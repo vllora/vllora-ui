@@ -90,7 +90,7 @@ export const LocalProviderFilter: React.FC<LocalProviderFilterProps> = ({
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Search providers..."
                   className="w-full pl-8 pr-3 py-1.5 bg-zinc-800/50 text-white text-sm rounded
-                    border border-zinc-700/50 focus:border-emerald-500/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20
+                    border border-zinc-700/50 focus:border-theme-500/50 focus:outline-none focus:ring-2 focus:ring-theme-500/20
                     placeholder-zinc-500"
                   onClick={(e) => e.stopPropagation()}
                 />
@@ -106,7 +106,7 @@ export const LocalProviderFilter: React.FC<LocalProviderFilterProps> = ({
               className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-800/50 transition-colors flex items-center justify-between"
             >
               <span className="text-zinc-300">All Providers</span>
-              {selectedProviders.length === 0 && <Check className="w-4 h-4 text-emerald-400" />}
+              {selectedProviders.length === 0 && <Check className="w-4 h-4 text-theme-400" />}
             </button>
 
             {/* Provider List */}
@@ -133,7 +133,7 @@ export const LocalProviderFilter: React.FC<LocalProviderFilterProps> = ({
                       </div>
                       <span className="text-zinc-300">{provider}</span>
                     </div>
-                    {selectedProviders.includes(provider) && <Check className="w-4 h-4 text-emerald-400" />}
+                    {selectedProviders.includes(provider) && <Check className="w-4 h-4 text-theme-400" />}
                   </button>
                 ))
               ) : (

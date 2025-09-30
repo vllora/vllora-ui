@@ -56,7 +56,7 @@ export const ChatRightSidebar: React.FC<ChatRightSidebarProps> = ({
       case 'request':
         return <MessageSquare className="w-4 h-4 text-blue-500" />;
       case 'response':
-        return <MessageSquare className="w-4 h-4 text-emerald-500" />;
+        return <MessageSquare className="w-4 h-4 text-theme-500" />;
       case 'tool_call':
         return <Zap className="w-4 h-4 text-yellow-500" />;
       case 'system':

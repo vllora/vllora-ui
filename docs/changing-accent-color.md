@@ -1,137 +1,203 @@
 # Changing the Accent Color
 
-Ellora UI currently uses **emerald** as the default accent color throughout the interface. You can easily change this to any color you prefer.
+Ellora UI uses a **theme color system** that allows you to easily change the accent color throughout the entire interface by modifying just one line of code.
 
-## Current Usage
+## Quick Start
 
-The accent color (emerald) is currently hardcoded in these components:
+To change the accent color from emerald to any other color:
 
-### Core UI Components
-- **AppSidebar** (`/src/components/app-sidebar.tsx`)
-  - Active menu items
-  - Hover states
-  - Icons
-
-- **ProjectDropdown** (`/src/components/ProjectDropdown.tsx`)
-  - Folder icons
-  - Selected project background
-  - "New Project" text and hover state
-
-- **ChatSidebar** (`/src/components/chat/ChatSidebar.tsx`)
-  - "New Chat" button
-
-- **Projects Page** (`/src/pages/projects.tsx`)
-  - "New Project" button
-  - Project folder icons
-  - Card hover borders
-
-### Model Browser Components
-- Home page (`/src/pages/home.tsx`)
-- Model cards and tables
-- Search filters
-- Cost displays
-
-## How to Change the Accent Color
-
-### Quick Find & Replace (Current Method)
-
-Since the accent color is currently hardcoded, use find-and-replace:
-
-1. **Search** for: `emerald-`
-2. **Replace** with: `rose-` (or `blue-`, `purple-`, `amber-`, etc.)
-3. **Files to update**: All 14 files listed above
-
-**Example replacements:**
-- `emerald-500` → `rose-500`
-- `emerald-400` → `rose-400`
-- `emerald-600` → `rose-600`
-- `text-emerald-500` → `text-rose-500`
-- `bg-emerald-500/10` → `bg-rose-500/10`
-- `hover:bg-emerald-500/10` → `hover:bg-rose-500/10`
-- `border-emerald-500/30` → `border-rose-500/30`
-
-### Future: CSS Variable System (Recommended)
-
-For easier customization, we've prepared a CSS variable system:
-
-1. **Import the accent CSS** in your main CSS file (`/src/index.css`):
-   ```css
-   @import './styles/accent.css';
-   ```
-
-2. **Edit** `/src/styles/accent.css` and uncomment your preferred color:
-   ```css
-   /* Rose accent */
-   :root {
-     --accent-500: 244 63 94;
-     --accent-600: 225 29 72;
-     /* ... */
-   }
-   ```
-
-3. **Update components** to use CSS variables instead of hardcoded colors:
-   ```tsx
-   // Before
-   className="text-emerald-500"
-
-   // After
-   className="text-[rgb(var(--accent-500))]"
-   ```
-
-4. **Or use the utility helper** (`/src/lib/accent.ts`):
-   ```tsx
-   import { accent } from '@/lib/accent';
-
-   className={accent.text}
-   className={accent.bg.subtle}
-   className={accent.hover.bg}
-   ```
-
-## Available Color Presets
-
-Presets available in `/src/styles/accent.css`:
-
-- **Emerald** (default) - `#22c55e`
-- **Rose** - `#f43f5e`
-- **Blue** - `#3b82f6`
-- **Purple** - `#a855f7`
-- **Amber** - `#f59e0b`
-
-You can also define custom RGB values for any color.
-
-## Migration Guide
-
-To migrate from hardcoded colors to CSS variables:
-
-1. Replace `emerald-500` → `[rgb(var(--accent-500))]`
-2. Replace `emerald-400` → `[rgb(var(--accent-400))]`
-3. Replace `emerald-600` → `[rgb(var(--accent-600))]`
-4. For opacity: `emerald-500/10` → `[rgb(var(--accent-500))]/10`
+1. Open `/tailwind.config.js`
+2. Find line 57: `theme: colors.emerald,`
+3. Change `emerald` to any Tailwind color: `rose`, `blue`, `purple`, `amber`, `sky`, `indigo`, `violet`, `fuchsia`, `pink`, `red`, `orange`, `yellow`, `lime`, `green`, `teal`, `cyan`, etc.
 
 **Example:**
-```tsx
-// Before
-<div className="text-emerald-600 dark:text-emerald-400 bg-emerald-500/10">
-
-// After
-<div className="text-[rgb(var(--accent-600))] dark:text-[rgb(var(--accent-400))] bg-[rgb(var(--accent-500))]/10">
+```javascript
+// In tailwind.config.js
+colors: {
+  // ... other colors
+  theme: colors.rose,  // Change this line!
+}
 ```
 
-## Common Accent Color Usages
+That's it! All components will automatically use the new color.
 
-- **Active states**: Sidebar menu items, selected projects
-- **Hover effects**: Buttons, cards, menu items
-- **Icons**: Folder icons, plus icons
-- **Text highlights**: "New Project", "New Chat" buttons
-- **Borders**: Card hovers, dropdown items
-- **Backgrounds**: Subtle tints (10-20% opacity)
+## How It Works
 
-## Notes
+All components use `theme-*` classes instead of hardcoded color names:
 
-- The accent color should have good contrast in both light and dark modes
-- Use lighter shades (400, 300) for dark mode
-- Use darker shades (600, 700) for light mode
-- Maintain consistent opacity levels:
-  - `10%` for subtle backgrounds
-  - `20%` for hover states
-  - `30-50%` for borders
+```tsx
+// ✅ Good - Uses theme system
+className="text-theme-500 bg-theme-500/10 hover:bg-theme-500/20"
+
+// ❌ Bad - Hardcoded color
+className="text-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20"
+```
+
+The `theme` color is defined in `tailwind.config.js` and mapped to any Tailwind color palette using `colors.emerald` (or any other color).
+
+## Components Using Theme Colors
+
+All core UI components use the theme color system:
+
+### Navigation
+- **AppSidebar** (`/src/components/app-sidebar.tsx`)
+  - Active menu items: `bg-theme-500/10 text-theme-500`
+  - Hover states: `hover:bg-theme-500/10 hover:text-theme-500`
+
+- **ProjectDropdown** (`/src/components/ProjectDropdown.tsx`)
+  - Folder icons: `text-theme-500`
+  - Hover borders: `hover:border-theme-500/30`
+  - Selected project icon: `text-theme-500`
+  - "New Project" button: `text-theme-600 dark:text-theme-400 hover:bg-theme-500/10`
+
+### Chat Interface
+- **ChatSidebar** (`/src/components/chat/ChatSidebar.tsx`)
+  - "New Chat" button: `text-theme-600 dark:text-theme-400 hover:bg-theme-500/10`
+
+### Projects
+- **Projects Page** (`/src/pages/projects.tsx`)
+  - Page header icon: `text-theme-500`
+  - "New Project" button: `from-theme-400 to-theme-600 hover:from-theme-500 hover:to-theme-700`
+  - Card hover borders: `hover:border-theme-500/50`
+  - Project folder icons: `text-theme-500`
+
+### Home Page
+- **Home Page** (`/src/pages/home.tsx`)
+  - "Gallery" gradient text: `from-theme-400 to-theme-600`
+  - Server status icon: `text-theme-500`
+  - Localhost text: `text-theme-500`
+
+## Available Colors
+
+You can use any Tailwind CSS color:
+
+- **Reds**: `red`, `rose`, `pink`
+- **Oranges**: `orange`, `amber`, `yellow`
+- **Greens**: `lime`, `green`, `emerald`, `teal`
+- **Blues**: `cyan`, `sky`, `blue`, `indigo`
+- **Purples**: `violet`, `purple`, `fuchsia`
+
+Each color has shades from 50 to 900, all automatically available through the theme system.
+
+## Configuration Details
+
+### Tailwind Config (`tailwind.config.js`)
+
+```javascript
+import colors from 'tailwindcss/colors'
+
+export default {
+  // ...
+  safelist: [
+    // Ensures theme colors are always available
+    { pattern: /^(bg|text|border|hover:bg|hover:text|hover:border|dark:text|from|to)-theme-(50|100|200|300|400|500|600|700|800|900)/ },
+  ],
+  theme: {
+    extend: {
+      colors: {
+        // ... other colors
+        theme: colors.emerald,  // 👈 Change this!
+      },
+    },
+  },
+}
+```
+
+### Common Usage Patterns
+
+```tsx
+// Text colors
+className="text-theme-500"                    // Standard text
+className="text-theme-600 dark:text-theme-400" // Light/dark mode
+
+// Backgrounds
+className="bg-theme-500"                      // Solid background
+className="bg-theme-500/10"                   // 10% opacity
+className="bg-theme-500/20"                   // 20% opacity
+
+// Hover states
+className="hover:bg-theme-500/10"
+className="hover:text-theme-500"
+className="hover:border-theme-500/30"
+
+// Gradients
+className="bg-gradient-to-r from-theme-400 to-theme-600"
+className="from-theme-500 to-theme-700"
+
+// Borders
+className="border-theme-500"
+className="border-theme-500/50"
+```
+
+## Best Practices
+
+### Contrast and Accessibility
+- Test your color in both light and dark modes
+- Ensure sufficient contrast for text (WCAG AA: 4.5:1 minimum)
+- Use lighter shades (300, 400) in dark mode
+- Use darker shades (600, 700) in light mode
+
+### Opacity Levels
+- **10%** (`/10`) - Subtle backgrounds, hover states
+- **20%** (`/20`) - Medium emphasis backgrounds
+- **30%** (`/30`) - Borders
+- **50%** (`/50`) - Stronger borders, dividers
+
+### Shade Selection
+- **50-200**: Very light backgrounds, borders
+- **300-400**: Light text, dark mode primary text
+- **500**: Main accent color, icons
+- **600-700**: Primary text in light mode, hover states
+- **800-900**: Strong emphasis, rarely used
+
+## Troubleshooting
+
+### Colors not showing up?
+1. Restart your dev server after changing `tailwind.config.js`
+2. Check that the `safelist` pattern is present in the config
+3. Verify that `colors` is imported from `tailwindcss/colors`
+
+### Wrong color displaying?
+1. Clear browser cache
+2. Check for any hardcoded `emerald-*` classes in custom code
+3. Ensure you're using `theme-*` not a direct color name
+
+## Migration from Hardcoded Colors
+
+If you have custom components using hardcoded colors, migrate them:
+
+```tsx
+// Before (hardcoded)
+className="text-emerald-500 bg-emerald-500/10"
+
+// After (theme system)
+className="text-theme-500 bg-theme-500/10"
+```
+
+Use find-and-replace:
+1. Find: `emerald-`
+2. Replace: `theme-`
+
+Then change the theme color in `tailwind.config.js` to your desired color.
+
+## Examples
+
+### Change to Rose
+```javascript
+// tailwind.config.js
+theme: colors.rose,
+```
+
+### Change to Blue
+```javascript
+// tailwind.config.js
+theme: colors.blue,
+```
+
+### Change to Purple
+```javascript
+// tailwind.config.js
+theme: colors.purple,
+```
+
+All components will instantly use the new color across the entire application!

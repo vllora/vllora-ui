@@ -15,7 +15,7 @@ export function HomePage() {
         <header className="text-center mb-8">
           <h1 className="text-5xl lg:text-6xl font-bold mb-4">
             <span className="block sm:inline-block">Local AI Models</span>{' '}
-            <span className="block sm:inline-block bg-gradient-to-r from-[rgb(var(--accent-400))] to-[rgb(var(--accent-600))] bg-clip-text text-transparent mt-2 sm:mt-0">
+            <span className="block sm:inline-block bg-gradient-to-r from-theme-400 to-theme-600 bg-clip-text text-transparent mt-2 sm:mt-0">
               Gallery
             </span>
           </h1>
@@ -23,9 +23,9 @@ export function HomePage() {
             Browse and manage your locally running AI models
           </p>
           <div className="flex items-center justify-center gap-2 mt-4">
-            <Server className="w-4 h-4 text-[rgb(var(--accent-500))]" />
+            <Server className="w-4 h-4 text-theme-500" />
             <span className="text-sm text-muted-foreground">
-              Running on <span className="text-[rgb(var(--accent-500))] font-medium">localhost:8080</span>
+              Running on <span className="text-theme-500 font-medium">localhost:8080</span>
             </span>
           </div>
         </header>

@@ -1,9 +1,15 @@
+import colors from 'tailwindcss/colors'
+
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: ["class"],
   content: [
     "./index.html",
     "./src/**/*.{ts,tsx,js,jsx}",
+  ],
+  safelist: [
+    // Safelist theme colors to ensure they're always available
+    { pattern: /^(bg|text|border|hover:bg|hover:text|hover:border|dark:text|from|to)-theme-(50|100|200|300|400|500|600|700|800|900)/ },
   ],
   theme: {
     container: {
@@ -48,6 +54,8 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Custom accent color system - change 'emerald' to any Tailwind color
+        theme: colors.emerald,
       },
       borderRadius: {
         lg: "var(--radius)",

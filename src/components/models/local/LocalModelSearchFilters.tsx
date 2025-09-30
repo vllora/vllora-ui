@@ -70,7 +70,7 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
     <div className="w-full space-y-4">
       {/* Search Bar */}
       <div className="relative w-full group">
-        <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5 transition-colors group-focus-within:text-emerald-500" />
+        <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5 transition-colors group-focus-within:text-theme-500" />
         <input
           type="text"
           placeholder="Search models by name, provider, or owner..."
@@ -78,7 +78,7 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
           onChange={handleSearchChange}
           className="w-full pl-12 pr-12 py-3.5 bg-card text-foreground placeholder-muted-foreground
             border border-border rounded-lg
-            focus:border-emerald-500/50 focus:ring-2 focus:ring-ring
+            focus:border-theme-500/50 focus:ring-2 focus:ring-ring
             focus:outline-none transition-all duration-200"
         />
         {localSearchTerm && (
@@ -122,7 +122,7 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
               type="checkbox"
               checked={groupByName}
               onChange={(e) => onGroupByNameChange(e.target.checked)}
-              className="w-4 h-4 rounded border-border bg-background text-emerald-500 focus:ring-ring focus:ring-2 cursor-pointer"
+              className="w-4 h-4 rounded border-border bg-background text-theme-500 focus:ring-ring focus:ring-2 cursor-pointer"
             />
             <span>Group by name</span>
           </label>

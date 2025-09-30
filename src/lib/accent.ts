@@ -1,6 +1,6 @@
 /**
  * Accent color utility classes
- * Use these instead of hardcoded 'emerald-*' classes for easy customization
+ * Use these instead of hardcoded 'theme-*' classes for easy customization
  *
  * To change the accent color:
  * 1. Edit /src/styles/accent.css

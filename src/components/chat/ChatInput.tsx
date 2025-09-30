@@ -285,7 +285,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               onClick={handleSend}
               disabled={disabled || !currentInput.trim()}
               size="icon"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white dark:bg-emerald-600 dark:hover:bg-emerald-700 h-8 w-8 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg"
+              className="bg-theme-600 hover:bg-theme-700 text-white dark:bg-theme-600 dark:hover:bg-theme-700 h-8 w-8 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg"
               title="Send message"
             >
               <Send className="w-4 h-4" />

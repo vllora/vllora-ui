@@ -185,7 +185,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                                         title="Copy model ID"
                                       >
                                         {copiedModel === modelGroup[0].id ? (
-                                          <Check className="w-3 h-3 text-emerald-500" />
+                                          <Check className="w-3 h-3 text-theme-500" />
                                         ) : (
                                           <Copy className="w-3 h-3 text-muted-foreground" />
                                         )}
@@ -217,7 +217,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                                       className="p-1 bg-secondary rounded hover:bg-secondary/80 transition-colors cursor-pointer"
                                     >
                                       {isCopied ? (
-                                        <Check className="w-3.5 h-3.5 text-emerald-500" />
+                                        <Check className="w-3.5 h-3.5 text-theme-500" />
                                       ) : (
                                         <ProviderIcon
                                           provider_name={provider}

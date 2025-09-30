@@ -84,7 +84,7 @@ export const OwnerFilter: React.FC<OwnerFilterProps> = ({
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Search owners..."
                   className="w-full pl-8 pr-3 py-1.5 bg-zinc-800/50 text-white text-sm rounded
-                    border border-zinc-700/50 focus:border-emerald-500/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20
+                    border border-zinc-700/50 focus:border-theme-500/50 focus:outline-none focus:ring-2 focus:ring-theme-500/20
                     placeholder-zinc-500"
                   onClick={(e) => e.stopPropagation()}
                 />
@@ -100,7 +100,7 @@ export const OwnerFilter: React.FC<OwnerFilterProps> = ({
               className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-800/50 transition-colors flex items-center justify-between"
             >
               <span className="text-zinc-300">All Owners</span>
-              {selectedOwners.length === 0 && <Check className="w-4 h-4 text-emerald-400" />}
+              {selectedOwners.length === 0 && <Check className="w-4 h-4 text-theme-400" />}
             </button>
 
             {/* Owner List */}
@@ -124,7 +124,7 @@ export const OwnerFilter: React.FC<OwnerFilterProps> = ({
                       </div>
                       <span className="text-zinc-300">{owner}</span>
                     </div>
-                    {selectedOwners.includes(owner) && <Check className="w-4 h-4 text-emerald-400" />}
+                    {selectedOwners.includes(owner) && <Check className="w-4 h-4 text-theme-400" />}
                   </button>
                 ))
               ) : (
