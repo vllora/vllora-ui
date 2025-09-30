@@ -112,7 +112,7 @@ export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSideb
                           className={cn(
                             "flex items-center rounded-lg text-sm font-medium transition-all duration-200",
                             isActive
-                              ? "bg-emerald-500/20 text-emerald-500 shadow-md shadow-emerald-500/20"
+                              ? "bg-emerald-500/10 text-emerald-500"
                               : "hover:bg-emerald-500/10 hover:text-emerald-500 text-muted-foreground",
                             "justify-center p-2 w-10 h-10"
                           )}
@@ -131,8 +131,8 @@ export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSideb
                       className={cn(
                         "flex items-center rounded-lg text-sm font-medium transition-all duration-200",
                         isActive
-                          ? "bg-gradient-to-r from-emerald-400/20 to-emerald-600/30 text-emerald-500 border border-emerald-500/50 shadow-sm"
-                          : "border border-transparent hover:bg-gradient-to-r hover:from-emerald-400/10 hover:to-emerald-600/15 hover:text-emerald-500/80 hover:border-emerald-500/30 text-muted-foreground",
+                          ? "bg-emerald-500/10 text-emerald-500"
+                          : "hover:bg-emerald-500/10 hover:text-emerald-500 text-muted-foreground",
                         "gap-3 px-3 py-2"
                       )}
                       onClick={() => setIsMobileOpen(false)}
@@ -163,7 +163,7 @@ export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSideb
                           className={cn(
                             "flex items-center rounded-lg text-sm font-medium transition-all duration-200",
                             isActive
-                              ? "bg-emerald-500/20 text-emerald-500 shadow-md shadow-emerald-500/20"
+                              ? "bg-emerald-500/10 text-emerald-500"
                               : "hover:bg-emerald-500/10 hover:text-emerald-500 text-muted-foreground",
                             "justify-center p-2 w-10 h-10"
                           )}
@@ -182,8 +182,8 @@ export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSideb
                       className={cn(
                         "flex items-center rounded-lg text-sm font-medium transition-all duration-200",
                         isActive
-                          ? "bg-gradient-to-r from-emerald-400/20 to-emerald-600/30 text-emerald-500 border border-emerald-500/50 shadow-sm"
-                          : "border border-transparent hover:bg-gradient-to-r hover:from-emerald-400/10 hover:to-emerald-600/15 hover:text-emerald-500/80 hover:border-emerald-500/30 text-muted-foreground",
+                          ? "bg-emerald-500/10 text-emerald-500"
+                          : "hover:bg-emerald-500/10 hover:text-emerald-500 text-muted-foreground",
                         "gap-3 px-3 py-2"
                       )}
                       onClick={() => setIsMobileOpen(false)}
