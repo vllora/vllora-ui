@@ -112,8 +112,8 @@ export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSideb
                           className={cn(
                             "flex items-center rounded-lg text-sm font-medium transition-all duration-200",
                             isActive
-                              ? "bg-emerald-500/10 text-emerald-500"
-                              : "hover:bg-emerald-500/10 hover:text-emerald-500 text-muted-foreground",
+                              ? "bg-[rgb(var(--accent-500))]/10 text-[rgb(var(--accent-500))]"
+                              : "hover:bg-[rgb(var(--accent-500))]/10 hover:text-[rgb(var(--accent-500))] text-muted-foreground",
                             "justify-center p-2 w-10 h-10"
                           )}
                           onClick={() => setIsMobileOpen(false)}
@@ -131,8 +131,8 @@ export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSideb
                       className={cn(
                         "flex items-center rounded-lg text-sm font-medium transition-all duration-200",
                         isActive
-                          ? "bg-emerald-500/10 text-emerald-500"
-                          : "hover:bg-emerald-500/10 hover:text-emerald-500 text-muted-foreground",
+                          ? "bg-[rgb(var(--accent-500))]/10 text-[rgb(var(--accent-500))]"
+                          : "hover:bg-[rgb(var(--accent-500))]/10 hover:text-[rgb(var(--accent-500))] text-muted-foreground",
                         "gap-3 px-3 py-2"
                       )}
                       onClick={() => setIsMobileOpen(false)}
@@ -163,8 +163,8 @@ export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSideb
                           className={cn(
                             "flex items-center rounded-lg text-sm font-medium transition-all duration-200",
                             isActive
-                              ? "bg-emerald-500/10 text-emerald-500"
-                              : "hover:bg-emerald-500/10 hover:text-emerald-500 text-muted-foreground",
+                              ? "bg-[rgb(var(--accent-500))]/10 text-[rgb(var(--accent-500))]"
+                              : "hover:bg-[rgb(var(--accent-500))]/10 hover:text-[rgb(var(--accent-500))] text-muted-foreground",
                             "justify-center p-2 w-10 h-10"
                           )}
                           onClick={() => setIsMobileOpen(false)}
@@ -182,8 +182,8 @@ export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSideb
                       className={cn(
                         "flex items-center rounded-lg text-sm font-medium transition-all duration-200",
                         isActive
-                          ? "bg-emerald-500/10 text-emerald-500"
-                          : "hover:bg-emerald-500/10 hover:text-emerald-500 text-muted-foreground",
+                          ? "bg-[rgb(var(--accent-500))]/10 text-[rgb(var(--accent-500))]"
+                          : "hover:bg-[rgb(var(--accent-500))]/10 hover:text-[rgb(var(--accent-500))] text-muted-foreground",
                         "gap-3 px-3 py-2"
                       )}
                       onClick={() => setIsMobileOpen(false)}

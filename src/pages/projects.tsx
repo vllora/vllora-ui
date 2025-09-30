@@ -113,12 +113,12 @@ export function ProjectsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <FolderOpen className="h-8 w-8 text-emerald-500" />
+          <FolderOpen className="h-8 w-8 text-[rgb(var(--accent-500))]" />
           <h1 className="text-3xl font-bold">Projects</h1>
         </div>
         <Button
           onClick={() => setIsCreateDialogOpen(true)}
-          className="bg-gradient-to-r from-emerald-400 to-emerald-600 hover:from-emerald-500 hover:to-emerald-700 text-white"
+          className="bg-gradient-to-r from-[rgb(var(--accent-400))] to-[rgb(var(--accent-600))] hover:from-[rgb(var(--accent-500))] hover:to-[rgb(var(--accent-700))] text-white"
         >
           <Plus className="h-4 w-4 mr-2" />
           New Project
@@ -151,14 +151,14 @@ export function ProjectsPage() {
           {projects.map((project) => (
             <Card
               key={project.id}
-              className="hover:border-emerald-500/50 transition-colors group cursor-pointer"
+              className="hover:border-[rgb(var(--accent-500))]/50 transition-colors group cursor-pointer"
               onClick={() => navigate(`/project/${project.id}`)}
             >
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <CardTitle className="flex items-center gap-2">
-                      <FolderOpen className="h-5 w-5 text-emerald-500" />
+                      <FolderOpen className="h-5 w-5 text-[rgb(var(--accent-500))]" />
                       {project.name}
                       {project.is_default && (
                         <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />
@@ -245,7 +245,7 @@ export function ProjectsPage() {
             <Button
               onClick={handleCreateProject}
               disabled={!newProjectName.trim() || creating}
-              className="bg-gradient-to-r from-emerald-400 to-emerald-600 hover:from-emerald-500 hover:to-emerald-700 text-white"
+              className="bg-gradient-to-r from-[rgb(var(--accent-400))] to-[rgb(var(--accent-600))] hover:from-[rgb(var(--accent-500))] hover:to-[rgb(var(--accent-700))] text-white"
             >
               {creating ? 'Creating...' : 'Create Project'}
             </Button>
