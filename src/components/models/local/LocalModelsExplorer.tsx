@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { LocalModel } from '@/types/models';
 import { LocalModelCard } from './LocalModelCard';
 import { LocalModelsTable } from './LocalModelsTable';
@@ -17,12 +18,39 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
   models,
   showViewModeToggle = true,
 }) => {
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedProviders, setSelectedProviders] = useState<string[]>([]);
-  const [selectedOwners, setSelectedOwners] = useState<string[]>([]);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Initialize state from URL params
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>(() => {
+    const view = searchParams.get('view');
+    return view === 'table' ? 'table' : 'grid';
+  });
+  const [searchTerm, setSearchTerm] = useState(() => searchParams.get('search') || '');
+  const [selectedProviders, setSelectedProviders] = useState<string[]>(() => {
+    const providers = searchParams.get('providers');
+    return providers ? providers.split(',') : [];
+  });
+  const [selectedOwners, setSelectedOwners] = useState<string[]>(() => {
+    const owners = searchParams.get('owners');
+    return owners ? owners.split(',') : [];
+  });
+  const [groupByName, setGroupByName] = useState(() => {
+    return searchParams.get('groupByName') === 'true';
+  });
   const [copiedModel, setCopiedModel] = useState<string | null>(null);
-  const [groupByName, setGroupByName] = useState(false);
+
+  // Update URL params when state changes
+  useEffect(() => {
+    const params = new URLSearchParams();
+
+    if (viewMode !== 'grid') params.set('view', viewMode);
+    if (searchTerm) params.set('search', searchTerm);
+    if (selectedProviders.length > 0) params.set('providers', selectedProviders.join(','));
+    if (selectedOwners.length > 0) params.set('owners', selectedOwners.join(','));
+    if (groupByName) params.set('groupByName', 'true');
+
+    setSearchParams(params, { replace: true });
+  }, [viewMode, searchTerm, selectedProviders, selectedOwners, groupByName, setSearchParams]);
 
   // Group models by model name (without provider prefix) - only if grouping by name is enabled
   const groupedModels = useMemo(() => {

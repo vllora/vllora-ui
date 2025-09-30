@@ -1,5 +1,6 @@
-import { Sparkles, AlertCircle, Loader2, RefreshCw, Server } from 'lucide-react';
+import { Sparkles, AlertCircle, RefreshCw, Server } from 'lucide-react';
 import { LocalModelsExplorer } from '@/components/models/local/LocalModelsExplorer';
+import { LocalModelsSkeletonLoader } from '@/components/models/local/LocalModelsSkeletonLoader';
 import { useLocalModels } from '@/hooks/useLocalModels';
 import { Button } from '@/components/ui/button';
 
@@ -31,9 +32,27 @@ export function HomePage() {
 
         {/* Loading State */}
         {localLoading && (
-          <div className="flex flex-col items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 text-emerald-400 animate-spin mb-4" />
-            <p className="text-zinc-400">Loading local models...</p>
+          <div className="flex flex-col space-y-6">
+            {/* Filters Skeleton */}
+            <div className="space-y-4 animate-pulse">
+              <div className="h-14 bg-zinc-900/50 border border-zinc-800 rounded-lg" />
+              <div className="flex gap-2">
+                <div className="h-10 w-32 bg-zinc-900/50 border border-zinc-800 rounded-full" />
+                <div className="h-10 w-32 bg-zinc-900/50 border border-zinc-800 rounded-full" />
+              </div>
+            </div>
+
+            {/* View Mode Toggle Skeleton */}
+            <div className="flex justify-between items-center animate-pulse">
+              <div className="h-5 w-48 bg-zinc-800 rounded" />
+              <div className="flex gap-2">
+                <div className="h-9 w-20 bg-zinc-800 rounded" />
+                <div className="h-9 w-20 bg-zinc-800 rounded" />
+              </div>
+            </div>
+
+            {/* Models Grid Skeleton */}
+            <LocalModelsSkeletonLoader viewMode="grid" count={9} />
           </div>
         )}
 
