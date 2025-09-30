@@ -22,7 +22,10 @@ export const ModelsExplorer: React.FC<ModelsExplorerProps> = ({
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProviders, setSelectedProviders] = useState<string[]>([]);
+  const [selectedPublishers, setSelectedPublishers] = useState<string[]>([]);
   const [selectedType, setSelectedType] = useState<string>('all');
+  const [selectedInputFormats, setSelectedInputFormats] = useState<string[]>([]);
+  const [selectedOutputFormats, setSelectedOutputFormats] = useState<string[]>([]);
   const [minContextSize, setMinContextSize] = useState<number | undefined>();
   const [maxContextSize, setMaxContextSize] = useState<number | undefined>();
   const [minInputCost, setMinInputCost] = useState<number | undefined>();
@@ -31,13 +34,48 @@ export const ModelsExplorer: React.FC<ModelsExplorerProps> = ({
 
   // Extract unique values for filters
   const providers = useMemo(() => {
-    const uniqueProviders = new Set(models.map(m => m.model_provider));
+    const uniqueProviders = new Set<string>();
+    models.forEach(m => {
+      if (m.inference_provider?.provider) {
+        uniqueProviders.add(m.inference_provider.provider);
+      }
+    });
     return Array.from(uniqueProviders).sort();
+  }, [models]);
+
+  const publishers = useMemo(() => {
+    const uniquePublishers = new Set<string>();
+    models.forEach(m => {
+      if (m.model_provider) {
+        uniquePublishers.add(m.model_provider);
+      }
+    });
+    return Array.from(uniquePublishers).sort();
   }, [models]);
 
   const types = useMemo(() => {
     const uniqueTypes = new Set(models.map(m => m.type));
     return Array.from(uniqueTypes).sort();
+  }, [models]);
+
+  const inputFormats = useMemo(() => {
+    const formats = new Set<string>();
+    models.forEach(m => {
+      if (m.input_formats) {
+        m.input_formats.forEach(format => formats.add(format));
+      }
+    });
+    return Array.from(formats).sort();
+  }, [models]);
+
+  const outputFormats = useMemo(() => {
+    const formats = new Set<string>();
+    models.forEach(m => {
+      if (m.output_formats) {
+        m.output_formats.forEach(format => formats.add(format));
+      }
+    });
+    return Array.from(formats).sort();
   }, [models]);
 
   // Group models by name for display
@@ -90,9 +128,36 @@ export const ModelsExplorer: React.FC<ModelsExplorerProps> = ({
         }
       }
 
+      // Publisher filter
+      if (selectedPublishers.length > 0 && !selectedPublishers.includes(model.model_provider || '')) {
+        return false;
+      }
+
       // Type filter
       if (selectedType !== 'all' && model.type !== selectedType) {
         return false;
+      }
+
+      // Input formats filter
+      if (selectedInputFormats.length > 0) {
+        const modelInputFormats = model.input_formats || [];
+        const hasMatchingFormat = selectedInputFormats.some(format =>
+          modelInputFormats.includes(format)
+        );
+        if (!hasMatchingFormat) {
+          return false;
+        }
+      }
+
+      // Output formats filter
+      if (selectedOutputFormats.length > 0) {
+        const modelOutputFormats = model.output_formats || [];
+        const hasMatchingFormat = selectedOutputFormats.some(format =>
+          modelOutputFormats.includes(format)
+        );
+        if (!hasMatchingFormat) {
+          return false;
+        }
       }
 
       // Context size filter
@@ -114,7 +179,7 @@ export const ModelsExplorer: React.FC<ModelsExplorerProps> = ({
 
       return true;
     });
-  }, [groupedModels, searchTerm, selectedProviders, selectedType, minContextSize, maxContextSize, minInputCost, maxInputCost]);
+  }, [groupedModels, searchTerm, selectedProviders, selectedPublishers, selectedType, selectedInputFormats, selectedOutputFormats, minContextSize, maxContextSize, minInputCost, maxInputCost]);
 
   // Copy model name function
   const copyModelName = useCallback(async (modelName: string) => {
@@ -188,10 +253,19 @@ export const ModelsExplorer: React.FC<ModelsExplorerProps> = ({
         onSearchChange={setSearchTerm}
         selectedProviders={selectedProviders}
         onProvidersChange={setSelectedProviders}
+        selectedPublishers={selectedPublishers}
+        onPublishersChange={setSelectedPublishers}
         selectedType={selectedType}
         onTypeChange={setSelectedType}
+        selectedInputFormats={selectedInputFormats}
+        onInputFormatsChange={setSelectedInputFormats}
+        selectedOutputFormats={selectedOutputFormats}
+        onOutputFormatsChange={setSelectedOutputFormats}
         providers={providers}
+        publishers={publishers}
         types={types}
+        inputFormats={inputFormats}
+        outputFormats={outputFormats}
         minContextSize={minContextSize}
         onMinContextSizeChange={setMinContextSize}
         maxContextSize={maxContextSize}
@@ -201,6 +275,7 @@ export const ModelsExplorer: React.FC<ModelsExplorerProps> = ({
         maxInputCost={maxInputCost}
         onMaxInputCostChange={setMaxInputCost}
         resultsCount={filteredModels.length}
+        totalCount={groupedModels.length}
       />
 
       {/* View Mode Toggle */}
@@ -263,7 +338,10 @@ export const ModelsExplorer: React.FC<ModelsExplorerProps> = ({
             onClick={() => {
               setSearchTerm('');
               setSelectedProviders([]);
+              setSelectedPublishers([]);
               setSelectedType('all');
+              setSelectedInputFormats([]);
+              setSelectedOutputFormats([]);
               setMinContextSize(undefined);
               setMaxContextSize(undefined);
               setMinInputCost(undefined);
