@@ -1,0 +1,149 @@
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { ChevronDown, Check, Search } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ProviderIcon } from '@/components/Icons/ProviderIcons';
+
+interface PublisherFilterProps {
+  publishers: string[];
+  selectedPublishers: string[];
+  setSelectedPublishers: (publishers: string[]) => void;
+}
+
+export const PublisherFilter: React.FC<PublisherFilterProps> = ({
+  publishers,
+  selectedPublishers,
+  setSelectedPublishers,
+}) => {
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Filter publishers based on search
+  const filteredPublishers = useMemo(() => {
+    if (!searchTerm) return publishers;
+    const searchLower = searchTerm.toLowerCase();
+    return publishers.filter(pub => pub.toLowerCase().includes(searchLower));
+  }, [publishers, searchTerm]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+        setSearchTerm('');
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        onClick={() => setShowDropdown(!showDropdown)}
+        className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-400
+          hover:text-white hover:bg-zinc-800/50 rounded-full
+          transition-all duration-200 cursor-pointer font-medium"
+      >
+        {selectedPublishers.length === 1 && (
+          <div className="p-0.5 rounded bg-zinc-800/30">
+            <ProviderIcon
+              provider_name={selectedPublishers[0]}
+              className="w-3.5 h-3.5"
+            />
+          </div>
+        )}
+        <span>
+          {selectedPublishers.length === 0
+            ? 'Publishers'
+            : selectedPublishers.length === 1
+            ? selectedPublishers[0]
+            : `${selectedPublishers.length} Publishers`
+          }
+        </span>
+        {selectedPublishers.length > 0 && (
+          <span className="text-xs text-zinc-300 ml-1">({selectedPublishers.length})</span>
+        )}
+        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${
+          showDropdown ? 'rotate-180' : ''
+        }`} />
+      </button>
+
+      <AnimatePresence>
+        {showDropdown && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="absolute z-[100] mt-2 left-0 right-4 sm:left-auto sm:right-auto sm:w-auto sm:min-w-[250px] bg-zinc-900/95 backdrop-blur-md border border-zinc-700/50 rounded-lg shadow-2xl max-w-[calc(100vw-2rem)]"
+            style={{ zIndex: 100 }}
+          >
+            {/* Search Input */}
+            <div className="p-2 border-b border-zinc-700/50">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search publishers..."
+                  className="w-full pl-8 pr-3 py-1.5 bg-zinc-800/50 text-white text-sm rounded
+                    border border-zinc-700/50 focus:border-zinc-600 focus:outline-none
+                    placeholder-zinc-500"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+            </div>
+
+            {/* All Publishers Option */}
+            <button
+              onClick={() => {
+                setSelectedPublishers([]);
+                setSearchTerm('');
+              }}
+              className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-800/50 transition-colors flex items-center justify-between"
+            >
+              <span className="text-zinc-300">All Publishers</span>
+              {selectedPublishers.length === 0 && <Check className="w-4 h-4 text-green-400" />}
+            </button>
+
+            {/* Publisher List */}
+            <div className="border-t border-zinc-700/50 max-h-48 overflow-y-auto">
+              {filteredPublishers.length > 0 ? (
+                filteredPublishers.map(publisher => (
+                  <button
+                    key={publisher}
+                    onClick={() => {
+                      if (selectedPublishers.includes(publisher)) {
+                        setSelectedPublishers(selectedPublishers.filter(p => p !== publisher));
+                      } else {
+                        setSelectedPublishers([...selectedPublishers, publisher]);
+                      }
+                    }}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-800/50 transition-colors flex items-center justify-between group"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="p-1 rounded bg-zinc-800/30 group-hover:bg-zinc-700/50 transition-colors">
+                        <ProviderIcon
+                          provider_name={publisher}
+                          className="w-4 h-4"
+                        />
+                      </div>
+                      <span className="text-zinc-300">{publisher}</span>
+                    </div>
+                    {selectedPublishers.includes(publisher) && <Check className="w-4 h-4 text-green-400" />}
+                  </button>
+                ))
+              ) : (
+                <div className="px-3 py-4 text-center text-sm text-zinc-500">
+                  No publishers found
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
