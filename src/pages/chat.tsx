@@ -1,108 +1,62 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { ChatPageSidebar } from '@/components/chat/ChatSidebar';
 import { ChatWindow } from '@/components/chat/ChatWindow';
-import { Thread, Message } from '@/types/chat';
+import { Thread } from '@/types/chat';
+import { API_CONFIG } from '@/config/api';
 
 export function ChatPage() {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<string>('openai/o1-mini');
 
-  const selectedThread = threads.find((t) => t.id === selectedThreadId);
-
-  const handleNewThread = () => {
+  const handleNewThread = useCallback(() => {
     const newThread: Thread = {
       id: `thread-${Date.now()}`,
-      title: '',
-      model: 'gpt-4',
+      title: 'New conversation',
+      model: selectedModel,
       messages: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
-    setThreads([newThread, ...threads]);
+    setThreads((prev) => [newThread, ...prev]);
     setSelectedThreadId(newThread.id);
-  };
+  }, [selectedModel]);
 
-  const handleSelectThread = (threadId: string) => {
+  const handleSelectThread = useCallback((threadId: string) => {
     setSelectedThreadId(threadId);
-  };
+    setThreads((prev) => {
+      const thread = prev.find((t) => t.id === threadId);
+      if (thread) {
+        setSelectedModel(thread.model);
+      }
+      return prev;
+    });
+  }, []);
 
-  const handleDeleteThread = (threadId: string) => {
-    setThreads(threads.filter((t) => t.id !== threadId));
-    if (selectedThreadId === threadId) {
-      setSelectedThreadId(null);
-    }
-  };
+  const handleDeleteThread = useCallback((threadId: string) => {
+    setThreads((prev) => prev.filter((t) => t.id !== threadId));
+    setSelectedThreadId((prevId) => (prevId === threadId ? null : prevId));
+  }, []);
 
-  const handleModelChange = (modelId: string) => {
-    if (!selectedThreadId) return;
-
-    setThreads(
-      threads.map((t) =>
-        t.id === selectedThreadId
-          ? {
-              ...t,
-              model: modelId,
-              updatedAt: Date.now(),
-            }
-          : t
-      )
-    );
-  };
-
-  const handleSendMessage = async (content: string) => {
-    if (!selectedThreadId) {
-      // Create new thread if none selected
-      handleNewThread();
-      return;
-    }
-
-    const userMessage: Message = {
-      id: `msg-${Date.now()}`,
-      role: 'user',
-      content,
-      timestamp: Date.now(),
-    };
-
-    // Add user message
-    setThreads(
-      threads.map((t) =>
-        t.id === selectedThreadId
-          ? {
-              ...t,
-              messages: [...t.messages, userMessage],
-              title: t.title || content.slice(0, 50),
-              updatedAt: Date.now(),
-            }
-          : t
-      )
-    );
-
-    setIsLoading(true);
-
-    // Simulate AI response (replace with actual API call)
-    setTimeout(() => {
-      const assistantMessage: Message = {
-        id: `msg-${Date.now()}`,
-        role: 'assistant',
-        content: 'This is a simulated response. Connect to your LLM API to get real responses.',
-        timestamp: Date.now(),
-      };
-
-      setThreads(
-        threads.map((t) =>
-          t.id === selectedThreadId
-            ? {
-                ...t,
-                messages: [...t.messages, userMessage, assistantMessage],
-                updatedAt: Date.now(),
-              }
-            : t
-        )
-      );
-      setIsLoading(false);
-    }, 1000);
-  };
+  const handleModelChange = useCallback((modelId: string) => {
+    setSelectedModel(modelId);
+    setSelectedThreadId((currentThreadId) => {
+      if (currentThreadId) {
+        setThreads((prev) =>
+          prev.map((t) =>
+            t.id === currentThreadId
+              ? {
+                  ...t,
+                  model: modelId,
+                  updatedAt: Date.now(),
+                }
+              : t
+          )
+        );
+      }
+      return currentThreadId;
+    });
+  }, []);
 
   return (
     <section className="flex-1 flex bg-background text-foreground overflow-hidden" aria-label="Chat Interface">
@@ -117,11 +71,14 @@ export function ChatPage() {
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {selectedThread ? (
+        {selectedThreadId ? (
           <ChatWindow
-            thread={selectedThread}
-            isLoading={isLoading}
-            onSendMessage={handleSendMessage}
+            threadId={selectedThreadId}
+            modelName={selectedModel}
+            apiUrl={API_CONFIG.url}
+            apiKey={API_CONFIG.apiKey}
+            projectId={API_CONFIG.projectId}
+            widgetId={`chat-${selectedThreadId}`}
             onModelChange={handleModelChange}
           />
         ) : (

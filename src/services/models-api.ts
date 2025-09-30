@@ -1,23 +1,21 @@
 import { ModelPricing, LocalModelsResponse } from '@/types/models';
+import { API_CONFIG } from '@/config/api';
 
-const API_URL = import.meta.env.VITE_LANGDB_API_URL;
-const PROJECT_ID = import.meta.env.VITE_LANGDB_PROJECT_ID;
-const API_KEY = import.meta.env.VITE_LANGDB_API_KEY;
 const LOCAL_API_URL = 'http://0.0.0.0:8080';
 
 export async function fetchModels(): Promise<ModelPricing[]> {
-  if (!API_URL || !PROJECT_ID) {
+  if (!API_CONFIG.url || !API_CONFIG.projectId) {
     throw new Error('Missing required environment variables: VITE_LANGDB_API_URL or VITE_LANGDB_PROJECT_ID');
   }
 
-  const url = `${API_URL}/projects/${PROJECT_ID}/models?include_parameters=false&include_benchmark=true`;
+  const url = `${API_CONFIG.url}/projects/${API_CONFIG.projectId}/models?include_parameters=false&include_benchmark=true`;
 
   try {
     const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        ...(API_KEY && { 'Authorization': `Bearer ${API_KEY}` }),
+        ...(API_CONFIG.apiKey && { 'Authorization': `Bearer ${API_CONFIG.apiKey}` }),
       },
     });
 
@@ -32,9 +30,6 @@ export async function fetchModels(): Promise<ModelPricing[]> {
     throw error;
   }
 }
-
-
-
 
 export async function fetchLocalModels(): Promise<LocalModelsResponse> {
   const url = `${LOCAL_API_URL}/v1/models`;
@@ -61,9 +56,9 @@ export async function fetchLocalModels(): Promise<LocalModelsResponse> {
 
 export function getApiConfig() {
   return {
-    apiUrl: API_URL,
-    projectId: PROJECT_ID,
-    hasApiKey: !!API_KEY,
+    apiUrl: API_CONFIG.url,
+    projectId: API_CONFIG.projectId,
+    hasApiKey: !!API_CONFIG.apiKey,
     localApiUrl: LOCAL_API_URL,
   };
 }

@@ -123,6 +123,8 @@ pnpm install
 VITE_LANGDB_PROJECT_ID=your_project_id
 VITE_LANGDB_API_KEY=your_api_key
 VITE_LANGDB_API_URL=https://api.staging.langdb.ai
+# Set to 'true' to connect to local AI gateway at http://localhost:8080/v1/chat/completions
+VITE_CONNECT_LOCAL=false
 ```
 
 ## Development

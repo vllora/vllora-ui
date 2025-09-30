@@ -1,25 +1,170 @@
-import React, { useState, useRef, KeyboardEvent } from 'react';
-import { Send } from 'lucide-react';
+import React, { useState, useRef, KeyboardEvent, useCallback, useEffect } from 'react';
+import { Send, Paperclip, X, Mic } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useDropzone } from 'react-dropzone';
+import { FileWithPreview } from '@/types/chat';
+import { emitter } from '@/utils/eventEmitter';
 
 interface ChatInputProps {
-  onSendMessage: (content: string) => void;
+  onSubmit: (props: {
+    inputText: string;
+    files: FileWithPreview[];
+    searchToolEnabled?: boolean;
+    otherTools?: string[];
+  }) => Promise<void>;
+  currentInput: string;
+  setCurrentInput: (input: string) => void;
   disabled?: boolean;
   placeholder?: string;
+  searchToolEnabled?: boolean;
+  toggleSearchTool?: (enabled: boolean) => void;
 }
 
+const convertAudioToBase64 = (file: File) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = (error) => reject(error);
+  });
+};
+
 export const ChatInput: React.FC<ChatInputProps> = ({
-  onSendMessage,
+  onSubmit,
+  currentInput,
+  setCurrentInput,
   disabled = false,
   placeholder = 'Type your message...',
+  searchToolEnabled,
 }) => {
-  const [message, setMessage] = useState('');
+  const [files, setFiles] = useState<FileWithPreview[]>([]);
+  const [isListening, setIsListening] = useState(false);
+  const [error, setError] = useState('');
+  const [isSupportingSpeechRecognition, setIsSupportingSpeechRecognition] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  useEffect(() => {
+    // Check if the browser supports SpeechRecognition
+    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+      setIsSupportingSpeechRecognition(false);
+    } else {
+      setIsSupportingSpeechRecognition(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleFileAdded = ({ files: newFiles }: { files: FileWithPreview[] }) => {
+      setFiles((prevFiles) => [...prevFiles, ...newFiles]);
+    };
+    emitter.on('langdb_input_fileAdded', handleFileAdded);
+    emitter.on('langdb_input_speechRecognitionStart', () => {
+      setIsListening(true);
+      setError('');
+    });
+    emitter.on('langdb_input_speechRecognitionEnd', () => {
+      setIsListening(false);
+    });
+    return () => {
+      emitter.off('langdb_input_fileAdded', handleFileAdded);
+      emitter.off('langdb_input_speechRecognitionStart', () => {
+        setIsListening(true);
+        setError('');
+      });
+      emitter.off('langdb_input_speechRecognitionEnd', () => {
+        setIsListening(false);
+      });
+    };
+  }, []);
+
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    const updatedFilesPromises = acceptedFiles.map((file) => {
+      if (file.type.startsWith('audio/')) {
+        return convertAudioToBase64(file).then((base64) => {
+          return {
+            preview: '',
+            base64: base64 as string,
+            raw_file: file,
+            ...file,
+            type: file.type,
+          } as FileWithPreview;
+        });
+      }
+      return Promise.resolve({
+        preview: URL.createObjectURL(file),
+        raw_file: file,
+        ...file,
+        type: file.type,
+      } as FileWithPreview);
+    });
+    const allResolved = Promise.all(updatedFilesPromises);
+    allResolved.then((updatedFiles) => {
+      emitter.emit('langdb_input_fileAdded', { files: updatedFiles });
+    });
+  }, []);
+
+  const { getRootProps, isDragActive, open, getInputProps } = useDropzone({
+    onDrop,
+    noClick: true,
+    noKeyboard: true,
+    accept: {
+      'image/*': [],
+      'audio/*': [],
+    },
+  });
+
+  const startListening = useCallback(() => {
+    if (typeof window === 'undefined') {
+      setError('Speech recognition is not available on server.');
+      return;
+    }
+
+    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+      setError('Speech recognition is not supported in this browser.');
+      return;
+    }
+
+    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const recognition = new SpeechRecognitionAPI();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.continuous = false;
+
+    recognition.onstart = () => {
+      emitter.emit('langdb_input_speechRecognitionStart', {});
+    };
+
+    recognition.onresult = (event: any) => {
+      const speechResult = event.results[0][0].transcript;
+      onSubmit({
+        inputText: speechResult,
+        files,
+        searchToolEnabled,
+        otherTools: [],
+      });
+    };
+
+    recognition.onerror = (event: any) => {
+      setError(event.error);
+    };
+
+    recognition.onend = () => {
+      emitter.emit('langdb_input_speechRecognitionEnd', {});
+    };
+
+    recognition.start();
+  }, [files, searchToolEnabled, onSubmit]);
+
   const handleSend = () => {
-    if (message.trim() && !disabled) {
-      onSendMessage(message.trim());
-      setMessage('');
+    if (currentInput.trim() && !disabled) {
+      const currentFiles = files;
+      setFiles([]);
+      onSubmit({
+        inputText: currentInput,
+        files: currentFiles,
+        searchToolEnabled,
+        otherTools: [],
+      });
+      setCurrentInput('');
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
@@ -39,29 +184,103 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
   };
 
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
   return (
     <div className="border-t border-border p-4 bg-card">
-      <div className="flex gap-2 items-end">
-        <textarea
-          ref={textareaRef}
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onInput={handleInput}
-          placeholder={placeholder}
-          disabled={disabled}
-          rows={1}
-          className="flex-1 bg-secondary text-secondary-foreground placeholder-muted-foreground px-4 py-3 rounded-lg resize-none
-            focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed
-            max-h-[200px] overflow-y-auto border border-input"
-        />
-        <Button
-          onClick={handleSend}
-          disabled={disabled || !message.trim()}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white dark:bg-emerald-600 dark:hover:bg-emerald-700 px-4 py-3 h-auto disabled:opacity-50"
-        >
-          <Send className="w-5 h-5" />
-        </Button>
+      {files.length > 0 && (
+        <div className="mb-3 flex flex-wrap gap-2">
+          {files.map((file, index) => (
+            <div
+              key={index}
+              className="relative group bg-secondary rounded-lg p-2 flex items-center gap-2 border border-border"
+            >
+              {file.type.startsWith('image/') && file.preview && (
+                <img src={file.preview} alt={file.name} className="w-12 h-12 object-cover rounded" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-foreground truncate">{file.name}</p>
+                <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</p>
+              </div>
+              <button
+                onClick={() => removeFile(index)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {error && <div className="text-red-500 text-sm mb-2">{error}</div>}
+      {isListening && <div className="animate-pulse text-xs mb-2 text-muted-foreground">Listening...</div>}
+
+      <div {...getRootProps()} className="relative">
+        {isDragActive && (
+          <div className="absolute inset-0 bg-black/50 flex flex-col gap-4 justify-center items-center text-white text-sm z-50 rounded-lg">
+            <Paperclip className="h-8 w-8" />
+            <div className="flex flex-col justify-center items-center">
+              <span className="font-bold">Add anything</span>
+              <span>Drop any file here to add it to conversation</span>
+            </div>
+          </div>
+        )}
+        <input {...getInputProps()} className="hidden" />
+
+        <div className="flex gap-2 items-end">
+          <div className="flex-1 bg-secondary rounded-lg border border-input">
+            <textarea
+              ref={textareaRef}
+              value={currentInput}
+              onChange={(e) => setCurrentInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onInput={handleInput}
+              placeholder={placeholder}
+              disabled={disabled || isListening}
+              rows={1}
+              className="w-full bg-transparent text-secondary-foreground placeholder-muted-foreground px-4 py-3 resize-none
+                focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed
+                max-h-[200px] overflow-y-auto border-0"
+            />
+            <div className="flex items-center gap-2 px-2 pb-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  open();
+                }}
+                className="flex items-center justify-center h-8 w-8 rounded-full hover:bg-accent"
+              >
+                <Paperclip className="h-4 w-4 text-muted-foreground" />
+              </button>
+              {isSupportingSpeechRecognition && (
+                <button
+                  type="button"
+                  disabled={isListening || disabled}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    startListening();
+                  }}
+                  className="flex items-center justify-center h-8 w-8 rounded-full hover:bg-accent disabled:opacity-50"
+                >
+                  <Mic className="h-4 w-4 text-muted-foreground" />
+                </button>
+              )}
+            </div>
+          </div>
+          <Button
+            onClick={handleSend}
+            disabled={disabled || !currentInput.trim()}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white dark:bg-emerald-600 dark:hover:bg-emerald-700 px-4 py-3 h-auto disabled:opacity-50"
+          >
+            <Send className="w-5 h-5" />
+          </Button>
+        </div>
       </div>
       <p className="text-xs text-muted-foreground/70 mt-2">
         Press Enter to send, Shift+Enter for new line
