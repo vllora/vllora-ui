@@ -3,9 +3,9 @@ import { Link, useLocation } from "react-router-dom"
 import {
   Home,
   MessageSquare,
-  FolderOpen,
   Settings,
   BarChart3,
+  FolderOpen,
   ChevronLeft,
   ChevronRight,
   Menu,
@@ -28,15 +28,16 @@ const mainMenuItems = [
 
 const bottomMenuItems = [
   { id: "projects", label: "Projects", icon: FolderOpen, path: "/projects" },
-  { id: "settings", label: "Settings", icon: Settings, path: "/settings" },
+  { id: "settings", label: "Global Config", icon: Settings, path: "/settings" },
 ]
 
 interface AppSidebarProps {
   isCollapsed: boolean
   onToggle: () => void
+  currentProjectId?: string
 }
 
-export function AppSidebar({ isCollapsed, onToggle }: AppSidebarProps) {
+export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSidebarProps) {
   const location = useLocation()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
 
@@ -90,7 +91,16 @@ export function AppSidebar({ isCollapsed, onToggle }: AppSidebarProps) {
           <ul className="space-y-1.5">
             {mainMenuItems.map((item) => {
               const Icon = item.icon
-              const isActive = location.pathname === item.path
+              // Build path with projectId for project-scoped routes
+              const itemPath = currentProjectId
+                ? `/project/${currentProjectId}${item.path === '/' ? '' : item.path}`
+                : item.path
+
+              // Check if active (match path pattern)
+              const isActive = currentProjectId
+                ? location.pathname === `/project/${currentProjectId}` && item.path === '/' ||
+                  location.pathname.startsWith(`/project/${currentProjectId}${item.path}`) && item.path !== '/'
+                : location.pathname === item.path
 
               return (
                 <li key={item.id}>
@@ -98,7 +108,7 @@ export function AppSidebar({ isCollapsed, onToggle }: AppSidebarProps) {
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Link
-                          to={item.path}
+                          to={itemPath}
                           className={cn(
                             "flex items-center rounded-lg text-sm font-medium transition-all duration-200",
                             isActive
@@ -117,7 +127,7 @@ export function AppSidebar({ isCollapsed, onToggle }: AppSidebarProps) {
                     </Tooltip>
                   ) : (
                     <Link
-                      to={item.path}
+                      to={itemPath}
                       className={cn(
                         "flex items-center rounded-lg text-sm font-medium transition-all duration-200",
                         isActive

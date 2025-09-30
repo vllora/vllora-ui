@@ -21,10 +21,15 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Layout />}>
-            <Route index element={<HomePage />} />
-            <Route path="chat" element={<ChatPage />} />
+            {/* Project-scoped routes */}
+            <Route path="project/:projectId">
+              <Route index element={<HomePage />} />
+              <Route path="chat" element={<ChatPage />} />
+              <Route path="analytics" element={<AnalyticsPage />} />
+            </Route>
+
+            {/* Global routes */}
             <Route path="projects" element={<ProjectsPage />} />
-            <Route path="analytics" element={<AnalyticsPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
         </Routes>

@@ -1,7 +1,5 @@
 import { ModelPricing, LocalModelsResponse } from '@/types/models';
-import { API_CONFIG } from '@/config/api';
-
-const LOCAL_API_URL = 'http://0.0.0.0:8080';
+import { API_CONFIG, LOCAL_API_URL } from '@/config/api';
 
 export async function fetchModels(): Promise<ModelPricing[]> {
   if (!API_CONFIG.url || !API_CONFIG.projectId) {
