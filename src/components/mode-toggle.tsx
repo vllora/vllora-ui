@@ -1,6 +1,6 @@
-import { Moon, Sun, Palette, Check } from "lucide-react"
-import { useTheme } from "next-themes"
-import { useThemeColor, type ThemeColor } from "./theme-provider"
+import { Palette, Check } from "lucide-react"
+import { useState } from "react"
+import { applyTheme, getThemeFromStorage, type ThemeColor } from "@/themes/themes"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -8,18 +8,13 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
   DropdownMenuLabel,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu"
 
 const themeColors: { value: ThemeColor; label: string }[] = [
   { value: "zinc", label: "Zinc" },
   { value: "slate", label: "Slate" },
   { value: "stone", label: "Stone" },
-  { value: "gray", label: "Gray" },
   { value: "neutral", label: "Neutral" },
   { value: "red", label: "Red" },
   { value: "rose", label: "Rose" },
@@ -31,57 +26,38 @@ const themeColors: { value: ThemeColor; label: string }[] = [
 ]
 
 export function ModeToggle() {
-  const { setTheme } = useTheme()
-  const { color, setColor } = useThemeColor()
+  const [currentTheme, setCurrentTheme] = useState<ThemeColor>(() => getThemeFromStorage())
+
+  const changeTheme = (theme: ThemeColor) => {
+    setCurrentTheme(theme)
+    localStorage.setItem("theme-color", theme)
+    applyTheme(theme)
+  }
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="icon">
-          <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-          <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-          <span className="sr-only">Toggle theme</span>
+          <Palette className="h-[1.2rem] w-[1.2rem]" />
+          <span className="sr-only">Choose color theme</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel>Theme Mode</DropdownMenuLabel>
-        <DropdownMenuItem onClick={() => setTheme("light")}>
-          <Sun className="mr-2 h-4 w-4" />
-          Light
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme("dark")}>
-          <Moon className="mr-2 h-4 w-4" />
-          Dark
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme("system")}>
-          <span className="mr-2 h-4 w-4" />
-          System
-        </DropdownMenuItem>
-
-        <DropdownMenuSeparator />
-
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <Palette className="mr-2 h-4 w-4" />
-            Theme Color
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className="max-h-96 overflow-y-auto">
-            {themeColors.map((themeColor) => (
-              <DropdownMenuItem
-                key={themeColor.value}
-                onClick={() => setColor(themeColor.value)}
-              >
-                {color === themeColor.value && (
-                  <Check className="mr-2 h-4 w-4" />
-                )}
-                {color !== themeColor.value && (
-                  <span className="mr-2 h-4 w-4" />
-                )}
-                {themeColor.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
+      <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuLabel>Color Theme</DropdownMenuLabel>
+        {themeColors.map((theme) => (
+          <DropdownMenuItem
+            key={theme.value}
+            onClick={() => changeTheme(theme.value)}
+          >
+            {currentTheme === theme.value && (
+              <Check className="mr-2 h-4 w-4" />
+            )}
+            {currentTheme !== theme.value && (
+              <span className="mr-2 h-4 w-4" />
+            )}
+            {theme.label}
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   )

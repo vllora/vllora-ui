@@ -44,20 +44,27 @@ export function AppSidebar({ isCollapsed, onToggle }: AppSidebarProps) {
 
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex flex-col border-r bg-background transition-all duration-300 md:relative md:translate-x-0",
+          "fixed inset-y-0 left-0 z-40 flex flex-col transition-all duration-300 md:relative md:translate-x-0",
+          "backdrop-blur-xl bg-background/95",
+          "border-r border-border/40 shadow-lg",
           isCollapsed ? "w-16" : "w-64",
           isMobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
       >
-        <div className="flex h-16 items-center justify-between px-4 border-b">
+        <div className={cn(
+          "flex h-16 items-center justify-between px-4",
+          "border-b border-border/40 backdrop-blur-sm"
+        )}>
           {!isCollapsed && (
-            <h2 className="text-lg font-semibold">LLM Studio</h2>
+            <h2 className="text-lg font-bold tracking-tight">
+              LLM Studio
+            </h2>
           )}
           <Button
             variant="ghost"
             size="icon"
             className={cn(
-              "hidden md:flex",
+              "hidden md:flex hover:bg-accent transition-all duration-200",
               isCollapsed && "mx-auto"
             )}
             onClick={onToggle}
@@ -71,7 +78,7 @@ export function AppSidebar({ isCollapsed, onToggle }: AppSidebarProps) {
         </div>
 
         <nav className="flex-1 overflow-y-auto p-4">
-          <ul className="space-y-2">
+          <ul className="space-y-1.5">
             {menuItems.map((item) => {
               const Icon = item.icon
               const isActive = location.pathname === item.path
@@ -81,15 +88,19 @@ export function AppSidebar({ isCollapsed, onToggle }: AppSidebarProps) {
                   <Link
                     to={item.path}
                     className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
+                      "hover:scale-[1.02] active:scale-[0.98]",
                       isActive
-                        ? "bg-secondary text-secondary-foreground"
-                        : "hover:bg-secondary/50",
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "hover:bg-accent hover:text-accent-foreground text-muted-foreground",
                       isCollapsed && "justify-center"
                     )}
                     onClick={() => setIsMobileOpen(false)}
                   >
-                    <Icon className="h-5 w-5 flex-shrink-0" />
+                    <Icon className={cn(
+                      "h-5 w-5 flex-shrink-0 transition-transform duration-200",
+                      isActive && "scale-110"
+                    )} />
                     {!isCollapsed && (
                       <span className="truncate">{item.label}</span>
                     )}
@@ -101,7 +112,7 @@ export function AppSidebar({ isCollapsed, onToggle }: AppSidebarProps) {
         </nav>
 
         <div className={cn(
-          "p-4 border-t",
+          "p-4 border-t border-border/40 backdrop-blur-sm",
           isCollapsed ? "flex justify-center" : ""
         )}>
           <ModeToggle />

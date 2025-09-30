@@ -36,7 +36,7 @@ export const ChatPageSidebar: React.FC<ChatSidebarProps> = ({
       <div className="p-4 border-b border-border">
         <Button
           onClick={onNewThread}
-          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white dark:bg-emerald-600 dark:hover:bg-emerald-700"
+          className="w-full"
         >
           <MessageSquarePlus className="w-4 h-4 mr-2" />
           New Chat
