@@ -177,6 +177,44 @@ export const useMessageSubmission = (
 
         // Stream chat completion
         const chatUrl = getChatCompletionsUrl();
+
+        // Build the current message content with files
+        const buildMessageContent = (text: string, files: FileWithPreview[]) => {
+          if (!files || files.length === 0) {
+            return text;
+          }
+
+          const content: any[] = [];
+
+          files.forEach((file) => {
+            if (file.type.startsWith('image/')) {
+              // Use base64 for API, fall back to preview for display only
+              const imageUrl = file.base64;
+              if (imageUrl) {
+                content.push({
+                  type: 'image_url',
+                  image_url: { url: imageUrl },
+                });
+              }
+            } else if (file.type.startsWith('audio/') && file.base64) {
+              // Extract format from file name
+              const format = file.name.split('.').pop();
+              content.push({
+                type: 'input_audio',
+                audio: {
+                  data: file.base64.split(',')[1], // Remove data:audio/...;base64, prefix
+                  format: format || 'mp3',
+                },
+              });
+            }
+          });
+
+          // Add text message at the end
+          content.push({ type: 'text', text });
+
+          return content;
+        };
+
         const response = await fetch(chatUrl, {
           method: 'POST',
           headers: {
@@ -189,9 +227,14 @@ export const useMessageSubmission = (
             messages: [
               ...messages.map((msg) => ({
                 role: msg.role,
-                content: msg.content,
+                content: msg.files && msg.files.length > 0
+                  ? buildMessageContent(msg.content, msg.files)
+                  : msg.content,
               })),
-              { role: 'user', content: inputText },
+              {
+                role: 'user',
+                content: buildMessageContent(inputText, files),
+              },
             ],
             stream: true,
             ...(threadId && { thread_id: threadId }),

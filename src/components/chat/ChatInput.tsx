@@ -20,7 +20,7 @@ interface ChatInputProps {
   toggleSearchTool?: (enabled: boolean) => void;
 }
 
-const convertAudioToBase64 = (file: File) => {
+const convertFileToBase64 = (file: File) => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -76,30 +76,37 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     };
   }, []);
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    const updatedFilesPromises = acceptedFiles.map((file) => {
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    const updatedFilesPromises = acceptedFiles.map(async (file) => {
       if (file.type.startsWith('audio/')) {
-        return convertAudioToBase64(file).then((base64) => {
-          return {
-            preview: '',
-            base64: base64 as string,
-            raw_file: file,
-            ...file,
-            type: file.type,
-          } as FileWithPreview;
-        });
+        const base64 = await convertFileToBase64(file);
+        return {
+          preview: '',
+          base64: base64 as string,
+          raw_file: file,
+          ...file,
+          type: file.type,
+        } as FileWithPreview;
       }
-      return Promise.resolve({
+      if (file.type.startsWith('image/')) {
+        const base64 = await convertFileToBase64(file);
+        return {
+          preview: URL.createObjectURL(file),
+          base64: base64 as string,
+          raw_file: file,
+          ...file,
+          type: file.type,
+        } as FileWithPreview;
+      }
+      return {
         preview: URL.createObjectURL(file),
         raw_file: file,
         ...file,
         type: file.type,
-      } as FileWithPreview);
+      } as FileWithPreview;
     });
-    const allResolved = Promise.all(updatedFilesPromises);
-    allResolved.then((updatedFiles) => {
-      emitter.emit('langdb_input_fileAdded', { files: updatedFiles });
-    });
+    const updatedFiles = await Promise.all(updatedFilesPromises);
+    emitter.emit('langdb_input_fileAdded', { files: updatedFiles });
   }, []);
 
   const { getRootProps, isDragActive, open, getInputProps } = useDropzone({
