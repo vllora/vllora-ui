@@ -22,9 +22,16 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
   const [selectedProviders, setSelectedProviders] = useState<string[]>([]);
   const [selectedOwners, setSelectedOwners] = useState<string[]>([]);
   const [copiedModel, setCopiedModel] = useState<string | null>(null);
+  const [groupByName, setGroupByName] = useState(false);
 
-  // Group models by model name (without provider prefix)
+  // Group models by model name (without provider prefix) - only if grouping by name is enabled
   const groupedModels = useMemo(() => {
+    if (!groupByName) {
+      // Return models as-is when NOT grouping by name
+      return models;
+    }
+
+    // Otherwise, group by model name
     const groups = new Map<string, LocalModel[]>();
 
     models.forEach(model => {
@@ -44,7 +51,7 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
       (firstModel as any)._modelName = modelName;
       return firstModel;
     });
-  }, [models]);
+  }, [models, groupByName]);
 
   // Extract unique providers and owners
   const providers = useMemo(() => {
@@ -137,13 +144,15 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
         owners={owners}
         resultsCount={filteredModels.length}
         totalCount={models.length}
+        groupByName={groupByName}
+        onGroupByNameChange={setGroupByName}
       />
 
       {/* View Mode Toggle */}
       {showViewModeToggle && (
         <div className="flex justify-between items-center">
           <p className="text-sm text-zinc-400">
-            Showing {filteredModels.length} of {models.length} local models
+            Showing {filteredModels.length} of {groupedModels.length} {groupByName ? 'models' : 'models'}
           </p>
           <div className="flex gap-2">
             <Button

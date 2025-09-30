@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Search, X } from 'lucide-react';
 import { useDebounceFn } from 'ahooks';
-import { LocalProviderFilter } from './filter-components/LocalProviderFilter';
-import { OwnerFilter } from './filter-components/OwnerFilter';
+import { LocalProviderFilter } from '../filter-components/LocalProviderFilter';
+import { OwnerFilter } from '../filter-components/OwnerFilter';
 
 interface LocalModelSearchFiltersProps {
   searchTerm: string;
@@ -15,6 +15,8 @@ interface LocalModelSearchFiltersProps {
   owners: string[];
   resultsCount: number;
   totalCount?: number;
+  groupByName?: boolean;
+  onGroupByNameChange?: (value: boolean) => void;
 }
 
 export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = ({
@@ -28,6 +30,8 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
   owners,
   resultsCount,
   totalCount,
+  groupByName = false,
+  onGroupByNameChange,
 }) => {
   // Local state for immediate UI update
   const [localSearchTerm, setLocalSearchTerm] = useState(searchTerm);
@@ -111,6 +115,19 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
           />
         )}
 
+        {/* Group By Model Name Checkbox */}
+        {onGroupByNameChange && providers.length > 1 && (
+          <label className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-400 hover:text-white cursor-pointer transition-colors">
+            <input
+              type="checkbox"
+              checked={groupByName}
+              onChange={(e) => onGroupByNameChange(e.target.checked)}
+              className="w-4 h-4 rounded border-zinc-700 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/20 focus:ring-2 cursor-pointer"
+            />
+            <span>Group by name</span>
+          </label>
+        )}
+
         {/* Clear Filters */}
         {hasActiveFilters && (
           <button
@@ -122,66 +139,55 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
         )}
       </div>
 
-      {/* Active Filters & Results */}
-      <div className="flex items-center justify-between mt-1">
-        {/* Active Filters */}
+      {/* Active Filters */}
+      {hasActiveFilters && (
         <div className="flex items-center gap-2 flex-wrap">
-          {hasActiveFilters && (
-            <>
-              <span className="text-xs text-zinc-600">Filtering:</span>
-              <div className="flex flex-wrap gap-1.5">
-                {searchTerm && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800/50 text-zinc-400 text-xs">
-                    "{searchTerm}"
-                    <button
-                      onClick={() => onSearchChange('')}
-                      className="ml-1 hover:text-zinc-200"
-                    >
-                      ×
-                    </button>
-                  </span>
-                )}
-                {selectedProviders.map(provider => (
-                  <div key={provider} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800/50 text-zinc-400 text-xs">
-                    <span>provider:</span>
-                    <span className="text-zinc-300 font-bold">{provider}</span>
-                    <button
-                      onClick={() => onProvidersChange(selectedProviders.filter(p => p !== provider))}
-                      className="ml-1 hover:text-zinc-200"
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-                {selectedOwners.map(owner => (
-                  <div key={owner} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800/50 text-zinc-400 text-xs">
-                    <span>owner:</span>
-                    <span className="text-zinc-300 font-bold">{owner}</span>
-                    <button
-                      onClick={() => onOwnersChange(selectedOwners.filter(o => o !== owner))}
-                      className="ml-1 hover:text-zinc-200"
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
+          <span className="text-xs text-zinc-600">Filtering:</span>
+          <div className="flex flex-wrap gap-1.5">
+            {searchTerm && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800/50 text-zinc-400 text-xs">
+                "{searchTerm}"
+                <button
+                  onClick={() => onSearchChange('')}
+                  className="ml-1 hover:text-zinc-200"
+                >
+                  ×
+                </button>
+              </span>
+            )}
+            {selectedProviders.map(provider => (
+              <div key={provider} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800/50 text-zinc-400 text-xs">
+                <span>provider:</span>
+                <span className="text-zinc-300 font-bold">{provider}</span>
+                <button
+                  onClick={() => onProvidersChange(selectedProviders.filter(p => p !== provider))}
+                  className="ml-1 hover:text-zinc-200"
+                >
+                  ×
+                </button>
               </div>
-              <button
-                onClick={clearAllFilters}
-                className="ml-2 text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
-              >
-                Clear all
-              </button>
-            </>
-          )}
+            ))}
+            {selectedOwners.map(owner => (
+              <div key={owner} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800/50 text-zinc-400 text-xs">
+                <span>owner:</span>
+                <span className="text-zinc-300 font-bold">{owner}</span>
+                <button
+                  onClick={() => onOwnersChange(selectedOwners.filter(o => o !== owner))}
+                  className="ml-1 hover:text-zinc-200"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={clearAllFilters}
+            className="ml-2 text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+          >
+            Clear all
+          </button>
         </div>
-
-        {/* Results Count */}
-        <div className="text-xs text-zinc-500">
-          <span className="text-zinc-300 font-medium">{resultsCount}</span>
-          <span> / {totalCount || resultsCount} models</span>
-        </div>
-      </div>
+      )}
     </div>
   );
 };

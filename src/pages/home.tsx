@@ -1,5 +1,5 @@
 import { Sparkles, AlertCircle, Loader2, RefreshCw, Server } from 'lucide-react';
-import { LocalModelsExplorer } from '@/components/models/LocalModelsExplorer';
+import { LocalModelsExplorer } from '@/components/models/local/LocalModelsExplorer';
 import { useLocalModels } from '@/hooks/useLocalModels';
 import { Button } from '@/components/ui/button';
 

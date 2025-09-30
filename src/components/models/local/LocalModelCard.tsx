@@ -49,6 +49,20 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model }) => {
             {/* Header with Model Name */}
             <div className="flex items-start gap-3">
               <div className="flex items-center gap-2 flex-1 min-w-0">
+                <Tooltip>
+                  <TooltipTrigger>
+                    <div className="p-1.5 bg-zinc-800/30 rounded-lg group-hover:bg-zinc-800/50 transition-colors">
+                      <ProviderIcon
+                        provider_name={modelGroup[0].owned_by}
+                        className="w-4 h-4"
+                      />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="bg-zinc-800 border-zinc-700 text-white">
+                    <p className="text-xs font-medium">{modelGroup[0].owned_by}</p>
+                  </TooltipContent>
+                </Tooltip>
+
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <Tooltip>
