@@ -31,10 +31,12 @@ ellora-ui/
 │   │   ├── theme-provider.tsx           # Theme context provider
 │   │   ├── mode-toggle.tsx              # Theme toggle component
 │   │   ├── chat/                        # Chat interface components
-│   │   │   ├── ChatWindow.tsx
-│   │   │   ├── ChatSidebar.tsx
-│   │   │   ├── ChatConversation.tsx
-│   │   │   └── ChatInput.tsx
+│   │   │   ├── ChatWindow.tsx           # Main chat container
+│   │   │   ├── ChatSidebar.tsx          # Thread list sidebar
+│   │   │   ├── ChatConversation.tsx     # Message display with markdown
+│   │   │   ├── ChatInput.tsx            # Input with file upload & voice
+│   │   │   ├── MessageDisplay.tsx       # Markdown renderer with syntax highlighting
+│   │   │   └── ModelSelector.tsx        # Two-step model selection dropdown
 │   │   ├── models/                      # Model explorer components
 │   │   │   ├── ModelsExplorer.tsx
 │   │   │   ├── ModelCard.tsx
@@ -74,13 +76,20 @@ ellora-ui/
 │   │   ├── analytics.tsx                # Analytics page
 │   │   └── settings.tsx                 # Settings page
 │   ├── hooks/                           # Custom React hooks
-│   │   └── useLocalModels.tsx           # Hook for fetching local models
+│   │   ├── useLocalModels.tsx           # Hook for fetching local models
+│   │   ├── useChatState.ts              # Chat state management
+│   │   ├── useMessageSubmission.ts      # Message submission & streaming
+│   │   └── useScrollToBottom.ts         # Auto-scroll functionality
 │   ├── services/                        # API services
-│   │   └── models.tsx                   # Model data fetching
+│   │   └── models-api.ts                # Model data fetching
+│   ├── config/                          # Configuration
+│   │   └── api.ts                       # Centralized API configuration
 │   ├── types/                           # TypeScript type definitions
+│   │   └── chat.ts                      # Chat-related types
 │   ├── lib/
 │   │   └── utils.ts                     # Utility functions
 │   ├── utils/                           # Helper utilities
+│   │   └── eventEmitter.ts              # Event-driven communication
 │   ├── App.tsx                          # Main app component with routing
 │   ├── main.tsx                         # Application entry point
 │   └── index.css                        # Global styles and theme variables
@@ -104,7 +113,7 @@ ellora-ui/
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/langdb/llm-studio-ui.git
+git clone https://github.com/langdb/ellora-ui.git
 cd ellora-ui
 ```
 
@@ -178,8 +187,13 @@ pnpm preview
 
 ### Chat Interface
 - Interactive chat interface with AI models
-- Chat history and conversation management
-- Message input with support for multi-line text
+- **Streaming Support** - Real-time message streaming with Server-Sent Events
+- **File Upload** - Attach images and audio files with drag & drop support
+- **Speech Recognition** - Voice input using browser Speech Recognition API
+- **Markdown Rendering** - Full markdown support with syntax highlighting for code blocks
+- **Model Selection** - Two-step model selector (model name → provider)
+- Thread management with conversation history
+- Auto-scroll to bottom during streaming and on completion
 - Integration with local and remote AI models
 
 ### Collapsible Sidebar
@@ -259,6 +273,11 @@ The application uses Tailwind CSS with custom shadcn/ui theme variables. You can
 - **date-fns** - Date utility library
 - **class-variance-authority** - CSS variant management
 - **tailwind-merge** - Tailwind class merging utility
+- **react-markdown** - Markdown rendering for chat messages
+- **react-syntax-highlighter** - Code syntax highlighting
+- **react-dropzone** - Drag & drop file uploads
+- **mitt** - Event emitter for component communication
+- **uuid** - Unique ID generation
 
 ## Key Dependencies
 
@@ -285,11 +304,14 @@ This application connects to:
 
 ## Development Notes
 
-- The app uses custom React hooks for data fetching (`useLocalModels`)
+- The app uses custom React hooks for state management and data fetching
+- Event-driven architecture using mitt for component communication
+- Streaming chat with Server-Sent Events (SSE)
 - Theme system uses CSS variables for easy customization
 - URL state management for filter persistence
 - Component-based architecture with clear separation of concerns
 - TypeScript for type safety across the application
+- Centralized API configuration in `/src/config/api.ts`
 
 ## License
 
