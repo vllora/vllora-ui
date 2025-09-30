@@ -230,22 +230,22 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         )}
         <input {...getInputProps()} className="hidden" />
 
-        <div className="flex gap-2 items-end">
-          <div className="flex-1 bg-secondary rounded-lg border border-input">
-            <textarea
-              ref={textareaRef}
-              value={currentInput}
-              onChange={(e) => setCurrentInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onInput={handleInput}
-              placeholder={placeholder}
-              disabled={disabled || isListening}
-              rows={1}
-              className="w-full bg-transparent text-secondary-foreground placeholder-muted-foreground px-4 py-3 resize-none
-                focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed
-                max-h-[200px] overflow-y-auto border-0"
-            />
-            <div className="flex items-center gap-2 px-2 pb-2">
+        <div className="bg-secondary rounded-xl border border-input focus-within:ring-2 focus-within:ring-ring transition-shadow">
+          <textarea
+            ref={textareaRef}
+            value={currentInput}
+            onChange={(e) => setCurrentInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onInput={handleInput}
+            placeholder={placeholder}
+            disabled={disabled || isListening}
+            rows={1}
+            className="w-full bg-transparent text-secondary-foreground placeholder-muted-foreground resize-none
+              focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed
+              max-h-[200px] overflow-y-auto px-4 pt-3 pb-2"
+          />
+          <div className="flex items-center justify-between gap-2 px-3 pb-2">
+            <div className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={(e) => {
@@ -253,7 +253,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   e.preventDefault();
                   open();
                 }}
-                className="flex items-center justify-center h-8 w-8 rounded-full hover:bg-accent"
+                className="flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors"
+                title="Attach file"
               >
                 <Paperclip className="h-4 w-4 text-muted-foreground" />
               </button>
@@ -266,20 +267,23 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     e.preventDefault();
                     startListening();
                   }}
-                  className="flex items-center justify-center h-8 w-8 rounded-full hover:bg-accent disabled:opacity-50"
+                  className="flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors disabled:opacity-50"
+                  title="Voice input"
                 >
-                  <Mic className="h-4 w-4 text-muted-foreground" />
+                  <Mic className={`h-4 w-4 ${isListening ? 'text-red-500 animate-pulse' : 'text-muted-foreground'}`} />
                 </button>
               )}
             </div>
+            <Button
+              onClick={handleSend}
+              disabled={disabled || !currentInput.trim()}
+              size="icon"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white dark:bg-emerald-600 dark:hover:bg-emerald-700 h-8 w-8 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg"
+              title="Send message"
+            >
+              <Send className="w-4 h-4" />
+            </Button>
           </div>
-          <Button
-            onClick={handleSend}
-            disabled={disabled || !currentInput.trim()}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white dark:bg-emerald-600 dark:hover:bg-emerald-700 px-4 py-3 h-auto disabled:opacity-50"
-          >
-            <Send className="w-5 h-5" />
-          </Button>
         </div>
       </div>
       <p className="text-xs text-muted-foreground/70 mt-2">
