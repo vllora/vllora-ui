@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { LocalModel } from '@/types/models';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { Copy, Check, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
@@ -21,6 +21,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
 }) => {
   const [sortField, setSortField] = useState<SortField>('none');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [copiedProviderId, setCopiedProviderId] = useState<string | null>(null);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -30,6 +31,20 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
       setSortDirection('asc');
     }
   };
+
+  const copyProviderModelId = useCallback(async (e: React.MouseEvent, provider: string, modelName: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    try {
+      const fullId = `${provider}/${modelName}`;
+      await navigator.clipboard.writeText(fullId);
+      setCopiedProviderId(fullId);
+      setTimeout(() => setCopiedProviderId(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy provider model ID:', err);
+    }
+  }, []);
 
   const sortedModels = useMemo(() => {
     // If no sorting, return models in original order
@@ -190,23 +205,36 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                       {/* Providers */}
                       <div className="w-[20%] overflow-hidden">
                         <div className="flex flex-wrap gap-1.5">
-                          {(providers as string[]).map((provider: string) => (
-                            <TooltipProvider key={provider}>
-                              <Tooltip>
-                                <TooltipTrigger>
-                                  <div className="p-1 bg-zinc-800/30 rounded hover:bg-zinc-800/50 transition-colors">
-                                    <ProviderIcon
-                                      provider_name={provider}
-                                      className="w-3.5 h-3.5"
-                                    />
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent side="bottom" className="bg-zinc-800 border-zinc-700 text-white">
-                                  <p className="text-xs font-medium">{provider}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          ))}
+                          {(providers as string[]).map((provider: string) => {
+                            const fullId = `${provider}/${modelName}`;
+                            const isCopied = copiedProviderId === fullId;
+                            return (
+                              <TooltipProvider key={provider}>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <div
+                                      onClick={(e) => copyProviderModelId(e, provider, modelName)}
+                                      className="p-1 bg-zinc-800/30 rounded hover:bg-zinc-800/50 transition-colors cursor-pointer"
+                                    >
+                                      {isCopied ? (
+                                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                      ) : (
+                                        <ProviderIcon
+                                          provider_name={provider}
+                                          className="w-3.5 h-3.5"
+                                        />
+                                      )}
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="bottom" className="bg-zinc-800 border-zinc-700 text-white">
+                                    <p className="text-xs font-medium">
+                                      {isCopied ? 'Copied!' : `Click to copy ${fullId}`}
+                                    </p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            );
+                          })}
                         </div>
                       </div>
 
