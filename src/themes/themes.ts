@@ -502,5 +502,5 @@ export function applyTheme(theme: ThemeColor) {
 }
 
 export function getThemeFromStorage(): ThemeColor {
-  return (localStorage.getItem("theme-color") as ThemeColor) || "violet"
+  return (localStorage.getItem("theme-color") as ThemeColor) || "neutral"
 }

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { ChatPageSidebar } from '@/components/chat/ChatSidebar';
 import { ChatWindow } from '@/components/chat/ChatWindow';
+import { ChatRightSidebar } from '@/components/chat/ChatRightSidebar';
 import { Thread } from '@/types/chat';
 import { API_CONFIG } from '@/config/api';
 
@@ -8,6 +9,8 @@ export function ChatPage() {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string>('openai/o1-mini');
+  const [traces, setTraces] = useState<any[]>([]);
+  const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
 
   const handleNewThread = useCallback(() => {
     const newThread: Thread = {
@@ -60,7 +63,7 @@ export function ChatPage() {
 
   return (
     <section className="flex-1 flex bg-background text-foreground overflow-hidden" aria-label="Chat Interface">
-      {/* Sidebar */}
+      {/* Left Sidebar */}
       <ChatPageSidebar
         threads={threads}
         selectedThreadId={selectedThreadId}
@@ -94,6 +97,16 @@ export function ChatPage() {
           </div>
         )}
       </div>
+
+      {/* Right Sidebar - Traces */}
+      {selectedThreadId && (
+        <ChatRightSidebar
+          threadId={selectedThreadId}
+          traces={traces}
+          isCollapsed={isRightSidebarCollapsed}
+          onToggle={() => setIsRightSidebarCollapsed(!isRightSidebarCollapsed)}
+        />
+      )}
     </section>
   );
 }

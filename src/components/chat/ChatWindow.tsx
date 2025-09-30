@@ -154,7 +154,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   return (
     <>
       {/* Chat Header */}
-      <div className="border-b border-border p-4 bg-card flex-shrink-0">
+      <div className="h-[88px] border-b border-border p-4 bg-card flex-shrink-0 flex flex-col justify-center">
         <h2 className="text-lg font-semibold text-card-foreground">
           {threadId ? `Thread: ${threadId}` : 'New conversation'}
         </h2>

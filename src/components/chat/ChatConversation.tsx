@@ -71,8 +71,8 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
         >
           {message.role === 'assistant' && (
             <div className="flex-shrink-0">
-              <div className="w-8 h-8 rounded-full bg-emerald-600 dark:bg-emerald-600 flex items-center justify-center">
-                <Bot className="w-5 h-5 text-white" />
+              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                <Bot className="w-5 h-5 text-primary" />
               </div>
             </div>
           )}
@@ -80,7 +80,7 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
           <div
             className={`max-w-[70%] rounded-2xl px-4 py-3 ${
               message.role === 'user'
-                ? 'bg-emerald-600 dark:bg-emerald-600 text-white'
+                ? 'bg-muted text-foreground border border-border'
                 : 'bg-secondary text-secondary-foreground'
             }`}
           >
@@ -106,13 +106,7 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
                 <MessageDisplay message={message.content} />
               )}
             </div>
-            <p
-              className={`text-xs mt-2 ${
-                message.role === 'user'
-                  ? 'text-emerald-100 dark:text-emerald-200'
-                  : 'text-muted-foreground'
-              }`}
-            >
+            <p className="text-xs mt-2 text-muted-foreground">
               {formatTime(message.timestamp)}
             </p>
           </div>
@@ -132,8 +126,8 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
           messages[messages.length - 1].type !== MessageType.AIMessage) && (
           <div className="flex gap-4 justify-start">
             <div className="flex-shrink-0">
-              <div className="w-8 h-8 rounded-full bg-emerald-600 dark:bg-emerald-600 flex items-center justify-center">
-                <Bot className="w-5 h-5 text-white" />
+              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                <Bot className="w-5 h-5 text-primary" />
               </div>
             </div>
             <div className="bg-secondary rounded-2xl px-4 py-3">

@@ -33,12 +33,12 @@ export const ChatPageSidebar: React.FC<ChatSidebarProps> = ({
   return (
     <div className="w-80 bg-card border-r border-border flex flex-col h-full">
       {/* Header */}
-      <div className="p-4 border-b border-border">
+      <div className="h-[88px] p-4 border-b border-border flex items-center">
         <Button
           onClick={onNewThread}
-          className="w-full"
+          className="w-full text-black bg-emerald-500 hover:bg-emerald-600 text-white font-medium shadow-md"
         >
-          <MessageSquarePlus className="w-4 h-4 mr-2" />
+          <MessageSquarePlus className="w-4 h-4 mr-2 text-white" />
           New Chat
         </Button>
       </div>
