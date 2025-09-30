@@ -8,7 +8,7 @@ export function HomePage() {
   const { models: localModels, loading: localLoading, error: localError, refetch: localRefetch } = useLocalModels();
 
   return (
-    <section className="flex-1 flex flex-col overflow-auto bg-zinc-950 text-white w-full" aria-label="AI Models Gallery">
+    <section className="flex-1 flex flex-col overflow-auto bg-background text-foreground w-full" aria-label="AI Models Gallery">
       <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
         {/* Header */}
@@ -19,13 +19,13 @@ export function HomePage() {
               Gallery
             </span>
           </h1>
-          <p className="text-zinc-400 text-lg max-w-2xl mx-auto">
+          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
             Browse and manage your locally running AI models
           </p>
           <div className="flex items-center justify-center gap-2 mt-4">
             <Server className="w-4 h-4 text-emerald-500" />
-            <span className="text-sm text-zinc-500">
-              Running on <span className="text-emerald-400 font-medium">localhost:8080</span>
+            <span className="text-sm text-muted-foreground">
+              Running on <span className="text-emerald-500 font-medium">localhost:8080</span>
             </span>
           </div>
         </header>
@@ -35,19 +35,19 @@ export function HomePage() {
           <div className="flex flex-col space-y-6">
             {/* Filters Skeleton */}
             <div className="space-y-4 animate-pulse">
-              <div className="h-14 bg-zinc-900/50 border border-zinc-800 rounded-lg" />
+              <div className="h-14 bg-muted/50 border border-border rounded-lg" />
               <div className="flex gap-2">
-                <div className="h-10 w-32 bg-zinc-900/50 border border-zinc-800 rounded-full" />
-                <div className="h-10 w-32 bg-zinc-900/50 border border-zinc-800 rounded-full" />
+                <div className="h-10 w-32 bg-muted/50 border border-border rounded-full" />
+                <div className="h-10 w-32 bg-muted/50 border border-border rounded-full" />
               </div>
             </div>
 
             {/* View Mode Toggle Skeleton */}
             <div className="flex justify-between items-center animate-pulse">
-              <div className="h-5 w-48 bg-zinc-800 rounded" />
+              <div className="h-5 w-48 bg-muted rounded" />
               <div className="flex gap-2">
-                <div className="h-9 w-20 bg-zinc-800 rounded" />
-                <div className="h-9 w-20 bg-zinc-800 rounded" />
+                <div className="h-9 w-20 bg-muted rounded" />
+                <div className="h-9 w-20 bg-muted rounded" />
               </div>
             </div>
 
@@ -58,10 +58,10 @@ export function HomePage() {
 
         {/* Error State */}
         {localError && !localLoading && (
-          <div className="flex flex-col items-center justify-center py-12 bg-zinc-900 border border-zinc-800 rounded-lg">
-            <AlertCircle className="w-12 h-12 text-red-400 mb-4" />
-            <h2 className="text-xl font-semibold text-white mb-2">Failed to Load Local Models</h2>
-            <p className="text-zinc-400 text-center max-w-md mb-4">
+          <div className="flex flex-col items-center justify-center py-12 bg-card border border-border rounded-lg">
+            <AlertCircle className="w-12 h-12 text-destructive mb-4" />
+            <h2 className="text-xl font-semibold text-card-foreground mb-2">Failed to Load Local Models</h2>
+            <p className="text-muted-foreground text-center max-w-md mb-4">
               {localError.message}
             </p>
             <Button

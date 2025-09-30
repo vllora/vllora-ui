@@ -99,15 +99,15 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
       </div>
 
       {/* Desktop Table View */}
-      <div className="hidden sm:block bg-zinc-900/50 border border-zinc-800 rounded-lg overflow-hidden">
-        <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900">
+      <div className="hidden sm:block bg-card border border-border rounded-lg overflow-hidden">
+        <div className="overflow-x-auto">
           <div className="w-full">
             {/* Table Header */}
-            <div className="bg-zinc-900 border-b border-zinc-800 px-4 py-3">
-              <div className="flex items-center gap-2 text-xs font-medium text-zinc-400 uppercase tracking-wide">
+            <div className="bg-secondary border-b border-border px-4 py-3">
+              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 <button
                   onClick={() => handleSort('id')}
-                  className="w-[40%] flex items-center gap-1 hover:text-zinc-200 transition-colors cursor-pointer group"
+                  className="w-[40%] flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer group"
                 >
                   <span>MODEL ID</span>
                   {sortField === 'id' ? (
@@ -118,7 +118,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                 </button>
                 <button
                   onClick={() => handleSort('provider')}
-                  className="w-[20%] flex items-center gap-1 hover:text-zinc-200 transition-colors cursor-pointer group"
+                  className="w-[20%] flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer group"
                 >
                   <span>PROVIDER</span>
                   {sortField === 'provider' ? (
@@ -129,7 +129,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                 </button>
                 <button
                   onClick={() => handleSort('owner')}
-                  className="w-[25%] flex items-center gap-1 hover:text-zinc-200 transition-colors cursor-pointer group"
+                  className="w-[25%] flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer group"
                 >
                   <span>OWNER</span>
                   {sortField === 'owner' ? (
@@ -140,7 +140,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                 </button>
                 <button
                   onClick={() => handleSort('created')}
-                  className="w-[15%] flex items-center gap-1 hover:text-zinc-200 transition-colors cursor-pointer group"
+                  className="w-[15%] flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer group"
                 >
                   <span>CREATED</span>
                   {sortField === 'created' ? (
@@ -153,7 +153,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
             </div>
 
             {/* Table Body */}
-            <div className="divide-y divide-zinc-800">
+            <div className="divide-y divide-border">
               {sortedModels.map((model, index) => {
                 // Get model group if available, otherwise treat as single model
                 const modelGroup = (model as any)._modelGroup || [model];
@@ -161,7 +161,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                 const providers = Array.from(new Set(modelGroup.map((m: LocalModel) => m.id.split('/')[0])));
 
                 return (
-                  <div key={`${model.id}-${index}`} className="group px-4 py-4 hover:bg-zinc-800/50 transition-colors">
+                  <div key={`${model.id}-${index}`} className="group px-4 py-4 hover:bg-accent/50 transition-colors">
                     <div className="flex items-center gap-2">
                       {/* Model Name */}
                       <div className="w-[40%] min-w-0 pr-3">
@@ -172,7 +172,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                                      <span className="font-medium text-white truncate text-sm">
+                                      <span className="font-medium text-card-foreground truncate text-sm">
                                         {modelName}
                                       </span>
                                       <button
@@ -181,18 +181,18 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                                           e.preventDefault();
                                           copyModelName(modelGroup[0].id);
                                         }}
-                                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-700 rounded transition-all flex-shrink-0"
+                                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-accent rounded transition-all flex-shrink-0"
                                         title="Copy model ID"
                                       >
                                         {copiedModel === modelGroup[0].id ? (
-                                          <Check className="w-3 h-3 text-green-400" />
+                                          <Check className="w-3 h-3 text-emerald-500" />
                                         ) : (
-                                          <Copy className="w-3 h-3 text-zinc-400" />
+                                          <Copy className="w-3 h-3 text-muted-foreground" />
                                         )}
                                       </button>
                                     </div>
                                   </TooltipTrigger>
-                                  <TooltipContent side="top" className="bg-zinc-800 border-zinc-700 text-white">
+                                  <TooltipContent side="top" className="bg-popover border-border">
                                     <span className="text-xs font-mono">{modelName}</span>
                                   </TooltipContent>
                                 </Tooltip>
@@ -214,10 +214,10 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                                   <TooltipTrigger>
                                     <div
                                       onClick={(e) => copyProviderModelId(e, provider, modelName)}
-                                      className="p-1 bg-zinc-800/30 rounded hover:bg-zinc-800/50 transition-colors cursor-pointer"
+                                      className="p-1 bg-secondary rounded hover:bg-secondary/80 transition-colors cursor-pointer"
                                     >
                                       {isCopied ? (
-                                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                        <Check className="w-3.5 h-3.5 text-emerald-500" />
                                       ) : (
                                         <ProviderIcon
                                           provider_name={provider}
@@ -226,7 +226,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                                       )}
                                     </div>
                                   </TooltipTrigger>
-                                  <TooltipContent side="bottom" className="bg-zinc-800 border-zinc-700 text-white">
+                                  <TooltipContent side="bottom" className="bg-popover border-border">
                                     <p className="text-xs font-medium">
                                       {isCopied ? 'Copied!' : `Click to copy ${fullId}`}
                                     </p>
@@ -240,12 +240,12 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
 
                       {/* Owner */}
                       <div className="w-[25%]">
-                        <span className="text-sm text-zinc-300">{modelGroup[0].owned_by}</span>
+                        <span className="text-sm text-foreground/80">{modelGroup[0].owned_by}</span>
                       </div>
 
                       {/* Created Date */}
                       <div className="w-[15%]">
-                        <span className="text-xs text-zinc-400">
+                        <span className="text-xs text-muted-foreground">
                           {new Date(modelGroup[0].created * 1000).toLocaleDateString('en-US', {
                             month: 'short',
                             day: 'numeric',

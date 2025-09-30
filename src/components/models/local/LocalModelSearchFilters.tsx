@@ -70,15 +70,15 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
     <div className="w-full space-y-4">
       {/* Search Bar */}
       <div className="relative w-full group">
-        <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-zinc-500 w-5 h-5 transition-colors group-focus-within:text-emerald-400" />
+        <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5 transition-colors group-focus-within:text-emerald-500" />
         <input
           type="text"
           placeholder="Search models by name, provider, or owner..."
           value={localSearchTerm}
           onChange={handleSearchChange}
-          className="w-full pl-12 pr-12 py-3.5 bg-zinc-900/50 text-white placeholder-zinc-500
-            border border-zinc-800 rounded-lg
-            focus:border-emerald-500/50 focus:bg-zinc-900/80 focus:ring-2 focus:ring-emerald-500/20
+          className="w-full pl-12 pr-12 py-3.5 bg-card text-foreground placeholder-muted-foreground
+            border border-border rounded-lg
+            focus:border-emerald-500/50 focus:ring-2 focus:ring-ring
             focus:outline-none transition-all duration-200"
         />
         {localSearchTerm && (
@@ -87,10 +87,10 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
               setLocalSearchTerm('');
               onSearchChange('');
             }}
-            className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1.5 hover:bg-zinc-700/50 rounded-full transition-colors"
+            className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1.5 hover:bg-accent rounded-full transition-colors"
             title="Clear search"
           >
-            <X className="w-4 h-4 text-zinc-400 hover:text-white" />
+            <X className="w-4 h-4 text-muted-foreground hover:text-foreground" />
           </button>
         )}
       </div>
@@ -117,12 +117,12 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
 
         {/* Group By Model Name Checkbox */}
         {onGroupByNameChange && providers.length > 1 && (
-          <label className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-400 hover:text-white cursor-pointer transition-colors">
+          <label className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
             <input
               type="checkbox"
               checked={groupByName}
               onChange={(e) => onGroupByNameChange(e.target.checked)}
-              className="w-4 h-4 rounded border-zinc-700 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/20 focus:ring-2 cursor-pointer"
+              className="w-4 h-4 rounded border-border bg-background text-emerald-500 focus:ring-ring focus:ring-2 cursor-pointer"
             />
             <span>Group by name</span>
           </label>
@@ -132,7 +132,7 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
         {hasActiveFilters && (
           <button
             onClick={clearAllFilters}
-            className="ml-2 text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+            className="ml-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             Clear all
           </button>
@@ -142,38 +142,38 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
       {/* Active Filters */}
       {hasActiveFilters && (
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-zinc-600">Filtering:</span>
+          <span className="text-xs text-muted-foreground">Filtering:</span>
           <div className="flex flex-wrap gap-1.5">
             {searchTerm && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800/50 text-zinc-400 text-xs">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs">
                 "{searchTerm}"
                 <button
                   onClick={() => onSearchChange('')}
-                  className="ml-1 hover:text-zinc-200"
+                  className="ml-1 hover:text-foreground"
                 >
                   ×
                 </button>
               </span>
             )}
             {selectedProviders.map(provider => (
-              <div key={provider} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800/50 text-zinc-400 text-xs">
+              <div key={provider} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs">
                 <span>provider:</span>
-                <span className="text-zinc-300 font-bold">{provider}</span>
+                <span className="font-bold">{provider}</span>
                 <button
                   onClick={() => onProvidersChange(selectedProviders.filter(p => p !== provider))}
-                  className="ml-1 hover:text-zinc-200"
+                  className="ml-1 hover:text-foreground"
                 >
                   ×
                 </button>
               </div>
             ))}
             {selectedOwners.map(owner => (
-              <div key={owner} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800/50 text-zinc-400 text-xs">
+              <div key={owner} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs">
                 <span>owner:</span>
-                <span className="text-zinc-300 font-bold">{owner}</span>
+                <span className="font-bold">{owner}</span>
                 <button
                   onClick={() => onOwnersChange(selectedOwners.filter(o => o !== owner))}
-                  className="ml-1 hover:text-zinc-200"
+                  className="ml-1 hover:text-foreground"
                 >
                   ×
                 </button>
@@ -182,7 +182,7 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
           </div>
           <button
             onClick={clearAllFilters}
-            className="ml-2 text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+            className="ml-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             Clear all
           </button>

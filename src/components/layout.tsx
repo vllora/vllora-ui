@@ -14,11 +14,11 @@ export function Layout() {
       />
       <main
         className={cn(
-          "flex-1 overflow-y-auto transition-all duration-300",
+          "flex-1 overflow-y-auto transition-all duration-300 flex",
           isSidebarCollapsed ? "md:ml-0" : "md:ml-0"
         )}
       >
-        <div className="container mx-auto p-6 pt-20 md:pt-6">
+        <div className="pt-20 md:pt-6 flex flex-1">
           <Outlet />
         </div>
       </main>

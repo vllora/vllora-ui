@@ -179,7 +179,7 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
       {/* View Mode Toggle */}
       {showViewModeToggle && (
         <div className="flex justify-between items-center">
-          <p className="text-sm text-zinc-400">
+          <p className="text-sm text-muted-foreground">
             Showing {filteredModels.length} of {groupedModels.length} {groupByName ? 'models' : 'models'}
           </p>
           <div className="flex gap-2">
@@ -224,14 +224,14 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
       {/* Empty State */}
       {filteredModels.length === 0 && (
         <div className="text-center py-12">
-          <p className="text-zinc-400">No local models found matching your filters.</p>
+          <p className="text-muted-foreground">No local models found matching your filters.</p>
           <button
             onClick={() => {
               setSearchTerm('');
               setSelectedProviders([]);
               setSelectedOwners([]);
             }}
-            className="mt-4 text-sm text-zinc-300 hover:text-white underline"
+            className="mt-4 text-sm text-foreground/70 hover:text-foreground underline"
           >
             Clear all filters
           </button>
