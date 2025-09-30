@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { LocalModel } from '@/types/models';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
-import { Copy, Check, ExternalLink, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
+import { Copy, Check, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { LocalModelCard } from './LocalModelCard';
 
@@ -11,7 +11,7 @@ interface LocalModelsTableProps {
   copyModelName: (modelName: string) => Promise<void>;
 }
 
-type SortField = 'id' | 'provider' | 'owner' | 'created';
+type SortField = 'id' | 'provider' | 'owner' | 'created' | 'none';
 type SortDirection = 'asc' | 'desc';
 
 export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
@@ -19,7 +19,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
   copiedModel,
   copyModelName,
 }) => {
-  const [sortField, setSortField] = useState<SortField>('id');
+  const [sortField, setSortField] = useState<SortField>('none');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   const handleSort = (field: SortField) => {
@@ -32,23 +32,39 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
   };
 
   const sortedModels = useMemo(() => {
+    // If no sorting, return models in original order
+    if (sortField === 'none') {
+      return models;
+    }
+
     return [...models].sort((a, b) => {
       let compareResult = 0;
 
+      // Check if models are grouped
+      const aModelName = (a as any)._modelName || a.id.split('/').slice(1).join('/');
+      const bModelName = (b as any)._modelName || b.id.split('/').slice(1).join('/');
+      const aModelGroup = (a as any)._modelGroup || [a];
+      const bModelGroup = (b as any)._modelGroup || [b];
+
       switch (sortField) {
         case 'id':
-          compareResult = a.id.localeCompare(b.id);
+          // If grouped, sort by model name; otherwise by full id
+          if ((a as any)._modelName && (b as any)._modelName) {
+            compareResult = aModelName.localeCompare(bModelName);
+          } else {
+            compareResult = a.id.localeCompare(b.id);
+          }
           break;
         case 'provider':
-          const aProvider = a.id.split('/')[0];
-          const bProvider = b.id.split('/')[0];
+          const aProvider = aModelGroup[0].id.split('/')[0];
+          const bProvider = bModelGroup[0].id.split('/')[0];
           compareResult = aProvider.localeCompare(bProvider);
           break;
         case 'owner':
-          compareResult = a.owned_by.localeCompare(b.owned_by);
+          compareResult = aModelGroup[0].owned_by.localeCompare(bModelGroup[0].owned_by);
           break;
         case 'created':
-          compareResult = a.created - b.created;
+          compareResult = aModelGroup[0].created - bModelGroup[0].created;
           break;
         default:
           compareResult = 0;
@@ -76,7 +92,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
               <div className="flex items-center gap-2 text-xs font-medium text-zinc-400 uppercase tracking-wide">
                 <button
                   onClick={() => handleSort('id')}
-                  className="w-[35%] flex items-center gap-1 hover:text-zinc-200 transition-colors cursor-pointer group"
+                  className="w-[40%] flex items-center gap-1 hover:text-zinc-200 transition-colors cursor-pointer group"
                 >
                   <span>MODEL ID</span>
                   {sortField === 'id' ? (
@@ -98,7 +114,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                 </button>
                 <button
                   onClick={() => handleSort('owner')}
-                  className="w-[20%] flex items-center gap-1 hover:text-zinc-200 transition-colors cursor-pointer group"
+                  className="w-[25%] flex items-center gap-1 hover:text-zinc-200 transition-colors cursor-pointer group"
                 >
                   <span>OWNER</span>
                   {sortField === 'owner' ? (
@@ -118,7 +134,6 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                     <ChevronsUpDown className="w-3 h-3 opacity-0 group-hover:opacity-50" />
                   )}
                 </button>
-                <div className="w-[10%] text-center">ACTIONS</div>
               </div>
             </div>
 
@@ -134,7 +149,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                   <div key={`${model.id}-${index}`} className="group px-4 py-4 hover:bg-zinc-800/50 transition-colors">
                     <div className="flex items-center gap-2">
                       {/* Model Name */}
-                      <div className="w-[35%] min-w-0 pr-3">
+                      <div className="w-[40%] min-w-0 pr-3">
                         <div className="flex items-start gap-2">
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 mb-1">
@@ -168,11 +183,6 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                                 </Tooltip>
                               </TooltipProvider>
                             </div>
-                            <div className="text-xs text-zinc-500">
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-medium">
-                                Local
-                              </span>
-                            </div>
                           </div>
                         </div>
                       </div>
@@ -201,7 +211,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                       </div>
 
                       {/* Owner */}
-                      <div className="w-[20%]">
+                      <div className="w-[25%]">
                         <span className="text-sm text-zinc-300">{modelGroup[0].owned_by}</span>
                       </div>
 
@@ -214,22 +224,6 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                             year: '2-digit'
                           })}
                         </span>
-                      </div>
-
-                      {/* Actions */}
-                      <div className="w-[10%] flex justify-center gap-1">
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button className="p-1 hover:bg-zinc-700 rounded transition-colors text-zinc-400 hover:text-white">
-                                <ExternalLink className="w-3.5 h-3.5" />
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="text-xs">View details</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
                       </div>
                     </div>
                   </div>

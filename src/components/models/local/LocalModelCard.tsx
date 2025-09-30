@@ -9,7 +9,8 @@ export interface LocalModelCardProps {
 }
 
 export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model }) => {
-  const [copied, setCopied] = useState(false);
+  const [copiedModelName, setCopiedModelName] = useState(false);
+  const [copiedProviderId, setCopiedProviderId] = useState<string | null>(null);
 
   // Get model group if available, otherwise treat as single model
   const modelGroup = (model as any)._modelGroup || [model];
@@ -23,14 +24,30 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model }) => {
     e.stopPropagation();
 
     try {
-      // Copy the first model's full ID
-      await navigator.clipboard.writeText(modelGroup[0].id);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      // If multiple providers (grouped), copy just the model name
+      // Otherwise, copy the full model ID with provider prefix
+      const textToCopy = providers.length > 1 ? modelName : modelGroup[0].id;
+      await navigator.clipboard.writeText(textToCopy);
+      setCopiedModelName(true);
+      setTimeout(() => setCopiedModelName(false), 2000);
     } catch (err) {
       console.error('Failed to copy model ID:', err);
     }
-  }, [modelGroup]);
+  }, [modelGroup, modelName, providers.length]);
+
+  const copyProviderModelId = useCallback(async (e: React.MouseEvent, provider: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    try {
+      const fullId = `${provider}/${modelName}`;
+      await navigator.clipboard.writeText(fullId);
+      setCopiedProviderId(fullId);
+      setTimeout(() => setCopiedProviderId(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy provider model ID:', err);
+    }
+  }, [modelName]);
 
   // Format timestamp to readable date
   const formatDate = (timestamp: number) => {
@@ -59,7 +76,7 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model }) => {
                     </div>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="bg-zinc-800 border-zinc-700 text-white">
-                    <p className="text-xs font-medium">{modelGroup[0].owned_by}</p>
+                    <p className="text-xs font-medium">Owner: {modelGroup[0].owned_by}</p>
                   </TooltipContent>
                 </Tooltip>
 
@@ -75,15 +92,15 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model }) => {
                         </h3>
                       </TooltipTrigger>
                       <TooltipContent side="top" className="bg-zinc-800 border-zinc-700 text-white">
-                        <p className="text-xs">{copied ? "Copied!" : "Click to copy"}</p>
+                        <p className="text-xs">{copiedModelName ? "Copied!" : "Click to copy"}</p>
                       </TooltipContent>
                     </Tooltip>
                     <button
                       onClick={copyModelId}
                       className="p-1 rounded hover:bg-zinc-700/50 transition-colors opacity-0 group-hover:opacity-100"
-                      title={copied ? "Copied!" : "Copy model ID"}
+                      title={copiedModelName ? "Copied!" : "Copy model ID"}
                     >
-                      {copied ? (
+                      {copiedModelName ? (
                         <Check className="w-3.5 h-3.5 text-green-400" />
                       ) : (
                         <Copy className="w-3.5 h-3.5 text-zinc-400 hover:text-white" />
@@ -97,32 +114,39 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model }) => {
             {/* Model Details */}
             <div className="space-y-2">
               {/* Providers */}
-              <div className="flex items-start justify-between text-xs">
+              <div className="flex items-center justify-between text-xs">
                 <span className="text-zinc-500">{providers.length > 1 ? 'Providers' : 'Provider'}</span>
                 <div className="flex flex-wrap gap-1.5 justify-end">
-                  {(providers as string[]).map((provider: string) => (
-                    <Tooltip key={provider}>
-                      <TooltipTrigger>
-                        <div className="p-1 bg-zinc-800/30 rounded group-hover:bg-zinc-800/50 transition-colors">
-                          <ProviderIcon
-                            provider_name={provider}
-                            className="w-4 h-4"
-                          />
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="bg-zinc-800 border-zinc-700 text-white">
-                        <p className="text-xs font-medium">{provider}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  ))}
+                  {(providers as string[]).map((provider: string) => {
+                    const fullId = `${provider}/${modelName}`;
+                    const isCopied = copiedProviderId === fullId;
+                    return (
+                      <Tooltip key={provider}>
+                        <TooltipTrigger>
+                          <div
+                            onClick={(e) => copyProviderModelId(e, provider)}
+                            className="p-1 bg-zinc-800/30 rounded hover:bg-zinc-800/50 transition-colors cursor-pointer"
+                          >
+                            {isCopied ? (
+                              <Check className="w-4 h-4 text-emerald-400" />
+                            ) : (
+                              <ProviderIcon
+                                provider_name={provider}
+                                className="w-4 h-4"
+                              />
+                            )}
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="bg-zinc-800 border-zinc-700 text-white">
+                          <p className="text-xs font-medium">
+                            {isCopied ? 'Copied!' : `Click to copy ${fullId}`}
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
                 </div>
               </div>
-
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-zinc-500">Owner</span>
-                <span className="text-zinc-300 font-medium">{modelGroup[0].owned_by}</span>
-              </div>
-
               <div className="flex items-center justify-between text-xs">
                 <span className="text-zinc-500">Created</span>
                 <span className="text-zinc-300 font-medium">{formatDate(modelGroup[0].created)}</span>
