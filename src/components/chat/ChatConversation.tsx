@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Bot, User, ArrowDown } from 'lucide-react';
 import { Message, MessageType } from '@/types/chat';
 import { useInViewport } from 'ahooks';
+import { MessageDisplay } from './MessageDisplay';
 
 interface ChatConversationProps {
   messages: Message[];
@@ -21,10 +22,12 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
   const [inViewport] = useInViewport(messagesEndRef);
 
   useEffect(() => {
-    if (!externalScrollToBottom) {
+    if (externalScrollToBottom) {
+      externalScrollToBottom();
+    } else {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages, externalScrollToBottom, messagesEndRef]);
+  }, [messages, isLoading, externalScrollToBottom, messagesEndRef]);
 
   const scrollToBottom = () => {
     if (externalScrollToBottom) {
@@ -96,9 +99,13 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
                 ))}
               </div>
             )}
-            <p className="text-sm whitespace-pre-wrap break-words">
-              {message.content}
-            </p>
+            <div className="text-sm break-words">
+              {message.role === 'user' ? (
+                <p className="whitespace-pre-wrap">{message.content}</p>
+              ) : (
+                <MessageDisplay message={message.content} />
+              )}
+            </div>
             <p
               className={`text-xs mt-2 ${
                 message.role === 'user'
