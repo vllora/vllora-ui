@@ -1,10 +1,10 @@
-import { Sparkles, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
-import { ModelsExplorer } from '@/components/models/ModelsExplorer';
-import { useModels } from '@/hooks/useModels';
+import { Sparkles, AlertCircle, Loader2, RefreshCw, Server } from 'lucide-react';
+import { LocalModelsExplorer } from '@/components/models/LocalModelsExplorer';
+import { useLocalModels } from '@/hooks/useLocalModels';
 import { Button } from '@/components/ui/button';
 
 export function HomePage() {
-  const { models, loading, error, refetch } = useModels();
+  const { models: localModels, loading: localLoading, error: localError, refetch: localRefetch } = useLocalModels();
 
   return (
     <section className="flex-1 flex flex-col overflow-auto bg-zinc-950 text-white w-full" aria-label="AI Models Gallery">
@@ -13,40 +13,40 @@ export function HomePage() {
         {/* Header */}
         <header className="text-center mb-8">
           <h1 className="text-5xl lg:text-6xl font-bold mb-4">
-            <span className="block sm:inline-block">AI Models</span>{' '}
-            <span className="block sm:inline-block bg-gradient-to-r from-zinc-200 to-zinc-400 bg-clip-text text-transparent mt-2 sm:mt-0">
+            <span className="block sm:inline-block">Local AI Models</span>{' '}
+            <span className="block sm:inline-block bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent mt-2 sm:mt-0">
               Gallery
             </span>
           </h1>
           <p className="text-zinc-400 text-lg max-w-2xl mx-auto">
-            Discover and compare the latest AI models from leading providers
+            Browse and manage your locally running AI models
           </p>
           <div className="flex items-center justify-center gap-2 mt-4">
-            <Sparkles className="w-4 h-4 text-zinc-500" />
+            <Server className="w-4 h-4 text-emerald-500" />
             <span className="text-sm text-zinc-500">
-              Updated with the newest models
+              Running on <span className="text-emerald-400 font-medium">localhost:8080</span>
             </span>
           </div>
         </header>
 
         {/* Loading State */}
-        {loading && (
+        {localLoading && (
           <div className="flex flex-col items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 text-zinc-400 animate-spin mb-4" />
-            <p className="text-zinc-400">Loading models...</p>
+            <Loader2 className="w-8 h-8 text-emerald-400 animate-spin mb-4" />
+            <p className="text-zinc-400">Loading local models...</p>
           </div>
         )}
 
         {/* Error State */}
-        {error && !loading && (
+        {localError && !localLoading && (
           <div className="flex flex-col items-center justify-center py-12 bg-zinc-900 border border-zinc-800 rounded-lg">
             <AlertCircle className="w-12 h-12 text-red-400 mb-4" />
-            <h2 className="text-xl font-semibold text-white mb-2">Failed to Load Models</h2>
+            <h2 className="text-xl font-semibold text-white mb-2">Failed to Load Local Models</h2>
             <p className="text-zinc-400 text-center max-w-md mb-4">
-              {error.message}
+              {localError.message}
             </p>
             <Button
-              onClick={() => refetch()}
+              onClick={() => localRefetch()}
               variant="outline"
               className="flex items-center gap-2"
             >
@@ -56,13 +56,13 @@ export function HomePage() {
           </div>
         )}
 
-        {/* Models Explorer */}
-        {!loading && !error && (
-          <ModelsExplorer
-            models={models}
+        {/* Local Models Explorer */}
+        {!localLoading && !localError && (
+          <LocalModelsExplorer
+            models={localModels}
             showViewModeToggle={true}
             showStats={true}
-            statsTitle="AI Models Ecosystem"
+            statsTitle="Local Models"
           />
         )}
 

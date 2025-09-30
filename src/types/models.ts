@@ -53,3 +53,15 @@ export interface ModelAnalytics {
   avgInputCost: number;
   avgOutputCost: number;
 }
+
+export interface LocalModel {
+  id: string;
+  object: string;
+  created: number;
+  owned_by: string;
+}
+
+export interface LocalModelsResponse {
+  object: string;
+  data: LocalModel[];
+}
