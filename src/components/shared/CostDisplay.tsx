@@ -86,7 +86,7 @@ export const CostDisplay: React.FC<CostDisplayProps> = ({
         </div>
       )}
       {cachingEnabled && (
-        <Database className="w-3 h-3 text-theme-500" />
+        <Database className="w-3 h-3 text-[rgb(var(--theme-500))]" />
       )}
     </div>
   );

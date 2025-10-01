@@ -30,8 +30,18 @@
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
 
-    /* Theme color RGB for focus shadows - emerald-500 */
+    /* Theme color RGB values - emerald by default */
     --theme-rgb: 16, 185, 129;
+    --theme-50: 236, 253, 245;
+    --theme-100: 209, 250, 229;
+    --theme-200: 167, 243, 208;
+    --theme-300: 110, 231, 183;
+    --theme-400: 52, 211, 153;
+    --theme-500: 16, 185, 129;
+    --theme-600: 5, 150, 105;
+    --theme-700: 4, 120, 87;
+    --theme-800: 6, 95, 70;
+    --theme-900: 6, 78, 59;
   }
 
   .dark {

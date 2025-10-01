@@ -112,8 +112,8 @@ export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSideb
                           className={cn(
                             "flex items-center rounded-lg text-sm font-medium transition-all duration-200",
                             isActive
-                              ? "bg-theme-500/10 text-theme-500"
-                              : "hover:bg-theme-500/10 hover:text-theme-500 text-muted-foreground",
+                              ? "bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]"
+                              : "hover:bg-[rgba(var(--theme-500),0.1)] hover:text-[rgb(var(--theme-500))] text-muted-foreground",
                             "justify-center p-2 w-10 h-10"
                           )}
                           onClick={() => setIsMobileOpen(false)}
@@ -131,8 +131,8 @@ export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSideb
                       className={cn(
                         "flex items-center rounded-lg text-sm font-medium transition-all duration-200",
                         isActive
-                          ? "bg-theme-500/10 text-theme-500"
-                          : "hover:bg-theme-500/10 hover:text-theme-500 text-muted-foreground",
+                          ? "bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]"
+                          : "hover:bg-[rgba(var(--theme-500),0.1)] hover:text-[rgb(var(--theme-500))] text-muted-foreground",
                         "gap-3 px-3 py-2"
                       )}
                       onClick={() => setIsMobileOpen(false)}
@@ -163,8 +163,8 @@ export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSideb
                           className={cn(
                             "flex items-center rounded-lg text-sm font-medium transition-all duration-200",
                             isActive
-                              ? "bg-theme-500/10 text-theme-500"
-                              : "hover:bg-theme-500/10 hover:text-theme-500 text-muted-foreground",
+                              ? "bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]"
+                              : "hover:bg-[rgba(var(--theme-500),0.1)] hover:text-[rgb(var(--theme-500))] text-muted-foreground",
                             "justify-center p-2 w-10 h-10"
                           )}
                           onClick={() => setIsMobileOpen(false)}
@@ -182,8 +182,8 @@ export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSideb
                       className={cn(
                         "flex items-center rounded-lg text-sm font-medium transition-all duration-200",
                         isActive
-                          ? "bg-theme-500/10 text-theme-500"
-                          : "hover:bg-theme-500/10 hover:text-theme-500 text-muted-foreground",
+                          ? "bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]"
+                          : "hover:bg-[rgba(var(--theme-500),0.1)] hover:text-[rgb(var(--theme-500))] text-muted-foreground",
                         "gap-3 px-3 py-2"
                       )}
                       onClick={() => setIsMobileOpen(false)}

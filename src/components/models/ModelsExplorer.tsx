@@ -236,7 +236,7 @@ export const ModelsExplorer: React.FC<ModelsExplorerProps> = ({
               <p className="text-sm text-zinc-400">Providers</p>
             </div>
             <div>
-              <p className="text-3xl font-bold text-theme-400">{stats.newModelsCount}</p>
+              <p className="text-3xl font-bold text-[rgb(var(--theme-400))]">{stats.newModelsCount}</p>
               <p className="text-sm text-zinc-400">New Models</p>
             </div>
             <div>

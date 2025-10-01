@@ -237,7 +237,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         )}
         <input {...getInputProps()} className="hidden" />
 
-        <div className="bg-secondary rounded-xl border border-input focus-within:border-theme-500 focus-within:shadow-[0_0_0_3px_rgba(var(--theme-rgb),0.1)] transition-all">
+        <div className="bg-secondary rounded-xl border border-input focus-within:border-[rgb(var(--theme-500))] focus-within:shadow-[0_0_0_3px_rgba(var(--theme-rgb),0.1)] transition-all">
           <textarea
             ref={textareaRef}
             value={currentInput}
@@ -285,7 +285,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               onClick={handleSend}
               disabled={disabled || !currentInput.trim()}
               size="icon"
-              className="bg-theme-600 hover:bg-theme-700 text-white dark:bg-theme-600 dark:hover:bg-theme-700 h-8 w-8 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg"
+              className="bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-700))] text-white dark:bg-[rgb(var(--theme-600))] dark:hover:bg-[rgb(var(--theme-700))] h-8 w-8 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg"
               title="Send message"
             >
               <Send className="w-4 h-4" />

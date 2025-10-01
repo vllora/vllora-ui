@@ -101,7 +101,7 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model }) => {
                       title={copiedModelName ? "Copied!" : "Copy model ID"}
                     >
                       {copiedModelName ? (
-                        <Check className="w-3.5 h-3.5 text-theme-500" />
+                        <Check className="w-3.5 h-3.5 text-[rgb(var(--theme-500))]" />
                       ) : (
                         <Copy className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
                       )}
@@ -128,7 +128,7 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model }) => {
                             className="p-1 bg-secondary rounded hover:bg-secondary/80 transition-colors cursor-pointer"
                           >
                             {isCopied ? (
-                              <Check className="w-4 h-4 text-theme-500" />
+                              <Check className="w-4 h-4 text-[rgb(var(--theme-500))]" />
                             ) : (
                               <ProviderIcon
                                 provider_name={provider}

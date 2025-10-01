@@ -1,4 +1,5 @@
 import { ProjectDropdown } from './ProjectDropdown';
+import { BrandToggle } from './brand-toggle';
 import { useLocation } from 'react-router-dom';
 
 interface HeaderProps {
@@ -24,6 +25,11 @@ export function Header({ currentProjectId, onProjectChange }: HeaderProps) {
             currentProjectId={currentProjectId}
             onProjectChange={onProjectChange}
           />
+        </div>
+
+        {/* Right: Brand Color Toggle */}
+        <div className="flex items-center gap-2">
+          <BrandToggle />
         </div>
       </div>
     </header>

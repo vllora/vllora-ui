@@ -70,10 +70,10 @@ export function ProjectDropdown({ currentProjectId, onProjectChange }: ProjectDr
       <DropdownMenuTrigger asChild>
         <Button
           variant="outline"
-          className="flex items-center gap-3 min-w-[240px] justify-between backdrop-blur-xl bg-card/50 border-border/50 hover:bg-card/80 hover:border-theme-500/30 transition-all duration-200 shadow-sm"
+          className="flex items-center gap-3 min-w-[240px] justify-between backdrop-blur-xl bg-card/50 border-border/50 hover:bg-card/80 hover:border-[rgba(var(--theme-500),0.3)] transition-all duration-200 shadow-sm"
         >
           <div className="flex items-center gap-2 truncate">
-            <FolderOpen className="h-4 w-4 flex-shrink-0 text-theme-500" />
+            <FolderOpen className="h-4 w-4 flex-shrink-0 text-[rgb(var(--theme-500))]" />
             <span className="truncate font-medium">
               {loading ? 'Loading...' : currentProject?.name || 'Select Project'}
             </span>
@@ -104,7 +104,7 @@ export function ProjectDropdown({ currentProjectId, onProjectChange }: ProjectDr
                     : 'hover:bg-accent focus:bg-accent'
                 }`}
               >
-                <FolderOpen className={`h-4 w-4 flex-shrink-0 ${isSelected ? 'text-theme-500' : 'text-muted-foreground'}`} />
+                <FolderOpen className={`h-4 w-4 flex-shrink-0 ${isSelected ? 'text-[rgb(var(--theme-500))]' : 'text-muted-foreground'}`} />
                 <div className="flex-1 truncate">
                   <div className="font-medium truncate">{project.name}</div>
                   {project.description && (
@@ -135,7 +135,7 @@ export function ProjectDropdown({ currentProjectId, onProjectChange }: ProjectDr
           </Link>
 
           <Link to="/projects?action=create">
-            <DropdownMenuItem className="flex items-center gap-3 cursor-pointer rounded-lg mx-1 px-3 py-2 text-theme-600 dark:text-theme-400 hover:bg-theme-500/10 transition-all duration-200">
+            <DropdownMenuItem className="flex items-center gap-3 cursor-pointer rounded-lg mx-1 px-3 py-2 text-[rgb(var(--theme-600))] dark:text-[rgb(var(--theme-400))] hover:bg-[rgba(var(--theme-500),0.1)] transition-all duration-200">
               <Plus className="h-4 w-4 flex-shrink-0" />
               <span className="font-medium">New Project</span>
             </DropdownMenuItem>
