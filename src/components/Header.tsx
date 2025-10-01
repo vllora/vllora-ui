@@ -3,11 +3,10 @@ import { BrandToggle } from './brand-toggle';
 import { useLocation } from 'react-router-dom';
 
 interface HeaderProps {
-  currentProjectId?: string;
   onProjectChange?: (projectId: string) => void;
 }
 
-export function Header({ currentProjectId, onProjectChange }: HeaderProps) {
+export function Header({ onProjectChange }: HeaderProps) {
   const location = useLocation();
   const isProjectsPage = location.pathname === '/projects';
 
@@ -21,10 +20,7 @@ export function Header({ currentProjectId, onProjectChange }: HeaderProps) {
       <div className="h-full flex items-center justify-between px-4 gap-4">
         {/* Left: Project Dropdown */}
         <div className="flex items-center gap-3">
-          <ProjectDropdown
-            currentProjectId={currentProjectId}
-            onProjectChange={onProjectChange}
-          />
+          <ProjectDropdown onProjectChange={onProjectChange} />
         </div>
 
         {/* Right: Brand Color Toggle */}

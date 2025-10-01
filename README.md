@@ -29,7 +29,8 @@ ellora-ui/
 │   │   ├── app-sidebar.tsx              # Collapsible sidebar navigation
 │   │   ├── layout.tsx                   # Main layout wrapper
 │   │   ├── theme-provider.tsx           # Theme context provider
-│   │   ├── mode-toggle.tsx              # Theme toggle component
+│   │   ├── mode-toggle.tsx              # Color theme toggle component
+│   │   ├── brand-toggle.tsx             # Brand color picker component
 │   │   ├── chat/                        # Chat interface components
 │   │   │   ├── ChatWindow.tsx           # Main chat container
 │   │   │   ├── ChatSidebar.tsx          # Thread list sidebar
@@ -72,28 +73,37 @@ ellora-ui/
 │   ├── pages/
 │   │   ├── home.tsx                     # Local models gallery page
 │   │   ├── chat.tsx                     # Chat interface page
-│   │   ├── projects.tsx                 # Projects page
+│   │   ├── projects.tsx                 # Projects management page
 │   │   ├── analytics.tsx                # Analytics page
 │   │   └── settings.tsx                 # Settings page
+│   ├── contexts/                        # React Context providers
+│   │   ├── ProjectContext.tsx           # Project state management
+│   │   └── LocalModelsContext.tsx       # Local models state management
 │   ├── hooks/                           # Custom React hooks
-│   │   ├── useLocalModels.tsx           # Hook for fetching local models
 │   │   ├── useChatState.ts              # Chat state management
 │   │   ├── useMessageSubmission.ts      # Message submission & streaming
 │   │   └── useScrollToBottom.ts         # Auto-scroll functionality
 │   ├── services/                        # API services
-│   │   └── models-api.ts                # Model data fetching
+│   │   ├── models-api.ts                # Model data fetching
+│   │   └── projects-api.ts              # Project CRUD operations
 │   ├── config/                          # Configuration
 │   │   └── api.ts                       # Centralized API configuration
 │   ├── types/                           # TypeScript type definitions
-│   │   └── chat.ts                      # Chat-related types
+│   │   ├── chat.ts                      # Chat-related types
+│   │   └── models.ts                    # Model-related types
 │   ├── lib/
 │   │   └── utils.ts                     # Utility functions
 │   ├── utils/                           # Helper utilities
 │   │   └── eventEmitter.ts              # Event-driven communication
+│   ├── themes/                          # Theme configuration
+│   │   └── themes.ts                    # Color theme definitions
 │   ├── App.tsx                          # Main app component with routing
 │   ├── main.tsx                         # Application entry point
-│   └── index.css                        # Global styles and theme variables
+│   └── index.css                        # Global styles and CSS variables
 ├── public/                              # Static assets
+├── docs/                                # Documentation
+│   ├── state-management-pattern.md     # State management guide
+│   └── changing-accent-color.md        # Theme customization guide
 ├── .env                                 # Environment variables
 ├── index.html
 ├── package.json
@@ -269,7 +279,8 @@ The application uses Tailwind CSS with custom shadcn/ui theme variables. You can
 - **React Router DOM** - Client-side routing
 - **next-themes** - Theme management system
 - **framer-motion** - Animation library
-- **ahooks** - React hooks library
+- **ahooks** - React hooks library for data fetching
+- **sonner** - Beautiful toast notifications
 - **date-fns** - Date utility library
 - **class-variance-authority** - CSS variant management
 - **tailwind-merge** - Tailwind class merging utility
@@ -302,16 +313,23 @@ This application connects to:
 - **LangDB API** - For model data and chat functionality
 - **Local Model Server** - For locally running AI models (localhost:8080)
 
+## Documentation
+
+- **[State Management Pattern](./docs/state-management-pattern.md)** - Guide for Context API + ahooks pattern
+- **[Changing Accent Color](./docs/changing-accent-color.md)** - Theme customization guide
+
 ## Development Notes
 
-- The app uses custom React hooks for state management and data fetching
+- React Context + ahooks for server state management
 - Event-driven architecture using mitt for component communication
 - Streaming chat with Server-Sent Events (SSE)
 - Theme system uses CSS variables for easy customization
+- Dynamic brand colors with Tailwind CSS variables
 - URL state management for filter persistence
 - Component-based architecture with clear separation of concerns
 - TypeScript for type safety across the application
 - Centralized API configuration in `/src/config/api.ts`
+- Toast notifications with Sonner
 
 ## License
 

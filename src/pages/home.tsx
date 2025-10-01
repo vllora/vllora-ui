@@ -1,11 +1,11 @@
-import { Sparkles, AlertCircle, RefreshCw, Server } from 'lucide-react';
+import { AlertCircle, RefreshCw, Server } from 'lucide-react';
 import { LocalModelsExplorer } from '@/components/models/local/LocalModelsExplorer';
 import { LocalModelsSkeletonLoader } from '@/components/models/local/LocalModelsSkeletonLoader';
-import { useLocalModels } from '@/hooks/useLocalModels';
+import { LocalModelsConsumer } from '@/contexts/LocalModelsContext';
 import { Button } from '@/components/ui/button';
 
 export function HomePage() {
-  const { models: localModels, loading: localLoading, error: localError, refetch: localRefetch } = useLocalModels();
+  const { models: localModels, loading: localLoading, error: localError, refetchModels: localRefetch } = LocalModelsConsumer();
 
   return (
     <section className="flex-1 flex flex-col overflow-auto bg-background text-foreground w-full" aria-label="AI Models Gallery">

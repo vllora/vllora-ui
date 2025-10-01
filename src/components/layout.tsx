@@ -60,10 +60,7 @@ export function Layout() {
         currentProjectId={projectId}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header
-          currentProjectId={projectId}
-          onProjectChange={handleProjectChange}
-        />
+        <Header onProjectChange={handleProjectChange} />
         <main className="flex-1 flex overflow-hidden">
           <Outlet />
         </main>

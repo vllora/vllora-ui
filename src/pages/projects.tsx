@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { FolderOpen, Plus, Trash2, Star } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -20,17 +21,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  listProjects,
   createProject,
   deleteProject,
-  type Project,
   type CreateProjectRequest,
 } from '@/services/projects-api';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { ProjectsConsumer } from '@/contexts/ProjectContext';
 
 export function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { projects, loading, refetchProjects } = ProjectsConsumer();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDescription, setNewProjectDescription] = useState('');
@@ -39,27 +38,11 @@ export function ProjectsPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetchProjects();
-  }, []);
-
-  useEffect(() => {
     // Open create dialog if ?action=create in URL
     if (searchParams.get('action') === 'create') {
       setIsCreateDialogOpen(true);
     }
   }, [searchParams]);
-
-  const fetchProjects = async () => {
-    try {
-      setLoading(true);
-      const data = await listProjects();
-      setProjects(data);
-    } catch (error) {
-      console.error('Failed to fetch projects:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleCreateProject = async () => {
     if (!newProjectName.trim()) return;
@@ -78,11 +61,18 @@ export function ProjectsPage() {
       setIsCreateDialogOpen(false);
 
       // Refresh projects list
-      await fetchProjects();
+      refetchProjects();
 
       // Clear URL params
       navigate('/projects', { replace: true });
+
+      toast.success('Project created', {
+        description: `${newProjectName} has been created successfully`,
+      });
     } catch (error) {
+      toast.error('Failed to create project', {
+        description: error instanceof Error ? error.message : 'An error occurred',
+      });
       console.error('Failed to create project:', error);
     } finally {
       setCreating(false);
@@ -94,8 +84,14 @@ export function ProjectsPage() {
 
     try {
       await deleteProject(projectId);
-      await fetchProjects();
+      refetchProjects();
+      toast.success('Project deleted', {
+        description: 'The project has been deleted successfully',
+      });
     } catch (error) {
+      toast.error('Failed to delete project', {
+        description: error instanceof Error ? error.message : 'An error occurred',
+      });
       console.error('Failed to delete project:', error);
     }
   };

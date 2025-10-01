@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ChevronDown, ChevronLeft } from 'lucide-react';
-import { useLocalModels } from '@/hooks/useLocalModels';
+import { LocalModelsConsumer } from '@/contexts/LocalModelsContext';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 
 interface ModelSelectorProps {
@@ -12,7 +12,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   selectedModel,
   onModelChange,
 }) => {
-  const { models } = useLocalModels();
+  const { models } = LocalModelsConsumer();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');

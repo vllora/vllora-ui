@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { ChevronDown, Plus, FolderOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -9,59 +8,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { listProjects, type Project } from '@/services/projects-api';
+import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { Link } from 'react-router-dom';
 
 interface ProjectDropdownProps {
-  currentProjectId?: string;
   onProjectChange?: (projectId: string) => void;
 }
 
-export function ProjectDropdown({ currentProjectId, onProjectChange }: ProjectDropdownProps) {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [currentProject, setCurrentProject] = useState<Project | null>(null);
-
-  useEffect(() => {
-    fetchProjects();
-  }, []);
-
-  useEffect(() => {
-    if (currentProjectId && projects.length > 0) {
-      const project = projects.find((p) => p.id === currentProjectId);
-      setCurrentProject(project || null);
-    } else if (projects.length > 0 && !currentProjectId) {
-      // Set first project as default if no current project
-      const defaultProject = projects.find((p) => p.is_default) || projects[0];
-      setCurrentProject(defaultProject);
-      if (onProjectChange && defaultProject) {
-        onProjectChange(defaultProject.id);
-      }
-    }
-  }, [currentProjectId, projects, onProjectChange]);
-
-  const fetchProjects = async () => {
-    try {
-      setLoading(true);
-      const data = await listProjects();
-      setProjects(data);
-    } catch (error) {
-      console.error('Failed to fetch projects:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+export function ProjectDropdown({ onProjectChange }: ProjectDropdownProps) {
+  const { projects, loading, currentProject, currentProjectId } = ProjectsConsumer();
 
   const handleProjectSelect = (projectId: string) => {
     // Skip if already selected
     if (projectId === currentProjectId) return;
 
-    const project = projects.find((p) => p.id === projectId);
-    if (project) {
-      setCurrentProject(project);
-      if (onProjectChange) {
-        onProjectChange(projectId);
-      }
+    if (onProjectChange) {
+      onProjectChange(projectId);
     }
   };
 

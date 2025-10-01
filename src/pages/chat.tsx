@@ -2,10 +2,12 @@ import { useState, useCallback } from 'react';
 import { ChatPageSidebar } from '@/components/chat/ChatSidebar';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import { ChatRightSidebar } from '@/components/chat/ChatRightSidebar';
+import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { Thread } from '@/types/chat';
 import { API_CONFIG } from '@/config/api';
 
 export function ChatPage() {
+  const { currentProjectId } = ProjectsConsumer();
   const [threads, setThreads] = useState<Thread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string>('openai/o1-mini');
@@ -79,8 +81,8 @@ export function ChatPage() {
             threadId={selectedThreadId}
             modelName={selectedModel}
             apiUrl={API_CONFIG.url}
-            apiKey={API_CONFIG.apiKey}
-            projectId={API_CONFIG.projectId}
+            // apiKey={API_CONFIG.apiKey}
+            projectId={currentProjectId}
             widgetId={`chat-${selectedThreadId}`}
             onModelChange={handleModelChange}
           />
