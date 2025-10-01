@@ -58,11 +58,23 @@ export interface Message {
 
 export interface Thread {
   id: string;
-  title: string;
-  model: string;
-  messages: Message[];
-  createdAt: number;
-  updatedAt: number;
+  cost?: number;
+  output_tokens?: number;
+  input_tokens?: number;
+  project_id: string;
+  mcp_template_definition_ids?: string[];
+  description?: string;
+  model_name: string;
+  user_id: string;
+  created_at: string;
+  updated_at: string;
+  score?: number;
+  title?: string;
+  tags_info?: string[];
+  errors?: string[];
+  input_models?: string[];
+  request_model_name?: string;
+  is_public?: boolean;
 }
 
 export interface CreateThreadRequest {
