@@ -1,7 +1,7 @@
 import { ArrowsPointingOutIcon } from "@heroicons/react/24/outline"
-import { ProviderIcon } from "../Icons/ProviderIcons"
+import { ProviderIcon } from "../../Icons/ProviderIcons"
 import { cn } from "@/lib/utils"
-import { Avatar } from "../ui/avatar"
+import { Avatar } from "../../ui/avatar"
 import {
   Tooltip,
   TooltipContent,

@@ -1,7 +1,7 @@
 export enum MessageType {
-  HumanMessage = 'HumanMessage',
-  AIMessage = 'AIMessage',
-  SystemMessage = 'SystemMessage',
+  HumanMessage = 'human',
+  AIMessage = 'assistant',
+  SystemMessage = 'system',
 }
 
 export enum MessageContentType {
@@ -38,20 +38,26 @@ export interface MessageMetrics {
   trace_id?: string;
   usage?: ModelUsage;
   cost?: number;
+  ttft?: number;
+  duration?: number;
+  start_time_us?: number;
 }
 
 export interface Message {
   id: string;
-  role: 'user' | 'assistant' | 'system';
+  type: string;
+  role?: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: number;
-  type?: MessageType;
-  content_type?: MessageContentType;
+  content_type?: string;
   thread_id?: string;
+  content_array?: any[];
   trace_id?: string;
   run_id?: string;
   model_name?: string;
   files?: FileWithPreview[];
+  tool_call_id?: any;
+  created_at?: string;
   tool_calls?: ToolCall[];
   metrics?: MessageMetrics[];
 }

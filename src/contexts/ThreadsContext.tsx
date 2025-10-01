@@ -1,4 +1,5 @@
-import { createContext, useContext, ReactNode, useState, useCallback } from 'react';
+import { createContext, useContext, ReactNode, useState, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Thread } from '@/types/chat';
 import { queryThreads, updateThreadTitle, deleteThread as deleteThreadApi } from '@/services/threads-api';
@@ -14,7 +15,6 @@ interface ThreadsContextType {
   hasMore: boolean;
   refreshThreads: () => Promise<void>;
   loadMoreThreads: () => Promise<void>;
-  selectThread: (threadId: string | null) => void;
   renameThread: (threadId: string, title: string) => Promise<void>;
   deleteThread: (threadId: string) => void;
   addThread: (thread: Thread) => void;
@@ -29,14 +29,19 @@ interface ThreadsProviderProps {
 }
 
 export function ThreadsProvider({ children, projectId }: ThreadsProviderProps) {
+  const [searchParams] = useSearchParams();
   const [threads, setThreads] = useState<Thread[]>([]);
-  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [offset, setOffset] = useState<number>(0);
   const [total, setTotal] = useState<number>(0);
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [loadingThreadsError, setLoadingThreadsError] = useState<string | null>(null);
+
+  // Read selectedThreadId from URL query string
+  const selectedThreadId = useMemo(() => {
+    return searchParams.get('threadId');
+  }, [searchParams]);
 
   const refreshThreads = useCallback(async () => {
     setLoading(true);
@@ -124,9 +129,6 @@ export function ThreadsProvider({ children, projectId }: ThreadsProviderProps) {
     });
   }, [projectId]);
 
-  const selectThread = useCallback((threadId: string | null) => {
-    setSelectedThreadId(threadId);
-  }, []);
 
   const renameThread = useCallback(
     async (threadId: string, title: string) => {
@@ -152,9 +154,7 @@ export function ThreadsProvider({ children, projectId }: ThreadsProviderProps) {
       try {
         await deleteThreadApi(projectId, threadId);
         setThreads((prev) => prev.filter((thread) => thread.id !== threadId));
-        if (selectedThreadId === threadId) {
-          setSelectedThreadId(null);
-        }
+        // Note: URL will need to be updated externally to clear threadId param
         toast.success('Thread deleted');
       } catch (err: any) {
         toast.error('Failed to delete thread', {
@@ -162,7 +162,7 @@ export function ThreadsProvider({ children, projectId }: ThreadsProviderProps) {
         });
       }
     },
-    [projectId, selectedThreadId]
+    [projectId]
   );
 
   const addThread = useCallback((thread: Thread) => {
@@ -191,7 +191,6 @@ export function ThreadsProvider({ children, projectId }: ThreadsProviderProps) {
     hasMore,
     refreshThreads,
     loadMoreThreads,
-    selectThread,
     renameThread,
     deleteThread,
     addThread,

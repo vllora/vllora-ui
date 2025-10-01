@@ -4,16 +4,15 @@ import { ClockIcon, CurrencyDollarIcon, ExclamationTriangleIcon, PencilIcon } fr
 import { formatDistanceToNow, format } from "date-fns";
 import React, { useCallback, useRef, useState, useMemo } from "react";
 import { useSearchParams, useNavigate, useParams } from "react-router-dom";
-import { Input } from "../ui/input";
+import { Input } from "../../ui/input";
 import { ListProviders } from "./ListProviders";
 import { ThreadCopiableId } from "./ThreadCopiableId";
 import { cn } from "@/lib/utils";
 import { formatMoney } from "@/utils/format";
 import { useClickAway } from "ahooks";
 import { ThreadTagsDisplay } from "./ThreadTagsDisplay";
-import { ShareThread } from "./ShareThread";
-import { Card } from "../ui/card";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+import { Card } from "../../ui/card";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../ui/tooltip";
 import { motion } from "framer-motion";
 import { ErrorTooltip } from "./ErrorTooltip";
 
@@ -132,8 +131,8 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                 onClick={handleThreadClick}
                 className={cn(
                     "py-3 px-4 transition-all duration-200 flex flex-col gap-2 cursor-pointer rounded-md border border-[#161616] border-l-4 border-r-4 active:bg-sidebar-accent/40",
-                    isSelected ? '!border-r-4 !border-r-primary bg-secondary shadow-sm' : 
-                    '!border-r !border-r-[#161616] bg-[#161616] hover:bg-sidebar-accent/50',               
+                    isSelected ? '!border-r-4 !border-r-[rgb(var(--theme-500))] bg-secondary shadow-sm' :
+                    '!border-r !border-r-[#161616] bg-[#161616] hover:bg-sidebar-accent/50',
                     haveErrors ? '!border-l-4 !border-l-yellow-500' : '!border-l !border-l-[#161616]',
                 )}
             >
@@ -157,7 +156,7 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                                 onKeyDown={handleKeyDown}
                                 onClick={(e) => e.stopPropagation()}
                                 placeholder="Summarize this thread..."
-                                className="text-xs px-2 h-[32px] w-full placeholder:text-xs focus:ring-1 focus:ring-primary"
+                                className="text-xs px-2 h-[32px] w-full placeholder:text-xs focus:ring-1 focus:ring-[rgb(var(--theme-500))]"
                             />
                         ) : (
                             <div className="flex items-center group gap-2">
@@ -178,7 +177,7 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                                 </TooltipProvider>
                                 <button
                                     onClick={handleTitleEdit}
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-primary focus:outline-none focus:text-primary"
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-[rgb(var(--theme-500))] focus:outline-none focus:text-[rgb(var(--theme-500))]"
                                 >
                                     <PencilIcon className="w-3.5 h-3.5" />
                                 </button>
@@ -198,17 +197,9 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                             </ErrorTooltip>
                         )}
                         
-                        {/* Thread ID and Share */}
+                        {/* Thread ID */}
                         <div className="flex items-center gap-1">
                             <ThreadCopiableId id={thread.id} />
-                            {projectId && (
-                                <ShareThread
-                                    threadId={thread.id}
-                                    projectId={projectId}
-                                    modelName={thread.model_name}
-                                    isPublic={thread.is_public || false}
-                                />
-                            )}
                         </div>
                     </div>
                 </div>

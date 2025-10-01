@@ -1,26 +1,32 @@
-import { useState, useCallback, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useNavigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { ChatPageSidebar } from '@/components/chat/ChatSidebar';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import { ChatRightSidebar } from '@/components/chat/ChatRightSidebar';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { ThreadsConsumer } from '@/contexts/ThreadsContext';
+import { ChatWindowProvider } from '@/contexts/ChatWindowContext';
 import { Thread } from '@/types/chat';
 import { API_CONFIG } from '@/config/api';
 
 export function ChatPage() {
   const { currentProjectId } = ProjectsConsumer();
+  const { projectId } = useParams<{ projectId: string }>();
+  const [searchParams] = useSearchParams();
   const {
     threads,
     selectedThreadId,
-    selectThread,
     addThread,
     updateThread,
     refreshThreads
   } = ThreadsConsumer();
   const navigate = useNavigate();
   const location = useLocation();
-  const [selectedModel, setSelectedModel] = useState<string>('openai/o1-mini');
+
+  // Read selectedModel from URL query string, fallback to default
+  const selectedModel = useMemo(() => {
+    return searchParams.get('model') || 'openai/o1-mini';
+  }, [searchParams]);
   const [traces, setTraces] = useState<any[]>([]);
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
 
@@ -39,26 +45,30 @@ export function ChatPage() {
       updated_at: new Date().toISOString(),
     };
     addThread(newThread);
-    selectThread(newThread.id);
-  }, [selectedModel, currentProjectId, addThread, selectThread]);
+    // Navigate to the new thread with model in URL
+    navigate(`/projects/${projectId}/chat?threadId=${newThread.id}&model=${selectedModel}`);
+  }, [selectedModel, currentProjectId, projectId, addThread, navigate]);
 
   const handleSelectThread = useCallback((threadId: string) => {
-    selectThread(threadId);
     const thread = threads.find((t) => t.id === threadId);
-    if (thread) {
-      setSelectedModel(thread.model_name);
-    }
-  }, [selectThread, threads]);
+    // Navigate to update the threadId and model in URL
+    const modelParam = thread?.model_name || selectedModel;
+    navigate(`/projects/${projectId}/chat?threadId=${threadId}&model=${modelParam}`);
+  }, [projectId, threads, selectedModel, navigate]);
 
 
   const handleModelChange = useCallback((modelId: string) => {
-    setSelectedModel(modelId);
+    // Update URL with new model
+    const params = new URLSearchParams(searchParams);
+    params.set('model', modelId);
     if (selectedThreadId) {
+      params.set('threadId', selectedThreadId);
       updateThread(selectedThreadId, {
         model_name: modelId,
       });
     }
-  }, [selectedThreadId, updateThread]);
+    navigate(`/projects/${projectId}/chat?${params.toString()}`);
+  }, [selectedThreadId, searchParams, projectId, updateThread, navigate]);
 
   const handleProjectChange = useCallback((newProjectId: string) => {
     localStorage.setItem('currentProjectId', newProjectId);
@@ -79,16 +89,18 @@ export function ChatPage() {
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {selectedThreadId ? (
-          <ChatWindow
-            threadId={selectedThreadId}
-            modelName={selectedModel}
-            apiUrl={API_CONFIG.url}
-            // apiKey={API_CONFIG.apiKey}
-            projectId={currentProjectId}
-            widgetId={`chat-${selectedThreadId}`}
-            onModelChange={handleModelChange}
-          />
+        {selectedThreadId && projectId ? (
+          <ChatWindowProvider threadId={selectedThreadId} projectId={projectId}>
+            <ChatWindow
+              threadId={selectedThreadId}
+              modelName={selectedModel}
+              apiUrl={API_CONFIG.url}
+              // apiKey={API_CONFIG.apiKey}
+              projectId={currentProjectId}
+              widgetId={`chat-${selectedThreadId}`}
+              onModelChange={handleModelChange}
+            />
+          </ChatWindowProvider>
         ) : (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">

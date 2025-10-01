@@ -31,7 +31,7 @@ const BaseMessageDisplay: React.FC<{ message: string }> = ({ message }) => {
       remarkPlugins={[remarkGfm, behead, remarkFlexibleParagraphs]}
       rehypePlugins={[rehypeRaw, [rehypeExternalLinks, { target: '_blank' }]]}
       components={{
-        code({ className, children, ...props }) {
+        code({ className, children, ref, ...props }) {
           const match = /language-(\w+)/.exec(className || '');
           return match ? (
             <div className="relative my-2">
@@ -99,7 +99,6 @@ const BaseMessageDisplay: React.FC<{ message: string }> = ({ message }) => {
                       whiteSpace: 'pre-wrap',
                       margin: 0,
                     }}
-                    {...props}
                   >
                     {String(children).replace(/\n$/, '')}
                   </SyntaxHighlighter>

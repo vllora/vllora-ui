@@ -1,4 +1,4 @@
-import { LOCAL_API_URL } from '@/config/api';
+import { API_CONFIG, getThreadsUrl } from '@/config/api';
 import { Thread } from '@/types/chat';
 
 export interface QueryThreadsRequest {
@@ -29,8 +29,7 @@ export async function queryThreads(
   projectId: string,
   request: QueryThreadsRequest
 ): Promise<QueryThreadsResponse> {
-  //const url = `${LOCAL_API_URL}/threads`;
-  const url = `https://api.staging.langdb.ai/threads`;
+  const url = getThreadsUrl();
 
   try {
     const response = await fetch(url, {
@@ -38,7 +37,7 @@ export async function queryThreads(
       headers: {
         'Content-Type': 'application/json',
         'x-project-id': projectId,
-        'authorization': 'Bearer langdb_YmZzRGp6NWR5UXFraHA=',
+        'authorization': `Bearer ${API_CONFIG.apiKey}`,
         //'x-project-id': projectId,
       },
       body: JSON.stringify(request),
@@ -62,7 +61,7 @@ export async function queryThreads(
 export async function updateThreadTitle(
   request: UpdateThreadTitleRequest
 ): Promise<void> {
-  const url = `${LOCAL_API_URL}/threads/${request.threadId}/title`;
+  const url = `${getThreadsUrl()}/${request.threadId}/title`;
 
   try {
     const response = await fetch(url, {
@@ -87,7 +86,7 @@ export async function updateThreadTitle(
  * Delete a thread
  */
 export async function deleteThread(projectId: string, threadId: string): Promise<void> {
-  const url = `${LOCAL_API_URL}/threads/${threadId}`;
+  const url = `${getThreadsUrl()}/${threadId}`;
 
   try {
     const response = await fetch(url, {

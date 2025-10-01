@@ -142,10 +142,9 @@ export const useMessageSubmission = (
 
       const newMessage: Message = {
         id: uuidv4(),
-        role: 'user',
+        type: MessageType.HumanMessage,
         content: inputText,
         timestamp: Date.now(),
-        type: MessageType.HumanMessage,
         content_type: MessageContentType.Text,
         thread_id: threadId,
         files,
@@ -226,7 +225,7 @@ export const useMessageSubmission = (
             model: props.modelName,
             messages: [
               ...messages.map((msg) => ({
-                role: msg.role,
+                role: msg.type,
                 content: msg.files && msg.files.length > 0
                   ? buildMessageContent(msg.content, msg.files)
                   : msg.content,

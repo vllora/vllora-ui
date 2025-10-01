@@ -3,7 +3,7 @@ import { MessageSquarePlus } from 'lucide-react';
 import { Thread } from '@/types/chat';
 import { Button } from '@/components/ui/button';
 import { ProjectDropdown } from '@/components/ProjectDropdown';
-import { ThreadList } from './ThreadList';
+import { ThreadList } from './thread/ThreadList';
 
 interface ChatSidebarProps {
   threads: Thread[];

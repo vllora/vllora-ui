@@ -14,3 +14,12 @@ export function getChatCompletionsUrl(): string {
   }
   return `${API_CONFIG.url}/chat/completions`;
 }
+
+export const getThreadsUrl = () => {
+  return `${API_CONFIG.url}/threads`;
+}
+
+export const getMessagesUrl = (threadId: string) => {
+  return `${getThreadsUrl()}/${threadId}/messages`;
+}
+  

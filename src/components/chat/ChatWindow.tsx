@@ -2,6 +2,7 @@ import React, { useCallback, useEffect } from 'react';
 import { ChatConversation } from './ChatConversation';
 import { ChatInput } from './ChatInput';
 import { ModelSelector } from './ModelSelector';
+import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 import { useChatState } from '@/hooks/useChatState';
 import { useMessageSubmission } from '@/hooks/useMessageSubmission';
 import { emitter } from '@/utils/eventEmitter';
@@ -18,7 +19,7 @@ interface ChatWindowProps {
 }
 
 export const ChatWindow: React.FC<ChatWindowProps> = ({
-  threadId: initialThreadId,
+  threadId,
   modelName,
   apiUrl,
   apiKey,
@@ -26,7 +27,11 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   widgetId,
   onModelChange,
 }) => {
-  const chatState = useChatState({ initialMessages: [] });
+  // Get historical messages from context (fetched from API)
+  const { messages: historicalMessages, clearMessages } = ChatWindowConsumer();
+
+  // Use the existing chat state hook for managing active conversation (streaming, typing, etc.)
+  const chatState = useChatState({ initialMessages: historicalMessages });
 
   const {
     messages,
@@ -35,10 +40,15 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     typing,
     error,
     setError,
-    setMessages,
     setThreadId,
-    threadId,
   } = chatState;
+
+  // Override threadId from props since it's managed by URL
+  useEffect(() => {
+    if (threadId) {
+      setThreadId(threadId);
+    }
+  }, [threadId, setThreadId]);
 
   const {
     submitMessageFn: handleSubmit,
@@ -92,15 +102,14 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         (input.widgetId && input.widgetId === widgetId)
       ) {
         terminateChat();
-        setMessages([]);
-        setThreadId(initialThreadId);
+        clearMessages();
       }
     };
     emitter.on('langdb_clearChat', handleClearChat);
     return () => {
       emitter.off('langdb_clearChat', handleClearChat);
     };
-  }, [terminateChat, threadId, widgetId, setMessages, setThreadId, initialThreadId]);
+  }, [terminateChat, threadId, widgetId, clearMessages]);
 
   useEffect(() => {
     const handleScrollToBottom = (input: {

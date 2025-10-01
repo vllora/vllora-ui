@@ -1,8 +1,8 @@
 import React, { useEffect, useRef } from 'react';
-import { Bot, User, ArrowDown } from 'lucide-react';
+import { Bot, ArrowDown } from 'lucide-react';
 import { Message, MessageType } from '@/types/chat';
 import { useInViewport } from 'ahooks';
-import { MessageDisplay } from './MessageDisplay';
+import { MessageItem } from './MessageItem';
 
 interface ChatConversationProps {
   messages: Message[];
@@ -37,13 +37,6 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
     }
   };
 
-  const formatTime = (timestamp: number) => {
-    return new Date(timestamp).toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-    });
-  };
-
   if (messages.length === 0 && !isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center p-8">
@@ -63,62 +56,7 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-6 relative">
       {messages.map((message) => (
-        <div
-          key={message.id}
-          className={`flex gap-4 ${
-            message.role === 'user' ? 'justify-end' : 'justify-start'
-          }`}
-        >
-          {message.role === 'assistant' && (
-            <div className="flex-shrink-0">
-              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                <Bot className="w-5 h-5 text-primary" />
-              </div>
-            </div>
-          )}
-
-          <div
-            className={`max-w-[70%] rounded-2xl px-4 py-3 ${
-              message.role === 'user'
-                ? 'bg-muted text-foreground border border-border'
-                : 'bg-secondary text-secondary-foreground'
-            }`}
-          >
-            {message.files && message.files.length > 0 && (
-              <div className="mb-2 flex flex-wrap gap-2">
-                {message.files.map((file, index) => (
-                  <div key={index} className="relative">
-                    {file.type.startsWith('image/') && file.preview && (
-                      <img
-                        src={file.preview}
-                        alt={file.name}
-                        className="max-w-xs rounded-lg"
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="text-sm break-words">
-              {message.role === 'user' ? (
-                <p className="whitespace-pre-wrap">{message.content}</p>
-              ) : (
-                <MessageDisplay message={message.content} />
-              )}
-            </div>
-            <p className="text-xs mt-2 text-muted-foreground">
-              {formatTime(message.timestamp)}
-            </p>
-          </div>
-
-          {message.role === 'user' && (
-            <div className="flex-shrink-0">
-              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                <User className="w-5 h-5 text-muted-foreground" />
-              </div>
-            </div>
-          )}
-        </div>
+        <MessageItem key={message.id} message={message} />
       ))}
 
       {isLoading &&
