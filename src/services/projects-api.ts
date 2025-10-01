@@ -58,8 +58,8 @@ export async function listProjects(): Promise<Project[]> {
       throw new Error(`Failed to list projects: ${response.status} ${response.statusText}`);
     }
 
-    const data: ListProjectsResponse = await response.json();
-    return data.projects;
+    const data: Project[] = await response.json();
+    return data;
   } catch (error) {
     console.error('Error listing projects:', error);
     throw error;

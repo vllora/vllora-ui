@@ -78,7 +78,7 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
           onChange={handleSearchChange}
           className="w-full pl-12 pr-12 py-3.5 bg-card text-foreground placeholder-muted-foreground
             border border-border rounded-lg
-            focus:border-theme-500/50 focus:ring-2 focus:ring-ring
+            focus:border-theme-500 focus:shadow-[0_0_0_3px_rgba(var(--theme-rgb),0.1)]
             focus:outline-none transition-all duration-200"
         />
         {localSearchTerm && (

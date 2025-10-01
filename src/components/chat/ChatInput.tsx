@@ -237,7 +237,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         )}
         <input {...getInputProps()} className="hidden" />
 
-        <div className="bg-secondary rounded-xl border border-input focus-within:ring-2 focus-within:ring-ring transition-shadow">
+        <div className="bg-secondary rounded-xl border border-input focus-within:border-theme-500 focus-within:shadow-[0_0_0_3px_rgba(var(--theme-rgb),0.1)] transition-all">
           <textarea
             ref={textareaRef}
             value={currentInput}
