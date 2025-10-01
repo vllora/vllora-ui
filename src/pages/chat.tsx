@@ -27,7 +27,6 @@ export function ChatPage() {
   const selectedModel = useMemo(() => {
     return searchParams.get('model') || 'openai/o1-mini';
   }, [searchParams]);
-  const [traces, setTraces] = useState<any[]>([]);
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
 
   useEffect(() => {
@@ -105,7 +104,6 @@ export function ChatPage() {
           {/* Right Sidebar - Traces */}
           <ChatRightSidebar
             threadId={selectedThreadId}
-            traces={traces}
             isCollapsed={isRightSidebarCollapsed}
             onToggle={() => setIsRightSidebarCollapsed(!isRightSidebarCollapsed)}
           />

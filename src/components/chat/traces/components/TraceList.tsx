@@ -1,0 +1,45 @@
+import React from 'react';
+import { Loader2 } from 'lucide-react';
+import { RunDTO } from '@/services/runs-api';
+import { TraceRow } from './TraceRow';
+
+interface TraceListProps {
+  runs: RunDTO[];
+  hasMore: boolean;
+  loadMoreRuns: () => Promise<void>;
+  loadingMore: boolean;
+  observerTarget: React.RefObject<HTMLDivElement | null>;
+}
+
+export const TraceList: React.FC<TraceListProps> = ({
+  runs,
+  hasMore,
+  loadMoreRuns,
+  loadingMore,
+}) => {
+  return (
+    <div className="space-y-2">
+      {runs.map((run) => (
+        <TraceRow key={run.run_id} run={run} isInSidebar={true} />
+      ))}
+
+      {/* Load More Button */}
+      {hasMore && (
+        <button
+          onClick={loadMoreRuns}
+          disabled={loadingMore}
+          className="w-full p-3 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg hover:bg-accent/50 transition-colors disabled:opacity-50"
+        >
+          {loadingMore ? (
+            <span className="flex items-center justify-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading more...
+            </span>
+          ) : (
+            'Load More'
+          )}
+        </button>
+      )}
+    </div>
+  );
+};

@@ -1,5 +1,72 @@
 import { API_CONFIG } from '@/config/api';
 
+export interface Span {
+  trace_id: string;
+  span_id: string;
+  thread_id: string;
+  parent_span_id?: string;
+  operation_name: string;
+  start_time_us: number;
+  finish_time_us: number;
+  attribute: Attributes;
+  child_attribute?: Attributes;
+  run_id: string;
+  parent_trace_id?: string;
+  spans?: Span[];
+}
+
+export type Attributes =
+  | ModelCall
+  | ToolCall
+  | ApiCall
+  | {
+      message_id?: string;
+      error?: string;
+      output?: string;
+      [key: string]: any;
+    };
+
+export interface ModelCall {
+  input: Input | string;
+  model: Model;
+  output: string;
+  label?: string;
+  provider_name?: string;
+  model_name?: string;
+  error?: string;
+}
+
+export interface Input {
+  query: string;
+}
+
+export interface Model {
+  name: string;
+  provider?: string;
+}
+
+export interface ToolCall {
+  tool_name: string;
+  arguments: object;
+  output: object[];
+  provider_name?: string;
+  label?: string;
+  tool_calls?: string;
+  error?: string;
+  response?: string;
+  tool_results?: string;
+  mcp_server?: string;
+  mcp_template_definition_id?: string;
+}
+
+export interface ApiCall {
+  request: string;
+  output?: string;
+  provider_name?: string;
+  label?: string;
+  error?: string;
+}
+
 export interface RunDTO {
   run_id: string | null;
   thread_ids: string[];
@@ -115,4 +182,47 @@ export const listRuns = async (props: {
   }
 
   return await response.json();
+};
+
+export const fetchRunSpans = async (props: {
+  runId: string;
+  projectId: string;
+  offset: number;
+  limit: number;
+}): Promise<{ data: Span[]; pagination: { total: number; offset: number; limit: number } }> => {
+  const { runId, projectId, offset, limit } = props;
+
+  // Build query string
+  const queryParams = new URLSearchParams({
+    offset: String(offset),
+    limit: String(limit),
+  });
+
+  const url = `${API_CONFIG.url}/traces/run/${runId}?${queryParams.toString()}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-project-id': projectId,
+      authorization: `Bearer ${API_CONFIG.apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      errorData.message || errorData.error || `Failed to fetch run spans: ${response.statusText}`
+    );
+  }
+
+  const responseData = await response.json();
+  return {
+    data: responseData.data as Span[],
+    pagination: responseData.pagination as {
+      total: number;
+      offset: number;
+      limit: number;
+    },
+  };
 };
