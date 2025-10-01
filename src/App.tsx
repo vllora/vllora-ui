@@ -26,7 +26,7 @@ function App() {
           <Routes>
             <Route path="/" element={<ProjectProvider><Layout /></ProjectProvider>}>
               {/* Project-scoped routes */}
-              <Route path="project/:projectId">
+              <Route path="projects/:projectId">
                 <Route index element={<HomePage />} />
                 <Route path="chat" element={<ChatPageWrapper />} />
                 <Route path="analytics" element={<AnalyticsPage />} />

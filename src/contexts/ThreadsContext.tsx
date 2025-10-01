@@ -38,23 +38,16 @@ export function ThreadsProvider({ children, projectId }: ThreadsProviderProps) {
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [loadingThreadsError, setLoadingThreadsError] = useState<string | null>(null);
 
-  const queryEntitiesData = useCallback(
-    async (isLoadMore: boolean = false) => {
-      return queryThreads(projectId, {
-        order_by: [['updated_at', 'desc']],
-        limit: 100,
-        offset: isLoadMore ? offset : 0,
-      });
-    },
-    [projectId, offset]
-  );
-
   const refreshThreads = useCallback(async () => {
     setLoading(true);
     setOffset(0);
     setHasMore(true);
     try {
-      const response = await queryEntitiesData(false);
+      const response = await queryThreads(projectId, {
+        order_by: [['updated_at', 'desc']],
+        limit: 100,
+        offset: 0,
+      });
       const pagination = response.pagination;
       const newThreads = response.data.map((t: Thread) => ({
         ...t,
@@ -73,30 +66,63 @@ export function ThreadsProvider({ children, projectId }: ThreadsProviderProps) {
     } finally {
       setLoading(false);
     }
-  }, [queryEntitiesData]);
+  }, [projectId]);
 
   const loadMoreThreads = useCallback(async () => {
-    if (loading || loadingMore || !hasMore) return;
-    setLoadingMore(true);
-    try {
-      const response = await queryEntitiesData(true);
-      const pagination = response.pagination;
-      const newThreads = response.data.map((t: Thread) => ({
-        ...t,
-        created_at: new Date(Date.parse(t.created_at + 'Z')).toString(),
-        updated_at: new Date(Date.parse(t.updated_at + 'Z')).toString(),
-      }));
-      setThreads((prev) => [...prev, ...newThreads]);
-      setOffset((prev) => prev + newThreads.length);
-      setTotal((prev) => prev + newThreads.length);
-      setHasMore(newThreads.length === pagination.limit);
-    } catch (e: any) {
-      const errorMessage = e.message || 'Failed to load more threads';
-      setLoadingThreadsError(errorMessage);
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [queryEntitiesData, loading, loadingMore, hasMore]);
+    setLoadingMore((currentLoadingMore) => {
+      if (currentLoadingMore) return true;
+
+      // Use functional updates to get current values
+      setLoading((currentLoading) => {
+        if (currentLoading) {
+          setLoadingMore(false);
+          return currentLoading;
+        }
+
+        setHasMore((currentHasMore) => {
+          if (!currentHasMore) {
+            setLoadingMore(false);
+            return currentHasMore;
+          }
+
+          // Proceed with loading
+          setOffset((currentOffset) => {
+            queryThreads(projectId, {
+              order_by: [['updated_at', 'desc']],
+              limit: 100,
+              offset: currentOffset,
+            })
+              .then((response) => {
+                const pagination = response.pagination;
+                const newThreads = response.data.map((t: Thread) => ({
+                  ...t,
+                  created_at: new Date(Date.parse(t.created_at + 'Z')).toString(),
+                  updated_at: new Date(Date.parse(t.updated_at + 'Z')).toString(),
+                }));
+                setThreads((prev) => [...prev, ...newThreads]);
+                setOffset((prev) => prev + newThreads.length);
+                setTotal((prev) => prev + newThreads.length);
+                setHasMore(newThreads.length === pagination.limit);
+                setLoadingMore(false);
+              })
+              .catch((e: any) => {
+                const errorMessage = e.message || 'Failed to load more threads';
+                setLoadingThreadsError(errorMessage);
+                setLoadingMore(false);
+              });
+
+            return currentOffset;
+          });
+
+          return currentHasMore;
+        });
+
+        return currentLoading;
+      });
+
+      return true;
+    });
+  }, [projectId]);
 
   const selectThread = useCallback((threadId: string | null) => {
     setSelectedThreadId(threadId);

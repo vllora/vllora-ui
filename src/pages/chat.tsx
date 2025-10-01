@@ -16,7 +16,6 @@ export function ChatPage() {
     selectThread,
     addThread,
     updateThread,
-    deleteThread,
     refreshThreads
   } = ThreadsConsumer();
   const navigate = useNavigate();
@@ -51,9 +50,6 @@ export function ChatPage() {
     }
   }, [selectThread, threads]);
 
-  const handleDeleteThread = useCallback((threadId: string) => {
-    deleteThread(threadId);
-  }, [deleteThread]);
 
   const handleModelChange = useCallback((modelId: string) => {
     setSelectedModel(modelId);
@@ -78,7 +74,6 @@ export function ChatPage() {
         selectedThreadId={selectedThreadId}
         onSelectThread={handleSelectThread}
         onNewThread={handleNewThread}
-        onDeleteThread={handleDeleteThread}
         onProjectChange={handleProjectChange}
       />
 

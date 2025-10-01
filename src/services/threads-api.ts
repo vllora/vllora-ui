@@ -37,7 +37,7 @@ export async function queryThreads(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-project-id': 'b97c20ff-ff11-429e-b97f-137b22042d3d',
+        'x-project-id': projectId,
         'authorization': 'Bearer langdb_YmZzRGp6NWR5UXFraHA=',
         //'x-project-id': projectId,
       },

@@ -1,76 +1,123 @@
-import React from 'react';
-import { Trash2 } from 'lucide-react';
+import React, { useEffect, useRef, useCallback } from 'react';
+import { InfoIcon, CheckCircle2, Loader2 } from 'lucide-react';
 import { Thread } from '@/types/chat';
+import { ThreadsConsumer } from '@/contexts/ThreadsContext';
+import { ThreadRow } from './ThreadRow';
 
 interface ThreadListProps {
   threads: Thread[];
-  selectedThreadId: string | null;
-  onSelectThread: (threadId: string) => void;
-  onDeleteThread: (threadId: string) => void;
 }
 
 export const ThreadList: React.FC<ThreadListProps> = ({
   threads,
-  selectedThreadId,
-  onSelectThread,
-  onDeleteThread,
 }) => {
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const { loading, loadingMore, loadingThreadsError, loadMoreThreads, hasMore } = ThreadsConsumer();
+  const observerTarget = useRef<HTMLDivElement>(null);
+  const loadingRef = useRef(false);
 
-    if (days === 0) return 'Today';
-    if (days === 1) return 'Yesterday';
-    if (days < 7) return `${days} days ago`;
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
+  useEffect(() => {
+    loadingRef.current = loading || loadingMore;
+  }, [loading, loadingMore]);
 
-  if (threads.length === 0) {
-    return (
-      <div className="p-4 text-center text-muted-foreground text-sm">
-        No conversations yet. Start a new chat!
-      </div>
-    );
-  }
+  const intersectionCallback = useCallback(
+    (entries: IntersectionObserverEntry[]) => {
+      const first = entries[0];
+      if (first.isIntersecting && hasMore && !loadingRef.current) {
+        loadMoreThreads();
+      }
+    },
+    [hasMore, loadMoreThreads]
+  );
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(intersectionCallback, {
+      threshold: 0.1,
+      rootMargin: '100px',
+    });
+
+    const currentTarget = observerTarget.current;
+    if (currentTarget) {
+      observer.observe(currentTarget);
+    }
+
+    return () => {
+      if (currentTarget) {
+        observer.unobserve(currentTarget);
+      }
+    };
+  }, [intersectionCallback]);
 
   return (
-    <div className="p-2 space-y-1">
-      {threads.map((thread) => (
-        <div
-          key={thread.id}
-          onClick={() => onSelectThread(thread.id)}
-          className={`group relative p-3 rounded-lg cursor-pointer transition-colors ${
-            selectedThreadId === thread.id
-              ? 'bg-accent border border-border'
-              : 'hover:bg-accent/50'
-          }`}
-        >
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-medium text-card-foreground truncate mb-1">
-                {thread.title || 'New conversation'}
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                {formatDate(thread.updated_at)}
-              </p>
-              <p className="text-xs text-muted-foreground/70 mt-1">
-                {thread.model_name}
-              </p>
+    <>
+      {threads && threads.length > 0 && (
+        <div className="p-2 space-y-2">
+          {threads.map((thread) => (
+            <ThreadRow
+              key={thread.id}
+              thread={thread}
+            />
+          ))}
+        </div>
+      )}
+
+      {loading && threads.length === 0 && (
+        <div className="p-8 flex-1 w-full flex flex-col items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        </div>
+      )}
+
+      {loadingThreadsError && (
+        <div className="p-8 flex-1 w-full flex flex-col items-center">
+          <div className="flex flex-col items-center gap-4">
+            <div className="rounded-full bg-destructive/20 p-4">
+              <InfoIcon className="w-8 h-8 text-destructive" />
             </div>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDeleteThread(thread.id);
-              }}
-              className="opacity-0 group-hover:opacity-100 p-1 hover:bg-accent rounded transition-all"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
-            </button>
+            <p className="text-sm text-muted-foreground">{loadingThreadsError}</p>
           </div>
         </div>
-      ))}
-    </div>
+      )}
+
+      {!loading && (!threads || threads.length === 0) && (
+        <div className="p-8 flex-1 w-full flex flex-col items-center">
+          <div className="flex flex-col items-center gap-4">
+            <div className="rounded-full bg-muted/20 p-4">
+              <InfoIcon className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <div className="text-center flex flex-col items-center gap-2">
+              <h3 className="text-lg font-semibold text-foreground mb-1">No Threads Found</h3>
+              <p className="text-sm text-muted-foreground max-w-[300px]">
+                Start a new conversation to see your threads appear here.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Load More Indicator */}
+      {hasMore && threads.length > 0 && (
+        <div
+          ref={observerTarget}
+          className="h-16 w-full flex items-center justify-center py-2"
+        >
+          {loadingMore ? (
+            <div className="flex items-center gap-2 px-4 py-2">
+              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+              <span className="text-sm font-medium text-muted-foreground">Loading...</span>
+            </div>
+          ) : (
+            <div className="h-1 w-12 rounded-full bg-muted animate-pulse"></div>
+          )}
+        </div>
+      )}
+
+      {!hasMore && threads.length > 0 && (
+        <div className="h-16 w-full flex items-center justify-center py-2">
+          <div className="flex items-center gap-2 px-4 py-2">
+            <CheckCircle2 size={16} className="text-[rgb(var(--theme-500))]" />
+            <span className="text-sm font-medium text-muted-foreground">All threads loaded</span>
+          </div>
+        </div>
+      )}
+    </>
   );
 };

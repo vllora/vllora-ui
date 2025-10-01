@@ -10,7 +10,6 @@ interface ChatSidebarProps {
   selectedThreadId: string | null;
   onSelectThread: (threadId: string) => void;
   onNewThread: () => void;
-  onDeleteThread: (threadId: string) => void;
   onProjectChange?: (projectId: string) => void;
 }
 
@@ -19,7 +18,6 @@ export const ChatPageSidebar: React.FC<ChatSidebarProps> = ({
   selectedThreadId,
   onSelectThread,
   onNewThread,
-  onDeleteThread,
   onProjectChange,
 }) => {
   return (
@@ -43,12 +41,7 @@ export const ChatPageSidebar: React.FC<ChatSidebarProps> = ({
 
       {/* Thread List */}
       <div className="flex-1 overflow-y-auto">
-        <ThreadList
-          threads={threads}
-          selectedThreadId={selectedThreadId}
-          onSelectThread={onSelectThread}
-          onDeleteThread={onDeleteThread}
-        />
+        <ThreadList threads={threads} />
       </div>
     </div>
   );
