@@ -100,13 +100,13 @@ export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSideb
               // Use currentProjectId or fallback to default project
               const projectIdToUse = currentProjectId || defaultProject?.id
               const itemPath = projectIdToUse
-                ? `/project/${projectIdToUse}${item.path === '/' ? '' : item.path}`
+                ? `/projects/${projectIdToUse}${item.path === '/' ? '' : item.path}`
                 : item.path
 
               // Check if active (match path pattern)
               const isActive = currentProjectId
-                ? location.pathname === `/project/${currentProjectId}` && item.path === '/' ||
-                  location.pathname.startsWith(`/project/${currentProjectId}${item.path}`) && item.path !== '/'
+                ? location.pathname === `/projects/${currentProjectId}` && item.path === '/' ||
+                  location.pathname.startsWith(`/projects/${currentProjectId}${item.path}`) && item.path !== '/'
                 : location.pathname === item.path
 
               return (

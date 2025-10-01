@@ -26,7 +26,7 @@ export function Layout() {
       // Check localStorage first
       const storedProjectId = localStorage.getItem('currentProjectId')
       if (storedProjectId) {
-        navigate(`/project/${storedProjectId}`, { replace: true })
+        navigate(`/projects/${storedProjectId}`, { replace: true })
         return
       }
 
@@ -35,7 +35,7 @@ export function Layout() {
       const defaultProject = projects.find((p) => p.is_default) || projects[0]
       if (defaultProject) {
         localStorage.setItem('currentProjectId', defaultProject.id)
-        navigate(`/project/${defaultProject.id}`, { replace: true })
+        navigate(`/projects/${defaultProject.id}`, { replace: true })
       }
     } catch (error) {
       console.error('Failed to load default project:', error)
@@ -49,7 +49,7 @@ export function Layout() {
     const currentPath = location.pathname.split('/').slice(3).join('/') || ''
 
     // Navigate to same page but with new project
-    navigate(`/project/${newProjectId}${currentPath ? '/' + currentPath : ''}`)
+    navigate(`/projects/${newProjectId}${currentPath ? '/' + currentPath : ''}`)
   }
 
   return (

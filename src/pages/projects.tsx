@@ -148,7 +148,7 @@ export function ProjectsPage() {
             <Card
               key={project.id}
               className="hover:border-[rgba(var(--theme-500),0.5)] transition-colors group cursor-pointer"
-              onClick={() => navigate(`/project/${project.id}`)}
+              onClick={() => navigate(`/projects/${project.id}`)}
             >
               <CardHeader>
                 <div className="flex items-start justify-between">

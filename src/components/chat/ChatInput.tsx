@@ -244,7 +244,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             onChange={(e) => setCurrentInput(e.target.value)}
             onKeyDown={handleKeyDown}
             onInput={handleInput}
-            placeholder={placeholder}
+            placeholder="Press Enter to send, Shift+Enter for new line"
             disabled={disabled || isListening}
             rows={1}
             className="w-full bg-transparent text-secondary-foreground placeholder-muted-foreground resize-none
@@ -293,9 +293,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           </div>
         </div>
       </div>
-      <p className="text-xs text-muted-foreground/70 mt-2">
-        Press Enter to send, Shift+Enter for new line
-      </p>
     </div>
   );
 };

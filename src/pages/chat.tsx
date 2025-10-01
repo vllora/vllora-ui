@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { ChatPageSidebar } from '@/components/chat/ChatSidebar';
-import { ChatWindow } from '@/components/chat/ChatWindow';
+import { ConversationWindow } from '@/components/chat/ConversationWindow';
 import { ChatRightSidebar } from '@/components/chat/ChatRightSidebar';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { ThreadsConsumer } from '@/contexts/ThreadsContext';
@@ -73,7 +73,7 @@ export function ChatPage() {
   const handleProjectChange = useCallback((newProjectId: string) => {
     localStorage.setItem('currentProjectId', newProjectId);
     const currentPath = location.pathname.split('/').slice(3).join('/') || '';
-    navigate(`/project/${newProjectId}${currentPath ? '/' + currentPath : ''}`);
+    navigate(`/projects/${newProjectId}${currentPath ? '/' + currentPath : ''}`);
   }, [location.pathname, navigate]);
 
   return (
@@ -87,11 +87,11 @@ export function ChatPage() {
         onProjectChange={handleProjectChange}
       />
 
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {selectedThreadId && projectId ? (
-          <ChatWindowProvider threadId={selectedThreadId} projectId={projectId}>
-            <ChatWindow
+      {/* Main Chat Area and Right Sidebar */}
+      {selectedThreadId && projectId ? (
+        <ChatWindowProvider threadId={selectedThreadId} projectId={projectId}>
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <ConversationWindow
               threadId={selectedThreadId}
               modelName={selectedModel}
               apiUrl={API_CONFIG.url}
@@ -100,29 +100,27 @@ export function ChatPage() {
               widgetId={`chat-${selectedThreadId}`}
               onModelChange={handleModelChange}
             />
-          </ChatWindowProvider>
-        ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <h2 className="text-2xl font-semibold text-muted-foreground mb-2">
-                Select a conversation
-              </h2>
-              <p className="text-muted-foreground/70">
-                Choose a thread from the sidebar or start a new chat
-              </p>
-            </div>
           </div>
-        )}
-      </div>
 
-      {/* Right Sidebar - Traces */}
-      {selectedThreadId && (
-        <ChatRightSidebar
-          threadId={selectedThreadId}
-          traces={traces}
-          isCollapsed={isRightSidebarCollapsed}
-          onToggle={() => setIsRightSidebarCollapsed(!isRightSidebarCollapsed)}
-        />
+          {/* Right Sidebar - Traces */}
+          <ChatRightSidebar
+            threadId={selectedThreadId}
+            traces={traces}
+            isCollapsed={isRightSidebarCollapsed}
+            onToggle={() => setIsRightSidebarCollapsed(!isRightSidebarCollapsed)}
+          />
+        </ChatWindowProvider>
+      ) : (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <h2 className="text-2xl font-semibold text-muted-foreground mb-2">
+              Select a conversation
+            </h2>
+            <p className="text-muted-foreground/70">
+              Choose a thread from the sidebar or start a new chat
+            </p>
+          </div>
+        </div>
       )}
     </section>
   );

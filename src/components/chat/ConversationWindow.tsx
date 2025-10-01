@@ -18,7 +18,7 @@ interface ChatWindowProps {
   onModelChange?: (modelId: string) => void;
 }
 
-export const ChatWindow: React.FC<ChatWindowProps> = ({
+export const ConversationWindow: React.FC<ChatWindowProps> = ({
   threadId,
   modelName,
   apiUrl,
