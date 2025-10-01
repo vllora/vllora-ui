@@ -4,18 +4,11 @@ import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { listProjects, type Project } from '@/services/projects-api';
 
-interface ProjectContextType {
-  projects: Project[];
-  loading: boolean;
-  error: Error | undefined;
-  refetchProjects: () => void;
-  currentProject: Project | null;
-  currentProjectId: string | undefined;
-}
+export type ProjectContextType = ReturnType<typeof useProject>;
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
-export function ProjectProvider({ children }: { children: ReactNode }) {
+export function useProject() {
   const { projectId } = useParams<{ projectId: string }>();
 
   const { data: projects = [], loading, error, run: refetchProjects } = useRequest(listProjects, {
@@ -32,7 +25,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     return projects.find((p) => p.id === projectId) || null;
   }, [projectId, projects]);
 
-  const value: ProjectContextType = {
+  return {
     projects,
     loading,
     error,
@@ -40,7 +33,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     currentProject,
     currentProjectId: projectId,
   };
+}
 
+export function ProjectProvider({ children }: { children: ReactNode }) {
+  const value = useProject();
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
 }
 

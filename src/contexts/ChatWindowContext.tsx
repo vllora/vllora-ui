@@ -15,44 +15,19 @@ export interface SpanMap {
   [key: string]: Span[];
 }
 
-interface ChatWindowContextType {
-  messages: Message[];
-  isLoading: boolean;
-  error: Error | undefined;
-  addMessage: (message: Message) => void;
-  clearMessages: () => void;
-  refreshMessages: () => void;
-  runs: RunDTO[];
-  runsLoading: boolean;
-  runsError: Error | undefined;
-  refreshRuns: () => void;
-  loadMoreRuns: () => Promise<void>;
-  hasMoreRuns: boolean;
-  runsTotal: number;
-  loadingMoreRuns: boolean;
-  // Selection state
-  selectedSpanInfo: SelectedSpanInfo | null;
-  setSelectedSpanInfo: (info: SelectedSpanInfo | null) => void;
-  openTraces: string[];
-  setOpenTraces: (traces: string[] | ((prev: string[]) => string[])) => void;
-  // Span data
-  spanMap: SpanMap;
-  fetchSpansByRunId: (runId: string) => Promise<void>;
-  loadingSpansById: Set<string>;
-}
 
+export type ChatWindowContextType = ReturnType<typeof useChatWindow>;
 
 const ChatWindowContext = createContext<ChatWindowContextType | undefined>(undefined);
 
 interface ChatWindowProviderProps {
-  children: ReactNode;
   threadId: string;
   projectId: string;
 }
 
 const LIMIT_LOADING_RUNS = 20;
 
-export function ChatWindowProvider({ children, threadId, projectId }: ChatWindowProviderProps) {
+export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) {
   // Pagination state for runs
   const [runsOffset, setRunsOffset] = useState<number>(0);
   const [runsTotal, setRunsTotal] = useState<number>(0);
@@ -238,7 +213,8 @@ export function ChatWindowProvider({ children, threadId, projectId }: ChatWindow
     [projectIdRef]
   );
 
-  const value: ChatWindowContextType = {
+
+  return {
     messages,
     isLoading,
     error,
@@ -263,10 +239,11 @@ export function ChatWindowProvider({ children, threadId, projectId }: ChatWindow
     fetchSpansByRunId: fetchSpansByRunIdCallback,
     loadingSpansById,
   };
-
+}
+export function ChatWindowProvider({ children, threadId, projectId }: { children: ReactNode, threadId: string, projectId: string }) {
+  const value = useChatWindow({ threadId, projectId });
   return <ChatWindowContext.Provider value={value}>{children}</ChatWindowContext.Provider>;
 }
-
 export function ChatWindowConsumer() {
   const context = useContext(ChatWindowContext);
   if (context === undefined) {

@@ -2,18 +2,12 @@ import { createContext, useContext, ReactNode } from 'react';
 import { useRequest } from 'ahooks';
 import { toast } from 'sonner';
 import { fetchLocalModels } from '@/services/models-api';
-import { LocalModel } from '@/types/models';
 
-interface LocalModelsContextType {
-  models: LocalModel[];
-  loading: boolean;
-  error: Error | undefined;
-  refetchModels: () => void;
-}
+export type LocalModelsContextType = ReturnType<typeof useLocalModels>;
 
 const LocalModelsContext = createContext<LocalModelsContextType | undefined>(undefined);
 
-export function LocalModelsProvider({ children }: { children: ReactNode }) {
+export function useLocalModels() {
   const { data, loading, error, run: refetchModels } = useRequest(
     async () => {
       const response = await fetchLocalModels();
@@ -28,13 +22,16 @@ export function LocalModelsProvider({ children }: { children: ReactNode }) {
     }
   );
 
-  const value: LocalModelsContextType = {
+  return {
     models: data || [],
     loading,
     error,
     refetchModels,
   };
+}
 
+export function LocalModelsProvider({ children }: { children: ReactNode }) {
+  const value = useLocalModels();
   return <LocalModelsContext.Provider value={value}>{children}</LocalModelsContext.Provider>;
 }
 

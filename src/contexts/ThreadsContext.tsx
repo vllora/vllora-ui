@@ -4,31 +4,15 @@ import { toast } from 'sonner';
 import { Thread } from '@/types/chat';
 import { queryThreads, updateThreadTitle, deleteThread as deleteThreadApi } from '@/services/threads-api';
 
-interface ThreadsContextType {
-  threads: Thread[];
-  loading: boolean;
-  loadingMore: boolean;
-  loadingThreadsError: string | null;
-  selectedThreadId: string | null;
-  total: number;
-  offset: number;
-  hasMore: boolean;
-  refreshThreads: () => Promise<void>;
-  loadMoreThreads: () => Promise<void>;
-  renameThread: (threadId: string, title: string) => Promise<void>;
-  deleteThread: (threadId: string) => void;
-  addThread: (thread: Thread) => void;
-  updateThread: (threadId: string, updates: Partial<Thread>) => void;
-}
+export type ThreadsContextType = ReturnType<typeof useThreads>;
 
 const ThreadsContext = createContext<ThreadsContextType | undefined>(undefined);
 
 interface ThreadsProviderProps {
-  children: ReactNode;
   projectId: string;
 }
 
-export function ThreadsProvider({ children, projectId }: ThreadsProviderProps) {
+export function useThreads({ projectId }: ThreadsProviderProps) {
   const [searchParams] = useSearchParams();
   const [threads, setThreads] = useState<Thread[]>([]);
   const [offset, setOffset] = useState<number>(0);
@@ -180,7 +164,7 @@ export function ThreadsProvider({ children, projectId }: ThreadsProviderProps) {
     );
   }, []);
 
-  const value: ThreadsContextType = {
+  return {
     threads,
     loading,
     loadingMore,
@@ -196,7 +180,10 @@ export function ThreadsProvider({ children, projectId }: ThreadsProviderProps) {
     addThread,
     updateThread,
   };
+}
 
+export function ThreadsProvider({ children, projectId }: { children: ReactNode; projectId: string }) {
+  const value = useThreads({ projectId });
   return <ThreadsContext.Provider value={value}>{children}</ThreadsContext.Provider>;
 }
 
