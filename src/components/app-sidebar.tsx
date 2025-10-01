@@ -13,6 +13,7 @@ import {
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { ModeToggle } from "@/components/mode-toggle"
+import { ProjectsConsumer } from "@/contexts/ProjectContext"
 import {
   Tooltip,
   TooltipContent,
@@ -40,6 +41,10 @@ interface AppSidebarProps {
 export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSidebarProps) {
   const location = useLocation()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
+  const { projects } = ProjectsConsumer()
+
+  // Get default project for fallback
+  const defaultProject = projects.find((p) => p.is_default) || projects[0]
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -92,8 +97,10 @@ export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSideb
             {mainMenuItems.map((item) => {
               const Icon = item.icon
               // Build path with projectId for project-scoped routes
-              const itemPath = currentProjectId
-                ? `/project/${currentProjectId}${item.path === '/' ? '' : item.path}`
+              // Use currentProjectId or fallback to default project
+              const projectIdToUse = currentProjectId || defaultProject?.id
+              const itemPath = projectIdToUse
+                ? `/project/${projectIdToUse}${item.path === '/' ? '' : item.path}`
                 : item.path
 
               // Check if active (match path pattern)
