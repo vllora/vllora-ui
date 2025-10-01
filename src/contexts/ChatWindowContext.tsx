@@ -92,9 +92,7 @@ export function ChatWindowProvider({ children, threadId, projectId }: ChatWindow
           description: err.message || 'An error occurred while loading messages',
         });
       },
-      onSuccess: (response) => {
-        console.log('ChatWindowContext: Messages loaded successfully', response);
-      },
+     
     }
   );
 
@@ -116,8 +114,6 @@ export function ChatWindowProvider({ children, threadId, projectId }: ChatWindow
           offset: 0,
         },
       });
-      console.log('ChatWindowContext: Fetched runs', response);
-
       // Update pagination state
       const runs = response?.data || [];
       const pagination = response?.pagination || { offset: 0, limit: 0, total: 0 };
@@ -138,10 +134,7 @@ export function ChatWindowProvider({ children, threadId, projectId }: ChatWindow
         toast.error('Failed to load runs', {
           description: err.message || 'An error occurred while loading runs',
         });
-      },
-      onSuccess: (response) => {
-        console.log('ChatWindowContext: Runs loaded successfully', response);
-      },
+      }
     }
   );
 
