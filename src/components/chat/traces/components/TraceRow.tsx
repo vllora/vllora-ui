@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { RunDTO } from "@/services/runs-api";
@@ -14,7 +14,7 @@ interface TraceRowProps {
 
 // Component implementation
 const TraceRowImpl = ({ run, index = 0, isInSidebar = false }: TraceRowProps) => {
-  const {openTraces, setOpenTraces} = ChatWindowConsumer();
+  const { openTraces, setOpenTraces, fetchSpansByRunId } = ChatWindowConsumer();
   const traceOrRunId = run.run_id || '';
 
   const isOpen = openTraces.includes(traceOrRunId);
@@ -26,7 +26,15 @@ const TraceRowImpl = ({ run, index = 0, isInSidebar = false }: TraceRowProps) =>
         return [...prev, traceOrRunId];
       }
     });
-  }, []);
+  }, [traceOrRunId, setOpenTraces]);
+
+  // Fetch spans when the trace row is opened
+  useEffect(() => {
+    if (isOpen && traceOrRunId) {
+      fetchSpansByRunId(traceOrRunId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, traceOrRunId]);
 
   return (
     <motion.div

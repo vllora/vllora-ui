@@ -2,12 +2,17 @@ import { createContext, useContext, ReactNode, useCallback, useState } from 'rea
 import { useRequest, useLatest } from 'ahooks';
 import { toast } from 'sonner';
 import { queryMessages } from '@/services/messages-api';
-import { listRuns, RunDTO } from '@/services/runs-api';
+import { listRuns, RunDTO, Span } from '@/services/runs-api';
 import { Message } from '@/types/chat';
+import { fetchAllSpansByRunId } from '@/utils/traces';
 
 export interface SelectedSpanInfo {
   spanId: string;
   runId: string;
+}
+
+export interface SpanMap {
+  [key: string]: Span[];
 }
 
 interface ChatWindowContextType {
@@ -30,6 +35,10 @@ interface ChatWindowContextType {
   setSelectedSpanInfo: (info: SelectedSpanInfo | null) => void;
   openTraces: string[];
   setOpenTraces: (traces: string[] | ((prev: string[]) => string[])) => void;
+  // Span data
+  spanMap: SpanMap;
+  fetchSpansByRunId: (runId: string) => Promise<void>;
+  loadingSpansById: Set<string>;
 }
 
 
@@ -55,6 +64,10 @@ export function ChatWindowProvider({ children, threadId, projectId }: ChatWindow
   const [selectedSpanInfo, setSelectedSpanInfo] = useState<SelectedSpanInfo | null>(null);
   // should the the run be expanded
   const [openTraces, setOpenTraces] = useState<string[]>([]);
+
+  // Span data state
+  const [spanMap, setSpanMap] = useState<SpanMap>({});
+  const [loadingSpansById, setLoadingSpansById] = useState<Set<string>>(new Set());
 
   const threadIdRef = useLatest(threadId);
   const projectIdRef = useLatest(projectId);
@@ -189,6 +202,49 @@ export function ChatWindowProvider({ children, threadId, projectId }: ChatWindow
     refreshMessages();
   }, [refreshMessages]);
 
+  /**
+   * Fetches detailed span data for a specific run when user expands a row
+   * Prevents concurrent duplicate requests but allows re-fetching after collapse/expand
+   *
+   * @param runId - The run ID to fetch spans for
+   */
+  const fetchSpansByRunIdCallback = useCallback(
+    async (runId: string) => {
+      // Check if already loading this runId to prevent concurrent duplicate requests
+      // We use functional state updates to access the latest loadingSpansById without adding it to deps
+      let shouldFetch = true;
+      setLoadingSpansById((prev) => {
+        if (prev.has(runId)) {
+          shouldFetch = false;
+          return prev;
+        }
+        return new Set(prev).add(runId);
+      });
+
+      if (!shouldFetch) {
+        return;
+      }
+
+      try {
+        const relatedSpans = await fetchAllSpansByRunId(runId, projectIdRef.current);
+        setSpanMap((prev) => ({ ...prev, [runId]: relatedSpans }));
+      } catch (e: any) {
+        console.error('==== Error fetching spans by run id:', e);
+        toast.error('Failed to fetch span details', {
+          description: e.message || 'An error occurred while fetching span details',
+        });
+      } finally {
+        // Remove from loading set
+        setLoadingSpansById((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(runId);
+          return newSet;
+        });
+      }
+    },
+    [projectIdRef]
+  );
+
   const value: ChatWindowContextType = {
     messages,
     isLoading,
@@ -209,6 +265,10 @@ export function ChatWindowProvider({ children, threadId, projectId }: ChatWindow
     setSelectedSpanInfo,
     openTraces,
     setOpenTraces,
+    // Span data
+    spanMap,
+    fetchSpansByRunId: fetchSpansByRunIdCallback,
+    loadingSpansById,
   };
 
   return <ChatWindowContext.Provider value={value}>{children}</ChatWindowContext.Provider>;

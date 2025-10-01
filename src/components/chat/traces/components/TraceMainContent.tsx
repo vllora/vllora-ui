@@ -29,16 +29,16 @@ const TraceMainContentImpl: React.FC<TraceMainContentProps> = ({
   const observerTarget = useRef<HTMLDivElement>(null);
 
   // Get selectedSpanInfo from context to ensure consistency
-  const { selectedSpanInfo } = ChatWindowConsumer();
+  const { openTraces } = ChatWindowConsumer();
 
   // Memoize panel sizes to prevent unnecessary re-calculations
   const { defaultSizes, minSizes } = useMemo(() => {
-    const hasSelectedSpan = Boolean(selectedSpanInfo?.spanId);
+    const hasSelectedSpan = Boolean(openTraces?.length);
     const defaultSizes: [number, number] = hasSelectedSpan ? [40, 60] : [100, 0];
     const minSizes: [number, number] = hasSelectedSpan ? [20, 30] : [100, 0];
 
     return { defaultSizes, minSizes };
-  }, [selectedSpanInfo?.spanId]);
+  }, [openTraces]);
 
   const panelGroupRef = useRef<ImperativePanelGroupHandle>(null);
 
