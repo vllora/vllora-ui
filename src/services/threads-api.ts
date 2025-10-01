@@ -30,15 +30,15 @@ export async function queryThreads(
   request: QueryThreadsRequest
 ): Promise<QueryThreadsResponse> {
   //const url = `${LOCAL_API_URL}/threads`;
-  const url = `https://api.us-east-1.langdb.ai/threads`;
+  const url = `https://api.staging.langdb.ai/threads`;
 
   try {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-project-id': '9c7ac2c8-b76f-453b-914d-39eaaccec092',
-        'authorization': 'Bearer langdb_TW9hdFMwb1JqUzFtSnJ0QlY2RTZhS1VPcE5YV3FW',
+        'x-project-id': 'b97c20ff-ff11-429e-b97f-137b22042d3d',
+        'authorization': 'Bearer langdb_YmZzRGp6NWR5UXFraHA=',
         //'x-project-id': projectId,
       },
       body: JSON.stringify(request),
