@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useRef, useEffect, useMemo } from "react";
 import { TraceContent } from "./TraceContent";
-import { cn } from "@/lib/utils";
+import { SpanDetailsPanel } from "./SpanDetailsPanel";
 import { RunDTO } from "@/services/runs-api";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
+import { ImperativePanelGroupHandle } from "react-resizable-panels";
 
 interface TraceMainContentProps {
   loadingSpans: boolean;
@@ -25,23 +27,70 @@ const TraceMainContentImpl: React.FC<TraceMainContentProps> = ({
 }) => {
   const observerTarget = useRef<HTMLDivElement>(null);
 
+  // For now, we don't have selectedSpanInfo, so always show empty state
+  // When we add span selection later, we'll integrate with context
+  const hasSelectedSpan = false;
+
+  // Memoize panel sizes to prevent unnecessary re-calculations
+  const { defaultSizes, minSizes } = useMemo(() => {
+    const defaultSizes: [number, number] = hasSelectedSpan ? [40, 60] : [100, 0];
+    const minSizes: [number, number] = hasSelectedSpan ? [20, 30] : [100, 0];
+
+    return { defaultSizes, minSizes };
+  }, [hasSelectedSpan]);
+
+  const panelGroupRef = useRef<ImperativePanelGroupHandle>(null);
+
+  // Effect to handle panel layout changes - debounced to prevent rapid updates
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (panelGroupRef.current && panelGroupRef.current.setLayout) {
+        panelGroupRef.current.setLayout(defaultSizes);
+      }
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [defaultSizes]);
+
   return (
-    <div className={cn("h-full flex flex-col overflow-hidden")}>
-      <div className="h-full flex flex-col min-w-0">
-        {/* Content - scrollable */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden min-w-0 bg-black p-2">
-          <TraceContent
-            loadingSpans={loadingSpans}
-            runs={runs}
-            hasMore={hasMore}
-            loadMoreRuns={loadMoreRuns}
-            loadingMore={loadingMore}
-            threadId={threadId}
-            observerTarget={observerTarget}
-          />
+    <ResizablePanelGroup
+      direction="vertical"
+      id="traces-panel-group"
+      className="bg-black"
+      ref={panelGroupRef}
+    >
+      <ResizablePanel
+        defaultSize={defaultSizes[0]}
+        minSize={minSizes[0]}
+        id="trace-content"
+        className="overflow-hidden"
+      >
+        <div className="h-full w-full">
+          <div className="h-full overflow-y-auto overflow-x-hidden p-2">
+            <TraceContent
+              loadingSpans={loadingSpans}
+              runs={runs}
+              hasMore={hasMore}
+              loadMoreRuns={loadMoreRuns}
+              loadingMore={loadingMore}
+              threadId={threadId}
+              observerTarget={observerTarget}
+            />
+          </div>
         </div>
-      </div>
-    </div>
+      </ResizablePanel>
+      <ResizableHandle
+        withHandle={false}
+        className="hover:bg-secondary transition-colors"
+      />
+      <ResizablePanel
+        defaultSize={defaultSizes[1]}
+        minSize={minSizes[1]}
+        id="span-details"
+      >
+        <SpanDetailsPanel className="border-l border-border bg-black" />
+      </ResizablePanel>
+    </ResizablePanelGroup>
   );
 };
 
