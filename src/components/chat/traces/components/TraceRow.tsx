@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { RunDTO } from "@/services/runs-api";
 import { SummaryTraces } from "./Summary-row";
 import { DetailedRunView } from "./detail-run-view";
+import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 
 interface TraceRowProps {
   run: RunDTO;
@@ -13,11 +14,18 @@ interface TraceRowProps {
 
 // Component implementation
 const TraceRowImpl = ({ run, index = 0, isInSidebar = false }: TraceRowProps) => {
-  const [isOpen, setIsOpen] = useState(false);
+  const {openTraces, setOpenTraces} = ChatWindowConsumer();
   const traceOrRunId = run.run_id || '';
 
+  const isOpen = openTraces.includes(traceOrRunId);
   const toggleAccordion = useCallback(() => {
-    setIsOpen(prev => !prev);
+    setOpenTraces(prev => {
+      if (prev.includes(traceOrRunId)) {
+        return prev.filter(id => id !== traceOrRunId);
+      } else {
+        return [...prev, traceOrRunId];
+      }
+    });
   }, []);
 
   return (

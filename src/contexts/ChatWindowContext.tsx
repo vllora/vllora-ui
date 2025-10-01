@@ -5,6 +5,11 @@ import { queryMessages } from '@/services/messages-api';
 import { listRuns, RunDTO } from '@/services/runs-api';
 import { Message } from '@/types/chat';
 
+export interface SelectedSpanInfo {
+  spanId: string;
+  runId: string;
+}
+
 interface ChatWindowContextType {
   messages: Message[];
   isLoading: boolean;
@@ -20,6 +25,11 @@ interface ChatWindowContextType {
   hasMoreRuns: boolean;
   runsTotal: number;
   loadingMoreRuns: boolean;
+  // Selection state
+  selectedSpanInfo: SelectedSpanInfo | null;
+  setSelectedSpanInfo: (info: SelectedSpanInfo | null) => void;
+  openTraces: string[];
+  setOpenTraces: (traces: string[] | ((prev: string[]) => string[])) => void;
 }
 
 
@@ -40,6 +50,11 @@ export function ChatWindowProvider({ children, threadId, projectId }: ChatWindow
   const [hasMoreRuns, setHasMoreRuns] = useState<boolean>(false);
   const [loadingMoreRuns, setLoadingMoreRuns] = useState<boolean>(false);
   const [rawRuns, setRawRuns] = useState<RunDTO[]>([]);
+
+  // Selection state
+  const [selectedSpanInfo, setSelectedSpanInfo] = useState<SelectedSpanInfo | null>(null);
+  // should the the run be expanded
+  const [openTraces, setOpenTraces] = useState<string[]>([]);
 
   const threadIdRef = useLatest(threadId);
   const projectIdRef = useLatest(projectId);
@@ -189,6 +204,11 @@ export function ChatWindowProvider({ children, threadId, projectId }: ChatWindow
     hasMoreRuns,
     runsTotal,
     loadingMoreRuns,
+    // Selection state
+    selectedSpanInfo,
+    setSelectedSpanInfo,
+    openTraces,
+    setOpenTraces,
   };
 
   return <ChatWindowContext.Provider value={value}>{children}</ChatWindowContext.Provider>;

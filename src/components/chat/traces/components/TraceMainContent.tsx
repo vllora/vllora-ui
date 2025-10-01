@@ -6,6 +6,7 @@ import { SpanDetailsPanel } from "./SpanDetailsPanel";
 import { RunDTO } from "@/services/runs-api";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { ImperativePanelGroupHandle } from "react-resizable-panels";
+import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 
 interface TraceMainContentProps {
   loadingSpans: boolean;
@@ -27,17 +28,17 @@ const TraceMainContentImpl: React.FC<TraceMainContentProps> = ({
 }) => {
   const observerTarget = useRef<HTMLDivElement>(null);
 
-  // For now, we don't have selectedSpanInfo, so always show empty state
-  // When we add span selection later, we'll integrate with context
-  const hasSelectedSpan = false;
+  // Get selectedSpanInfo from context to ensure consistency
+  const { selectedSpanInfo } = ChatWindowConsumer();
 
   // Memoize panel sizes to prevent unnecessary re-calculations
   const { defaultSizes, minSizes } = useMemo(() => {
+    const hasSelectedSpan = Boolean(selectedSpanInfo?.spanId);
     const defaultSizes: [number, number] = hasSelectedSpan ? [40, 60] : [100, 0];
     const minSizes: [number, number] = hasSelectedSpan ? [20, 30] : [100, 0];
 
     return { defaultSizes, minSizes };
-  }, [hasSelectedSpan]);
+  }, [selectedSpanInfo?.spanId]);
 
   const panelGroupRef = useRef<ImperativePanelGroupHandle>(null);
 
