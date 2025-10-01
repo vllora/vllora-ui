@@ -1,10 +1,11 @@
-import { createContext, useContext, ReactNode, useCallback, useState } from 'react';
+import { createContext, useContext, ReactNode, useCallback, useState, useMemo } from 'react';
 import { useRequest, useLatest } from 'ahooks';
 import { toast } from 'sonner';
-import { queryMessages } from '@/services/messages-api';
 import { listRuns, RunDTO, Span } from '@/services/runs-api';
 import { Message } from '@/types/chat';
 import { fetchAllSpansByRunId } from '@/utils/traces';
+import { extractAllMessagesFromThread } from '@/utils/traceMessageParser';
+import { TraceUsageParser } from '@/utils/traceUsageParser';
 
 export interface SelectedSpanInfo {
   spanId: string;
@@ -47,29 +48,25 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   const threadIdRef = useLatest(threadId);
   const projectIdRef = useLatest(projectId);
 
-  // Use ahooks useRequest for fetching messages
-  const { data, loading: isLoading, error, run: refreshMessages } = useRequest(
-    async () => {
-      if (!threadId || !projectId) {
-        return [];
-      }
-      const response = await queryMessages(projectId, threadId, {
-        order_by: [['created_at', 'asc']],
-        limit: 100,
-        offset: 0,
-      });
-      return response;
-    },
-    {
-      refreshDeps: [threadId, projectId],
-      onError: (err) => {
-        toast.error('Failed to load messages', {
-          description: err.message || 'An error occurred while loading messages',
-        });
-      },
-     
+  // Parse messages from trace data instead of using messages API
+  const messages = useMemo(() => {
+    if (Object.keys(spanMap).length === 0) {
+      return [];
     }
-  );
+    return extractAllMessagesFromThread(spanMap);
+  }, [spanMap]);
+
+  // Update runs with usage data from traces
+  const runsWithUsage = useMemo(() => {
+    if (Object.keys(spanMap).length === 0) {
+      return rawRuns;
+    }
+    return TraceUsageParser.updateRunsWithUsage(rawRuns, spanMap);
+  }, [rawRuns, spanMap]);
+
+  // Mock loading and error states for compatibility
+  const isLoading = false;
+  const error = null;
 
   // Use ahooks useRequest for fetching runs of this thread (initial load)
   const {
@@ -100,6 +97,13 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
       setRunsOffset(newOffset);
       setHasMoreRuns(newHasMore);
       setRawRuns(runs);
+
+      // Automatically fetch spans for all runs to get messages
+      runs.forEach(run => {
+        if (run.run_id) {
+          fetchSpansByRunIdCallback(run.run_id);
+        }
+      });
 
       return response;
     },
@@ -139,6 +143,13 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
       setRunsOffset(newOffset);
       setHasMoreRuns(newHasMore);
       setRawRuns((prev) => [...prev, ...runs]);
+
+      // Automatically fetch spans for new runs to get messages
+      runs.forEach(run => {
+        if (run.run_id) {
+          fetchSpansByRunIdCallback(run.run_id);
+        }
+      });
     } catch (err: any) {
       toast.error('Failed to load more runs', {
         description: err.message || 'An error occurred while loading more runs',
@@ -157,18 +168,21 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     triggerRefreshRuns();
   }, [triggerRefreshRuns]);
 
-  // Map API messages to local Message type
-  const messages = data || [];
-  const runs = rawRuns;
+  const runs = runsWithUsage;
 
   const addMessage = useCallback((_message: Message) => {
     // TODO: Implement optimistic message adding if needed
   }, []);
 
   const clearMessages = useCallback(() => {
-    // Clear messages by refreshing with empty result
-    refreshMessages();
-  }, [refreshMessages]);
+    // Clear messages by clearing span data
+    setSpanMap({});
+  }, []);
+
+  const refreshMessages = useCallback(() => {
+    // Refresh messages by refreshing runs (which will trigger span fetching)
+    refreshRuns();
+  }, [refreshRuns]);
 
   /**
    * Fetches detailed span data for a specific run when user expands a row
