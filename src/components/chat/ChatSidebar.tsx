@@ -2,6 +2,7 @@ import React from 'react';
 import { MessageSquarePlus, MoreVertical, Trash2, Edit2 } from 'lucide-react';
 import { Thread } from '@/types/chat';
 import { Button } from '@/components/ui/button';
+import { ProjectDropdown } from '@/components/ProjectDropdown';
 
 interface ChatSidebarProps {
   threads: Thread[];
@@ -9,6 +10,7 @@ interface ChatSidebarProps {
   onSelectThread: (threadId: string) => void;
   onNewThread: () => void;
   onDeleteThread: (threadId: string) => void;
+  onProjectChange?: (projectId: string) => void;
 }
 
 export const ChatPageSidebar: React.FC<ChatSidebarProps> = ({
@@ -17,6 +19,7 @@ export const ChatPageSidebar: React.FC<ChatSidebarProps> = ({
   onSelectThread,
   onNewThread,
   onDeleteThread,
+  onProjectChange,
 }) => {
   const formatDate = (timestamp: number) => {
     const date = new Date(timestamp);
@@ -32,8 +35,13 @@ export const ChatPageSidebar: React.FC<ChatSidebarProps> = ({
 
   return (
     <div className="w-80 bg-card border-r border-border flex flex-col h-full">
-      {/* Header */}
-      <div className="h-[88px] p-4 border-b border-border flex items-center">
+      {/* Project Dropdown Header */}
+      <div className="h-16 px-4 border-b border-border flex items-center bg-card/95 backdrop-blur-xl">
+        <ProjectDropdown onProjectChange={onProjectChange} />
+      </div>
+
+      {/* New Chat Button */}
+      <div className="p-4 border-b border-border flex items-center">
         <Button
           onClick={onNewThread}
           variant="outline"

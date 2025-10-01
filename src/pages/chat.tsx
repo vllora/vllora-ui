@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ChatPageSidebar } from '@/components/chat/ChatSidebar';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import { ChatRightSidebar } from '@/components/chat/ChatRightSidebar';
@@ -8,6 +9,8 @@ import { API_CONFIG } from '@/config/api';
 
 export function ChatPage() {
   const { currentProjectId } = ProjectsConsumer();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [threads, setThreads] = useState<Thread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string>('openai/o1-mini');
@@ -63,6 +66,12 @@ export function ChatPage() {
     });
   }, []);
 
+  const handleProjectChange = useCallback((newProjectId: string) => {
+    localStorage.setItem('currentProjectId', newProjectId);
+    const currentPath = location.pathname.split('/').slice(3).join('/') || '';
+    navigate(`/project/${newProjectId}${currentPath ? '/' + currentPath : ''}`);
+  }, [location.pathname, navigate]);
+
   return (
     <section className="flex-1 flex bg-background text-foreground overflow-hidden" aria-label="Chat Interface">
       {/* Left Sidebar */}
@@ -72,6 +81,7 @@ export function ChatPage() {
         onSelectThread={handleSelectThread}
         onNewThread={handleNewThread}
         onDeleteThread={handleDeleteThread}
+        onProjectChange={handleProjectChange}
       />
 
       {/* Main Chat Area */}
