@@ -117,9 +117,9 @@ export function getColorByType(operationName: string): string {
  */
 export function skipThisSpan(span: Span): boolean {
   // Skip internal/system spans
-  if (span.operation_name === 'internal' || span.operation_name === 'system') {
-    return true;
-  }
+  // if (span.operation_name === 'internal' || span.operation_name === 'system') {
+  //   return true;
+  // }
 
   return false;
 }
