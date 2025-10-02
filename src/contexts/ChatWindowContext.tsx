@@ -67,7 +67,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
       return response;
     },
     {
-      refreshDeps: [threadId, projectId],
+      manual: true,
       onError: (err) => {
         
       },
@@ -227,7 +227,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
 
   return {
-    messages: serverMessages,
+    serverMessages,
     isLoading,
     error,
     addMessage,

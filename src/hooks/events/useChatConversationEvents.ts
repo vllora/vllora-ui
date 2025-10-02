@@ -18,11 +18,10 @@ export function useChatConversationEvents(props: {
         if(event.type === 'Custom') {
            if(event.thread_id === currentThreadId && event.name === 'message_event') {
             if(event.value && event.value.event_type === 'created' && !isChatProcessing) {
-              refreshMessages()
+              //refreshMessages()
             }
             
            }
-           
         }
         // Handle different event types here
         // Example: update threads, refresh data, etc.

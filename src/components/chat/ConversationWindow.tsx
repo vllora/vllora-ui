@@ -29,7 +29,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
   onModelChange,
 }) => {
   // Get historical messages from context (fetched from API)
-  const { messages: historicalMessages, clearMessages, setIsChatProcessing, refreshMessages } = ChatWindowConsumer();
+  const { serverMessages: historicalMessages, clearMessages, setIsChatProcessing } = ChatWindowConsumer();
 
   // Use the existing chat state hook for managing active conversation (streaming, typing, etc.)
   const chatState = useChatState({ initialMessages: historicalMessages });
