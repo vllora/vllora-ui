@@ -2,9 +2,10 @@ import { createContext, useContext, ReactNode, useCallback, useState } from 'rea
 import { useRequest, useLatest } from 'ahooks';
 import { toast } from 'sonner';
 import { queryMessages } from '@/services/messages-api';
-import { listRuns, RunDTO, Span } from '@/services/runs-api';
+import { listRuns} from '@/services/runs-api';
 import { Message } from '@/types/chat';
 import { fetchAllSpansByRunId } from '@/utils/traces';
+import { RunDTO, Span } from '@/types/common-type';
 
 export interface SelectedSpanInfo {
   spanId: string;

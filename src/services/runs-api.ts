@@ -1,98 +1,6 @@
-import { API_CONFIG } from '@/config/api';
+import { API_CONFIG, getRunsUrl } from '@/config/api';
+import { Pagination, RunDTO, Span } from '@/types/common-type';
 
-export interface Span {
-  trace_id: string;
-  span_id: string;
-  thread_id: string;
-  parent_span_id?: string;
-  operation_name: string;
-  start_time_us: number;
-  finish_time_us: number;
-  attribute: Attributes;
-  child_attribute?: Attributes;
-  run_id: string;
-  parent_trace_id?: string;
-  spans?: Span[];
-}
-
-export type Attributes =
-  | ModelCall
-  | ToolCall
-  | ApiCall
-  | {
-      message_id?: string;
-      error?: string;
-      output?: string;
-      [key: string]: any;
-    };
-
-export interface ModelCall {
-  input: Input | string;
-  model: Model;
-  output: string;
-  label?: string;
-  provider_name?: string;
-  model_name?: string;
-  error?: string;
-}
-
-export interface Input {
-  query: string;
-}
-
-export interface Model {
-  name: string;
-  provider?: string;
-}
-
-export interface RouterCall {
-  router_name?: string;
-  label?: string;
-  error?: string;
-}
-export interface ToolCall {
-  tool_name: string;
-  arguments: object;
-  output: object[];
-  provider_name?: string;
-  label?: string;
-  tool_calls?: string;
-  error?: string;
-  response?: string;
-  tool_results?: string;
-  mcp_server?: string;
-  mcp_template_definition_id?: string;
-}
-
-export interface ApiCall {
-  request: string;
-  output?: string;
-  provider_name?: string;
-  label?: string;
-  error?: string;
-}
-
-export interface RunDTO {
-  run_id: string | null;
-  thread_ids: string[];
-  trace_ids: string[];
-  used_models: string[];
-  request_models: string[];
-  used_tools: string[];
-  mcp_template_definition_ids: string[];
-  cost: number;
-  input_tokens: number;
-  output_tokens: number;
-  start_time_us: number;
-  finish_time_us: number;
-  errors: string[];
-}
-
-export interface Pagination {
-  offset: number;
-  limit: number;
-  total: number;
-}
 
 export interface PaginatedRunsResponse {
   data: RunDTO[];
@@ -168,7 +76,7 @@ export const listRuns = async (props: {
     }
   });
 
-  const url = `${API_CONFIG.url}/runs?${queryParams.toString()}`;
+  const url = `${getRunsUrl()}?${queryParams.toString()}`;
 
   const response = await fetch(url, {
     method: 'GET',
@@ -194,7 +102,7 @@ export const fetchRunSpans = async (props: {
   projectId: string;
   offset: number;
   limit: number;
-}): Promise<{ data: Span[]; pagination: { total: number; offset: number; limit: number } }> => {
+}): Promise<{ data: Span[]; pagination: Pagination }> => {
   const { runId, projectId, offset, limit } = props;
 
   // Build query string
@@ -203,7 +111,7 @@ export const fetchRunSpans = async (props: {
     limit: String(limit),
   });
 
-  const url = `${API_CONFIG.url}/traces/run/${runId}?${queryParams.toString()}`;
+  const url = `${getRunsUrl()}/${runId}?${queryParams.toString()}`;
 
   const response = await fetch(url, {
     method: 'GET',
@@ -224,10 +132,6 @@ export const fetchRunSpans = async (props: {
   const responseData = await response.json();
   return {
     data: responseData.data as Span[],
-    pagination: responseData.pagination as {
-      total: number;
-      offset: number;
-      limit: number;
-    },
+    pagination: responseData.pagination as Pagination,
   };
 };

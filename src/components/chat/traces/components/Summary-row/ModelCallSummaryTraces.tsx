@@ -1,5 +1,5 @@
 import React, { useCallback } from "react";
-import { RunDTO } from "@/services/runs-api";
+import { RunDTO } from "@/types/common-type";
 import { Card } from "@/components/ui/card";
 import {
   ExclamationTriangleIcon,

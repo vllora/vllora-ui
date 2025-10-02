@@ -9,18 +9,30 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 
 interface ProjectDropdownProps {
   onProjectChange?: (projectId: string) => void;
 }
 
 export function ProjectDropdown({ onProjectChange }: ProjectDropdownProps) {
-  const { projects, loading, currentProject, currentProjectId } = ProjectsConsumer();
+  const { projects, loading, currentProject, currentProjectId, isDefaultProject } = ProjectsConsumer();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const handleProjectSelect = (projectId: string) => {
     // Skip if already selected
     if (projectId === currentProjectId) return;
+
+    // Update URL with new project_id query parameter (omit if default project)
+    const searchParams = new URLSearchParams(location.search);
+    if (isDefaultProject(projectId)) {
+      searchParams.delete('project_id');
+    } else {
+      searchParams.set('project_id', projectId);
+    }
+    const queryString = searchParams.toString();
+    navigate(`${location.pathname}${queryString ? '?' + queryString : ''}`);
 
     if (onProjectChange) {
       onProjectChange(projectId);

@@ -9,17 +9,23 @@ export const API_CONFIG = {
 } as const;
 
 export function getChatCompletionsUrl(): string {
-  if (API_CONFIG.connectLocal) {
-    return `${API_CONFIG.localApiUrl}/v1/chat/completions`;
-  }
-  return `${API_CONFIG.url}/chat/completions`;
+  
+  return `${LOCAL_API_URL}/v1/chat/completions`;
 }
 
 export const getThreadsUrl = () => {
-  return `${API_CONFIG.url}/threads`;
+  return `${LOCAL_API_URL}/threads`;
 }
 
 export const getMessagesUrl = (threadId: string) => {
   return `${getThreadsUrl()}/${threadId}/messages`;
 }
   
+
+export const getRunsUrl = () => {
+  return `${LOCAL_API_URL}/runs`;
+}
+  
+export const getEventsUrl = () => {
+  return `${LOCAL_API_URL}/events`;
+}

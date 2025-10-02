@@ -5,9 +5,8 @@ import { TimelineContent } from "../../components/TimelineContent";
 import { AlertCircle, Clock } from "lucide-react";
 import { CustomErrorFallback } from "../custom-error-fallback";
 import { getSpanName } from "@/components/chat/utils";
-import { RunDTO } from "@/services/runs-api";
+import { RunDTO, Span } from "@/types/common-type";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
-import { Span } from "@/services/runs-api";
 
 // Main component that uses the above components
 export const DetailedRunView: React.FC<{run: RunDTO}> = ({

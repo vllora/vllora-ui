@@ -1,16 +1,16 @@
-import { useParams } from 'react-router-dom';
 import { ThreadsProvider } from '@/contexts/ThreadsContext';
+import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { ChatPage } from './chat';
 
 export function ChatPageWrapper() {
-  const { projectId } = useParams<{ projectId: string }>();
+  const { currentProjectId } = ProjectsConsumer();
 
-  if (!projectId) {
+  if (!currentProjectId) {
     return null;
   }
 
   return (
-    <ThreadsProvider projectId={projectId}>
+    <ThreadsProvider projectId={currentProjectId}>
       <ChatPage />
     </ThreadsProvider>
   );

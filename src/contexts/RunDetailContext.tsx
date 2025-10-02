@@ -1,6 +1,6 @@
 'use client'
-import { RunDTO, Span } from "@/services/runs-api";
 import { ReactNode, createContext, useContext } from "react";
+import { RunDTO, Span } from "@/types/common-type";
 export type RunDetailContextType = ReturnType<typeof runDetails>;
 
 export interface Hierarchy {

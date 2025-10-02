@@ -29,7 +29,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 
 export function ProjectsPage() {
-  const { projects, loading, refetchProjects } = ProjectsConsumer();
+  const { projects, loading, refetchProjects, isDefaultProject } = ProjectsConsumer();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDescription, setNewProjectDescription] = useState('');
@@ -148,7 +148,14 @@ export function ProjectsPage() {
             <Card
               key={project.id}
               className="hover:border-[rgba(var(--theme-500),0.5)] transition-colors group cursor-pointer"
-              onClick={() => navigate(`/projects/${project.id}`)}
+              onClick={() => {
+                // Navigate to home with project_id query param (omit if default)
+                if (isDefaultProject(project.id)) {
+                  navigate('/');
+                } else {
+                  navigate(`/?project_id=${project.id}`);
+                }
+              }}
             >
               <CardHeader>
                 <div className="flex items-start justify-between">

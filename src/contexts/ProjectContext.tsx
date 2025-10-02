@@ -1,6 +1,6 @@
-import { createContext, useContext, useMemo, ReactNode } from 'react';
+import { createContext, useContext, useMemo, useCallback, ReactNode } from 'react';
 import { useRequest } from 'ahooks';
-import { useParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { listProjects, type Project } from '@/services/projects-api';
 
@@ -9,7 +9,8 @@ export type ProjectContextType = ReturnType<typeof useProject>;
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
 export function useProject() {
-  const { projectId } = useParams<{ projectId: string }>();
+  const [searchParams] = useSearchParams();
+  const projectIdFromUrl = searchParams.get('project_id');
 
   const { data: projects = [], loading, error, run: refetchProjects } = useRequest(listProjects, {
     onError: (err) => {
@@ -19,11 +20,29 @@ export function useProject() {
     },
   });
 
-  // Derive current project from URL projectId
+  // Get default project
+  const defaultProject = useMemo(() => {
+    if (projects.length === 0) return null;
+    return projects.find((p) => p.is_default) || projects[0] || null;
+  }, [projects]);
+
+  // Determine current project ID: use URL param, or fallback to default/first project
+  const currentProjectId = useMemo(() => {
+    if (projectIdFromUrl) return projectIdFromUrl;
+    return defaultProject?.id;
+  }, [projectIdFromUrl, defaultProject]);
+
+  // Derive current project from determined project ID
   const currentProject = useMemo(() => {
-    if (!projectId || projects.length === 0) return null;
-    return projects.find((p) => p.id === projectId) || null;
-  }, [projectId, projects]);
+    if (!currentProjectId || projects.length === 0) return null;
+    return projects.find((p) => p.id === currentProjectId) || null;
+  }, [currentProjectId, projects]);
+
+  // Helper to check if a project ID is the default
+  const isDefaultProject = useCallback((projectId?: string) => {
+    if (!projectId || !defaultProject) return false;
+    return projectId === defaultProject.id;
+  }, [defaultProject]);
 
   return {
     projects,
@@ -31,7 +50,9 @@ export function useProject() {
     error,
     refetchProjects,
     currentProject,
-    currentProjectId: projectId,
+    currentProjectId,
+    defaultProject,
+    isDefaultProject,
   };
 }
 

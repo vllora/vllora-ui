@@ -1,7 +1,7 @@
 import React from "react";
 import { SingleRunTimelineView } from "../TraceRow/new-timeline/single-run-timeline";
 import { cn } from "@/lib/utils";
-import { Span } from "@/services/runs-api";
+import { Span } from "@/types/common-type";
 import { RunDetailProvider } from "@/contexts/RunDetailContext";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 

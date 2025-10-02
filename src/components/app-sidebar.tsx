@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Link, useLocation } from "react-router-dom"
 import {
   Home,
@@ -12,7 +12,6 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { ModeToggle } from "@/components/mode-toggle"
 import { ProjectsConsumer } from "@/contexts/ProjectContext"
 import {
   Tooltip,
@@ -41,10 +40,17 @@ interface AppSidebarProps {
 export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSidebarProps) {
   const location = useLocation()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
-  const { projects } = ProjectsConsumer()
+  const { projects, isDefaultProject } = ProjectsConsumer()
 
   // Get default project for fallback
   const defaultProject = projects.find((p) => p.is_default) || projects[0]
+
+  // Build query string with project_id only if not default project
+  const projectQueryString = useMemo(() => {
+    const projectIdToUse = currentProjectId || defaultProject?.id
+    if (!projectIdToUse || isDefaultProject(projectIdToUse)) return ''
+    return `?project_id=${projectIdToUse}`
+  }, [currentProjectId, defaultProject?.id, isDefaultProject])
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -96,18 +102,11 @@ export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSideb
           <ul className="space-y-1.5">
             {mainMenuItems.map((item) => {
               const Icon = item.icon
-              // Build path with projectId for project-scoped routes
-              // Use currentProjectId or fallback to default project
-              const projectIdToUse = currentProjectId || defaultProject?.id
-              const itemPath = projectIdToUse
-                ? `/projects/${projectIdToUse}${item.path === '/' ? '' : item.path}`
-                : item.path
+              // Build path with query string for project-scoped routes
+              const itemPath = `${item.path}${projectQueryString}`
 
-              // Check if active (match path pattern)
-              const isActive = currentProjectId
-                ? location.pathname === `/projects/${currentProjectId}` && item.path === '/' ||
-                  location.pathname.startsWith(`/projects/${currentProjectId}${item.path}`) && item.path !== '/'
-                : location.pathname === item.path
+              // Check if active (match path)
+              const isActive = location.pathname === item.path
 
               return (
                 <li key={item.id}>

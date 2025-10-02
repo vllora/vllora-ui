@@ -1,5 +1,4 @@
-import React from 'react';
-import { RunDTO } from '@/services/runs-api';
+import { RunDTO } from '@/types/common-type';
 import { ModelCallSummaryTraces } from './ModelCallSummaryTraces';
 
 export interface SummarySpansProps {

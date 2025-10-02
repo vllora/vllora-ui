@@ -12,6 +12,7 @@ import { Toaster } from "sonner"
 import { useEffect } from "react"
 import { applyTheme, getThemeFromStorage } from "./themes/themes"
 
+
 function App() {
   useEffect(() => {
     // Apply saved theme on mount
@@ -25,12 +26,10 @@ function App() {
         <LocalModelsProvider>
           <Routes>
             <Route path="/" element={<ProjectProvider><Layout /></ProjectProvider>}>
-              {/* Project-scoped routes */}
-              <Route path="projects/:projectId">
-                <Route index element={<HomePage />} />
-                <Route path="chat" element={<ChatPageWrapper />} />
-                <Route path="analytics" element={<AnalyticsPage />} />
-              </Route>
+              {/* Project-scoped routes (now using query string ?project_id=...) */}
+              <Route index element={<HomePage />} />
+              <Route path="chat" element={<ChatPageWrapper />} />
+              <Route path="analytics" element={<AnalyticsPage />} />
 
               {/* Global routes */}
               <Route path="projects" element={<ProjectsPage />} />

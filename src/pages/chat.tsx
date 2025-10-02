@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
-import { useNavigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
+import { useState, useCallback, useMemo } from 'react';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { ChatPageSidebar } from '@/components/chat/ChatSidebar';
 import { ConversationWindow } from '@/components/chat/ConversationWindow';
 import { ChatRightSidebar } from '@/components/chat/ChatRightSidebar';
@@ -10,8 +10,7 @@ import { Thread } from '@/types/chat';
 import { API_CONFIG } from '@/config/api';
 
 export function ChatPage() {
-  const { currentProjectId } = ProjectsConsumer();
-  const { projectId } = useParams<{ projectId: string }>();
+  const { currentProjectId, isDefaultProject } = ProjectsConsumer();
   const [searchParams] = useSearchParams();
   const {
     threads,
@@ -29,9 +28,9 @@ export function ChatPage() {
   }, [searchParams]);
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
 
-  useEffect(() => {
-    refreshThreads();
-  }, [refreshThreads]);
+  // useEffect(() => {
+  //   refreshThreads();
+  // }, [refreshThreads]);
 
   const handleNewThread = useCallback(() => {
     const newThread: Thread = {
@@ -44,16 +43,32 @@ export function ChatPage() {
       updated_at: new Date().toISOString(),
     };
     addThread(newThread);
-    // Navigate to the new thread with model in URL
-    navigate(`/projects/${projectId}/chat?threadId=${newThread.id}&model=${selectedModel}`);
-  }, [selectedModel, currentProjectId, projectId, addThread, navigate]);
+    // Navigate to the new thread with model in URL and project_id (only if not default)
+    const params = new URLSearchParams(searchParams);
+    params.set('threadId', newThread.id);
+    params.set('model', selectedModel);
+    if (currentProjectId && !isDefaultProject(currentProjectId)) {
+      params.set('project_id', currentProjectId);
+    } else {
+      params.delete('project_id');
+    }
+    navigate(`/chat?${params.toString()}`);
+  }, [selectedModel, currentProjectId, addThread, navigate, searchParams, isDefaultProject]);
 
   const handleSelectThread = useCallback((threadId: string) => {
     const thread = threads.find((t) => t.id === threadId);
     // Navigate to update the threadId and model in URL
     const modelParam = thread?.model_name || selectedModel;
-    navigate(`/projects/${projectId}/chat?threadId=${threadId}&model=${modelParam}`);
-  }, [projectId, threads, selectedModel, navigate]);
+    const params = new URLSearchParams(searchParams);
+    params.set('threadId', threadId);
+    params.set('model', modelParam);
+    if (currentProjectId && !isDefaultProject(currentProjectId)) {
+      params.set('project_id', currentProjectId);
+    } else {
+      params.delete('project_id');
+    }
+    navigate(`/chat?${params.toString()}`);
+  }, [threads, selectedModel, navigate, searchParams, currentProjectId, isDefaultProject]);
 
 
   const handleModelChange = useCallback((modelId: string) => {
@@ -66,14 +81,26 @@ export function ChatPage() {
         model_name: modelId,
       });
     }
-    navigate(`/projects/${projectId}/chat?${params.toString()}`);
-  }, [selectedThreadId, searchParams, projectId, updateThread, navigate]);
+    if (currentProjectId && !isDefaultProject(currentProjectId)) {
+      params.set('project_id', currentProjectId);
+    } else {
+      params.delete('project_id');
+    }
+    navigate(`/chat?${params.toString()}`);
+  }, [selectedThreadId, searchParams, currentProjectId, updateThread, navigate, isDefaultProject]);
 
   const handleProjectChange = useCallback((newProjectId: string) => {
     localStorage.setItem('currentProjectId', newProjectId);
-    const currentPath = location.pathname.split('/').slice(3).join('/') || '';
-    navigate(`/projects/${newProjectId}${currentPath ? '/' + currentPath : ''}`);
-  }, [location.pathname, navigate]);
+    // Update the project_id query param while keeping current path (omit if default)
+    const params = new URLSearchParams(searchParams);
+    if (isDefaultProject(newProjectId)) {
+      params.delete('project_id');
+    } else {
+      params.set('project_id', newProjectId);
+    }
+    const queryString = params.toString();
+    navigate(`${location.pathname}${queryString ? '?' + queryString : ''}`);
+  }, [location.pathname, navigate, searchParams, isDefaultProject]);
 
   return (
     <section className="flex-1 flex bg-background text-foreground overflow-hidden" aria-label="Chat Interface">
@@ -87,8 +114,8 @@ export function ChatPage() {
       />
 
       {/* Main Chat Area and Right Sidebar */}
-      {selectedThreadId && projectId ? (
-        <ChatWindowProvider threadId={selectedThreadId} projectId={projectId}>
+      {selectedThreadId && currentProjectId ? (
+        <ChatWindowProvider threadId={selectedThreadId} projectId={currentProjectId}>
           <div className="flex-1 flex flex-col overflow-hidden">
             <ConversationWindow
               threadId={selectedThreadId}

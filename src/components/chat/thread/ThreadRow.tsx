@@ -1,9 +1,10 @@
 import { Thread } from "@/types/chat";
 import { ThreadsConsumer } from "@/contexts/ThreadsContext";
+import { ProjectsConsumer } from "@/contexts/ProjectContext";
 import { ClockIcon, CurrencyDollarIcon, ExclamationTriangleIcon, PencilIcon } from "@heroicons/react/24/outline";
 import { formatDistanceToNow, format } from "date-fns";
 import React, { useCallback, useRef, useState, useMemo } from "react";
-import { useSearchParams, useNavigate, useParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { Input } from "../../ui/input";
 import { ListProviders } from "./ListProviders";
 import { ThreadCopiableId } from "./ThreadCopiableId";
@@ -18,13 +19,13 @@ import { ErrorTooltip } from "./ErrorTooltip";
 
 export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
     const { renameThread, selectedThreadId } = ThreadsConsumer();
-    const { projectId } = useParams<{ projectId: string }>();
+    const { currentProjectId, isDefaultProject } = ProjectsConsumer();
     const [isEditing, setIsEditing] = useState(false);
     const [newTitle, setNewTitle] = useState(thread.title);
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const urlThreadId = searchParams?.get('threadId');
-    
+
     // Use URL parameter for immediate feedback, fallback to context only if URL param is null
     const isSelected = urlThreadId ? urlThreadId === thread.id : selectedThreadId === thread.id;
 
@@ -37,10 +38,19 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                 modelParam = thread.input_models[thread.input_models.length - 1];
             }
         }
-        if (!projectId) return;
-        const url = `/projects/${projectId}/chat?threadId=${thread.id}${modelParam ? `&model=${modelParam}` : ''}`;
-        navigate(url);
-    }, [projectId, thread.id, thread.input_models, thread.request_model_name, navigate]);
+        if (!currentProjectId) return;
+        const params = new URLSearchParams(searchParams);
+        params.set('threadId', thread.id);
+        if (!isDefaultProject(currentProjectId)) {
+            params.set('project_id', currentProjectId);
+        } else {
+            params.delete('project_id');
+        }
+        if (modelParam) {
+            params.set('model', modelParam);
+        }
+        navigate(`/chat?${params.toString()}`);
+    }, [currentProjectId, thread.id, thread.input_models, thread.request_model_name, navigate, searchParams, isDefaultProject]);
     
     // Memoize expensive calculations
     const { tagsDisplay, providersInfo } = useMemo(() => {

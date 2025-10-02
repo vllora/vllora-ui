@@ -41,16 +41,42 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
 
   // Update URL params when state changes
   useEffect(() => {
-    const params = new URLSearchParams();
+    // Start with existing search params to preserve things like project_id
+    const params = new URLSearchParams(searchParams);
 
-    if (viewMode !== 'grid') params.set('view', viewMode);
-    if (searchTerm) params.set('search', searchTerm);
-    if (selectedProviders.length > 0) params.set('providers', selectedProviders.join(','));
-    if (selectedOwners.length > 0) params.set('owners', selectedOwners.join(','));
-    if (groupByName) params.set('groupByName', 'true');
+    // Remove filter params that are not set
+    if (viewMode === 'grid') {
+      params.delete('view');
+    } else {
+      params.set('view', viewMode);
+    }
+
+    if (!searchTerm) {
+      params.delete('search');
+    } else {
+      params.set('search', searchTerm);
+    }
+
+    if (selectedProviders.length === 0) {
+      params.delete('providers');
+    } else {
+      params.set('providers', selectedProviders.join(','));
+    }
+
+    if (selectedOwners.length === 0) {
+      params.delete('owners');
+    } else {
+      params.set('owners', selectedOwners.join(','));
+    }
+
+    if (!groupByName) {
+      params.delete('groupByName');
+    } else {
+      params.set('groupByName', 'true');
+    }
 
     setSearchParams(params, { replace: true });
-  }, [viewMode, searchTerm, selectedProviders, selectedOwners, groupByName, setSearchParams]);
+  }, [viewMode, searchTerm, selectedProviders, selectedOwners, groupByName, searchParams, setSearchParams]);
 
   // Group models by model name (without provider prefix) - only if grouping by name is enabled
   const groupedModels = useMemo(() => {
