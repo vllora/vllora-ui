@@ -255,6 +255,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
   return {
     serverMessages,
+    setServerMessages,
     isLoading,
     error,
     addMessage,

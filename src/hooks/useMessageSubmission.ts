@@ -22,7 +22,6 @@ export const useMessageSubmission = (
 ) => {
   const abortControllerRef = useRef<AbortController | null>(null);
   const {
-    setMessages,
     setCurrentInput,
     setTyping,
     setError,
@@ -34,6 +33,7 @@ export const useMessageSubmission = (
     traceId,
     threadId,
     messages,
+    onSetMessages,
   } = chatState;
 
   const { messagesEndRef, scrollToBottom } = useScrollToBottom();
@@ -71,7 +71,7 @@ export const useMessageSubmission = (
           }
           props.onEvent?.(event);
 
-          setMessages((prevMessages) => {
+          onSetMessages((prevMessages) => {
             const lastMessage = prevMessages[prevMessages.length - 1];
 
             if (lastMessage && lastMessage.type === MessageType.HumanMessage) {
@@ -125,7 +125,7 @@ export const useMessageSubmission = (
         console.error('Error processing event:', error);
       }
     },
-    [props, setTyping, setError, appendUsage, setMessages]
+    [props, setTyping, setError, appendUsage, onSetMessages]
   );
 
   const submitMessageFn = useCallback(
@@ -152,7 +152,7 @@ export const useMessageSubmission = (
         files,
       };
 
-      setMessages((prevMessages) => {
+      onSetMessages((prevMessages) => {
         return [...prevMessages, newMessage];
       });
       setCurrentInput('');
@@ -358,7 +358,7 @@ export const useMessageSubmission = (
     },
     [
       threadId,
-      setMessages,
+      onSetMessages,
       setCurrentInput,
       setTyping,
       setError,

@@ -29,7 +29,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
   onModelChange,
 }) => {
   // Get historical messages from context (fetched from API)
-  const { serverMessages: historicalMessages, clearMessages, setIsChatProcessing, refreshMessages } = ChatWindowConsumer();
+  const { serverMessages, setServerMessages, clearMessages, setIsChatProcessing, refreshMessages } = ChatWindowConsumer();
    useEffect(() => {
     if(threadId) {
       clearMessages();
@@ -37,10 +37,9 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     }
   }, [threadId])
   // Use the existing chat state hook for managing active conversation (streaming, typing, etc.)
-  const chatState = useChatState({ initialMessages: historicalMessages });
+  const chatState = useChatState({ messages: serverMessages, onSetMessages: setServerMessages });
 
   const {
-    messages,
     currentInput,
     setCurrentInput,
     typing,
@@ -147,8 +146,8 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       widgetId?: string;
     }) => {
       if (
-        messages &&
-        messages.length > 0 &&
+        serverMessages &&
+        serverMessages.length > 0 &&
         ((input.threadId === threadId && input.threadId) ||
           (input.widgetId && input.widgetId === widgetId))
       ) {
@@ -159,7 +158,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     return () => {
       emitter.off('langdb_chat_scrollToBottom', handleScrollToBottom);
     };
-  }, [messages, threadId, scrollToBottom, widgetId]);
+  }, [serverMessages, threadId, scrollToBottom, widgetId]);
 
   useEffect(() => {
     const handleExternalSubmit = ({
@@ -207,7 +206,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
 
       {/* Chat Conversation */}
       <ChatConversation
-        messages={messages}
+        messages={serverMessages}
         isLoading={typing}
         messagesEndRef={messagesEndRef as React.RefObject<HTMLDivElement>}
         scrollToBottom={scrollToBottom}

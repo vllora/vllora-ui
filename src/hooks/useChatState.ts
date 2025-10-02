@@ -1,9 +1,11 @@
 import { useCallback, useState } from 'react';
 import { Message, ModelUsage } from '@/types/chat';
 
-export const useChatState = (props: { initialMessages: Message[] }) => {
-  const { initialMessages } = props;
-  const [messages, setMessages] = useState<Message[]>([]);
+export const useChatState = (props: {
+  messages: Message[];
+  onSetMessages: React.Dispatch<React.SetStateAction<Message[]>>;
+}) => {
+  const { messages, onSetMessages } = props;
   const [currentInput, setCurrentInput] = useState<string>('');
   const [threadId, setThreadId] = useState<string | undefined>();
   const [messageId, setMessageId] = useState<string | undefined>();
@@ -19,17 +21,8 @@ export const useChatState = (props: { initialMessages: Message[] }) => {
     [setUsageInfo]
   );
 
-  const displayMessages = [...initialMessages, ...messages];
-  // make displayMessages unique by id
-  const uniqueMessages = Array.from(new Set(displayMessages.map((msg) => msg.id)))
-    .map((id) => {
-      return displayMessages.find((msg) => msg.id === id);
-    })
-    .filter((msg) => msg !== undefined) as Message[];
-
   return {
-    messages: uniqueMessages,
-    setMessages,
+    
     currentInput,
     setCurrentInput,
     threadId,
@@ -44,6 +37,7 @@ export const useChatState = (props: { initialMessages: Message[] }) => {
     setError,
     usageInfo,
     appendUsage,
-    initialMessages,
+    onSetMessages,
+    messages
   };
 };
