@@ -14,6 +14,7 @@ interface MessageSubmissionProps {
   onEvent?: (event: ChatCompletionChunk) => void;
   widgetId?: string;
   threadId?: string;
+  threadTitle?: string;
 }
 
 export const useMessageSubmission = (
@@ -135,10 +136,11 @@ export const useMessageSubmission = (
       searchToolEnabled?: boolean;
       otherTools?: string[];
       threadId?: string;
+      threadTitle?: string;
     }) => {
       abortControllerRef.current = new AbortController();
 
-      const { inputText, files, threadId } = inputProps;
+      const { inputText, files, threadId, threadTitle } = inputProps;
 
       if (inputText.trim() === '') return;
 
@@ -162,6 +164,7 @@ export const useMessageSubmission = (
       let currentThreadId = threadId;
       const widgetId = props.widgetId;
 
+      console.log('threadTitle 2', threadTitle);
       try {
         widgetId &&
           emitter.emit('langdb_chatWindow', {
@@ -223,6 +226,7 @@ export const useMessageSubmission = (
             ...(props.apiKey && { Authorization: `Bearer ${props.apiKey}` }),
             ...(props.projectId && { 'X-Project-Id': props.projectId }),
             ...(threadId && { 'X-Thread-Id': threadId }),
+            ...(threadTitle && { 'X-Thread-Title': threadTitle }),
           },
           body: JSON.stringify({
             model: props.modelName,

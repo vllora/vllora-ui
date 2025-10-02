@@ -110,6 +110,10 @@ export function ChatPage() {
     navigate(`${location.pathname}${queryString ? '?' + queryString : ''}`);
   }, [location.pathname, navigate, searchParams, isDefaultProject]);
 
+  const handleThreadTitleChange = useCallback((threadId: string, title: string) => {
+    updateThread(threadId, { title });
+  }, [updateThread]);
+
   return (
     <section className="flex-1 flex bg-background text-foreground overflow-hidden" aria-label="Chat Interface">
       {/* Left Sidebar */}
@@ -118,6 +122,7 @@ export function ChatPage() {
         selectedThreadId={selectedThreadId}
         onSelectThread={handleSelectThread}
         onNewThread={handleNewThread}
+        onThreadTitleChange={handleThreadTitleChange}
         onProjectChange={handleProjectChange}
       />
 
@@ -127,6 +132,7 @@ export function ChatPage() {
           <div className="flex-1 flex flex-col overflow-hidden">
             <ConversationWindow
               threadId={selectedThreadId}
+              threadTitle={threads.find((t) => t.id === selectedThreadId)?.title}
               modelName={selectedModel}
               apiUrl={API_CONFIG.url}
               projectId={currentProjectId}

@@ -17,7 +17,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../
 import { motion } from "framer-motion";
 import { ErrorTooltip } from "./ErrorTooltip";
 
-export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
+export const ThreadRow = React.memo(({ thread, onThreadTitleChange }: { thread: Thread, onThreadTitleChange?: (threadId: string, title: string) => void }) => {
     const { renameThread, deleteDraftThread, selectedThreadId } = ThreadsConsumer();
     const { currentProjectId, isDefaultProject } = ProjectsConsumer();
     const [isEditing, setIsEditing] = useState(false);
@@ -102,6 +102,7 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
     const handleTitleSave = useCallback(() => {
         if (newTitle?.trim()) {
             renameThread(thread.id, newTitle.trim());
+            onThreadTitleChange?.(thread.id, newTitle.trim());
         }
         setNewTitle(undefined);
         setIsEditing(false);
