@@ -98,28 +98,50 @@ export function getAgentName(span: Span): string | null {
 /**
  * Get color by operation type
  */
-export function getColorByType(operationName: string): string {
-  const colorMap: Record<string, string> = {
-    'model_call': 'bg-purple-500/10 text-purple-400',
-    'api_invoke': 'bg-blue-500/10 text-blue-400',
-    'tool_call': 'bg-green-500/10 text-green-400',
-    'agent': 'bg-amber-500/10 text-amber-400',
-    'router': 'bg-pink-500/10 text-pink-400',
-    'mcp': 'bg-teal-500/10 text-teal-400',
-    'cache': 'bg-cyan-500/10 text-cyan-400',
-  };
-
-  return colorMap[operationName] || 'bg-gray-500/10 text-gray-400';
+export const getColorByType = (type: string) => {
+  switch (type) {
+    case 'api_invoke':
+      // yellow
+      return '#eab308';
+    case 'SpanToolNode':
+      return '#3b82f6'; // Blue for tools
+    case 'ClientSDKNode':
+      return '#10b981'; // Emerald for tools
+    case 'SpanModelNode':
+      return '#eab308'; // Gold/yellow for models
+    case 'RunNode':
+      return '#14b8a6'; // Teal for runs
+    case 'RouterNode':
+      return '#8b5cf6'; // Amber for routers (fixed hex code)
+    case 'GuardNode':
+      return '#ec4899'; // Pink for guards
+    case 'VirtualModelNode':
+      return '#10b981'; // Emerald green for virtual models
+    default:
+      return '#3b82f6';
+  }
 }
 
 /**
  * Check if span should be skipped in display
  */
-export function skipThisSpan(span: Span): boolean {
-  // Skip internal/system spans
-  // if (span.operation_name === 'internal' || span.operation_name === 'system') {
-  //   return true;
-  // }
+export function skipThisSpan(span: Span, isClientSDKTrace?: boolean): boolean {
+  let operation_name = span.operation_name;
+    if (isClientSDKTrace) {
+        let sdkName = getClientSDKName(span);
+        if (sdkName === 'adk') {
+            return ['invocation', 'tools', 'call_llm'].includes(operation_name)
+        }
+        if (sdkName === 'crewai') {
+            let isAgent = isAgentSpan(span);
+            return false
+        }
+    }
+    if (!isClientSDKTrace && span.operation_name === 'api_invoke' && span.attribute && span.attribute['error']) {
+        return false
+    }
+
+    return ["cloud_api_invoke", "api_invoke", "model_call"].includes(operation_name);
 
   return false;
 }

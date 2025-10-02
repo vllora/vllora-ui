@@ -19,10 +19,10 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
     // In ellora-ui, we're always in sidebar mode (chat sidebar)
     const titleWidth: string | number = `${propTitleWidth}px`.replace('pxpx', 'px');
 
-    let root = hierarchy.span;
+    let root = hierarchy.root;
     let children = hierarchy.children;
     let isClientSDKTrace = isClientSDK(root);
-    let skipCondition = skipThisSpan(root)
+    let skipCondition = skipThisSpan(root, isClientSDKTrace)
     let isSingleTrace = level == 0 && hierarchy.children.length === 0;
     // Skip certain operation types and render their children directly
     if (skipCondition && !isSingleTrace) {
@@ -32,7 +32,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                     {children.map(child => (
                         <HierarchyRow
                             level={level}
-                            key={child.span.span_id}
+                            key={child.root.span_id}
                             hierarchy={child}
                             totalDuration={totalDuration}
                             startTime={startTime}
@@ -61,12 +61,15 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
     const title = spanTitle || root.operation_name || 'Unknown';
     let operationIcon = getOperationIcon({ span: root, relatedSpans: spans });
 
+    
     const operationIconColor = getOperationIconColor({ span: root, relatedSpans: spans });
     const timelineBgColor = getTimelineBgColor({ span: root, relatedSpans: spans });
 
+    console.log('===== operationIconColor', operationIconColor)
+    console.log('===== timelineBgColor', timelineBgColor)
     // Calculate finish time for parent span if it has children
     let finish_time_us = children.length > 0
-        ? children.reduce((min, child) => Math.min(min, child.span.start_time_us), root.finish_time_us)
+        ? children.reduce((min, child) => Math.min(min, child.root.start_time_us), root.finish_time_us)
         : root.finish_time_us;
 
     // Leaf node (no children)
@@ -111,7 +114,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                 {children.map(child => (
                     <HierarchyRow
                         level={level + 1}
-                        key={child.span.span_id}
+                        key={child.root.span_id}
                         hierarchy={child}
                         totalDuration={totalDuration}
                         startTime={startTime}

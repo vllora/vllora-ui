@@ -17,7 +17,6 @@ export const DetailedRunView: React.FC<{run: RunDTO}> = ({
     const spansByRunId: Span[] = run.run_id ? spanMap[run.run_id] || [] : []
     const detailViewRef = useRef<HTMLDivElement>(null);
 
-    console.log("==== spansByRunId", spansByRunId)
     if (spansByRunId?.length > 0) {
         const uniqueNames = new Set(spansByRunId
             .filter(span => !['model_call', 'api_invoke', 'cloud_api_invoke'].includes(span.operation_name))

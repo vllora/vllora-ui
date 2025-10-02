@@ -13,15 +13,8 @@ export const SingleRunTimelineView = (props: SingleRunTimelineViewProps) => {
     const { spans, hierarchies, rootSpans } = RunDetailConsumer();
     // Dynamic title width based on display mode - wider when not in sidebar
     const titleWidth: string | number = useMemo(() => isInSidebar ? `${180}px` : '20vw', [isInSidebar]);
-    console.log("==== SingleRunTimelineView spans", spans)
-    console.log("==== SingleRunTimelineView rootSpans", rootSpans)
-    console.log("==== SingleRunTimelineView rootSpanId", rootSpanId)
     const rootSpan = rootSpans.find(span => `${span.span_id}` === `${rootSpanId}`);
-    console.log("==== SingleRunTimelineView rootSpan", rootSpan)
-    console.log("==== SingleRunTimelineView hierarchies", hierarchies)
-    const hierarchy = rootSpan ? hierarchies[rootSpan.span_id] : null;
-    console.log("==== SingleRunTimelineView hierarchy", hierarchy)
-
+    const hierarchy = rootSpan ? hierarchies[rootSpan.span_id] : null;    
     if (!hierarchy) {
         return <></>;
     }
@@ -30,17 +23,11 @@ export const SingleRunTimelineView = (props: SingleRunTimelineViewProps) => {
     const startTime = Math.min(...spans.map(span => span.start_time_us));
     const endTime = Math.max(...spans.map(span => span.finish_time_us));
     const totalDuration = endTime - startTime;
-    const totalDurationSeconds = (totalDuration / 1000000).toFixed(2);
     return (
         <div className="flex flex-col space-y-1 mt-2 first:mt-0">
             {/* Timeline header with ticks */}
             {index === 0 && (
                 <div className="flex flex-col">
-                    {/* <div className="flex items-center gap-2 mb-2 px-2">
-                        <ClockIcon className="h-3 w-3 text-gray-400" />
-                        <span className="text-xs text-gray-400">Total Duration: {totalDurationSeconds}s</span>
-                    </div> */}
-
                     <div className="flex w-full">
                         <div style={{ width: titleWidth }} className="flex-shrink-0"></div>
                         <div className="flex-grow relative">
