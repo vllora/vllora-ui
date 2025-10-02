@@ -9,7 +9,7 @@ export function useConversationEvents(props: {
 }) {
   const { subscribe } = ProjectEventsConsumer();
   const { currentProjectId, currentThreadId } = props;
-  const {isChatProcessing, refreshMessages} = ChatWindowConsumer()
+  const {isChatProcessing, refreshMessages, serverMessages} = ChatWindowConsumer()
   useEffect(() => {
     const unsubscribe = subscribe(
       'chat-conversation-events',
@@ -18,7 +18,11 @@ export function useConversationEvents(props: {
         if(event.type === 'Custom') {
            if(event.thread_id === currentThreadId && event.name === 'message_event') {
             if(event.value && event.value.event_type === 'created' && !isChatProcessing) {
-              refreshMessages()
+               //check if the message is in serverMessages
+               const message = serverMessages.find((message) => message.id === event.value.message_id);
+               if(!message) {
+                 refreshMessages()
+               }
             }
             
            }
@@ -26,5 +30,5 @@ export function useConversationEvents(props: {
       }
     );
     return unsubscribe;
-  }, [subscribe, currentProjectId, currentThreadId, isChatProcessing, refreshMessages]);
+  }, [subscribe, currentProjectId, currentThreadId, isChatProcessing, refreshMessages, serverMessages]);
 }
