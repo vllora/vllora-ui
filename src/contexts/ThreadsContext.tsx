@@ -131,12 +131,20 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
   const renameThread = useCallback(
     async (threadId: string, title: string) => {
       try {
-        await updateThreadTitle({ threadId, title, projectId });
-        setThreads((prev) =>
-          prev.map((thread) => (thread.id === threadId ? { ...thread, title } : thread))
-        );
-        await refreshThreads();
-        toast.success('Thread renamed successfully');
+        let thread = threads.find((thread) => thread.id === threadId);
+        if (!thread?.is_from_local) {
+          await updateThreadTitle({ threadId, title, projectId });
+          setThreads((prev) =>
+            prev.map((thread) => (thread.id === threadId ? { ...thread, title } : thread))
+          );
+          await refreshThreads();
+          toast.success('Thread renamed successfully');
+        } else {
+          setThreads((prev) =>
+            prev.map((thread) => (thread.id === threadId ? { ...thread, title } : thread))
+          );
+        }
+        
       } catch (err: any) {
         toast.error('Failed to rename thread', {
           description: err.message,
@@ -144,7 +152,7 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
         throw err;
       }
     },
-    [projectId, refreshThreads]
+    [projectId, refreshThreads, threads]
   );
 
   const deleteThread = useCallback(

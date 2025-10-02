@@ -127,6 +127,7 @@ export function ChatPage() {
           <div className="flex-1 flex flex-col overflow-hidden">
             <ConversationWindow
               threadId={selectedThreadId}
+              threadTitle={threads.find((t) => t.id === selectedThreadId)?.title}
               modelName={selectedModel}
               apiUrl={API_CONFIG.url}
               projectId={currentProjectId}

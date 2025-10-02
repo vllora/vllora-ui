@@ -11,6 +11,7 @@ import { useConversationEvents } from '@/hooks/events/useConversationEvents';
 
 interface ChatWindowProps {
   threadId?: string;
+  threadTitle?: string;
   modelName?: string;
   apiUrl: string;
   apiKey?: string;
@@ -21,6 +22,7 @@ interface ChatWindowProps {
 
 export const ConversationWindow: React.FC<ChatWindowProps> = ({
   threadId,
+  threadTitle,
   modelName,
   apiUrl,
   apiKey,
@@ -28,6 +30,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
   widgetId,
   onModelChange,
 }) => {
+  console.log('threadTitle', threadTitle);
   // Get historical messages from context (fetched from API)
   const { serverMessages, setServerMessages, clearMessages, setIsChatProcessing, refreshMessages } = ChatWindowConsumer();
    useEffect(() => {
@@ -72,6 +75,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       modelName,
       widgetId,
       threadId,
+      threadTitle,
     },
     chatState
   );
@@ -83,6 +87,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       searchToolEnabled?: boolean;
       otherTools?: string[];
       threadId?: string;
+      threadTitle?: string;
     }) => {
       return handleSubmit(inputProps);
     },
@@ -166,14 +171,16 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       files,
       searchToolEnabled,
       otherTools,
+      threadTitle,
     }: {
       inputText: string;
       files: any[];
       searchToolEnabled?: boolean;
       otherTools?: string[];
+      threadTitle?: string;
     }) => {
       setCurrentInput(inputText);
-      onSubmitWrapper({ inputText, files, searchToolEnabled, otherTools, threadId });
+      onSubmitWrapper({ inputText, files, searchToolEnabled, otherTools, threadId, threadTitle });
     };
     emitter.on('langdb_input_chatSubmit', handleExternalSubmit);
 
@@ -194,7 +201,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       {/* Chat Header */}
       <div className="h-[88px] border-b border-border p-4 bg-card flex-shrink-0 flex flex-col justify-center">
         <h2 className="text-lg font-semibold text-card-foreground">
-          {threadId ? `Thread: ${threadId}` : 'New conversation'}
+          {threadTitle ? threadTitle : 'New conversation'}
         </h2>
 
         {/* Model Selector */}
@@ -239,6 +246,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
           currentInput={currentInput}
           setCurrentInput={setCurrentInput}
           disabled={typing}
+          threadTitle={threadTitle}
         />
       </div>
     </>

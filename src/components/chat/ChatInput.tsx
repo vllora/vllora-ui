@@ -11,6 +11,7 @@ interface ChatInputProps {
     files: FileWithPreview[];
     searchToolEnabled?: boolean;
     otherTools?: string[];
+    threadTitle?: string;
   }) => Promise<void>;
   currentInput: string;
   setCurrentInput: (input: string) => void;
@@ -18,6 +19,7 @@ interface ChatInputProps {
   placeholder?: string;
   searchToolEnabled?: boolean;
   toggleSearchTool?: (enabled: boolean) => void;
+  threadTitle?: string;
 }
 
 const convertFileToBase64 = (file: File) => {
@@ -35,6 +37,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   setCurrentInput,
   disabled = false,
   searchToolEnabled,
+  threadTitle,
 }) => {
   const [files, setFiles] = useState<FileWithPreview[]>([]);
   const [isListening, setIsListening] = useState(false);
@@ -146,6 +149,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         files,
         searchToolEnabled,
         otherTools: [],
+        threadTitle,
       });
     };
 
@@ -158,7 +162,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     };
 
     recognition.start();
-  }, [files, searchToolEnabled, onSubmit]);
+  }, [files, searchToolEnabled, onSubmit, threadTitle]);
 
   const handleSend = () => {
     if (currentInput.trim() && !disabled) {
@@ -169,6 +173,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         files: currentFiles,
         searchToolEnabled,
         otherTools: [],
+        threadTitle,
       });
       setCurrentInput('');
       if (textareaRef.current) {
