@@ -1,6 +1,6 @@
 import { startTransition, useEffect } from 'react';
 import { ProjectEventsConsumer } from '@/contexts/project-events';
-import { LangDBCustomEvent, LangDBEventSpan, ProjectEventUnion, ThreadEventValue } from '@/contexts/project-events/dto';
+import { CostValueData, LangDBCustomEvent, LangDBEventSpan, ProjectEventUnion, ThreadEventValue } from '@/contexts/project-events/dto';
 import { ThreadsConsumer } from '@/contexts/ThreadsContext';
 import { convertToNormalSpan, getTokensInfo, getTotalCost } from '@/contexts/project-events/util';
 
@@ -11,7 +11,7 @@ export function useThreadsEvents(props: {
 }) {
   const { subscribe } = ProjectEventsConsumer();
   const { currentProjectId, currentThreadId, onSelectThread } = props;
-  const { addThreadByEvent } = ThreadsConsumer();
+  const { addThreadByEvent, updateThreadCost } = ThreadsConsumer();
   useEffect(() => {
     const unsubscribe = subscribe(
       'chat-page-events',
@@ -36,6 +36,10 @@ export function useThreadsEvents(props: {
             return;
            }
            
+           if(customEvent.name === 'cost') {
+            const costEvent = customEvent.value as CostValueData;
+            updateThreadCost(currentThreadId, costEvent.cost);
+          }
         }
       }
     );

@@ -212,6 +212,15 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
     );
   }, []);
 
+  const updateThreadCost = useCallback((threadId: string, cost: number) => {
+    setThreads((prev) =>
+      prev.map((thread) =>
+        thread.id === threadId
+          ? { ...thread, cost: cost + (thread.cost ?? 0), updated_at: new Date().toISOString() }
+          : thread
+      )
+    );
+  }, []);
 
   const addThreadByEvent = useCallback((eventThread: ThreadEventValue, onThreadAdded?: (threadId: string, isNew: boolean) => void) => {
     let threadInfo = convertToThreadInfo(eventThread);
@@ -272,7 +281,8 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
     deleteDraftThread,
     addThread,
     updateThread,
-    addThreadByEvent
+    addThreadByEvent,
+    updateThreadCost
   };
 }
 
