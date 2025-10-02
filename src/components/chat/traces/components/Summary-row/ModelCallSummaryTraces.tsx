@@ -207,7 +207,7 @@ const SidebarModelCallSummaryTracesImpl = ({
               <TooltipTrigger asChild>
                 <div className="flex items-center text-xs text-muted-foreground hover:text-foreground transition-colors hover:cursor-help truncate">
                   <ClockIcon className="w-3.5 h-3.5 mr-1.5 text-blue-400" />
-                  <span className={cn("font-mono", errors && errors.length > 0 ? "max-w-[70px] truncate" : "max-w-[90px] truncate")}>
+                  <span className={cn("font-mono", errors && errors.length > 0 ? "max-w-[130px] truncate" : "max-w-[150px] truncate")}>
                     {timeAgoInSidebar}
                   </span>
                 </div>
