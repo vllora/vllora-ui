@@ -64,9 +64,6 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
     
     const operationIconColor = getOperationIconColor({ span: root, relatedSpans: spans });
     const timelineBgColor = getTimelineBgColor({ span: root, relatedSpans: spans });
-
-    console.log('===== operationIconColor', operationIconColor)
-    console.log('===== timelineBgColor', timelineBgColor)
     // Calculate finish time for parent span if it has children
     let finish_time_us = children.length > 0
         ? children.reduce((min, child) => Math.min(min, child.root.start_time_us), root.finish_time_us)
