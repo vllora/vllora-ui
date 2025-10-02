@@ -174,7 +174,7 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                                     <Tooltip>
                                         <TooltipTrigger asChild>
                                             <span className={cn(
-                                                "text-sm max-w-[100px] truncate font-medium",
+                                                "text-sm max-w-[140px] truncate font-medium",
                                                 isSelected ? 'text-white' : 'text-foreground'
                                             )}>
                                                 {thread.title || 'Untitled'}
