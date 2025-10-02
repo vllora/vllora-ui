@@ -61,7 +61,7 @@ export async function queryThreads(
 export async function updateThreadTitle(
   request: UpdateThreadTitleRequest
 ): Promise<void> {
-  const url = `${getThreadsUrl()}/${request.threadId}/title`;
+  const url = `${getThreadsUrl()}/${request.threadId}`;
 
   try {
     const response = await fetch(url, {
