@@ -34,7 +34,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   currentInput,
   setCurrentInput,
   disabled = false,
-  placeholder = 'Type your message...',
   searchToolEnabled,
 }) => {
   const [files, setFiles] = useState<FileWithPreview[]>([]);

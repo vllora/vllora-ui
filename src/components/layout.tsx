@@ -3,6 +3,7 @@ import { Outlet } from "react-router-dom"
 import { AppSidebar } from "./app-sidebar"
 import { Header } from "./Header"
 import { ProjectsConsumer } from "@/contexts/ProjectContext"
+import { ProjectEventsProvider } from "@/contexts/project-events"
 
 export function Layout() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
@@ -24,7 +25,13 @@ export function Layout() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header onProjectChange={handleProjectChange} />
         <main className="flex-1 flex overflow-hidden">
-          <Outlet />
+          {currentProjectId ? (
+            <ProjectEventsProvider projectId={currentProjectId}>
+              <Outlet />
+            </ProjectEventsProvider>
+          ) : (
+            <Outlet />
+          )}
         </main>
       </div>
     </div>

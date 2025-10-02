@@ -1,4 +1,3 @@
-
 export interface Span {
   trace_id: string;
   span_id: string;
@@ -87,8 +86,7 @@ export interface RunDTO {
   errors: string[];
 }
 export interface Pagination {
-    offset: number;
-    limit: number;
-    total: number;
-  }
-  
+  offset: number;
+  limit: number;
+  total: number;
+}

@@ -17,7 +17,7 @@ export function ChatPage() {
     selectedThreadId,
     addThread,
     updateThread,
-    refreshThreads
+    // refreshThreads
   } = ThreadsConsumer();
   const navigate = useNavigate();
   const location = useLocation();

@@ -141,32 +141,7 @@ export const NewModelsTable: React.FC<NewModelsTableProps> = ({
             const showNewTag = isNewModel(model);
             const modelsGroup = model._modelGroup || [model];
 
-            // Calculate release info for new badge
-            const getReleaseInfo = () => {
-              if (!showNewTag) return null;
-
-              // Check current model first
-              if (model.langdb_release_date) {
-                const releaseDate = new Date(model.langdb_release_date);
-                const now = new Date();
-                const daysAgo = Math.floor((now.getTime() - releaseDate.getTime()) / (1000 * 60 * 60 * 24));
-                return { releaseDate: model.langdb_release_date, daysAgo, displayText: `${daysAgo} days ago` };
-              }
-
-              // Check models in group
-              for (const m of modelsGroup) {
-                if (m.langdb_release_date) {
-                  const releaseDate = new Date(m.langdb_release_date);
-                  const now = new Date();
-                  const daysAgo = Math.floor((now.getTime() - releaseDate.getTime()) / (1000 * 60 * 60 * 24));
-                  return { releaseDate: m.langdb_release_date, daysAgo, displayText: `${daysAgo} days ago` };
-                }
-              }
-
-              return null;
-            };
-
-            const releaseInfo = getReleaseInfo();
+            //const releaseInfo = getReleaseInfo();
 
             return (
               <ModelCard

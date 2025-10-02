@@ -1,14 +1,10 @@
-import { ModelCall, Span } from "@/services/runs-api";
 import { AcademicCapIcon, ArrowsUpDownIcon, CloudIcon, ShieldCheckIcon, ShieldExclamationIcon, WrenchScrewdriverIcon } from "@heroicons/react/24/outline";
 import { ProviderIcon } from "@/components/Icons/ProviderIcons";
 import { tryParseJson } from "@/utils/modelUtils";
 import { getColorByType, getClientSDKName, isAgentSpan, isClientSDK, isPromptCachingApplied, isRouterSpan } from "@/utils/graph-utils";
-import { BotIcon, ClapperboardIcon, ExternalLinkIcon, CoinsIcon, BrainIcon, ImageIcon, LayersIcon, ZapIcon } from "lucide-react";
-import { Link } from "react-router-dom";
-import { getModelFullName } from "@/utils/model-fullname";
-import { formatContextSize, formatTokenPrice } from "@/utils/format";
-import { Badge } from "@/components/ui/badge";
+import { BotIcon, ClapperboardIcon } from "lucide-react";
 import { ArrowsPointingOutIcon } from "@heroicons/react/24/outline"
+import { ModelCall, Span } from "@/types/common-type";
 
 
 export const getRouterTitle = (props: { span: Span }) => {
@@ -75,9 +71,9 @@ export const getToolDisplayName = (props: { span: Span }) => {
 }
 
 
-export const getModelTooltipDisplay = (props: { model: any }) => {
+export const getModelTooltipDisplay = (_: any) => {
     return <></>
-    
+
 }
 
 
@@ -267,8 +263,6 @@ export const getOperationIconColor = (props: {
         if (parentSpans.length > 0) {
             let parentSpan = parentSpans[0];
             if (parentSpan.operation_name == 'model_call') {
-                let attributes = parentSpan.attribute;
-                // boxShadow: `0 4px 20px ${nodeColor}30`
                 return `border-[1px] border-[#eab308] border-opacity-30 shadow-[0_4px_20px_#eab308_30]`;
             }
         }
@@ -321,7 +315,7 @@ export const getOperationTitle = (props: {
     if (operation_name === 'cache') {
         return 'Cache Model Response';
     }
-    if(span && isPromptCachingApplied(span)){
+    if (span && isPromptCachingApplied(span)) {
         return 'Model with prompt caching';
     }
     return 'Model';
@@ -367,9 +361,7 @@ export const getTimelineBgColor = (props: {
         if (parentSpans.length > 0) {
             let parentSpan = parentSpans[0];
             if (parentSpan.operation_name == 'model_call') {
-                let attributes = parentSpan.attribute;
-                // boxShadow: `0 4px 20px ${nodeColor}30`
-                // return getColorByType('SpanToolNode');
+
                 return getColorByType('SpanToolNode')
             }
         }
@@ -396,7 +388,7 @@ export const getOperationIcon = (props: {
     if (operationName === 'api_invoke') {
         return <ArrowsUpDownIcon className="w-4 h-4" />;
     }
-    if(isRouterSpan(span)){
+    if (isRouterSpan(span)) {
         return <ArrowsPointingOutIcon className="w-4 h-4" />
     }
     if (operationName.startsWith('guard_')) {

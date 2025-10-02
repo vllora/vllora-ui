@@ -1,5 +1,8 @@
 import { API_CONFIG, getRunsUrl } from '@/config/api';
-import { Pagination, RunDTO, Span } from '@/types/common-type';
+import { Pagination, RunDTO, Span, ModelCall, ToolCall, RouterCall, Attributes } from '@/types/common-type';
+
+// Re-export types for convenience
+export type { Pagination, RunDTO, Span, ModelCall, ToolCall, RouterCall, Attributes };
 
 
 export interface PaginatedRunsResponse {

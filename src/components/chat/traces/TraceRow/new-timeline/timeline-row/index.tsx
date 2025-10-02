@@ -1,4 +1,3 @@
-import { Span } from "@/services/runs-api";
 import { cn } from "@/lib/utils";
 import { ReactNode } from "react";
 import { TimelineVisualization } from "./timeline-visualization";
@@ -6,6 +5,7 @@ import { FullscreenTimelineContent } from "./fullscreen-timeline-content";
 import { SidebarTimelineContent } from "./sidebar-timeline-content";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { classNames } from "@/utils/modelUtils";
+import { Span } from "@/types/common-type";
 
 // Base props for timeline content components
 export interface TimelineContentBaseProps {

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Hierarchy, RunDetailConsumer } from "@/contexts/RunDetailContext";
 import { getSpanTitle, getOperationIcon, getOperationIconColor, getTimelineBgColor } from "./utils";
 import { TimelineRow } from "./timeline-row";
-import { skipThisSpan, getMCPDefinitionId, getMCPTemplateName, isClientSDK, isMCP } from "@/utils/graph-utils";
+import { skipThisSpan, isClientSDK } from "@/utils/graph-utils";
 
 export interface HierarchyRowProps {
     hierarchy: Hierarchy;
@@ -64,10 +64,6 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
     
     const operationIconColor = getOperationIconColor({ span: root, relatedSpans: spans });
     const timelineBgColor = getTimelineBgColor({ span: root, relatedSpans: spans });
-    // Calculate finish time for parent span if it has children
-    let finish_time_us = children.length > 0
-        ? children.reduce((min, child) => Math.min(min, child.root.start_time_us), root.finish_time_us)
-        : root.finish_time_us;
 
     // Leaf node (no children)
     if (children.length === 0) {

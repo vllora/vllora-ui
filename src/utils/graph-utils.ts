@@ -133,7 +133,7 @@ export function skipThisSpan(span: Span, isClientSDKTrace?: boolean): boolean {
             return ['invocation', 'tools', 'call_llm'].includes(operation_name)
         }
         if (sdkName === 'crewai') {
-            let isAgent = isAgentSpan(span);
+           // let isAgent = isAgentSpan(span);
             return false
         }
     }

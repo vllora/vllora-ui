@@ -1,4 +1,4 @@
-import { Attributes } from "@/types/traces";
+import { Attributes } from "@/types/common-type";
 
 // Base interface for all project events with run context
 export interface ProjectEvent {

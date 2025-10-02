@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { Span } from "@/services/traces";
+import { Span } from "@/types/common-type";
 
 // Base props for timeline content components
 export interface TimelineContentBaseProps {

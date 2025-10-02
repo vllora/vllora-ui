@@ -1,5 +1,5 @@
-import { Span } from "@/services/runs-api";
 import { cn } from "@/lib/utils";
+import { Span } from "@/types/common-type";
 
 // Props for the TimelineVisualization component
 interface TimelineVisualizationProps {

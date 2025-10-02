@@ -15,8 +15,6 @@ interface ChatSidebarProps {
 
 export const ChatPageSidebar: React.FC<ChatSidebarProps> = ({
   threads,
-  selectedThreadId,
-  onSelectThread,
   onNewThread,
   onProjectChange,
 }) => {

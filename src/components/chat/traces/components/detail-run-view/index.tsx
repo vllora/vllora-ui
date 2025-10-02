@@ -4,7 +4,6 @@ import { cn } from "@/lib/utils";
 import { TimelineContent } from "../../components/TimelineContent";
 import { AlertCircle, Clock } from "lucide-react";
 import { CustomErrorFallback } from "../custom-error-fallback";
-import { getSpanName } from "@/components/chat/utils";
 import { RunDTO, Span } from "@/types/common-type";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 
@@ -17,12 +16,7 @@ export const DetailedRunView: React.FC<{run: RunDTO}> = ({
     const detailViewRef = useRef<HTMLDivElement>(null);
 
     if (spansByRunId?.length > 0) {
-        const uniqueNames = new Set(spansByRunId
-            .filter(span => !['model_call', 'api_invoke', 'cloud_api_invoke'].includes(span.operation_name))
-            .map(span => getSpanName(span))
-            .filter(String));
-        const uniqueNameCount = uniqueNames.size;
-
+        
         return (
             <div
                 ref={detailViewRef}

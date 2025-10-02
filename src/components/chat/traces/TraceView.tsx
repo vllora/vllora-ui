@@ -22,7 +22,7 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
     loadingMoreRuns,
   } = ChatWindowConsumer();
 
-  const [showErrorDialog, setShowErrorDialog] = useState(false);
+  const [_, setShowErrorDialog] = useState(false);
 
   // Helper function to truncate error message for display
   const truncateError = (error: string, maxLength: number = 80) => {

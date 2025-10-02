@@ -37,7 +37,7 @@ export function runDetails(props: {
     spans: Span[],
     run?: RunDTO
 }) {
-    const { runId, projectId, spans, run } = props;
+    const { runId, projectId, spans } = props;
 
     const originRootSpans = spans
         .sort((a, b) => a.start_time_us - b.start_time_us)

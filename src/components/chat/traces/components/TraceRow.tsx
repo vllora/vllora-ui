@@ -14,7 +14,7 @@ interface TraceRowProps {
 
 // Component implementation
 const TraceRowImpl = ({ run, index = 0, isInSidebar = false }: TraceRowProps) => {
-  const { openTraces, setOpenTraces, fetchSpansByRunId, projectId, spanMap } = ChatWindowConsumer();
+  const { openTraces, setOpenTraces, fetchSpansByRunId } = ChatWindowConsumer();
   const traceOrRunId = run.run_id || '';
 
   const isOpen = openTraces.includes(traceOrRunId);

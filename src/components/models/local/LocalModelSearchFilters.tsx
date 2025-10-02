@@ -28,8 +28,6 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
   onOwnersChange,
   providers,
   owners,
-  resultsCount,
-  totalCount,
   groupByName = false,
   onGroupByNameChange,
 }) => {

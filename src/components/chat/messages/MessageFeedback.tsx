@@ -13,7 +13,7 @@ export const MessageFeedback: React.FC<MessageFeedbackProps> = ({
   isTyping,
 }) => {
   const [score, setScore] = useState<number | undefined>();
-  const [error, setError] = useState<string | undefined>();
+  const [error, _] = useState<string | undefined>();
 
   const handleScore = useCallback(
     async (scoreValue: number) => {

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { ShareIcon } from "@heroicons/react/24/outline";
 import { Check, Copy, ExternalLink, Globe, Lock, LockOpenIcon, Link2 } from "lucide-react";
 import {
@@ -54,8 +54,6 @@ interface ShareThreadProps {
 
 export const ShareThread = ({
   threadId,
-  projectId,
-  modelName = "",
   isPublic = false,
 }: ShareThreadProps) => {
   const [open, setOpen] = useState(false);

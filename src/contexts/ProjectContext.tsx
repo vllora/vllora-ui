@@ -2,7 +2,7 @@ import { createContext, useContext, useMemo, useCallback, ReactNode } from 'reac
 import { useRequest } from 'ahooks';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { listProjects, type Project } from '@/services/projects-api';
+import { listProjects } from '@/services/projects-api';
 
 export type ProjectContextType = ReturnType<typeof useProject>;
 
