@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { v4 as uuidv4 } from 'uuid';
 import { ChatPageSidebar } from '@/components/chat/ChatSidebar';
 import { ConversationWindow } from '@/components/chat/ConversationWindow';
 import { ChatRightSidebar } from '@/components/chat/ChatRightSidebar';
@@ -34,7 +35,7 @@ export function ChatPage() {
 
   const handleNewThread = useCallback(() => {
     const newThread: Thread = {
-      id: `thread-${Date.now()}`,
+      id: uuidv4(),
       title: 'New conversation',
       model_name: selectedModel,
       project_id: currentProjectId || '',

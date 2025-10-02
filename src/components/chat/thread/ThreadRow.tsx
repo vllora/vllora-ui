@@ -136,7 +136,7 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
             transition={{ duration: 0.2 }}
         >
             <Card
-                id={`thread-${thread.id}`}
+                id={`thread-row-${thread.id}`}
                 key={thread.id}
                 onClick={handleThreadClick}
                 className={cn(
