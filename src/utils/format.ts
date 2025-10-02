@@ -11,3 +11,28 @@ export const formatMoney = (money?: number, precision: number = 3) => {
   }
   return `$${parseFloat(money.toFixed(precision))}`;
 };
+
+export const formatTokenPrice = (price?: number, type?: string, moneyOnly?: boolean) => {
+  if (type === "image generation" || type === 'image_generation') {
+      return price ? `${formatMoney(price, 2)} / image` : "";
+  }
+  return price ? `${formatMoney(price, 2)}${moneyOnly ? "" : " / 1M tokens"}` : "_";
+};
+
+export const formatContextSize = (contextSize: number, hideTokenAffix?: boolean) => {
+  if (contextSize === 0) {
+    return ``;
+  }
+
+  if (contextSize % 1000000 === 0) {
+    contextSize = contextSize / 1000000;
+    return `${contextSize}${hideTokenAffix ? "M" : "M tokens"}`;
+  }
+
+  if (contextSize % 1000 === 0) {
+    contextSize = contextSize / 1000;
+    return `${contextSize}${hideTokenAffix ? "K" : "K tokens"}`;
+  }
+
+  return `${contextSize}${hideTokenAffix ? "" : " tokens"}`;
+};

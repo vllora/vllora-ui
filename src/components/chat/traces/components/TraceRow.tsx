@@ -20,21 +20,22 @@ const TraceRowImpl = ({ run, index = 0, isInSidebar = false }: TraceRowProps) =>
   const isOpen = openTraces.includes(traceOrRunId);
   const toggleAccordion = useCallback(() => {
     setOpenTraces(prev => {
-      if (prev.includes(traceOrRunId)) {
-        return prev.filter(id => id !== traceOrRunId);
+      const isCurrentlyOpen = prev.includes(traceOrRunId);
+      if (isCurrentlyOpen) {
+        // Close the trace
+        return [];
       } else {
-        return [...prev, traceOrRunId];
+        // Open the trace and fetch spans as a side effect (outside state setter)
+        // We'll use setTimeout to ensure state update happens first
+        setTimeout(() => {
+          fetchSpansByRunId(traceOrRunId);
+        }, 0);
+        return [traceOrRunId];
       }
     });
-  }, [traceOrRunId, setOpenTraces]);
+  }, [traceOrRunId, setOpenTraces, fetchSpansByRunId]);
 
-  // Fetch spans when the trace row is opened
-  useEffect(() => {
-    if (isOpen && traceOrRunId) {
-      fetchSpansByRunId(traceOrRunId);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, traceOrRunId]);
+  
 
   return (
     <motion.div

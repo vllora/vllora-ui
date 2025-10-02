@@ -238,6 +238,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     spanMap,
     fetchSpansByRunId: fetchSpansByRunIdCallback,
     loadingSpansById,
+    projectId,
   };
 }
 export function ChatWindowProvider({ children, threadId, projectId }: { children: ReactNode, threadId: string, projectId: string }) {

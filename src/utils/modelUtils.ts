@@ -2,6 +2,14 @@ export function classNames(...classes: string[]) {
   return classes.filter(Boolean).join(' ')
 }
 
+export const tryParseJson = (str: string) => {
+  try {
+    return JSON.parse(str);
+  } catch (e) {
+    return undefined;
+  }
+}
+
 export const getModelTypeDisplayName = (type: string) => {
   switch (type) {
     case 'image_generation':

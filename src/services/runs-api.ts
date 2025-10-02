@@ -45,6 +45,11 @@ export interface Model {
   provider?: string;
 }
 
+export interface RouterCall {
+  router_name?: string;
+  label?: string;
+  error?: string;
+}
 export interface ToolCall {
   tool_name: string;
   arguments: object;
