@@ -2,6 +2,7 @@ import React from 'react';
 import { Message, MessageType } from '@/types/chat';
 import { HumanMessage } from './messages/HumanMessage';
 import { AiMessage } from './messages/AiMessage';
+import { SystemMessage } from './messages/System';
 
 interface MessageItemProps {
   message: Message;
@@ -30,10 +31,16 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, isTyping }) =
           ${isHumanMessage ? 'order-1' : 'order-2'}
         `}
       >
-        {isHumanMessage ? (
+       {isHumanMessage ? (
           <HumanMessage message={message} />
+        ) : message.type === MessageType.SystemMessage ? (
+          <SystemMessage
+            msg={message}
+          />
         ) : (
-          <AiMessage message={message} isTyping={isTyping} />
+          <AiMessage
+          message={message} isTyping={isTyping}
+          />
         )}
       </div>
     </article>
