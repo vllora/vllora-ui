@@ -13,7 +13,7 @@ interface ChatSidebarProps {
   onProjectChange?: (projectId: string) => void;
 }
 
-export const ChatPageSidebar: React.FC<ChatSidebarProps> = ({
+export const ThreadsSidebar: React.FC<ChatSidebarProps> = ({
   threads,
   onNewThread,
   onProjectChange,

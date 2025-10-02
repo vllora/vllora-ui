@@ -3,7 +3,7 @@ import { ProjectEventsConsumer } from '@/contexts/project-events';
 import {  ProjectEventUnion } from '@/contexts/project-events/dto';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 
-export function useChatConversationEvents(props: {
+export function useConversationEvents(props: {
   currentProjectId: string;
   currentThreadId: string;
 }) {
@@ -18,14 +18,11 @@ export function useChatConversationEvents(props: {
         if(event.type === 'Custom') {
            if(event.thread_id === currentThreadId && event.name === 'message_event') {
             if(event.value && event.value.event_type === 'created' && !isChatProcessing) {
-              refreshMessages()
+              //refreshMessages()
             }
             
            }
-           
         }
-        // Handle different event types here
-        // Example: update threads, refresh data, etc.
       }
     );
     return unsubscribe;

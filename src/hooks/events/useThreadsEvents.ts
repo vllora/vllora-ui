@@ -1,9 +1,10 @@
-import { useEffect } from 'react';
+import { startTransition, useEffect } from 'react';
 import { ProjectEventsConsumer } from '@/contexts/project-events';
-import { LangDBCustomEvent, ProjectEventUnion, ThreadEventValue } from '@/contexts/project-events/dto';
+import { LangDBCustomEvent, LangDBEventSpan, ProjectEventUnion, ThreadEventValue } from '@/contexts/project-events/dto';
 import { ThreadsConsumer } from '@/contexts/ThreadsContext';
+import { convertToNormalSpan, getTokensInfo, getTotalCost } from '@/contexts/project-events/util';
 
-export function useChatPageProjectEvents(props: {
+export function useThreadsEvents(props: {
   currentProjectId: string;
   currentThreadId: string;
   onSelectThread: (threadId: string) => void;
@@ -17,11 +18,11 @@ export function useChatPageProjectEvents(props: {
       (event: ProjectEventUnion) => {
 
         if(event.type === 'Custom') {
+          const customEvent = event as LangDBCustomEvent;
            if(event.name === 'thread_event') {
-            const threadEvent = event as LangDBCustomEvent;
-            const threadId = threadEvent.thread_id;
+            const threadId = customEvent.thread_id;
             if (threadId) {
-              let threadEventInfo = threadEvent.value as ThreadEventValue;
+              let threadEventInfo = customEvent.value as ThreadEventValue;
               // Add/update thread using the event data
               setTimeout(() => {
                 addThreadByEvent(threadEventInfo, (newThreadId, isNew) => {
@@ -36,8 +37,6 @@ export function useChatPageProjectEvents(props: {
            }
            
         }
-        // Handle different event types here
-        // Example: update threads, refresh data, etc.
       }
     );
     return unsubscribe;
