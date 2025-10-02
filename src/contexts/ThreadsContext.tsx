@@ -3,11 +3,25 @@ import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Thread } from '@/types/chat';
 import { queryThreads, updateThreadTitle, deleteThread as deleteThreadApi } from '@/services/threads-api';
+import { ThreadEventValue } from './project-events/dto';
+import { convertToThreadInfo } from './project-events/util';
+import { MessageThread } from '@/types/common-type';
 
 export type ThreadsContextType = ReturnType<typeof useThreads>;
 
 const ThreadsContext = createContext<ThreadsContextType | undefined>(undefined);
-
+const convertToTime = (dateString: string): Date => {
+  // handle case like this: "Thu Jul 10 2025 12:59:06 GMT+0700 (Indochina Time)"
+  if (dateString.includes('GMT')) {
+    return new Date(dateString);
+  }
+  
+  // handle this case : "2025-07-10 06:00:37.000000"
+  // Replace any whitespace between date and time with 'T' and add 'Z' for UTC
+  // This handles multiple spaces or other whitespace characters properly
+  const isoString = dateString.replace(/(\d{4}-\d{2}-\d{2})\s+(.+)/, '$1T$2Z');
+  return new Date(isoString);
+}
 interface ThreadsProviderProps {
   projectId: string;
 }
@@ -164,6 +178,43 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
     );
   }, []);
 
+
+  const addThreadByEvent = useCallback((eventThread: ThreadEventValue, onThreadAdded?: (threadId: string, isNew: boolean) => void) => {
+    let threadInfo = convertToThreadInfo(eventThread);
+    let isNewThread = false;
+
+    setThreads((prev) => {
+      // Check if thread already exists
+      const existingIndex = prev.findIndex(thread => thread.id === threadInfo.id);
+
+      let updatedThreads: MessageThread[];
+      if (existingIndex !== -1) {
+        // Update existing thread
+        updatedThreads = [...prev];
+        updatedThreads[existingIndex] = threadInfo;
+        isNewThread = false;
+      } else {
+        // Add new thread
+        updatedThreads = [threadInfo, ...prev];
+        isNewThread = true;
+      }
+
+      const sortedThreads = updatedThreads.sort((a, b) => {
+        const dateA = convertToTime(a.updated_at);
+        const dateB = convertToTime(b.updated_at);
+        return dateB.getTime() - dateA.getTime();
+      });
+      return sortedThreads;
+    });
+
+    // Call the callback after state update
+    if (onThreadAdded) {
+      onThreadAdded(threadInfo.id, isNewThread);
+    }
+  }, []);
+
+  
+
   return {
     threads,
     loading,
@@ -179,6 +230,7 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
     deleteThread,
     addThread,
     updateThread,
+    addThreadByEvent
   };
 }
 

@@ -90,3 +90,25 @@ export interface Pagination {
   limit: number;
   total: number;
 }
+
+
+export interface MessageThread {
+  id: string;
+  cost?: number;
+  output_tokens?: number;
+  input_tokens?: number;
+  project_id: string;
+  mcp_template_definition_ids?: string[];
+  description?: string;
+  model_name: string;       // Corresponding LangDB model
+  user_id: string;          // UUID
+  created_at: string;
+  updated_at: string;
+  score?: number;
+  title?: string;
+  tags_info?: string[];
+  errors?: string[];
+  input_models?: string[];
+  request_model_name?: string;
+  is_public?: boolean;      // Whether the thread is publicly shareable
+}

@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { ChatPageSidebar } from '@/components/chat/ChatSidebar';
@@ -19,7 +19,7 @@ export function ChatPage() {
     selectedThreadId,
     addThread,
     updateThread,
-    // refreshThreads
+    refreshThreads
   } = ThreadsConsumer();
   const navigate = useNavigate();
   const location = useLocation();
@@ -30,14 +30,30 @@ export function ChatPage() {
   }, [searchParams]);
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
 
-  // useEffect(() => {
-  //   refreshThreads();
-  // }, [refreshThreads]);
+  useEffect(() => {
+    refreshThreads();
+  }, [refreshThreads]);
+
+  const handleSelectThread = useCallback((threadId: string) => {
+    const thread = threads.find((t) => t.id === threadId);
+    // Navigate to update the threadId and model in URL
+    const modelParam = thread?.model_name || selectedModel;
+    const params = new URLSearchParams(searchParams);
+    params.set('threadId', threadId);
+    params.set('model', modelParam);
+    if (currentProjectId && !isDefaultProject(currentProjectId)) {
+      params.set('project_id', currentProjectId);
+    } else {
+      params.delete('project_id');
+    }
+    navigate(`/chat?${params.toString()}`);
+  }, [threads, selectedModel, navigate, searchParams, currentProjectId, isDefaultProject]);
 
   // Subscribe to project events
   useChatPageProjectEvents({
     currentProjectId: currentProjectId || '',
     currentThreadId: selectedThreadId || '',
+    onSelectThread: handleSelectThread,
   });
 
   const handleNewThread = useCallback(() => {
@@ -62,22 +78,6 @@ export function ChatPage() {
     }
     navigate(`/chat?${params.toString()}`);
   }, [selectedModel, currentProjectId, addThread, navigate, searchParams, isDefaultProject]);
-
-  const handleSelectThread = useCallback((threadId: string) => {
-    const thread = threads.find((t) => t.id === threadId);
-    // Navigate to update the threadId and model in URL
-    const modelParam = thread?.model_name || selectedModel;
-    const params = new URLSearchParams(searchParams);
-    params.set('threadId', threadId);
-    params.set('model', modelParam);
-    if (currentProjectId && !isDefaultProject(currentProjectId)) {
-      params.set('project_id', currentProjectId);
-    } else {
-      params.delete('project_id');
-    }
-    navigate(`/chat?${params.toString()}`);
-  }, [threads, selectedModel, navigate, searchParams, currentProjectId, isDefaultProject]);
-
 
   const handleModelChange = useCallback((modelId: string) => {
     // Update URL with new model
