@@ -1,7 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Message, MessageType, MessageContentType, FileWithPreview, ChatCompletionChunk } from '@/types/chat';
-import { useChatState } from './useChatState';
 import { useScrollToBottom } from './useScrollToBottom';
 import { emitter } from '@/utils/eventEmitter';
 import { getChatCompletionsUrl } from '@/config/api';
@@ -15,27 +14,32 @@ interface MessageSubmissionProps {
   widgetId?: string;
   threadId?: string;
   threadTitle?: string;
+  messages: Message[];
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
+  setCurrentInput: React.Dispatch<React.SetStateAction<string>>;
+  setTyping: React.Dispatch<React.SetStateAction<boolean>>;
+  setError: React.Dispatch<React.SetStateAction<string | undefined>>;
+  setMessageId: React.Dispatch<React.SetStateAction<string | undefined>>;
+  setTraceId: React.Dispatch<React.SetStateAction<string | undefined>>;
+  appendUsage: (usage: any) => void;
+  messageId?: string;
+  traceId?: string;
 }
 
-export const useMessageSubmission = (
-  props: MessageSubmissionProps,
-  chatState: ReturnType<typeof useChatState>
-) => {
+export const useMessageSubmission = (props: MessageSubmissionProps) => {
   const abortControllerRef = useRef<AbortController | null>(null);
   const {
     setCurrentInput,
     setTyping,
     setError,
     setMessageId,
-    setThreadId,
     setTraceId,
     appendUsage,
     messageId,
     traceId,
-    threadId,
     messages,
-    onSetMessages,
-  } = chatState;
+    setMessages,
+  } = props;
 
   const { messagesEndRef, scrollToBottom } = useScrollToBottom();
 
@@ -72,7 +76,7 @@ export const useMessageSubmission = (
           }
           props.onEvent?.(event);
 
-          onSetMessages((prevMessages) => {
+          setMessages((prevMessages) => {
             const lastMessage = prevMessages[prevMessages.length - 1];
 
             if (lastMessage && lastMessage.type === MessageType.HumanMessage) {
@@ -126,7 +130,7 @@ export const useMessageSubmission = (
         console.error('Error processing event:', error);
       }
     },
-    [props, setTyping, setError, appendUsage, onSetMessages]
+    [props, setTyping, setError, appendUsage, setMessages]
   );
 
   const submitMessageFn = useCallback(
@@ -154,7 +158,7 @@ export const useMessageSubmission = (
         files,
       };
 
-      onSetMessages((prevMessages) => {
+      setMessages((prevMessages) => {
         return [...prevMessages, newMessage];
       });
       setCurrentInput('');
@@ -262,7 +266,6 @@ export const useMessageSubmission = (
         currentMessageId = messageIdHeader || currentMessageId;
         currentTraceId = traceIdHeader || currentTraceId;
         currentRunId = runIdHeader || currentRunId;
-        setThreadId(currentThreadId);
         setMessageId(currentMessageId);
         setTraceId(currentTraceId);
 
@@ -361,8 +364,7 @@ export const useMessageSubmission = (
       }
     },
     [
-      threadId,
-      onSetMessages,
+      setMessages,
       setCurrentInput,
       setTyping,
       setError,
@@ -371,7 +373,6 @@ export const useMessageSubmission = (
       messageId,
       traceId,
       messages,
-      setThreadId,
       setMessageId,
       setTraceId,
       handleMessage,

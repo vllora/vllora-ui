@@ -18,7 +18,7 @@ export function useConversationEvents(props: {
         if(event.type === 'Custom') {
            if(event.thread_id === currentThreadId && event.name === 'message_event') {
             if(event.value && event.value.event_type === 'created' && !isChatProcessing) {
-              //refreshMessages()
+              refreshMessages()
             }
             
            }

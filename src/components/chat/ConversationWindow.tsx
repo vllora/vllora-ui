@@ -1,9 +1,8 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ChatConversation } from './ChatConversation';
 import { ChatInput } from './ChatInput';
 import { ModelSelector } from './ModelSelector';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
-import { useChatState } from '@/hooks/useChatState';
 import { useMessageSubmission } from '@/hooks/useMessageSubmission';
 import { emitter } from '@/utils/eventEmitter';
 import { XCircle } from 'lucide-react';
@@ -31,54 +30,63 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
   onModelChange,
 }) => {
   console.log('threadTitle', threadTitle);
-  // Get historical messages from context (fetched from API)
-  const { serverMessages, setServerMessages, clearMessages, setIsChatProcessing, refreshMessages } = ChatWindowConsumer();
-   useEffect(() => {
+
+  // Get all state from context
+  const {
+    serverMessages,
+    setServerMessages,
+    clearMessages,
+    setIsChatProcessing,
+    refreshMessages,
+    currentInput,
+    setCurrentInput,
+    typing,
+    setTyping,
+    error,
+    setError,
+    messageId,
+    setMessageId,
+    traceId,
+    setTraceId,
+    appendUsage,
+  } = ChatWindowConsumer();
+
+  useEffect(() => {
     if(threadId) {
       clearMessages();
       refreshMessages();
     }
   }, [threadId])
-  // Use the existing chat state hook for managing active conversation (streaming, typing, etc.)
-  const chatState = useChatState({ messages: serverMessages, onSetMessages: setServerMessages });
-
-  const {
-    currentInput,
-    setCurrentInput,
-    typing,
-    error,
-    setError,
-    setThreadId,
-  } = chatState;
 
   useConversationEvents({
     currentProjectId: projectId || '',
     currentThreadId: threadId || '',
   });
-  // Override threadId from props since it's managed by URL
-  useEffect(() => {
-    if (threadId) {
-      setThreadId(threadId);
-    }
-  }, [threadId, setThreadId]);
 
   const {
     submitMessageFn: handleSubmit,
     messagesEndRef,
     terminateChat,
     scrollToBottom,
-  } = useMessageSubmission(
-    {
-      apiUrl,
-      apiKey,
-      projectId,
-      modelName,
-      widgetId,
-      threadId,
-      threadTitle,
-    },
-    chatState
-  );
+  } = useMessageSubmission({
+    apiUrl,
+    apiKey,
+    projectId,
+    modelName,
+    widgetId,
+    threadId,
+    threadTitle,
+    messages: serverMessages,
+    setMessages: setServerMessages,
+    setCurrentInput,
+    setTyping,
+    setError,
+    setMessageId,
+    setTraceId,
+    appendUsage,
+    messageId,
+    traceId,
+  });
 
   const onSubmitWrapper = useCallback(
     (inputProps: {

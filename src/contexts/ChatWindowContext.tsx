@@ -55,8 +55,17 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   
 
   const [serverMessages, setServerMessages] = useState<Message[]>([]);
+
+  // UI state
+  const [currentInput, setCurrentInput] = useState<string>('');
+  const [typing, setTyping] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+  const [messageId, setMessageId] = useState<string | undefined>();
+  const [traceId, setTraceId] = useState<string | undefined>();
+  const [usageInfo, setUsageInfo] = useState<any[]>([]);
+
   // Use ahooks useRequest for fetching messages
-  const { loading: isLoading, error, run: refreshMessages } = useRequest(
+  const { loading: isLoading, error: loadError, run: refreshMessages } = useRequest(
     async () => {
       if (!threadId || !projectId) {
         return [];
@@ -205,6 +214,10 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
      setServerMessages([]);
   }, []);
 
+  const appendUsage = useCallback((usage: any) => {
+    setUsageInfo((prev) => [...prev, usage]);
+  }, []);
+
   
 
   /**
@@ -257,7 +270,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     serverMessages,
     setServerMessages,
     isLoading,
-    error,
+    loadError,
     addMessage,
     clearMessages,
     refreshMessages,
@@ -281,7 +294,20 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     projectId,
     isChatProcessing,
     setIsChatProcessing,
-    addEventSpans
+    addEventSpans,
+    // UI state
+    currentInput,
+    setCurrentInput,
+    typing,
+    setTyping,
+    error,
+    setError,
+    messageId,
+    setMessageId,
+    traceId,
+    setTraceId,
+    usageInfo,
+    appendUsage,
   };
 }
 export function ChatWindowProvider({ children, threadId, projectId }: { children: ReactNode, threadId: string, projectId: string }) {
