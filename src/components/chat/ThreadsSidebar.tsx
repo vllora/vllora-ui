@@ -11,14 +11,12 @@ interface ChatSidebarProps {
   onSelectThread: (threadId: string) => void;
   onNewThread: () => void;
   onProjectChange?: (projectId: string) => void;
-  onThreadTitleChange?: (threadId: string, title: string) => void;
 }
 
 export const ThreadsSidebar: React.FC<ChatSidebarProps> = ({
   threads,
   onNewThread,
   onProjectChange,
-  onThreadTitleChange,
 }) => {
   return (
     <div className="w-80 bg-card border-r border-border flex flex-col h-full">
@@ -41,7 +39,7 @@ export const ThreadsSidebar: React.FC<ChatSidebarProps> = ({
 
       {/* Thread List */}
       <div className="flex-1 overflow-y-auto">
-        <ThreadList threads={threads} onThreadTitleChange={onThreadTitleChange} />
+        <ThreadList threads={threads} />
       </div>
     </div>
   );

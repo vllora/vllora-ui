@@ -6,12 +6,10 @@ import { ThreadRow } from './ThreadRow';
 
 interface ThreadListProps {
   threads: Thread[];
-  onThreadTitleChange?: (threadId: string, title: string) => void;
 }
 
 export const ThreadList: React.FC<ThreadListProps> = ({
   threads,
-  onThreadTitleChange,
 }) => {
   const { loading, loadingMore, loadingThreadsError, loadMoreThreads, hasMore } = ThreadsConsumer();
   const observerTarget = useRef<HTMLDivElement>(null);
@@ -57,7 +55,6 @@ export const ThreadList: React.FC<ThreadListProps> = ({
             <ThreadRow
               key={thread.id}
               thread={thread}
-              onThreadTitleChange={onThreadTitleChange}
             />
           ))}
         </div>
