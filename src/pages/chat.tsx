@@ -7,6 +7,7 @@ import { ChatRightSidebar } from '@/components/chat/ChatRightSidebar';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { ThreadsConsumer } from '@/contexts/ThreadsContext';
 import { ChatWindowProvider } from '@/contexts/ChatWindowContext';
+import { useChatPageProjectEvents } from '@/hooks/useChatPageProjectEvents';
 import { Thread } from '@/types/chat';
 import { API_CONFIG } from '@/config/api';
 
@@ -32,6 +33,12 @@ export function ChatPage() {
   // useEffect(() => {
   //   refreshThreads();
   // }, [refreshThreads]);
+
+  // Subscribe to project events
+  useChatPageProjectEvents({
+    currentProjectId: currentProjectId || '',
+    currentThreadId: selectedThreadId || '',
+  });
 
   const handleNewThread = useCallback(() => {
     const newThread: Thread = {
