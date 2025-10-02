@@ -7,6 +7,7 @@ import { useChatState } from '@/hooks/useChatState';
 import { useMessageSubmission } from '@/hooks/useMessageSubmission';
 import { emitter } from '@/utils/eventEmitter';
 import { XCircle } from 'lucide-react';
+import { useChatConversationEvents } from '@/hooks/events/useChatConversationEvents';
 
 interface ChatWindowProps {
   threadId?: string;
@@ -28,7 +29,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
   onModelChange,
 }) => {
   // Get historical messages from context (fetched from API)
-  const { messages: historicalMessages, clearMessages } = ChatWindowConsumer();
+  const { messages: historicalMessages, clearMessages, setIsChatProcessing, refreshMessages } = ChatWindowConsumer();
 
   // Use the existing chat state hook for managing active conversation (streaming, typing, etc.)
   const chatState = useChatState({ initialMessages: historicalMessages });
@@ -43,6 +44,10 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     setThreadId,
   } = chatState;
 
+  useChatConversationEvents({
+    currentProjectId: projectId || '',
+    currentThreadId: threadId || '',
+  });
   // Override threadId from props since it's managed by URL
   useEffect(() => {
     if (threadId) {
@@ -96,6 +101,24 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       emitter.off('langdb_chatTerminate', handleTerminate);
     };
   }, [terminateChat, setError, threadId, widgetId]);
+
+
+  useEffect(() => {
+    const handlerChatWindowEvent = (input: { threadId?: string; widgetId?: string; state?: string }) => {
+      if (threadId && widgetId && input.widgetId === widgetId) {
+        if (input.state === 'SubmitStart' || input.state === 'Processing') {
+          setIsChatProcessing(true);
+  
+        } else {
+          setIsChatProcessing(false);
+        }
+      }
+    };
+    emitter.on('langdb_chatWindow', handlerChatWindowEvent);
+    return () => {
+        emitter.off('langdb_chatWindow', handlerChatWindowEvent);
+    }
+}, [threadId, widgetId])
 
   useEffect(() => {
     const handleClearChat = (input: { threadId?: string; widgetId?: string }) => {

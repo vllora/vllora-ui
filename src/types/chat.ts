@@ -81,6 +81,7 @@ export interface Thread {
   input_models?: string[];
   request_model_name?: string;
   is_public?: boolean;
+  is_from_local?: boolean;
 }
 
 export interface CreateThreadRequest {

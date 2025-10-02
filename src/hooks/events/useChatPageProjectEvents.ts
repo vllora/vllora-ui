@@ -16,7 +16,6 @@ export function useChatPageProjectEvents(props: {
       'chat-page-events',
       (event: ProjectEventUnion) => {
 
-        console.log('==== Received project event from chat page:', event);
         if(event.type === 'Custom') {
            if(event.name === 'thread_event') {
             const threadEvent = event as LangDBCustomEvent;
@@ -33,7 +32,9 @@ export function useChatPageProjectEvents(props: {
                 });
               }, 0)
             }
+            return;
            }
+           
         }
         // Handle different event types here
         // Example: update threads, refresh data, etc.

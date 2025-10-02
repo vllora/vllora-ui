@@ -165,7 +165,6 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
 
   const addThread = useCallback((thread: Thread) => {
     setThreads((prev) => [thread, ...prev]);
-    setTotal((prev) => prev + 1);
   }, []);
 
   const updateThread = useCallback((threadId: string, updates: Partial<Thread>) => {

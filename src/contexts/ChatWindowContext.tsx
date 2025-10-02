@@ -1,4 +1,4 @@
-import { createContext, useContext, ReactNode, useCallback, useState } from 'react';
+import { createContext, useContext, ReactNode, useCallback, useState, useEffect } from 'react';
 import { useRequest, useLatest } from 'ahooks';
 import { toast } from 'sonner';
 import { queryMessages } from '@/services/messages-api';
@@ -36,6 +36,9 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   const [loadingMoreRuns, setLoadingMoreRuns] = useState<boolean>(false);
   const [rawRuns, setRawRuns] = useState<RunDTO[]>([]);
 
+
+  const [isChatProcessing, setIsChatProcessing] = useState<boolean>(false);
+
   // Selection state
   const [selectedSpanInfo, setSelectedSpanInfo] = useState<SelectedSpanInfo | null>(null);
   // should the the run be expanded
@@ -47,9 +50,11 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
   const threadIdRef = useLatest(threadId);
   const projectIdRef = useLatest(projectId);
+  
 
+  const [serverMessages, setServerMessages] = useState<Message[]>([]);
   // Use ahooks useRequest for fetching messages
-  const { data, loading: isLoading, error, run: refreshMessages } = useRequest(
+  const { loading: isLoading, error, run: refreshMessages } = useRequest(
     async () => {
       if (!threadId || !projectId) {
         return [];
@@ -64,9 +69,10 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     {
       refreshDeps: [threadId, projectId],
       onError: (err) => {
-        toast.error('Failed to load messages', {
-          description: err.message || 'An error occurred while loading messages',
-        });
+        
+      },
+      onSuccess: (data) => {
+        setServerMessages(data);
       },
      
     }
@@ -159,7 +165,6 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   }, [triggerRefreshRuns]);
 
   // Map API messages to local Message type
-  const messages = data || [];
   const runs = rawRuns;
 
   const addMessage = useCallback((_message: Message) => {
@@ -167,9 +172,15 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   }, []);
 
   const clearMessages = useCallback(() => {
-    // Clear messages by refreshing with empty result
-    refreshMessages();
-  }, [refreshMessages]);
+     setServerMessages([]);
+  }, []);
+
+  useEffect(() => {
+    if(threadId) {
+      clearMessages();
+      refreshMessages();
+    }
+  }, [threadId])
 
   /**
    * Fetches detailed span data for a specific run when user expands a row
@@ -216,7 +227,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
 
   return {
-    messages,
+    messages: serverMessages,
     isLoading,
     error,
     addMessage,
@@ -240,6 +251,8 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     fetchSpansByRunId: fetchSpansByRunIdCallback,
     loadingSpansById,
     projectId,
+    isChatProcessing,
+    setIsChatProcessing,
   };
 }
 export function ChatWindowProvider({ children, threadId, projectId }: { children: ReactNode, threadId: string, projectId: string }) {

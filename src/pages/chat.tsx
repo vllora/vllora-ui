@@ -7,9 +7,9 @@ import { ChatRightSidebar } from '@/components/chat/ChatRightSidebar';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { ThreadsConsumer } from '@/contexts/ThreadsContext';
 import { ChatWindowProvider } from '@/contexts/ChatWindowContext';
-import { useChatPageProjectEvents } from '@/hooks/useChatPageProjectEvents';
 import { Thread } from '@/types/chat';
 import { API_CONFIG } from '@/config/api';
+import { useChatPageProjectEvents } from '@/hooks/events/useChatPageProjectEvents';
 
 export function ChatPage() {
   const { currentProjectId, isDefaultProject } = ProjectsConsumer();
@@ -65,6 +65,7 @@ export function ChatPage() {
       user_id: '', // TODO: Get from auth context
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      is_from_local: true,
     };
     addThread(newThread);
     // Navigate to the new thread with model in URL and project_id (only if not default)
@@ -129,7 +130,6 @@ export function ChatPage() {
               threadId={selectedThreadId}
               modelName={selectedModel}
               apiUrl={API_CONFIG.url}
-              // apiKey={API_CONFIG.apiKey}
               projectId={currentProjectId}
               widgetId={`chat-${selectedThreadId}`}
               onModelChange={handleModelChange}
