@@ -13,6 +13,7 @@ interface MessageSubmissionProps {
   modelName?: string;
   onEvent?: (event: ChatCompletionChunk) => void;
   widgetId?: string;
+  threadId?: string;
 }
 
 export const useMessageSubmission = (
@@ -133,10 +134,11 @@ export const useMessageSubmission = (
       files: FileWithPreview[];
       searchToolEnabled?: boolean;
       otherTools?: string[];
+      threadId?: string;
     }) => {
       abortControllerRef.current = new AbortController();
 
-      const { inputText, files } = inputProps;
+      const { inputText, files, threadId } = inputProps;
 
       if (inputText.trim() === '') return;
 
@@ -220,6 +222,7 @@ export const useMessageSubmission = (
             'Content-Type': 'application/json',
             ...(props.apiKey && { Authorization: `Bearer ${props.apiKey}` }),
             ...(props.projectId && { 'X-Project-Id': props.projectId }),
+            ...(threadId && { 'X-Thread-Id': threadId }),
           },
           body: JSON.stringify({
             model: props.modelName,

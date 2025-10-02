@@ -62,6 +62,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       projectId,
       modelName,
       widgetId,
+      threadId,
     },
     chatState
   );
@@ -72,6 +73,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       files: any[];
       searchToolEnabled?: boolean;
       otherTools?: string[];
+      threadId?: string;
     }) => {
       return handleSubmit(inputProps);
     },
@@ -144,14 +146,14 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       otherTools?: string[];
     }) => {
       setCurrentInput(inputText);
-      onSubmitWrapper({ inputText, files, searchToolEnabled, otherTools });
+      onSubmitWrapper({ inputText, files, searchToolEnabled, otherTools, threadId });
     };
     emitter.on('langdb_input_chatSubmit', handleExternalSubmit);
 
     return () => {
       emitter.off('langdb_input_chatSubmit', handleExternalSubmit);
     };
-  }, [onSubmitWrapper, setCurrentInput]);
+  }, [onSubmitWrapper, setCurrentInput, threadId]);
 
   // Ensure typing indicator is visible by scrolling to bottom when typing state changes
   useEffect(() => {
