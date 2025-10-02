@@ -168,7 +168,6 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
       let currentThreadId = threadId;
       const widgetId = props.widgetId;
 
-      console.log('threadTitle 2', threadTitle);
       try {
         widgetId &&
           emitter.emit('langdb_chatWindow', {
