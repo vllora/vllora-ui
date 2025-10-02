@@ -7,7 +7,7 @@ import { useChatState } from '@/hooks/useChatState';
 import { useMessageSubmission } from '@/hooks/useMessageSubmission';
 import { emitter } from '@/utils/eventEmitter';
 import { XCircle } from 'lucide-react';
-import { useChatConversationEvents } from '@/hooks/events/useChatConversationEvents';
+import { useConversationEvents } from '@/hooks/events/useConversationEvents';
 
 interface ChatWindowProps {
   threadId?: string;
@@ -44,7 +44,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     setThreadId,
   } = chatState;
 
-  useChatConversationEvents({
+  useConversationEvents({
     currentProjectId: projectId || '',
     currentThreadId: threadId || '',
   });

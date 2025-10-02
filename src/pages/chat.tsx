@@ -1,15 +1,15 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
-import { ChatPageSidebar } from '@/components/chat/ChatSidebar';
+import { ThreadsSidebar } from '@/components/chat/ThreadsSidebar';
 import { ConversationWindow } from '@/components/chat/ConversationWindow';
-import { ChatRightSidebar } from '@/components/chat/ChatRightSidebar';
+import { TracesRightSidebar } from '@/components/chat/TracesRightSidebar';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { ThreadsConsumer } from '@/contexts/ThreadsContext';
 import { ChatWindowProvider } from '@/contexts/ChatWindowContext';
 import { Thread } from '@/types/chat';
 import { API_CONFIG } from '@/config/api';
-import { useChatPageProjectEvents } from '@/hooks/events/useChatPageProjectEvents';
+import { useThreadsEvents } from '@/hooks/events/useThreadsEvents';
 
 export function ChatPage() {
   const { currentProjectId, isDefaultProject } = ProjectsConsumer();
@@ -50,7 +50,7 @@ export function ChatPage() {
   }, [threads, selectedModel, navigate, searchParams, currentProjectId, isDefaultProject]);
 
   // Subscribe to project events
-  useChatPageProjectEvents({
+  useThreadsEvents({
     currentProjectId: currentProjectId || '',
     currentThreadId: selectedThreadId || '',
     onSelectThread: handleSelectThread,
@@ -114,7 +114,7 @@ export function ChatPage() {
   return (
     <section className="flex-1 flex bg-background text-foreground overflow-hidden" aria-label="Chat Interface">
       {/* Left Sidebar */}
-      <ChatPageSidebar
+      <ThreadsSidebar
         threads={threads}
         selectedThreadId={selectedThreadId}
         onSelectThread={handleSelectThread}
@@ -137,7 +137,7 @@ export function ChatPage() {
           </div>
 
           {/* Right Sidebar - Traces */}
-          <ChatRightSidebar
+          <TracesRightSidebar
             threadId={selectedThreadId}
             isCollapsed={isRightSidebarCollapsed}
             onToggle={() => setIsRightSidebarCollapsed(!isRightSidebarCollapsed)}

@@ -6,6 +6,8 @@ import { listRuns} from '@/services/runs-api';
 import { Message } from '@/types/chat';
 import { fetchAllSpansByRunId } from '@/utils/traces';
 import { RunDTO, Span } from '@/types/common-type';
+import { LangDBEventSpan } from './project-events/dto';
+import { convertSpanToRunDTO, convertToNormalSpan } from './project-events/util';
 
 export interface SelectedSpanInfo {
   spanId: string;
@@ -155,6 +157,34 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     }
   }, [runsLoading, loadingMoreRuns, hasMoreRuns, runsOffset, threadIdRef, projectIdRef]);
 
+
+  const addEventSpans = useCallback((eventSpans: LangDBEventSpan[]) => {
+    eventSpans.sort((a, b) => a.start_time_unix_nano - b.start_time_unix_nano).forEach(span => {
+      addEventSpan(span as LangDBEventSpan);
+    });
+  }, []);
+
+  const addEventSpan = useCallback((eventSpan: LangDBEventSpan) => {
+    const span = convertToNormalSpan(eventSpan);
+    let current_runId = span.run_id;
+    setRawRuns(prev => {
+      let runIndex = prev.findIndex(r => r.run_id === current_runId);
+      if(runIndex === -1) {
+        return [...prev, convertSpanToRunDTO(span)];
+      }
+      let newRun = convertSpanToRunDTO(span, prev[runIndex]);
+      prev[runIndex] = newRun;
+      return [...prev];
+    });
+    current_runId && setSpanMap(prev => {
+      let runMap = prev[current_runId];
+      if(runMap) {
+        return { ...prev, [current_runId]: [...runMap, span] };
+      } else {
+        return { ...prev, [current_runId]: [span] };
+      }
+   });
+  }, []);
   // Refresh runs function (reset and reload from beginning)
   const refreshRuns = useCallback(() => {
     setRunsOffset(0);
@@ -226,6 +256,8 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   );
 
 
+
+
   return {
     serverMessages,
     isLoading,
@@ -253,6 +285,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     projectId,
     isChatProcessing,
     setIsChatProcessing,
+    addEventSpans
   };
 }
 export function ChatWindowProvider({ children, threadId, projectId }: { children: ReactNode, threadId: string, projectId: string }) {

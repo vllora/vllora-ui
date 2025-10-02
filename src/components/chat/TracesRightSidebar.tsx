@@ -5,23 +5,29 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { TraceView } from './traces/TraceView';
+import { ProjectsConsumer } from '@/contexts/ProjectContext';
+import { useTraceEvents } from '@/hooks/events/useTraceEvents';
 
 const TRACE_PANEL_WIDTH = 450;
 const CONTROL_PANEL_WIDTH = 40;
 
-interface ChatRightSidebarProps {
+interface TracesRightSidebarProps {
   threadId: string;
   isCollapsed?: boolean;
   onToggle?: () => void;
 }
 
-export const ChatRightSidebar: React.FC<ChatRightSidebarProps> = ({
+export const TracesRightSidebar: React.FC<TracesRightSidebarProps> = ({
   threadId,
   isCollapsed = false,
   onToggle,
 }) => {
   const isOpen = !isCollapsed;
-
+  const {currentProjectId} = ProjectsConsumer();
+  useTraceEvents({
+    currentProjectId: currentProjectId || '',
+    currentThreadId: threadId,
+  });
   return (
     <div className="flex h-full">
       <AnimatePresence mode="wait">
