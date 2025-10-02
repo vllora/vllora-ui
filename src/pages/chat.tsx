@@ -59,7 +59,6 @@ export function ChatPage() {
   const handleNewThread = useCallback(() => {
     const newThread: Thread = {
       id: uuidv4(),
-      title: 'New conversation',
       model_name: selectedModel,
       project_id: currentProjectId || '',
       user_id: '', // TODO: Get from auth context

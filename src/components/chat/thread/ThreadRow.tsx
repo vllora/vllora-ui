@@ -1,7 +1,7 @@
 import { Thread } from "@/types/chat";
 import { ThreadsConsumer } from "@/contexts/ThreadsContext";
 import { ProjectsConsumer } from "@/contexts/ProjectContext";
-import { ClockIcon, CurrencyDollarIcon, ExclamationTriangleIcon, PencilIcon } from "@heroicons/react/24/outline";
+import { ClockIcon, CurrencyDollarIcon, ExclamationTriangleIcon, PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { formatDistanceToNow, format } from "date-fns";
 import React, { useCallback, useRef, useState, useMemo } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
@@ -18,7 +18,7 @@ import { motion } from "framer-motion";
 import { ErrorTooltip } from "./ErrorTooltip";
 
 export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
-    const { renameThread, selectedThreadId } = ThreadsConsumer();
+    const { renameThread, deleteDraftThread, selectedThreadId } = ThreadsConsumer();
     const { currentProjectId, isDefaultProject } = ProjectsConsumer();
     const [isEditing, setIsEditing] = useState(false);
     const [newTitle, setNewTitle] = useState(thread.title);
@@ -31,10 +31,10 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
 
     const handleThreadClick = useCallback(() => {
         let modelParam = '';
-        if(thread.request_model_name && thread.request_model_name.startsWith('router/')) {
+        if (thread.request_model_name && thread.request_model_name.startsWith('router/')) {
             modelParam = thread.request_model_name;
         } else {
-            if(thread.input_models && thread.input_models.length > 0) {
+            if (thread.input_models && thread.input_models.length > 0) {
                 modelParam = thread.input_models[thread.input_models.length - 1];
             }
         }
@@ -51,7 +51,7 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
         }
         navigate(`/chat?${params.toString()}`);
     }, [currentProjectId, thread.id, thread.input_models, thread.request_model_name, navigate, searchParams, isDefaultProject]);
-    
+
     // Memoize expensive calculations
     const { tagsDisplay, providersInfo } = useMemo(() => {
         const inputModels = thread.input_models || [];
@@ -91,14 +91,14 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
 
         return { haveErrors, formattedStartTime, createdDate };
     }, [thread.errors, thread.updated_at]);
-    
+
     const handleTitleEdit = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
         setNewTitle(thread.title);
         setIsEditing(true);
     }, [thread.title]);
-    
+
     const handleTitleSave = useCallback(() => {
         if (newTitle?.trim()) {
             renameThread(thread.id, newTitle.trim());
@@ -106,7 +106,13 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
         setNewTitle(undefined);
         setIsEditing(false);
     }, [newTitle, renameThread, thread.id]);
-    
+
+    const handleDelete = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        deleteDraftThread(thread.id);
+    }, [deleteDraftThread, thread.id]);
+
     const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         e.stopPropagation();
         e.preventDefault();
@@ -126,9 +132,9 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
             handleTitleSave();
         }
     }, [inputRef]);
-    
+
     // No need to calculate model count as we're not displaying it
-    
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -142,7 +148,7 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                 className={cn(
                     "py-3 px-4 transition-all duration-200 flex flex-col gap-2 cursor-pointer rounded-md border border-[#161616] border-l-4 border-r-4 active:bg-sidebar-accent/40",
                     isSelected ? '!border-r-4 !border-r-[rgb(var(--theme-500))] bg-secondary shadow-sm' :
-                    '!border-r !border-r-[#161616] bg-[#161616] hover:bg-sidebar-accent/50',
+                        '!border-r !border-r-[#161616] bg-[#161616] hover:bg-sidebar-accent/50',
                     haveErrors ? '!border-l-4 !border-l-yellow-500' : '!border-l !border-l-[#161616]',
                 )}
             >
@@ -155,7 +161,7 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                                 <ListProviders providersInfo={providersInfo} />
                             </div>
                         )}
-                        
+
                         {/* Thread title */}
                         {isEditing ? (
                             <Input
@@ -185,6 +191,11 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                                         </TooltipContent>
                                     </Tooltip>
                                 </TooltipProvider>
+                                {thread.is_from_local && (
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 font-medium">
+                                        Draft
+                                    </span>
+                                )}
                                 <button
                                     onClick={handleTitleEdit}
                                     className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-[rgb(var(--theme-500))] focus:outline-none focus:text-[rgb(var(--theme-500))]"
@@ -194,9 +205,9 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                             </div>
                         )}
                     </div>
-                    
+
                     {/* Right side metadata */}
-                    <div className="flex items-center gap-2">                        
+                    <div className="flex items-center gap-2">
                         {/* Error indicator */}
                         {haveErrors && (
                             <ErrorTooltip errors={thread.errors || []} side="top">
@@ -206,14 +217,14 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                                 </div>
                             </ErrorTooltip>
                         )}
-                        
+
                         {/* Thread ID */}
                         <div className="flex items-center gap-1">
                             <ThreadCopiableId id={thread.id} />
                         </div>
                     </div>
                 </div>
-                
+
                 {/* Second row with time, cost and tags */}
                 <div className="flex justify-between flex-1 items-center">
                     <div className="flex flex-1 items-center gap-2">
@@ -231,7 +242,7 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                                 </TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
-                        
+
                         {/* Cost info */}
                         {thread.cost !== undefined && (
                             <TooltipProvider>
@@ -239,7 +250,7 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                                     <TooltipTrigger asChild>
                                         <div className="flex items-center text-xs text-muted-foreground hover:text-foreground transition-colors hover:cursor-help truncate">
                                             <CurrencyDollarIcon className="w-3.5 h-3.5 mr-1.5 text-teal-500" />
-                                            <span className="font-mono tabular-nums"> { formatMoney(thread.cost)}</span>
+                                            <span className="font-mono tabular-nums"> {formatMoney(thread.cost)}</span>
                                         </div>
                                     </TooltipTrigger>
                                     <TooltipContent side="top" className="text-xs p-1.5">
@@ -250,13 +261,24 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                                 </Tooltip>
                             </TooltipProvider>
                         )}
+
+
                     </div>
-                    
+
                     {/* Tags */}
                     {tagsDisplay && tagsDisplay.length > 0 && (
                         <div>
                             <ThreadTagsDisplay tags={tagsDisplay} />
                         </div>
+                    )}
+                    {/* Delete button for local threads */}
+                    {thread.is_from_local && (
+                        <button
+                            onClick={handleDelete}
+                            className="text-muted-foreground hover:text-red-500 focus:outline-none focus:text-red-500"
+                        >
+                            <TrashIcon className="w-3.5 h-3.5" />
+                        </button>
                     )}
                 </div>
             </Card>

@@ -205,12 +205,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
      setServerMessages([]);
   }, []);
 
-  useEffect(() => {
-    if(threadId) {
-      clearMessages();
-      refreshMessages();
-    }
-  }, [threadId])
+  
 
   /**
    * Fetches detailed span data for a specific run when user expands a row

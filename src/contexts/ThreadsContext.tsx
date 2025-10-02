@@ -1,5 +1,5 @@
 import { createContext, useContext, ReactNode, useState, useCallback, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Thread } from '@/types/chat';
 import { queryThreads, updateThreadTitle, deleteThread as deleteThreadApi } from '@/services/threads-api';
@@ -28,6 +28,7 @@ interface ThreadsProviderProps {
 
 export function useThreads({ projectId }: ThreadsProviderProps) {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [threads, setThreads] = useState<Thread[]>([]);
   const [offset, setOffset] = useState<number>(0);
   const [total, setTotal] = useState<number>(0);
@@ -163,6 +164,33 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
     [projectId]
   );
 
+  const deleteDraftThread = useCallback(
+    (threadId: string) => {
+      // Check if the deleted thread is currently selected
+      const isSelectedThread = selectedThreadId === threadId;
+
+      setThreads((prev) => {
+        const newThreads = prev.filter((thread) => thread.id !== threadId);
+
+        // If the deleted thread was selected, navigate to the first remaining thread
+        if (isSelectedThread && newThreads.length > 0) {
+          const firstThread = newThreads[0];
+          const params = new URLSearchParams(searchParams);
+          params.set('threadId', firstThread.id);
+          navigate(`/chat?${params.toString()}`);
+        } else if (isSelectedThread && newThreads.length === 0) {
+          // If no threads remain, clear the threadId param
+          const params = new URLSearchParams(searchParams);
+          params.delete('threadId');
+          navigate(`/chat?${params.toString()}`);
+        }
+
+        return newThreads;
+      });
+    },
+    [selectedThreadId, searchParams, navigate]
+  );
+
   const addThread = useCallback((thread: Thread) => {
     setThreads((prev) => [thread, ...prev]);
   }, []);
@@ -227,6 +255,7 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
     loadMoreThreads,
     renameThread,
     deleteThread,
+    deleteDraftThread,
     addThread,
     updateThread,
     addThreadByEvent
