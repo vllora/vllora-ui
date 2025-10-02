@@ -5,7 +5,6 @@ import { Thread } from '@/types/chat';
 import { queryThreads, updateThreadTitle, deleteThread as deleteThreadApi } from '@/services/threads-api';
 import { ThreadEventValue } from './project-events/dto';
 import { convertToThreadInfo } from './project-events/util';
-import { MessageThread } from '@/types/common-type';
 
 export type ThreadsContextType = ReturnType<typeof useThreads>;
 
@@ -15,7 +14,7 @@ const convertToTime = (dateString: string): Date => {
   if (dateString.includes('GMT')) {
     return new Date(dateString);
   }
-  
+
   // handle this case : "2025-07-10 06:00:37.000000"
   // Replace any whitespace between date and time with 'T' and add 'Z' for UTC
   // This handles multiple spaces or other whitespace characters properly
@@ -214,12 +213,19 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
       // Check if thread already exists
       const existingIndex = prev.findIndex(thread => thread.id === threadInfo.id);
 
-      let updatedThreads: MessageThread[];
+      let updatedThreads: Thread[];
       if (existingIndex !== -1) {
         // Update existing thread
         updatedThreads = [...prev];
-        updatedThreads[existingIndex] = threadInfo;
+        const prevThread = prev[existingIndex];
+        let updatedThread = {
+          ...prevThread,
+          ...threadInfo,
+          input_models: threadInfo.input_models && threadInfo.input_models.length > 0 ? threadInfo.input_models : prevThread.input_models,
+          model_name: threadInfo.model_name && threadInfo.model_name.length > 0 ? threadInfo.model_name : prevThread.model_name,
+        };
         isNewThread = false;
+        updatedThreads[existingIndex] = updatedThread;
       } else {
         // Add new thread
         updatedThreads = [threadInfo, ...prev];
@@ -240,7 +246,7 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
     }
   }, []);
 
-  
+
 
   return {
     threads,

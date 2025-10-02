@@ -1,6 +1,7 @@
 import { tryParseJson } from "@/utils/modelUtils";
 import { LangDBEventSpan, ThreadEventValue } from "./dto"
-import { MessageThread, RunDTO, Span } from "@/types/common-type";
+import { RunDTO, Span } from "@/types/common-type";
+import { Thread } from "@/types/chat";
 
 
 export const convertToNormalSpan = (eventSpan: LangDBEventSpan): Span => {
@@ -20,10 +21,10 @@ export const convertToNormalSpan = (eventSpan: LangDBEventSpan): Span => {
     return result;
 }
 
-export const convertToThreadInfo = (eventThread: ThreadEventValue): MessageThread => {
+export const convertToThreadInfo = (eventThread: ThreadEventValue): Thread => {
     let createdAt = eventThread.created_at ? new Date(Date.parse(eventThread.created_at + 'Z')).toString() : '';
     let updatedAt = eventThread.updated_at ? new Date(Date.parse(eventThread.updated_at + 'Z')).toString() : '';
-    let result: MessageThread = {
+    let result: Thread = {
         id: eventThread.id,
         cost: eventThread.cost,
         output_tokens: eventThread.output_tokens,
@@ -41,6 +42,7 @@ export const convertToThreadInfo = (eventThread: ThreadEventValue): MessageThrea
         errors: eventThread.errors,
         input_models: eventThread.input_models,
         is_public: eventThread.is_public ?? false,
+        is_from_local:false
     }
     return result;
 }
