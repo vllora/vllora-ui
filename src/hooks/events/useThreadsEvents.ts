@@ -37,8 +37,6 @@ export function useThreadsEvents(props: {
            }
            
         }
-        // Handle different event types here
-        // Example: update threads, refresh data, etc.
       }
     );
     return unsubscribe;
