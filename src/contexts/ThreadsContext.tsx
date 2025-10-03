@@ -1,4 +1,4 @@
-import { createContext, useContext, ReactNode, useState, useCallback, useMemo } from 'react';
+import { createContext, useContext, ReactNode, useState, useCallback, useMemo, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -54,6 +54,17 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
   const selectedThreadId = useMemo(() => {
     return searchParams.get('threadId');
   }, [searchParams]);
+
+  // Clear thread changes when user selects/views a thread
+  useEffect(() => {
+    if (selectedThreadId) {
+      setThreadsHaveChanges((prev) => {
+        const updated = { ...prev };
+        delete updated[selectedThreadId];
+        return updated;
+      });
+    }
+  }, [selectedThreadId]);
 
   const onThreadMessageHaveChanges = useCallback((input: {
     threadId: string;
