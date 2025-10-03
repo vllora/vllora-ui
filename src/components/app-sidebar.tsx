@@ -27,8 +27,7 @@ const mainMenuItems = [
 ]
 
 const bottomMenuItems = [
-  { id: "projects", label: "Projects", icon: FolderOpen, path: "/projects" },
-  { id: "settings", label: "Global Config", icon: Settings, path: "/settings" },
+  { id: "settings", label: "Settings", icon: Settings, path: "/settings" },
 ]
 
 interface AppSidebarProps {
