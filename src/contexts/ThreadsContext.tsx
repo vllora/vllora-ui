@@ -69,41 +69,33 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
 
   const onThreadMessageHaveChanges = useCallback((input: {
     threadId: string;
-    event: TextMessageStartEvent | TextMessageEndEvent | TextMessageContentEvent 
+    event: TextMessageStartEvent | TextMessageEndEvent | TextMessageContentEvent
   }) => {
     const { threadId, event } = input;
+
+    // Helper to get status from event type
+    const getStatus = (type: string): 'start' | 'streaming' | 'end' =>
+      type === 'TextMessageStart' ? 'start' : type === 'TextMessageContent' ? 'streaming' : 'end';
+
+    // Create new message entry
+    const newMessage = {
+      message_id: event.message_id,
+      status: getStatus(event.type),
+      timestamp: event.timestamp
+    };
+
     setThreadsHaveChanges((prev) => {
-      let prevThread = prev[threadId];
-      console.log('==== prevThread onThreadMessageHaveChanges', prevThread);
-      if(prevThread) {
-        let prevMessages = prevThread.messages;
-        // filter out the message with message_id = event.message_id
-        let newMessages = prevMessages.filter((m) => m.message_id !== event.message_id);
-        newMessages.push({
-          message_id: event.message_id,
-          status: event.type === 'TextMessageStart' ? 'start' : event.type === 'TextMessageContent' ? 'streaming' : 'end',
-          timestamp: event.timestamp
-        });
-        // sort newMessages by timestamp
-        newMessages.sort((a, b) => b.timestamp - a.timestamp);
-        return {
-          ...prev,
-          [threadId]: {
-            messages: [...newMessages]
-          }
-        }
-      } else {
-        return {
-          ...prev,
-          [threadId]: {
-            messages: [{
-              message_id: event.message_id,
-              status: event.type === 'TextMessageStart' ? 'start' : event.type === 'TextMessageContent' ? 'streaming' : 'end',
-              timestamp: event.timestamp
-            }]
-          }
-        }
-      }
+      // Get existing messages, filter out old entry for this message_id, add new entry, and sort
+      const existingMessages = prev[threadId]?.messages || [];
+      const updatedMessages = [
+        ...existingMessages.filter((m) => m.message_id !== event.message_id),
+        newMessage
+      ].sort((a, b) => b.timestamp - a.timestamp);
+
+      return {
+        ...prev,
+        [threadId]: { messages: updatedMessages }
+      };
     });
     // update the update_at in thread, current value updated_at have format "2025-07-10 06:00:33"
     let newUpdatedAt = event.timestamp;
@@ -149,37 +141,26 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
     event: MessageCreatedEvent
   }) => {
     const { threadId, event } = input;
+
+    // Create new message entry
+    const newMessage = {
+      message_id: event.value.message_id,
+      status: 'end' as const,
+      timestamp: event.timestamp
+    };
+
     setThreadsHaveChanges((prev) => {
-      let prevThread = prev[threadId];
-      if(prevThread) {
-        let prevMessages = prevThread.messages;
-        // filter out the message with message_id = event.message_id
-        let newMessages = prevMessages.filter((m) => m.message_id !== event.value.message_id);
-        newMessages.push({
-          message_id:  event.value.message_id,
-          status: 'end',
-          timestamp: event.timestamp
-        });
-        // sort newMessages by timestamp
-        newMessages.sort((a, b) => b.timestamp - a.timestamp);
-        return {
-          ...prev,
-          [threadId]: {
-            messages: [...newMessages]
-          }
-        }
-      } else {
-        return {
-          ...prev,
-          [threadId]: {
-            messages: [{
-              message_id: event.value.message_id,
-              status: 'end',
-              timestamp: event.timestamp
-            }]
-          }
-        }
-      }
+      // Get existing messages, filter out old entry for this message_id, add new entry, and sort
+      const existingMessages = prev[threadId]?.messages || [];
+      const updatedMessages = [
+        ...existingMessages.filter((m) => m.message_id !== event.value.message_id),
+        newMessage
+      ].sort((a, b) => b.timestamp - a.timestamp);
+
+      return {
+        ...prev,
+        [threadId]: { messages: updatedMessages }
+      };
     });
     // update the update_at in thread, current value updated_at have format "2025-07-10 06:00:33"
     let newUpdatedAt = event.timestamp;
