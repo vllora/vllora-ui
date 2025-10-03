@@ -97,6 +97,12 @@ export function ChatPage() {
     navigate(`/chat?${params.toString()}`);
   }, [selectedThreadId, searchParams, currentProjectId, updateThread, navigate, isDefaultProject]);
 
+  useEffect(() => {
+    if (!selectedThreadId && threads.length > 0) {
+      handleSelectThread(threads[0].id);
+    }
+  }, [selectedThreadId, threads, handleSelectThread]);
+
   const handleProjectChange = useCallback((newProjectId: string) => {
     localStorage.setItem('currentProjectId', newProjectId);
     // Update the project_id query param while keeping current path (omit if default)
