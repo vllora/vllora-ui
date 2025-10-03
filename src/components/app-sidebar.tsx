@@ -23,7 +23,6 @@ import {
 const mainMenuItems = [
   { id: "home", label: "Home", icon: Home, path: "/" },
   { id: "chat", label: "Chat", icon: MessageSquare, path: "/chat" },
-  { id: "analytics", label: "Analytics", icon: BarChart3, path: "/analytics" },
 ]
 
 const bottomMenuItems = [
