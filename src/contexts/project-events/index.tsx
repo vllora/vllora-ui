@@ -156,8 +156,6 @@ export const useProjectEvents = (props: ProjectEventsHookProps) => {
 
             let ignoreThisEvent = projectEvent.type === 'Custom' && projectEvent.name === 'ping'
             if (!ignoreThisEvent) {
-
-              console.log('==== Received project event:', projectEvent);
               // Emit to subscribers instead of storing in array
               emit(projectEvent);
             }

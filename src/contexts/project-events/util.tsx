@@ -22,8 +22,6 @@ export const convertToNormalSpan = (eventSpan: LangDBEventSpan): Span => {
 }
 
 export const convertToThreadInfo = (eventThread: ThreadEventValue): Thread => {
-    let createdAt = eventThread.created_at ? new Date(Date.parse(eventThread.created_at + 'Z')).toString() : '';
-    let updatedAt = eventThread.updated_at ? new Date(Date.parse(eventThread.updated_at + 'Z')).toString() : '';
     let result: Thread = {
         id: eventThread.id,
         cost: eventThread.cost,
@@ -34,8 +32,8 @@ export const convertToThreadInfo = (eventThread: ThreadEventValue): Thread => {
         description: eventThread.description ?? '',
         model_name: eventThread.model_name ?? '',
         user_id: '',
-        created_at: createdAt ?? '',
-        updated_at: updatedAt ?? '',
+        created_at: eventThread.created_at ?? '',
+        updated_at: eventThread.updated_at ?? '',
         score: eventThread.score,
         title: eventThread.title ?? '',
         tags_info: eventThread.tags_info ?? [],
