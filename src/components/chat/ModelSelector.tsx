@@ -104,17 +104,17 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   };
 
   return (
-    <div className="relative mt-2" ref={dropdownRef}>
+    <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        className="w-full flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ProviderIcon
           provider_name={getProviderFromModelId(selectedModel)}
           className="w-4 h-4"
         />
         <span>{selectedModel}</span>
-        <ChevronDown className={`w-4 h-4 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-4 h-4 transition-transform ml-auto ${isDropdownOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isDropdownOpen && (
