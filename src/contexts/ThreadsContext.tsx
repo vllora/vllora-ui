@@ -231,7 +231,6 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
   const addThreadByEvent = useCallback((eventThread: ThreadEventValue, onThreadAdded?: (threadId: string, isNew: boolean) => void) => {
     let threadInfo = convertToThreadInfo(eventThread);
     let isNewThread = false;
-
     setThreads((prev) => {
       // Check if thread already exists
       const existingIndex = prev.findIndex(thread => thread.id === threadInfo.id);

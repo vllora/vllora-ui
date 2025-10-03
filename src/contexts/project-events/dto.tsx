@@ -121,6 +121,7 @@ export interface ProjectEvent {
     prompt_tokens?: number;
     errors?: string[];
     score?: number;
+    request_model_name?: string;
     project_id?: string;
     tags_info?: string[];
     title?: string;

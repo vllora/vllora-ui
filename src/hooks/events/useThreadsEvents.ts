@@ -1,8 +1,7 @@
-import { startTransition, useEffect } from 'react';
+import { useEffect } from 'react';
 import { ProjectEventsConsumer } from '@/contexts/project-events';
-import { CostValueData, LangDBCustomEvent, LangDBEventSpan, ProjectEventUnion, ThreadEventValue } from '@/contexts/project-events/dto';
+import { CostValueData, LangDBCustomEvent, ProjectEventUnion, ThreadEventValue } from '@/contexts/project-events/dto';
 import { ThreadsConsumer } from '@/contexts/ThreadsContext';
-import { convertToNormalSpan, getTokensInfo, getTotalCost } from '@/contexts/project-events/util';
 
 export function useThreadsEvents(props: {
   currentProjectId: string;
