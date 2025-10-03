@@ -13,7 +13,22 @@ export function getClientSDKName(span: Span): string | null {
 
   return null;
 }
-
+export const getClientSDKDisplayName = (span: Span) => {
+  let name = getClientSDKName(span);
+  if(name === 'adk') {
+      return 'Agent Development Kit (ADK)';
+  }
+  if(name === 'crewai') {
+      return 'CrewAI SDK';
+  }
+  if(name === 'openai') {
+      return 'OpenAI SDK';
+  }
+  if(name === 'agno') {
+      return 'Agno SDK';
+  }
+  return name;
+}
 /**
  * Check if span is an agent span
  */

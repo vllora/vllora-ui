@@ -18,7 +18,6 @@ export const TimelineContent: React.FC<TimelineContentProps> = ({
 
   // Get run ID from first span (all spans should belong to same run)
   const runId = rootSpans &&rootSpans.length > 0 ? rootSpans[0]?.run_id : '';
-  console.log('===== TimelineContent rootSpans', rootSpans);
   const {projectId} =  ChatWindowConsumer()// Temporary: get from run data
 
   return (

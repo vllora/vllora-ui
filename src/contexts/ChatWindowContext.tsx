@@ -1,4 +1,4 @@
-import { createContext, useContext, ReactNode, useCallback, useState, useEffect } from 'react';
+import { createContext, useContext, ReactNode, useCallback, useState, useEffect, useMemo } from 'react';
 import { useRequest, useLatest } from 'ahooks';
 import { toast } from 'sonner';
 import { queryMessages } from '@/services/messages-api';
@@ -263,10 +263,27 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     [projectIdRef]
   );
 
+  const spansOfSelectedRun =  useMemo(() => {
+    return  selectedSpanInfo?.runId ? spanMap[selectedSpanInfo.runId] : [];
+  }, [selectedSpanInfo, spanMap]);
+  const selectedRun = useMemo(() => {
+    return selectedSpanInfo?.runId ? runs.find(r => r.run_id === selectedSpanInfo.runId) : undefined;
+  }, [selectedSpanInfo, runs]);
+
+  const selectedSpan = useMemo(() => {
+    return selectedSpanInfo?.spanId ? spansOfSelectedRun.find(s => s.span_id === selectedSpanInfo.spanId) : undefined;
+  }, [selectedSpanInfo, spansOfSelectedRun]);
+
 
 
 
   return {
+    spansOfSelectedRun,
+    selectedRun,
+    selectedSpan,
+
+
+
     serverMessages,
     setServerMessages,
     isLoading,

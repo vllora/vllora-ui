@@ -31,7 +31,7 @@ export const constructHierarchy = (props: {
     return { root, children: childrenSpan };
 }
 export const RunDetailContext = createContext<RunDetailContextType | null>(null);
-export function runDetails(props: {
+function runDetails(props: {
     runId: string,
     projectId: string,
     spans: Span[],
