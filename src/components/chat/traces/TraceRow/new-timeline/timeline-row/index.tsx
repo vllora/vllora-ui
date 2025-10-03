@@ -84,7 +84,7 @@ export const TimelineRow = (props: TimelineRowProps) => {
             data-span-id={span.span_id}
             className={cn(
                 "w-full group transition-colors hover:cursor-pointer",
-                selectedSpanInfo && selectedSpanInfo.spanId && span.span_id === selectedSpanInfo?.spanId ? "border-l-2 !border-l-primary" : "hover:bg-[#151515] border-l-2 !border-l-transparent"
+                selectedSpanInfo && selectedSpanInfo.spanId && span.span_id === selectedSpanInfo?.spanId ? "border-l-2 !border-l-[rgb(var(--theme-500))]" : "hover:bg-[#151515] border-l-2 !border-l-transparent"
             )}
             onClick={(e) => {
                 e.stopPropagation();
