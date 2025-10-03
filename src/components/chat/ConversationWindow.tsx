@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { ChatConversation } from './ChatConversation';
 import { ChatInput } from './ChatInput';
 import { ModelSelector } from './ModelSelector';
@@ -7,6 +7,7 @@ import { useMessageSubmission } from '@/hooks/useMessageSubmission';
 import { emitter } from '@/utils/eventEmitter';
 import { XCircle } from 'lucide-react';
 import { useConversationEvents } from '@/hooks/events/useConversationEvents';
+import { ArrowsPointingInIcon, ArrowsPointingOutIcon, CurrencyDollarIcon } from '@heroicons/react/24/outline';
 
 interface ChatWindowProps {
   threadId?: string;
@@ -16,6 +17,9 @@ interface ChatWindowProps {
   apiKey?: string;
   projectId?: string;
   widgetId?: string;
+  cost?: number;
+  inputTokens?: number;
+  outputTokens?: number;
   onModelChange?: (modelId: string) => void;
 }
 
@@ -27,6 +31,9 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
   apiKey,
   projectId,
   widgetId,
+  cost,
+  inputTokens,
+  outputTokens,
   onModelChange,
 }) => {
   // Get all state from context
@@ -205,16 +212,43 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
   return (
     <>
       {/* Chat Header */}
-      <div className="h-[88px] border-b border-border p-4 bg-card flex-shrink-0 flex flex-col justify-center">
-        <h2 className="text-lg font-semibold text-card-foreground">
-          {threadTitle ? threadTitle : 'New conversation'}
-        </h2>
-
+      <div className="border-b border-border bg-card flex-shrink-0">
         {/* Model Selector */}
-        <ModelSelector
-          selectedModel={modelName || 'Select a model'}
-          onModelChange={onModelChange}
-        />
+        <div className="p-4">
+          <div className="max-w-md border border-border rounded-md px-3 py-2">
+            <ModelSelector
+              selectedModel={modelName || 'Select a model'}
+              onModelChange={onModelChange}
+            />
+          </div>
+        </div>
+
+        {/* Cost and Tokens Display */}
+        {threadId && (cost !== undefined || inputTokens !== undefined || outputTokens !== undefined) && (
+          <div className="px-4 pb-3 flex items-center justify-between text-sm">
+            {cost !== undefined && (
+              <div className="flex items-center gap-2">
+                <CurrencyDollarIcon className="w-4 h-4 text-teal-500" />
+                <span className="text-muted-foreground">Cost</span>
+                <span className="font-medium text-foreground">${cost.toFixed(4)}</span>
+              </div>
+            )}
+            {inputTokens !== undefined && (
+              <div className="flex items-center gap-2">
+                <ArrowsPointingInIcon className="w-4 h-4 text-blue-500" />
+                <span className="text-muted-foreground">Input</span>
+                <span className="font-medium text-foreground">{inputTokens.toLocaleString()} tokens</span>
+              </div>
+            )}
+            {outputTokens !== undefined && (
+              <div className="flex items-center gap-2">
+                <ArrowsPointingOutIcon className="w-4 h-4 text-purple-500" />
+                <span className="text-muted-foreground">Output</span>
+                <span className="font-medium text-foreground">{outputTokens.toLocaleString()} tokens</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Chat Conversation */}
