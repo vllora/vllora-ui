@@ -3,7 +3,7 @@ import { ThreadsConsumer } from "@/contexts/ThreadsContext";
 import { ProjectsConsumer } from "@/contexts/ProjectContext";
 import { ClockIcon, CurrencyDollarIcon, ExclamationTriangleIcon, PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { formatDistanceToNow, format } from "date-fns";
-import React, { useCallback, useRef, useState, useMemo } from "react";
+import React, { useCallback, useRef, useState, useMemo, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Input } from "../../ui/input";
 import { ListProviders } from "./ListProviders";

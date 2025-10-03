@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { InfoIcon, CheckCircle2, Loader2 } from 'lucide-react';
 import { Thread } from '@/types/chat';
 import { ThreadsConsumer } from '@/contexts/ThreadsContext';
 import { ThreadRow } from './ThreadRow';
+import { useVirtualizer } from '@tanstack/react-virtual';
 
 interface ThreadListProps {
   threads: Thread[];
@@ -12,51 +13,121 @@ export const ThreadList: React.FC<ThreadListProps> = ({
   threads,
 }) => {
   const { loading, loadingMore, loadingThreadsError, loadMoreThreads, hasMore } = ThreadsConsumer();
-  const observerTarget = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
+  const parentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadingRef.current = loading || loadingMore;
   }, [loading, loadingMore]);
 
-  const intersectionCallback = useCallback(
-    (entries: IntersectionObserverEntry[]) => {
-      const first = entries[0];
-      if (first.isIntersecting && hasMore && !loadingRef.current) {
-        loadMoreThreads();
-      }
-    },
-    [hasMore, loadMoreThreads]
-  );
+  // Virtualize the list
+  const rowVirtualizer = useVirtualizer({
+    count: threads.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 120, // Estimated height of each thread row
+    overscan: 5, // Render 5 extra items above and below viewport
+  });
 
+  // Load more when scrolling near the end
   useEffect(() => {
-    const observer = new IntersectionObserver(intersectionCallback, {
-      threshold: 0.1,
-      rootMargin: '100px',
-    });
+    const [lastItem] = [...rowVirtualizer.getVirtualItems()].reverse();
 
-    const currentTarget = observerTarget.current;
-    if (currentTarget) {
-      observer.observe(currentTarget);
+    if (!lastItem) return;
+
+    if (
+      lastItem.index >= threads.length - 1 &&
+      hasMore &&
+      !loadingRef.current
+    ) {
+      loadMoreThreads();
     }
-
-    return () => {
-      if (currentTarget) {
-        observer.unobserve(currentTarget);
-      }
-    };
-  }, [intersectionCallback]);
+  }, [
+    hasMore,
+    loadMoreThreads,
+    threads.length,
+    rowVirtualizer.getVirtualItems(),
+  ]);
 
   return (
     <>
       {threads && threads.length > 0 && (
-        <div className="p-2 space-y-2">
-          {threads.map((thread) => (
-            <ThreadRow
-              key={thread.id}
-              thread={thread}
-            />
-          ))}
+        <div
+          ref={parentRef}
+          className="h-full overflow-y-auto"
+          style={{ contain: 'strict' }}
+        >
+          <div
+            style={{
+              height: `${rowVirtualizer.getTotalSize() + 80}px`,
+              width: '100%',
+              position: 'relative',
+              paddingTop: '8px',
+              paddingBottom: '8px',
+            }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const thread = threads[virtualRow.index];
+              return (
+                <div
+                  key={thread.id}
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    transform: `translateY(${virtualRow.start + 8}px)`,
+                    paddingLeft: '8px',
+                    paddingRight: '8px',
+                    paddingBottom: '8px',
+                  }}
+                >
+                  <ThreadRow thread={thread} />
+                </div>
+              );
+            })}
+
+            {/* Load More Indicator - absolutely positioned at bottom */}
+            {hasMore && (
+              <div
+                className="h-16 w-full flex items-center justify-center"
+                style={{
+                  position: 'absolute',
+                  top: `${rowVirtualizer.getTotalSize() + 8}px`,
+                  left: 0,
+                  right: 0,
+                }}
+              >
+                {loadingMore ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                    <span className="text-sm font-medium text-muted-foreground">Loading...</span>
+                  </div>
+                ) : (
+                  <div className="h-1 w-12 rounded-full bg-muted animate-pulse"></div>
+                )}
+              </div>
+            )}
+
+            {/* All loaded indicator - absolutely positioned at bottom */}
+            {!hasMore && (
+              <div
+                className="h-16 w-full flex items-center justify-center"
+                style={{
+                  position: 'absolute',
+                  top: `${rowVirtualizer.getTotalSize() + 8}px`,
+                  left: 0,
+                  right: 0,
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 size={16} className="text-[rgb(var(--theme-500))]" />
+                  <span className="text-sm font-medium text-muted-foreground">All threads loaded</span>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -89,32 +160,6 @@ export const ThreadList: React.FC<ThreadListProps> = ({
                 Start a new conversation to see your threads appear here.
               </p>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Load More Indicator */}
-      {hasMore && threads.length > 0 && (
-        <div
-          ref={observerTarget}
-          className="h-16 w-full flex items-center justify-center py-2"
-        >
-          {loadingMore ? (
-            <div className="flex items-center gap-2 px-4 py-2">
-              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-              <span className="text-sm font-medium text-muted-foreground">Loading...</span>
-            </div>
-          ) : (
-            <div className="h-1 w-12 rounded-full bg-muted animate-pulse"></div>
-          )}
-        </div>
-      )}
-
-      {!hasMore && threads.length > 0 && (
-        <div className="h-16 w-full flex items-center justify-center py-2">
-          <div className="flex items-center gap-2 px-4 py-2">
-            <CheckCircle2 size={16} className="text-[rgb(var(--theme-500))]" />
-            <span className="text-sm font-medium text-muted-foreground">All threads loaded</span>
           </div>
         </div>
       )}

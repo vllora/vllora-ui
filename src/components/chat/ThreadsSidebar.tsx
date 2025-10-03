@@ -38,7 +38,7 @@ export const ThreadsSidebar: React.FC<ChatSidebarProps> = ({
       </div>
 
       {/* Thread List */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-hidden">
         <ThreadList threads={threads} />
       </div>
     </div>
