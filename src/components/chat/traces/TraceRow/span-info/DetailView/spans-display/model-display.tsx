@@ -79,6 +79,7 @@ export const ModelInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
     const headerCount = headers ? Object.keys(headers).length : 0;
 
     const havingPromptCaching = span && isPromptCachingApplied(span);
+    const isSuccessStatus = status && ['200', 200].includes(status);
     return (
         <BaseSpanUIDetailsDisplay 
             value={openAccordionItems} 
@@ -100,8 +101,8 @@ export const ModelInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
                             <span className="text-xs text-white">Status</span>
                         </div>
                         {status && (
-                            <div className={`flex items-center px-2 py-1 rounded-md text-xs ${status === '200' ? 'bg-[#1a2e1a] text-green-500 border border-green-800' : 'bg-[#2e1a1a] text-red-500 border border-red-800'}`}>
-                                {status === '200' ? (
+                            <div className={`flex items-center px-2 py-1 rounded-md text-xs ${isSuccessStatus? 'bg-[#1a2e1a] text-green-500 border border-green-800' : 'bg-[#2e1a1a] text-red-500 border border-red-800'}`}>
+                                {isSuccessStatus ? (
                                     <CheckCircleIcon className="w-3 h-3 mr-1" />
                                 ) : (
                                     <ExclamationTriangleIcon className="w-3 h-3 mr-1" />
