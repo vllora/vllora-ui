@@ -1,9 +1,10 @@
 import { createContext, useContext, ReactNode, useState, useCallback, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { format } from 'date-fns';
 import { Thread } from '@/types/chat';
 import { queryThreads, updateThreadTitle, deleteThread as deleteThreadApi } from '@/services/threads-api';
-import { CostValueData, ThreadEventValue } from './project-events/dto';
+import { CostValueData, MessageCreatedEvent, TextMessageContentEvent, TextMessageEndEvent, TextMessageStartEvent, ThreadEventValue, ThreadModelStartEvent } from './project-events/dto';
 import { convertToThreadInfo } from './project-events/util';
 
 export type ThreadsContextType = ReturnType<typeof useThreads>;
@@ -14,12 +15,16 @@ const convertToTime = (dateString: string): Date => {
   if (dateString.includes('GMT')) {
     return new Date(dateString);
   }
-
-  // handle this case : "2025-07-10 06:00:37.000000"
-  // Replace any whitespace between date and time with 'T' and add 'Z' for UTC
-  // This handles multiple spaces or other whitespace characters properly
   const isoString = dateString.replace(/(\d{4}-\d{2}-\d{2})\s+(.+)/, '$1T$2Z');
   return new Date(isoString);
+}
+
+const sortThreads = (threads: Thread[]) => {
+  return [...threads].sort((a, b) => {
+    const dateA = convertToTime(a.updated_at);
+    const dateB = convertToTime(b.updated_at);
+    return dateB.getTime() - dateA.getTime();
+  });
 }
 interface ThreadsProviderProps {
   projectId: string;
@@ -36,10 +41,98 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [loadingThreadsError, setLoadingThreadsError] = useState<string | null>(null);
 
+  const [threadsHaveChanges, setThreadsHaveChanges] = useState<{
+    [threadId: string]: {
+      messages: {
+        message_id: string;
+        status: 'start' | 'streaming' | 'end'
+      }[]
+    }
+  }>({});
+
   // Read selectedThreadId from URL query string
   const selectedThreadId = useMemo(() => {
     return searchParams.get('threadId');
   }, [searchParams]);
+
+  const onThreadMessageHaveChanges = useCallback((input: {
+    threadId: string;
+    event: TextMessageStartEvent | TextMessageEndEvent | TextMessageContentEvent 
+  }) => {
+    const { threadId, event } = input;
+    setThreadsHaveChanges((prev) => ({
+      ...prev,
+      [threadId]: {
+        messages: [...(prev[threadId]?.messages || []), {
+          message_id: event.message_id,
+          status: event.type === 'TextMessageStart' ? 'start' : event.type === 'TextMessageContent' ? 'streaming' : 'end',
+          timestamp: event.timestamp
+        }]
+      }
+    }));
+    // update the update_at in thread, current value updated_at have format "2025-07-10 06:00:33"
+    let newUpdatedAt = event.timestamp;
+    // convert newUpdatedAt (timestamp number in milliseconds) to format "2025-07-10 06:00:33"
+    const newUpdatedAtString = format(new Date(newUpdatedAt), 'yyyy-MM-dd HH:mm:ss');
+    setThreads((prev) => {
+      const updatedThreads = prev.map((thread) => (thread.id === threadId ? { ...thread, updated_at: newUpdatedAtString } : thread));
+      return sortThreads(updatedThreads);
+    });
+  }, []);
+
+  const onThreadModelStartEvent = useCallback((input: {
+    threadId: string;
+    event: ThreadModelStartEvent
+  }) => {
+    const { threadId, event } = input;
+    // update the update_at in thread, current value updated_at have format "2025-07-10 06:00:33"
+    let newUpdatedAt = event.timestamp;
+    // convert newUpdatedAt (timestamp number in milliseconds) to format "2025-07-10 06:00:33"
+    const newUpdatedAtString = format(new Date(newUpdatedAt), 'yyyy-MM-dd HH:mm:ss');
+    setThreads((prev) => {
+      const updatedThreads = prev.map((thread) =>{
+        if(thread.id === threadId) {
+          // Create unique array of input models with new model added
+          let newModelName = event.value.provider_name ? `${event.value.provider_name}/${event.value.model_name}` : event.value.model_name;
+          const newInputModels = [...new Set([...(thread.input_models || []), newModelName])];
+          return {
+            ...thread,
+            updated_at: newUpdatedAtString,
+            input_models: newInputModels,
+            request_model_name: event.value.model_name,
+          };
+        }
+        return thread;
+      });
+      let result = sortThreads(updatedThreads);
+      return result;
+    });
+  }, []);
+
+  const onThreadMessageCreated = useCallback((input: {
+    threadId: string;
+    event: MessageCreatedEvent
+  }) => {
+    const { threadId, event } = input;
+    setThreadsHaveChanges((prev) => ({
+      ...prev,
+      [threadId]: {
+        messages: [...(prev[threadId]?.messages || []), {
+          message_id: event.value.message_id,
+          status: 'end',
+          timestamp: event.timestamp
+        }]
+      }
+    }));
+    // update the update_at in thread, current value updated_at have format "2025-07-10 06:00:33"
+    let newUpdatedAt = event.timestamp;
+    // convert newUpdatedAt (timestamp number in milliseconds) to format "2025-07-10 06:00:33"
+    const newUpdatedAtString = format(new Date(newUpdatedAt), 'yyyy-MM-dd HH:mm:ss');
+    setThreads((prev) => {
+      const updatedThreads = prev.map((thread) => (thread.id === threadId ? { ...thread, updated_at: newUpdatedAtString } : thread));
+      return sortThreads(updatedThreads);
+    });
+  }, []);
 
   const refreshThreads = useCallback(async () => {
     setLoading(true);
@@ -254,11 +347,7 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
         isNewThread = true;
       }
 
-      const sortedThreads = updatedThreads.sort((a, b) => {
-        const dateA = convertToTime(a.updated_at);
-        const dateB = convertToTime(b.updated_at);
-        return dateB.getTime() - dateA.getTime();
-      });
+      const sortedThreads = sortThreads(updatedThreads);
       return sortedThreads;
     });
 
@@ -287,7 +376,11 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
     addThread,
     updateThread,
     addThreadByEvent,
-    updateThreadCost
+    updateThreadCost,
+    onThreadMessageHaveChanges,
+    threadsHaveChanges,
+    onThreadMessageCreated,
+    onThreadModelStartEvent,
   };
 }
 

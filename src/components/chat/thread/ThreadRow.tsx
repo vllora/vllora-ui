@@ -18,13 +18,15 @@ import { motion } from "framer-motion";
 import { ErrorTooltip } from "./ErrorTooltip";
 
 export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
-    const { renameThread, deleteDraftThread, selectedThreadId } = ThreadsConsumer();
+    const { renameThread, deleteDraftThread, selectedThreadId, threadsHaveChanges } = ThreadsConsumer();
     const { currentProjectId, isDefaultProject } = ProjectsConsumer();
     const [isEditing, setIsEditing] = useState(false);
     const [newTitle, setNewTitle] = useState(thread.title);
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const urlThreadId = searchParams?.get('threadId');
+
+    const currentThreadChanges = useMemo(() => threadsHaveChanges[thread.id], [thread.id, threadsHaveChanges])
 
     // Use URL parameter for immediate feedback, fallback to context only if URL param is null
     const isSelected = urlThreadId ? urlThreadId === thread.id : selectedThreadId === thread.id;
@@ -191,6 +193,18 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                                         </TooltipContent>
                                     </Tooltip>
                                 </TooltipProvider>
+                                {currentThreadChanges?.messages?.length > 0 && !isSelected && (
+                                    <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <div className="w-2 h-2 rounded-full bg-[rgb(var(--theme-500))] animate-pulse" />
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top">
+                                                {currentThreadChanges?.messages?.length} new {currentThreadChanges?.messages?.length === 1 ? 'update' : 'updates'}
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                )}
                                 {thread.is_from_local && (
                                     <span className="text-xs px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 font-medium">
                                         Draft

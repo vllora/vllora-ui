@@ -32,24 +32,6 @@ export interface ProjectEvent {
     step_name: string;
   }
 
-  // Text Message Events
-  export interface TextMessageStartEvent extends ProjectEvent {
-    type: 'TextMessageStart';
-    message_id: string;
-    role: string;
-  }
-
-  export interface TextMessageContentEvent extends ProjectEvent {
-    type: 'TextMessageContent';
-    delta: string;
-    message_id: string;
-  }
-
-  export interface TextMessageEndEvent extends ProjectEvent {
-    type: 'TextMessageEnd';
-    message_id: string;
-  }
-
   // Tool Call Events
   export interface ToolCallStartEvent extends ProjectEvent {
     type: 'ToolCallStart';
@@ -104,6 +86,53 @@ export interface ProjectEvent {
     type: 'Custom';
     name: string;
     value: any; // Custom event value
+  }
+
+  export interface TextMessageBaseEvent extends ProjectEvent {
+    message_id: string;
+    timestamp: number;
+    thread_id: string;
+  }
+
+  export interface TextMessageStartEvent extends TextMessageBaseEvent {
+    type: 'TextMessageStart';
+    role: string;
+  }
+  export interface TextMessageContentEvent extends TextMessageBaseEvent {
+    type: 'TextMessageContent';
+    delta: string;
+  }
+
+  export interface TextMessageEndEvent extends TextMessageBaseEvent {
+    type: 'TextMessageEnd';
+  }
+
+
+  export interface MessageCreatedEvent extends ProjectEvent {
+    type: 'Custom';
+    name: "message_event";
+    run_id: string;
+    thread_id: string;
+    timestamp: number;
+    value: {
+      event_type: "created";
+      message_id: string;
+      project_id: string;
+      run_id: string;
+      thread_id: string;
+    }
+  }
+
+  export interface ThreadModelStartEvent extends ProjectEvent {
+    type: 'Custom';
+    name: "model_start";
+    run_id: string;
+    thread_id: string;
+    timestamp: number;
+    value: {
+      model_name: string;
+      provider_name: string;
+    }
   }
 
   export interface ThreadEventValue {

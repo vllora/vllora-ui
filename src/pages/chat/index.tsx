@@ -1,6 +1,6 @@
 import { ThreadsProvider } from '@/contexts/ThreadsContext';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
-import { ChatPage } from './chat';
+import { ChatPage } from './content';
 
 export function ChatPageWrapper() {
   const { currentProjectId } = ProjectsConsumer();

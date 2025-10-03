@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { ProjectEventsConsumer } from '@/contexts/project-events';
-import { CostValueData, LangDBCustomEvent, ProjectEventUnion, ThreadEventValue } from '@/contexts/project-events/dto';
+import { CostValueData, LangDBCustomEvent, MessageCreatedEvent, ProjectEventUnion, TextMessageContentEvent, TextMessageEndEvent, TextMessageStartEvent, ThreadEventValue, ThreadModelStartEvent } from '@/contexts/project-events/dto';
 import { ThreadsConsumer } from '@/contexts/ThreadsContext';
 
 export function useThreadsEvents(props: {
@@ -10,12 +10,37 @@ export function useThreadsEvents(props: {
 }) {
   const { subscribe } = ProjectEventsConsumer();
   const { currentProjectId, currentThreadId, onSelectThread } = props;
-  const { addThreadByEvent, updateThreadCost } = ThreadsConsumer();
+  const { addThreadByEvent, updateThreadCost, onThreadMessageHaveChanges, onThreadMessageCreated, onThreadModelStartEvent } = ThreadsConsumer();
   useEffect(() => {
     const unsubscribe = subscribe(
       'chat-page-events',
       (event: ProjectEventUnion) => {
+        console.log("===== event", event);
 
+        if(event.type === 'TextMessageStart') {
+          const textMessageStartEvent = event as TextMessageStartEvent;
+          textMessageStartEvent && textMessageStartEvent.thread_id && onThreadMessageHaveChanges({
+            threadId: textMessageStartEvent.thread_id,
+            event: textMessageStartEvent
+          });
+          return;
+        }
+        if(event.type === 'TextMessageEnd') {
+          const textMessageEndEvent = event as TextMessageEndEvent;
+          textMessageEndEvent && textMessageEndEvent.thread_id && onThreadMessageHaveChanges({
+            threadId: textMessageEndEvent.thread_id,
+            event: textMessageEndEvent
+          });
+          return;
+        }
+        if(event.type === 'TextMessageContent') {
+          const textMessageContentEvent = event as TextMessageContentEvent;
+          textMessageContentEvent && textMessageContentEvent.thread_id && onThreadMessageHaveChanges({
+            threadId: textMessageContentEvent.thread_id,
+            event: textMessageContentEvent
+          });
+          return;
+        }
         if(event.type === 'Custom') {
           const customEvent = event as LangDBCustomEvent;
            if(event.name === 'thread_event') {
@@ -32,6 +57,23 @@ export function useThreadsEvents(props: {
                 });
               }, 0)
             }
+            return;
+           }
+           if(event.value && (event as MessageCreatedEvent).value.event_type === 'created') {
+            const messageCreatedEvent = event as MessageCreatedEvent;
+            messageCreatedEvent && messageCreatedEvent.thread_id && onThreadMessageCreated({
+              threadId: messageCreatedEvent.thread_id,
+              event: messageCreatedEvent
+            });
+            return;
+           }
+           if(event.value && (event as ThreadModelStartEvent).name === 'model_start') {
+            console.log("===== model_start event", event);
+            const threadModelStartEvent = event as ThreadModelStartEvent;
+            threadModelStartEvent && threadModelStartEvent.thread_id && onThreadModelStartEvent({
+              threadId: threadModelStartEvent.thread_id,
+              event: threadModelStartEvent
+            });
             return;
            }
            

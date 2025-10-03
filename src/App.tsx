@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom"
 import { Layout } from "./components/layout"
 import { HomePage } from "./pages/home"
-import { ChatPageWrapper } from "./pages/chat-wrapper"
+import { ChatPageWrapper } from "./pages/chat"
 import { ProjectsPage } from "./pages/projects"
 import { AnalyticsPage } from "./pages/analytics"
 import { SettingsPage } from "./pages/settings"
