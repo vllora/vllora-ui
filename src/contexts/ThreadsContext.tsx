@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Thread } from '@/types/chat';
 import { queryThreads, updateThreadTitle, deleteThread as deleteThreadApi } from '@/services/threads-api';
-import { ThreadEventValue } from './project-events/dto';
+import { CostValueData, ThreadEventValue } from './project-events/dto';
 import { convertToThreadInfo } from './project-events/util';
 
 export type ThreadsContextType = ReturnType<typeof useThreads>;
@@ -212,11 +212,17 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
     );
   }, []);
 
-  const updateThreadCost = useCallback((threadId: string, cost: number) => {
+  const updateThreadCost = useCallback((threadId: string, cost: CostValueData) => {
     setThreads((prev) =>
       prev.map((thread) =>
         thread.id === threadId
-          ? { ...thread, cost: cost + (thread.cost ?? 0), updated_at: new Date().toISOString() }
+          ? { 
+            ...thread, 
+            cost: cost.cost + (thread.cost ?? 0), 
+            updated_at: new Date().toISOString(),
+            input_tokens: (cost.usage?.input_tokens ?? 0) + (thread.input_tokens ?? 0),
+            output_tokens: (cost.usage?.output_tokens ?? 0) + (thread.output_tokens ?? 0),
+          }
           : thread
       )
     );

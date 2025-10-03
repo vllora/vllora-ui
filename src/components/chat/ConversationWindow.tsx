@@ -29,8 +29,6 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
   widgetId,
   onModelChange,
 }) => {
-  console.log('threadTitle', threadTitle);
-
   // Get all state from context
   const {
     serverMessages,

@@ -38,7 +38,9 @@ export function useThreadsEvents(props: {
            
            if(customEvent.name === 'cost') {
             const costEvent = customEvent.value as CostValueData;
-            updateThreadCost(currentThreadId, costEvent.cost);
+            if (customEvent.thread_id) {
+              updateThreadCost(customEvent.thread_id, costEvent);
+            }
           }
         }
       }

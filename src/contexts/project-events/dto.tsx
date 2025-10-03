@@ -129,10 +129,9 @@ export interface ProjectEvent {
 
   export interface CostValueData {
     cost: number;
-    is_cache_used: boolean;
-    per_input_token: number;
-    per_output_token: number;
+    usage: UsageValueData | undefined;
   }
+
   export interface UsageValueData {
     completion_tokens_details?: any;
     input_tokens: number;
