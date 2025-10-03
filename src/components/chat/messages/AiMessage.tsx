@@ -46,7 +46,7 @@ export const AiMessage: React.FC<{
   const providerName = getProviderName(msg?.model_name);
 
   return (
-    <div className={`flex gap-3 items-start`}>
+    <div className={`flex gap-3 items-start group`}>
       <div className="flex-shrink-0 mt-1">
         <TooltipProvider>
           <Tooltip>
@@ -71,13 +71,13 @@ export const AiMessage: React.FC<{
           </Tooltip>
         </TooltipProvider>
       </div>
-      <div className="w-full rounded-lg p-4 bg-neutral-900/80 border border-neutral-800/80 shadow-md overflow-hidden backdrop-blur-sm">
-        <div className="flex items-center justify-between mb-3 pb-2 border-b border-neutral-800/50">
+      <div className="w-full">
+        <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <span className="text-neutral-300 font-semibold text-sm">Assistant</span>
+            <span className="text-neutral-300 font-medium text-sm">Assistant</span>
             {msg?.created_at && (
               <div className="flex items-center text-xs text-neutral-500">
-                <Clock className="h-3.5 w-3.5 mr-1.5" />
+                <Clock className="h-3 w-3 mr-1" />
                 <span>{formatMessageTime(msg.created_at)}</span>
               </div>
             )}
@@ -101,34 +101,32 @@ export const AiMessage: React.FC<{
                     .catch((err) => console.error('Failed to copy:', err));
                 }
               }}
-              className="text-neutral-500 hover:text-neutral-300 transition-colors p-1.5 hover:bg-neutral-800/50 rounded-md"
+              className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-neutral-300 transition-all p-1 hover:bg-neutral-800/50 rounded"
               title={copied ? 'Copied!' : 'Copy message'}
             >
               {copied ? (
-                <Check className="h-4 w-4 text-green-400" />
+                <Check className="h-3.5 w-3.5 text-green-400" />
               ) : (
-                <Copy className="h-4 w-4" />
+                <Copy className="h-3.5 w-3.5" />
               )}
             </button>
           )}
         </div>
         {msg?.tool_calls && msg.tool_calls.length > 0 && (
-          <div className="mb-3 border border-neutral-700 rounded-lg overflow-hidden bg-neutral-900/50 shadow-lg">
-            <div className="px-4 py-2.5 bg-neutral-800/50 border-b border-neutral-700 flex items-center justify-between">
+          <div className="mb-3 rounded-lg overflow-hidden bg-neutral-900/30 border border-neutral-800/50">
+            <div className="px-3 py-2 flex items-center justify-between bg-neutral-800/20">
               <div className="flex items-center gap-2">
-                <Wrench className="h-4 w-4 text-neutral-400" />
-                <span className="text-sm font-semibold text-neutral-200">
+                <Wrench className="h-3.5 w-3.5 text-neutral-400" />
+                <span className="text-xs font-medium text-neutral-300">
                   Tool Calls
                 </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-neutral-400 bg-neutral-800 px-2 py-1 rounded-full font-medium">
+                <span className="text-xs text-neutral-500">
                   {msg.tool_calls.length}{" "}
                   {msg.tool_calls.length === 1 ? "call" : "calls"}
                 </span>
               </div>
             </div>
-            <div className="divide-y divide-neutral-700/50">
+            <div className="divide-y divide-neutral-800/30">
               {msg.tool_calls.map((tool_call, index) => {
                 if (tool_call.function) {
                   const function_display = tool_call.function;
@@ -174,10 +172,10 @@ export const AiMessage: React.FC<{
                   return (
                     <div
                       key={index}
-                      className="bg-neutral-800/40 hover:bg-neutral-800/60 transition-colors"
+                      className="hover:bg-neutral-800/20 transition-colors"
                     >
                       <div
-                        className="px-4 py-3 cursor-pointer"
+                        className="px-3 py-2 cursor-pointer"
                         onClick={() => {
                           setExpandedToolCalls((prev) => ({
                             ...prev,
@@ -186,40 +184,38 @@ export const AiMessage: React.FC<{
                         }}
                       >
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2.5 flex-1">
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
                             {isExpanded ? (
-                              <ChevronDown className="h-4 w-4 text-neutral-400 flex-shrink-0" />
+                              <ChevronDown className="h-3.5 w-3.5 text-neutral-500 flex-shrink-0" />
                             ) : (
-                              <ChevronRight className="h-4 w-4 text-neutral-400 flex-shrink-0" />
+                              <ChevronRight className="h-3.5 w-3.5 text-neutral-500 flex-shrink-0" />
                             )}
-                            <div className="flex items-center gap-2 flex-1 min-w-0">
-                              <span className="text-sm font-semibold text-neutral-100 truncate">
-                                {formattedName}
-                              </span>
-                              <span className="text-xs text-neutral-500 bg-neutral-700/50 px-2 py-0.5 rounded font-mono truncate">
-                                {tool_call.id}
-                              </span>
-                            </div>
+                            <span className="text-sm font-medium text-neutral-200 truncate">
+                              {formattedName}
+                            </span>
+                            <span className="text-xs text-neutral-500 font-mono truncate">
+                              {tool_call.id}
+                            </span>
                           </div>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleCopyToolCall();
                             }}
-                            className="ml-2 text-neutral-500 hover:text-neutral-200 transition-colors p-1 hover:bg-neutral-700/50 rounded"
+                            className="ml-2 text-neutral-500 hover:text-neutral-300 transition-colors p-0.5 hover:bg-neutral-700/30 rounded"
                             title={isToolCopied ? "Copied!" : "Copy function"}
                           >
                             {isToolCopied ? (
-                              <CheckIcon className="h-4 w-4 text-green-400" />
+                              <CheckIcon className="h-3.5 w-3.5 text-green-400" />
                             ) : (
-                              <ClipboardDocumentIcon className="h-4 w-4" />
+                              <ClipboardDocumentIcon className="h-3.5 w-3.5" />
                             )}
                           </button>
                         </div>
                       </div>
                       {isExpanded && (
-                        <div className="px-4 pb-3 max-w-full overflow-x-auto border-t border-neutral-700/30">
-                          <div className="mt-2 bg-neutral-900/50 rounded-md p-3">
+                        <div className="px-3 pb-2 max-w-full overflow-x-auto">
+                          <div className="bg-neutral-900/40 rounded p-2">
                             <ReactJson
                               key={index}
                               name={false}
@@ -266,26 +262,26 @@ export const AiMessage: React.FC<{
           </div>
         )}
         {msg?.type === "tool" && msg?.tool_call_id && (
-          <div className="mb-3 border border-neutral-700 rounded-md overflow-hidden bg-neutral-800/50">
-            <div className="px-3 py-1.5 border-b border-neutral-700">
+          <div className="mb-3 rounded-md overflow-hidden bg-neutral-900/20 border border-neutral-800/40">
+            <div className="px-2 py-1 bg-neutral-800/20">
               <span className="text-xs text-neutral-500">
                 ID: {msg.tool_call_id}
               </span>
             </div>
-            <div className="px-3 py-2">
-              <div className="whitespace-normal text-gray-100 break-words overflow-wrap break-all">
+            <div className="px-2 py-2">
+              <div className="whitespace-normal text-neutral-100 break-words overflow-wrap break-all text-sm">
                 <MessageDisplay message={msg?.content || ""} />
               </div>
             </div>
           </div>
         )}
         {msg?.type !== "tool" && (
-          <div className="whitespace-normal flex flex-col gap-3 text-neutral-100 break-words overflow-wrap break-all leading-relaxed">
+          <div className="whitespace-normal text-neutral-100 break-words overflow-wrap break-all leading-relaxed text-sm">
             <MessageDisplay message={msg?.content || ""} />
           </div>
         )}
         {msg && (
-          <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-neutral-800/50 flex-wrap">
+          <div className="flex items-center justify-between gap-3 mt-3 pt-2 border-t border-neutral-800/30 flex-wrap">
             <MessageMetrics message={msg} />
             {/* <MessageFeedback
               threadId={thread_id}
@@ -296,9 +292,9 @@ export const AiMessage: React.FC<{
         )}
 
         {isTyping && (
-          <div className="rounded-lg bg-neutral-800/30 p-3 flex items-center gap-2.5 mt-3 border border-neutral-700/50">
-            <Pencil className="h-4 w-4 text-neutral-400 animate-pulse" />
-            <span className="text-sm text-neutral-300">Thinking...</span>
+          <div className="rounded bg-neutral-800/20 px-2 py-1.5 flex items-center gap-2 mt-2 border border-neutral-800/30">
+            <Pencil className="h-3.5 w-3.5 text-neutral-400 animate-pulse" />
+            <span className="text-xs text-neutral-400">Thinking...</span>
           </div>
         )}
       </div>
