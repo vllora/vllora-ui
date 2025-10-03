@@ -26,8 +26,7 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
     const navigate = useNavigate();
     const urlThreadId = searchParams?.get('threadId');
 
-    const currentThreadChanges = useMemo(() => threadsHaveChanges[thread.id], [thread.id, threadsHaveChanges])
-
+    const currentThreadChanges = useMemo(() => threadsHaveChanges[thread.id], [thread.id, threadsHaveChanges]);
     // Use URL parameter for immediate feedback, fallback to context only if URL param is null
     const isSelected = urlThreadId ? urlThreadId === thread.id : selectedThreadId === thread.id;
 
@@ -193,6 +192,12 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                                         </TooltipContent>
                                     </Tooltip>
                                 </TooltipProvider>
+                                <button
+                                    onClick={handleTitleEdit}
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-[rgb(var(--theme-500))] focus:outline-none focus:text-[rgb(var(--theme-500))]"
+                                >
+                                    <PencilIcon className="w-3.5 h-3.5" />
+                                </button>
                                 {currentThreadChanges?.messages?.length > 0 && !isSelected && (
                                     <TooltipProvider>
                                         <Tooltip>
@@ -210,12 +215,7 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                                         Draft
                                     </span>
                                 )}
-                                <button
-                                    onClick={handleTitleEdit}
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-[rgb(var(--theme-500))] focus:outline-none focus:text-[rgb(var(--theme-500))]"
-                                >
-                                    <PencilIcon className="w-3.5 h-3.5" />
-                                </button>
+                                
                             </div>
                         )}
                     </div>

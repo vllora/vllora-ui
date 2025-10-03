@@ -45,7 +45,8 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
     [threadId: string]: {
       messages: {
         message_id: string;
-        status: 'start' | 'streaming' | 'end'
+        status: 'start' | 'streaming' | 'end',
+        timestamp: number
       }[]
     }
   }>({});
@@ -71,16 +72,39 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
     event: TextMessageStartEvent | TextMessageEndEvent | TextMessageContentEvent 
   }) => {
     const { threadId, event } = input;
-    setThreadsHaveChanges((prev) => ({
-      ...prev,
-      [threadId]: {
-        messages: [...(prev[threadId]?.messages || []), {
+    setThreadsHaveChanges((prev) => {
+      let prevThread = prev[threadId];
+      console.log('==== prevThread onThreadMessageHaveChanges', prevThread);
+      if(prevThread) {
+        let prevMessages = prevThread.messages;
+        // filter out the message with message_id = event.message_id
+        let newMessages = prevMessages.filter((m) => m.message_id !== event.message_id);
+        newMessages.push({
           message_id: event.message_id,
           status: event.type === 'TextMessageStart' ? 'start' : event.type === 'TextMessageContent' ? 'streaming' : 'end',
           timestamp: event.timestamp
-        }]
+        });
+        // sort newMessages by timestamp
+        newMessages.sort((a, b) => b.timestamp - a.timestamp);
+        return {
+          ...prev,
+          [threadId]: {
+            messages: [...newMessages]
+          }
+        }
+      } else {
+        return {
+          ...prev,
+          [threadId]: {
+            messages: [{
+              message_id: event.message_id,
+              status: event.type === 'TextMessageStart' ? 'start' : event.type === 'TextMessageContent' ? 'streaming' : 'end',
+              timestamp: event.timestamp
+            }]
+          }
+        }
       }
-    }));
+    });
     // update the update_at in thread, current value updated_at have format "2025-07-10 06:00:33"
     let newUpdatedAt = event.timestamp;
     // convert newUpdatedAt (timestamp number in milliseconds) to format "2025-07-10 06:00:33"
@@ -125,16 +149,38 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
     event: MessageCreatedEvent
   }) => {
     const { threadId, event } = input;
-    setThreadsHaveChanges((prev) => ({
-      ...prev,
-      [threadId]: {
-        messages: [...(prev[threadId]?.messages || []), {
-          message_id: event.value.message_id,
+    setThreadsHaveChanges((prev) => {
+      let prevThread = prev[threadId];
+      if(prevThread) {
+        let prevMessages = prevThread.messages;
+        // filter out the message with message_id = event.message_id
+        let newMessages = prevMessages.filter((m) => m.message_id !== event.value.message_id);
+        newMessages.push({
+          message_id:  event.value.message_id,
           status: 'end',
           timestamp: event.timestamp
-        }]
+        });
+        // sort newMessages by timestamp
+        newMessages.sort((a, b) => b.timestamp - a.timestamp);
+        return {
+          ...prev,
+          [threadId]: {
+            messages: [...newMessages]
+          }
+        }
+      } else {
+        return {
+          ...prev,
+          [threadId]: {
+            messages: [{
+              message_id: event.value.message_id,
+              status: 'end',
+              timestamp: event.timestamp
+            }]
+          }
+        }
       }
-    }));
+    });
     // update the update_at in thread, current value updated_at have format "2025-07-10 06:00:33"
     let newUpdatedAt = event.timestamp;
     // convert newUpdatedAt (timestamp number in milliseconds) to format "2025-07-10 06:00:33"
@@ -162,6 +208,7 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
         updated_at: new Date(Date.parse(t.updated_at + 'Z')).toString(),
       }));
       setThreads(newThreads);
+      setThreadsHaveChanges({});
       setTotal(pagination.total);
       setOffset(pagination.offset + newThreads.length);
       setHasMore(pagination.limit + pagination.offset < pagination.total);
