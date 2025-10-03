@@ -230,7 +230,9 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
               <div className="flex items-center gap-2">
                 <CurrencyDollarIcon className="w-4 h-4 text-teal-500" />
                 <span className="text-muted-foreground">Cost</span>
-                <span className="font-medium text-foreground">${cost.toFixed(4)}</span>
+                <span className="font-medium text-foreground">
+                  {cost > 0 && cost < 0.0001 ? '<$0.0001' : `$${cost.toFixed(4)}`}
+                </span>
               </div>
             )}
             {inputTokens !== undefined && (
