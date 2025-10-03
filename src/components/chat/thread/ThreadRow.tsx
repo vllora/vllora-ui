@@ -3,7 +3,7 @@ import { ThreadsConsumer } from "@/contexts/ThreadsContext";
 import { ProjectsConsumer } from "@/contexts/ProjectContext";
 import { ClockIcon, CurrencyDollarIcon, ExclamationTriangleIcon, PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { formatDistanceToNow, format } from "date-fns";
-import React, { useCallback, useRef, useState, useMemo, useEffect } from "react";
+import React, { useCallback, useRef, useState, useMemo } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Input } from "../../ui/input";
 import { ListProviders } from "./ListProviders";
@@ -17,7 +17,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../
 import { motion } from "framer-motion";
 import { ErrorTooltip } from "./ErrorTooltip";
 
-export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
+export const ThreadRow = React.memo(({ thread, timeUpdateTrigger }: { thread: Thread; timeUpdateTrigger?: number }) => {
     const { renameThread, deleteDraftThread, selectedThreadId, threadsHaveChanges } = ThreadsConsumer();
     const { currentProjectId, isDefaultProject } = ProjectsConsumer();
     const [isEditing, setIsEditing] = useState(false);
@@ -90,7 +90,7 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
         const createdDate = isValidDate ? date : null;
 
         return { haveErrors, formattedStartTime, createdDate };
-    }, [thread.errors, thread.updated_at]);
+    }, [thread.errors, thread.updated_at, timeUpdateTrigger]);
 
     const handleTitleEdit = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
