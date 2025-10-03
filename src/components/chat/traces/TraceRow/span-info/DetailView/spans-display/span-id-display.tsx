@@ -79,7 +79,7 @@ export const IdDisplay = ({ id, type, className = "" }: IdDisplayProps) => {
 
       </div>
       <div className="flex items-center gap-2">
-        {type.toLowerCase() === 'trace' && <Tooltip>
+        {type.toLowerCase() === 'trace' && <TooltipProvider><Tooltip>
           <TooltipTrigger asChild>
             <a href={buildFilterUrl('traceIds', id)} >
               <FunnelIcon className="h-3.5 w-3.5 cursor-pointer hover:text-teal-500" />
@@ -88,8 +88,8 @@ export const IdDisplay = ({ id, type, className = "" }: IdDisplayProps) => {
           <TooltipContent side="bottom">
             <p className="text-xs">Click to filter by this trace</p>
           </TooltipContent>
-        </Tooltip>}
-        {type.toLowerCase() === 'thread' && <Tooltip>
+        </Tooltip></TooltipProvider>}
+        {type.toLowerCase() === 'thread' && <TooltipProvider><Tooltip>
           <TooltipTrigger asChild>
             <a href={buildFilterUrl('threadIds', id)} >
               <FunnelIcon className="h-3.5 w-3.5 cursor-pointer hover:text-teal-500" />
@@ -98,8 +98,8 @@ export const IdDisplay = ({ id, type, className = "" }: IdDisplayProps) => {
           <TooltipContent side="bottom">
             <p className="text-xs">Click to filter by this thread</p>
           </TooltipContent>
-        </Tooltip>}
-        {type.toLowerCase() === 'run' && <Tooltip>
+        </Tooltip></TooltipProvider>}
+        {type.toLowerCase() === 'run' && <TooltipProvider><Tooltip>
           <TooltipTrigger asChild>
             <a href={buildFilterUrl('runIds', id)} >
               <FunnelIcon className="h-3.5 w-3.5 cursor-pointer hover:text-teal-500" />
@@ -108,8 +108,8 @@ export const IdDisplay = ({ id, type, className = "" }: IdDisplayProps) => {
           <TooltipContent side="bottom">
             <p className="text-xs">Click to filter by this run</p>
           </TooltipContent>
-        </Tooltip>}
-        {type.toLowerCase() === 'thread' && !isInThreadsUrl && <Tooltip>
+        </Tooltip></TooltipProvider>}
+        {type.toLowerCase() === 'thread' && !isInThreadsUrl && <TooltipProvider><Tooltip>
           <TooltipTrigger asChild>
             <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5 cursor-pointer hover:text-teal-500" />
 
@@ -117,7 +117,7 @@ export const IdDisplay = ({ id, type, className = "" }: IdDisplayProps) => {
           <TooltipContent side="bottom">
             <p className="text-xs">Click to view this thread</p>
           </TooltipContent>
-        </Tooltip>}
+        </Tooltip></TooltipProvider>}
         <CopyTextButton text={id} tooltipText={`Copy ${displayType} ID`} />
       </div>
     </div>
