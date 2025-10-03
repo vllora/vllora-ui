@@ -8,6 +8,7 @@ import { fetchAllSpansByRunId } from '@/utils/traces';
 import { RunDTO, Span } from '@/types/common-type';
 import { LangDBEventSpan } from './project-events/dto';
 import { convertSpanToRunDTO, convertToNormalSpan } from './project-events/util';
+import { skipThisSpan } from '@/utils/graph-utils';
 
 export interface SelectedSpanInfo {
   spanId: string;
@@ -118,6 +119,8 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
       setRunsOffset(newOffset);
       setHasMoreRuns(newHasMore);
       setRawRuns(runs);
+      setSelectedSpanInfo(null);
+      setOpenTraces([]);
 
       return response;
     },
@@ -245,7 +248,22 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
       try {
         const relatedSpans = await fetchAllSpansByRunId(runId, projectIdRef.current);
+        let firstSpan  = undefined
+        for (let i = 0; i < relatedSpans.length; i++) {
+          if(skipThisSpan(relatedSpans[i])) {
+            continue;
+          }
+          firstSpan = relatedSpans[i];
+          break;
+        }
         setSpanMap((prev) => ({ ...prev, [runId]: relatedSpans }));
+        // auto select the first span
+        if(firstSpan) {
+          setSelectedSpanInfo({
+            runId,
+            spanId: firstSpan.span_id,
+          });
+        }
       } catch (e: any) {
         console.error('==== Error fetching spans by run id:', e);
         toast.error('Failed to fetch span details', {
@@ -273,10 +291,6 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   const selectedSpan = useMemo(() => {
     return selectedSpanInfo?.spanId ? spansOfSelectedRun.find(s => s.span_id === selectedSpanInfo.spanId) : undefined;
   }, [selectedSpanInfo, spansOfSelectedRun]);
-
-
-
-
   return {
     spansOfSelectedRun,
     selectedRun,
