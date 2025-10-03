@@ -85,9 +85,8 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
         const isValidDate = !isNaN(date.getTime());
 
         const formattedStartTime = isValidDate
-            ? formatDistanceToNow(date, { addSuffix: true })
+            ? formatDistanceToNow(date, { addSuffix: true }).replace('less than a minute ago', 'just now')
             : 'Unknown time';
-
         const createdDate = isValidDate ? date : null;
 
         return { haveErrors, formattedStartTime, createdDate };
@@ -198,18 +197,6 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                                 >
                                     <PencilIcon className="w-3.5 h-3.5" />
                                 </button>
-                                {currentThreadChanges?.messages?.length > 0 && !isSelected && (
-                                    <TooltipProvider>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <div className="w-2 h-2 rounded-full bg-[rgb(var(--theme-500))] animate-pulse" />
-                                            </TooltipTrigger>
-                                            <TooltipContent side="top">
-                                                {currentThreadChanges?.messages?.length} new {currentThreadChanges?.messages?.length === 1 ? 'update' : 'updates'}
-                                            </TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>
-                                )}
                                 {thread.is_from_local && (
                                     <span className="text-xs px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 font-medium">
                                         Draft
@@ -222,6 +209,8 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
 
                     {/* Right side metadata */}
                     <div className="flex items-center gap-2">
+                        
+
                         {/* Error indicator */}
                         {haveErrors && (
                             <ErrorTooltip errors={thread.errors || []} side="top">
@@ -284,6 +273,22 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                         <div>
                             <ThreadTagsDisplay tags={tagsDisplay} />
                         </div>
+                    )}
+                    {/* Unread indicator */}
+                    {currentThreadChanges?.messages?.length > 0 && !isSelected && (
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div className="relative flex items-center justify-center w-2 h-2 flex-shrink-0">
+                                        <div className="absolute w-2 h-2 rounded-full bg-[rgb(var(--theme-500))] animate-ping opacity-75" />
+                                        <div className="relative w-1.5 h-1.5 rounded-full bg-[rgb(var(--theme-500))]" />
+                                    </div>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">
+                                    {currentThreadChanges?.messages?.length} new {currentThreadChanges?.messages?.length === 1 ? 'update' : 'updates'}
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
                     )}
                     {/* Delete button for local threads */}
                     {thread.is_from_local && (
