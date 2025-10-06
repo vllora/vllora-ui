@@ -158,14 +158,14 @@ export const convertSpanToRunDTO = (span: Span, prevDTO?: RunDTO): RunDTO => {
           }
         }
       }
+
       if (att_api_invoke.cost) {
         let cost = tryParseJson(att_api_invoke.cost);
         if (cost) {
           result.cost += cost.cost;
         }
       }
-    }
-    if(span.operation_name === 'model_call') {
+    } else if(span.operation_name === 'model_call') {
       let att_model_call = span.attribute as any;
       if(att_model_call.usage) {
         let usage = tryParseJson(att_model_call.usage);
@@ -183,6 +183,14 @@ export const convertSpanToRunDTO = (span: Span, prevDTO?: RunDTO): RunDTO => {
             (value, index) => newArray.indexOf(value) === index
           );
           result.request_models = uniqueArray;
+        }
+      }
+    } else {
+      let att_span = span.attribute as any;
+      if (att_span.cost) {
+        let cost = parseFloat(att_span.cost);
+        if (cost) {
+          result.cost += cost;
         }
       }
     }
