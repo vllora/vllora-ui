@@ -20,7 +20,6 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
   const internalMessagesEndRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = externalMessagesEndRef || internalMessagesEndRef;
   const [inViewport] = useInViewport(messagesEndRef);
-
   useEffect(() => {
     if (externalScrollToBottom) {
       externalScrollToBottom();
