@@ -118,7 +118,7 @@ export function useConversationEvents(props: {
                       metrics: [
                         {
                           ttft: parseInt(event.value.span.attribute.ttft),
-                          duration: event.value.span.end_time_unix_nano - event.value.span.start_time_unix_nano,
+                          duration: (event.value.span.end_time_unix_nano - event.value.span.start_time_unix_nano) / 1000,
                           start_time_us: event.value.span.start_time_unix_nano,
                           usage: JSON.parse(event.value.span.attribute.usage),
                           cost: parseFloat(event.value.span.attribute.cost),
