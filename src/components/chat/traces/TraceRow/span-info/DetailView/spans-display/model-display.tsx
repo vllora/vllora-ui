@@ -35,7 +35,6 @@ export const ModelInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
     const currentAttribute = span.attribute as any;
     const modelCallAttribute = modelCallSpan?.attribute as any;
     const apiInvokeAttribute = apiInvokeSpan?.attribute as any;
-
     const apiCloudInvokeAttribute = apiCloudInvokeSpan?.attribute as any;
     const headersStr = apiCloudInvokeAttribute?.['http.request.header'];
     const headers = headersStr ? tryParseJson(headersStr) : undefined;
@@ -59,7 +58,7 @@ export const ModelInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
     const raw_response_json = raw_response_string ? tryParseJson(raw_response_string) : null;
     const isFinishReasonStop = raw_response_json?.finish_reason === 'stop';
     const otherLevelMessages = (isSingleSpan || isFinishReasonStop) ? (apiInvokeAttribute?.response ? [apiInvokeAttribute?.response] : undefined) : undefined;
-    const cost_str = apiInvokeAttribute?.cost;
+    const cost_str = currentAttribute?.cost || apiInvokeAttribute?.cost;
     const ttf_str = modelCallAttribute?.ttft;
     const usage_str = currentAttribute?.usage;
     const modelJsonStr = apiInvokeAttribute?.model || modelCallAttribute?.model;
