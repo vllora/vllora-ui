@@ -95,33 +95,6 @@ const TraceMainContentImpl: React.FC<TraceMainContentProps> = ({
   );
 };
 
-// Custom comparison function to prevent unnecessary re-renders
-const arePropsEqual = (
-  prevProps: TraceMainContentProps,
-  nextProps: TraceMainContentProps
-) => {
-  // Check primitive props first (fastest)
-  if (
-    prevProps.loadingSpans !== nextProps.loadingSpans ||
-    prevProps.hasMore !== nextProps.hasMore ||
-    prevProps.loadingMore !== nextProps.loadingMore ||
-    prevProps.threadId !== nextProps.threadId
-  ) {
-    return false;
-  }
-
-  // Efficiently compare runs arrays
-  const prevRuns = prevProps.runs;
-  const nextRuns = nextProps.runs;
-  if (prevRuns === nextRuns) return true; // Same reference
-  if (!prevRuns || !nextRuns) return prevRuns === nextRuns;
-  if (prevRuns.length !== nextRuns.length) return false;
-  for (let i = 0; i < prevRuns.length; i++) {
-    if (prevRuns[i].run_id !== nextRuns[i].run_id) return false;
-  }
-
-  return true;
-};
 
 // Export memoized component
-export const TraceMainContent = React.memo(TraceMainContentImpl, arePropsEqual);
+export const TraceMainContent = TraceMainContentImpl;

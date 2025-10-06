@@ -197,6 +197,72 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
       }
    });
   }, []);
+  const upsertRun = useCallback((input: {
+    runId: string;
+    timestamp: number;
+    threadId: string;
+    request_models?: string[];
+    used_models?: string[];
+    used_tools?: string[];
+    mcp_template_definition_ids?: string[];
+    cost?: number;
+    input_tokens?: number;
+    output_tokens?: number;
+    errors?: string[];
+  })=> {
+    if(input.threadId !== threadId) return;
+    setRawRuns(prev => {
+      const runIndex = prev.findIndex(r => r.run_id === input.runId && r.thread_ids.includes(input.threadId));
+      // Create new run
+      if(runIndex === -1) {
+        const startTime_micro = input.timestamp * 1000;
+        const newRunDTO: RunDTO = {
+          run_id: input.runId,
+          thread_ids: [input.threadId],
+          trace_ids: [],
+          used_models: input.used_models || [],
+          request_models: input.request_models || [],
+          used_tools: input.used_tools || [],
+          mcp_template_definition_ids: input.mcp_template_definition_ids || [],
+          cost: input.cost || 0,
+          input_tokens: input.input_tokens || 0,
+          output_tokens: input.output_tokens || 0,
+          start_time_us: startTime_micro,
+          finish_time_us: startTime_micro,
+          errors: input.errors || [],
+        };
+        return [newRunDTO, ...prev];
+      }
+
+      // Update existing run
+      const existingRun = prev[runIndex];
+      const newRun: RunDTO = {
+        ...existingRun,
+        used_models: input.used_models?.length
+          ? [...new Set([...existingRun.used_models, ...input.used_models])]
+          : existingRun.used_models,
+        request_models: input.request_models?.length
+          ? [...new Set([...existingRun.request_models, ...input.request_models])]
+          : existingRun.request_models,
+        used_tools: input.used_tools?.length
+          ? [...new Set([...existingRun.used_tools, ...input.used_tools])]
+          : existingRun.used_tools,
+        mcp_template_definition_ids: input.mcp_template_definition_ids?.length
+          ? [...new Set([...existingRun.mcp_template_definition_ids, ...input.mcp_template_definition_ids])]
+          : existingRun.mcp_template_definition_ids,
+        cost: input.cost ?? existingRun.cost,
+        input_tokens: input.input_tokens ?? existingRun.input_tokens,
+        output_tokens: input.output_tokens ?? existingRun.output_tokens,
+        errors: input.errors?.length ? input.errors : existingRun.errors,
+      };
+
+      const updated = [...prev];
+      updated[runIndex] = newRun;
+      return updated;
+    });
+  }, [threadId])
+
+
   // Refresh runs function (reset and reload from beginning)
   const refreshRuns = useCallback(() => {
     setRunsOffset(0);
@@ -339,6 +405,9 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     setTraceId,
     usageInfo,
     appendUsage,
+
+
+    upsertRun,
   };
 }
 export function ChatWindowProvider({ children, threadId, projectId }: { children: ReactNode, threadId: string, projectId: string }) {

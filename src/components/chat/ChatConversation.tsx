@@ -81,7 +81,6 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
                     style={{ animationDelay: '300ms' }}
                   />
                 </div>
-                <span className="text-sm text-muted-foreground">Thinking…</span>
               </div>
             </div>
           </div>
