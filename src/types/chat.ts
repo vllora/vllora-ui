@@ -60,6 +60,8 @@ export interface Message {
   created_at?: string;
   tool_calls?: ToolCall[];
   metrics?: MessageMetrics[];
+
+  is_from_local?: boolean;
 }
 
 export interface Thread {

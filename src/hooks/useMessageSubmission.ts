@@ -156,6 +156,7 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
         content_type: MessageContentType.Text,
         thread_id: threadId,
         files,
+        is_from_local: true,
       };
 
       setMessages((prevMessages) => {
