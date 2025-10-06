@@ -15,8 +15,6 @@ export function useThreadsEvents(props: {
     const unsubscribe = subscribe(
       'chat-page-events',
       (event: ProjectEventUnion) => {
-        console.log("===== event", event);
-
         if(event.type === 'TextMessageStart') {
           const textMessageStartEvent = event as TextMessageStartEvent;
           textMessageStartEvent && textMessageStartEvent.thread_id && onThreadMessageHaveChanges({
@@ -68,7 +66,6 @@ export function useThreadsEvents(props: {
             return;
            }
            if(event.value && (event as ThreadModelStartEvent).name === 'model_start') {
-            console.log("===== model_start event", event);
             const threadModelStartEvent = event as ThreadModelStartEvent;
             threadModelStartEvent && threadModelStartEvent.thread_id && onThreadModelStartEvent({
               threadId: threadModelStartEvent.thread_id,
