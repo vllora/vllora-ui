@@ -350,34 +350,7 @@ const SidebarModelCallSummaryTracesImpl = ({
   );
 };
 
-// Custom comparison function for React.memo to prevent unnecessary re-renders
-const arePropsEqual = (
-  prevProps: ModelCallSummaryTracesProps,
-  nextProps: ModelCallSummaryTracesProps
-) => {
-  // Check primitive props first (fastest)
-  if (
-    prevProps.isOpen !== nextProps.isOpen ||
-    prevProps.isInSidebar !== nextProps.isInSidebar
-  ) {
-    return false;
-  }
-
-  // Check run ID
-  if (prevProps.run?.run_id !== nextProps.run?.run_id) {
-    return false;
-  }
-
-  // Check function references - these should be stable from useCallback
-  if (prevProps.onChevronClick !== nextProps.onChevronClick) {
-    return false;
-  }
-
-  return true;
-};
-
 // Export memoized component
 export const ModelCallSummaryTraces = React.memo(
-  SidebarModelCallSummaryTracesImpl,
-  arePropsEqual
+  SidebarModelCallSummaryTracesImpl
 );

@@ -16,7 +16,6 @@ interface TraceRowProps {
 const TraceRowImpl = ({ run, index = 0, isInSidebar = false }: TraceRowProps) => {
   const { openTraces, setOpenTraces, fetchSpansByRunId } = ChatWindowConsumer();
   const traceOrRunId = run.run_id || '';
-
   const isOpen = openTraces.includes(traceOrRunId);
   const toggleAccordion = useCallback(() => {
     setOpenTraces(prev => {
@@ -77,23 +76,5 @@ const TraceRowImpl = ({ run, index = 0, isInSidebar = false }: TraceRowProps) =>
   );
 };
 
-// Custom comparison function to prevent unnecessary re-renders
-const arePropsEqual = (prevProps: TraceRowProps, nextProps: TraceRowProps) => {
-  // Check primitive props first (fastest)
-  if (prevProps.index !== nextProps.index ||
-    prevProps.isInSidebar !== nextProps.isInSidebar) {
-    return false;
-  }
-
-  // Check run efficiently
-  const prevRun = prevProps.run;
-  const nextRun = nextProps.run;
-  if (prevRun?.run_id !== nextRun?.run_id) {
-    return false;
-  }
-
-  return true;
-};
-
 // Export memoized component
-export const TraceRow = React.memo(TraceRowImpl, arePropsEqual);
+export const TraceRow = React.memo(TraceRowImpl);
