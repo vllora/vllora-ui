@@ -66,16 +66,13 @@ export const AiMessage: React.FC<{
   }, [canClickToOpenTrace, metrics, setOpenTraces, fetchSpansByRunId]);
 
   const handleMouseEnter = useCallback(() => {
-    // Only highlight if there's no currently selected run
-    if (selectedSpanInfo?.runId) return;
-
     if (metrics && Array.isArray(metrics) && metrics.length > 0) {
       const runId = metrics[0]?.run_id;
       if (runId) {
         setHoveredRunId(runId);
       }
     }
-  }, [metrics, selectedSpanInfo, setHoveredRunId]);
+  }, [metrics, setHoveredRunId]);
 
   const handleMouseLeave = useCallback(() => {
     setHoveredRunId(null);
