@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/anhthuduong/Documents/GitHub/langdb-cloud-ui-new/src/components/LimitDisplay/**)",
+      "Read(//Users/anhthuduong/Documents/GitHub/ai-gateway/gateway/src/**)",
+      "Bash(cat:*)",
+      "Read(//Users/anhthuduong/Documents/GitHub/ai-gateway/core/src/types/**)",
+      "Read(//Users/anhthuduong/Documents/GitHub/ai-gateway/core/src/metadata/services/**)",
+      "Bash(npm install:*)",
+      "Bash(npm --version)",
+      "Bash(pnpm:*)",
+      "Bash(git submodule add:*)",
+      "Bash(cargo check:*)",
+      "Bash(lsof:*)",
+      "Bash(curl:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

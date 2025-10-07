@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "build-app": "cd ai-gateway && cargo build --release && cd .. && pnpm tauri:build"
   },
   "repository": {
     "type": "git",
@@ -23,6 +27,8 @@
   "homepage": "https://github.com/langdb/llm-studio-ui#readme",
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",
+    "@tauri-apps/api": "^2.8.0",
+    "@tauri-apps/cli": "^2.8.4",
     "@types/react": "^19.1.15",
     "@types/react-dom": "^19.1.9",
     "@types/react-syntax-highlighter": "^15.5.13",
