@@ -26,11 +26,10 @@ export const ThreadsSidebar: React.FC<ChatSidebarProps> = ({
       </div>
 
       {/* New Chat Button */}
-      <div className="p-4 h-16 border-b border-border flex items-center">
+      <div className="px-4 h-16 border-b border-border flex items-center">
         <Button
           onClick={onNewThread}
-          variant="outline"
-          className="w-full text-[rgb(var(--theme-600))] dark:text-[rgb(var(--theme-400))] hover:bg-[rgba(var(--theme-500),0.1)] font-medium"
+          className="w-full bg-gradient-to-r from-[rgb(var(--theme-600))] to-[rgb(var(--theme-500))] hover:from-[rgb(var(--theme-700))] hover:to-[rgb(var(--theme-600))] text-white font-semibold shadow-sm hover:shadow-md transition-all duration-200"
         >
           <MessageSquarePlus className="w-4 h-4 mr-2" />
           New Chat

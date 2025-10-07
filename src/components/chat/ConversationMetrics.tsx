@@ -22,8 +22,8 @@ export const ConversationMetrics: React.FC<ConversationMetricsProps> = ({
 }) => {
   const formatMoney = (amount: number) => {
     if (amount === 0) return "$0.00";
-    if (amount < 0.0001) return "<$0.0001";
-    return `$${amount.toFixed(4)}`;
+    if (amount < 0.0001) return "< $0.0001";
+    return `≤ $${amount.toFixed(4)}`;
   };
 
   const displayDuration = duration ? formatMiliSecondsToSeconds(duration) : undefined;
