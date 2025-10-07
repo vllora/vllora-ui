@@ -11,6 +11,7 @@ import { LocalModelsProvider } from "./contexts/LocalModelsContext"
 import { Toaster } from "sonner"
 import { useEffect } from "react"
 import { applyTheme, getThemeFromStorage } from "./themes/themes"
+import { ProviderKeysProvider } from "./contexts/ProviderKeysContext"
 
 
 function App() {
@@ -33,7 +34,7 @@ function App() {
 
               {/* Global routes */}
               <Route path="projects" element={<ProjectsPage />} />
-              <Route path="settings" element={<SettingsPage />} />
+              <Route path="settings" element={<ProviderKeysProvider><SettingsPage /></ProviderKeysProvider>} />
             </Route>
           </Routes>
           <Toaster position="top-right" richColors />
