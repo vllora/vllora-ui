@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, PanelRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { TraceView } from './traces/TraceView';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
@@ -57,9 +57,9 @@ export const TracesRightSidebar: React.FC<TracesRightSidebarProps> = ({
           className="hover:bg-accent transition-all duration-200 flex-shrink-0"
         >
           {isCollapsed ? (
-            <ChevronLeft className="h-4 w-4" />
+            <PanelRight className="h-4 w-4" />
           ) : (
-            <ChevronRight className="h-4 w-4" />
+            <PanelRight className="h-4 w-4" />
           )}
         </Button>
       </div>

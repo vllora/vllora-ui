@@ -7,6 +7,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
+  PanelLeftCloseIcon,
+  PanelLeftOpenIcon,
+  PanelLeftIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -87,9 +90,9 @@ export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSideb
             onClick={onToggle}
           >
             {isCollapsed ? (
-              <ChevronRight className="h-4 w-4" />
+              <PanelLeftIcon className="h-4 w-4" />
             ) : (
-              <ChevronLeft className="h-4 w-4" />
+              <PanelLeftIcon className="h-4 w-4" />
             )}
           </Button>
         </div>
