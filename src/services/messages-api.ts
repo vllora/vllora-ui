@@ -33,7 +33,16 @@ export async function getMessageById(props: {
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch message: ${response.statusText}`);
+    let errorMessage = `Failed to fetch message: ${response.statusText}`;
+    try {
+      const errorData = await response.json();
+      if (errorData.message || errorData.error || errorData.detail) {
+        errorMessage = errorData.message || errorData.error || errorData.detail;
+      }
+    } catch (e) {
+      // If parsing error response fails, use default message
+    }
+    throw new Error(errorMessage);
   }
 
   return await response.json();
@@ -56,7 +65,16 @@ export async function queryMessages(
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch messages: ${response.statusText}`);
+    let errorMessage = `Failed to fetch messages: ${response.statusText}`;
+    try {
+      const errorData = await response.json();
+      if (errorData.message || errorData.error || errorData.detail) {
+        errorMessage = errorData.message || errorData.error || errorData.detail;
+      }
+    } catch (e) {
+      // If parsing error response fails, use default message
+    }
+    throw new Error(errorMessage);
   }
 
   return await response.json();

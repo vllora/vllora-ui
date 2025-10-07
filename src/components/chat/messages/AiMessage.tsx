@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   Wrench,
+  ExternalLink,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -15,18 +16,20 @@ import {
 } from '@/components/ui/tooltip';
 import { AvatarItem } from './AvatarItem';
 import { Message } from '@/types/chat';
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { MessageDisplay } from '../MessageDisplay';
 import { formatMessageTime } from '@/utils/dateUtils';
 import { MessageMetrics } from './MessageMetrics';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { CheckIcon, ClipboardDocumentIcon } from '@heroicons/react/24/outline';
 import ReactJson from 'react-json-view';
+import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 
 export const AiMessage: React.FC<{
   message?: Message;
   isTyping?: boolean;
 }> = ({ message: msg, isTyping }) => {
+  const { setOpenTraces, fetchSpansByRunId } = ChatWindowConsumer();
 
   const [copied, setCopied] = useState(false);
   const [toolCopiedStates, setToolCopiedStates] = useState<{
@@ -36,6 +39,14 @@ export const AiMessage: React.FC<{
     [key: string]: boolean;
   }>({});
 
+  const metrics = msg?.metrics;
+  const canClickToOpenTrace = useMemo(() => {
+    if (!metrics) return false;
+    if (!Array.isArray(metrics)) return false;
+    if (metrics.length === 0) return false;
+    return metrics[0]?.trace_id && metrics[0]?.trace_id.length > 0;
+  }, [metrics]);
+
   // Extract provider name from model_name (e.g., "openai/gpt-4" -> "openai")
   const getProviderName = (modelName?: string) => {
     if (!modelName) return 'default';
@@ -44,6 +55,16 @@ export const AiMessage: React.FC<{
   };
 
   const providerName = getProviderName(msg?.model_name);
+
+  const handleOpenTrace = useCallback(() => {
+    if (!canClickToOpenTrace || !metrics || !Array.isArray(metrics) || metrics.length === 0) return;
+    const runId = metrics[0]?.run_id;
+    if (!runId) return;
+
+    // Open the trace and fetch spans
+    setOpenTraces([runId]);
+    fetchSpansByRunId(runId);
+  }, [canClickToOpenTrace, metrics, setOpenTraces, fetchSpansByRunId]);
 
   return (
     <div className={`flex gap-3 items-start group`}>
@@ -80,6 +101,24 @@ export const AiMessage: React.FC<{
                 <Clock className="h-3 w-3 mr-1" />
                 <span>{formatMessageTime(msg.created_at)}</span>
               </div>
+            )}
+            {canClickToOpenTrace && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={handleOpenTrace}
+                      className="flex items-center gap-1 px-2 py-0.5 text-xs text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 rounded transition-colors border border-blue-400/30 hover:border-blue-400/50"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      <span>View Trace</span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Open trace details for this message</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             )}
           </div>
           {msg?.content && (

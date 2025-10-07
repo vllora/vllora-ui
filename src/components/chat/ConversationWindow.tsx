@@ -22,6 +22,7 @@ interface ChatWindowProps {
   inputTokens?: number;
   outputTokens?: number;
   onModelChange?: (modelId: string) => void;
+  isDraft?: boolean;
 }
 
 export const ConversationWindow: React.FC<ChatWindowProps> = ({
@@ -36,6 +37,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
   inputTokens,
   outputTokens,
   onModelChange,
+  isDraft = false,
 }) => {
   // Get all state from context
   const {
@@ -57,11 +59,13 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
   } = ChatWindowConsumer();
 
   useEffect(() => {
-    if(threadId) {
+    if(threadId && !isDraft) {
       clearMessages();
       refreshMessages();
+    } else if(threadId && isDraft) {
+      clearMessages();
     }
-  }, [threadId])
+  }, [threadId, isDraft])
 
   useConversationEvents({
     currentProjectId: projectId || '',
