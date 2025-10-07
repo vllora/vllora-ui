@@ -384,6 +384,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
       );
     });
   }, []);
+  
   const upsertMessage = useCallback(
     (input: {
       message_id: string;
@@ -476,7 +477,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
    *
    * @param runId - The run ID to fetch spans for
    */
-  const fetchSpansByRunIdCallback = useCallback(
+  const fetchSpansByRunId = useCallback(
     async (runId: string) => {
       // Check if already loading this runId to prevent concurrent duplicate requests
       // We use functional state updates to access the latest loadingSpansById without adding it to deps
@@ -566,7 +567,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     setOpenTraces,
     // Span data
     spanMap,
-    fetchSpansByRunId: fetchSpansByRunIdCallback,
+    fetchSpansByRunId,
     loadingSpansById,
     projectId,
     isChatProcessing,

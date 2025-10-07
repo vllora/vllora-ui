@@ -2,19 +2,19 @@ import { useRef } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { cn } from "@/lib/utils";
 import { TimelineContent } from "../../components/TimelineContent";
-import { AlertCircle, Clock } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { CustomErrorFallback } from "../custom-error-fallback";
 import { RunDTO, Span } from "@/types/common-type";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
+import { LoadingState } from "./LoadingState";
 
 // Main component that uses the above components
 export const DetailedRunView: React.FC<{run: RunDTO}> = ({
     run
 }) => {
-    const {spanMap} = ChatWindowConsumer()
+    const {spanMap, loadingSpansById} = ChatWindowConsumer()
     const spansByRunId: Span[] = run.run_id ? spanMap[run.run_id] || [] : []
     const detailViewRef = useRef<HTMLDivElement>(null);
-
     if (spansByRunId?.length > 0) {
         
         return (
@@ -42,8 +42,9 @@ export const DetailedRunView: React.FC<{run: RunDTO}> = ({
 
     // Check if we have resolvedSpans but no initialSpans (empty run)
     const isEmptyRun = spansByRunId.length === 0;
+    const isLoading = run.run_id && loadingSpansById.has(run.run_id);
 
-    if (isEmptyRun) {
+    if (isEmptyRun && !isLoading) {
         return (
             <div className="flex flex-col items-center justify-center py-8 px-4 bg-[#0a0a0a] border border-[#262626] rounded-lg mx-4 my-2">
                 <div className="flex items-center justify-center w-12 h-12 bg-[#1a1a1a] rounded-full mb-4">
@@ -58,14 +59,5 @@ export const DetailedRunView: React.FC<{run: RunDTO}> = ({
     }
 
     // Loading state when we don't have resolvedSpans yet
-    return (
-        <div className="p-4 bg-[#171717]">
-            <div className="flex items-center justify-center py-8">
-                <div className="flex items-center gap-3">
-                    <Clock className="w-5 h-5 text-blue-400 animate-spin" />
-                    <span className="text-sm text-gray-400">Loading execution details...</span>
-                </div>
-            </div>
-        </div>
-    );
+    return <LoadingState />;
 }
