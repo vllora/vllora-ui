@@ -7,8 +7,8 @@ import { useMessageSubmission } from '@/hooks/useMessageSubmission';
 import { emitter } from '@/utils/eventEmitter';
 import { XCircle } from 'lucide-react';
 import { useConversationEvents } from '@/hooks/events/useConversationEvents';
-import { ArrowsPointingInIcon, ArrowsPointingOutIcon, CurrencyDollarIcon } from '@heroicons/react/24/outline';
 import { Message } from '@/types/chat';
+import { ConversationMetrics } from './ConversationMetrics';
 
 interface ChatWindowProps {
   threadId?: string;
@@ -215,9 +215,9 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
   return (
     <>
       {/* Chat Header */}
-      <div className="border-b border-border bg-card flex-shrink-0">
-        {/* Model Selector */}
-        <div className="p-4">
+      <div className="bg-card flex-shrink-0">
+        {/* Model Selector - Top row aligned with Project Dropdown */}
+        <div className="h-16 px-4 border-b border-border flex items-center bg-card/95 backdrop-blur-xl">
           <div className="max-w-md border border-border rounded-md px-3 py-2">
             <ModelSelector
               selectedModel={modelName || 'Select a model'}
@@ -226,34 +226,13 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
           </div>
         </div>
 
-        {/* Cost and Tokens Display */}
-        {threadId && (cost !== undefined || inputTokens !== undefined || outputTokens !== undefined) && (
-          <div className="px-4 pb-3 flex items-center justify-between text-sm">
-            {cost !== undefined && (
-              <div className="flex items-center gap-2">
-                <CurrencyDollarIcon className="w-4 h-4 text-teal-500" />
-                <span className="text-muted-foreground">Cost</span>
-                <span className="font-medium text-foreground">
-                  {cost > 0 && cost < 0.0001 ? '<$0.0001' : `$${cost.toFixed(4)}`}
-                </span>
-              </div>
-            )}
-            {inputTokens !== undefined && (
-              <div className="flex items-center gap-2">
-                <ArrowsPointingInIcon className="w-4 h-4 text-blue-500" />
-                <span className="text-muted-foreground">Input</span>
-                <span className="font-medium text-foreground">{inputTokens.toLocaleString()} tokens</span>
-              </div>
-            )}
-            {outputTokens !== undefined && (
-              <div className="flex items-center gap-2">
-                <ArrowsPointingOutIcon className="w-4 h-4 text-purple-500" />
-                <span className="text-muted-foreground">Output</span>
-                <span className="font-medium text-foreground">{outputTokens.toLocaleString()} tokens</span>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Cost and Tokens Display - Second row aligned with New Chat button */}
+        <ConversationMetrics
+          threadId={threadId}
+          cost={cost}
+          inputTokens={inputTokens}
+          outputTokens={outputTokens}
+        />
       </div>
 
       {/* Chat Conversation */}

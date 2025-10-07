@@ -12,7 +12,7 @@ export const TraceHeader: React.FC<TraceHeaderProps> = ({
   refreshSpans,
 }) => {
   return (
-    <div className="p-4 border-b border-border flex items-center justify-between">
+    <div className="h-16 px-4 border-b border-border flex items-center justify-between">
       <div>
         <h2 className="text-sm font-semibold text-foreground">Traces</h2>
       </div>

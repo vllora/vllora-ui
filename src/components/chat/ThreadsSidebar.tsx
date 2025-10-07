@@ -26,7 +26,7 @@ export const ThreadsSidebar: React.FC<ChatSidebarProps> = ({
       </div>
 
       {/* New Chat Button */}
-      <div className="p-4 border-b border-border flex items-center">
+      <div className="p-4 h-16 border-b border-border flex items-center">
         <Button
           onClick={onNewThread}
           variant="outline"
