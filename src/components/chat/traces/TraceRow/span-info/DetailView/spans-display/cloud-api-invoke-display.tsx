@@ -1,5 +1,5 @@
 import { Span } from "@/types/common-type";
-import { BaseSpanUIDetailsDisplay, getApiInvokeSpans, getModelCallSpans, getApiCloudInvokeSpans, getParentApiInvoke, getParentCloudApiInvoke } from ".."
+import { BaseSpanUIDetailsDisplay } from ".."
 import { getStatus } from "../index";
 import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { ExclamationTriangleIcon, CheckCircleIcon, ClockIcon, CpuChipIcon, CodeBracketIcon, ChatBubbleLeftRightIcon, DocumentTextIcon, WrenchScrewdriverIcon, BoltIcon } from "@heroicons/react/24/outline";
@@ -10,7 +10,6 @@ import { ExtraParameters } from "../input-viewer";
 import { MessageViewer } from "../message-viewer";
 import { HeadersViewer } from "../headers-viewer";
 import { tryParseJson } from "@/utils/modelUtils";
-import { ProviderIcon } from "@/components/Icons/ProviderIcons";
 import { ToolInfoCall } from "./tool-display";
 import { ToolDefinitionsViewer } from "../tool-definitions-viewer";
 import { BasicSpanInfo } from "../basic-span-info-section";

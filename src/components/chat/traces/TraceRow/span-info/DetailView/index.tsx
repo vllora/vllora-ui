@@ -33,11 +33,6 @@ const findParentApiInvoke = (spans: Span[], parent_span_id: string) => {
   return findParentApiInvoke(spans, span.parent_span_id);
 }
 
-const getParentCall = (spans: Span[], currentSpanId: string) => {
-  let currentSpan = spans.find(s => s.span_id === currentSpanId);
-  let parentSpan = spans.find(s => s.span_id === currentSpan?.parent_span_id);
-  return parentSpan;
-}
 
 const getParentWithOperationName = (spans: Span[], currentSpanId: string, operationName: string) => {
   let currentSpan = spans.find(s => s.span_id === currentSpanId);
@@ -111,7 +106,7 @@ export const getModelCallSpans = (spans: Span[], currentSpanId: string) => {
 
 
 
-export const SpanUIDetailsDisplay = ({ obj }: { obj: any }) => {
+export const SpanUIDetailsDisplay = (_input: { span: Span }) => {
   const { spanMap, selectedSpanInfo } = ChatWindowConsumer();
   let currentSpan = selectedSpanInfo ?  spanMap[selectedSpanInfo?.runId]?.find(span => span.span_id === selectedSpanInfo?.spanId) : undefined;
   let operation_name = currentSpan?.operation_name;
@@ -164,12 +159,7 @@ export const BaseSpanUIDetailsDisplay = ({children, defaultOpen, value, onValueC
 export const SpanModelDetailsDisplay = ({ obj }: { obj: any }) => {
   let usage = obj.usage;
   const { spanMap, selectedSpanInfo } = ChatWindowConsumer();
-  let currentSpan = selectedSpanInfo ? spanMap[selectedSpanInfo?.runId]?.find(span => span.span_id === selectedSpanInfo?.spanId) : undefined;
-  let apiInvokeSpan = selectedSpanInfo ? getApiInvokeSpans(spanMap[selectedSpanInfo?.runId], selectedSpanInfo?.spanId) : undefined;
   let status = selectedSpanInfo ? getStatus(spanMap[selectedSpanInfo?.runId], selectedSpanInfo?.spanId) : undefined;
-  let apiInvokeAttribute = apiInvokeSpan?.attribute as any;
-  // let modelCallAttribute = modelCallSpan?.attribute as any;
-
   let error = undefined //modelCallAttribute?.error || apiInvokeAttribute?.error;
   let output = undefined //modelCallAttribute?.response || modelCallAttribute?.output || apiInvokeAttribute?.response;
   let request = undefined //apiInvokeAttribute?.request

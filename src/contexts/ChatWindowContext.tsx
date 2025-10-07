@@ -1,4 +1,4 @@
-import { createContext, useContext, ReactNode, useCallback, useState, useEffect, useMemo } from 'react';
+import { createContext, useContext, ReactNode, useCallback, useState, useMemo } from 'react';
 import { useRequest, useLatest } from 'ahooks';
 import { toast } from 'sonner';
 import { getMessageById, queryMessages } from '@/services/messages-api';
@@ -81,8 +81,10 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     },
     {
       manual: true,
-      onError: (err) => {
-
+      onError: (err: any) => {
+        toast.error('Failed to load messages', {
+          description: err.message || 'An error occurred while loading messages',
+        });
       },
       onSuccess: (data) => {
         setServerMessages(data);

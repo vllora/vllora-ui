@@ -1,4 +1,4 @@
-import { API_CONFIG, getMessagesUrl, getThreadsUrl } from "@/config/api";
+import { getMessagesUrl, getThreadsUrl } from "@/config/api";
 import { Message } from "@/types/chat";
 
 export interface QueryMessagesRequest {

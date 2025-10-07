@@ -7,10 +7,6 @@ import {
   deleteProvider,
   type ProviderInfo,
   type Credentials,
-  type ApiKeyCredentials,
-  type AwsIAMCredentials,
-  type AwsApiKeyCredentials,
-  type VertexCredentials,
 } from '@/services/providers-api';
 import type { CredentialFormValues } from '@/pages/settings/ProviderCredentialForm';
 
@@ -19,7 +15,7 @@ export type ProviderKeysContextType = ReturnType<typeof useProviderKeys>;
 const ProviderKeysContext = createContext<ProviderKeysContextType | undefined>(undefined);
 
 // All providers now use modal for consistency
-export const shouldUseModal = (providerType: string): boolean => {
+export const shouldUseModal = (): boolean => {
   return true;
 };
 

@@ -3,7 +3,7 @@ import { SpanDetailsDisplay } from "./span-detail-display";
 
 
 export const SpanInfo = () => {
-    const { spanMap, selectedSpanInfo, setSelectedSpanInfo } = ChatWindowConsumer();
+    const { spanMap, selectedSpanInfo } = ChatWindowConsumer();
     const spanId = selectedSpanInfo?.spanId;
     const spanOrRunId = selectedSpanInfo?.runId || selectedSpanInfo?.spanId || '';
 
@@ -13,8 +13,5 @@ export const SpanInfo = () => {
     }
 
     return <SpanDetailsDisplay
-        onClose={() => {
-            setSelectedSpanInfo(null);
-        }}
     />
 }

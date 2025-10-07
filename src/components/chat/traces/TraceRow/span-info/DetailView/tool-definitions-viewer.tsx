@@ -120,7 +120,7 @@ export const ToolDefinitionsViewer = ({ toolCalls }: { toolCalls: ToolInfoCall[]
     return (
         <div className="flex flex-col gap-2">
             {toolCalls && toolCalls.length > 0 && toolCalls.map((toolCall, index) => {
-                const { id, type } = toolCall;
+                const { id } = toolCall;
                 const { name, description, parameters } = toolCall.function;
                 const argumentsJson = toolCall.function.arguments ? tryParseJson(toolCall.function.arguments as string) : undefined;
                 const argumentsCount = argumentsJson ? Object.keys(argumentsJson).length : 0;

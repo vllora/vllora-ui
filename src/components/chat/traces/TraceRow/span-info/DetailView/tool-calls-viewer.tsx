@@ -1,5 +1,4 @@
-import { WrenchScrewdriverIcon, FingerPrintIcon } from "@heroicons/react/24/outline";
-import { useState } from "react";
+import { FingerPrintIcon } from "@heroicons/react/24/outline";
 import { JsonViewer } from "../JsonViewer";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { tryParseJson } from "@/utils/modelUtils";
@@ -26,8 +25,7 @@ export const SingleToolCallViewer = (props: {
     'function': FunctionCall;
     [key: string]: any
 }) => {
-    const { id, type, 'function': func, ...rest } = props;
-    const [isOpen, setIsOpen] = useState(true);
+    const { id, type, 'function': func } = props;
     const functionName = func?.name || 'Unknown Function';
     let argumentsJson = func?.arguments ? tryParseJson(func.arguments as string) : undefined;
     

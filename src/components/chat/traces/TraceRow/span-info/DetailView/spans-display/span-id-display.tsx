@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ArrowTopRightOnSquareIcon, CheckIcon, ClipboardDocumentIcon, FunnelIcon } from "@heroicons/react/24/outline";
+import { CheckIcon, ClipboardDocumentIcon } from "@heroicons/react/24/outline";
 import { HashIcon } from "lucide-react";
 import { useState } from "react";
 

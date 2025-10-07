@@ -1,7 +1,7 @@
 import { BaseSpanUIDetailsDisplay, getApiInvokeSpans, getModelCallSpans, getApiCloudInvokeSpans } from ".."
 import { getStatus } from "../index";
 import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ExclamationTriangleIcon, CheckCircleIcon, ClockIcon, CodeBracketIcon, DocumentTextIcon, WrenchScrewdriverIcon, BoltIcon } from "@heroicons/react/24/outline";
+import { ExclamationTriangleIcon, CheckCircleIcon, ClockIcon, CodeBracketIcon, DocumentTextIcon, BoltIcon } from "@heroicons/react/24/outline";
 import { ArrowRightLeftIcon, DatabaseIcon, ExternalLink, Grid2x2Check } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ErrorViewer } from "../error-viewer";
@@ -61,9 +61,6 @@ export const ModelInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
     const cost_str = currentAttribute?.cost || apiInvokeAttribute?.cost;
     const ttf_str = modelCallAttribute?.ttft;
     const usage_str = currentAttribute?.usage;
-    const modelJsonStr = apiInvokeAttribute?.model || modelCallAttribute?.model;
-    const modelJson = modelJsonStr ? tryParseJson(modelJsonStr) : null;
-    const modelName = modelJson?.name;
     const router_metric_resolution_str = currentAttribute?.['router.metric_resolution'];
     const router_metric_resolution = router_metric_resolution_str ? tryParseJson(router_metric_resolution_str) : null;
 

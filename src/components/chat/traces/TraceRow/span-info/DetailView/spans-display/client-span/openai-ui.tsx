@@ -25,20 +25,6 @@ export const OpenAIInfoUIDisplay = ({ span }: { span: Span }) => {
         return acc;
     }, {} as any);
 
-    let input_messages_keys = filteredAttributes.filter(k => k.startsWith('llm.input_messages.')).sort()
-
-    let input_messages = input_messages_keys.reduce((acc, currentKey) => {
-        let current_index = currentKey.replace('llm.input_messages.', '').split('.')[0] || '';
-        let currentAttributeName = currentKey.replace(`llm.input_messages.${current_index}.message.`, '');
-        let currentAttributeValue = attribute[currentKey];
-        if(!acc[current_index]){
-            acc[current_index] = {};
-        }
-        acc[current_index][currentAttributeName] = currentAttributeValue;
-        return acc;
-    }, {} as any);
-    let output_messages_keys = filteredAttributes.filter(k => k.startsWith('llm.output_messages.')).sort()
-
     return (
         <>
             {span_kind && (

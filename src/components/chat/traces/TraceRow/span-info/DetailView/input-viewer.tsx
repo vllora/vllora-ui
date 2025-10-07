@@ -1,5 +1,3 @@
-import { ProviderIcon } from '@/components/Icons/ProviderIcons';
-import React from 'react';
 import { JsonViewer } from '../JsonViewer';
 import { CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/solid';
 export const ExtraParameters = (props: { input: any }) => {
@@ -73,7 +71,7 @@ export const StringParameter = (props: { keyInput: string, value: string }) => {
     if (keyInput === 'model') {
         let entity = undefined;
         if (entity) {
-            let modelPrice = entity as any;
+            // let modelPrice = entity as any;
             return <></>
             // if (modelPrice.inference_provider) {
             //     return <div className="flex flex-row items-center gap-1">

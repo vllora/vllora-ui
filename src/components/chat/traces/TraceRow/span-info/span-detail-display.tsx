@@ -2,19 +2,15 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 // import { RenderArray } from "./utils";
 import { JsonViewer } from "./JsonViewer";
 import { useState } from "react";
-import { DatabaseIcon, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { getModelFullName } from "@/utils/model-fullname";
+import { DatabaseIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SpanUIDetailsDisplay } from "./DetailView";
 import { ClientSdkIcon } from "@/components/Icons/ClientSdkIcon";
-import { getModelDetailName, getOperationIcon, getOperationIconColor, getSpanTitle } from "../new-timeline/utils";
+import { getOperationIcon, getOperationIconColor, getSpanTitle } from "../new-timeline/utils";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
-import { getClientSDKName, isAgentSpan, isPromptCachingApplied } from "@/utils/graph-utils";
+import { getClientSDKName, isPromptCachingApplied } from "@/utils/graph-utils";
 
-export const SpanDetailsDisplay = ({ onClose }:
-  { onClose?: () => void }) => {
+export const SpanDetailsDisplay = () => {
   const [currentTab, setCurrentTab] = useState<string>("details");
   const { spanMap, selectedSpanInfo } = ChatWindowConsumer();
     const spanId = selectedSpanInfo?.spanId;
@@ -32,17 +28,10 @@ export const SpanDetailsDisplay = ({ onClose }:
   const operationIcon = getOperationIcon({ span: currentSpan, relatedSpans });
   const spanTitle = getSpanTitle({ span: currentSpan, relatedSpans });
   const operationIconColor = getOperationIconColor({ span: currentSpan, relatedSpans });
-  const attributes = currentSpan.attribute as any;
-  const tool_name: string = attributes && attributes['tool_name'] as string;
-  let mcp_template_definition_id = attributes && attributes['mcp_template_definition_id'] as string;
 
   // get prefix from tool_name
-  const prefix = tool_name && tool_name.includes('---') ? tool_name.split('---')[0] : tool_name;
   let logoLink = '';
   const linkReference = ''; //getLinkFromAttribute({ attributes, projectId: params?.projectId as string, mcp_template_definition_id, currentSpan, relatedSpans });
-  const modelDetailName = getModelDetailName(currentSpan, relatedSpans);
-  // const modelByModelName = cacheModelPrices?.find(model => getModelFullName(model) === modelDetailName);
-  const isAgent = currentSpan && isAgentSpan(currentSpan);
   const sdkName = currentSpan && getClientSDKName(currentSpan);
   const isPromptCached = currentSpan && isPromptCachingApplied(currentSpan);
 
@@ -116,7 +105,7 @@ export const SpanDetailsDisplay = ({ onClose }:
             <JsonViewer data={currentSpan} style={{ fontSize: '10px' }} />
           </TabsContent>
           <TabsContent value="details" className="p-2 h-full">
-            <SpanUIDetailsDisplay obj={currentSpan} />
+            <SpanUIDetailsDisplay span={currentSpan} />
           </TabsContent>
         </div>
       </Tabs>

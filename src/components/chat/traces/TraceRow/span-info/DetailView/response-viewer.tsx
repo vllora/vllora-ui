@@ -92,7 +92,6 @@ const ResponseUIView = ({ response, otherLevelMessages }: { response: any, other
     let messages = response && response.messages as any[];
     let finish_reason = response && response.finish_reason;
     const tool_calls = responseToolCalls && responseToolCalls.length > 0;
-    const parameterCount = keys?.filter((key: string) => key !== 'finish_reason' && key !== 'tool_calls' && key !== 'messages').length || 0;
     const choices: any[] = response && response.choices as any[];
     const candidates = response && response.candidates as any[];
 
@@ -130,7 +129,6 @@ const ResponseUIView = ({ response, otherLevelMessages }: { response: any, other
            extraDataDisplay[key] = response[key];
        })
     }
-    const hasExtraParameters = Object.keys(extraDataDisplay).length > 0;    
     return (
         <div className="overflow-hidden">
             <div className="divide-y divide-border">

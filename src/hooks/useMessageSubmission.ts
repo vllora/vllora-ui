@@ -42,9 +42,6 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
     (
       data: string,
       currentThreadId?: string,
-      currentMessageId?: string,
-      currentTraceId?: string | null,
-      currentRunId?: string | null
     ) => {
       try {
         if (data === '[DONE]') {
@@ -252,9 +249,6 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
                 handleMessage(
                   data,
                   currentThreadId || threadId,
-                  currentMessageId || messageId,
-                  currentTraceId,
-                  currentRunId
                 );
 
                 if (isFirstSignal) {

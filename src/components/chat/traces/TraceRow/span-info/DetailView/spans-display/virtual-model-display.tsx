@@ -1,17 +1,10 @@
 import { BaseSpanUIDetailsDisplay, getParentApiInvoke, getParentCloudApiInvoke } from ".."
 import { getStatus } from "../index";
 import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ExclamationTriangleIcon, CheckCircleIcon, ClockIcon, CpuChipIcon, CodeBracketIcon, ChatBubbleLeftRightIcon, DocumentTextIcon, WrenchScrewdriverIcon, BoltIcon } from "@heroicons/react/24/outline";
+import { ExclamationTriangleIcon, CheckCircleIcon, ClockIcon, CodeBracketIcon, DocumentTextIcon, BoltIcon } from "@heroicons/react/24/outline";
 import { ErrorViewer } from "../error-viewer";
 import { UsageViewer } from "../usage-viewer";
-import { OutputViewer } from "../output-viewer";
-import { ExtraParameters } from "../input-viewer";
-import { MessageViewer } from "../message-viewer";
 import { HeadersViewer } from "../headers-viewer";
-import { ProviderIcon } from "@/components/Icons/ProviderIcons";
-import { IdDisplay } from "./span-id-display";
-import { ToolInfoCall } from "./tool-display";
-import { ToolDefinitionsViewer } from "../tool-definitions-viewer";
 import { BasicSpanInfo } from "../basic-span-info-section";
 import { RequestViewer } from "../request-viewer";
 import { SimpleTabsList, SimpleTabsTrigger, Tabs } from "@/components/ui/tabs";
@@ -49,20 +42,11 @@ export const VirtualModelCallUIDetailsDisplay = ({ span }: { span: Span }) => {
     const raw_request_json = raw_request_string ? tryParseJson(raw_request_string) : null;
 
     const usage_str = currentAttribute?.usage;
-    let virtualModelInfoStr = currentAttribute?.virtual_mdoel || currentAttribute?.virtual_model;
-    const virtualModelInfo = virtualModelInfoStr ? tryParseJson(virtualModelInfoStr.replace("()", "\"\"")) : null;
-    const modelName = virtualModelInfo?.slug;
     const costInfo = cost_str ? tryParseJson(cost_str) : null;
     const usageInfo = usage_str ? tryParseJson(usage_str) : null;
 
     const triggerClassName = "px-3 py-3 hover:bg-[#1a1a1a] transition-colors";
-    const keys = raw_request_json && Object.keys(raw_request_json);
-    const hasExtraParameters = keys && keys.filter((key: string) => key !== 'messages' && key !== 'tools' && key !== 'model').length > 0;
-    const messageCount = raw_request_json?.messages?.length || 0;
-    const parameterCount = keys?.filter((key: string) => key !== 'messages' && key !== 'tools' && key !== 'model').length || 0;
-
     const headerCount = headers ? Object.keys(headers).length : 0;
-    const toolDefinitions: ToolInfoCall[] = raw_request_json?.tools || [];
 
     return (
         <BaseSpanUIDetailsDisplay 

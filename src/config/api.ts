@@ -1,4 +1,4 @@
-export const LOCAL_API_URL = 'http://0.0.0.0:8080';
+export const LOCAL_API_URL = 'http://localhost:8080';
 
 export const API_CONFIG = {
   url: import.meta.env.VITE_LANGDB_API_URL || LOCAL_API_URL,

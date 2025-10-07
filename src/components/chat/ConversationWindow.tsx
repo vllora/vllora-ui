@@ -40,7 +40,6 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
   // Get all state from context
   const {
     serverMessages,
-    setServerMessages,
     clearMessages,
     setIsChatProcessing,
     refreshMessages,

@@ -1,7 +1,7 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronUp, InfoIcon } from 'lucide-react';
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { CopyTextButton } from './spans-display/span-id-display';
 export const HeadersViewer = (props: { input: any }) => {
     const { input } = props;
@@ -10,7 +10,7 @@ export const HeadersViewer = (props: { input: any }) => {
     if (!input) {
         return <div className="p-2 text-gray-400 italic border border-gray-700 rounded-md bg-black">No input</div>;
     }
-    
+
     // LangDB headers with descriptions for tooltips
     const langdbHeaders = [
         { key: 'x-project-id', description: 'Unique identifier for the project' },
@@ -32,10 +32,10 @@ export const HeadersViewer = (props: { input: any }) => {
         }
         return a.localeCompare(b);
     });
-    
+
     // Check if any LangDB headers exist
     const hasLangdbHeaders = keys.some(key => langdbHeaderKeys.includes(key));
-    
+
     // If no LangDB headers exist, show all headers by default
     useEffect(() => {
         if (!hasLangdbHeaders) {
@@ -122,7 +122,7 @@ export const HeadersViewer = (props: { input: any }) => {
                             )}
                         </div>
                     })}
-                    
+
                     {/* Hide Other Headers Button (when expanded) */}
                     {hasLangdbHeaders && (
                         <Button

@@ -1,11 +1,10 @@
-import { BaseSpanUIDetailsDisplay, getApiInvokeSpans, getModelCallSpans, getApiCloudInvokeSpans, getParentApiInvoke, getParentCloudApiInvoke } from ".."
+import { BaseSpanUIDetailsDisplay, getParentCloudApiInvoke } from ".."
 import { getStatus } from "../index";
 import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ExclamationTriangleIcon, CheckCircleIcon, ClockIcon, CpuChipIcon, CodeBracketIcon, ChatBubbleLeftRightIcon, DocumentTextIcon, WrenchScrewdriverIcon } from "@heroicons/react/24/outline";
+import { ExclamationTriangleIcon, CheckCircleIcon, ClockIcon, CpuChipIcon, CodeBracketIcon, DocumentTextIcon } from "@heroicons/react/24/outline";
 import { ErrorViewer } from "../error-viewer";
 import { UsageViewer } from "../usage-viewer";
 import { HeadersViewer } from "../headers-viewer";
-import { ProviderIcon } from "@/components/Icons/ProviderIcons";
 import { BasicSpanInfo } from "../basic-span-info-section";
 import { useState } from "react";
 import { SimpleTabsList, SimpleTabsTrigger, Tabs } from "@/components/ui/tabs";
@@ -45,7 +44,6 @@ export const ApiInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
     const [requestViewMode, setRequestViewMode] = useState<'ui' | 'raw'>('ui');
     const [responseViewMode, setResponseViewMode] = useState<'ui' | 'raw'>('ui');
     const [openAccordionItems, setOpenAccordionItems] = useState<string[]>(error ? ['error'] : []);
-    const request = apiInvokeAttribute?.request;
     const cost_str = apiInvokeAttribute?.cost;
     const ttf_str = modelCallAttribute?.ttft;
     const usage_str = currentAttribute?.usage;
@@ -58,10 +56,8 @@ export const ApiInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
 
     const costInfo = cost_str ? tryParseJson(cost_str) : null;
     const usageInfo = usage_str ? tryParseJson(usage_str) : null;
-    const inputInfo = request ? tryParseJson(request) : null;
 
     const triggerClassName = "px-3 py-3 hover:bg-[#1a1a1a] transition-colors";
-    const keys = inputInfo && Object.keys(inputInfo);
    
     const headerCount = headers ? Object.keys(headers).length : 0;
 

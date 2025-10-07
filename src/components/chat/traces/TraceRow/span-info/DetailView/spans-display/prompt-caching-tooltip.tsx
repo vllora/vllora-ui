@@ -1,4 +1,4 @@
-import { ExternalLink, Zap, DollarSign, Database, TrendingUp, TrendingDown, Info } from "lucide-react";
+import { ExternalLink, TrendingUp, TrendingDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -70,13 +70,11 @@ export const calculateCacheCost = (usageInfo: any, modelPriceInfo: any) => {
 
 export const PromptCachingInfo = ({
   usageInfo,
-  costInfo,
   entityByName,
   showLearnMore = true
 }: PromptCachingTooltipProps) => {
   // Determine which cache tokens we have
   const totalInputTokens = usageInfo?.input_tokens || 0;
-  const totalOutputTokens = usageInfo?.output_tokens || 0;
   const cacheTokens = getCachedTokens(usageInfo);
   const cacheCost = calculateCacheCost(usageInfo, entityByName);
 
@@ -84,12 +82,6 @@ export const PromptCachingInfo = ({
   const cacheReadPercentage = totalInputTokens > 0 ? ((cacheTokens.read || 0) / totalInputTokens) * 100 : 0;
   const cacheWritePercentage = totalInputTokens > 0 ? ((cacheTokens.write || 0) / totalInputTokens) * 100 : 0;
   const uncachedPercentage = 100 - cacheReadPercentage - cacheWritePercentage;
-
-  // Calculate total cost
-  const totalCost = costInfo?.total_cost || 0;
-  const inputCost = costInfo?.input_cost || 0;
-  const outputCost = costInfo?.output_cost || 0;
-
   // Calculate savings
   const standardInputPricePerMTokens = entityByName?.price?.per_input_token || 0;
   const standardInputPricePerTokens = standardInputPricePerMTokens / 1000000;

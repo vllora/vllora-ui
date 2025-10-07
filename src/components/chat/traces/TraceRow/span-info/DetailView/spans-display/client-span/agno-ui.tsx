@@ -25,20 +25,6 @@ export const AgnoInfoUIDisplay = ({ span }: { span: Span }) => {
         return acc;
     }, {} as any);
 
-    let input_messages_keys = filteredAttributes.filter(k => k.startsWith('input.messages.')).sort()
-
-    let input_messages = input_messages_keys.reduce((acc, currentKey) => {
-        let current_index = currentKey.replace('input.messages.', '').split('.')[0] || '';
-        let currentAttributeName = currentKey.replace(`input.messages.${current_index}.message.`, '');
-        let currentAttributeValue = attribute[currentKey];
-        if(!acc[current_index]){
-            acc[current_index] = {};
-        }
-        acc[current_index][currentAttributeName] = currentAttributeValue;
-        return acc;
-    }, {} as any);
-    let output_messages_keys = filteredAttributes.filter(k => k.startsWith('llm.output_messages.')).sort()
-
     return (
         <>
             {span_kind && (

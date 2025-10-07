@@ -1,4 +1,3 @@
-import { ExclamationTriangleIcon, XCircleIcon } from "@heroicons/react/24/outline";
 import { AlertTriangle, Bug, FileWarning, ServerCrash } from "lucide-react";
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Copy, CheckIcon } from "lucide-react";

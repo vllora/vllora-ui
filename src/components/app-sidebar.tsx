@@ -4,8 +4,6 @@ import {
   Home,
   MessageSquare,
   Settings,
-  BarChart3,
-  FolderOpen,
   ChevronLeft,
   ChevronRight,
   Menu,

@@ -30,14 +30,12 @@ export const ToolUIDetailsDisplay = ({ span }: { span: Span }) => {
     const labelTitles: string[] = attributeTool.label && attributeTool.label.split(',') || [];
     const jsonToolCalls: any[] | undefined = toolCalls && tryParseJson(toolCalls);
     const toolCallCount = jsonToolCalls?.length || 0;
-    let parentSpan = spansOfSelectedRun.find(span => span.span_id === currentSpan.parent_span_id);
     const parentApiInvoke = getParentApiInvoke(spansOfSelectedRun, currentSpan.span_id);
     const parentApiInvokeAttribute = parentApiInvoke?.attribute as any;
     const requestParentApiInvokeStr = parentApiInvokeAttribute?.request;
     const requestParentApiInvoke = requestParentApiInvokeStr && tryParseJson(requestParentApiInvokeStr);
     const tools: ToolInfoCall[] = requestParentApiInvoke?.tools || [];
     const currentToolsInfo = tools.filter((t: ToolInfoCall) => labelTitles.includes(t['function'].name));
-    const triggerClassName = "px-3 py-3 hover:bg-[#1a1a1a] transition-colors";
 
     const isSuccess = !attributeTool.error;
     const toolResponse = attributeTool.response;
@@ -50,7 +48,6 @@ export const ToolUIDetailsDisplay = ({ span }: { span: Span }) => {
         created_at: string;
         updated_at: string;
     } | undefined = mcp_server_string && tryParseJson(mcp_server_string);
-    const mcp_slug = mcp_server_json?.slug;
 
     const toolResponseJson = toolResponse ? tryParseJson(toolResponse) as {
         content: {
