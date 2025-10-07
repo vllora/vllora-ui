@@ -242,40 +242,46 @@ export const AiMessage: React.FC<{
                       {isExpanded && (
                         <div className="px-3 pb-2 max-w-full overflow-x-auto">
                           <div className="bg-neutral-900/40 rounded p-2">
-                            <ReactJson
-                              key={index}
-                              name={false}
-                              collapsed={2}
-                              displayDataTypes={false}
-                              displayObjectSize={false}
-                              enableClipboard={false}
-                              theme={{
-                                base00: "transparent",
-                                base01: "#404040",
-                                base02: "#525252",
-                                base03: "#737373",
-                                base04: "#a3a3a3",
-                                base05: "#d4d4d4",
-                                base06: "#e5e5e5",
-                                base07: "#f5f5f5",
-                                base08: "#f87171",
-                                base09: "#fb923c",
-                                base0A: "#facc15",
-                                base0B: "#4ade80",
-                                base0C: "#22d3ee",
-                                base0D: "#60a5fa",
-                                base0E: "#a78bfa",
-                                base0F: "#f472b6",
-                              }}
-                              style={{
-                                wordWrap: "break-word",
-                                whiteSpace: "pre-wrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                maxWidth: "100%",
-                              }}
-                              src={function_display}
-                            />
+                            {function_display && typeof function_display === 'object' ? (
+                              <ReactJson
+                                key={index}
+                                name={false}
+                                collapsed={2}
+                                displayDataTypes={false}
+                                displayObjectSize={false}
+                                enableClipboard={false}
+                                theme={{
+                                  base00: "transparent",
+                                  base01: "#404040",
+                                  base02: "#525252",
+                                  base03: "#737373",
+                                  base04: "#a3a3a3",
+                                  base05: "#d4d4d4",
+                                  base06: "#e5e5e5",
+                                  base07: "#f5f5f5",
+                                  base08: "#f87171",
+                                  base09: "#fb923c",
+                                  base0A: "#facc15",
+                                  base0B: "#4ade80",
+                                  base0C: "#22d3ee",
+                                  base0D: "#60a5fa",
+                                  base0E: "#a78bfa",
+                                  base0F: "#f472b6",
+                                }}
+                                style={{
+                                  wordWrap: "break-word",
+                                  whiteSpace: "pre-wrap",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  maxWidth: "100%",
+                                }}
+                                src={function_display}
+                              />
+                            ) : (
+                              <pre className="text-xs text-neutral-400">
+                                {JSON.stringify(function_display, null, 2)}
+                              </pre>
+                            )}
                           </div>
                         </div>
                       )}

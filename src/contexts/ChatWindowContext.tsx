@@ -227,7 +227,10 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   const addEventSpan = useCallback((eventSpan: LangDBEventSpan) => {
     const span = convertToNormalSpan(eventSpan);
     let current_runId = span.run_id;
-    setRawRuns(prev => {
+
+    let ignoreThisSpan = skipThisSpan(span);
+
+    !ignoreThisSpan && setRawRuns(prev => {
       let runIndex = prev.findIndex(r => r.run_id === current_runId);
       if (runIndex === -1) {
         return [...prev, convertSpanToRunDTO(span)];
@@ -245,6 +248,8 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
       }
     });
   }, []);
+
+
   const upsertRun = useCallback((input: {
     runId: string;
     timestamp: number;
@@ -359,12 +364,12 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
           start_time_us: (input.metrics?.start_time_us && input.metrics?.start_time_us > 0) ? input.metrics?.start_time_us : existingMetric.start_time_us,
           usage: input.metrics.usage
             ? {
-                input_tokens: (input.metrics.usage?.input_tokens && input.metrics.usage?.input_tokens > 0) ? input.metrics.usage?.input_tokens : existingMetric.usage?.input_tokens,
-                output_tokens: (input.metrics.usage?.output_tokens && input.metrics.usage?.output_tokens > 0) ? input.metrics.usage?.output_tokens : existingMetric.usage?.output_tokens,
-                prompt_tokens: (input.metrics.usage?.prompt_tokens && input.metrics.usage?.prompt_tokens > 0) ? input.metrics.usage?.prompt_tokens : existingMetric.usage?.prompt_tokens,
-                completion_tokens: input.metrics.usage?.completion_tokens ?? existingMetric.usage?.completion_tokens,
-                cost: input.metrics.usage?.cost ?? existingMetric.usage?.cost,
-              }
+              input_tokens: (input.metrics.usage?.input_tokens && input.metrics.usage?.input_tokens > 0) ? input.metrics.usage?.input_tokens : existingMetric.usage?.input_tokens,
+              output_tokens: (input.metrics.usage?.output_tokens && input.metrics.usage?.output_tokens > 0) ? input.metrics.usage?.output_tokens : existingMetric.usage?.output_tokens,
+              prompt_tokens: (input.metrics.usage?.prompt_tokens && input.metrics.usage?.prompt_tokens > 0) ? input.metrics.usage?.prompt_tokens : existingMetric.usage?.prompt_tokens,
+              completion_tokens: input.metrics.usage?.completion_tokens ?? existingMetric.usage?.completion_tokens,
+              cost: input.metrics.usage?.cost ?? existingMetric.usage?.cost,
+            }
             : existingMetric.usage,
         };
 
@@ -384,7 +389,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
       );
     });
   }, []);
-  
+
   const upsertMessage = useCallback(
     (input: {
       message_id: string;
@@ -557,7 +562,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
           if (metric.duration && metric.duration > 0) {
             totalDuration += metric.duration;
           }
-          if(metric.cost && metric.cost > 0) {
+          if (metric.cost && metric.cost > 0) {
             totalCost += metric.cost;
           }
           if (metric.usage) {
