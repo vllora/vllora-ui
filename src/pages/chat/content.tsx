@@ -138,9 +138,6 @@ export function ChatPage() {
               apiUrl={API_CONFIG.url}
               projectId={currentProjectId}
               widgetId={`chat-${selectedThreadId}`}
-              cost={threads.find((t) => t.id === selectedThreadId)?.cost}
-              inputTokens={threads.find((t) => t.id === selectedThreadId)?.input_tokens}
-              outputTokens={threads.find((t) => t.id === selectedThreadId)?.output_tokens}
               onModelChange={handleModelChange}
               isDraft={threads.find((t) => t.id === selectedThreadId)?.is_from_local}
             />

@@ -18,9 +18,6 @@ interface ChatWindowProps {
   apiKey?: string;
   projectId?: string;
   widgetId?: string;
-  cost?: number;
-  inputTokens?: number;
-  outputTokens?: number;
   onModelChange?: (modelId: string) => void;
   isDraft?: boolean;
 }
@@ -33,9 +30,6 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
   apiKey,
   projectId,
   widgetId,
-  cost,
-  inputTokens,
-  outputTokens,
   onModelChange,
   isDraft = false,
 }) => {
@@ -56,13 +50,14 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     traceId,
     setTraceId,
     appendUsage,
+    conversationMetrics,
   } = ChatWindowConsumer();
 
   useEffect(() => {
-    if(threadId && !isDraft) {
+    if (threadId && !isDraft) {
       clearMessages();
       refreshMessages();
-    } else if(threadId && isDraft) {
+    } else if (threadId && isDraft) {
       clearMessages();
     }
   }, [threadId, isDraft])
@@ -133,7 +128,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       if (threadId && widgetId && input.widgetId === widgetId) {
         if (input.state === 'SubmitStart' || input.state === 'Processing') {
           setIsChatProcessing(true);
-  
+
         } else {
           setIsChatProcessing(false);
         }
@@ -141,9 +136,9 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     };
     emitter.on('langdb_chatWindow', handlerChatWindowEvent);
     return () => {
-        emitter.off('langdb_chatWindow', handlerChatWindowEvent);
+      emitter.off('langdb_chatWindow', handlerChatWindowEvent);
     }
-}, [threadId, widgetId])
+  }, [threadId, widgetId])
 
   useEffect(() => {
     const handleClearChat = (input: { threadId?: string; widgetId?: string }) => {
@@ -227,12 +222,13 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
         </div>
 
         {/* Cost and Tokens Display - Second row aligned with New Chat button */}
-        <ConversationMetrics
+        {!isDraft && threadId && conversationMetrics && (conversationMetrics.cost || conversationMetrics.inputTokens || conversationMetrics.outputTokens || conversationMetrics.duration) && <ConversationMetrics
           threadId={threadId}
-          cost={cost}
-          inputTokens={inputTokens}
-          outputTokens={outputTokens}
-        />
+          cost={conversationMetrics.cost}
+          inputTokens={conversationMetrics.inputTokens}
+          outputTokens={conversationMetrics.outputTokens}
+          duration={conversationMetrics.duration}
+        />}
       </div>
 
       {/* Chat Conversation */}

@@ -36,3 +36,7 @@ export const formatContextSize = (contextSize: number, hideTokenAffix?: boolean)
 
   return `${contextSize}${hideTokenAffix ? "" : " tokens"}`;
 };
+export const formatToSeconds = (microseconds: number) => {
+  const seconds = microseconds / 1000000;
+  return seconds < 1 ? `${seconds.toFixed(2)}s` : `${seconds.toFixed(1)}s`;
+};

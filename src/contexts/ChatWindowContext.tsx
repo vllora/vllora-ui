@@ -539,10 +539,45 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   const selectedSpan = useMemo(() => {
     return selectedSpanInfo?.spanId ? spansOfSelectedRun.find(s => s.span_id === selectedSpanInfo.spanId) : undefined;
   }, [selectedSpanInfo, spansOfSelectedRun]);
+
+  // Calculate sum of all message metrics
+  const conversationMetrics = useMemo(() => {
+    if (!serverMessages || serverMessages.length === 0) return undefined;
+
+    let totalDuration = 0;
+    let totalCost = 0;
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    serverMessages.filter(m => m.type !== 'human').forEach(message => {
+      if (message.metrics && Array.isArray(message.metrics)) {
+        message.metrics.forEach(metric => {
+          if (metric.duration && metric.duration > 0) {
+            totalDuration += metric.duration;
+          }
+          if(metric.cost && metric.cost > 0) {
+            totalCost += metric.cost;
+          }
+          if (metric.usage) {
+            totalInputTokens += metric.usage.input_tokens || 0;
+            totalOutputTokens += metric.usage.output_tokens || 0;
+          }
+        });
+      }
+    });
+
+    return {
+      cost: totalCost > 0 ? totalCost : undefined,
+      inputTokens: totalInputTokens > 0 ? totalInputTokens : undefined,
+      outputTokens: totalOutputTokens > 0 ? totalOutputTokens : undefined,
+      duration: totalDuration > 0 ? totalDuration / 1000 : undefined, // Convert ms to seconds
+    };
+  }, [serverMessages]);
+
   return {
     spansOfSelectedRun,
     selectedRun,
     selectedSpan,
+    conversationMetrics,
 
 
 

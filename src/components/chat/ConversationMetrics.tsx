@@ -1,11 +1,13 @@
 import React from 'react';
-import { ArrowsPointingInIcon, ArrowsPointingOutIcon, CurrencyDollarIcon } from '@heroicons/react/24/outline';
+import { ArrowsPointingInIcon, ArrowsPointingOutIcon, CurrencyDollarIcon, ClockIcon } from '@heroicons/react/24/outline';
+import { formatToSeconds } from '@/utils/format';
 
 interface ConversationMetricsProps {
   threadId?: string;
   cost?: number;
   inputTokens?: number;
   outputTokens?: number;
+  duration?: number; // in seconds
 }
 
 export const ConversationMetrics: React.FC<ConversationMetricsProps> = ({
@@ -13,38 +15,81 @@ export const ConversationMetrics: React.FC<ConversationMetricsProps> = ({
   cost,
   inputTokens,
   outputTokens,
+  duration,
 }) => {
+  const formatMoney = (amount: number) => {
+    if (amount === 0) return "$0.00";
+    if (amount < 0.0001) return "<$0.0001";
+    return `$${amount.toFixed(4)}`;
+  };
+
+  const displayDuration = duration ? formatToSeconds(duration) : undefined;
+
   return (
-    <div className="h-16 px-4 border-b border-border flex items-center gap-4 text-sm">
+    <div className="h-16 px-6 border-b border-border flex items-center justify-between text-xs">
       {threadId && (cost !== undefined || inputTokens !== undefined || outputTokens !== undefined) ? (
         <>
+          {/* Cost */}
           {cost !== undefined && (
-            <div className="flex items-center gap-2">
-              <CurrencyDollarIcon className="w-4 h-4 text-teal-500" />
-              <span className="text-muted-foreground">Cost</span>
-              <span className="font-medium text-foreground">
-                {cost > 0 && cost < 0.0001 ? '<$0.0001' : `$${cost.toFixed(4)}`}
-              </span>
+            <div className="flex items-center">
+              <div className="flex items-center justify-center w-6 h-6 rounded-full bg-teal-500/10 mr-2">
+                <CurrencyDollarIcon className="w-3.5 h-3.5 text-teal-500" />
+              </div>
+              <div>
+                <div className="font-semibold text-[10px] text-muted-foreground">Cost</div>
+                <div className="tabular-nums text-white font-medium">
+                  {formatMoney(cost)}
+                </div>
+              </div>
             </div>
           )}
+
+          {/* Input Tokens */}
           {inputTokens !== undefined && (
-            <div className="flex items-center gap-2">
-              <ArrowsPointingInIcon className="w-4 h-4 text-blue-500" />
-              <span className="text-muted-foreground">Input</span>
-              <span className="font-medium text-foreground">{inputTokens.toLocaleString()} tokens</span>
+            <div className="flex items-center">
+              <div className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-500/10 mr-2">
+                <ArrowsPointingInIcon className="w-3.5 h-3.5 text-blue-500" />
+              </div>
+              <div>
+                <div className="font-semibold text-[10px] text-muted-foreground">Input</div>
+                <div className="tabular-nums text-white font-medium">
+                  {inputTokens.toLocaleString()}
+                </div>
+              </div>
             </div>
           )}
+
+          {/* Output Tokens */}
           {outputTokens !== undefined && (
-            <div className="flex items-center gap-2">
-              <ArrowsPointingOutIcon className="w-4 h-4 text-purple-500" />
-              <span className="text-muted-foreground">Output</span>
-              <span className="font-medium text-foreground">{outputTokens.toLocaleString()} tokens</span>
+            <div className="flex items-center">
+              <div className="flex items-center justify-center w-6 h-6 rounded-full bg-purple-500/10 mr-2">
+                <ArrowsPointingOutIcon className="w-3.5 h-3.5 text-purple-500" />
+              </div>
+              <div>
+                <div className="font-semibold text-[10px] text-muted-foreground">Output</div>
+                <div className="tabular-nums text-white font-medium">
+                  {outputTokens.toLocaleString()}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Duration */}
+          {displayDuration !== undefined && (
+            <div className="flex items-center">
+              <div className="flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/10 mr-2">
+                <ClockIcon className="w-3.5 h-3.5 text-amber-500" />
+              </div>
+              <div>
+                <div className="font-semibold text-[10px] text-muted-foreground">Duration</div>
+                <div className="tabular-nums text-white font-medium">
+                  {displayDuration}
+                </div>
+              </div>
             </div>
           )}
         </>
-      ) : (
-        <div className="text-muted-foreground text-sm">No metrics available</div>
-      )}
+      ) : null}
     </div>
   );
 };
