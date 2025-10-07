@@ -8,7 +8,7 @@ import {
   ArrowsPointingInIcon,
   ArrowsPointingOutIcon,
 } from "@heroicons/react/24/outline";
-import { ChevronRight, X } from "lucide-react";
+import { ChevronRight, Download, Upload, X } from "lucide-react";
 import { formatDistanceToNow, differenceInMinutes } from "date-fns";
 import {
   Tooltip,
@@ -282,7 +282,7 @@ const SidebarModelCallSummaryTracesImpl = ({
           {/* Input Tokens */}
           <div className="flex items-center">
             <div className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-500/10 mr-2">
-              <ArrowsPointingInIcon className="w-3.5 h-3.5 text-blue-500" />
+              <Upload className="w-3.5 h-3.5 text-blue-500" />
             </div>
             <div>
               <div className="font-semibold text-[10px]">Input</div>
@@ -295,7 +295,7 @@ const SidebarModelCallSummaryTracesImpl = ({
           {/* Output Tokens */}
           <div className="flex items-center">
             <div className="flex items-center justify-center w-6 h-6 rounded-full bg-purple-500/10 mr-2">
-              <ArrowsPointingOutIcon className="w-3.5 h-3.5 text-purple-500" />
+              <Download className="w-3.5 h-3.5 text-purple-500" />
             </div>
             <div>
               <div className="font-semibold text-[10px]">Output</div>

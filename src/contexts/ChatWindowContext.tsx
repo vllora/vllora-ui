@@ -548,6 +548,9 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     let totalCost = 0;
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
+    let totalTTFT = 0;
+    let ttftCount = 0;
+
     serverMessages.filter(m => m.type !== 'human').forEach(message => {
       if (message.metrics && Array.isArray(message.metrics)) {
         message.metrics.forEach(metric => {
@@ -561,6 +564,10 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
             totalInputTokens += metric.usage.input_tokens || 0;
             totalOutputTokens += metric.usage.output_tokens || 0;
           }
+          if (metric.ttft && metric.ttft > 0) {
+            totalTTFT += metric.ttft;
+            ttftCount++;
+          }
         });
       }
     });
@@ -570,6 +577,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
       inputTokens: totalInputTokens > 0 ? totalInputTokens : undefined,
       outputTokens: totalOutputTokens > 0 ? totalOutputTokens : undefined,
       duration: totalDuration > 0 ? totalDuration / 1000 : undefined, // Convert ms to seconds
+      avgTTFT: ttftCount > 0 ? (totalTTFT / ttftCount) / 1000 : undefined, // Convert ms to seconds and average
     };
   }, [serverMessages]);
 

@@ -50,26 +50,12 @@ export const MessageMetrics: React.FC<MessageMetricsProps> = ({
           <div
             className={`flex items-center gap-3 text-xs text-neutral-500 cursor-help ${className}`}
           >
-            {ttft !== undefined && (
-              <div className="flex items-center gap-1">
-                <span>TTFT:</span>
-                <span>{formatToSeconds(ttft)}</span>
-              </div>
-            )}
-
-            {duration !== undefined && (
-              <div className="flex items-center gap-1">
-                <span>Duration:</span>
-                <span>{formatToSeconds(duration)}</span>
-              </div>
-            )}
             {cost && (
               <div className="flex gap-1 items-center">
                 <span>Cost:</span>
                 <span>{formatCost(cost)}</span>
               </div>
             )}
-
             {usage && (
               <div className="flex items-center gap-2">
                 {usage.input_tokens && (
@@ -86,6 +72,23 @@ export const MessageMetrics: React.FC<MessageMetricsProps> = ({
                 )}
               </div>
             )}
+            {duration !== undefined && (
+              <div className="flex items-center gap-1">
+                <span>Duration:</span>
+                <span>{formatToSeconds(duration)}</span>
+              </div>
+            )}
+            {ttft !== undefined && (
+              <div className="flex items-center gap-1">
+                <span>TTFT:</span>
+                <span>{formatToSeconds(ttft)}</span>
+              </div>
+            )}
+
+            
+            
+
+            
           </div>
         </TooltipTrigger>
         <TooltipContent className="max-w-xs">
