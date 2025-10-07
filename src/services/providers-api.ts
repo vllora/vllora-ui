@@ -94,8 +94,8 @@ export async function listProviders(): Promise<ProviderInfo[]> {
       throw new Error(`Failed to list providers: ${response.status} ${response.statusText}`);
     }
 
-    const data: ListProvidersResponse = await response.json();
-    return data.providers;
+    const data:  ProviderInfo[] = await response.json();
+    return data;
   } catch (error) {
     console.error('Error listing providers:', error);
     throw error;
