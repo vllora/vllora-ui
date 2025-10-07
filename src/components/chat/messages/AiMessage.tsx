@@ -6,7 +6,6 @@ import {
   ChevronDown,
   ChevronRight,
   Wrench,
-  ExternalLink,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -67,7 +66,10 @@ export const AiMessage: React.FC<{
   }, [canClickToOpenTrace, metrics, setOpenTraces, fetchSpansByRunId]);
 
   return (
-    <div className={`flex gap-3 items-start group`}>
+    <div
+      className={`flex gap-3 items-start group ${canClickToOpenTrace ? 'cursor-pointer hover:bg-neutral-800/30 rounded-lg p-2 -m-2 transition-colors' : ''}`}
+      onClick={canClickToOpenTrace ? handleOpenTrace : undefined}
+    >
       <div className="flex-shrink-0 mt-1">
         <TooltipProvider>
           <Tooltip>
@@ -103,22 +105,7 @@ export const AiMessage: React.FC<{
               </div>
             )}
             {canClickToOpenTrace && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={handleOpenTrace}
-                      className="flex items-center gap-1 px-2 py-0.5 text-xs text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 rounded transition-colors border border-blue-400/30 hover:border-blue-400/50"
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      <span>View Trace</span>
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Open trace details for this message</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <span className="text-[10px] text-blue-400/60 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">Click to view trace details</span>
             )}
           </div>
           {msg?.content && (
