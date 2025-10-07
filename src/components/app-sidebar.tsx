@@ -4,11 +4,7 @@ import {
   Home,
   MessageSquare,
   Settings,
-  ChevronLeft,
-  ChevronRight,
   Menu,
-  PanelLeftCloseIcon,
-  PanelLeftOpenIcon,
   PanelLeftIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"

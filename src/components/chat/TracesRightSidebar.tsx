@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, PanelRight } from 'lucide-react';
+import { PanelRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { TraceView } from './traces/TraceView';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
@@ -23,7 +23,7 @@ export const TracesRightSidebar: React.FC<TracesRightSidebarProps> = ({
   onToggle,
 }) => {
   const isOpen = !isCollapsed;
-  const {currentProjectId} = ProjectsConsumer();
+  const { currentProjectId } = ProjectsConsumer();
   useTraceEvents({
     currentProjectId: currentProjectId || '',
     currentThreadId: threadId,
