@@ -1,6 +1,5 @@
 import { useCallback, useRef } from 'react';
-import { v4 as uuidv4 } from 'uuid';
-import { Message, MessageType, MessageContentType, FileWithPreview, ChatCompletionChunk } from '@/types/chat';
+import { Message, FileWithPreview, ChatCompletionChunk } from '@/types/chat';
 import { useScrollToBottom } from './useScrollToBottom';
 import { emitter } from '@/utils/eventEmitter';
 import { getChatCompletionsUrl } from '@/config/api';
@@ -14,8 +13,6 @@ interface MessageSubmissionProps {
   widgetId?: string;
   threadId?: string;
   threadTitle?: string;
-  messages: Message[];
-  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   setCurrentInput: React.Dispatch<React.SetStateAction<string>>;
   setTyping: React.Dispatch<React.SetStateAction<boolean>>;
   setError: React.Dispatch<React.SetStateAction<string | undefined>>;
@@ -37,8 +34,6 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
     appendUsage,
     messageId,
     traceId,
-    messages,
-    setMessages,
   } = props;
 
   const { messagesEndRef, scrollToBottom } = useScrollToBottom();
@@ -91,10 +86,11 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
       otherTools?: string[];
       threadId?: string;
       threadTitle?: string;
+      initialMessages?: Message[];
     }) => {
       abortControllerRef.current = new AbortController();
 
-      const { inputText, files, threadId, threadTitle } = inputProps;
+      const { inputText, files, threadId, threadTitle, initialMessages } = inputProps;
 
       if (inputText.trim() === '') return;
 
@@ -185,12 +181,12 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
           body: JSON.stringify({
             model: props.modelName,
             messages: [
-              ...messages.map((msg) => ({
+              ...(initialMessages?.map((msg) => ({
                 role: msg.type,
                 content: msg.files && msg.files.length > 0
                   ? buildMessageContent(msg.content, msg.files)
                   : msg.content,
-              })),
+              })) || []),
               {
                 role: 'user',
                 content: buildMessageContent(inputText, files),
@@ -314,7 +310,6 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
       }
     },
     [
-      setMessages,
       setCurrentInput,
       setTyping,
       setError,
@@ -322,7 +317,6 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
       props,
       messageId,
       traceId,
-      messages,
       setMessageId,
       setTraceId,
       handleMessage,

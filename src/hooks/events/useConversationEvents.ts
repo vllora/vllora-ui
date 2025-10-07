@@ -60,7 +60,6 @@ export function useConversationEvents(props: {
         trace_id: span.trace_id,
         start_time_us,
       };
-      console.log('===== metrics', metrics)
       setTimeout(() => {
         updateMessageMetrics({
           message_id: messageId,
@@ -139,20 +138,22 @@ export function useConversationEvents(props: {
           let thread_id = eventMessage.thread_id;
           let run_id = eventMessage.run_id;
           let delta = (eventMessage as any).delta || "";
+
           setTimeout(() => {
             setTyping(["TextMessageStart", "TextMessageContent"].includes(event.type));
             upsertMessage({
               message_id: message_id,
               thread_id: thread_id,
-              run_id: run_id || "",
               delta: delta,
               timestamp: eventMessage.timestamp,
               message_type: 'ai',
+              metrics: [{
+                run_id: run_id,                
+              }]
             });
           }, 0);
           return;
         }
-        console.log('===== event', event)
 
         if (
           event.type === "Custom" &&

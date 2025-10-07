@@ -8,6 +8,7 @@ import { emitter } from '@/utils/eventEmitter';
 import { XCircle } from 'lucide-react';
 import { useConversationEvents } from '@/hooks/events/useConversationEvents';
 import { ArrowsPointingInIcon, ArrowsPointingOutIcon, CurrencyDollarIcon } from '@heroicons/react/24/outline';
+import { Message } from '@/types/chat';
 
 interface ChatWindowProps {
   threadId?: string;
@@ -81,8 +82,6 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     widgetId,
     threadId,
     threadTitle,
-    messages: serverMessages,
-    setMessages: setServerMessages,
     setCurrentInput,
     setTyping,
     setError,
@@ -97,6 +96,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     (inputProps: {
       inputText: string;
       files: any[];
+      initialMessages?: Message[];
       searchToolEnabled?: boolean;
       otherTools?: string[];
       threadId?: string;
@@ -193,14 +193,14 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       threadTitle?: string;
     }) => {
       setCurrentInput(inputText);
-      onSubmitWrapper({ inputText, files, searchToolEnabled, otherTools, threadId, threadTitle });
+      onSubmitWrapper({ inputText, files, searchToolEnabled, otherTools, threadId, threadTitle, initialMessages: serverMessages });
     };
     emitter.on('langdb_input_chatSubmit', handleExternalSubmit);
 
     return () => {
       emitter.off('langdb_input_chatSubmit', handleExternalSubmit);
     };
-  }, [onSubmitWrapper, setCurrentInput, threadId]);
+  }, [onSubmitWrapper, setCurrentInput, threadId, serverMessages]);
 
   // Ensure typing indicator is visible by scrolling to bottom when typing state changes
   useEffect(() => {
