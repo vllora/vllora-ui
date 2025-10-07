@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { ProviderIcon } from "@/components/Icons/ProviderIcons";
+import { formatCost } from "@/utils/formatCost";
 
 interface ModelCallSummaryTracesProps {
   run: RunDTO;
@@ -140,11 +141,6 @@ const SidebarModelCallSummaryTracesImpl = ({
       : date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const formatMoney = (cost: number) => {
-    if (cost === 0) return "$0.00";
-    if (cost < 0.0001) return "< $0.0001";
-    return `≤ $${cost.toFixed(4)}`;
-  };
 
   return (
     <Card
@@ -274,7 +270,7 @@ const SidebarModelCallSummaryTracesImpl = ({
             <div>
               <div className="font-semibold text-[10px]">Cost</div>
               <div className="tabular-nums text-white font-medium">
-                {formatMoney(totalCost)}
+                {formatCost(totalCost)}
               </div>
             </div>
           </div>

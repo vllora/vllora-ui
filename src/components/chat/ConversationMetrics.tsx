@@ -2,6 +2,7 @@ import React from 'react';
 import { CurrencyDollarIcon, ClockIcon } from '@heroicons/react/24/outline';
 import { formatMiliSecondsToSeconds } from '@/utils/format';
 import { Download, Upload } from 'lucide-react';
+import { formatCost } from '@/utils/formatCost';
 
 interface ConversationMetricsProps {
   threadId?: string;
@@ -20,11 +21,6 @@ export const ConversationMetrics: React.FC<ConversationMetricsProps> = ({
   duration,
   avgTTFT,
 }) => {
-  const formatMoney = (amount: number) => {
-    if (amount === 0) return "$0.00";
-    if (amount < 0.0001) return "< $0.0001";
-    return `≤ $${amount.toFixed(4)}`;
-  };
 
   const displayDuration = duration ? formatMiliSecondsToSeconds(duration) : undefined;
   const ttftDisplay = avgTTFT ? formatMiliSecondsToSeconds(avgTTFT) : undefined;
@@ -42,7 +38,7 @@ export const ConversationMetrics: React.FC<ConversationMetricsProps> = ({
               <div>
                 <div className="font-semibold text-[10px] text-muted-foreground">Cost</div>
                 <div className="tabular-nums text-white font-medium">
-                  {formatMoney(cost)}
+                  {formatCost(cost)}
                 </div>
               </div>
             </div>
