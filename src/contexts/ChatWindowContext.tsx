@@ -416,9 +416,9 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
           };
           return [...prev, newMsg];
         } else {
-          const newMessages = [...prev];
-          let prevMsg = newMessages[messageIndex];
+          const prevMsg = prev[messageIndex];
           let newMetrics = prevMsg.metrics || [];
+
           if (
             newMetrics.length > 0 &&
             input.metrics &&
@@ -438,12 +438,20 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
               },
             ];
           }
-          prevMsg.content += input.delta || "";
-          prevMsg.timestamp = input.timestamp;
-          prevMsg.trace_id = input.trace_id;
-          prevMsg.metrics = newMetrics;
-          newMessages[messageIndex] = { ...prevMsg };
-          return [...newMessages];
+
+          // Immutably update the message - avoid mutation
+          const updatedMessage: Message = {
+            ...prevMsg,
+            content: prevMsg.content + (input.delta || ""),
+            timestamp: input.timestamp,
+            trace_id: input.trace_id || prevMsg.trace_id,
+            metrics: newMetrics,
+            is_loading: input.is_loading ?? prevMsg.is_loading,
+          };
+
+          return prev.map((msg, idx) =>
+            idx === messageIndex ? updatedMessage : msg
+          );
         }
       });
     },
