@@ -1,9 +1,9 @@
 import { createContext, useContext, ReactNode, useCallback, useState, useEffect, useMemo } from 'react';
 import { useRequest, useLatest } from 'ahooks';
 import { toast } from 'sonner';
-import { queryMessages } from '@/services/messages-api';
-import { listRuns} from '@/services/runs-api';
-import { Message } from '@/types/chat';
+import { getMessageById, queryMessages } from '@/services/messages-api';
+import { listRuns } from '@/services/runs-api';
+import { Message, MessageMetrics } from '@/types/chat';
 import { fetchAllSpansByRunId } from '@/utils/traces';
 import { RunDTO, Span } from '@/types/common-type';
 import { LangDBEventSpan } from './project-events/dto';
@@ -53,7 +53,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
   const threadIdRef = useLatest(threadId);
   const projectIdRef = useLatest(projectId);
-  
+
 
   const [serverMessages, setServerMessages] = useState<Message[]>([]);
 
@@ -64,6 +64,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   const [messageId, setMessageId] = useState<string | undefined>();
   const [traceId, setTraceId] = useState<string | undefined>();
   const [usageInfo, setUsageInfo] = useState<any[]>([]);
+
 
   // Use ahooks useRequest for fetching messages
   const { loading: isLoading, error: loadError, run: refreshMessages } = useRequest(
@@ -81,14 +82,59 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     {
       manual: true,
       onError: (err) => {
-        
+
       },
       onSuccess: (data) => {
         setServerMessages(data);
       },
-     
+
     }
   );
+
+
+  const refreshMessageById = useCallback(async (input: {
+    messageId: string;
+    threadId: string;
+    projectId: string;
+  }) => {
+    try {
+      if (input.threadId !== threadIdRef.current || input.projectId !== projectIdRef.current) {
+        return;
+      }
+      const message: Message = await getMessageById({
+        messageId: input.messageId,
+        projectId: input.projectId,
+        threadId: input.threadId
+      });
+
+      setServerMessages(prev => {
+        let newMessages = [...prev];
+        let index = newMessages.findIndex(m => m.id === input.messageId);
+        if (index === -1) {
+          //newMessages.push(message);
+        } else {
+          let prevMessage = newMessages[index];
+
+          // NOTE: work around for metrics not being returned in the message since message is commited but not the metrics
+          if (message.metrics && message.metrics.length > 0) {
+            newMessages[index] = message;
+          } else {
+            newMessages[index] = {
+              ...message,
+              metrics: prevMessage.metrics
+            }
+
+          }
+        }
+        return newMessages;
+      });
+
+    } catch (err) {
+      toast.error('Failed to load message', {
+        description: (err as Error).message || 'An error occurred while loading message',
+      });
+    }
+  }, []);
 
   // Use ahooks useRequest for fetching runs of this thread (initial load)
   const {
@@ -181,7 +227,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     let current_runId = span.run_id;
     setRawRuns(prev => {
       let runIndex = prev.findIndex(r => r.run_id === current_runId);
-      if(runIndex === -1) {
+      if (runIndex === -1) {
         return [...prev, convertSpanToRunDTO(span)];
       }
       let newRun = convertSpanToRunDTO(span, prev[runIndex]);
@@ -190,12 +236,12 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     });
     current_runId && setSpanMap(prev => {
       let runMap = prev[current_runId];
-      if(runMap) {
+      if (runMap) {
         return { ...prev, [current_runId]: [...runMap, span] };
       } else {
         return { ...prev, [current_runId]: [span] };
       }
-   });
+    });
   }, []);
   const upsertRun = useCallback((input: {
     runId: string;
@@ -209,12 +255,12 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     input_tokens?: number;
     output_tokens?: number;
     errors?: string[];
-  })=> {
-    if(input.threadId !== threadId) return;
+  }) => {
+    if (input.threadId !== threadId) return;
     setRawRuns(prev => {
       const runIndex = prev.findIndex(r => r.run_id === input.runId && r.thread_ids.includes(input.threadId));
       // Create new run
-      if(runIndex === -1) {
+      if (runIndex === -1) {
         const startTime_micro = input.timestamp * 1000;
         const newRunDTO: RunDTO = {
           run_id: input.runId,
@@ -275,19 +321,144 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   // Map API messages to local Message type
   const runs = rawRuns;
 
-  const addMessage = useCallback((_message: Message) => {
-    // TODO: Implement optimistic message adding if needed
+
+
+  const updateMessageMetrics: (input: {
+    message_id: string;
+    thread_id: string;
+    run_id?: string;
+    metrics: MessageMetrics;
+  }) => void = useCallback((input) => {
+    setServerMessages((prev) => {
+      const messageIndex = prev.findIndex(
+        (msg) =>
+          msg.id === input.message_id && msg.thread_id === input.thread_id
+      );
+      if (messageIndex === -1) return prev;
+
+      const existingMessage = prev[messageIndex];
+      const existingMetrics = existingMessage.metrics || [];
+
+      // Find if there's already a metric entry for this run_id
+      const sameRunIndex = existingMetrics.findIndex(
+        (metric) => metric.run_id === input.run_id
+      );
+      let updatedMetrics: MessageMetrics[];
+
+      if (sameRunIndex !== -1) {
+        // Same run exists - merge the metrics, preferring non-undefined values from input
+        const existingMetric = existingMetrics[sameRunIndex];
+        const mergedMetric: MessageMetrics = {
+          run_id: input.metrics.run_id ?? existingMetric.run_id,
+          trace_id: input.metrics.trace_id ?? existingMetric.trace_id,
+          cost: (input.metrics.cost && input.metrics.cost > 0) ? input.metrics.cost : existingMetric.cost,
+          ttft: (input.metrics.ttft && input.metrics.ttft > 0) ? input.metrics.ttft : existingMetric.ttft,
+          duration: (input.metrics.duration && input.metrics.duration > 0) ? input.metrics.duration : existingMetric.duration,
+          start_time_us: (input.metrics?.start_time_us && input.metrics?.start_time_us > 0) ? input.metrics?.start_time_us : existingMetric.start_time_us,
+          usage: input.metrics.usage
+            ? {
+                input_tokens: (input.metrics.usage?.input_tokens && input.metrics.usage?.input_tokens > 0) ? input.metrics.usage?.input_tokens : existingMetric.usage?.input_tokens,
+                output_tokens: (input.metrics.usage?.output_tokens && input.metrics.usage?.output_tokens > 0) ? input.metrics.usage?.output_tokens : existingMetric.usage?.output_tokens,
+                prompt_tokens: (input.metrics.usage?.prompt_tokens && input.metrics.usage?.prompt_tokens > 0) ? input.metrics.usage?.prompt_tokens : existingMetric.usage?.prompt_tokens,
+                completion_tokens: input.metrics.usage?.completion_tokens ?? existingMetric.usage?.completion_tokens,
+                cost: input.metrics.usage?.cost ?? existingMetric.usage?.cost,
+              }
+            : existingMetric.usage,
+        };
+
+        updatedMetrics = existingMetrics.map((metric, idx) =>
+          idx === sameRunIndex ? mergedMetric : metric
+        );
+      } else {
+        // Different run - append new metrics
+        updatedMetrics = [...existingMetrics, input.metrics];
+      }
+
+      // Return new array with updated message
+      return prev.map((msg, idx) =>
+        idx === messageIndex
+          ? { ...msg, metrics: updatedMetrics }
+          : msg
+      );
+    });
   }, []);
+  const upsertMessage = useCallback(
+    (input: {
+      message_id: string;
+      thread_id: string;
+      run_id?: string;
+      message_type: string;
+      trace_id?: string;
+      delta?: string;
+      is_loading?: boolean;
+      metrics?: MessageMetrics[];
+      timestamp: number;
+    }) => {
+      setServerMessages((prev) => {
+        const messageIndex = prev.findIndex(
+          (msg) =>
+            msg.id === input.message_id && msg.thread_id === input.thread_id
+        );
+        if (messageIndex === -1) {
+          let newMsg: Message = {
+            id: input.message_id,
+            type: input.message_type,
+            thread_id: input.thread_id,
+            content_type: "Text",
+            content: input.delta || "",
+            timestamp: input.timestamp,
+            trace_id: input.trace_id,
+            metrics: input.metrics || [
+              {
+                run_id: input.run_id,
+              },
+            ],
+          };
+          return [...prev, newMsg];
+        } else {
+          const newMessages = [...prev];
+          let prevMsg = newMessages[messageIndex];
+          let newMetrics = prevMsg.metrics || [];
+          if (
+            newMetrics.length > 0 &&
+            input.metrics &&
+            input.metrics.length > 0
+          ) {
+            let firstPrevMetric = newMetrics[0];
+            let firstInputMetric = input.metrics[0];
+            firstPrevMetric = {
+              ...firstPrevMetric,
+              ...firstInputMetric,
+            };
+            newMetrics = [firstPrevMetric];
+          } else {
+            newMetrics = input.metrics || [
+              {
+                run_id: input.run_id,
+              },
+            ];
+          }
+          prevMsg.content += input.delta || "";
+          prevMsg.timestamp = input.timestamp;
+          prevMsg.trace_id = input.trace_id;
+          prevMsg.metrics = newMetrics;
+          newMessages[messageIndex] = { ...prevMsg };
+          return [...newMessages];
+        }
+      });
+    },
+    []
+  );
 
   const clearMessages = useCallback(() => {
-     setServerMessages([]);
+    setServerMessages([]);
   }, []);
 
   const appendUsage = useCallback((usage: any) => {
     setUsageInfo((prev) => [...prev, usage]);
   }, []);
 
-  
+
 
   /**
    * Fetches detailed span data for a specific run when user expands a row
@@ -314,9 +485,9 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
       try {
         const relatedSpans = await fetchAllSpansByRunId(runId, projectIdRef.current);
-        let firstSpan  = undefined
+        let firstSpan = undefined
         for (let i = 0; i < relatedSpans.length; i++) {
-          if(skipThisSpan(relatedSpans[i])) {
+          if (skipThisSpan(relatedSpans[i])) {
             continue;
           }
           firstSpan = relatedSpans[i];
@@ -324,7 +495,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
         }
         setSpanMap((prev) => ({ ...prev, [runId]: relatedSpans }));
         // auto select the first span
-        if(firstSpan) {
+        if (firstSpan) {
           setSelectedSpanInfo({
             runId,
             spanId: firstSpan.span_id,
@@ -347,8 +518,8 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     [projectIdRef]
   );
 
-  const spansOfSelectedRun =  useMemo(() => {
-    return  selectedSpanInfo?.runId ? spanMap[selectedSpanInfo.runId] : [];
+  const spansOfSelectedRun = useMemo(() => {
+    return selectedSpanInfo?.runId ? spanMap[selectedSpanInfo.runId] : [];
   }, [selectedSpanInfo, spanMap]);
   const selectedRun = useMemo(() => {
     return selectedSpanInfo?.runId ? runs.find(r => r.run_id === selectedSpanInfo.runId) : undefined;
@@ -368,7 +539,6 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     setServerMessages,
     isLoading,
     loadError,
-    addMessage,
     clearMessages,
     refreshMessages,
     runs,
@@ -408,6 +578,9 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
 
     upsertRun,
+    upsertMessage,
+    updateMessageMetrics,
+    refreshMessageById,
   };
 }
 export function ChatWindowProvider({ children, threadId, projectId }: { children: ReactNode, threadId: string, projectId: string }) {

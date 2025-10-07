@@ -120,6 +120,7 @@ export interface ProjectEvent {
       project_id: string;
       run_id: string;
       thread_id: string;
+      message_type: string;
     }
   }
 

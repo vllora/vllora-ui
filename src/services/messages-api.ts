@@ -1,4 +1,4 @@
-import { API_CONFIG, getMessagesUrl } from "@/config/api";
+import { API_CONFIG, getMessagesUrl, getThreadsUrl } from "@/config/api";
 import { Message } from "@/types/chat";
 
 export interface QueryMessagesRequest {
@@ -16,6 +16,29 @@ export interface QueryMessagesResponse {
   };
 }
 
+
+export async function getMessageById(props: {
+  messageId: string;
+  projectId: string;
+  threadId: string;
+}) {
+  const url = `${getThreadsUrl()}/${props.threadId}/messages/${props.messageId}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-project-id': props.projectId
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch message: ${response.statusText}`);
+  }
+
+  return await response.json();
+}
+
 export async function queryMessages(
   projectId: string,
   threadId: string,
@@ -28,8 +51,7 @@ export async function queryMessages(
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
-      'x-project-id': projectId,
-      'authorization': `Bearer ${API_CONFIG.apiKey}`,
+      'x-project-id': projectId
     }
   });
 

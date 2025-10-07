@@ -10,6 +10,22 @@ export const tryParseJson = (str: string) => {
   }
 }
 
+export const tryParseFloat = (str: string) => {
+  try {
+    return parseFloat(str);
+  } catch (e) {
+    return undefined;
+  }
+}
+
+export const tryParseInt = (str: string) => {
+  try {
+    return parseInt(str);
+  } catch (e) {
+    return undefined;
+  }
+}
+
 export const getModelTypeDisplayName = (type: string) => {
   switch (type) {
     case 'image_generation':

@@ -53,7 +53,6 @@ export interface Message {
   thread_id?: string;
   content_array?: any[];
   trace_id?: string;
-  run_id?: string;
   model_name?: string;
   files?: FileWithPreview[];
   tool_call_id?: any;
@@ -62,6 +61,7 @@ export interface Message {
   metrics?: MessageMetrics[];
 
   is_from_local?: boolean;
+  is_loading?: boolean;
 }
 
 export interface Thread {

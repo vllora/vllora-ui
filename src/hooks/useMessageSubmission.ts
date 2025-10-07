@@ -72,65 +72,15 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
               threadId: currentThreadId,
               widgetId: props.widgetId,
             });
-            appendUsage(event.usage);
+            //appendUsage(event.usage);
           }
           props.onEvent?.(event);
-
-          setMessages((prevMessages) => {
-            const lastMessage = prevMessages[prevMessages.length - 1];
-
-            if (lastMessage && lastMessage.type === MessageType.HumanMessage) {
-              return [
-                ...prevMessages.slice(0, -1),
-                { ...lastMessage, thread_id: currentThreadId },
-                {
-                  id: currentMessageId || uuidv4(),
-                  role: 'assistant' as const,
-                  content: event.choices.map((choice) => choice.delta.content).join(''),
-                  timestamp: Date.now(),
-                  model_name: event.model,
-                  type: MessageType.AIMessage,
-                  content_type: MessageContentType.Text,
-                  thread_id: currentThreadId,
-                  trace_id: currentTraceId || undefined,
-                },
-              ];
-            }
-
-            const updatedLastMessage: Message = {
-              ...lastMessage,
-              content:
-                lastMessage.content +
-                event.choices.map((choice) => choice.delta.content).join(''),
-              run_id: currentRunId || undefined,
-            };
-
-            if (!updatedLastMessage.metrics && event.usage) {
-              const customUsage: any = { ...event.usage };
-              if (customUsage.prompt_tokens) {
-                customUsage.input_tokens = customUsage.prompt_tokens;
-              }
-              if (customUsage.completion_tokens) {
-                customUsage.output_tokens = customUsage.completion_tokens;
-              }
-              updatedLastMessage.metrics = [
-                {
-                  run_id: currentRunId || undefined,
-                  trace_id: currentTraceId || undefined,
-                  usage: customUsage,
-                  cost: event.usage?.cost,
-                },
-              ];
-            }
-
-            return [...prevMessages.slice(0, -1), updatedLastMessage];
-          });
         }
       } catch (error) {
         console.error('Error processing event:', error);
       }
     },
-    [props, setTyping, setError, appendUsage, setMessages]
+    [props, setTyping, setError, appendUsage]
   );
 
   const submitMessageFn = useCallback(
@@ -148,20 +98,20 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
 
       if (inputText.trim() === '') return;
 
-      const newMessage: Message = {
-        id: uuidv4(),
-        type: MessageType.HumanMessage,
-        content: inputText,
-        timestamp: Date.now(),
-        content_type: MessageContentType.Text,
-        thread_id: threadId,
-        files,
-        is_from_local: true,
-      };
+      // const newMessage: Message = {
+      //   id: uuidv4(),
+      //   type: MessageType.HumanMessage,
+      //   content: inputText,
+      //   timestamp: Date.now(),
+      //   content_type: MessageContentType.Text,
+      //   thread_id: threadId,
+      //   files,
+      //   is_from_local: true,
+      // };
 
-      setMessages((prevMessages) => {
-        return [...prevMessages, newMessage];
-      });
+      // setMessages((prevMessages) => {
+      //   return [...prevMessages, newMessage];
+      // });
       setCurrentInput('');
       setTyping(true);
       setError(undefined);
@@ -266,8 +216,8 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
         currentMessageId = messageIdHeader || currentMessageId;
         currentTraceId = traceIdHeader || currentTraceId;
         currentRunId = runIdHeader || currentRunId;
-        setMessageId(currentMessageId);
-        setTraceId(currentTraceId);
+        // setMessageId(currentMessageId);
+        // setTraceId(currentTraceId);
 
         widgetId &&
           emitter.emit('langdb_chatWindow', {
