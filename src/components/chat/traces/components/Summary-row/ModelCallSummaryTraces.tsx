@@ -19,6 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ProviderIcon } from "@/components/Icons/ProviderIcons";
 import { formatCost } from "@/utils/formatCost";
+import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 
 interface ModelCallSummaryTracesProps {
   run: RunDTO;
@@ -32,7 +33,9 @@ const SidebarModelCallSummaryTracesImpl = ({
   isOpen,
   onChevronClick,
 }: ModelCallSummaryTracesProps) => {
+  const { hoveredRunId } = ChatWindowConsumer();
   const runId = run.run_id || "";
+  const isHovered = hoveredRunId === runId;
 
   // Extract models and providers
   const usedModels = run.used_models || [];
@@ -147,8 +150,10 @@ const SidebarModelCallSummaryTracesImpl = ({
       onClick={handleCardClick}
       data-run-id={runId}
       className={cn(
-        "py-2 hover:bg-[#171717] rounded-none bg-[#161616] transition-all border-none gap-1 flex px-2 cursor-pointer",
-        isOpen && "bg-[#171717]"
+        "py-2 hover:bg-[#171717] bg-[#161616] transition-all gap-1 flex px-2 cursor-pointer",
+        isOpen && "bg-[#171717]",
+        isHovered && !isOpen ? " border-r-0 border-y-0 border-l-4 border-[rgb(var(--theme-500))]" : ' border-r-0 border-y-0 border-l-4 border-transparent'
+
       )}
     >
       <div className="flex flex-col gap-2 flex-1">

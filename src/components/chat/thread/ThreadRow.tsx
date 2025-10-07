@@ -9,7 +9,6 @@ import { Input } from "../../ui/input";
 import { ListProviders } from "./ListProviders";
 import { ThreadCopiableId } from "./ThreadCopiableId";
 import { cn } from "@/lib/utils";
-import { formatMoney } from "@/utils/format";
 import { useClickAway } from "ahooks";
 import { ThreadTagsDisplay } from "./ThreadTagsDisplay";
 import { Card } from "../../ui/card";

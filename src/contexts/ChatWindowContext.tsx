@@ -46,6 +46,8 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   const [selectedSpanInfo, setSelectedSpanInfo] = useState<SelectedSpanInfo | null>(null);
   // should the the run be expanded
   const [openTraces, setOpenTraces] = useState<string[]>([]);
+  // hovered run id (for highlighting related traces when hovering messages)
+  const [hoveredRunId, setHoveredRunId] = useState<string | null>(null);
 
   // Span data state
   const [spanMap, setSpanMap] = useState<SpanMap>({});
@@ -613,6 +615,8 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     setSelectedSpanInfo,
     openTraces,
     setOpenTraces,
+    hoveredRunId,
+    setHoveredRunId,
     // Span data
     spanMap,
     fetchSpansByRunId,

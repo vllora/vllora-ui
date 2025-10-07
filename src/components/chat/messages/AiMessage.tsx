@@ -28,7 +28,7 @@ export const AiMessage: React.FC<{
   message?: Message;
   isTyping?: boolean;
 }> = ({ message: msg, isTyping }) => {
-  const { setOpenTraces, fetchSpansByRunId } = ChatWindowConsumer();
+  const { setOpenTraces, fetchSpansByRunId, selectedSpanInfo, setHoveredRunId } = ChatWindowConsumer();
 
   const [copied, setCopied] = useState(false);
   const [toolCopiedStates, setToolCopiedStates] = useState<{
@@ -65,10 +65,28 @@ export const AiMessage: React.FC<{
     fetchSpansByRunId(runId);
   }, [canClickToOpenTrace, metrics, setOpenTraces, fetchSpansByRunId]);
 
+  const handleMouseEnter = useCallback(() => {
+    // Only highlight if there's no currently selected run
+    if (selectedSpanInfo?.runId) return;
+
+    if (metrics && Array.isArray(metrics) && metrics.length > 0) {
+      const runId = metrics[0]?.run_id;
+      if (runId) {
+        setHoveredRunId(runId);
+      }
+    }
+  }, [metrics, selectedSpanInfo, setHoveredRunId]);
+
+  const handleMouseLeave = useCallback(() => {
+    setHoveredRunId(null);
+  }, [setHoveredRunId]);
+
   return (
     <div
       className={`flex gap-3 items-start group ${canClickToOpenTrace ? 'cursor-pointer hover:bg-neutral-800/30 rounded-lg p-2 -m-2 transition-colors' : ''}`}
       onClick={canClickToOpenTrace ? handleOpenTrace : undefined}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       <div className="flex-shrink-0 mt-1">
         <TooltipProvider>
