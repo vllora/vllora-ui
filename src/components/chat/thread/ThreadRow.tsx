@@ -16,6 +16,7 @@ import { Card } from "../../ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../ui/tooltip";
 import { motion } from "framer-motion";
 import { ErrorTooltip } from "./ErrorTooltip";
+import { formatCost } from "@/utils/formatCost";
 
 export const ThreadRow = React.memo(({ thread, timeUpdateTrigger }: { thread: Thread; timeUpdateTrigger?: number }) => {
     const { renameThread, deleteDraftThread, selectedThreadId, threadsHaveChanges } = ThreadsConsumer();
@@ -253,11 +254,11 @@ export const ThreadRow = React.memo(({ thread, timeUpdateTrigger }: { thread: Th
                                     <TooltipTrigger asChild>
                                         <div className="flex items-center text-xs text-muted-foreground hover:text-foreground transition-colors hover:cursor-help truncate">
                                             <CurrencyDollarIcon className="w-3.5 h-3.5 mr-1.5 text-teal-500" />
-                                            <span className="font-mono tabular-nums"> {formatMoney(thread.cost)}</span>
+                                            <span className="font-mono tabular-nums"> {formatCost(thread.cost)}</span>
                                         </div>
                                     </TooltipTrigger>
                                     <TooltipContent side="top" className="text-xs p-1.5">
-                                        <div>Total cost: {formatMoney(thread.cost, 5)}</div>
+                                        <div>Total cost: {formatCost(thread.cost, 6)}</div>
                                         {thread.input_tokens && <div>Input tokens: {thread.input_tokens.toLocaleString()}</div>}
                                         {thread.output_tokens && <div>Output tokens: {thread.output_tokens.toLocaleString()}</div>}
                                     </TooltipContent>
