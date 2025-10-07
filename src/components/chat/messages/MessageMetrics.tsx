@@ -8,6 +8,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { formatCost } from '@/utils/formatCost';
+import { formatDuration } from '@/utils/formatDuration';
 
 interface MessageMetricsProps {
   message?: Message;
@@ -34,14 +35,13 @@ export const MessageMetrics: React.FC<MessageMetricsProps> = ({
 
   // Helper function to format milliseconds to seconds
   const formatToSeconds = (microseconds: number) => {
-    const seconds = microseconds / 1000000;
-    return seconds < 1 ? `${seconds.toFixed(2)}s` : `${seconds.toFixed(1)}s`;
+    let milliseconds = microseconds / 1000;
+    return formatDuration(milliseconds);
+    // return seconds < 1 ? `${seconds.toFixed(2)}s` : `${seconds.toFixed(1)}s`;
   };
   const formatToMilliseconds = (microseconds: number) => {
     const milliseconds = microseconds / 1000;
-    return milliseconds < 1
-      ? `${milliseconds.toFixed(2)}ms`
-      : `${milliseconds.toFixed(1)}ms`;
+    return formatDuration(milliseconds);
   };
   return (
     <TooltipProvider>

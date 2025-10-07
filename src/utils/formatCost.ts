@@ -14,9 +14,26 @@ export const formatCost = (cost: number, decimals: number = 4): string => {
     return `<$${threshold.toFixed(decimals)}`;
   }
 
-  // Format with specified decimals and remove trailing zeros
+  // Format with specified decimals
   const formatted = cost.toFixed(decimals);
-  const withoutTrailingZeros = parseFloat(formatted).toString();
+  const roundedValue = parseFloat(formatted);
+
+  // Check if rounding increased the value (lost precision)
+  // If the rounded value is greater than the original, show "<" prefix
+  if (roundedValue > cost) {
+    const withoutTrailingZeros = roundedValue.toString();
+    const parts = withoutTrailingZeros.split('.');
+    if (parts.length === 1) {
+      return `<$${parts[0]}.00`;
+    }
+    if (parts[1].length === 1) {
+      return `<$${parts[0]}.${parts[1]}0`;
+    }
+    return `<$${withoutTrailingZeros}`;
+  }
+
+  // Remove trailing zeros for exact values
+  const withoutTrailingZeros = roundedValue.toString();
 
   // Ensure at least 2 decimal places for currency
   const parts = withoutTrailingZeros.split('.');

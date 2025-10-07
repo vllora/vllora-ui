@@ -3,6 +3,13 @@ import { CurrencyDollarIcon, ClockIcon } from '@heroicons/react/24/outline';
 import { formatMiliSecondsToSeconds } from '@/utils/format';
 import { Download, Upload } from 'lucide-react';
 import { formatCost } from '@/utils/formatCost';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { formatDuration } from '@/utils/formatDuration';
 
 interface ConversationMetricsProps {
   threadId?: string;
@@ -13,6 +20,7 @@ interface ConversationMetricsProps {
   avgTTFT?: number; // average time to first token in seconds
 }
 
+
 export const ConversationMetrics: React.FC<ConversationMetricsProps> = ({
   threadId,
   cost,
@@ -22,8 +30,9 @@ export const ConversationMetrics: React.FC<ConversationMetricsProps> = ({
   avgTTFT,
 }) => {
 
-  const displayDuration = duration ? formatMiliSecondsToSeconds(duration) : undefined;
-  const ttftDisplay = avgTTFT ? formatMiliSecondsToSeconds(avgTTFT) : undefined;
+  // duration is milliseconds
+  const displayDuration = duration ? formatDuration(duration) : undefined;
+  const ttftDisplay = avgTTFT ? formatDuration(avgTTFT) : undefined;
 
   return (
     <div className="h-16 px-6 border-b border-border flex items-center justify-between text-xs">
@@ -31,77 +40,122 @@ export const ConversationMetrics: React.FC<ConversationMetricsProps> = ({
         <>
           {/* Cost */}
           {cost !== undefined && (
-            <div className="flex items-center">
-              <div className="flex items-center justify-center w-6 h-6 rounded-full bg-teal-500/10 mr-2">
-                <CurrencyDollarIcon className="w-3.5 h-3.5 text-teal-500" />
-              </div>
-              <div>
-                <div className="font-semibold text-[10px] text-muted-foreground">Cost</div>
-                <div className="tabular-nums text-white font-medium">
-                  {formatCost(cost)}
-                </div>
-              </div>
-            </div>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center cursor-help">
+                    <div className="flex items-center justify-center w-6 h-6 rounded-full bg-teal-500/10 mr-2">
+                      <CurrencyDollarIcon className="w-3.5 h-3.5 text-teal-500" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-[10px] text-muted-foreground">Cost</div>
+                      <div className="tabular-nums text-white font-medium">
+                        {formatCost(cost)}
+                      </div>
+                    </div>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs">Raw value: ${cost.toFixed(10)}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
 
           {/* Input Tokens */}
           {inputTokens !== undefined && (
-            <div className="flex items-center">
-              <div className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-500/10 mr-2">
-                <Upload className="w-3.5 h-3.5 text-blue-500" />
-              </div>
-              <div>
-                <div className="font-semibold text-[10px] text-muted-foreground">Input</div>
-                <div className="tabular-nums text-white font-medium">
-                  {inputTokens.toLocaleString()}
-                </div>
-              </div>
-            </div>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center cursor-help">
+                    <div className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-500/10 mr-2">
+                      <Upload className="w-3.5 h-3.5 text-blue-500" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-[10px] text-muted-foreground">Input</div>
+                      <div className="tabular-nums text-white font-medium">
+                        {inputTokens.toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs">Total tokens sent to the model (prompts + context)</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
 
           {/* Output Tokens */}
           {outputTokens !== undefined && (
-            <div className="flex items-center">
-              <div className="flex items-center justify-center w-6 h-6 rounded-full bg-purple-500/10 mr-2">
-                <Download className="w-3.5 h-3.5 text-purple-500" />
-              </div>
-              <div>
-                <div className="font-semibold text-[10px] text-muted-foreground">Output</div>
-                <div className="tabular-nums text-white font-medium">
-                  {outputTokens.toLocaleString()}
-                </div>
-              </div>
-            </div>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center cursor-help">
+                    <div className="flex items-center justify-center w-6 h-6 rounded-full bg-purple-500/10 mr-2">
+                      <Download className="w-3.5 h-3.5 text-purple-500" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-[10px] text-muted-foreground">Output</div>
+                      <div className="tabular-nums text-white font-medium">
+                        {outputTokens.toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs">Total tokens generated by the model (responses)</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
 
           {/* Duration */}
-          {displayDuration && (
-            <div className="flex items-center">
-              <div className="flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/10 mr-2">
-                <ClockIcon className="w-3.5 h-3.5 text-amber-500" />
-              </div>
-              <div>
-                <div className="font-semibold text-[10px] text-muted-foreground">Duration</div>
-                <div className="tabular-nums text-white font-medium">
-                  {displayDuration}
-                </div>
-              </div>
-            </div>
+          {displayDuration && duration !== undefined && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center cursor-help">
+                    <div className="flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/10 mr-2">
+                      <ClockIcon className="w-3.5 h-3.5 text-amber-500" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-[10px] text-muted-foreground">Duration</div>
+                      <div className="tabular-nums text-white font-medium">
+                        {displayDuration}
+                      </div>
+                    </div>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs">Total execution time: {formatDuration(duration)}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
 
           {/* Average TTFT */}
-          {ttftDisplay && (
-            <div className="flex items-center">
-              <div className="flex items-center justify-center w-6 h-6 rounded-full bg-green-500/10 mr-2">
-                <ClockIcon className="w-3.5 h-3.5 text-green-500" />
-              </div>
-              <div>
-                <div className="font-semibold text-[10px] text-muted-foreground">Avg TTFT</div>
-                <div className="tabular-nums text-white font-medium">
-                  {ttftDisplay}
-                </div>
-              </div>
-            </div>
+          {ttftDisplay && avgTTFT !== undefined && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center cursor-help">
+                    <div className="flex items-center justify-center w-6 h-6 rounded-full bg-green-500/10 mr-2">
+                      <ClockIcon className="w-3.5 h-3.5 text-green-500" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-[10px] text-muted-foreground">Avg TTFT</div>
+                      <div className="tabular-nums text-white font-medium">
+                        {ttftDisplay}
+                      </div>
+                    </div>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs">Average time to first token: {formatDuration(avgTTFT)}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </>
       ) : null}
