@@ -12,8 +12,8 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "build-app": "cd ai-gateway && cargo build --release && cd .. && pnpm tauri:build",
-    "start:backend": "cd ai-gateway && cargo run -- serve --port 8080",
-    "start:backend:release": "cd ai-gateway && cargo run --release -- serve --port 8080",
+    "start:backend": "cd ai-gateway && cargo run serve --port 8080",
+    "start:backend:release": "cd ai-gateway && cargo run --release serve --port 8080",
     "start:frontend": "pnpm dev"
   },
   "repository": {
