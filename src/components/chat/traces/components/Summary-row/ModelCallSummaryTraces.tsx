@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { ProviderIcon } from "@/components/Icons/ProviderIcons";
 import { formatCost } from "@/utils/formatCost";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
+import { formatMessageTime } from "@/utils/dateUtils";
 
 interface ModelCallSummaryTracesProps {
   run: RunDTO;
@@ -88,49 +89,9 @@ const SidebarModelCallSummaryTracesImpl = ({
   // Improved time display with better granularity for older traces
   const getTimeDisplay = () => {
     if (!startTime) return "";
-
-    const now = new Date();
     const traceDate = new Date(startTime / 1000);
-    const minutesAgo = differenceInMinutes(now, traceDate);
-
-    // For recent traces (< 60 minutes), show relative time
-    if (minutesAgo < 60) {
-      return formatDistanceToNow(traceDate, { addSuffix: true });
-    }
-
-    // For traces from today, show time only
-    if (now.toDateString() === traceDate.toDateString()) {
-      return traceDate.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: false,
-      });
-    }
-
-    // For traces within the last week, show day and time
-    const daysAgo = Math.floor(
-      (now.getTime() - traceDate.getTime()) / (1000 * 60 * 60 * 24)
-    );
-    if (daysAgo <= 7) {
-      const dayName = traceDate.toLocaleDateString("en-US", { weekday: "short" });
-      const time = traceDate.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      });
-      return `${dayName} ${time}`;
-    }
-
-    // For older traces, show month/day and time
-    const month = traceDate.toLocaleDateString("en-US", { month: "short" });
-    const day = traceDate.getDate();
-    const time = traceDate.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-    return `${month} ${day} ${time}`;
+    const dateString = traceDate.toISOString();
+    return formatMessageTime(dateString);
   };
 
   const timeAgoInSidebar = getTimeDisplay();

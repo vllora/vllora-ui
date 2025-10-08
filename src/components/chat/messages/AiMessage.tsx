@@ -31,7 +31,6 @@ export const AiMessage: React.FC<{
 }> = ({ message: msg, isTyping }) => {
   const { setOpenTraces, fetchSpansByRunId, setHoveredRunId } = ChatWindowConsumer();
   const { setIsRightSidebarCollapsed } = ThreadsConsumer();
-
   const [copied, setCopied] = useState(false);
   const [toolCopiedStates, setToolCopiedStates] = useState<{
     [key: string]: boolean;
@@ -84,79 +83,55 @@ export const AiMessage: React.FC<{
 
   return (
     <div
-      className={`flex gap-3 items-start group ${canClickToOpenTrace ? 'cursor-pointer hover:bg-neutral-800/30 rounded-lg p-2 -m-2 transition-colors' : ''}`}
+      className={`flex flex-col gap-2 group ${canClickToOpenTrace ? 'cursor-pointer hover:bg-neutral-800/30 rounded-lg p-2 -m-2 transition-colors' : ''}`}
       onClick={canClickToOpenTrace ? handleOpenTrace : undefined}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      <div className="flex-shrink-0 mt-1">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger>
-              {msg?.model_name ? (
-                <ProviderIcon
-                  provider_name={providerName}
-                  className="h-6 w-6 rounded-full"
-                />
-              ) : (
-                <AvatarItem
-                  className="h-6 w-6 rounded-full"
-                  name={'Assistant'}
-                />
-              )}
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>
-                {msg?.model_name ? `Model: ${msg.model_name}` : 'AI Message'}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-      <div className="w-full">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <span className="text-neutral-300 font-medium text-sm">Assistant</span>
-            {msg?.created_at && (
-              <div className="flex items-center text-xs text-neutral-500">
-                <Clock className="h-3 w-3 mr-1" />
-                <span>{formatMessageTime(msg.created_at)}</span>
-              </div>
-            )}
-            {canClickToOpenTrace && (
-              <span className="text-[10px] text-blue-400/60 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">Click to view trace details</span>
-            )}
-          </div>
-          {msg?.content && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                // Guard browser APIs for SSR
-                if (typeof navigator === 'undefined' || !navigator.clipboard) {
-                  console.warn('Clipboard API not available');
-                  return;
-                }
-                if (msg?.content) {
-                  navigator.clipboard
-                    .writeText(msg.content)
-                    .then(() => {
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 2000);
-                    })
-                    .catch((err) => console.error('Failed to copy:', err));
-                }
-              }}
-              className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-neutral-300 transition-all p-1 hover:bg-neutral-800/50 rounded"
-              title={copied ? 'Copied!' : 'Copy message'}
-            >
-              {copied ? (
-                <Check className="h-3.5 w-3.5 text-green-400" />
-              ) : (
-                <Copy className="h-3.5 w-3.5" />
-              )}
-            </button>
+      {/* Header with Avatar and Metadata */}
+      {msg?.model_name && <div className="flex items-center gap-3">
+        <div className="flex-shrink-0">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                {msg?.model_name ? (
+                  <ProviderIcon
+                    provider_name={providerName}
+                    className="h-6 w-6 rounded-full"
+                  />
+                ) : (
+                  <AvatarItem
+                    className="h-6 w-6 rounded-full"
+                    name={'Assistant'}
+                  />
+                )}
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>
+                  {msg?.model_name ? `Model: ${msg.model_name}` : 'AI Message'}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+
+        {/* Metadata */}
+        <div className="flex items-center gap-2 flex-1">
+          <span className="text-neutral-300 font-medium text-sm">{msg?.model_name ? msg.model_name : 'Assistant'}</span>
+          {msg?.created_at && (
+            <div className="flex items-center text-xs text-neutral-500">
+              <Clock className="h-3 w-3 mr-1" />
+              <span>{formatMessageTime(msg.created_at)}</span>
+            </div>
+          )}
+          {canClickToOpenTrace && (
+            <span className="text-[10px] text-blue-400/60 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">Click to view trace details</span>
           )}
         </div>
+      </div>}
+
+      {/* Content */}
+      <div className="w-full">
         {msg?.tool_calls && msg.tool_calls.length > 0 && (
           <div className="mb-3 rounded-lg overflow-hidden bg-neutral-900/30 border border-neutral-800/50">
             <div className="px-3 py-2 flex items-center justify-between bg-neutral-800/20">
@@ -331,24 +306,22 @@ export const AiMessage: React.FC<{
             <MessageDisplay message={msg?.content || ""} />
           </div>
         )}
-        {msg && (
-          <div className="flex items-center justify-between gap-3 mt-3 pt-2 border-t border-neutral-800/30 flex-wrap">
-            <MessageMetrics message={msg} />
-            {/* <MessageFeedback
-              threadId={thread_id}
-              messageId={id}
-              isTyping={isTyping}
-            /> */}
-          </div>
-        )}
 
-        {isTyping && (
-          <div className="rounded bg-neutral-800/20 px-2 py-1.5 flex items-center gap-2 mt-2 border border-neutral-800/30">
-            <Pencil className="h-3.5 w-3.5 text-neutral-400 animate-pulse" />
-            <span className="text-xs text-neutral-400">Thinking...</span>
-          </div>
-        )}
       </div>
+
+      {/* Footer with Metrics */}
+      {msg && (
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <MessageMetrics message={msg} />
+        </div>
+      )}
+
+      {isTyping && (
+        <div className="rounded bg-neutral-800/20 px-2 py-1.5 flex items-center gap-2 mt-2 border border-neutral-800/30">
+          <Pencil className="h-3.5 w-3.5 text-neutral-400 animate-pulse" />
+          <span className="text-xs text-neutral-400">Thinking...</span>
+        </div>
+      )}
     </div>
   );
 };

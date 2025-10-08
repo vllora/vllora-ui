@@ -3,34 +3,47 @@
  * @param dateString ISO date string to format
  * @returns Formatted time string (e.g., "2:30 PM" or "Jun 26, 2:30 PM")
  */
-import { formatDistanceToNow, differenceInMinutes } from 'date-fns';
+import { differenceInSeconds } from 'date-fns';
 
+/// dateString have format 2025-10-08T04:06:41.405607Z
 export const formatMessageTime = (dateString?: string): string => {
   if (!dateString) return '';
 
-  // Convert format "2025-09-29 14:11:50.395000" to ISO format
-  // Replace space with 'T' and ensure proper format
-  const isoString = dateString.replace(' ', 'T');
+  // Handle both formats:
+  // - ISO with Z: "2025-10-08T04:06:41.405607Z"
+  // - Space-separated: "2025-09-29 14:11:50.395000"
+  let isoString = dateString;
+  if (!dateString.includes('T')) {
+    isoString = dateString.replace(' ', 'T');
+  }
+  if (!isoString.endsWith('Z')) {
+    isoString += 'Z';
+  }
 
-  // Parse as UTC time (assuming input is UTC)
-  const date = new Date(isoString + 'Z');
+  const date = new Date(isoString);
   if (isNaN(date.getTime())) return '';
 
   const now = new Date();
-  const minutesAgo = differenceInMinutes(now, date);
+  const secondsAgo = differenceInSeconds(now, date);
 
   // For recent traces (< 60 minutes), show relative time
-  if (minutesAgo < 60) {
-    return formatDistanceToNow(date, { addSuffix: true });
+  if (secondsAgo < 60) {
+    if(secondsAgo < 1) {
+      return 'Just now';
+    }
+    return `${secondsAgo} seconds ago`;
   }
   // For traces from today, show time only
   if (now.toDateString() === date.toDateString()) {
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
+    const time = date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: 'numeric',
+      second: 'numeric',
       hour12: false,
+    
     });
+    const milliseconds = date.getMilliseconds().toString().padStart(3, '0');
+    return `${time}.${milliseconds}`;
   }
   // For traces within the last week, show day and time
   const daysAgo = Math.floor(
@@ -43,7 +56,8 @@ export const formatMessageTime = (dateString?: string): string => {
       minute: '2-digit',
       hour12: false,
     });
-    return `${dayName} ${time}`;
+    const milliseconds = date.getMilliseconds().toString().padStart(3, '0');
+    return `${dayName} ${time} ${milliseconds}ms`;
   }
 
   // For older traces, show month/day and time

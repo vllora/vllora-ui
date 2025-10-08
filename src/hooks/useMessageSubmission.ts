@@ -284,6 +284,7 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
             messageId: messageId,
             traceId: traceId,
           });
+          
 
         if (error instanceof Error && error.name === 'AbortError') {
           return;
@@ -301,6 +302,9 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
             messageId: messageId,
             traceId: traceId,
           });
+          setTimeout(() => {
+            scrollToBottom();
+          }, 0);
       }
     },
     [
