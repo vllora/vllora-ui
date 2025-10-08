@@ -24,7 +24,7 @@ Before building, ensure the ai-gateway submodule is properly initialized:
 
 ```bash
 # Clone the repository
-git clone https://github.com/langdb/llm-studio-ui.git
+git clone https://github.com/langdb/ellora-ui.git
 cd ellora-ui
 
 # Initialize and update submodules (automatically checks out feat/oss-refactor branch)
@@ -35,10 +35,11 @@ cd ai-gateway
 cp .env.example .env
 cp config.sample.yaml config.yaml
 # Edit .env and config.yaml with your API keys and settings
+# manually start by: cargo run serve --port 8080
 cd ..
-
 # Install frontend dependencies
 pnpm install
+pnpm dev
 ```
 
 **Note:** The ai-gateway submodule is configured to track the `feat/oss-refactor` branch automatically via `.gitmodules`. You don't need to manually switch branches.
