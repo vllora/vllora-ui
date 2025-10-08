@@ -1,5 +1,6 @@
 import { RefreshCcwIcon } from "lucide-react";
 import { ModelSelector } from "../ModelSelector";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ModelSelectorHeaderProps {
   modelName?: string;
@@ -18,13 +19,22 @@ export function ConversationHeader({ modelName, onModelChange, onRefresh, isLoad
         />
       </div>
       {onRefresh && (
-        <button
-          onClick={onRefresh}
-          disabled={isLoading}
-          className="ml-2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-        >
-          <RefreshCcwIcon className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-        </button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={onRefresh}
+                disabled={isLoading}
+                className="ml-2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+              >
+                <RefreshCcwIcon className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              <p>{isLoading ? 'Refreshing...' : 'Refresh'}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       )}
     </div>
   );
