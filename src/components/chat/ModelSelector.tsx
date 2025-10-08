@@ -1,7 +1,13 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { ChevronDown, ChevronLeft } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { LocalModelsConsumer } from '@/contexts/LocalModelsContext';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface ModelSelectorProps {
   selectedModel: string;
@@ -13,29 +19,9 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   onModelChange,
 }) => {
   const { models } = LocalModelsConsumer();
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsDropdownOpen(false);
-        setSelectedProvider(null);
-        setSearchTerm('');
-      }
-    };
-
-    if (isDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isDropdownOpen]);
 
   const getProviderFromModelId = (modelId: string) => {
     return modelId.split('/')[0];
@@ -79,7 +65,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 
   const handleModelSelect = (modelId: string) => {
     onModelChange?.(modelId);
-    setIsDropdownOpen(false);
+    setOpen(false);
     setSelectedProvider(null);
     setSearchTerm('');
   };
@@ -103,106 +89,111 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     setSearchTerm('');
   };
 
+  const handleOpenChange = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (!isOpen) {
+      setSelectedProvider(null);
+      setSearchTerm('');
+    }
+  };
+
   return (
-    <div className="relative" ref={dropdownRef}>
-      <button
-        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-        className="w-full flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <ProviderIcon
-          provider_name={getProviderFromModelId(selectedModel)}
-          className="w-4 h-4"
-        />
-        <span>{selectedModel}</span>
-        <ChevronDown className={`w-4 h-4 transition-transform ml-auto ${isDropdownOpen ? 'rotate-180' : ''}`} />
-      </button>
+    <DropdownMenu open={open} onOpenChange={handleOpenChange}>
+      <DropdownMenuTrigger asChild>
+        <button className="w-full flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <ProviderIcon
+            provider_name={getProviderFromModelId(selectedModel)}
+            className="w-4 h-4"
+          />
+          <span>{selectedModel}</span>
+          <ChevronDown className={`w-4 h-4 transition-transform ml-auto ${open ? 'rotate-180' : ''}`} />
+        </button>
+      </DropdownMenuTrigger>
 
-      {isDropdownOpen && (
-        <div className="absolute top-full left-0 mt-2 w-96 bg-popover border border-border rounded-lg shadow-xl z-50">
-          {/* Header with Back Button (when model name is selected) */}
-          {selectedProvider && (
-            <div className="p-3 border-b border-border flex items-center gap-2">
-              <button
-                onClick={handleBack}
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                <span>Back</span>
-              </button>
-              <span className="text-sm font-medium text-foreground ml-2">{selectedProvider}</span>
-            </div>
-          )}
-
-          {/* Search Input */}
-          <div className="p-3 border-b border-border">
-            <input
-              type="text"
-              placeholder={selectedProvider ? "Search providers..." : "Search models..."}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-background text-foreground placeholder-muted-foreground px-3 py-2 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring border border-input"
-              autoFocus
-            />
+      <DropdownMenuContent className="w-96 p-0" align="start">
+        {/* Header with Back Button (when model name is selected) */}
+        {selectedProvider && (
+          <div className="p-3 border-b border-border flex items-center gap-2">
+            <button
+              onClick={handleBack}
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span>Back</span>
+            </button>
+            <span className="text-sm font-medium text-foreground ml-2">{selectedProvider}</span>
           </div>
+        )}
 
-          {/* Content Area */}
-          <div className="max-h-80 overflow-y-auto">
-            {!selectedProvider ? (
-              // Model Name Selection View (Step 1)
-              filteredModelNames.length > 0 ? (
-                filteredModelNames.map((modelName) => (
-                  <button
-                    key={modelName}
-                    onClick={() => handleModelNameSelect(modelName)}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-accent transition-colors"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-popover-foreground truncate">{modelName}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {modelNameGroups[modelName].length} {modelNameGroups[modelName].length === 1 ? 'provider' : 'providers'}
-                      </p>
-                    </div>
-                    <ChevronDown className="w-4 h-4 -rotate-90 text-muted-foreground" />
-                  </button>
-                ))
-              ) : (
-                <div className="px-4 py-8 text-center text-muted-foreground text-sm">
-                  No models found
-                </div>
-              )
-            ) : (
-              // Provider Selection View (Step 2)
-              filteredProviders.length > 0 ? (
-                filteredProviders.map((model) => {
-                  const provider = getProviderFromModelId(model.id);
-                  return (
-                    <button
-                      key={model.id}
-                      onClick={() => handleModelSelect(model.id)}
-                      className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-accent transition-colors ${
-                        model.id === selectedModel ? 'bg-accent/50' : ''
-                      }`}
-                    >
-                      <ProviderIcon
-                        provider_name={provider}
-                        className="w-6 h-6 flex-shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-popover-foreground">{provider}</p>
-                        <p className="text-xs text-muted-foreground truncate">{model.owned_by}</p>
-                      </div>
-                    </button>
-                  );
-                })
-              ) : (
-                <div className="px-4 py-8 text-center text-muted-foreground text-sm">
-                  No providers found
-                </div>
-              )
-            )}
-          </div>
+        {/* Search Input */}
+        <div className="p-3 border-b border-border">
+          <input
+            type="text"
+            placeholder={selectedProvider ? "Search providers..." : "Search models..."}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full bg-background text-foreground placeholder-muted-foreground px-3 py-2 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring border border-input"
+            autoFocus
+          />
         </div>
-      )}
-    </div>
+
+        {/* Content Area */}
+        <div className="max-h-80 overflow-y-auto">
+          {!selectedProvider ? (
+            // Model Name Selection View (Step 1)
+            filteredModelNames.length > 0 ? (
+              filteredModelNames.map((modelName) => (
+                <DropdownMenuItem
+                  key={modelName}
+                  onSelect={() => handleModelNameSelect(modelName)}
+                  className="flex items-center gap-3 px-4 py-3 cursor-pointer"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-popover-foreground truncate">{modelName}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {modelNameGroups[modelName].length} {modelNameGroups[modelName].length === 1 ? 'provider' : 'providers'}
+                    </p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                </DropdownMenuItem>
+              ))
+            ) : (
+              <div className="px-4 py-8 text-center text-muted-foreground text-sm">
+                No models found
+              </div>
+            )
+          ) : (
+            // Provider Selection View (Step 2)
+            filteredProviders.length > 0 ? (
+              filteredProviders.map((model) => {
+                const provider = getProviderFromModelId(model.id);
+                return (
+                  <DropdownMenuItem
+                    key={model.id}
+                    onSelect={() => handleModelSelect(model.id)}
+                    className={`flex items-center gap-3 px-4 py-3 cursor-pointer ${
+                      model.id === selectedModel ? 'bg-accent/50' : ''
+                    }`}
+                  >
+                    <ProviderIcon
+                      provider_name={provider}
+                      className="w-6 h-6 flex-shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-popover-foreground">{provider}</p>
+                      <p className="text-xs text-muted-foreground truncate">{model.owned_by}</p>
+                    </div>
+                  </DropdownMenuItem>
+                );
+              })
+            ) : (
+              <div className="px-4 py-8 text-center text-muted-foreground text-sm">
+                No providers found
+              </div>
+            )
+          )}
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };
