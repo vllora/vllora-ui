@@ -27,6 +27,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     return modelId.split('/')[0];
   };
 
+
+
   const getModelNameFromId = (modelId: string) => {
     const parts = modelId.split('/');
     return parts.length > 1 ? parts.slice(1).join('/') : modelId;
@@ -105,7 +107,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             provider_name={getProviderFromModelId(selectedModel)}
             className="w-4 h-4"
           />
-          <span>{selectedModel}</span>
+          <span>{getModelNameFromId(selectedModel)}</span>
           <ChevronDown className={`w-4 h-4 transition-transform ml-auto ${open ? 'rotate-180' : ''}`} />
         </button>
       </DropdownMenuTrigger>
