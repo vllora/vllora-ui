@@ -78,7 +78,7 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
           </div>
         )}
 
-      <div ref={messagesEndRef} className="h-1" />
+      <div ref={messagesEndRef} className="h-[50px]" />
 
       {!inViewport && (
         <div className="sticky bottom-4 w-full flex justify-center mt-2 mb-2">
