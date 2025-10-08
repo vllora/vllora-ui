@@ -7,7 +7,7 @@
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "pnpm run dev",
-    "beforeBuildCommand": "pnpm run build && cd ai-gateway && cargo build --release"
+    "beforeBuildCommand": "pnpm run build && cd ai-gateway && make gateway_mac_m1"
   },
   "app": {
     "windows": [
