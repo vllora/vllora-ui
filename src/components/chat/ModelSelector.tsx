@@ -102,13 +102,13 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   return (
     <DropdownMenu open={open} onOpenChange={handleOpenChange}>
       <DropdownMenuTrigger asChild>
-        <div className="w-full flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+        <div className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer w-[200px] truncate">
           <ProviderIcon
             provider_name={getProviderFromModelId(selectedModel)}
-            className="w-4 h-4"
+            className="w-4 h-4 flex-shrink-0"
           />
-          <span>{getModelNameFromId(selectedModel)}</span>
-          <ChevronDown className={`w-4 h-4 transition-transform ml-auto ${open ? 'rotate-180' : ''}`} />
+          <span className="truncate flex-1">{getModelNameFromId(selectedModel)}</span>
+          <ChevronDown className={`w-4 h-4 transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`} />
         </div>
       </DropdownMenuTrigger>
 
