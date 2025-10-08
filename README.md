@@ -4,19 +4,39 @@ A comprehensive desktop application for exploring AI models and interacting with
 
 ## Installation
 
+### Prerequisites
+
+Install [GitHub CLI](https://cli.github.com/) if you haven't already:
+```bash
+brew install gh
+gh auth login
+```
+
 ### Quick Install (macOS Apple Silicon)
 
+**Option 1: Download and install via gh CLI**
 ```bash
-# Using shell script
-curl -fsSL https://raw.githubusercontent.com/langdb/ellora-ui/main/install.sh | bash
+# Download the latest DMG
+gh release download v0.1.0 --repo langdb/ellora-ui --pattern "*.dmg"
 
-# Or using npx (after npm publish)
-npx @ellora/installer
+# Open the DMG
+open Ellora_0.1.0_aarch64.dmg
+
+# Drag Ellora.app to Applications, then remove quarantine:
+sudo /usr/bin/xattr -rd com.apple.quarantine /Applications/Ellora.app
+```
+
+**Option 2: Use the install script**
+```bash
+# Clone the repo and run the installer
+gh repo clone langdb/ellora-ui
+cd ellora-ui
+./install.sh
 ```
 
 ### Manual Installation
 
-Download the latest DMG from [Releases](https://github.com/YOUR_ORG/ellora-ui/releases/latest) and see [INSTALLATION.md](./INSTALLATION.md) for detailed instructions.
+See [INSTALLATION.md](./INSTALLATION.md) for detailed instructions including troubleshooting.
 
 > **📖 For development setup and build instructions, see [BUILD.md](./BUILD.md)**
 
