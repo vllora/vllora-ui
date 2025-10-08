@@ -2,7 +2,23 @@
 
 A comprehensive desktop application for exploring AI models and interacting with them through a beautiful chat interface. Built with React, TypeScript, Tauri, and a Rust-based AI Gateway backend.
 
-> **📖 For complete build instructions and setup guide, see [BUILD.md](./BUILD.md)**
+## Installation
+
+### Quick Install (macOS Apple Silicon)
+
+```bash
+# Using shell script
+curl -fsSL https://raw.githubusercontent.com/YOUR_ORG/ellora-ui/main/install.sh | bash
+
+# Or using npx (after npm publish)
+npx @ellora/installer
+```
+
+### Manual Installation
+
+Download the latest DMG from [Releases](https://github.com/YOUR_ORG/ellora-ui/releases/latest) and see [INSTALLATION.md](./INSTALLATION.md) for detailed instructions.
+
+> **📖 For development setup and build instructions, see [BUILD.md](./BUILD.md)**
 
 ## Overview
 
