@@ -1,119 +1,145 @@
-# Ellora UI (LLM Studio UI)
+# Ellora - AI Gateway Desktop App
 
-A comprehensive AI model explorer and chat interface built with React TypeScript. Browse local AI models running on your machine, compare model specifications, costs, and capabilities with an intuitive interface.
+A comprehensive desktop application for exploring AI models and interacting with them through a beautiful chat interface. Built with React, TypeScript, Tauri, and a Rust-based AI Gateway backend.
 
 > **📖 For complete build instructions and setup guide, see [BUILD.md](./BUILD.md)**
 
+## Overview
+
+Ellora combines a React TypeScript frontend with a Tauri desktop wrapper and a powerful Rust AI Gateway backend to provide:
+- **Native Desktop Experience** - Cross-platform app (macOS, Windows, Linux) built with Tauri
+- **AI Gateway Backend** - Rust-based API server with support for multiple AI providers
+- **Dynamic Port Management** - Automatic port allocation to avoid conflicts
+- **Local Model Management** - Browse and manage AI models running on your machine
+- **Chat Interface** - Real-time streaming chat with AI models
+
+## Architecture
+
+```
+┌─────────────────────────────────────────┐
+│         Ellora Desktop App              │
+│  ┌───────────────────────────────────┐  │
+│  │   React Frontend (Vite)           │  │
+│  │   - UI Components                 │  │
+│  │   - Chat Interface                │  │
+│  │   - Model Explorer                │  │
+│  └───────────────────────────────────┘  │
+│  ┌───────────────────────────────────┐  │
+│  │   Tauri (Rust)                    │  │
+│  │   - Window Management             │  │
+│  │   - Backend Lifecycle             │  │
+│  │   - IPC Communication             │  │
+│  └───────────────────────────────────┘  │
+│  ┌───────────────────────────────────┐  │
+│  │   AI Gateway (Rust)               │  │
+│  │   - Multi-provider Support        │  │
+│  │   - Streaming API                 │  │
+│  │   - Dynamic Port (8080-8090)      │  │
+│  └───────────────────────────────────┘  │
+└─────────────────────────────────────────┘
+```
+
 ## Features
 
+### Frontend
 - ⚛️ **React 19** with TypeScript
-- 🎨 **Tailwind CSS** for styling with custom color schemes
-- 🧩 **shadcn/ui** components (Dropdown Menu, Tooltip, Button)
-- 🎯 **Vite** for fast development and building
-- 📱 **Responsive Design** with mobile-friendly navigation
-- 🎭 **Lucide React** icons
-- 🧭 **React Router** for navigation
-- 📊 Collapsible sidebar with smooth animations
-- 🌓 **Dark Mode** support with theme toggle (Light/Dark/System)
-- 🤖 **Local AI Models Explorer** - Browse and manage locally running models
-- 💬 **Chat Interface** - Interactive chat with AI models
-- 📋 **Advanced Filtering** - Filter by provider, type, category, cost, context size, and more
-- 📈 **Model Comparison** - Compare specifications across models
-- 🎨 **Multiple View Modes** - Grid and table views for model browsing
-- 🔄 **Real-time Data** - Connect to local model servers (localhost:8080)
+- 🎨 **Tailwind CSS** with custom color schemes
+- 🧩 **shadcn/ui** components
+- 🎯 **Vite** for fast development
+- 📱 **Responsive Design**
+- 🌓 **Dark Mode** support
+- 🧭 **React Router** navigation
+- 📊 Collapsible sidebar with animations
+
+### Desktop App
+- 🖥️ **Tauri** - Native desktop wrapper
+- 🔧 **Cross-platform** - macOS, Windows, Linux
+- ⚡ **Native Performance** - Rust backend
+- 🔌 **Dynamic Port Allocation** - Auto-finds available ports
+- 🎯 **Window Management** - Shows only when backend ready
+
+### AI Gateway Backend
+- 🦀 **Rust** - High-performance backend
+- 🔄 **Multi-provider Support** - OpenAI, Anthropic, Google, AWS Bedrock, etc.
+- 📡 **Streaming API** - Real-time message streaming
+- 🔑 **Credential Management** - Secure API key storage
+- 💾 **Database Integration** - SQLite for local storage
+- 📊 **Usage Tracking** - Cost and token tracking
+
+### Application Features
+- 🤖 **Local AI Models Explorer** - Browse and manage models
+- 💬 **Chat Interface** - Interactive chat with streaming
+- 📋 **Advanced Filtering** - Filter by provider, type, cost, etc.
+- 📈 **Model Comparison** - Compare specifications
+- 🎨 **Multiple View Modes** - Grid and table views
+- 🔄 **Real-time Updates** - Live model data
 
 ## Project Structure
 
 ```
 ellora-ui/
-├── src/
-│   ├── components/
-│   │   ├── app-sidebar.tsx              # Collapsible sidebar navigation
-│   │   ├── layout.tsx                   # Main layout wrapper
-│   │   ├── theme-provider.tsx           # Theme context provider
-│   │   ├── mode-toggle.tsx              # Color theme toggle component
-│   │   ├── brand-toggle.tsx             # Brand color picker component
+├── src/                                 # React Frontend
+│   ├── components/                      # React components
 │   │   ├── chat/                        # Chat interface components
-│   │   │   ├── ChatWindow.tsx           # Main chat container
-│   │   │   ├── ChatSidebar.tsx          # Thread list sidebar
-│   │   │   ├── ChatConversation.tsx     # Message display with markdown
-│   │   │   ├── ChatInput.tsx            # Input with file upload & voice
-│   │   │   ├── MessageDisplay.tsx       # Markdown renderer with syntax highlighting
-│   │   │   └── ModelSelector.tsx        # Two-step model selection dropdown
 │   │   ├── models/                      # Model explorer components
-│   │   │   ├── ModelsExplorer.tsx
-│   │   │   ├── ModelCard.tsx
-│   │   │   ├── NewModelsTable.tsx
-│   │   │   ├── ModelSearchFilters.tsx
-│   │   │   ├── FormatDropdown.tsx
-│   │   │   ├── ContextSizeFilter.tsx
-│   │   │   ├── local/                   # Local models components
-│   │   │   │   ├── LocalModelsExplorer.tsx
-│   │   │   │   ├── LocalModelCard.tsx
-│   │   │   │   ├── LocalModelsTable.tsx
-│   │   │   │   ├── LocalModelSearchFilters.tsx
-│   │   │   │   └── LocalModelsSkeletonLoader.tsx
-│   │   │   └── filter-components/       # Filter components
-│   │   │       ├── ProviderFilter.tsx
-│   │   │       ├── LocalProviderFilter.tsx
-│   │   │       ├── TypeFilter.tsx
-│   │   │       ├── CategoryFilter.tsx
-│   │   │       ├── CombinedCostFilter.tsx
-│   │   │       ├── CachingFilter.tsx
-│   │   │       ├── PublisherFilter.tsx
-│   │   │       └── OwnerFilter.tsx
-│   │   ├── shared/                      # Shared components
-│   │   │   ├── NewBadge.tsx
-│   │   │   ├── RankingsBadge.tsx
-│   │   │   └── CostDisplay.tsx
-│   │   ├── Icons/
-│   │   │   └── ProviderIcons.tsx
-│   │   └── ui/                          # shadcn/ui components
-│   │       ├── button.tsx
-│   │       ├── dropdown-menu.tsx
-│   │       └── tooltip.tsx
-│   ├── pages/
-│   │   ├── home.tsx                     # Local models gallery page
-│   │   ├── chat.tsx                     # Chat interface page
-│   │   ├── projects.tsx                 # Projects management page
-│   │   ├── analytics.tsx                # Analytics page
+│   │   ├── ui/                          # shadcn/ui components
+│   │   └── ...
+│   ├── pages/                           # Page components
+│   │   ├── home.tsx                     # Local models gallery
+│   │   ├── chat.tsx                     # Chat interface
+│   │   ├── projects.tsx                 # Projects management
+│   │   ├── analytics.tsx                # Analytics dashboard
 │   │   └── settings.tsx                 # Settings page
 │   ├── contexts/                        # React Context providers
-│   │   ├── ProjectContext.tsx           # Project state management
-│   │   └── LocalModelsContext.tsx       # Local models state management
 │   ├── hooks/                           # Custom React hooks
-│   │   ├── useChatState.ts              # Chat state management
-│   │   ├── useMessageSubmission.ts      # Message submission & streaming
-│   │   └── useScrollToBottom.ts         # Auto-scroll functionality
 │   ├── services/                        # API services
 │   │   ├── models-api.ts                # Model data fetching
-│   │   └── projects-api.ts              # Project CRUD operations
-│   ├── config/                          # Configuration
-│   │   └── api.ts                       # Centralized API configuration
-│   ├── types/                           # TypeScript type definitions
-│   │   ├── chat.ts                      # Chat-related types
-│   │   └── models.ts                    # Model-related types
-│   ├── lib/
-│   │   └── utils.ts                     # Utility functions
-│   ├── utils/                           # Helper utilities
-│   │   └── eventEmitter.ts              # Event-driven communication
-│   ├── themes/                          # Theme configuration
-│   │   └── themes.ts                    # Color theme definitions
-│   ├── App.tsx                          # Main app component with routing
-│   ├── main.tsx                         # Application entry point
-│   └── index.css                        # Global styles and CSS variables
-├── public/                              # Static assets
+│   │   ├── projects-api.ts              # Project operations
+│   │   └── providers-api.ts             # Provider management
+│   ├── config/
+│   │   └── api.ts                       # API config with dynamic port
+│   ├── types/                           # TypeScript definitions
+│   ├── App.tsx                          # Main app with routing
+│   └── main.tsx                         # Entry point
+├── src-tauri/                           # Tauri Desktop App (Rust)
+│   ├── src/
+│   │   ├── lib.rs                       # Main Tauri logic
+│   │   │                                # - Dynamic port allocation
+│   │   │                                # - Backend lifecycle management
+│   │   │                                # - Window visibility control
+│   │   └── main.rs                      # Tauri entry point
+│   ├── tauri.conf.json                  # Tauri configuration
+│   │                                    # - Window settings
+│   │                                    # - Resource bundling
+│   │                                    # - Build commands
+│   ├── Cargo.toml                       # Rust dependencies
+│   └── icons/                           # App icons
+├── ai-gateway/                          # AI Gateway Backend (Git Submodule)
+│   ├── gateway/                         # Main gateway service
+│   ├── core/                            # Core types and utilities
+│   ├── guardrails/                      # AI safety features
+│   ├── .env                             # API keys (create from .env.example)
+│   ├── config.yaml                      # Server config (create from sample)
+│   └── target/release/
+│       └── ai-gateway                   # Compiled binary (bundled in app)
+├── dist/                                # Built frontend (generated)
 ├── docs/                                # Documentation
-│   ├── state-management-pattern.md     # State management guide
-│   └── changing-accent-color.md        # Theme customization guide
-├── .env                                 # Environment variables
-├── index.html
-├── package.json
-├── vite.config.ts
-├── tsconfig.json
-├── tailwind.config.js
-└── postcss.config.js
+│   ├── state-management-pattern.md      # State management guide
+│   └── changing-accent-color.md         # Theme customization
+├── BUILD.md                             # Complete build guide
+├── README.md                            # This file
+├── .gitmodules                          # Git submodule config
+├── package.json                         # npm scripts and dependencies
+├── vite.config.ts                       # Vite configuration
+├── tsconfig.json                        # TypeScript configuration
+└── tailwind.config.js                   # Tailwind CSS configuration
 ```
+
+**Key Directories:**
+- `src/` - React frontend application
+- `src-tauri/` - Tauri desktop wrapper (Rust)
+- `ai-gateway/` - Backend API server (Git submodule, Rust)
+- `dist/` - Compiled frontend (bundled into Tauri app)
 
 ## Quick Start
 
@@ -273,49 +299,60 @@ The application uses Tailwind CSS with custom shadcn/ui theme variables. You can
 
 ## Technology Stack
 
+### Desktop & Backend
+- **Tauri 2.x** - Native desktop app framework (Rust)
+- **Rust** - Backend language for Tauri and AI Gateway
+- **AI Gateway** - Custom Rust-based API server
+  - Multi-provider AI integration
+  - SQLite database
+  - Streaming API support
+  - Dynamic port allocation
+
+### Frontend
 - **React 19** - UI framework
 - **TypeScript** - Type safety
 - **Vite** - Build tool and dev server
-- **Tailwind CSS** - Utility-first CSS framework with custom theming
-- **shadcn/ui** - Reusable component library (Button, Dropdown Menu, Tooltip)
-- **Radix UI** - Unstyled, accessible UI components
-- **Lucide React** - Icon library
+- **Tailwind CSS** - Utility-first CSS framework
+- **shadcn/ui** - Component library
+- **Radix UI** - Accessible UI primitives
 - **React Router DOM** - Client-side routing
-- **next-themes** - Theme management system
+- **next-themes** - Theme management
+
+### UI & UX
+- **Lucide React** - Icon library
 - **framer-motion** - Animation library
-- **ahooks** - React hooks library for data fetching
-- **sonner** - Beautiful toast notifications
-- **date-fns** - Date utility library
-- **class-variance-authority** - CSS variant management
-- **tailwind-merge** - Tailwind class merging utility
-- **react-markdown** - Markdown rendering for chat messages
+- **sonner** - Toast notifications
+- **react-markdown** - Markdown rendering
 - **react-syntax-highlighter** - Code syntax highlighting
-- **react-dropzone** - Drag & drop file uploads
-- **mitt** - Event emitter for component communication
+- **react-dropzone** - File upload
+
+### State Management & Utilities
+- **ahooks** - React hooks for data fetching
+- **mitt** - Event emitter
+- **date-fns** - Date utilities
 - **uuid** - Unique ID generation
+- **class-variance-authority** - CSS variants
+- **tailwind-merge** - Class merging
 
-## Key Dependencies
+## System Architecture
 
-```json
-{
-  "react": "^19.1.1",
-  "typescript": "^5.9.2",
-  "vite": "^7.1.7",
-  "tailwindcss": "^3.4.17",
-  "@radix-ui/react-dropdown-menu": "^2.1.16",
-  "@radix-ui/react-tooltip": "^1.2.8",
-  "lucide-react": "^0.544.0",
-  "react-router-dom": "^7.9.3",
-  "next-themes": "^0.4.6",
-  "framer-motion": "^12.23.22"
-}
+```
+User Interface (React)
+        ↕ (Fetch API)
+Tauri IPC Layer (get_backend_port)
+        ↕
+AI Gateway (Rust)
+        ↕
+External AI Providers
+(OpenAI, Anthropic, Google, etc.)
 ```
 
-## API Integration
-
-This application connects to:
-- **LangDB API** - For model data and chat functionality
-- **Local Model Server** - For locally running AI models (localhost:8080)
+**Data Flow:**
+1. User interacts with React UI
+2. UI calls AI Gateway API (dynamic port via Tauri IPC)
+3. AI Gateway routes requests to appropriate provider
+4. Responses stream back through gateway to UI
+5. UI displays real-time results
 
 ## Documentation
 
@@ -325,16 +362,33 @@ This application connects to:
 
 ## Development Notes
 
-- React Context + ahooks for server state management
-- Event-driven architecture using mitt for component communication
-- Streaming chat with Server-Sent Events (SSE)
-- Theme system uses CSS variables for easy customization
-- Dynamic brand colors with Tailwind CSS variables
-- URL state management for filter persistence
-- Component-based architecture with clear separation of concerns
-- TypeScript for type safety across the application
-- Centralized API configuration in `/src/config/api.ts`
-- Toast notifications with Sonner
+### Architecture Patterns
+- **Tauri IPC** - Communication between frontend and Rust backend
+- **Dynamic Port Allocation** - Automatic port discovery (8080-8090) to avoid conflicts
+- **Window Lifecycle** - Window shows only after backend health check succeeds
+- **Git Submodules** - ai-gateway tracked as submodule on `feat/oss-refactor` branch
+
+### Frontend Patterns
+- **React Context + ahooks** - Server state management
+- **Event-driven architecture** - Using mitt for component communication
+- **Streaming chat** - Server-Sent Events (SSE) for real-time responses
+- **Dynamic API URLs** - Backend port fetched via Tauri IPC at runtime
+- **URL state** - Filter persistence in query parameters
+- **Theme system** - CSS variables for customization
+- **TypeScript** - Type safety across application
+
+### Backend Integration
+- **Configuration files** - Separate `.env` for frontend and backend
+- **Resource bundling** - Backend binary and config files bundled in production
+- **Working directory** - Set correctly for both dev and production modes
+- **Health checks** - Backend readiness polling before window display
+
+### Key Files
+- `src-tauri/src/lib.rs` - Tauri app logic, port allocation, backend lifecycle
+- `src/config/api.ts` - Dynamic API configuration with port fetching
+- `ai-gateway/.env` - Backend API keys (gitignored, create from .env.example)
+- `ai-gateway/config.yaml` - Backend server configuration
+- `.gitmodules` - Submodule configuration for ai-gateway
 
 ## License
 
