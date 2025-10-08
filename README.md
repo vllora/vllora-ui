@@ -18,20 +18,13 @@ gh auth login
 ```bash
 # Download the latest DMG
 gh release download v0.1.0 --repo langdb/ellora-ui --pattern "*.dmg"
-
 # Open the DMG
 open Ellora_0.1.0_aarch64.dmg
 
 # Drag Ellora.app to Applications, then remove quarantine:
 sudo /usr/bin/xattr -rd com.apple.quarantine /Applications/Ellora.app
-```
-
-**Option 2: Use the install script**
-```bash
-# Clone the repo and run the installer
-gh repo clone langdb/ellora-ui
-cd ellora-ui
-./install.sh
+# start ellora app
+open /Applications/Ellora.app
 ```
 
 ### Manual Installation
