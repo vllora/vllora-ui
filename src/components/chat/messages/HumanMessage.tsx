@@ -1,37 +1,14 @@
-import React, { useState } from 'react';
-import { Copy, Check, Clock } from 'lucide-react';
+import React from 'react';
+import { Clock } from 'lucide-react';
 import { Message } from '@/types/chat';
 import { MessageDisplay } from '../MessageDisplay';
 import { formatMessageTime } from '@/utils/dateUtils';
-import { AvatarItem } from './AvatarItem';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 
 interface HumanMessageProps {
   message: Message;
 }
 
 export const HumanMessage: React.FC<HumanMessageProps> = ({ message }) => {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    if (typeof navigator === 'undefined' || !navigator.clipboard) {
-      console.warn('Clipboard API not available');
-      return;
-    }
-    navigator.clipboard
-      .writeText(message.content)
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      })
-      .catch((err) => console.error('Failed to copy:', err));
-  };
-
 
   return (
     <div className="flex flex-col group mb-6">

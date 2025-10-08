@@ -1,6 +1,4 @@
 import {
-  Copy,
-  Check,
   Clock,
   Pencil,
   ChevronDown,
@@ -31,7 +29,6 @@ export const AiMessage: React.FC<{
 }> = ({ message: msg, isTyping }) => {
   const { setOpenTraces, fetchSpansByRunId, setHoveredRunId } = ChatWindowConsumer();
   const { setIsRightSidebarCollapsed } = ThreadsConsumer();
-  const [copied, setCopied] = useState(false);
   const [toolCopiedStates, setToolCopiedStates] = useState<{
     [key: string]: boolean;
   }>({});
