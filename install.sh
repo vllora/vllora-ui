@@ -16,7 +16,7 @@ if [[ $(uname -m) != "arm64" ]]; then
   exit 1
 fi
 
-REPO="YOUR_ORG/ellora-ui"  # Update this
+REPO="langdb/ellora-ui"
 VERSION="v0.1.0"
 DMG_NAME="Ellora_0.1.0_aarch64.dmg"
 DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${DMG_NAME}"

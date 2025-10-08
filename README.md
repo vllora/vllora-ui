@@ -8,7 +8,7 @@ A comprehensive desktop application for exploring AI models and interacting with
 
 ```bash
 # Using shell script
-curl -fsSL https://raw.githubusercontent.com/YOUR_ORG/ellora-ui/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/langdb/ellora-ui/main/install.sh | bash
 
 # Or using npx (after npm publish)
 npx @ellora/installer
