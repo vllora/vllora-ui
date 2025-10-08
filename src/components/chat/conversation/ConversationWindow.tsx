@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect } from 'react';
 import { ChatConversation } from './ChatConversation';
 import { ChatInput } from './ChatInput';
-import { ModelSelector } from './ModelSelector';
+import { ConversationHeader } from './ConversationHeader';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 import { useMessageSubmission } from '@/hooks/useMessageSubmission';
 import { emitter } from '@/utils/eventEmitter';
@@ -18,7 +18,7 @@ interface ChatWindowProps {
   apiKey?: string;
   projectId?: string;
   widgetId?: string;
-  onModelChange?: (modelId: string) => void;
+  onModelChange: (modelId: string) => void;
   isDraft?: boolean;
 }
 
@@ -51,6 +51,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     setTraceId,
     appendUsage,
     conversationMetrics,
+    isLoadingMessages
   } = ChatWindowConsumer();
 
   useEffect(() => {
@@ -212,14 +213,12 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       {/* Chat Header */}
       <div className="bg-card flex-shrink-0">
         {/* Model Selector - Top row aligned with Project Dropdown */}
-        <div className="h-16 px-4 border-b border-border flex items-center bg-card/95 backdrop-blur-xl">
-          <div className="max-w-md border border-border rounded-md px-3 py-2">
-            <ModelSelector
-              selectedModel={modelName || 'Select a model'}
-              onModelChange={onModelChange}
-            />
-          </div>
-        </div>
+        <ConversationHeader
+          modelName={modelName}
+          onModelChange={onModelChange}
+          onRefresh={refreshMessages}
+          isLoading={isLoadingMessages}
+        />
 
         {/* Cost and Tokens Display - Second row aligned with New Chat button */}
         {!isDraft && threadId && conversationMetrics && (conversationMetrics.cost || conversationMetrics.inputTokens || conversationMetrics.outputTokens || conversationMetrics.duration || conversationMetrics.avgTTFT) && <ConversationMetrics

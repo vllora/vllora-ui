@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import { Bot, ArrowDown } from 'lucide-react';
 import { Message, MessageType } from '@/types/chat';
 import { useInViewport } from 'ahooks';
-import { MessageItem } from './MessageItem';
+import { MessageItem } from '../MessageItem';
 
 interface ChatConversationProps {
   messages: Message[];

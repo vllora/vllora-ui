@@ -69,7 +69,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
 
   // Use ahooks useRequest for fetching messages
-  const { loading: isLoading, error: loadError, run: refreshMessages } = useRequest(
+  const { loading: isLoadingMessages, error: loadError, run: refreshMessages } = useRequest(
     async () => {
       if (!threadId || !projectId) {
         return [];
@@ -598,7 +598,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
     serverMessages,
     setServerMessages,
-    isLoading,
+    isLoadingMessages,
     loadError,
     clearMessages,
     refreshMessages,

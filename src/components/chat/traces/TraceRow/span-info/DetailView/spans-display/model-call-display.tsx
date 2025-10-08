@@ -132,51 +132,32 @@ export const ModelCallUIDetailsDisplay = ({ span }: { span: Span }) => {
             {/* Request section with UI/Raw toggle */}
             {raw_request_json && (
                 <AccordionItem value="raw_request">
-                    <AccordionTrigger className={triggerClassName}>
-                        <div className="flex items-center justify-between w-full">
+                    <div className="relative">
+                        <AccordionTrigger className={triggerClassName}>
                             <div className="flex items-center gap-2">
                                 <ArrowRightLeftIcon className="w-4 h-4 text-blue-500" />
                                 <span className="font-medium text-xs text-white">Request</span>
                             </div>
-                            {/* Mode toggle using SimpleTabsList */}
-                            <div>
-                                <Tabs defaultValue={requestViewMode} className=" mr-2">
-                                    <SimpleTabsList className="h-6 p-0.5 bg-[#1a1a1a]">
-                                        <SimpleTabsTrigger
-                                            value="ui"
-                                            className="text-xs "
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                setRequestViewMode('ui');
-                                                // Auto-open the Request accordion if not already open
-                                                if (!openAccordionItems.includes('raw_request')) {
-                                                    setOpenAccordionItems(prev => [...prev, 'raw_request']);
-                                                }
-                                            }}
-                                        >
-                                            UI
-                                        </SimpleTabsTrigger>
-                                        <SimpleTabsTrigger
-                                            value="raw"
-                                            className="text-xs "
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                setRequestViewMode('raw');
-                                                // Auto-open the Request accordion if not already open
-                                                if (!openAccordionItems.includes('raw_request')) {
-                                                    setOpenAccordionItems(prev => [...prev, 'raw_request']);
-                                                }
-                                            }}
-                                        >
-                                            JSON
-                                        </SimpleTabsTrigger>
-                                    </SimpleTabsList>
-                                </Tabs>
-                            </div>
+                        </AccordionTrigger>
+                        {/* Mode toggle using SimpleTabsList - positioned absolutely */}
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 z-10" onClick={(e) => e.stopPropagation()}>
+                            <Tabs value={requestViewMode} onValueChange={(value) => {
+                                setRequestViewMode(value as 'ui' | 'raw');
+                                if (!openAccordionItems.includes('raw_request')) {
+                                    setOpenAccordionItems(prev => [...prev, 'raw_request']);
+                                }
+                            }}>
+                                <SimpleTabsList className="h-6 p-0.5 bg-[#1a1a1a]">
+                                    <SimpleTabsTrigger value="ui" className="text-xs">
+                                        UI
+                                    </SimpleTabsTrigger>
+                                    <SimpleTabsTrigger value="raw" className="text-xs">
+                                        JSON
+                                    </SimpleTabsTrigger>
+                                </SimpleTabsList>
+                            </Tabs>
                         </div>
-                    </AccordionTrigger>
+                    </div>
                     <AccordionContent className="p-2 bg-[#0a0a0a] border-t border-border">
                         <RequestViewer jsonRequest={raw_request_json} viewMode={requestViewMode} />
                     </AccordionContent>
@@ -186,52 +167,32 @@ export const ModelCallUIDetailsDisplay = ({ span }: { span: Span }) => {
             {/* Response section with UI/Raw toggle */}
             {raw_response_json && (
                 <AccordionItem value="raw_response">
-                    <AccordionTrigger className={triggerClassName}>
-                        <div className="flex items-center justify-between w-full">
-
+                    <div className="relative">
+                        <AccordionTrigger className={triggerClassName}>
                             <div className="flex items-center gap-2">
                                 <DocumentTextIcon className="w-4 h-4 text-blue-500" />
                                 <span className="font-medium text-xs text-white">Response</span>
                             </div>
-                            {/* Mode toggle using SimpleTabsList */}
-                            <div>
-                                <Tabs defaultValue={responseViewMode} className=" mr-2">
-                                    <SimpleTabsList className="h-6 p-0.5 bg-[#1a1a1a]">
-                                        <SimpleTabsTrigger
-                                            value="ui"
-                                            className="text-xs "
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                setResponseViewMode('ui');
-                                                // Auto-open the Response accordion if not already open
-                                                if (!openAccordionItems.includes('raw_response')) {
-                                                    setOpenAccordionItems(prev => [...prev, 'raw_response']);
-                                                }
-                                            }}
-                                        >
-                                            UI
-                                        </SimpleTabsTrigger>
-                                        <SimpleTabsTrigger
-                                            value="raw"
-                                            className="text-xs "
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                setResponseViewMode('raw');
-                                                // Auto-open the Response accordion if not already open
-                                                if (!openAccordionItems.includes('raw_response')) {
-                                                    setOpenAccordionItems(prev => [...prev, 'raw_response']);
-                                                }
-                                            }}
-                                        >
-                                            JSON
-                                        </SimpleTabsTrigger>
-                                    </SimpleTabsList>
-                                </Tabs>
-                            </div>
+                        </AccordionTrigger>
+                        {/* Mode toggle using SimpleTabsList - positioned absolutely */}
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 z-10" onClick={(e) => e.stopPropagation()}>
+                            <Tabs value={responseViewMode} onValueChange={(value) => {
+                                setResponseViewMode(value as 'ui' | 'raw');
+                                if (!openAccordionItems.includes('raw_response')) {
+                                    setOpenAccordionItems(prev => [...prev, 'raw_response']);
+                                }
+                            }}>
+                                <SimpleTabsList className="h-6 p-0.5 bg-[#1a1a1a]">
+                                    <SimpleTabsTrigger value="ui" className="text-xs">
+                                        UI
+                                    </SimpleTabsTrigger>
+                                    <SimpleTabsTrigger value="raw" className="text-xs">
+                                        JSON
+                                    </SimpleTabsTrigger>
+                                </SimpleTabsList>
+                            </Tabs>
                         </div>
-                    </AccordionTrigger>
+                    </div>
                     <AccordionContent className="bg-[#0a0a0a] border-t border-border p-2">
                         <ResponseViewer response={raw_response_json} viewMode={responseViewMode} />
                     </AccordionContent>

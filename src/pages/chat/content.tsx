@@ -2,7 +2,7 @@ import { useCallback, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { ThreadsSidebar } from '@/components/chat/ThreadsSidebar';
-import { ConversationWindow } from '@/components/chat/ConversationWindow';
+import { ConversationWindow } from '@/components/chat/conversation/ConversationWindow';
 import { TracesRightSidebar } from '@/components/chat/TracesRightSidebar';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { ThreadsConsumer } from '@/contexts/ThreadsContext';
