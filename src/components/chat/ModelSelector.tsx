@@ -147,7 +147,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
               filteredModelNames.map((modelName) => (
                 <DropdownMenuItem
                   key={modelName}
-                  onSelect={() => handleModelNameSelect(modelName)}
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    handleModelNameSelect(modelName);
+                  }}
                   className="flex items-center gap-3 px-4 py-3 cursor-pointer"
                 >
                   <div className="flex-1 min-w-0">

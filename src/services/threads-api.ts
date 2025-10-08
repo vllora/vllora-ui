@@ -38,7 +38,6 @@ export async function queryThreads(
         'Content-Type': 'application/json',
         'x-project-id': projectId,
         'authorization': `Bearer ${API_CONFIG.apiKey}`,
-        //'x-project-id': projectId,
       },
       body: JSON.stringify(request),
     });
