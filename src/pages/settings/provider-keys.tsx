@@ -38,6 +38,7 @@ const ProviderKeysContent = () => {
         cancelEditing,
         updateCredentialValues,
         setModalOpen,
+        refetchProviders,
     } = ProviderKeysConsumer();
 
     const editingProviderData = providers.find(p => p.name === editingProvider);
@@ -84,6 +85,7 @@ const ProviderKeysContent = () => {
                 onChange={(values) => editingProvider && updateCredentialValues(editingProvider, values)}
                 onToggleShow={(field) => editingProvider && toggleShowKeyField(editingProvider, field)}
                 onSave={handleSaveModal}
+                onRefresh={refetchProviders}
             />
 
             {/* Delete Confirmation Dialog */}

@@ -75,7 +75,7 @@ export function useProviderKeys() {
         };
 
       case 'langdb':
-        return 'LangDb';
+        return { api_key: values.api_key };
 
       default:
         // Default to API key

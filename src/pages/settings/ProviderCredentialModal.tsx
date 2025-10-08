@@ -23,6 +23,7 @@ interface ProviderCredentialModalProps {
     onChange: (values: CredentialFormValues) => void;
     onToggleShow: (field: string) => void;
     onSave: () => void;
+    onRefresh?: () => void;
 }
 
 export const ProviderCredentialModal = ({
@@ -35,6 +36,7 @@ export const ProviderCredentialModal = ({
     onChange,
     onToggleShow,
     onSave,
+    onRefresh,
 }: ProviderCredentialModalProps) => {
     if (!provider) return null;
 
@@ -61,6 +63,15 @@ export const ProviderCredentialModal = ({
                         showKeys={showKeys}
                         onChange={onChange}
                         onToggleShow={onToggleShow}
+                        onClose={async () => {
+                            // Backend already saved during session init
+                            // Refresh providers list to show updated status
+                            if (onRefresh) {
+                                await onRefresh();
+                            }
+                            // Close modal
+                            onOpenChange(false);
+                        }}
                     />
                 </div>
 
