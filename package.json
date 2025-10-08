@@ -1,5 +1,5 @@
 {
-  "name": "llm-studio-ui",
+  "name": "ellora-ui",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -18,16 +18,16 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/langdb/llm-studio-ui.git"
+    "url": "git+https://github.com/langdb/ellora-ui.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "bugs": {
-    "url": "https://github.com/langdb/llm-studio-ui/issues"
+    "url": "https://github.com/langdb/ellora-ui/issues"
   },
-  "homepage": "https://github.com/langdb/llm-studio-ui#readme",
+  "homepage": "https://github.com/langdb/ellora-ui#readme",
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",
     "@tauri-apps/api": "^2.8.0",

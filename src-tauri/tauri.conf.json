@@ -7,7 +7,7 @@
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "pnpm run dev",
-    "beforeBuildCommand": "pnpm run build && cd ai-gateway && make gateway_mac_m1"
+    "beforeBuildCommand": "pnpm run build && cd ai-gateway && make gateway_mac_m1 && cp target/aarch64-apple-darwin/release/ai-gateway target/aarch64-apple-darwin/release/ai-gateway-aarch64-apple-darwin"
   },
   "app": {
     "windows": [
@@ -24,7 +24,27 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": {
+        "default-src": "'self'",
+        "connect-src": [
+          "'self'",
+          "http://localhost:8080",
+          "http://localhost:8081",
+          "http://localhost:8082",
+          "http://localhost:8083",
+          "http://localhost:8084",
+          "http://localhost:8085",
+          "http://localhost:8086",
+          "http://localhost:8087",
+          "http://localhost:8088",
+          "http://localhost:8089",
+          "http://localhost:8090"
+        ],
+        "script-src": ["'self'", "'unsafe-inline'", "'wasm-unsafe-eval'"],
+        "style-src": ["'self'", "'unsafe-inline'"],
+        "img-src": ["'self'", "data:", "https:", "http:"],
+        "font-src": ["'self'", "data:"]
+      }
     },
     "withGlobalTauri": false
   },
@@ -38,8 +58,12 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [
+    "externalBin": [
       "../ai-gateway/target/aarch64-apple-darwin/release/ai-gateway"
+    ],
+    "resources": [
+      "../ai-gateway/.env",
+      "../ai-gateway/config.yaml"
     ]
   }
 }

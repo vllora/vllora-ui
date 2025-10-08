@@ -6,6 +6,33 @@
     "main"
   ],
   "permissions": [
-    "core:default"
+    "core:default",
+    "shell:allow-execute",
+    "shell:allow-spawn",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "ai-gateway",
+          "sidecar": true,
+          "args": [
+            "serve",
+            "--port",
+            { "validator": "\\d{4,5}" }
+          ]
+        },
+        {
+          "name": "cargo",
+          "args": [
+            "run",
+            "--release",
+            "--",
+            "serve",
+            "--port",
+            { "validator": "\\d{4,5}" }
+          ]
+        }
+      ]
+    }
   ]
 }
