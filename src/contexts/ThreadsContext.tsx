@@ -29,6 +29,8 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
     // Thread state
     threads: threadState.threads,
     selectedThreadId: threadState.selectedThreadId,
+    isRightSidebarCollapsed: threadState.isRightSidebarCollapsed,
+    setIsRightSidebarCollapsed: threadState.setIsRightSidebarCollapsed,
 
     // Pagination state
     loading: paginationState.loading,

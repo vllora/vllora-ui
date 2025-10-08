@@ -6,6 +6,7 @@ import { ThreadState } from './types';
 export function useThreadState(): ThreadState {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [searchParams] = useSearchParams();
+  const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
 
   // Read selectedThreadId from URL query string
   const selectedThreadId = useMemo(() => {
@@ -16,5 +17,7 @@ export function useThreadState(): ThreadState {
     threads,
     setThreads,
     selectedThreadId,
+    isRightSidebarCollapsed,
+    setIsRightSidebarCollapsed,
   };
 }

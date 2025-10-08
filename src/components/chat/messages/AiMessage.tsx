@@ -23,12 +23,14 @@ import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { CheckIcon, ClipboardDocumentIcon } from '@heroicons/react/24/outline';
 import ReactJson from 'react-json-view';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
+import { ThreadsConsumer } from '@/contexts/ThreadsContext';
 
 export const AiMessage: React.FC<{
   message?: Message;
   isTyping?: boolean;
 }> = ({ message: msg, isTyping }) => {
   const { setOpenTraces, fetchSpansByRunId, selectedSpanInfo, setHoveredRunId } = ChatWindowConsumer();
+  const { setIsRightSidebarCollapsed } = ThreadsConsumer();
 
   const [copied, setCopied] = useState(false);
   const [toolCopiedStates, setToolCopiedStates] = useState<{
@@ -63,7 +65,9 @@ export const AiMessage: React.FC<{
     // Open the trace and fetch spans
     setOpenTraces([runId]);
     fetchSpansByRunId(runId);
-  }, [canClickToOpenTrace, metrics, setOpenTraces, fetchSpansByRunId]);
+    // Auto-expand the right sidebar
+    setIsRightSidebarCollapsed(false);
+  }, [canClickToOpenTrace, metrics, setOpenTraces, fetchSpansByRunId, setIsRightSidebarCollapsed]);
 
   const handleMouseEnter = useCallback(() => {
     if (metrics && Array.isArray(metrics) && metrics.length > 0) {

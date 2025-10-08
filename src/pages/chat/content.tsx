@@ -19,7 +19,9 @@ export function ChatPage() {
     selectedThreadId,
     addThread,
     updateThread,
-    refreshThreads
+    refreshThreads,
+    isRightSidebarCollapsed,
+    setIsRightSidebarCollapsed
   } = ThreadsConsumer();
   const navigate = useNavigate();
   const location = useLocation();
@@ -28,7 +30,6 @@ export function ChatPage() {
   const selectedModel = useMemo(() => {
     return searchParams.get('model') || 'openai/o1-mini';
   }, [searchParams]);
-  const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     refreshThreads();
