@@ -2,6 +2,8 @@
 
 A comprehensive AI model explorer and chat interface built with React TypeScript. Browse local AI models running on your machine, compare model specifications, costs, and capabilities with an intuitive interface.
 
+> **📖 For complete build instructions and setup guide, see [BUILD.md](./BUILD.md)**
+
 ## Features
 
 - ⚛️ **React 19** with TypeScript
@@ -113,64 +115,66 @@ ellora-ui/
 └── postcss.config.js
 ```
 
-## Prerequisites
+## Quick Start
+
+### Prerequisites
 
 - Node.js 18+
 - pnpm 8+
-- Local AI model server running on `localhost:8080` (optional, for local models feature)
+- Rust (for Tauri desktop app)
+- Git
 
-## Installation
+### Installation
 
-1. Clone the repository:
 ```bash
+# Clone repository
 git clone https://github.com/langdb/ellora-ui.git
 cd ellora-ui
-```
 
-2. Install pnpm if you haven't already:
-```bash
-npm install -g pnpm
-```
+# Initialize submodules (ai-gateway backend)
+git submodule update --init --recursive
 
-3. Install dependencies:
-```bash
+# Setup backend configuration
+cd ai-gateway
+cp .env.example .env
+cp config.sample.yaml config.yaml
+# Edit .env and config.yaml with your settings
+cd ..
+
+# Install dependencies
 pnpm install
 ```
 
-4. Create a `.env` file in the root directory with your configuration:
-```env
-VITE_LANGDB_PROJECT_ID=your_project_id
-VITE_LANGDB_API_KEY=your_api_key
-VITE_LANGDB_API_URL=https://api.staging.langdb.ai
-# Set to 'true' to connect to local AI gateway at http://localhost:8080/v1/chat/completions
-VITE_CONNECT_LOCAL=false
-```
+### Development
 
-## Development
-
-To start the development server:
-
+**Frontend only:**
 ```bash
-pnpm dev
+pnpm dev  # Starts Vite dev server at http://localhost:5173
 ```
 
-The application will be available at `http://localhost:5173` (or another port if 5173 is busy).
-
-## Building for Production
-
-To create a production build:
-
+**Backend only:**
 ```bash
-pnpm build
+pnpm start:backend  # Starts ai-gateway on port 8080
 ```
 
-The build output will be in the `dist` directory.
-
-To preview the production build locally:
-
+**Full desktop app:**
 ```bash
-pnpm preview
+pnpm tauri:dev  # Starts complete Tauri app with backend
 ```
+
+### Building
+
+**Frontend only:**
+```bash
+pnpm build  # Outputs to dist/
+```
+
+**Complete desktop app:**
+```bash
+pnpm build-app  # Builds backend + frontend + Tauri app
+```
+
+> **📖 For detailed build process, configuration, and troubleshooting, see [BUILD.md](./BUILD.md)**
 
 ## Features Overview
 
@@ -315,6 +319,7 @@ This application connects to:
 
 ## Documentation
 
+- **[BUILD.md](./BUILD.md)** - Complete build process, configuration, and troubleshooting guide
 - **[State Management Pattern](./docs/state-management-pattern.md)** - Guide for Context API + ahooks pattern
 - **[Changing Accent Color](./docs/changing-accent-color.md)** - Theme customization guide
 

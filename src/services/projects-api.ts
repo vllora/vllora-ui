@@ -1,4 +1,4 @@
-import { LOCAL_API_URL } from '@/config/api';
+import { getBackendUrl } from '@/config/api';
 
 export interface Project {
   id: string;
@@ -44,7 +44,7 @@ export interface UpdateProjectResponse {
  * List all projects
  */
 export async function listProjects(): Promise<Project[]> {
-  const url = `${LOCAL_API_URL}/projects`;
+  const url = `${getBackendUrl()}/projects`;
 
   try {
     const response = await fetch(url, {
@@ -70,7 +70,7 @@ export async function listProjects(): Promise<Project[]> {
  * Get a specific project by ID
  */
 export async function getProject(projectId: string): Promise<Project> {
-  const url = `${LOCAL_API_URL}/projects/${projectId}`;
+  const url = `${getBackendUrl()}/projects/${projectId}`;
 
   try {
     const response = await fetch(url, {
@@ -96,7 +96,7 @@ export async function getProject(projectId: string): Promise<Project> {
  * Create a new project
  */
 export async function createProject(request: CreateProjectRequest): Promise<Project> {
-  const url = `${LOCAL_API_URL}/projects`;
+  const url = `${getBackendUrl()}/projects`;
 
   try {
     const response = await fetch(url, {
@@ -126,7 +126,7 @@ export async function updateProject(
   projectId: string,
   request: UpdateProjectRequest
 ): Promise<Project> {
-  const url = `${LOCAL_API_URL}/projects/${projectId}`;
+  const url = `${getBackendUrl()}/projects/${projectId}`;
 
   try {
     const response = await fetch(url, {
@@ -153,7 +153,7 @@ export async function updateProject(
  * Delete a project
  */
 export async function deleteProject(projectId: string): Promise<void> {
-  const url = `${LOCAL_API_URL}/projects/${projectId}`;
+  const url = `${getBackendUrl()}/projects/${projectId}`;
 
   try {
     const response = await fetch(url, {

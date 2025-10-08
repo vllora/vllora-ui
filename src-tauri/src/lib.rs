@@ -1,12 +1,50 @@
 use std::process::Command;
 use std::time::Duration;
-use tauri::Manager;
+use std::net::TcpListener;
+use std::sync::{Arc, Mutex};
+use tauri::{Manager, State};
+
+/// Application state to store the backend port
+struct AppState {
+  backend_port: Arc<Mutex<u16>>,
+}
+
+/// Tauri command to get the backend port
+#[tauri::command]
+fn get_backend_port(state: State<AppState>) -> u16 {
+  *state.backend_port.lock().unwrap()
+}
+
+/// Check if a port is available
+fn is_port_available(port: u16) -> bool {
+  TcpListener::bind(("127.0.0.1", port)).is_ok()
+}
+
+/// Find an available port starting from the given port
+fn find_available_port(start_port: u16, max_attempts: u16) -> Option<u16> {
+  for port in start_port..(start_port + max_attempts) {
+    if is_port_available(port) {
+      return Some(port);
+    }
+  }
+  None
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  // Find an available port for the backend before building the app
+  let backend_port = find_available_port(8080, 10)
+    .expect("Failed to find an available port for backend (tried 8080-8090)");
+
+  let app_state = AppState {
+    backend_port: Arc::new(Mutex::new(backend_port)),
+  };
+
   tauri::Builder::default()
     .plugin(tauri_plugin_shell::init())
-    .setup(|app| {
+    .manage(app_state)
+    .invoke_handler(tauri::generate_handler![get_backend_port])
+    .setup(move |app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()
@@ -14,6 +52,8 @@ pub fn run() {
             .build(),
         )?;
       }
+
+      log::info!("Using port {} for AI Gateway backend", backend_port);
 
       // Start AI Gateway backend server
       let backend_binary = if cfg!(debug_assertions) {
@@ -34,18 +74,26 @@ pub fn run() {
           .arg("--release")
           .arg("--")
           .arg("serve")
+          .arg("--port")
+          .arg(backend_port.to_string())
           .current_dir(&backend_path)
           .spawn()
       } else {
         // In production, use bundled binary
-        let resource_path = app.path().resource_dir()
-          .expect("Failed to get resource directory")
-          .join("ai-gateway");
+        let resource_dir = app.path().resource_dir()
+          .expect("Failed to get resource directory");
 
-        log::info!("Starting AI Gateway backend (production) from: {:?}", resource_path);
+        let backend_binary = resource_dir.join("ai-gateway");
 
-        Command::new(&resource_path)
+        // Set working directory to resource dir so backend can find config files
+        log::info!("Starting AI Gateway backend (production) from: {:?}", backend_binary);
+        log::info!("Backend working directory: {:?}", resource_dir);
+
+        Command::new(&backend_binary)
           .arg("serve")
+          .arg("--port")
+          .arg(backend_port.to_string())
+          .current_dir(&resource_dir)
           .spawn()
       };
 
@@ -59,11 +107,12 @@ pub fn run() {
             let client = reqwest::Client::new();
             let max_retries = 60; // Wait up to 2 minutes (60 * 2s = 120s)
             let mut retries = 0;
+            let health_url = format!("http://localhost:{}/v1/models", backend_port);
 
             loop {
-              match client.get("http://localhost:8080/v1/models").send().await {
+              match client.get(&health_url).send().await {
                 Ok(response) if response.status().is_success() => {
-                  log::info!("AI Gateway backend is ready!");
+                  log::info!("AI Gateway backend is ready on port {}!", backend_port);
 
                   // Show the main window
                   if let Some(window) = app_handle.get_webview_window("main") {
@@ -75,7 +124,7 @@ pub fn run() {
                 _ => {
                   retries += 1;
                   if retries >= max_retries {
-                    log::error!("Backend failed to start after {} seconds", max_retries * 2);
+                    log::error!("Backend failed to start after {} seconds on port {}", max_retries * 2, backend_port);
                     // Show window anyway so user can see the error
                     if let Some(window) = app_handle.get_webview_window("main") {
                       let _ = window.show();

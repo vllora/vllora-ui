@@ -12,6 +12,7 @@ import { Toaster } from "sonner"
 import { useEffect } from "react"
 import { applyTheme, getThemeFromStorage } from "./themes/themes"
 import { ProviderKeysProvider } from "./contexts/ProviderKeysContext"
+import { initializeBackendPort } from "./config/api"
 
 
 function App() {
@@ -19,6 +20,9 @@ function App() {
     // Apply saved theme on mount
     const theme = getThemeFromStorage()
     applyTheme(theme)
+
+    // Initialize backend port from Tauri
+    initializeBackendPort()
   }, [])
 
   return (

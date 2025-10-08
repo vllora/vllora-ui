@@ -1,5 +1,5 @@
 import { ModelPricing, LocalModelsResponse } from '@/types/models';
-import { API_CONFIG, LOCAL_API_URL } from '@/config/api';
+import { API_CONFIG, getBackendUrl } from '@/config/api';
 
 export async function fetchModels(): Promise<ModelPricing[]> {
   if (!API_CONFIG.url || !API_CONFIG.projectId) {
@@ -30,7 +30,7 @@ export async function fetchModels(): Promise<ModelPricing[]> {
 }
 
 export async function fetchLocalModels(): Promise<LocalModelsResponse> {
-  const url = `${LOCAL_API_URL}/v1/models`;
+  const url = `${getBackendUrl()}/v1/models`;
 
   try {
     const response = await fetch(url, {
@@ -57,6 +57,6 @@ export function getApiConfig() {
     apiUrl: API_CONFIG.url,
     projectId: API_CONFIG.projectId,
     hasApiKey: !!API_CONFIG.apiKey,
-    localApiUrl: LOCAL_API_URL,
+    localApiUrl: getBackendUrl(),
   };
 }

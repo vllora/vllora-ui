@@ -1,4 +1,4 @@
-import { LOCAL_API_URL } from '@/config/api';
+import { getBackendUrl } from '@/config/api';
 
 // Credentials types based on the Rust backend
 export interface ApiKeyCredentials {
@@ -80,7 +80,7 @@ export interface UpdateProviderRequest {
  * List all providers with their credential status
  */
 export async function listProviders(): Promise<ProviderInfo[]> {
-  const url = `${LOCAL_API_URL}/providers`;
+  const url = `${getBackendUrl()}/providers`;
 
   try {
     const response = await fetch(url, {
@@ -106,7 +106,7 @@ export async function listProviders(): Promise<ProviderInfo[]> {
  * Create a new provider
  */
 export async function createProvider(request: CreateProviderRequest): Promise<ProviderInfo> {
-  const url = `${LOCAL_API_URL}/providers`;
+  const url = `${getBackendUrl()}/providers`;
 
   try {
     const response = await fetch(url, {
@@ -137,7 +137,7 @@ export async function updateProvider(
   providerName: string,
   request: UpdateProviderRequest
 ): Promise<ProviderInfo> {
-  const url = `${LOCAL_API_URL}/providers/${providerName}`;
+  const url = `${getBackendUrl()}/providers/${providerName}`;
 
   try {
     const response = await fetch(url, {
@@ -165,7 +165,7 @@ export async function updateProvider(
  * Delete provider credentials
  */
 export async function deleteProvider(providerName: string): Promise<void> {
-  const url = `${LOCAL_API_URL}/providers/${providerName}`;
+  const url = `${getBackendUrl()}/providers/${providerName}`;
 
   try {
     const response = await fetch(url, {

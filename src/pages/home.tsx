@@ -3,6 +3,7 @@ import { LocalModelsExplorer } from '@/components/models/local/LocalModelsExplor
 import { LocalModelsSkeletonLoader } from '@/components/models/local/LocalModelsSkeletonLoader';
 import { LocalModelsConsumer } from '@/contexts/LocalModelsContext';
 import { Button } from '@/components/ui/button';
+import { getBackendUrl } from '@/config/api';
 
 export function HomePage() {
   const { models: localModels, loading: localLoading, error: localError, refetchModels: localRefetch } = LocalModelsConsumer();
@@ -25,7 +26,7 @@ export function HomePage() {
           <div className="flex items-center justify-center gap-2 mt-4">
             <Server className="w-4 h-4 text-[rgb(var(--theme-500))]" />
             <span className="text-sm text-muted-foreground">
-              Running on <span className="text-[rgb(var(--theme-500))] font-medium">localhost:8080</span>
+              Running on <span className="text-[rgb(var(--theme-500))] font-medium">{getBackendUrl()}</span>
             </span>
           </div>
         </header>
