@@ -5,8 +5,6 @@ import {
   ExclamationTriangleIcon,
   ClockIcon,
   CurrencyDollarIcon,
-  ArrowsPointingInIcon,
-  ArrowsPointingOutIcon,
 } from "@heroicons/react/24/outline";
 import { ChevronRight, Download, Upload, X } from "lucide-react";
 import { formatDistanceToNow, differenceInMinutes } from "date-fns";

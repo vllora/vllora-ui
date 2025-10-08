@@ -1,6 +1,5 @@
 import React from 'react';
 import { CurrencyDollarIcon, ClockIcon } from '@heroicons/react/24/outline';
-import { formatMiliSecondsToSeconds } from '@/utils/format';
 import { Download, Upload } from 'lucide-react';
 import { formatCost } from '@/utils/formatCost';
 import {

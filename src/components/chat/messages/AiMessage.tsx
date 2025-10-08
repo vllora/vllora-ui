@@ -29,7 +29,7 @@ export const AiMessage: React.FC<{
   message?: Message;
   isTyping?: boolean;
 }> = ({ message: msg, isTyping }) => {
-  const { setOpenTraces, fetchSpansByRunId, selectedSpanInfo, setHoveredRunId } = ChatWindowConsumer();
+  const { setOpenTraces, fetchSpansByRunId, setHoveredRunId } = ChatWindowConsumer();
   const { setIsRightSidebarCollapsed } = ThreadsConsumer();
 
   const [copied, setCopied] = useState(false);
