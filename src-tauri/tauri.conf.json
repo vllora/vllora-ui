@@ -39,9 +39,7 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "../ai-gateway/target/release/ai-gateway",
-      "../ai-gateway/config.yaml",
-      "../ai-gateway/.env"
+      "../ai-gateway/target/aarch64-apple-darwin/release/ai-gateway"
     ]
   }
 }
