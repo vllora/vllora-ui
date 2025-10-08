@@ -19,7 +19,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   onModelChange,
 }) => {
   const { models } = LocalModelsConsumer();
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
