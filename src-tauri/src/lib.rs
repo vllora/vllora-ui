@@ -3,6 +3,7 @@ use std::time::Duration;
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
 use tauri::{Manager, State};
+use tauri_plugin_log::{Target, TargetKind};
 
 /// Application state to store the backend port
 struct AppState {
@@ -45,13 +46,15 @@ pub fn run() {
     .manage(app_state)
     .invoke_handler(tauri::generate_handler![get_backend_port])
     .setup(move |app| {
-      if cfg!(debug_assertions) {
-        app.handle().plugin(
-          tauri_plugin_log::Builder::default()
-            .level(log::LevelFilter::Info)
-            .build(),
-        )?;
-      }
+      app.handle().plugin(
+        tauri_plugin_log::Builder::default()
+          .level(log::LevelFilter::Info)
+          .targets([
+            Target::new(TargetKind::Stdout),
+            Target::new(TargetKind::LogDir { file_name: None }),
+          ])
+          .build(),
+      )?;
 
       log::info!("Using port {} for AI Gateway backend", backend_port);
 
