@@ -120,6 +120,17 @@ export function ChatPage() {
     navigate(`${location.pathname}${queryString ? '?' + queryString : ''}`);
   }, [location.pathname, navigate, searchParams, isDefaultProject]);
 
+  const isCurrentThreadDraft = useMemo(()=> {
+    if(threads && threads.length > 0) {
+      const thread = threads.find((t) => t.id === selectedThreadId);
+      if(thread) {
+        return thread.is_from_local
+      }
+      return true;
+    }
+    return true;
+  }, [threads, selectedThreadId])
+
   return (
     <section className="flex-1 flex bg-background text-foreground overflow-hidden" aria-label="Chat Interface">
       {/* Left Sidebar */}
@@ -143,7 +154,7 @@ export function ChatPage() {
               projectId={currentProjectId}
               widgetId={`chat-${selectedThreadId}`}
               onModelChange={handleModelChange}
-              isDraft={threads.find((t) => t.id === selectedThreadId)?.is_from_local}
+              isDraft={isCurrentThreadDraft}
             />
           </div>
 
