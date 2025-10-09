@@ -76,7 +76,7 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model }) => {
                     </div>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="bg-popover border-border">
-                    <p className="text-xs font-medium">Owner: {modelGroup[0].owned_by}</p>
+                    <p className="text-xs font-medium">Publisher: {modelGroup[0].owned_by}</p>
                   </TooltipContent>
                 </Tooltip>
 

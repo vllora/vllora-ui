@@ -167,7 +167,7 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
             ))}
             {selectedOwners.map(owner => (
               <div key={owner} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs">
-                <span>owner:</span>
+                <span>publisher:</span>
                 <span className="font-bold">{owner}</span>
                 <button
                   onClick={() => onOwnersChange(selectedOwners.filter(o => o !== owner))}
