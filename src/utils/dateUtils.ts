@@ -42,8 +42,7 @@ export const formatMessageTime = (dateString?: string): string => {
       hour12: false,
     
     });
-    const milliseconds = date.getMilliseconds().toString().padStart(3, '0');
-    return `${time}.${milliseconds}`;
+    return `${time}`;
   }
   // For traces within the last week, show day and time
   const daysAgo = Math.floor(
@@ -56,8 +55,7 @@ export const formatMessageTime = (dateString?: string): string => {
       minute: '2-digit',
       hour12: false,
     });
-    const milliseconds = date.getMilliseconds().toString().padStart(3, '0');
-    return `${dayName} ${time} ${milliseconds}ms`;
+    return `${dayName} ${time}`;
   }
 
   // For older traces, show month/day and time
