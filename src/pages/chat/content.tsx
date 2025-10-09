@@ -26,10 +26,13 @@ export function ChatPage() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const currentThread = useMemo(() => {
+    return threads.find((t) => t.id === selectedThreadId);
+  }, [threads, selectedThreadId]);
   // Read selectedModel from URL query string, fallback to default
   const selectedModel = useMemo(() => {
-    return searchParams.get('model') || 'openai/o1-mini';
-  }, [searchParams]);
+    return searchParams.get('model')  || (currentThread?.input_models && currentThread.input_models.length > 0 ? currentThread.input_models[currentThread.input_models.length - 1] : undefined) || currentThread?.request_model_name || 'openai/o1-mini';
+  }, [searchParams, currentThread]);
 
   useEffect(() => {
     refreshThreads();
