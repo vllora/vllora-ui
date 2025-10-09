@@ -198,7 +198,10 @@ pub fn run() {
                     error: None,
                   });
 
-                  // Show the main window
+                  // Close splash screen and show main window
+                  if let Some(splash) = app_handle.get_webview_window("splashscreen") {
+                    let _ = splash.close();
+                  }
                   if let Some(window) = app_handle.get_webview_window("main") {
                     let _ = window.show();
                     let _ = window.set_focus();
@@ -217,7 +220,10 @@ pub fn run() {
                       error: Some("Backend failed to start within timeout".to_string()),
                     });
 
-                    // Show window anyway so user can see the error
+                    // Close splash screen and show window anyway so user can see the error
+                    if let Some(splash) = app_handle.get_webview_window("splashscreen") {
+                      let _ = splash.close();
+                    }
                     if let Some(window) = app_handle.get_webview_window("main") {
                       let _ = window.show();
                     }
@@ -332,7 +338,12 @@ pub fn run() {
     })
     .on_window_event(|window, event| {
       if let tauri::WindowEvent::CloseRequested { .. } = event {
-        // Kill backend sidecar when window close is requested
+        // Only kill backend when MAIN window closes, not splash screen
+        if window.label() != "main" {
+          return;
+        }
+
+        // Kill backend sidecar when main window close is requested
         if let Some(state) = window.try_state::<AppState>() {
           if let Some(pid) = state.backend_pid.lock().unwrap().take() {
             log::info!("Terminating AI Gateway backend sidecar (PID: {})...", pid);

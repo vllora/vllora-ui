@@ -48,7 +48,7 @@ export const ProviderCredentialForm = ({
     const firstInputRef = useRef<HTMLInputElement>(null);
     const [sessionStatus, setSessionStatus] = useState<SessionStatus>('idle');
     const [sessionError, setSessionError] = useState<string>('');
-    const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const pollingIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const loginWindowRef = useRef<Window | null>(null);
 
     useEffect(() => {

@@ -12,13 +12,27 @@
   "app": {
     "windows": [
       {
+        "label": "splashscreen",
+        "title": "Ellora",
+        "width": 600,
+        "height": 400,
+        "resizable": false,
+        "fullscreen": false,
+        "decorations": false,
+        "center": true,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "url": "splashscreen.html"
+      },
+      {
+        "label": "main",
         "title": "Ellora - AI Gateway",
         "width": 1280,
         "height": 900,
         "minWidth": 1024,
         "minHeight": 768,
         "resizable": true,
-        "fullscreen": false,
+        "fullscreen": true,
         "center": true,
         "visible": false
       }
@@ -46,7 +60,8 @@
         "font-src": ["'self'", "data:"]
       }
     },
-    "withGlobalTauri": false
+    "withGlobalTauri": false,
+    "macOSPrivateApi": true
   },
   "bundle": {
     "active": true,
