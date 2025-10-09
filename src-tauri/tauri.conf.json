@@ -32,7 +32,7 @@
         "minWidth": 1024,
         "minHeight": 768,
         "resizable": true,
-        "fullscreen": true,
+        "fullscreen": false,
         "center": true,
         "visible": false
       }

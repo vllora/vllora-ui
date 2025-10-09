@@ -1,4 +1,4 @@
-import { API_CONFIG, getThreadsUrl } from '@/config/api';
+import { getThreadsUrl } from '@/config/api';
 import { Thread } from '@/types/chat';
 
 export interface QueryThreadsRequest {
@@ -37,7 +37,6 @@ export async function queryThreads(
       headers: {
         'Content-Type': 'application/json',
         'x-project-id': projectId,
-        'authorization': `Bearer ${API_CONFIG.apiKey}`,
       },
       body: JSON.stringify(request),
     });

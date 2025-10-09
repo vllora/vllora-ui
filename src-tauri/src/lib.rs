@@ -204,6 +204,7 @@ pub fn run() {
                   }
                   if let Some(window) = app_handle.get_webview_window("main") {
                     let _ = window.show();
+                    let _ = window.set_fullscreen(true);
                     let _ = window.set_focus();
                   }
                   break;
@@ -226,6 +227,7 @@ pub fn run() {
                     }
                     if let Some(window) = app_handle.get_webview_window("main") {
                       let _ = window.show();
+                      let _ = window.set_fullscreen(true);
                     }
                     break;
                   }
