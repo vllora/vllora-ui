@@ -28,14 +28,23 @@ export const TraceEmptyState: React.FC = () => {
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-8">
-      <Sparkles className="h-12 w-12 text-muted-foreground/50 mb-4" />
-      <p className="text-sm text-muted-foreground font-medium mb-2">No traces yet</p>
-      <p className="text-xs text-muted-foreground mb-6">
-        Send a message to start tracking requests, or try the sample curl command below
-      </p>
+      <div className="flex flex-col items-center mb-8">
+        <div className="h-16 w-16 rounded-full bg-muted/30 flex items-center justify-center mb-4">
+          <Sparkles className="h-8 w-8 text-muted-foreground/60" />
+        </div>
+        <h3 className="text-lg font-semibold text-foreground mb-2">No traces yet</h3>
+        <p className="text-sm text-muted-foreground text-center max-w-md">
+          Start tracking your API requests by sending a message or try the sample command below
+        </p>
+      </div>
 
-      <div className="w-full max-w-2xl">
-        <CodeBlock title="cUrl" code={sampleCurlCommand} language="bash" />
+      <div className="w-full max-w-3xl">
+        <div className="mb-3 flex items-center gap-2">
+          <div className="h-px flex-1 bg-border"></div>
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Get Started</span>
+          <div className="h-px flex-1 bg-border"></div>
+        </div>
+        <CodeBlock title="Sample cURL Request" code={sampleCurlCommand} language="bash" />
       </div>
     </div>
   );
