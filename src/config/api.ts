@@ -1,37 +1,9 @@
-import { invoke } from '@tauri-apps/api/core';
-
-// Dynamic backend port (will be set on app initialization)
-let backendPort = 8080; // Default fallback
-
-// Function to get backend port from Tauri with retry logic
-export async function initializeBackendPort(): Promise<void> {
-  try {
-    // Check if running in Tauri environment
-    if ((window as any).__TAURI__) {
-      // Retry logic in case Tauri commands aren't ready yet
-      const maxRetries = 10;
-      for (let i = 0; i < maxRetries; i++) {
-        try {
-          backendPort = await invoke<number>('get_backend_port');
-          console.log(`Using backend port: ${backendPort}`);
-          return;
-        } catch (error) {
-          if (i === maxRetries - 1) {
-            throw error;
-          }
-          // Wait 100ms before retrying
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-      }
-    }
-  } catch (error) {
-    console.warn('Failed to get backend port from Tauri after retries, using default 8080:', error);
-  }
-}
+// Backend port - can be configured via environment variable
+const backendPort = import.meta.env.VITE_BACKEND_PORT || 8080;
 
 // Get the current backend URL (exported for use in other services)
 export function getBackendUrl(): string {
-  return `http://localhost:${backendPort}`;
+  return import.meta.env.VITE_BACKEND_URL || `http://localhost:${backendPort}`;
 }
 
 export const API_CONFIG = {
