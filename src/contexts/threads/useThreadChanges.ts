@@ -1,17 +1,19 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from "react";
 import {
   TextMessageStartEvent,
   TextMessageEndEvent,
   TextMessageContentEvent,
   MessageCreatedEvent,
   ThreadModelStartEvent,
-} from '../project-events/dto';
-import { ThreadChanges, ThreadState } from './types';
-import { sortThreads, formatTimestampToDateString } from './utils';
+} from "../project-events/dto";
+import { ThreadChanges, ThreadState } from "./types";
+import { sortThreads, formatTimestampToDateString } from "./utils";
 
 export function useThreadChanges(threadState: ThreadState) {
   const { setThreads, selectedThreadId } = threadState;
-  const [threadsHaveChanges, setThreadsHaveChanges] = useState<ThreadChanges>({});
+  const [threadsHaveChanges, setThreadsHaveChanges] = useState<ThreadChanges>(
+    {}
+  );
 
   // Clear thread changes when user selects/views a thread
   useEffect(() => {
@@ -25,13 +27,20 @@ export function useThreadChanges(threadState: ThreadState) {
   }, [selectedThreadId]);
 
   // Helper to get status from event type
-  const getStatus = (type: string): 'start' | 'streaming' | 'end' =>
-    type === 'TextMessageStart' ? 'start' : type === 'TextMessageContent' ? 'streaming' : 'end';
+  const getStatus = (type: string): "start" | "streaming" | "end" =>
+    type === "TextMessageStart"
+      ? "start"
+      : type === "TextMessageContent"
+      ? "streaming"
+      : "end";
 
   const onThreadMessageHaveChanges = useCallback(
     (input: {
       threadId: string;
-      event: TextMessageStartEvent | TextMessageEndEvent | TextMessageContentEvent;
+      event:
+        | TextMessageStartEvent
+        | TextMessageEndEvent
+        | TextMessageContentEvent;
     }) => {
       const { threadId, event } = input;
 
@@ -50,7 +59,6 @@ export function useThreadChanges(threadState: ThreadState) {
         status: getStatus(event.type),
         timestamp: event.timestamp,
       };
-
       setThreadsHaveChanges((prev) => {
         // Get existing messages, filter out old entry for this message_id, add new entry, and sort
         const existingMessages = prev[threadId]?.messages || [];
@@ -69,7 +77,9 @@ export function useThreadChanges(threadState: ThreadState) {
       const newUpdatedAtString = formatTimestampToDateString(event.timestamp);
       setThreads((prev) => {
         const updatedThreads = prev.map((thread) =>
-          thread.id === threadId ? { ...thread, updated_at: newUpdatedAtString } : thread
+          thread.id === threadId
+            ? { ...thread, updated_at: newUpdatedAtString }
+            : thread
         );
         return sortThreads(updatedThreads);
       });
@@ -89,7 +99,9 @@ export function useThreadChanges(threadState: ThreadState) {
             let newModelName = event.value.provider_name
               ? `${event.value.provider_name}/${event.value.model_name}`
               : event.value.model_name;
-            const newInputModels = [...new Set([...(thread.input_models || []), newModelName])];
+            const newInputModels = [
+              ...new Set([...(thread.input_models || []), newModelName]),
+            ];
             return {
               ...thread,
               updated_at: newUpdatedAtString,
@@ -112,34 +124,39 @@ export function useThreadChanges(threadState: ThreadState) {
       // Create new message entry
       const newMessage = {
         message_id: event.value.message_id,
-        status: 'end' as const,
+        status: "end" as const,
         timestamp: event.timestamp,
       };
 
-      setThreadsHaveChanges((prev) => {
-        // Get existing messages, filter out old entry for this message_id, add new entry, and sort
-        const existingMessages = prev[threadId]?.messages || [];
-        const updatedMessages = [
-          ...existingMessages.filter((m) => m.message_id !== event.value.message_id),
-          newMessage,
-        ].sort((a, b) => b.timestamp - a.timestamp);
+      selectedThreadId !== threadId &&
+        setThreadsHaveChanges((prev) => {
+          // Get existing messages, filter out old entry for this message_id, add new entry, and sort
+          const existingMessages = prev[threadId]?.messages || [];
+          const updatedMessages = [
+            ...existingMessages.filter(
+              (m) => m.message_id !== event.value.message_id
+            ),
+            newMessage,
+          ].sort((a, b) => b.timestamp - a.timestamp);
 
-        return {
-          ...prev,
-          [threadId]: { messages: updatedMessages },
-        };
-      });
+          return {
+            ...prev,
+            [threadId]: { messages: updatedMessages },
+          };
+        });
 
       // Update thread timestamp
       const newUpdatedAtString = formatTimestampToDateString(event.timestamp);
       setThreads((prev) => {
         const updatedThreads = prev.map((thread) =>
-          thread.id === threadId ? { ...thread, updated_at: newUpdatedAtString } : thread
+          thread.id === threadId
+            ? { ...thread, updated_at: newUpdatedAtString }
+            : thread
         );
         return sortThreads(updatedThreads);
       });
     },
-    [setThreads]
+    [setThreads, selectedThreadId]
   );
 
   return {
