@@ -142,21 +142,19 @@ export const getColorByType = (type: string) => {
  */
 export function skipThisSpan(span: Span, isClientSDKTrace?: boolean): boolean {
   let operation_name = span.operation_name;
-    if (isClientSDKTrace) {
-        let sdkName = getClientSDKName(span);
-        if (sdkName === 'adk') {
-            return ['invocation', 'tools', 'call_llm'].includes(operation_name)
-        }
-        if (sdkName === 'crewai') {
-           // let isAgent = isAgentSpan(span);
-            return false
-        }
-    }
-    if (!isClientSDKTrace && span.operation_name === 'api_invoke' && span.attribute && span.attribute['error']) {
-        return false
-    }
+  if (isClientSDKTrace) {
+      let sdkName = getClientSDKName(span);
+      if (sdkName === 'adk') {
+          return ['invocation', 'tools', 'call_llm'].includes(operation_name)
+      }
+      if (sdkName === 'crewai') {
+          // let isAgent = isAgentSpan(span);
+          return false
+      }
+  }
+  if (!isClientSDKTrace && span.operation_name === 'api_invoke' && span.attribute && span.attribute['error']) {
+      return false
+  }
 
-    return ["cloud_api_invoke", "api_invoke", "model_call"].includes(operation_name);
-
-  return false;
+  return ["cloud_api_invoke", "api_invoke", "model_call"].includes(operation_name);
 }

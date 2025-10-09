@@ -193,6 +193,12 @@ export const convertSpanToRunDTO = (span: Span, prevDTO?: RunDTO): RunDTO => {
           result.cost += cost;
         }
       }
+
+      let usage = tryParseJson(att_span.usage);
+      if(usage) {
+        result.input_tokens += usage.input_tokens;
+        result.output_tokens += usage.output_tokens;
+      }
     }
     result.finish_time_us = span.finish_time_us;
     return result;

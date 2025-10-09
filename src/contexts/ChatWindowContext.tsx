@@ -242,25 +242,30 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
   const addEventSpan = useCallback((eventSpan: LangDBEventSpan) => {
     const span = convertToNormalSpan(eventSpan);
-    let current_runId = span.run_id;
+    let currentRunId = span.run_id;
 
     let ignoreThisSpan = skipThisSpan(span);
 
-    !ignoreThisSpan && setRawRuns(prev => {
-      let runIndex = prev.findIndex(r => r.run_id === current_runId);
-      if (runIndex === -1) {
-        return [...prev, convertSpanToRunDTO(span)];
-      }
-      let newRun = convertSpanToRunDTO(span, prev[runIndex]);
-      prev[runIndex] = newRun;
-      return [...prev];
-    });
-    current_runId && setSpanMap(prev => {
-      let runMap = prev[current_runId];
+    if (!ignoreThisSpan) {
+      setRawRuns(prev => {
+        let runIndex = prev.findIndex(r => r.run_id === currentRunId);
+        if (runIndex === -1) {
+          return [...prev, convertSpanToRunDTO(span)];
+        }
+        let newRun = convertSpanToRunDTO(span, prev[runIndex]);
+        // Create a new array instead of mutating prev
+        const updated = [...prev];
+        updated[runIndex] = newRun;
+        return updated;
+      });
+    }
+    
+    currentRunId && setSpanMap(prev => {
+      let runMap = prev[currentRunId];
       if (runMap) {
-        return { ...prev, [current_runId]: [...runMap, span] };
+        return { ...prev, [currentRunId]: [...runMap, span] };
       } else {
-        return { ...prev, [current_runId]: [span] };
+        return { ...prev, [currentRunId]: [span] };
       }
     });
   }, []);
