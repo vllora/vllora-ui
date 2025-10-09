@@ -34,8 +34,12 @@ export const ThreadList: React.FC<ThreadListProps> = ({
   const rowVirtualizer = useVirtualizer({
     count: threads.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 120, // Estimated height of each thread row
+    estimateSize: () => 86, // Estimated height of each thread row
     overscan: 5, // Render 5 extra items above and below viewport
+    measureElement: (element) => {
+      const height = element?.getBoundingClientRect().height ?? 86;
+      return height;
+    },
   });
 
   // Load more when scrolling near the end
@@ -71,8 +75,6 @@ export const ThreadList: React.FC<ThreadListProps> = ({
               height: `${rowVirtualizer.getTotalSize() + 80}px`,
               width: '100%',
               position: 'relative',
-              paddingTop: '8px',
-              paddingBottom: '8px',
             }}
           >
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
@@ -84,16 +86,14 @@ export const ThreadList: React.FC<ThreadListProps> = ({
                   ref={rowVirtualizer.measureElement}
                   style={{
                     position: 'absolute',
-                    top: 0,
+                    top: `${virtualRow.start}px`,
                     left: 0,
-                    right: 0,
-                    transform: `translateY(${virtualRow.start + 8}px)`,
-                    paddingLeft: '8px',
-                    paddingRight: '8px',
-                    paddingBottom: '8px',
+                    width: '100%',
                   }}
                 >
-                  <ThreadRow thread={thread} timeUpdateTrigger={timeUpdateTrigger} />
+                  <div style={{ paddingLeft: '8px', paddingRight: '8px', paddingBottom: '8px' }}>
+                    <ThreadRow thread={thread} timeUpdateTrigger={timeUpdateTrigger} />
+                  </div>
                 </div>
               );
             })}
