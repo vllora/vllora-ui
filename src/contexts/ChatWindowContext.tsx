@@ -113,6 +113,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
       setServerMessages(prev => {
         let newMessages = [...prev];
+
         let index = newMessages.findIndex(m => m.id === input.messageId);
         if (index === -1) {
           //newMessages.push(message);
@@ -130,6 +131,19 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
           }
         }
+        // sort messages by created_at, if created_at is empty, keep the order
+        newMessages.sort((a, b) => {
+          if (a.created_at && b.created_at) {
+            return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          } else if (a.created_at) {
+            return -1;
+          } else if (b.created_at) {
+            return 1;
+          } else {
+            return 0;
+          }
+        });
+        
         return newMessages;
       });
 
