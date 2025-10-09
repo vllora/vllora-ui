@@ -34,8 +34,9 @@ const TraceMainContentImpl: React.FC<TraceMainContentProps> = ({
   // Memoize panel sizes to prevent unnecessary re-calculations
   const { defaultSizes, minSizes } = useMemo(() => {
     const hasSelectedSpan = Boolean(openTraces?.length);
-    const defaultSizes: [number, number] = hasSelectedSpan ? [40, 60] : [100, 0];
-    const minSizes: [number, number] = hasSelectedSpan ? [20, 30] : [100, 0];
+    const selectedInfo = openTraces && openTraces.length > 0 && openTraces[0];
+    const defaultSizes: [number, number] = hasSelectedSpan && selectedInfo && selectedInfo.tab === 'trace' ?  [40, 60] : [100, 0];
+    const minSizes: [number, number] = hasSelectedSpan && selectedInfo && selectedInfo.tab === 'trace' ? [20, 30] : [100, 0];
 
     return { defaultSizes, minSizes };
   }, [openTraces]);

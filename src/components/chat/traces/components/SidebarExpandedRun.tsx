@@ -1,10 +1,11 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { SummaryTraces } from './Summary-row';
 import { DetailedRunView } from './detail-run-view';
+import { TraceCodeView } from './TraceCodeView';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 
 interface SidebarExpandedRunProps {
-  runId: string;
+ 
 }
 
 /**
@@ -12,43 +13,57 @@ interface SidebarExpandedRunProps {
  * with sticky header for better UX when viewing trace details
  */
 export const SidebarExpandedRun: React.FC<SidebarExpandedRunProps> = ({
-  runId,
+
 }) => {
   const { setOpenTraces, openTraces, runs } = ChatWindowConsumer();
 
+
+  const currentRunId: string = useMemo(()=> {
+    return openTraces && openTraces.length && openTraces[0] ? openTraces[0].run_id : ''
+  }, [openTraces])
+
+  const currentTab: 'trace' | 'code' = useMemo(()=> {
+    return openTraces && openTraces.length && openTraces[0] ? openTraces[0].tab : 'trace'
+  }, [openTraces])
+  const isOpen = openTraces.some(t => t.run_id === currentRunId);
+
   const toggleAccordion = useCallback(() => {
     setOpenTraces(prev => {
-      if (prev.includes(runId)) {
+      const existingIndex = prev.findIndex(t => t.run_id === currentRunId);
+      if (existingIndex !== -1) {
         return [];
       } else {
-        return [runId];
+        return [{ run_id: currentRunId, tab: 'trace' }];
       }
     });
-  }, [setOpenTraces, runId]);
+  }, [setOpenTraces, currentRunId]);
 
-  const isOpen = openTraces.includes(runId);
-  const run = runs.find(r => r.run_id === runId);
+  const run = runs.find(r => r.run_id === currentRunId);
 
   if (!run) {
     return null;
   }
 
   return (
-    <div key={`SidebarExpandedRun-${runId}-${isOpen}`} className="h-full flex flex-col">
+    <div key={`SidebarExpandedRun-${currentRunId}-${isOpen}`} className="h-full flex flex-col">
       {/* Sticky Header */}
-      <div className="sticky top-0 z-10 bg-background border-b border-border">
+      {currentTab === 'trace' && <div className="sticky top-0 z-10 bg-background border-b border-border">
         <SummaryTraces
           run={run}
           isOpen={isOpen}
           isInSidebar={true}
           onChevronClick={toggleAccordion}
         />
-      </div>
+      </div>}
 
       {/* Scrollable Content */}
       {isOpen && (
         <div className="flex-1 overflow-auto">
-          <DetailedRunView run={run} />
+          {currentTab === 'trace' ? (
+            <DetailedRunView run={run} />
+          ) : (
+            <TraceCodeView runId={currentRunId} />
+          )}
         </div>
       )}
     </div>

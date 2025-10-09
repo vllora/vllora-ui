@@ -36,13 +36,13 @@ const TraceContentImpl: React.FC<TraceContentProps> = ({
   }
 
   // Show expanded single run view when exactly one trace is open
-  const isShowingExpandedRun = openTraces && openTraces.length > 0;
+  const isShowingExpandedRun =  openTraces && openTraces.length > 0;
 
   return (
     <div className={cn("h-full flex flex-col")}>
       <div className="flex-1 overflow-y-auto overflow-x-hidden min-w-0">
         {isShowingExpandedRun ? (
-          <SidebarExpandedRun runId={openTraces[0]} />
+          <SidebarExpandedRun  />
         ) : (
           <TraceList
             runs={runs}

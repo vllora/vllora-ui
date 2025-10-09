@@ -59,7 +59,7 @@ export const AiMessage: React.FC<{
     if (!runId) return;
 
     // Open the trace and fetch spans
-    setOpenTraces([runId]);
+    setOpenTraces([{ run_id: runId, tab: 'trace' }]);
     fetchSpansByRunId(runId);
     // Auto-expand the right sidebar
     setIsRightSidebarCollapsed(false);

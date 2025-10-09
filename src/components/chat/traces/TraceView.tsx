@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { cn } from "@/lib/utils";
-import { TraceHeader } from "./components/TraceHeader";
+import { TraceHeader } from "./components/header";
 import { TraceMainContent } from "./components/TraceMainContent";
 import { ExclamationCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
 
@@ -40,7 +40,7 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
       )}
     >
       {/* Header with actions */}
-      <TraceHeader loadingSpans={runsLoading} refreshSpans={refreshRuns} />
+      <TraceHeader />
 
       {/* Error display - positioned between header and filters */}
       {errorMessage && (

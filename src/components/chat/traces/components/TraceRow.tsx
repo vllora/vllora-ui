@@ -16,10 +16,10 @@ interface TraceRowProps {
 const TraceRowImpl = ({ run, index = 0, isInSidebar = false }: TraceRowProps) => {
   const { openTraces, setOpenTraces, fetchSpansByRunId } = ChatWindowConsumer();
   const traceOrRunId = run.run_id || '';
-  const isOpen = openTraces.includes(traceOrRunId);
+  const isOpen = openTraces.some(t => t.run_id === traceOrRunId);
   const toggleAccordion = useCallback(() => {
     setOpenTraces(prev => {
-      const isCurrentlyOpen = prev.includes(traceOrRunId);
+      const isCurrentlyOpen = prev.some(t => t.run_id === traceOrRunId);
       if (isCurrentlyOpen) {
         // Close the trace
         return [];
@@ -29,7 +29,7 @@ const TraceRowImpl = ({ run, index = 0, isInSidebar = false }: TraceRowProps) =>
         setTimeout(() => {
           fetchSpansByRunId(traceOrRunId);
         }, 0);
-        return [traceOrRunId];
+        return [{ run_id: traceOrRunId, tab: 'trace' }];
       }
     });
   }, [traceOrRunId, setOpenTraces, fetchSpansByRunId]);

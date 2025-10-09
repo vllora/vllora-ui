@@ -56,11 +56,7 @@ export const TracesRightSidebar: React.FC<TracesRightSidebarProps> = ({
           onClick={onToggle}
           className="hover:bg-accent transition-all duration-200 flex-shrink-0"
         >
-          {isCollapsed ? (
-            <PanelRight className="h-4 w-4" />
-          ) : (
-            <PanelRight className="h-4 w-4" />
-          )}
+          <PanelRight className="h-4 w-4" />
         </Button>
       </div>
     </div>

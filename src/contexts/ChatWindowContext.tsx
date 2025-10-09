@@ -45,7 +45,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   // Selection state
   const [selectedSpanInfo, setSelectedSpanInfo] = useState<SelectedSpanInfo | null>(null);
   // should the the run be expanded
-  const [openTraces, setOpenTraces] = useState<string[]>([]);
+  const [openTraces, setOpenTraces] = useState<{ run_id: string; tab: 'trace' | 'code' }[]>([]);
   // hovered run id (for highlighting related traces when hovering messages)
   const [hoveredRunId, setHoveredRunId] = useState<string | null>(null);
 
