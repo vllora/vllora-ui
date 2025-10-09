@@ -35,6 +35,15 @@ export function useThreadChanges(threadState: ThreadState) {
     }) => {
       const { threadId, event } = input;
 
+      if (selectedThreadId === threadId) {
+        setThreadsHaveChanges((prev) => {
+          const updated = { ...prev };
+          delete updated[threadId];
+          return updated;
+        });
+        return;
+      }
+
       // Create new message entry
       const newMessage = {
         message_id: event.message_id,
@@ -65,7 +74,7 @@ export function useThreadChanges(threadState: ThreadState) {
         return sortThreads(updatedThreads);
       });
     },
-    [setThreads]
+    [setThreads, selectedThreadId]
   );
 
   const onThreadModelStartEvent = useCallback(
@@ -85,7 +94,7 @@ export function useThreadChanges(threadState: ThreadState) {
               ...thread,
               updated_at: newUpdatedAtString,
               input_models: newInputModels,
-              request_model_name: event.value.model_name,
+              request_model_name: newModelName,
             };
           }
           return thread;
