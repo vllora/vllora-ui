@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { CheckIcon, ClipboardDocumentIcon } from '@heroicons/react/24/outline';
 import { CheckCircle, Copy } from 'lucide-react';
 
 interface CodeBlockProps {
