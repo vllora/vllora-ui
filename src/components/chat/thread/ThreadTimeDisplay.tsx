@@ -20,7 +20,7 @@ export const ThreadTimeDisplay: React.FC<ThreadTimeDisplayProps> = ({ updatedAt 
   })();
 
   // Only update time display when visible and recent (24 hours = 86400 seconds)
-  useRelativeTime(threadRowTimeRef, updatedDateISOString, 10000, 86400);
+  useRelativeTime(threadRowTimeRef, updatedDateISOString, 60000, 86400);
 
   // Recalculate on every render (triggered by useRelativeTime)
   const formattedRelativeUpdatedDate = formatThreadTime(updatedDateISOString);

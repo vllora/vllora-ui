@@ -18,6 +18,8 @@ export const ThreadsSidebar: React.FC<ChatSidebarProps> = ({
   onNewThread,
   onProjectChange,
 }) => {
+
+  console.log('===== threads', threads)
   return (
     <div className="w-80 bg-card border-r border-border flex flex-col h-full">
       {/* Project Dropdown Header */}
