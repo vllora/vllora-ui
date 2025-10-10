@@ -22,6 +22,7 @@ import { CheckIcon, ClipboardDocumentIcon } from '@heroicons/react/24/outline';
 import ReactJson from 'react-json-view';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 import { ThreadsConsumer } from '@/contexts/ThreadsContext';
+import { useRelativeTime } from '@/hooks/useRelativeTime';
 
 export const AiMessage: React.FC<{
   message?: Message;
@@ -35,6 +36,11 @@ export const AiMessage: React.FC<{
   const [expandedToolCalls, setExpandedToolCalls] = useState<{
     [key: string]: boolean;
   }>({});
+
+  const messageRef = React.useRef<HTMLDivElement>(null);
+
+  // Only update relative time when message is visible and less than 60 seconds old
+  useRelativeTime(messageRef, msg?.created_at);
 
   const metrics = msg?.metrics;
   const canClickToOpenTrace = useMemo(() => {
@@ -80,6 +86,7 @@ export const AiMessage: React.FC<{
 
   return (
     <div
+      ref={messageRef}
       className={`flex flex-col gap-2 group ${canClickToOpenTrace ? 'cursor-pointer hover:bg-neutral-800/30 rounded-lg p-2 -m-2 transition-colors' : ''}`}
       onClick={canClickToOpenTrace ? handleOpenTrace : undefined}
       onMouseEnter={handleMouseEnter}

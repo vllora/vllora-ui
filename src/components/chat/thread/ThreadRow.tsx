@@ -1,8 +1,7 @@
 import { Thread } from "@/types/chat";
 import { ThreadsConsumer } from "@/contexts/ThreadsContext";
 import { ProjectsConsumer } from "@/contexts/ProjectContext";
-import { ClockIcon, CurrencyDollarIcon, ExclamationTriangleIcon, PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
-import { formatDistanceToNow, format } from "date-fns";
+import { CurrencyDollarIcon, ExclamationTriangleIcon, PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
 import React, { useCallback, useRef, useState, useMemo } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Input } from "../../ui/input";
@@ -16,8 +15,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../
 import { motion } from "framer-motion";
 import { ErrorTooltip } from "./ErrorTooltip";
 import { formatCost } from "@/utils/formatCost";
+import { ThreadTimeDisplay } from './ThreadTimeDisplay';
 
-export const ThreadRow = React.memo(({ thread, timeUpdateTrigger }: { thread: Thread; timeUpdateTrigger?: number }) => {
+export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
     const { renameThread, deleteDraftThread, selectedThreadId, threadsHaveChanges } = ThreadsConsumer();
     const { currentProjectId, isDefaultProject } = ProjectsConsumer();
     const [isEditing, setIsEditing] = useState(false);
@@ -77,20 +77,12 @@ export const ThreadRow = React.memo(({ thread, timeUpdateTrigger }: { thread: Th
 
         return { tagsDisplay, providersInfo };
     }, [thread.input_models, thread.tags_info, thread.model_name]);
-    const { haveErrors, formattedStartTime, createdDate } = useMemo(() => {
+    const haveErrors = useMemo(() => {
         const haveErrors = thread.errors && thread.errors.length > 0;
+        return haveErrors;
+    }, [thread.errors]);
 
-        // Safely parse the date and handle invalid values
-        const date = new Date(thread.updated_at);
-        const isValidDate = !isNaN(date.getTime());
 
-        const formattedStartTime = isValidDate
-            ? formatDistanceToNow(date, { addSuffix: true }).replace('less than a minute ago', 'just now')
-            : 'Unknown time';
-        const createdDate = isValidDate ? date : null;
-
-        return { haveErrors, formattedStartTime, createdDate };
-    }, [thread.errors, thread.updated_at, timeUpdateTrigger]);
 
     const handleTitleEdit = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
@@ -202,14 +194,14 @@ export const ThreadRow = React.memo(({ thread, timeUpdateTrigger }: { thread: Th
                                         Draft
                                     </span>
                                 )}
-                                
+
                             </div>
                         )}
                     </div>
 
                     {/* Right side metadata */}
                     <div className="flex items-center gap-2">
-                        
+
 
                         {/* Error indicator */}
                         {haveErrors && (
@@ -232,19 +224,7 @@ export const ThreadRow = React.memo(({ thread, timeUpdateTrigger }: { thread: Th
                 <div className="flex justify-between flex-1 items-center">
                     <div className="flex flex-1 items-center gap-2">
                         {/* Time info */}
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <div className="flex items-center text-xs text-muted-foreground hover:text-foreground transition-colors hover:cursor-help truncate">
-                                        <ClockIcon className="w-3.5 h-3.5 mr-1.5 text-blue-400" />
-                                        <span className="font-mono">{formattedStartTime}</span>
-                                    </div>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="text-xs p-1.5">
-                                    <div>Updated: {createdDate ? format(createdDate, "yyyy-MM-dd HH:mm:ss") : 'Unknown'}</div>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
+                        <ThreadTimeDisplay updatedAt={thread.updated_at} />
 
                         {/* Cost info */}
                         {thread.cost !== undefined && (

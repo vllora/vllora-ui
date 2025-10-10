@@ -15,20 +15,10 @@ export const ThreadList: React.FC<ThreadListProps> = ({
   const { loading, loadingMore, loadingThreadsError, loadMoreThreads, hasMore } = ThreadsConsumer();
   const loadingRef = useRef(false);
   const parentRef = useRef<HTMLDivElement>(null);
-  const [timeUpdateTrigger, setTimeUpdateTrigger] = React.useState(0);
-
   useEffect(() => {
     loadingRef.current = loading || loadingMore;
   }, [loading, loadingMore]);
 
-  // Global interval for updating all visible thread times
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTimeUpdateTrigger(prev => prev + 1);
-    }, 60000); // Update every 60 seconds
-
-    return () => clearInterval(interval);
-  }, []);
 
   // Virtualize the list
   const rowVirtualizer = useVirtualizer({
@@ -92,7 +82,7 @@ export const ThreadList: React.FC<ThreadListProps> = ({
                   }}
                 >
                   <div style={{ paddingLeft: '8px', paddingRight: '8px', paddingBottom: '8px' }}>
-                    <ThreadRow thread={thread} timeUpdateTrigger={timeUpdateTrigger} />
+                    <ThreadRow thread={thread}/>
                   </div>
                 </div>
               );

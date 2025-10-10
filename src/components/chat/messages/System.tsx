@@ -19,15 +19,19 @@ import {
 import { ProviderIcon } from "@/components/Icons/ProviderIcons";
 import { MessageDisplay } from "../MessageDisplay";
 import { Message } from "@/types/chat";
+import { useRelativeTime } from "@/hooks/useRelativeTime";
 
 const getProviderName = (modelName?: string) => {
   if (!modelName) return 'default';
   const parts = modelName.split('/');
   return parts.length > 1 ? parts[0] : 'default';
 };
-export const SystemMessage: React.FC<{ msg: Message }> =({ msg }) => {
+export const SystemMessage: React.FC<{ msg: Message }> = ({ msg }) => {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const messageRef = React.useRef<HTMLDivElement>(null);
+  useRelativeTime(messageRef, msg.created_at);
+
 
   // Function to count lines in a string
   const countLines = (text: string): number => {
@@ -46,10 +50,10 @@ export const SystemMessage: React.FC<{ msg: Message }> =({ msg }) => {
   const hasMoreLines = lineCount > 5;
   const displayMessage =
     expanded || !hasMoreLines ? messageContent : getFirstNLines(messageContent, 5);
-    const providerName = getProviderName(msg?.model_name);
+  const providerName = getProviderName(msg?.model_name);
 
   return (
-    <div className="flex items-start gap-2 mb-2">
+    <div className="flex items-start gap-2 mb-2" ref={messageRef}>
       <div className="flex-shrink-0">
         <TooltipProvider>
           <Tooltip>
@@ -68,15 +72,15 @@ export const SystemMessage: React.FC<{ msg: Message }> =({ msg }) => {
             <div className="flex items-center gap-1.5">
               {msg?.model_name ? (
                 <TooltipProvider>
-                <Tooltip>
+                  <Tooltip>
                     <TooltipTrigger>
-                        <ProviderIcon provider_name={providerName} className="h-4 w-4 rounded-full" />
+                      <ProviderIcon provider_name={providerName} className="h-4 w-4 rounded-full" />
                     </TooltipTrigger>
                     <TooltipContent>
-                        <p>System Message: {msg.model_name}</p>
+                      <p>System Message: {msg.model_name}</p>
                     </TooltipContent>
-                </Tooltip>
-            </TooltipProvider>
+                  </Tooltip>
+                </TooltipProvider>
               ) : (
                 <TooltipProvider>
                   <Tooltip>

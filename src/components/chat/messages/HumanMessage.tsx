@@ -2,16 +2,22 @@ import React from 'react';
 import { Clock } from 'lucide-react';
 import { Message } from '@/types/chat';
 import { MessageDisplay } from '../MessageDisplay';
+import { ContentArrayDisplay } from './ContentArrayDisplay';
 import { formatMessageTime } from '@/utils/dateUtils';
+import { useRelativeTime } from '@/hooks/useRelativeTime';
 
 interface HumanMessageProps {
   message: Message;
 }
 
 export const HumanMessage: React.FC<HumanMessageProps> = ({ message }) => {
+  const messageRef = React.useRef<HTMLDivElement>(null);
+
+  // Only update relative time when message is visible
+  useRelativeTime(messageRef, message.created_at);
 
   return (
-    <div className="flex flex-col group mb-6">
+    <div className="flex flex-col group mb-6" ref={messageRef}>
       {/* Header with Avatar and Metadata */}
       <div className="flex items-center gap-3 pb-3 border-b border-neutral-800/30">
         
@@ -48,9 +54,16 @@ export const HumanMessage: React.FC<HumanMessageProps> = ({ message }) => {
             ))}
           </div>
         )}
-        <div className="text-neutral-100 leading-relaxed whitespace-normal break-words text-sm">
-          <MessageDisplay message={message.content} />
-        </div>
+
+        {message.content_array && message.content_array.length > 0 ? (
+          <div className="text-right">
+            <ContentArrayDisplay contentArray={message.content_array} />
+          </div>
+        ) : (
+          <div className="text-neutral-100 leading-relaxed whitespace-normal break-words text-sm text-right">
+            <MessageDisplay message={message.content} />
+          </div>
+        )}
       </div>
     </div>
   );

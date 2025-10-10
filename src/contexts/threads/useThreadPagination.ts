@@ -76,15 +76,10 @@ export function useThreadPagination(
             })
               .then((response) => {
                 const pagination = response.pagination;
-                const newThreads = response.data.map((t: Thread) => ({
-                  ...t,
-                  created_at: new Date(Date.parse(t.created_at + 'Z')).toString(),
-                  updated_at: new Date(Date.parse(t.updated_at + 'Z')).toString(),
-                }));
-                setThreads((prev) => [...prev, ...newThreads]);
-                setOffset((prev) => prev + newThreads.length);
-                setTotal((prev) => prev + newThreads.length);
-                setHasMore(newThreads.length === pagination.limit);
+                setThreads((prev) => [...prev, ...response.data]);
+                setOffset((prev) => prev + response.data.length);
+                setTotal((prev) => prev + response.data.length);
+                setHasMore(response.data.length === pagination.limit);
                 setLoadingMore(false);
               })
               .catch((e: any) => {

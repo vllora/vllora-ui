@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo } from "react";
 import { RunDTO } from "@/types/common-type";
 import { Card } from "@/components/ui/card";
 import {
@@ -18,6 +18,7 @@ import { ProviderIcon } from "@/components/Icons/ProviderIcons";
 import { formatCost } from "@/utils/formatCost";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { formatMessageTime } from "@/utils/dateUtils";
+import { useRelativeTime } from "@/hooks/useRelativeTime";
 
 interface ModelCallSummaryTracesProps {
   run: RunDTO;
@@ -75,6 +76,9 @@ const SidebarModelCallSummaryTracesImpl = ({
     return ((finishMs - startMs) / 1000).toFixed(2);
   };
 
+  const messageRef = React.useRef<HTMLDivElement>(null);
+
+
   const duration = finishTime && startTime ? getDurations(startTimeMs, finishTimeMs) : "0.00";
 
   const handleCardClick = useCallback(
@@ -85,13 +89,20 @@ const SidebarModelCallSummaryTracesImpl = ({
     [onChevronClick]
   );
 
-  // Improved time display with better granularity for older traces
-  const getTimeDisplay = () => {
+  const startTimeInIsoFormat = useMemo(() => {
     if (!startTime) return "";
     const traceDate = new Date(startTime / 1000);
-    const dateString = traceDate.toISOString();
-    return formatMessageTime(dateString);
-  };
+    return traceDate.toISOString();
+  }, [startTime]);
+
+  useRelativeTime(messageRef, startTimeInIsoFormat);
+
+
+  // Improved time display with better granularity for older traces
+  const getTimeDisplay = useCallback(() => {
+    if (!startTime) return "";
+    return formatMessageTime(startTimeInIsoFormat);
+  }, [startTimeInIsoFormat]);
 
   const timeAgoInSidebar = getTimeDisplay();
 
@@ -164,7 +175,7 @@ const SidebarModelCallSummaryTracesImpl = ({
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="flex items-center text-xs text-muted-foreground hover:text-foreground transition-colors hover:cursor-help truncate">
+                <div ref={messageRef} className="flex items-center text-xs text-muted-foreground hover:text-foreground transition-colors hover:cursor-help truncate">
                   <ClockIcon className="w-3.5 h-3.5 mr-1.5 text-blue-400" />
                   <span className={cn("font-mono", errors && errors.length > 0 ? "max-w-[130px] truncate" : "max-w-[150px] truncate")}>
                     {timeAgoInSidebar}
@@ -291,9 +302,8 @@ const SidebarModelCallSummaryTracesImpl = ({
                   />
                 ) : (
                   <ChevronRight
-                    className={`w-4 h-4 text-text transition-transform duration-200 ${
-                      isOpen ? "rotate-90" : ""
-                    }`}
+                    className={`w-4 h-4 text-text transition-transform duration-200 ${isOpen ? "rotate-90" : ""
+                      }`}
                     aria-hidden="true"
                   />
                 )}
