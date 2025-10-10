@@ -15,6 +15,7 @@ import { AvatarItem } from './AvatarItem';
 import { Message } from '@/types/chat';
 import React, { useCallback, useMemo, useState } from 'react';
 import { MessageDisplay } from '../MessageDisplay';
+import { ContentArrayDisplay } from './ContentArrayDisplay';
 import { formatMessageTime } from '@/utils/dateUtils';
 import { MessageMetrics } from './MessageMetrics';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
@@ -306,9 +307,13 @@ export const AiMessage: React.FC<{
           </div>
         )}
         {msg?.type !== "tool" && (
-          <div className="whitespace-normal text-neutral-100 break-words overflow-wrap break-all leading-relaxed text-sm">
-            <MessageDisplay message={msg?.content || ""} />
-          </div>
+          msg?.content_array && msg.content_array.length > 0 ? (
+            <ContentArrayDisplay contentArray={msg.content_array} />
+          ) : (
+            <div className="whitespace-normal text-neutral-100 break-words overflow-wrap break-all leading-relaxed text-sm">
+              <MessageDisplay message={msg?.content || ""} />
+            </div>
+          )
         )}
 
       </div>
