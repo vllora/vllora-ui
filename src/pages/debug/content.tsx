@@ -19,6 +19,26 @@ export function DebugPageContent() {
   });
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const [isScrollable, setIsScrollable] = useState(false);
+  const BOTTOM_THRESHOLD = 24;
+
+  const updateScrollState = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) {
+      return;
+    }
+    const scrollableHeight = container.scrollHeight - container.clientHeight;
+    const scrollable = scrollableHeight > BOTTOM_THRESHOLD;
+    if (!scrollable) {
+      setIsScrollable(false);
+      setIsAtBottom(true);
+      return;
+    }
+    const atBottom =
+      container.scrollTop + container.clientHeight >= container.scrollHeight - BOTTOM_THRESHOLD;
+    setIsScrollable(true);
+    setIsAtBottom((prev) => (prev !== atBottom ? atBottom : prev));
+  }, [BOTTOM_THRESHOLD]);
 
   const scrollToBottom = useCallback(() => {
     const container = scrollContainerRef.current;
@@ -29,26 +49,24 @@ export function DebugPageContent() {
     requestAnimationFrame(() => {
       container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
       setIsAtBottom(true);
+      updateScrollState();
     });
-  }, []);
+  }, [updateScrollState]);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) {
       return;
     }
-    const threshold = 24;
     const handleScroll = () => {
-      const atBottom =
-        container.scrollTop + container.clientHeight >= container.scrollHeight - threshold;
-      setIsAtBottom((prev) => (prev !== atBottom ? atBottom : prev));
+      updateScrollState();
     };
     container.addEventListener('scroll', handleScroll);
-    handleScroll();
+    updateScrollState();
     return () => {
       container.removeEventListener('scroll', handleScroll);
     };
-  }, []);
+  }, [updateScrollState]);
 
   useEffect(() => {
     if (isPaused || !isAtBottom) {
@@ -56,6 +74,10 @@ export function DebugPageContent() {
     }
     scrollToBottom();
   }, [threads, isPaused, isAtBottom, scrollToBottom]);
+
+  useEffect(() => {
+    updateScrollState();
+  }, [threads, updateScrollState]);
 
   if (!currentProjectId) {
     return (
@@ -134,7 +156,7 @@ export function DebugPageContent() {
         <div ref={scrollContainerRef} className="h-full overflow-y-auto">
           <div className="relative min-h-full flex flex-col">
             <HierarchicalTimeline threads={threads} />
-            {!isAtBottom && (
+            {!isAtBottom && isScrollable && (
               <div className="sticky bottom-4 flex justify-end pr-4">
                 <Button
                   size="sm"
