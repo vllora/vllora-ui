@@ -316,7 +316,7 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
 
   // Convert map to sorted array
   const sortedThreads = Array.from(threads.values()).sort(
-    (a, b) => b.lastActivity - a.lastActivity
+    (a, b) => a.lastActivity - b.lastActivity
   );
 
   const pausedCount = pausedEventsRef.current.length;

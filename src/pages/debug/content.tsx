@@ -1,4 +1,5 @@
-import { Pause, Play, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowDown, Pause, Play, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { useDebugTimeline } from '@/hooks/events/useDebugTimeline';
@@ -16,6 +17,45 @@ export function DebugPageContent() {
   } = useDebugTimeline({
     projectId: currentProjectId || '',
   });
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+
+  const scrollToBottom = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) {
+      return;
+    }
+    // Defer to next frame so newly rendered content is measurable
+    requestAnimationFrame(() => {
+      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+      setIsAtBottom(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) {
+      return;
+    }
+    const threshold = 24;
+    const handleScroll = () => {
+      const atBottom =
+        container.scrollTop + container.clientHeight >= container.scrollHeight - threshold;
+      setIsAtBottom((prev) => (prev !== atBottom ? atBottom : prev));
+    };
+    container.addEventListener('scroll', handleScroll);
+    handleScroll();
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isPaused || !isAtBottom) {
+      return;
+    }
+    scrollToBottom();
+  }, [threads, isPaused, isAtBottom, scrollToBottom]);
 
   if (!currentProjectId) {
     return (
@@ -91,8 +131,23 @@ export function DebugPageContent() {
 
       {/* Hierarchical Timeline */}
       <div className="flex-1 overflow-hidden">
-        <div className="h-full overflow-y-auto">
-          <HierarchicalTimeline threads={threads} />
+        <div ref={scrollContainerRef} className="h-full overflow-y-auto">
+          <div className="relative min-h-full flex flex-col">
+            <HierarchicalTimeline threads={threads} />
+            {!isAtBottom && (
+              <div className="sticky bottom-4 flex justify-end pr-4">
+                <Button
+                  size="sm"
+                  onClick={scrollToBottom}
+                  variant="secondary"
+                  className="shadow-md"
+                >
+                  <ArrowDown className="w-4 h-4 mr-2" />
+                  Scroll to latest
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -29,7 +29,7 @@ export const HierarchicalTimeline: React.FC<HierarchicalTimelineProps> = ({ thre
           <ThreadItem
             key={thread.id}
             thread={thread}
-            defaultExpanded={index === 0}
+            defaultExpanded={index === threads.length - 1}
           />
         ))}
       </div>

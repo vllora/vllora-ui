@@ -49,7 +49,7 @@ export const ThreadItem: React.FC<ThreadItemProps> = ({ thread, defaultExpanded 
   const threadTotalDuration = threadEndTime - threadStartTime;
 
   const titleWidth = 180; // Fixed width for left panel
-  const sortedRuns = [...thread.runs].sort((a, b) => b.start_time_us - a.start_time_us);
+  const sortedRuns = [...thread.runs].sort((a, b) => a.start_time_us - b.start_time_us);
 
   return (
     <div className="border-b border-border/50">
@@ -112,15 +112,15 @@ export const ThreadItem: React.FC<ThreadItemProps> = ({ thread, defaultExpanded 
 
           {/* Runs with timeline visualization */}
           {sortedRuns.map((run, runIndex) => (
-              <RunItem
-                key={run.run_id}
-                run={run}
-                threadStartTime={threadStartTime}
-                threadTotalDuration={threadTotalDuration}
-                titleWidth={titleWidth}
-                defaultExpanded={runIndex === 0}
-              />
-            ))}
+            <RunItem
+              key={run.run_id}
+              run={run}
+              threadStartTime={threadStartTime}
+              threadTotalDuration={threadTotalDuration}
+              titleWidth={titleWidth}
+              defaultExpanded={runIndex === sortedRuns.length - 1}
+            />
+          ))}
         </div>
       )}
     </div>

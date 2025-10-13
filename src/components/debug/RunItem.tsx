@@ -34,7 +34,7 @@ export const RunItem: React.FC<RunItemProps> = ({
 
   const totalSpans = run.traces.reduce((sum, trace) => sum + trace.spans.length, 0);
   const totalTraces = run.traces.length;
-  const sortedTraces = [...run.traces].sort((a, b) => b.start_time_us - a.start_time_us);
+  const sortedTraces = [...run.traces].sort((a, b) => a.start_time_us - b.start_time_us);
 
   // Calculate timeline visualization percentages relative to thread timeline
   const duration = run.finish_time_us - run.start_time_us;
@@ -116,20 +116,20 @@ export const RunItem: React.FC<RunItemProps> = ({
 
           {run.traces.length > 0 && (
             <div className="mt-1 flex flex-col gap-3">
-          {sortedTraces.map((trace, traceIndex) => (
-            <div
-              key={trace.trace_id}
-              className="ml-4 pl-4 border-l border-border/40"
-            >
-              <TraceItem
-                trace={trace}
-                threadStartTime={threadStartTime}
-                threadTotalDuration={threadTotalDuration}
-                titleWidth={titleWidth}
-                defaultExpanded={traceIndex === 0}
-              />
-            </div>
-          ))}
+              {sortedTraces.map((trace, traceIndex) => (
+                <div
+                  key={trace.trace_id}
+                  className="ml-4 pl-4 border-l border-border/40"
+                >
+                  <TraceItem
+                    trace={trace}
+                    threadStartTime={threadStartTime}
+                    threadTotalDuration={threadTotalDuration}
+                    titleWidth={titleWidth}
+                    defaultExpanded={traceIndex === sortedTraces.length - 1}
+                  />
+                </div>
+              ))}
             </div>
           )}
         </>
