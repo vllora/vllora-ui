@@ -1,7 +1,7 @@
 import { BaseSpanUIDetailsDisplay, getApiInvokeSpans, getModelCallSpans, getApiCloudInvokeSpans } from ".."
 import { getStatus } from "../index";
 import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ExclamationTriangleIcon, CheckCircleIcon, ClockIcon, CodeBracketIcon, DocumentTextIcon, BoltIcon } from "@heroicons/react/24/outline";
+import { ExclamationTriangleIcon, CheckCircleIcon, ClockIcon, CodeBracketIcon, DocumentTextIcon, BoltIcon, WrenchScrewdriverIcon } from "@heroicons/react/24/outline";
 import { ArrowRightLeftIcon, DatabaseIcon, ExternalLink, Grid2x2Check } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ErrorViewer } from "../error-viewer";
@@ -19,6 +19,7 @@ import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { Span } from "@/types/common-type";
 import { isPromptCachingApplied } from "@/utils/graph-utils";
 import { MessageViewer } from "../message-viewer";
+import { ToolDefinitionsViewer } from "../tool-definitions-viewer";
 
 const formatNumber = (num: number) => {
     return new Intl.NumberFormat().format(num);
@@ -78,26 +79,55 @@ export const ModelInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
     const havingPromptCaching = span && isPromptCachingApplied(span);
     const isSuccessStatus = status && ['200', 200].includes(status);
 
-     let messages = raw_request_json?.messages;
-    if(!messages && raw_request_json?.contents){
+    let messages = raw_request_json?.messages;
+    if (!messages && raw_request_json?.contents) {
         messages = raw_request_json?.contents;
     }
 
-    console.log('===== messages', messages)
+    const tools = raw_request_json?.tools;
+
+    console.log('==== tools', tools)
+
+    console.log('===== raw_request_json', raw_request_json)
+    const tool_choice = raw_request_json?.tool_choice;
     return (<BaseSpanUIDetailsDisplay
-            value={openAccordionItems}
-            onValueChange={setOpenAccordionItems}
-        >
+        value={openAccordionItems}
+
+        onValueChange={setOpenAccordionItems}
+    >
+        <div className="flex flex-col gap-3">
             {messages && (
-                <div className="rounded-2xl bg-[#101010] p-4 space-y-3">
+                <div className="rounded-2xl bg-[#101010] px-2 space-y-1">
                     <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                        Input
+                        Messages
                     </div>
                     <MessageViewer
                         messages={messages as any}
                     />
                 </div>
             )}
+
+
+            {tools && (
+                <div className="rounded-2xl bg-[#101010] px-2 space-y-1">
+                    <div className="flex items-center justify-between">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                            Tools
+                        </div>
+                        {tool_choice && (
+                            <div className="text-xs font-semibold tracking-wide text-zinc-500">
+                                {tool_choice}
+                            </div>
+                        )}
+                    </div>
+
+                    <ToolDefinitionsViewer toolCalls={tools} />
+                </div>
+            )}
+        </div>
+        <div>
             
-        </BaseSpanUIDetailsDisplay>)
+        </div>
+
+    </BaseSpanUIDetailsDisplay>)
 }
