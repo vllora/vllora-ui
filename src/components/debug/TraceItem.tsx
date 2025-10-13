@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { DebugTrace } from '@/hooks/events/useDebugTimeline';
 import { SpanItem } from './SpanItem';
+import { skipThisSpan } from '@/utils/graph-utils';
 
 interface TraceItemProps {
   trace: DebugTrace;
@@ -31,7 +32,7 @@ export const TraceItem: React.FC<TraceItemProps> = ({
     setIsExpanded(defaultExpanded);
   }, [defaultExpanded, trace.trace_id]);
 
-  const sortedSpans = [...trace.spans].sort((a, b) => a.start_time_us - b.start_time_us);
+  const sortedSpans = [...trace.spans].sort((a, b) => a.start_time_us - b.start_time_us).filter((span) => !skipThisSpan(span));
 
   const duration = trace.finish_time_us - trace.start_time_us;
   const clamp = (value: number, max = 100) => Math.min(max, Math.max(0, value));

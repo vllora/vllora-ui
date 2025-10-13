@@ -1,9 +1,11 @@
+import { useMemo } from 'react';
 import { ArrowDown, Pause, Play, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { useDebugTimeline } from '@/hooks/events/useDebugTimeline';
 import { HierarchicalTimeline } from '@/components/debug/HierarchicalTimeline';
 import { useAutoScrollToBottom } from '@/hooks/useAutoScrollToBottom';
+import { SpanList } from '@/components/debug/SpanList';
 
 export function DebugPageContent() {
   const { currentProjectId } = ProjectsConsumer();
@@ -14,6 +16,9 @@ export function DebugPageContent() {
     pause,
     resume,
     clear,
+    spans,
+    isGrouped,
+    setIsGrouped,
   } = useDebugTimeline({
     projectId: currentProjectId || '',
   });
@@ -24,7 +29,13 @@ export function DebugPageContent() {
     scrollToBottom,
   } = useAutoScrollToBottom<HTMLDivElement>({
     isActive: !isPaused,
-    dependencies: [threads],
+    dependencies: useMemo(() => {
+      const latestThreadActivity = threads.length > 0 ? threads[threads.length - 1].lastActivity : 0;
+      const latestSpanActivity = spans.length > 0 ? spans[spans.length - 1].finish_time_us : 0;
+      return isGrouped
+        ? [isGrouped, threads.length, latestThreadActivity]
+        : [isGrouped, spans.length, latestSpanActivity];
+    }, [isGrouped, threads, spans]),
     threshold: 10,
   });
 
@@ -57,6 +68,25 @@ export function DebugPageContent() {
 
           {/* Controls */}
           <div className="flex items-center gap-2">
+            <div className="flex items-center rounded border border-border overflow-hidden">
+              <Button
+                variant={isGrouped ? 'default' : 'ghost'}
+                size="sm"
+                className="h-9 rounded-none"
+                onClick={() => setIsGrouped(true)}
+              >
+                Grouped
+              </Button>
+              <Button
+                variant={!isGrouped ? 'default' : 'ghost'}
+                size="sm"
+                className="h-9 rounded-none"
+                onClick={() => setIsGrouped(false)}
+              >
+                Spans
+              </Button>
+            </div>
+
             {/* Pause/Resume */}
             {isPaused ? (
               <Button
@@ -104,7 +134,11 @@ export function DebugPageContent() {
       <div className="flex-1 overflow-hidden">
         <div ref={containerRef} className="h-full overflow-y-auto">
           <div className="relative min-h-full flex flex-col">
-            <HierarchicalTimeline threads={threads} />
+            {isGrouped ? (
+              <HierarchicalTimeline threads={threads} />
+            ) : (
+              <SpanList spans={spans} />
+            )}
             {!isAtBottom && isScrollable && (
               <div className="sticky bottom-4 flex justify-end pr-4">
                 <Button

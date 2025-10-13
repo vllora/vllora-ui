@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { ProjectEventsConsumer } from '@/contexts/project-events';
 import {
   ProjectEventUnion,
@@ -38,6 +38,7 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
   const { subscribe } = ProjectEventsConsumer();
   const [threads, setThreads] = useState<Map<string, DebugThread>>(new Map());
   const [isPaused, setIsPaused] = useState(false);
+  const [isGrouped, setIsGrouped] = useState(true);
   const pausedEventsRef = useRef<ProjectEventUnion[]>([]);
 
   // Process a single event and update the hierarchy
@@ -315,14 +316,37 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
   }, []);
 
   // Convert map to sorted array
-  const sortedThreads = Array.from(threads.values()).sort(
-    (a, b) => a.lastActivity - b.lastActivity
+  const sortedThreads = useMemo(
+    () => Array.from(threads.values()).sort((a, b) => a.lastActivity - b.lastActivity),
+    [threads]
   );
+
+  const flatSpans = useMemo<Span[]>(() => {
+    const entries: Span[] = [];
+    for (const thread of threads.values()) {
+      for (const run of thread.runs) {
+        for (const trace of run.traces) {
+          for (const span of trace.spans) {
+            entries.push(span);
+          }
+        }
+      }
+    }
+    return entries.sort((a, b) => a.start_time_us - b.start_time_us);
+  }, [threads]);
+
+  const toggleGrouping = useCallback(() => {
+    setIsGrouped((prev) => !prev);
+  }, []);
 
   const pausedCount = pausedEventsRef.current.length;
 
   return {
     threads: sortedThreads,
+    spans: flatSpans,
+    isGrouped,
+    setIsGrouped,
+    toggleGrouping,
     isPaused,
     pausedCount,
     pause,

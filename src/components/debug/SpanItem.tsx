@@ -14,6 +14,7 @@ interface SpanItemProps {
   threadStartTime: number;
   threadTotalDuration: number;
   titleWidth: number;
+  variant?: 'hierarchy' | 'flat';
 }
 
 // Format duration in ms
@@ -25,7 +26,13 @@ const formatDuration = (startUs: number, endUs: number): string => {
   return `${(durationMs / 1000).toFixed(2)}s`;
 };
 
-export const SpanItem: React.FC<SpanItemProps> = ({ span, threadStartTime, threadTotalDuration, titleWidth }) => {
+export const SpanItem: React.FC<SpanItemProps> = ({
+  span,
+  threadStartTime,
+  threadTotalDuration,
+  titleWidth,
+  variant = 'hierarchy',
+}) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Calculate timeline visualization percentages relative to thread timeline
@@ -44,8 +51,13 @@ export const SpanItem: React.FC<SpanItemProps> = ({ span, threadStartTime, threa
   const timelineColor = getTimelineBgColor({ span, relatedSpans: [] });
   const operationTitle = getOperationTitle({ operation_name: span.operation_name, span });
 
+  const containerClasses =
+    variant === 'hierarchy'
+      ? 'border-l-2 border-purple-500/30 ml-12 pl-4'
+      : 'pl-2';
+
   return (
-    <div className="border-l-2 border-purple-500/30 ml-12 pl-4">
+    <div className={containerClasses}>
       <div className="flex items-start gap-2 py-1">
         {/* Left panel - Fixed width with icon, title, duration */}
         <div className="flex items-center gap-2 flex-shrink-0" style={{ width: titleWidth }}>
@@ -69,9 +81,6 @@ export const SpanItem: React.FC<SpanItemProps> = ({ span, threadStartTime, threa
           <div className="flex-1 min-w-0">
             <div className="text-xs text-foreground/80 truncate" title={title}>
               {title}
-            </div>
-            <div className="text-[10px] text-muted-foreground/60">
-              {operationTitle}
             </div>
           </div>
 
