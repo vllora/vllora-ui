@@ -1,9 +1,18 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, Zap } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Span } from '@/types/common-type';
+import {
+  getSpanTitle,
+  getOperationIcon,
+  getOperationIconColor,
+  getTimelineBgColor,
+  getOperationTitle
+} from '@/components/chat/traces/TraceRow/new-timeline/utils';
 
 interface SpanItemProps {
   span: Span;
+  totalDuration: number;
+  minStartTime: number;
 }
 
 // Format duration in ms
@@ -15,30 +24,75 @@ const formatDuration = (startUs: number, endUs: number): string => {
   return `${(durationMs / 1000).toFixed(2)}s`;
 };
 
-export const SpanItem: React.FC<SpanItemProps> = ({ span }) => {
+export const SpanItem: React.FC<SpanItemProps> = ({ span, totalDuration, minStartTime }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+
+  // Calculate timeline visualization percentages
+  const duration = span.finish_time_us - span.start_time_us;
+  const widthPercent = totalDuration > 0 ? (duration / totalDuration) * 100 : 0;
+  const offsetPercent = totalDuration > 0 ? ((span.start_time_us - minStartTime) / totalDuration) * 100 : 0;
+
+  // Get span display properties using utility functions
+  const title = getSpanTitle({ span, relatedSpans: [] });
+  const icon = getOperationIcon({ span, relatedSpans: [] });
+  const iconColorClass = getOperationIconColor({ span, relatedSpans: [] });
+  const timelineColor = getTimelineBgColor({ span, relatedSpans: [] });
+  const operationTitle = getOperationTitle({ operation_name: span.operation_name, span });
 
   return (
     <div className="border-l-2 border-purple-500/30 ml-12 pl-4">
-      <div
-        className="flex items-center gap-2 py-2 cursor-pointer hover:bg-accent/5 rounded px-2"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        <div className="flex-shrink-0">
-          {isExpanded ? (
-            <ChevronDown className="w-3 h-3 text-muted-foreground" />
-          ) : (
-            <ChevronRight className="w-3 h-3 text-muted-foreground" />
-          )}
+      <div className="flex items-start gap-2 py-1">
+        {/* Left panel - Fixed width with icon, title, duration */}
+        <div className="flex items-center gap-2 w-[180px] flex-shrink-0">
+          <div
+            className="flex-shrink-0 cursor-pointer"
+            onClick={() => setIsExpanded(!isExpanded)}
+          >
+            {isExpanded ? (
+              <ChevronDown className="w-3 h-3 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="w-3 h-3 text-muted-foreground" />
+            )}
+          </div>
+
+          {/* Icon in colored circle */}
+          <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${iconColorClass}`}>
+            {icon}
+          </div>
+
+          {/* Title - truncated */}
+          <div className="flex-1 min-w-0">
+            <div className="text-xs text-foreground/80 truncate" title={title}>
+              {title}
+            </div>
+            <div className="text-[10px] text-muted-foreground/60">
+              {operationTitle}
+            </div>
+          </div>
+
+          {/* Duration */}
+          <span className="text-[10px] text-muted-foreground flex-shrink-0">
+            {formatDuration(span.start_time_us, span.finish_time_us)}
+          </span>
         </div>
-        <Zap className="w-3 h-3 text-purple-400" />
-        <span className="text-xs font-mono text-purple-400">{span.span_id?.substring(0, 8)}</span>
-        <span className="text-xs text-foreground/80">{span.operation_name}</span>
-        <span className="text-xs text-muted-foreground ml-auto">
-          {formatDuration(span.start_time_us, span.finish_time_us)}
-        </span>
+
+        {/* Right panel - Timeline visualization */}
+        <div className="flex-1 min-w-0 flex items-center py-1">
+          <div className="relative w-full h-5 bg-muted/10 rounded">
+            <div
+              className="absolute h-full rounded"
+              style={{
+                left: `${offsetPercent}%`,
+                width: `${widthPercent}%`,
+                backgroundColor: timelineColor,
+                opacity: 0.8,
+              }}
+            />
+          </div>
+        </div>
       </div>
 
+      {/* Expandable JSON details */}
       {isExpanded && (
         <div className="ml-6 mt-1 mb-2 bg-muted/20 rounded p-2 text-xs font-mono">
           <pre className="text-foreground/70 overflow-x-auto">

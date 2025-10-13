@@ -17,6 +17,10 @@ const formatDuration = (startUs: number, endUs: number): string => {
 };
 
 export const TraceItem: React.FC<TraceItemProps> = ({ trace }) => {
+  // Calculate total duration and min start time for timeline visualization
+  const totalDuration = trace.finish_time_us - trace.start_time_us;
+  const minStartTime = trace.start_time_us;
+
   return (
     <div className="border-l-2 border-orange-500/30 ml-8 pl-4">
       <div className="flex items-center gap-2 py-2 hover:bg-accent/5 rounded px-2">
@@ -39,7 +43,12 @@ export const TraceItem: React.FC<TraceItemProps> = ({ trace }) => {
           {trace.spans
             .sort((a, b) => a.start_time_us - b.start_time_us)
             .map((span) => (
-              <SpanItem key={span.span_id} span={span} />
+              <SpanItem
+                key={span.span_id}
+                span={span}
+                totalDuration={totalDuration}
+                minStartTime={minStartTime}
+              />
             ))}
         </div>
       )}

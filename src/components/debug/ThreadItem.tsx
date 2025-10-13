@@ -56,7 +56,7 @@ export const ThreadItem: React.FC<ThreadItemProps> = ({ thread }) => {
           </div>
         </div>
       </div>
-
+      
       {thread.runs.length > 0 && (
         <div className="pb-2">
           {thread.runs

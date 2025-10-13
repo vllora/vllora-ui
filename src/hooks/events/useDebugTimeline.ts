@@ -42,6 +42,8 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
 
   // Process a single event and update the hierarchy
   const processEvent = useCallback((event: ProjectEventUnion) => {
+
+    console.log('====== Processing event:', event);
     setThreads((prevThreads) => {
       const newThreads = new Map(prevThreads);
 
@@ -78,7 +80,7 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
           const eventSpan = customEvent.value.span as LangDBEventSpan;
           const span = convertToNormalSpan(eventSpan);
 
-          if (!skipThisSpan(span) && span.thread_id && span.run_id) {
+          if (span.thread_id && span.run_id) {
             let thread = newThreads.get(span.thread_id);
 
             // Ensure thread exists
