@@ -8,7 +8,7 @@ import {
   type ProviderInfo,
   type Credentials,
 } from '@/services/providers-api';
-import type { CredentialFormValues } from '@/pages/settings/ProviderCredentialForm';
+import type { CredentialFormValues } from '@/pages/settings/providers/ProviderCredentialForm';
 
 export type ProviderKeysContextType = ReturnType<typeof useProviderKeys>;
 
