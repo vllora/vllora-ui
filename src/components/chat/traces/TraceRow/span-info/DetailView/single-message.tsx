@@ -13,11 +13,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ToolDefinitionsViewer } from "./tool-definitions-viewer";
 import { tryParseJson } from "@/utils/modelUtils";
+import { ToolCallList } from "@/components/chat/messages/ToolCallList";
 
-export const SingleMessage = (props: { role: string, content?: string, objectContent?: any, toolCalls?: any[], isFirst?: boolean, isLast?: boolean, parts?: any }) => {
-    const { role, content, objectContent, toolCalls, parts } = props;
+export const SingleMessage = (props: { role: string, content?: string, objectContent?: any, toolCalls?: any[], isFirst?: boolean, isLast?: boolean, parts?: any, tool_call_id?: string }) => {
+    const { role, content, objectContent, toolCalls, parts, tool_call_id } = props;
 
     const [isExpanded, setIsExpanded] = useState(false);
     const contentRef = useRef<HTMLDivElement>(null);
@@ -107,7 +107,7 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
     if (showStructuredBlock) {
         metaChips.push({
             key: 'structured',
-            label: Array.isArray(structuredContent) ? 'Structured parts' : 'JSON payload'
+            label: Array.isArray(structuredContent) ? 'Structured parts' : tool_call_id ?`Tool Call ID: ${tool_call_id}` :  'JSON payload'
         });
     }
     if (toolCalls && toolCalls.length > 0) {
@@ -120,73 +120,60 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
     const metaSummary = metaChips.map((chip) => chip.label).join(' • ');
 
     return (
-        <div className="rounded-xl border border-border/60 bg-[#111111] p-4 shadow-sm transition-colors hover:bg-[#131313]">
+        <div className={`flex flex-col gap-3 py-2`}>
             <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-medium text-zinc-200">{roleLabel}</span>
+                <span className="text-xs font-semibold uppercase tracking-wide text-zinc-300">{roleLabel}</span>
+                
                 {metaSummary && (
                     <span className="text-[11px] text-zinc-500">{metaSummary}</span>
                 )}
             </div>
-            <div className="mt-3 space-y-3">
-                {hasTextContent && (
-                    <div className="relative">
-                        <div
-                            ref={contentRef}
-                            className={`whitespace-pre-wrap text-xs text-gray-200 ${!isExpanded && showExpandButton ? 'line-clamp-3 overflow-hidden' : ''}`}
+             
+            {hasTextContent && (
+                <div className="relative">
+                    <div
+                        ref={contentRef}
+                        className={`whitespace-pre-wrap text-xs text-gray-200 ${!isExpanded && showExpandButton ? 'line-clamp-3 overflow-hidden' : ''}`}
+                    >
+                        <MarkdownViewer message={displayText} />
+                    </div>
+                    {showExpandButton && (
+                        <button
+                            onClick={() => setIsExpanded(!isExpanded)}
+                            className="mt-2 inline-flex items-center gap-1 text-xs text-zinc-300 transition-colors hover:text-white"
                         >
-                            <MarkdownViewer message={displayText} />
-                        </div>
-                        {showExpandButton && (
-                            <button
-                                onClick={() => setIsExpanded(!isExpanded)}
-                                className="mt-2 inline-flex items-center gap-1 text-xs text-zinc-300 transition-colors hover:text-white"
-                            >
-                                {isExpanded ? (
-                                    <>
-                                        <ChevronUp className="h-3 w-3" />
-                                        Show less
-                                    </>
-                                ) : (
-                                    <>
-                                        <ChevronDown className="h-3 w-3" />
-                                        Show more
-                                    </>
-                                )}
-                            </button>
-                        )}
-                    </div>
-                )}
+                            {isExpanded ? (
+                                <>
+                                    <ChevronUp className="h-3 w-3" />
+                                    Show less
+                                </>
+                            ) : (
+                                <>
+                                    <ChevronDown className="h-3 w-3" />
+                                    Show more
+                                </>
+                            )}
+                        </button>
+                    )}
+                </div>
+            )}
+           
 
-                {showStructuredBlock && (
-                    <div className="rounded-lg border border-border/60 bg-black/25 px-3 py-2">
-                        <div className="pb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-                            Structured Content
-                        </div>
-                        <ObjectMessageContent objectContent={structuredContent} />
+            {showStructuredBlock && (
+                <div className="rounded-lg bg-[#151515] px-3 py-2">
+                    <div className="pb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                        Structured Content
                     </div>
-                )}
+                    <ObjectMessageContent objectContent={structuredContent} />
+                </div>
+            )}
 
-                {!hasTextContent && !showStructuredBlock && (
-                    <div className="text-xs italic text-gray-400">
-                        empty message
-                    </div>
-                )}
+           
 
-                {toolCalls && toolCalls.length > 0 && (
-                    <div className="rounded-lg border border-border/60 bg-black/25 px-3 py-2">
-                        <div className="mb-2 flex items-center gap-1.5">
-                            <WrenchIcon className="h-3.5 w-3.5 text-zinc-300" />
-                            <span className="text-xs font-medium text-white">Tool Calls</span>
-                            <span className="rounded border border-border/70 bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-zinc-300">
-                                {toolCalls.length}
-                            </span>
-                        </div>
-                        <div className="space-y-2">
-                            <ToolDefinitionsViewer toolCalls={toolCalls} />
-                        </div>
-                    </div>
-                )}
-            </div>
+            {toolCalls && toolCalls.length > 0 && (
+                <ToolCallList toolCalls={toolCalls} />
+              
+            )}
         </div>
     );
 };

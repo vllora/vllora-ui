@@ -83,15 +83,21 @@ export const ModelInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
         messages = raw_request_json?.contents;
     }
 
-    console.log('==== message', messages)
-
+    console.log('===== messages', messages)
     return (<BaseSpanUIDetailsDisplay
             value={openAccordionItems}
             onValueChange={setOpenAccordionItems}
         >
-            {messages && <MessageViewer
-                messages={messages as any}
-            />}
+            {messages && (
+                <div className="rounded-2xl bg-[#101010] p-4 space-y-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                        Input
+                    </div>
+                    <MessageViewer
+                        messages={messages as any}
+                    />
+                </div>
+            )}
             
         </BaseSpanUIDetailsDisplay>)
 }

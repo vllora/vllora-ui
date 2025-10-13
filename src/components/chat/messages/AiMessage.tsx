@@ -1,10 +1,4 @@
-import {
-  Clock,
-  Pencil,
-  ChevronDown,
-  ChevronRight,
-  Wrench,
-} from 'lucide-react';
+import { Clock, Pencil } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -13,17 +7,16 @@ import {
 } from '@/components/ui/tooltip';
 import { AvatarItem } from './AvatarItem';
 import { Message } from '@/types/chat';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { MessageDisplay } from '../MessageDisplay';
 import { ContentArrayDisplay } from './ContentArrayDisplay';
 import { formatMessageTime } from '@/utils/dateUtils';
 import { MessageMetrics } from './MessageMetrics';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
-import { CheckIcon, ClipboardDocumentIcon } from '@heroicons/react/24/outline';
-import ReactJson from 'react-json-view';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 import { ThreadsConsumer } from '@/contexts/ThreadsContext';
 import { useRelativeTime } from '@/hooks/useRelativeTime';
+import { ToolCallList } from './ToolCallList';
 
 export const AiMessage: React.FC<{
   message?: Message;
@@ -31,12 +24,6 @@ export const AiMessage: React.FC<{
 }> = ({ message: msg, isTyping }) => {
   const { setOpenTraces, fetchSpansByRunId, setHoveredRunId } = ChatWindowConsumer();
   const { setIsRightSidebarCollapsed } = ThreadsConsumer();
-  const [toolCopiedStates, setToolCopiedStates] = useState<{
-    [key: string]: boolean;
-  }>({});
-  const [expandedToolCalls, setExpandedToolCalls] = useState<{
-    [key: string]: boolean;
-  }>({});
 
   const messageRef = React.useRef<HTMLDivElement>(null);
 
@@ -138,159 +125,7 @@ export const AiMessage: React.FC<{
       {/* Content */}
       <div className="w-full">
         {msg?.tool_calls && msg.tool_calls.length > 0 && (
-          <div className="mb-3 rounded-lg overflow-hidden bg-neutral-900/30 border border-neutral-800/50">
-            <div className="px-3 py-2 flex items-center justify-between bg-neutral-800/20">
-              <div className="flex items-center gap-2">
-                <Wrench className="h-3.5 w-3.5 text-neutral-400" />
-                <span className="text-xs font-medium text-neutral-300">
-                  Tool Calls
-                </span>
-                <span className="text-xs text-neutral-500">
-                  {msg.tool_calls.length}{" "}
-                  {msg.tool_calls.length === 1 ? "call" : "calls"}
-                </span>
-              </div>
-            </div>
-            <div className="divide-y divide-neutral-800/30">
-              {msg.tool_calls.map((tool_call, index) => {
-                if (tool_call.function) {
-                  const function_display = tool_call.function;
-                  const functionName = tool_call.function.name;
-                  const formattedName = functionName
-                    .replace(/([A-Z])/g, " $1")
-                    .replace(/_/g, " ")
-                    .trim()
-                    .replace(/^./, (str) => str.toUpperCase());
-
-                  const handleCopyToolCall = () => {
-                    if (
-                      typeof navigator === "undefined" ||
-                      !navigator.clipboard
-                    ) {
-                      console.warn("Clipboard API not available");
-                      return;
-                    }
-                    if (tool_call.function) {
-                      navigator.clipboard
-                        .writeText(JSON.stringify(tool_call.function, null, 2))
-                        .then(() => {
-                          setToolCopiedStates((prev) => ({
-                            ...prev,
-                            [tool_call.id]: true,
-                          }));
-                          setTimeout(() => {
-                            setToolCopiedStates((prev) => ({
-                              ...prev,
-                              [tool_call.id]: false,
-                            }));
-                          }, 2000);
-                        })
-                        .catch((err) =>
-                          console.error("Failed to copy tool call:", err),
-                        );
-                    }
-                  };
-
-                  const isToolCopied = toolCopiedStates[tool_call.id] || false;
-                  const isExpanded = expandedToolCalls[tool_call.id] ?? true;
-
-                  return (
-                    <div
-                      key={index}
-                      className="hover:bg-neutral-800/20 transition-colors"
-                    >
-                      <div
-                        className="px-3 py-2 cursor-pointer"
-                        onClick={() => {
-                          setExpandedToolCalls((prev) => ({
-                            ...prev,
-                            [tool_call.id]: !isExpanded,
-                          }));
-                        }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                            {isExpanded ? (
-                              <ChevronDown className="h-3.5 w-3.5 text-neutral-500 flex-shrink-0" />
-                            ) : (
-                              <ChevronRight className="h-3.5 w-3.5 text-neutral-500 flex-shrink-0" />
-                            )}
-                            <span className="text-sm font-medium text-neutral-200 truncate">
-                              {formattedName}
-                            </span>
-                            <span className="text-xs text-neutral-500 font-mono truncate">
-                              {tool_call.id}
-                            </span>
-                          </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleCopyToolCall();
-                            }}
-                            className="ml-2 text-neutral-500 hover:text-neutral-300 transition-colors p-0.5 hover:bg-neutral-700/30 rounded"
-                            title={isToolCopied ? "Copied!" : "Copy function"}
-                          >
-                            {isToolCopied ? (
-                              <CheckIcon className="h-3.5 w-3.5 text-green-400" />
-                            ) : (
-                              <ClipboardDocumentIcon className="h-3.5 w-3.5" />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                      {isExpanded && (
-                        <div className="px-3 pb-2 max-w-full overflow-x-auto">
-                          <div className="bg-neutral-900/40 rounded p-2">
-                            {function_display && typeof function_display === 'object' ? (
-                              <ReactJson
-                                key={index}
-                                name={false}
-                                collapsed={2}
-                                displayDataTypes={false}
-                                displayObjectSize={false}
-                                enableClipboard={false}
-                                theme={{
-                                  base00: "transparent",
-                                  base01: "#404040",
-                                  base02: "#525252",
-                                  base03: "#737373",
-                                  base04: "#a3a3a3",
-                                  base05: "#d4d4d4",
-                                  base06: "#e5e5e5",
-                                  base07: "#f5f5f5",
-                                  base08: "#f87171",
-                                  base09: "#fb923c",
-                                  base0A: "#facc15",
-                                  base0B: "#4ade80",
-                                  base0C: "#22d3ee",
-                                  base0D: "#60a5fa",
-                                  base0E: "#a78bfa",
-                                  base0F: "#f472b6",
-                                }}
-                                style={{
-                                  wordWrap: "break-word",
-                                  whiteSpace: "pre-wrap",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  maxWidth: "100%",
-                                }}
-                                src={function_display}
-                              />
-                            ) : (
-                              <pre className="text-xs text-neutral-400">
-                                {JSON.stringify(function_display, null, 2)}
-                              </pre>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
-                return null;
-              })}
-            </div>
-          </div>
+          <ToolCallList toolCalls={msg.tool_calls} />
         )}
         {msg?.type === "tool" && msg?.tool_call_id && (
           <div className="mb-3 rounded-md overflow-hidden bg-neutral-900/20 border border-neutral-800/40">
