@@ -6,6 +6,7 @@ import {
   Settings,
   Menu,
   PanelLeftIcon,
+  BugPlayIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -20,6 +21,7 @@ import {
 const mainMenuItems = [
   { id: "home", label: "Home", icon: Home, path: "/" },
   { id: "chat", label: "Chat", icon: MessageSquare, path: "/chat" },
+  { id: "debug", label: "Debug", icon: BugPlayIcon, path: "/debug" },
 ]
 
 const bottomMenuItems = [

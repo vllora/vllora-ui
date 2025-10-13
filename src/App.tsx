@@ -12,6 +12,7 @@ import { Toaster } from "sonner"
 import { useEffect } from "react"
 import { applyTheme, getThemeFromStorage } from "./themes/themes"
 import { ProviderKeysProvider } from "./contexts/ProviderKeysContext"
+import { DebugPage } from "./pages/debug"
 
 function App() {
   useEffect(() => {
@@ -29,6 +30,8 @@ function App() {
               {/* Project-scoped routes (now using query string ?project_id=...) */}
               <Route index element={<HomePage />} />
               <Route path="chat" element={<ChatPageWrapper />} />
+              <Route path="debug" element={<DebugPage />} />
+
               <Route path="analytics" element={<AnalyticsPage />} />
 
               {/* Global routes */}
