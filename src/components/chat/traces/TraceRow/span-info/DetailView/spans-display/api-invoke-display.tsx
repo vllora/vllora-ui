@@ -9,7 +9,7 @@ import { BasicSpanInfo } from "../basic-span-info-section";
 import { useState } from "react";
 import { SimpleTabsList, SimpleTabsTrigger, Tabs } from "@/components/ui/tabs";
 import { ResponseViewer } from "../response-viewer";
-import { RequestViewer } from "../request-viewer";
+import { InputViewer } from "../input_viewer";
 import { ArrowRightLeftIcon } from "lucide-react";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { tryParseJson } from "@/utils/modelUtils";
@@ -168,7 +168,7 @@ export const ApiInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
                         </div>
                     </div>
                     <AccordionContent className="p-2 bg-[#0a0a0a] border-t border-border">
-                        <RequestViewer jsonRequest={raw_request_json} viewMode={requestViewMode} />
+                        <InputViewer jsonRequest={raw_request_json} viewMode={requestViewMode} />
                     </AccordionContent>
                 </AccordionItem>
             )}

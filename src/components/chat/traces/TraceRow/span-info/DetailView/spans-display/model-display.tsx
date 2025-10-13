@@ -9,7 +9,6 @@ import { UsageViewer } from "../usage-viewer";
 import { HeadersViewer } from "../headers-viewer";
 import { BasicSpanInfo } from "../basic-span-info-section";
 import { getCachedTokens, PromptCachingInfo } from "./prompt-caching-tooltip";
-import { RequestViewer } from "../request-viewer";
 import { useState } from "react";
 import { SimpleTabsList, SimpleTabsTrigger, Tabs } from "@/components/ui/tabs";
 import { ResponseViewer } from "../response-viewer";
@@ -20,6 +19,7 @@ import { Span } from "@/types/common-type";
 import { isPromptCachingApplied } from "@/utils/graph-utils";
 import { MessageViewer } from "../message-viewer";
 import { ToolDefinitionsViewer } from "../tool-definitions-viewer";
+import { InputViewer } from "../input_viewer";
 
 const formatNumber = (num: number) => {
     return new Intl.NumberFormat().format(num);
@@ -83,51 +83,12 @@ export const ModelInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
     if (!messages && raw_request_json?.contents) {
         messages = raw_request_json?.contents;
     }
-
-    const tools = raw_request_json?.tools;
-
-    console.log('==== tools', tools)
-
-    console.log('===== raw_request_json', raw_request_json)
-    const tool_choice = raw_request_json?.tool_choice;
     return (<BaseSpanUIDetailsDisplay
         value={openAccordionItems}
 
         onValueChange={setOpenAccordionItems}
     >
-        <div className="flex flex-col gap-3">
-            {messages && (
-                <div className="rounded-2xl bg-[#101010] px-2 space-y-1">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                        Messages
-                    </div>
-                    <MessageViewer
-                        messages={messages as any}
-                    />
-                </div>
-            )}
-
-
-            {tools && (
-                <div className="rounded-2xl bg-[#101010] px-2 space-y-1">
-                    <div className="flex items-center justify-between">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                            Tools
-                        </div>
-                        {tool_choice && (
-                            <div className="text-xs font-semibold tracking-wide text-zinc-500">
-                                {tool_choice}
-                            </div>
-                        )}
-                    </div>
-
-                    <ToolDefinitionsViewer toolCalls={tools} />
-                </div>
-            )}
-        </div>
-        <div>
-            
-        </div>
-
+        <InputViewer jsonRequest={raw_request_json} />
+        <ResponseViewer response={raw_response_json} />
     </BaseSpanUIDetailsDisplay>)
 }

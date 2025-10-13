@@ -7,7 +7,7 @@ import { ErrorViewer } from "../error-viewer";
 import { UsageViewer } from "../usage-viewer";
 import { HeadersViewer } from "../headers-viewer";
 import { BasicSpanInfo } from "../basic-span-info-section";
-import { RequestViewer } from "../request-viewer";
+import { InputViewer } from "../input_viewer";
 import { SimpleTabsList, SimpleTabsTrigger, Tabs } from "@/components/ui/tabs";
 import { ArrowRightLeftIcon } from "lucide-react";
 import { useState } from "react";
@@ -159,7 +159,7 @@ export const ModelCallUIDetailsDisplay = ({ span }: { span: Span }) => {
                         </div>
                     </div>
                     <AccordionContent className="p-2 bg-[#0a0a0a] border-t border-border">
-                        <RequestViewer jsonRequest={raw_request_json} viewMode={requestViewMode} />
+                        <InputViewer jsonRequest={raw_request_json} viewMode={requestViewMode} />
                     </AccordionContent>
                 </AccordionItem>
             )}

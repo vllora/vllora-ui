@@ -234,10 +234,6 @@ const ResponseUIView = ({ response, otherLevelMessages }: { response: any, other
     );
 };
 
-// Raw JSON View Component
-const ResponseRawView = ({ response }: { response: any }) => {
-    return <JsonViewer data={response} />;
-};
 
 // Main RequestViewer Component
 export const ResponseViewer = (props: { 
@@ -250,11 +246,7 @@ export const ResponseViewer = (props: {
     }
     return (
         <div className="flex flex-col gap-4 overflow-y-auto rounded-lg text-xs">
-            {viewMode === 'raw' ? (
-                <ResponseRawView response={response} />
-            ) : (
-                <ResponseUIView response={response} otherLevelMessages={otherLevelMessages} />
-            )}
+            <ResponseUIView response={response} otherLevelMessages={otherLevelMessages} />
         </div>
     );
 }
