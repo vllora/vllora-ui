@@ -1,5 +1,5 @@
-import React from 'react';
-import { GitBranch } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { DebugTrace } from '@/hooks/events/useDebugTimeline';
 import { SpanItem } from './SpanItem';
 
@@ -8,72 +8,57 @@ interface TraceItemProps {
   threadStartTime: number;
   threadTotalDuration: number;
   titleWidth: number;
+  defaultExpanded?: boolean;
 }
 
-// Format duration in ms
-const formatDuration = (startUs: number, endUs: number): string => {
-  const durationMs = (endUs - startUs) / 1000;
-  if (durationMs < 1000) {
-    return `${durationMs.toFixed(0)}ms`;
-  }
-  return `${(durationMs / 1000).toFixed(2)}s`;
-};
+export const TraceItem: React.FC<TraceItemProps> = ({
+  trace,
+  threadStartTime,
+  threadTotalDuration,
+  titleWidth,
+  defaultExpanded = false,
+}) => {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  useEffect(() => {
+    setIsExpanded(defaultExpanded);
+  }, [defaultExpanded, trace.trace_id]);
 
-export const TraceItem: React.FC<TraceItemProps> = ({ trace, threadStartTime, threadTotalDuration, titleWidth }) => {
-  // Calculate timeline visualization percentages relative to thread timeline
-  const duration = trace.finish_time_us - trace.start_time_us;
-  const widthPercent = threadTotalDuration > 0 ? (duration / threadTotalDuration) * 100 : 0;
-  const offsetPercent = threadTotalDuration > 0 ? ((trace.start_time_us - threadStartTime) / threadTotalDuration) * 100 : 0;
+  const sortedSpans = [...trace.spans].sort((a, b) => a.start_time_us - b.start_time_us);
 
   return (
-    <div className="border-l-2 border-orange-500/30 ml-8 pl-4">
-      <div className="flex items-start gap-2 py-1">
-        {/* Left panel - Fixed width with trace info */}
-        <div className="flex items-center gap-2 flex-shrink-0" style={{ width: titleWidth }}>
-          <GitBranch className="w-3.5 h-3.5 text-orange-400 flex-shrink-0" />
-          <div className="flex-1 min-w-0">
-            <span className="text-xs font-mono text-orange-400 truncate block">
-              Trace: {trace.trace_id?.substring(0, 8)}
-            </span>
-            <span className="text-[10px] text-purple-400">
-              {trace.spans.length} spans
-            </span>
-          </div>
-          <span className="text-[10px] text-muted-foreground flex-shrink-0">
-            {formatDuration(trace.start_time_us, trace.finish_time_us)}
-          </span>
-        </div>
-
-        {/* Right panel - Timeline visualization */}
-        <div className="flex-1 min-w-0 flex items-center py-1">
-          <div className="relative w-full h-5 bg-muted/10 rounded">
-            <div
-              className="absolute h-full rounded bg-orange-500"
-              style={{
-                left: `${offsetPercent}%`,
-                width: `${widthPercent}%`,
-                opacity: 0.6,
-              }}
-            />
-          </div>
-        </div>
+    <div className="flex flex-col gap-2">
+      <div
+        className="flex items-center gap-2 text-left hover:bg-muted/5 px-1 py-0.5 rounded transition cursor-pointer select-none"
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
+        onClick={() => setIsExpanded((prev) => !prev)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            setIsExpanded((prev) => !prev);
+          }
+        }}
+      >
+        <span className="flex-shrink-0 text-muted-foreground">
+          {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+        </span>
+        <span className="text-xs text-muted-foreground/80">Trace spans</span>
+        <span className="sr-only">
+          {isExpanded ? 'Collapse trace spans' : 'Expand trace spans'}
+        </span>
       </div>
 
-      {trace.spans.length > 0 && (
-        <div className="mt-1">
-          {trace.spans
-            .sort((a, b) => a.start_time_us - b.start_time_us)
-            .map((span) => (
-              <SpanItem
-                key={span.span_id}
-                span={span}
-                threadStartTime={threadStartTime}
-                threadTotalDuration={threadTotalDuration}
-                titleWidth={titleWidth}
-              />
-            ))}
-        </div>
-      )}
+      {isExpanded &&
+        sortedSpans.map((span) => (
+          <SpanItem
+            key={span.span_id}
+            span={span}
+            threadStartTime={threadStartTime}
+            threadTotalDuration={threadTotalDuration}
+            titleWidth={titleWidth}
+          />
+        ))}
     </div>
   );
 };

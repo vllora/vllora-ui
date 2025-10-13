@@ -30,8 +30,12 @@ export const SpanItem: React.FC<SpanItemProps> = ({ span, threadStartTime, threa
 
   // Calculate timeline visualization percentages relative to thread timeline
   const duration = span.finish_time_us - span.start_time_us;
-  const widthPercent = threadTotalDuration > 0 ? (duration / threadTotalDuration) * 100 : 0;
-  const offsetPercent = threadTotalDuration > 0 ? ((span.start_time_us - threadStartTime) / threadTotalDuration) * 100 : 0;
+  const clamp = (value: number, max = 100) => Math.min(max, Math.max(0, value));
+  const formatPercent = (value: number) => Number(value.toFixed(3));
+  const rawWidth = threadTotalDuration > 0 ? (duration / threadTotalDuration) * 100 : 0;
+  const rawOffset = threadTotalDuration > 0 ? ((span.start_time_us - threadStartTime) / threadTotalDuration) * 100 : 0;
+  const offsetPercent = formatPercent(clamp(rawOffset));
+  const widthPercent = formatPercent(clamp(rawWidth, 100 - offsetPercent));
 
   // Get span display properties using utility functions
   const title = getSpanTitle({ span, relatedSpans: [] });

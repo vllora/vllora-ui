@@ -25,8 +25,12 @@ export const HierarchicalTimeline: React.FC<HierarchicalTimelineProps> = ({ thre
         Showing {threads.length} thread{threads.length !== 1 ? 's' : ''}
       </div>
       <div className="flex-1">
-        {threads.map((thread) => (
-          <ThreadItem key={thread.id} thread={thread} />
+        {threads.map((thread, index) => (
+          <ThreadItem
+            key={thread.id}
+            thread={thread}
+            defaultExpanded={index === 0}
+          />
         ))}
       </div>
     </div>

@@ -51,8 +51,15 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
 
     // Calculate duration and position for the timeline bar
     const duration = root.finish_time_us - root.start_time_us;
-    const widthPercent = (duration / totalDuration * 100).toFixed(0);
-    const offsetPercent = (((root.start_time_us - startTime) / totalDuration) * 100).toFixed(0);
+    const toPercent = (value: number) => Number.isFinite(value) ? value : 0;
+    const clamp = (value: number, max = 100) => Math.min(max, Math.max(0, value));
+    const rawWidth = toPercent((duration / totalDuration) * 100);
+    const rawOffset = toPercent(((root.start_time_us - startTime) / totalDuration) * 100);
+    const offsetPercentNumber = clamp(rawOffset);
+    const widthPercentNumber = clamp(rawWidth, 100 - offsetPercentNumber);
+    const formatPercent = (value: number) => Number(value.toFixed(3)).toString();
+    const widthPercent = formatPercent(widthPercentNumber);
+    const offsetPercent = formatPercent(offsetPercentNumber);
     const durationSeconds = (duration / 1000000);
 
     // Get operation name and icon

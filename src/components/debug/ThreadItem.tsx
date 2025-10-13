@@ -1,10 +1,11 @@
-import React from 'react';
-import { MessageSquare } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ChevronDown, ChevronRight, MessageSquare } from 'lucide-react';
 import { DebugThread } from '@/hooks/events/useDebugTimeline';
 import { RunItem } from './RunItem';
 
 interface ThreadItemProps {
   thread: DebugThread;
+  defaultExpanded?: boolean;
 }
 
 // Format time helper
@@ -20,7 +21,12 @@ const formatTime = (timestamp: number): string => {
   return `${timeStr}.${ms}`;
 };
 
-export const ThreadItem: React.FC<ThreadItemProps> = ({ thread }) => {
+export const ThreadItem: React.FC<ThreadItemProps> = ({ thread, defaultExpanded = false }) => {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  useEffect(() => {
+    setIsExpanded(defaultExpanded);
+  }, [defaultExpanded, thread.id]);
+
   const totalRuns = thread.runs.length;
   const totalTraces = thread.runs.reduce((sum, run) => sum + run.traces.length, 0);
   const totalSpans = thread.runs.reduce(
@@ -43,11 +49,20 @@ export const ThreadItem: React.FC<ThreadItemProps> = ({ thread }) => {
   const threadTotalDuration = threadEndTime - threadStartTime;
 
   const titleWidth = 180; // Fixed width for left panel
+  const sortedRuns = [...thread.runs].sort((a, b) => b.start_time_us - a.start_time_us);
 
   return (
     <div className="border-b border-border/50">
-      <div className="flex items-center gap-2 p-3 hover:bg-accent/5">
-        <MessageSquare className="w-5 h-5 text-green-400" />
+      <button
+        type="button"
+        className="w-full flex items-center gap-3 p-3 text-left hover:bg-accent/5 transition"
+        onClick={() => setIsExpanded((prev) => !prev)}
+        aria-expanded={isExpanded}
+      >
+        <span className="flex-shrink-0 text-muted-foreground">
+          {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+        </span>
+        <MessageSquare className="w-5 h-5 text-green-400 flex-shrink-0" />
         <div className="flex-1">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-foreground">
@@ -57,7 +72,7 @@ export const ThreadItem: React.FC<ThreadItemProps> = ({ thread }) => {
               {thread.id.substring(0, 8)}
             </span>
           </div>
-          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground">
             <span className="font-mono">{formatTime(thread.lastActivity)}</span>
             {totalRuns > 0 && <span className="text-blue-400">{totalRuns} runs</span>}
             {totalTraces > 0 && <span className="text-orange-400">{totalTraces} traces</span>}
@@ -66,9 +81,9 @@ export const ThreadItem: React.FC<ThreadItemProps> = ({ thread }) => {
             {totalTokens > 0 && <span className="text-cyan-400">{totalTokens} tokens</span>}
           </div>
         </div>
-      </div>
+      </button>
 
-      {thread.runs.length > 0 && (
+      {isExpanded && thread.runs.length > 0 && (
         <div className="pb-2">
           {/* Timeline header with ticks */}
           <div className="flex w-full px-3 mb-2">
@@ -96,15 +111,14 @@ export const ThreadItem: React.FC<ThreadItemProps> = ({ thread }) => {
           </div>
 
           {/* Runs with timeline visualization */}
-          {thread.runs
-            .sort((a, b) => b.start_time_us - a.start_time_us)
-            .map((run) => (
+          {sortedRuns.map((run, runIndex) => (
               <RunItem
                 key={run.run_id}
                 run={run}
                 threadStartTime={threadStartTime}
                 threadTotalDuration={threadTotalDuration}
                 titleWidth={titleWidth}
+                defaultExpanded={runIndex === 0}
               />
             ))}
         </div>
