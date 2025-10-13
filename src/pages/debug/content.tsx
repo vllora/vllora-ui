@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowDown, Pause, Play, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { useDebugTimeline } from '@/hooks/events/useDebugTimeline';
 import { HierarchicalTimeline } from '@/components/debug/HierarchicalTimeline';
+import { useAutoScrollToBottom } from '@/hooks/useAutoScrollToBottom';
 
 export function DebugPageContent() {
   const { currentProjectId } = ProjectsConsumer();
@@ -17,67 +17,16 @@ export function DebugPageContent() {
   } = useDebugTimeline({
     projectId: currentProjectId || '',
   });
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [isAtBottom, setIsAtBottom] = useState(true);
-  const [isScrollable, setIsScrollable] = useState(false);
-  const BOTTOM_THRESHOLD = 24;
-
-  const updateScrollState = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) {
-      return;
-    }
-    const scrollableHeight = container.scrollHeight - container.clientHeight;
-    const scrollable = scrollableHeight > BOTTOM_THRESHOLD;
-    if (!scrollable) {
-      setIsScrollable(false);
-      setIsAtBottom(true);
-      return;
-    }
-    const atBottom =
-      container.scrollTop + container.clientHeight >= container.scrollHeight - BOTTOM_THRESHOLD;
-    setIsScrollable(true);
-    setIsAtBottom((prev) => (prev !== atBottom ? atBottom : prev));
-  }, [BOTTOM_THRESHOLD]);
-
-  const scrollToBottom = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) {
-      return;
-    }
-    // Defer to next frame so newly rendered content is measurable
-    requestAnimationFrame(() => {
-      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
-      setIsAtBottom(true);
-      updateScrollState();
-    });
-  }, [updateScrollState]);
-
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) {
-      return;
-    }
-    const handleScroll = () => {
-      updateScrollState();
-    };
-    container.addEventListener('scroll', handleScroll);
-    updateScrollState();
-    return () => {
-      container.removeEventListener('scroll', handleScroll);
-    };
-  }, [updateScrollState]);
-
-  useEffect(() => {
-    if (isPaused || !isAtBottom) {
-      return;
-    }
-    scrollToBottom();
-  }, [threads, isPaused, isAtBottom, scrollToBottom]);
-
-  useEffect(() => {
-    updateScrollState();
-  }, [threads, updateScrollState]);
+  const {
+    containerRef,
+    isAtBottom,
+    isScrollable,
+    scrollToBottom,
+  } = useAutoScrollToBottom<HTMLDivElement>({
+    isActive: !isPaused,
+    dependencies: [threads],
+    threshold: 10,
+  });
 
   if (!currentProjectId) {
     return (
@@ -153,7 +102,7 @@ export function DebugPageContent() {
 
       {/* Hierarchical Timeline */}
       <div className="flex-1 overflow-hidden">
-        <div ref={scrollContainerRef} className="h-full overflow-y-auto">
+        <div ref={containerRef} className="h-full overflow-y-auto">
           <div className="relative min-h-full flex flex-col">
             <HierarchicalTimeline threads={threads} />
             {!isAtBottom && isScrollable && (
