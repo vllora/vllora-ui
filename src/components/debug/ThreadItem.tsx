@@ -33,6 +33,17 @@ export const ThreadItem: React.FC<ThreadItemProps> = ({ thread }) => {
     0
   );
 
+  // Calculate thread timeline bounds from all runs
+  const threadStartTime = thread.runs.length > 0
+    ? Math.min(...thread.runs.map(run => run.start_time_us))
+    : 0;
+  const threadEndTime = thread.runs.length > 0
+    ? Math.max(...thread.runs.map(run => run.finish_time_us))
+    : 0;
+  const threadTotalDuration = threadEndTime - threadStartTime;
+
+  const titleWidth = 180; // Fixed width for left panel
+
   return (
     <div className="border-b border-border/50">
       <div className="flex items-center gap-2 p-3 hover:bg-accent/5">
@@ -56,13 +67,45 @@ export const ThreadItem: React.FC<ThreadItemProps> = ({ thread }) => {
           </div>
         </div>
       </div>
-      
+
       {thread.runs.length > 0 && (
         <div className="pb-2">
+          {/* Timeline header with ticks */}
+          <div className="flex w-full px-3 mb-2">
+            <div style={{ width: titleWidth }} className="flex-shrink-0"></div>
+            <div className="flex-grow relative ml-2">
+              <div className="relative w-full h-5">
+                {/* Time markers */}
+                <div className="absolute left-0 bottom-1 text-[10px] text-foreground/60 font-semibold whitespace-nowrap">
+                  0.0s
+                </div>
+                <div className="absolute left-1/4 bottom-1 -translate-x-1/2 text-[10px] font-semibold text-foreground/60 whitespace-nowrap">
+                  {(threadTotalDuration * 0.25 / 1000000).toFixed(1)}s
+                </div>
+                <div className="absolute left-1/2 bottom-1 -translate-x-1/2 text-[10px] font-semibold text-foreground/60 whitespace-nowrap">
+                  {(threadTotalDuration * 0.5 / 1000000).toFixed(1)}s
+                </div>
+                <div className="absolute left-3/4 bottom-1 -translate-x-1/2 text-[10px] font-semibold text-foreground/60 whitespace-nowrap">
+                  {(threadTotalDuration * 0.75 / 1000000).toFixed(1)}s
+                </div>
+                <div className="absolute right-0 bottom-1 text-right text-[10px] font-semibold text-foreground/60 whitespace-nowrap">
+                  {(threadTotalDuration / 1000000).toFixed(1)}s
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Runs with timeline visualization */}
           {thread.runs
             .sort((a, b) => b.start_time_us - a.start_time_us)
             .map((run) => (
-              <RunItem key={run.run_id} run={run} />
+              <RunItem
+                key={run.run_id}
+                run={run}
+                threadStartTime={threadStartTime}
+                threadTotalDuration={threadTotalDuration}
+                titleWidth={titleWidth}
+              />
             ))}
         </div>
       )}

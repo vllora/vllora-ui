@@ -11,8 +11,9 @@ import {
 
 interface SpanItemProps {
   span: Span;
-  totalDuration: number;
-  minStartTime: number;
+  threadStartTime: number;
+  threadTotalDuration: number;
+  titleWidth: number;
 }
 
 // Format duration in ms
@@ -24,13 +25,13 @@ const formatDuration = (startUs: number, endUs: number): string => {
   return `${(durationMs / 1000).toFixed(2)}s`;
 };
 
-export const SpanItem: React.FC<SpanItemProps> = ({ span, totalDuration, minStartTime }) => {
+export const SpanItem: React.FC<SpanItemProps> = ({ span, threadStartTime, threadTotalDuration, titleWidth }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Calculate timeline visualization percentages
+  // Calculate timeline visualization percentages relative to thread timeline
   const duration = span.finish_time_us - span.start_time_us;
-  const widthPercent = totalDuration > 0 ? (duration / totalDuration) * 100 : 0;
-  const offsetPercent = totalDuration > 0 ? ((span.start_time_us - minStartTime) / totalDuration) * 100 : 0;
+  const widthPercent = threadTotalDuration > 0 ? (duration / threadTotalDuration) * 100 : 0;
+  const offsetPercent = threadTotalDuration > 0 ? ((span.start_time_us - threadStartTime) / threadTotalDuration) * 100 : 0;
 
   // Get span display properties using utility functions
   const title = getSpanTitle({ span, relatedSpans: [] });
@@ -43,7 +44,7 @@ export const SpanItem: React.FC<SpanItemProps> = ({ span, totalDuration, minStar
     <div className="border-l-2 border-purple-500/30 ml-12 pl-4">
       <div className="flex items-start gap-2 py-1">
         {/* Left panel - Fixed width with icon, title, duration */}
-        <div className="flex items-center gap-2 w-[180px] flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0" style={{ width: titleWidth }}>
           <div
             className="flex-shrink-0 cursor-pointer"
             onClick={() => setIsExpanded(!isExpanded)}
