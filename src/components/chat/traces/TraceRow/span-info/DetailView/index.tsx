@@ -59,7 +59,7 @@ const getParentCloudModelCall = (spans: Span[], currentSpanId: string) => {
   return getParentWithOperationName(spans, currentSpanId, 'model_call');
 }
 
-const isActualModelCall = (span: Span) => {
+export const isActualModelCall = (span: Span) => {
  let operationName = span.operation_name;
  return operationName && !['api_invoke', 'cloud_api_invoke', 'model_call', 'tool_call', 'tools'].includes(operationName) && !operationName.startsWith('guard_');
 }

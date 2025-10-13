@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { MarkdownViewer } from "./markdown-viewer";
 import { JsonViewer } from "../JsonViewer";
-import { DatabaseIcon, WrenchIcon, ChevronDown, ChevronUp } from "lucide-react";
+import {
+    DatabaseIcon,
+    WrenchIcon,
+    ChevronDown,
+    ChevronUp,
+} from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -17,143 +22,170 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
     const [isExpanded, setIsExpanded] = useState(false);
     const contentRef = useRef<HTMLDivElement>(null);
     const [showExpandButton, setShowExpandButton] = useState(false);
-    useEffect(() => {
-        if (contentRef.current) {
-            // Check if content height exceeds approximately 3 lines (using 72px as estimate)
-            const exceedsThreeLines = contentRef.current.scrollHeight > 72;
-            setShowExpandButton(exceedsThreeLines);
-        }
-    }, [content]);
 
-    const getRoleStyles = () => {
-        return 'bg-[#0a0a0a] border-border hover:bg-[#0f0f0f] transition-colors';
-    };
-
-    const getRoleInfo = () => {
-        switch (role.toLowerCase()) {
+    const getRoleLabel = () => {
+        const normalizedRole = role?.toLowerCase?.() || '';
+        const fallback = role ? `${role.charAt(0).toUpperCase()}${role.slice(1)}` : 'Message';
+        switch (normalizedRole) {
             case 'tool':
-                return {
-                    bgColor: 'bg-blue-500/20',
-                    textColor: 'text-blue-400',
-                    borderColor: 'border-blue-500/30',
-                    label: 'Tool'
-                };
+                return 'Tool';
             case 'assistant':
-                return {
-                    bgColor: 'bg-green-500/20',
-                    textColor: 'text-green-400',
-                    borderColor: 'border-green-500/30',
-                    label: 'Assistant'
-                };
+                return 'Assistant';
             case 'system':
-                return {
-                    bgColor: 'bg-purple-500/20',
-                    textColor: 'text-purple-400',
-                    borderColor: 'border-purple-500/30',
-                    label: 'System'
-                };
+                return 'System';
             case 'ai':
-                return {
-                    bgColor: 'bg-amber-500/20',
-                    textColor: 'text-amber-400',
-                    borderColor: 'border-amber-500/30',
-                    label: 'AI'
-                };
+                return 'AI';
             case 'user':
-                return {
-                    bgColor: 'bg-pink-500/20',
-                    textColor: 'text-pink-400',
-                    borderColor: 'border-pink-500/30',
-                    label: 'User'
-                };
+                return 'User';
             case 'model':
-                return {
-                    bgColor: 'bg-cyan-500/20',
-                    textColor: 'text-cyan-400',
-                    borderColor: 'border-cyan-500/30',
-                    label: 'Model'
-                };
+                return 'Model';
             default:
-                return {
-                    bgColor: 'bg-gray-500/20',
-                    textColor: 'text-gray-400',
-                    borderColor: 'border-gray-500/30',
-                    label: role
-                };
+                return fallback;
         }
     };
 
-    const roleInfo = getRoleInfo();
-    let partText: string | undefined = undefined;
-    
+    const roleLabel = getRoleLabel();
 
-    let messageJson = content ? tryParseJson(content) : (parts || null);
-    if (parts && Array.isArray(parts) && parts.length > 0 && parts[0].text && parts[0].text.length > 0) {
-        partText = parts[0].text;
-        messageJson = null;
+    const parsedContent = typeof content === 'string' ? tryParseJson(content) : undefined;
+
+    const partsArray = Array.isArray(parts) ? parts : [];
+    const textSegments: string[] = [];
+    const seenText = new Set<string>();
+    const registerTextSegment = (segment?: string) => {
+        if (!segment) {
+            return;
+        }
+        const trimmed = segment.trim();
+        if (!trimmed || seenText.has(trimmed)) {
+            return;
+        }
+        seenText.add(trimmed);
+        textSegments.push(segment);
+    };
+
+    if (typeof content === 'string' && !parsedContent) {
+        registerTextSegment(content);
     }
-    
+
+    const textParts = partsArray.filter((part) => typeof part?.text === 'string' && part.text.trim().length > 0);
+    textParts.forEach((part) => registerTextSegment(part.text));
+    const structuredParts = partsArray.filter((part) => !textParts.includes(part));
+
+    const displayText = textSegments.join('\n\n');
+    const hasTextContent = displayText.trim().length > 0;
+
+    let structuredContent = parsedContent;
+    if (objectContent !== undefined && objectContent !== null) {
+        structuredContent = objectContent;
+    } else if (!structuredContent && structuredParts.length > 0) {
+        structuredContent = structuredParts;
+    }
+
+    const showStructuredBlock = structuredContent !== undefined && structuredContent !== null && (typeof structuredContent !== 'string' || !hasTextContent);
+
+    useEffect(() => {
+        if (!hasTextContent || !contentRef.current) {
+            setShowExpandButton(false);
+            setIsExpanded(false);
+            return;
+        }
+        const exceedsThreeLines = contentRef.current.scrollHeight > 72;
+        setShowExpandButton(exceedsThreeLines);
+        if (!exceedsThreeLines) {
+            setIsExpanded(false);
+        }
+    }, [hasTextContent, displayText]);
+
+    const partsCount = partsArray.length;
+    const metaChips: { key: string; label: string }[] = [];
+    if (partsCount > 0) {
+        metaChips.push({
+            key: 'parts-count',
+            label: `${partsCount} ${partsCount === 1 ? 'part' : 'parts'}`
+        });
+    }
+    if (showStructuredBlock) {
+        metaChips.push({
+            key: 'structured',
+            label: Array.isArray(structuredContent) ? 'Structured parts' : 'JSON payload'
+        });
+    }
+    if (toolCalls && toolCalls.length > 0) {
+        metaChips.push({
+            key: 'tool-calls',
+            label: `${toolCalls.length} ${toolCalls.length === 1 ? 'tool call' : 'tool calls'}`
+        });
+    }
+
+    const metaSummary = metaChips.map((chip) => chip.label).join(' • ');
+
     return (
-        <div className={`p-3 rounded-lg border ${getRoleStyles()}`}>
-            <div className="flex flex-row items-start gap-3">
-                {/* Role Badge */}
-                <div className={`flex items-center justify-center px-2.5 py-1 rounded-full flex-shrink-0 w-20 ${roleInfo.bgColor} ${roleInfo.borderColor} border`}>
-                    <span className={`text-xs font-medium ${roleInfo.textColor}`}>
-                        {roleInfo.label}
-                    </span>
-                </div>
-                {/* Message Content */}
-                <div className="flex-1 min-w-0">
-                   
-                    {!messageJson && ((content && content.length > 0) || (partText && partText.length > 0)) ? (
-                        <div className="relative">
-                            <div
-                                ref={contentRef}
-                                className={`text-xs text-gray-200 whitespace-pre-wrap ${!isExpanded && showExpandButton ? 'line-clamp-3 overflow-hidden' : ''
-                                    }`}
+        <div className="rounded-xl border border-border/60 bg-[#111111] p-4 shadow-sm transition-colors hover:bg-[#131313]">
+            <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium text-zinc-200">{roleLabel}</span>
+                {metaSummary && (
+                    <span className="text-[11px] text-zinc-500">{metaSummary}</span>
+                )}
+            </div>
+            <div className="mt-3 space-y-3">
+                {hasTextContent && (
+                    <div className="relative">
+                        <div
+                            ref={contentRef}
+                            className={`whitespace-pre-wrap text-xs text-gray-200 ${!isExpanded && showExpandButton ? 'line-clamp-3 overflow-hidden' : ''}`}
+                        >
+                            <MarkdownViewer message={displayText} />
+                        </div>
+                        {showExpandButton && (
+                            <button
+                                onClick={() => setIsExpanded(!isExpanded)}
+                                className="mt-2 inline-flex items-center gap-1 text-xs text-zinc-300 transition-colors hover:text-white"
                             >
-                                <MarkdownViewer message={content || partText || ''} />
-                            </div>
-                            {showExpandButton && (
-                                <button
-                                    onClick={() => setIsExpanded(!isExpanded)}
-                                    className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 mt-2 transition-colors"
-                                >
-                                    {isExpanded ? (
-                                        <>
-                                            <ChevronUp className="w-3 h-3" />
-                                            Show less
-                                        </>
-                                    ) : (
-                                        <>
-                                            <ChevronDown className="w-3 h-3" />
-                                            Show more
-                                        </>
-                                    )}
-                                </button>
-                            )}
+                                {isExpanded ? (
+                                    <>
+                                        <ChevronUp className="h-3 w-3" />
+                                        Show less
+                                    </>
+                                ) : (
+                                    <>
+                                        <ChevronDown className="h-3 w-3" />
+                                        Show more
+                                    </>
+                                )}
+                            </button>
+                        )}
+                    </div>
+                )}
+
+                {showStructuredBlock && (
+                    <div className="rounded-lg border border-border/60 bg-black/25 px-3 py-2">
+                        <div className="pb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                            Structured Content
                         </div>
-                    ) : toolCalls && toolCalls.length > 0 ? (
-                        <></>
-                    ) : (
-                        (typeof objectContent === 'object' || messageJson) ? <ObjectMessageContent objectContent={objectContent || messageJson} /> : <div className="text-xs text-gray-400 italic">empty message</div>
-                    )}
-                    {toolCalls && toolCalls.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-border">
-                            <div className="flex items-center gap-1.5 mb-2">
-                                <WrenchIcon className="h-3.5 w-3.5 text-amber-400" />
-                                <span className="text-xs font-medium text-white">Tool Calls</span>
-                                <span className="text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded font-medium">
-                                    {toolCalls.length}
-                                </span>
-                            </div>
-                            <div className="space-y-2">
-                                <ToolDefinitionsViewer toolCalls={toolCalls} />
-                                
-                            </div>
+                        <ObjectMessageContent objectContent={structuredContent} />
+                    </div>
+                )}
+
+                {!hasTextContent && !showStructuredBlock && (
+                    <div className="text-xs italic text-gray-400">
+                        empty message
+                    </div>
+                )}
+
+                {toolCalls && toolCalls.length > 0 && (
+                    <div className="rounded-lg border border-border/60 bg-black/25 px-3 py-2">
+                        <div className="mb-2 flex items-center gap-1.5">
+                            <WrenchIcon className="h-3.5 w-3.5 text-zinc-300" />
+                            <span className="text-xs font-medium text-white">Tool Calls</span>
+                            <span className="rounded border border-border/70 bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-zinc-300">
+                                {toolCalls.length}
+                            </span>
                         </div>
-                    )}
-                </div>
+                        <div className="space-y-2">
+                            <ToolDefinitionsViewer toolCalls={toolCalls} />
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -166,7 +198,7 @@ export const ObjectMessageContent = ({ objectContent }: { objectContent: any }) 
     if (isArray) {
         return <div className="flex flex-col gap-1 divide-y divide-border">{objectContent.map((item: any, index: number) => {
             if (item.type === 'text' && item.text) {
-                return <TextMessageContent text={item.text} cache_control={item.cache_control} />
+                return <TextMessageContent key={`${index}_text`} text={item.text} cache_control={item.cache_control} />
             }
             return <JsonViewer key={`${index}_${item.type}`} data={item} />;
         })}</div>
@@ -179,23 +211,29 @@ const TextMessageContent = ({ text, cache_control }: { text: string, cache_contr
     const [isExpanded, setIsExpanded] = useState(false);
     const contentRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
-        if (contentRef.current) {
-            // Check if content height exceeds approximately 3 lines (using 72px as estimate)
-            const exceedsThreeLines = contentRef.current.scrollHeight > 72;
-            setShowExpandButton(exceedsThreeLines);
+        if (!contentRef.current) {
+            setShowExpandButton(false);
+            setIsExpanded(false);
+            return;
+        }
+        // Check if content height exceeds approximately 3 lines (using 72px as estimate)
+        const exceedsThreeLines = contentRef.current.scrollHeight > 72;
+        setShowExpandButton(exceedsThreeLines);
+        if (!exceedsThreeLines) {
+            setIsExpanded(false);
         }
     }, [text]);
-    return <div ref={contentRef} className={`py-2 flex flex-col justify-start overflow-scroll items-start gap-2`}>
-        <div className={`flex items-start truncate ${!isExpanded && showExpandButton && 'line-clamp-3 overflow-hidden truncate max-h-[150px]'} ${cache_control ? ' gap-2' : ''}`}>
+    return <div ref={contentRef} className={`flex flex-col items-start gap-2 overflow-hidden py-2`}>
+        <div className={`flex items-start ${!isExpanded && showExpandButton ? 'line-clamp-3 overflow-hidden max-h-[150px]' : ''} ${cache_control ? ' gap-2' : ''}`}>
             {cache_control && (
                 <div className="flex items-center">
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <div><DatabaseIcon className="w-4 h-4 text-amber-500" /></div>
+                                <div><DatabaseIcon className="w-4 h-4 text-zinc-300" /></div>
                             </TooltipTrigger>
                             <TooltipContent side="top" className="bg-zinc-900 text-zinc-100 border-zinc-800">
-                                <p>This message uses cache control {cache_control.type ?  <span className=""> with type <span className="font-semibold text-amber-500">{cache_control.type}</span></span> : ''}</p>
+                                <p>This message uses cache control {cache_control.type ?  <span className=""> with type <span className="font-semibold text-white">{cache_control.type}</span></span> : ''}</p>
                             </TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
@@ -208,7 +246,7 @@ const TextMessageContent = ({ text, cache_control }: { text: string, cache_contr
         {showExpandButton && (
             <button
                 onClick={() => setIsExpanded(!isExpanded)}
-                className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 mt-2 transition-colors"
+                className="mt-2 inline-flex items-center gap-1 text-xs text-zinc-300 transition-colors hover:text-white"
             >
                 {isExpanded ? (
                     <>

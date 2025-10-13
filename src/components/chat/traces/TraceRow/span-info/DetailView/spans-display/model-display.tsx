@@ -18,6 +18,7 @@ import { tryParseJson } from "@/utils/modelUtils";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { Span } from "@/types/common-type";
 import { isPromptCachingApplied } from "@/utils/graph-utils";
+import { MessageViewer } from "../message-viewer";
 
 const formatNumber = (num: number) => {
     return new Intl.NumberFormat().format(num);
@@ -39,7 +40,7 @@ export const ModelInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
     const headersStr = apiCloudInvokeAttribute?.['http.request.header'];
     const headers = headersStr ? tryParseJson(headersStr) : undefined;
     const error = modelCallAttribute?.error || apiInvokeAttribute?.error;
-    
+
     const [requestViewMode, setRequestViewMode] = useState<'ui' | 'raw'>('ui');
     const [responseViewMode, setResponseViewMode] = useState<'ui' | 'raw'>('ui');
     const [openAccordionItems, setOpenAccordionItems] = useState<string[]>(error ? ['error'] : []);
@@ -76,267 +77,21 @@ export const ModelInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
 
     const havingPromptCaching = span && isPromptCachingApplied(span);
     const isSuccessStatus = status && ['200', 200].includes(status);
-    return (
-        <BaseSpanUIDetailsDisplay 
-            value={openAccordionItems} 
+
+     let messages = raw_request_json?.messages;
+    if(!messages && raw_request_json?.contents){
+        messages = raw_request_json?.contents;
+    }
+
+    console.log('==== message', messages)
+
+    return (<BaseSpanUIDetailsDisplay
+            value={openAccordionItems}
             onValueChange={setOpenAccordionItems}
         >
-            {/* Header section with model info and status */}
-            <div className="flex flex-col gap-2 p-2 px-0 border-b border-border">
-                <div className="flex items-center justify-between px-1">
-
-                    {/* {entityByName && (entityByName as LLMRouter).strategy && (
-                        <div className="flex items-center gap-2">
-                            <ProviderIcon className="w-4 h-4 text-teal-500" provider_name={'routers'} />
-                            <span className="text-sm font-medium text-white">{(entityByName as LLMRouter).name}</span>
-                        </div>
-                    )} */}
-                    {status && <div className="flex items-center gap-2 w-full justify-between">
-                        <div className="flex items-center gap-2">
-                            <BoltIcon className="h-3.5 w-3.5 text-white" />
-                            <span className="text-xs text-white">Status</span>
-                        </div>
-                        {status && (
-                            <div className={`flex items-center px-2 py-1 rounded-md text-xs ${isSuccessStatus? 'bg-[#1a2e1a] text-green-500 border border-green-800' : 'bg-[#2e1a1a] text-red-500 border border-red-800'}`}>
-                                {isSuccessStatus ? (
-                                    <CheckCircleIcon className="w-3 h-3 mr-1" />
-                                ) : (
-                                    <ExclamationTriangleIcon className="w-3 h-3 mr-1" />
-                                )}
-                                {status}
-                            </div>
-                        )}
-                    </div>}
-                </div>
-
-                {/* Response Cache state indicator with tooltip */}
-                {cache_state && (
-                    <div className="flex items-center gap-2 w-full px-3 justify-between pt-2 border-t border-border">
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <div className="flex items-center gap-2 cursor-help">
-                                        <DatabaseIcon className="h-3.5 w-3.5 text-blue-400" />
-                                        <span className="text-xs text-white">Cache</span>
-                                    </div>
-                                </TooltipTrigger>
-                                <TooltipContent side="bottom" className="max-w-[300px] p-3">
-                                    <div className="flex flex-col gap-2">
-                                        <p className="text-xs">
-                                            {cache_state === 'HIT' ?
-                                                'This response was retrieved from cache, saving time and costs.' :
-                                                'This response was not found in cache and was generated fresh.'}
-                                        </p>
-                                        <a
-                                            href="https://docs.langdb.ai/features/response-caching"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-xs flex items-center gap-1 text-blue-400 hover:text-blue-300 transition-colors"
-                                        >
-                                            Learn more about response caching
-                                            <ExternalLink className="h-3 w-3" />
-                                        </a>
-                                    </div>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <div className={`flex items-center px-2 py-1 rounded-md text-xs cursor-help ${cache_state === 'HIT' ? 'bg-[#1a2e1a] text-green-500 border border-green-800' : 'bg-black text-amber-400 border border-amber-800'}`}>
-                                        {cache_state}
-                                    </div>
-                                </TooltipTrigger>
-                                <TooltipContent side="bottom" className="p-2">
-                                    {cache_state === 'HIT' ? (
-                                        <p className="text-xs">Cache hit: Response was served from cache</p>
-                                    ) : (
-                                        <p className="text-xs">Cache miss: Response was generated fresh</p>
-                                    )}
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                    </div>
-                )}
-
-
-            </div>
-            {/* ID information section */}
-            <BasicSpanInfo span={span} ttf_str={ttf_str} />
-
-            {/* Error section - only shown when there's an error */}
-            {error && (
-                <AccordionItem value="error">
-                    <AccordionTrigger className={triggerClassName}>
-                        <div className="flex items-center gap-2">
-                            <ExclamationTriangleIcon className="w-4 h-4 text-yellow-500" />
-                            <span className="font-medium text-xs text-white">Error</span>
-                        </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="bg-[#0a0a0a] border-t border-border p-2">
-                        <ErrorViewer error={error} />
-                    </AccordionContent>
-                </AccordionItem>
-            )}
-            {/* Headers section */}
-            {headers && (
-                <AccordionItem value="headers">
-                    <AccordionTrigger className={triggerClassName}>
-                        <div className="flex items-center justify-between w-full">
-                            <div className="flex items-center gap-2">
-                                <CodeBracketIcon className="w-4 h-4 text-blue-500" />
-                                <span className="font-medium text-xs text-white">Headers</span>
-                            </div>
-                            {headerCount && <span className="text-xs text-gray-400 bg-[#1a1a1a] px-2 py-0.5 rounded-md">
-                                {headerCount}
-                            </span>}
-                        </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="p-2 bg-[#0a0a0a] border-t border-border">
-                        <HeadersViewer input={headers} />
-                    </AccordionContent>
-                </AccordionItem>
-            )}
-
-            {/* Request section with UI/Raw toggle */}
-            {raw_request_json && (
-                <AccordionItem value="raw_request">
-                    <div className="relative">
-                        <AccordionTrigger className={triggerClassName}>
-                            <div className="flex items-center gap-2">
-                                <ArrowRightLeftIcon className="w-4 h-4 text-blue-500" />
-                                <span className="font-medium text-xs text-white">Request</span>
-                            </div>
-                        </AccordionTrigger>
-                        {/* Mode toggle using SimpleTabsList - positioned absolutely */}
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 z-10" onClick={(e) => e.stopPropagation()}>
-                            <Tabs value={requestViewMode} onValueChange={(value) => {
-                                setRequestViewMode(value as 'ui' | 'raw');
-                                if (!openAccordionItems.includes('raw_request')) {
-                                    setOpenAccordionItems(prev => [...prev, 'raw_request']);
-                                }
-                            }}>
-                                <SimpleTabsList className="h-6 p-0.5 bg-[#1a1a1a]">
-                                    <SimpleTabsTrigger value="ui" className="text-xs">
-                                        UI
-                                    </SimpleTabsTrigger>
-                                    <SimpleTabsTrigger value="raw" className="text-xs">
-                                        JSON
-                                    </SimpleTabsTrigger>
-                                </SimpleTabsList>
-                            </Tabs>
-                        </div>
-                    </div>
-                    <AccordionContent className="p-2 bg-[#0a0a0a] border-t border-border">
-                        <RequestViewer jsonRequest={raw_request_json} viewMode={requestViewMode} />
-                    </AccordionContent>
-                </AccordionItem>
-            )}
-
-            {/* Response section with UI/Raw toggle */}
-            {raw_response_json && (
-                <AccordionItem value="raw_response">
-                    <div className="relative">
-                        <AccordionTrigger className={triggerClassName}>
-                            <div className="flex items-center gap-2">
-                                <DocumentTextIcon className="w-4 h-4 text-blue-500" />
-                                <span className="font-medium text-xs text-white">Response</span>
-                            </div>
-                        </AccordionTrigger>
-                        {/* Mode toggle using SimpleTabsList - positioned absolutely */}
-                        {typeof raw_response_json !== 'string' && (
-                            <div className="absolute right-3 top-1/2 -translate-y-1/2 z-10" onClick={(e) => e.stopPropagation()}>
-                                <Tabs value={responseViewMode} onValueChange={(value) => {
-                                    setResponseViewMode(value as 'ui' | 'raw');
-                                    if (!openAccordionItems.includes('raw_response')) {
-                                        setOpenAccordionItems(prev => [...prev, 'raw_response']);
-                                    }
-                                }}>
-                                    <SimpleTabsList className="h-6 p-0.5 bg-[#1a1a1a]">
-                                        <SimpleTabsTrigger value="ui" className="text-xs">
-                                            UI
-                                        </SimpleTabsTrigger>
-                                        <SimpleTabsTrigger value="raw" className="text-xs">
-                                            JSON
-                                        </SimpleTabsTrigger>
-                                    </SimpleTabsList>
-                                </Tabs>
-                            </div>
-                        )}
-                    </div>
-                    <AccordionContent className="bg-[#0a0a0a] border-t border-border p-2">
-                        <ResponseViewer otherLevelMessages={otherLevelMessages} response={raw_response_json} viewMode={responseViewMode} />
-                    </AccordionContent>
-                </AccordionItem>
-            )}
-
-
-            {/* Router metric resolution */}
-            {router_metric_resolution && typeof router_metric_resolution === 'object' && (
-                <AccordionItem value="router_metric_resolution">
-                    <AccordionTrigger className={triggerClassName}>
-                        <div className="flex items-center justify-between w-full">
-                            <div className="flex items-center gap-2">
-                                <Grid2x2Check className="w-4 h-4 text-[#8b5cf6]" />
-                                <span className="font-medium text-xs text-white">Resolution</span>
-                            </div>
-                        </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="p-2 bg-[#0a0a0a] border-t border-border text-xs">
-                        <JsonViewer data={router_metric_resolution} collapseStringsAfterLength={200} collapsed={4} />
-                    </AccordionContent>
-                </AccordionItem>
-            )}
-
-            {havingPromptCaching && (<AccordionItem value="prompt-caching">
-                <AccordionTrigger className={triggerClassName}>
-                    <div className="flex items-center w-full justify-between">
-                        <div className="flex items-center gap-2 cursor-help">
-                            <DatabaseIcon className="h-3.5 w-3.5 text-amber-400" />
-                            <span className="text-xs font-medium text-white">Prompt Caching</span>
-                        </div>
-                        {/* Quick stats - show total cache read tokens */}
-                        <div className="flex items-center gap-1 text-xs text-zinc-400">
-                            {(() => {
-                                let cacheTokenInfo = getCachedTokens(usageInfo);
-                                return (
-                                    <>
-                                        <span className="text-amber-400 font-medium">{formatNumber((cacheTokenInfo.read || 0) + (cacheTokenInfo.write || 0))}</span>
-                                        <span> {cacheTokenInfo.read > 0 ? 'tokens read from cache' : 'tokens write to cache'}</span>
-                                    </>
-                                );
-                            })()}
-                        </div>
-                    </div>
-                </AccordionTrigger>
-                <AccordionContent className="bg-[#0a0a0a] border-t border-border p-2">
-                    <PromptCachingInfo
-                        usageInfo={usageInfo}
-                        costInfo={costInfo}
-                        entityByName={entityByName}
-                    />
-                </AccordionContent>
-            </AccordionItem>)}
-
-
-            {/* Usage section */}
-            {
-                (costInfo || ttf_str || usageInfo) && <AccordionItem value="usage">
-                    <AccordionTrigger className={triggerClassName}>
-                        <div className="flex items-center gap-2">
-                            <ClockIcon className="w-4 h-4 text-teal-500" />
-                            <span className="font-medium text-xs text-white">Usage & Cost</span>
-                        </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="border-t border-border p-2">
-                        <UsageViewer
-                            cost={costInfo || undefined}
-                            ttft={ttf_str || undefined}
-                            usage={usageInfo || undefined}
-                        />
-                    </AccordionContent>
-                </AccordionItem>
-            }
-        </BaseSpanUIDetailsDisplay >
-    );
+            {messages && <MessageViewer
+                messages={messages as any}
+            />}
+            
+        </BaseSpanUIDetailsDisplay>)
 }
