@@ -37,11 +37,15 @@ export const ModelInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
     const usageInfo = usage_str ? tryParseJson(usage_str) : null;
     const ttf_str = modelCallAttribute?.ttft;
 
+
+    const headersStr = apiCloudInvokeAttribute?.['http.request.header'];
+    const headers = headersStr ? tryParseJson(headersStr) : undefined;
+
     return (
         <BaseSpanUIDetailsDisplay>
             <BasicSpanInfo span={span} ttf_str={ttf_str} />
             <div className="flex flex-col gap-6 mt-4 pb-4">
-                <InputViewer jsonRequest={raw_request_json} />
+                <InputViewer jsonRequest={raw_request_json} headers={headers} />
                 <div className="h-px w-full bg-border/60" />
                 <ResponseViewer response={raw_response_json} />
                 <UsageViewer
