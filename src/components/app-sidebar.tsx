@@ -1,11 +1,16 @@
 import { useState, useMemo } from "react"
-import { Link, useLocation } from "react-router-dom"
+import { Link, useLocation, useSearchParams } from "react-router-dom"
 import {
   Home,
   MessageSquare,
   Settings,
   Menu,
   PanelLeftIcon,
+  Server,
+  Key,
+  Users,
+  Zap,
+  DollarSign,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -26,6 +31,63 @@ const bottomMenuItems = [
   { id: "settings", label: "Settings", icon: Settings, path: "/settings" },
 ]
 
+// Settings menu items
+const settingsMenuItems = [
+  // Global Settings
+  {
+    type: 'header',
+    label: 'Settings',
+    id: 'settings-header'
+  },
+  {
+    type: 'item',
+    label: 'Providers',
+    id: 'providers',
+    icon: Server,
+    description: 'Configure AI provider credentials',
+    path: '/settings?section=providers'
+  },
+  {
+    type: 'item',
+    label: 'Api Keys',
+    id: 'api-keys',
+    icon: Key,
+    description: 'Manage authentication keys',
+    path: '/settings?section=api-keys'
+  },
+  {
+    type: 'item',
+    label: 'Users',
+    id: 'users',
+    icon: Users,
+    description: 'User management and permissions',
+    path: '/settings?section=users'
+  },
+  
+  // Project Settings
+  {
+    type: 'header',
+    label: 'Project',
+    id: 'project-header'
+  },
+  {
+    type: 'item',
+    label: 'Models',
+    id: 'models',
+    icon: Zap,
+    description: 'Configure available models',
+    path: '/settings?section=models'
+  },
+  {
+    type: 'item',
+    label: 'Cost Control',
+    id: 'cost-control',
+    icon: DollarSign,
+    description: 'Usage limits and cost management',
+    path: '/settings?section=cost-control'
+  }
+]
+
 interface AppSidebarProps {
   isCollapsed: boolean
   onToggle: () => void
@@ -34,8 +96,13 @@ interface AppSidebarProps {
 
 export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSidebarProps) {
   const location = useLocation()
+  const [searchParams] = useSearchParams()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const { projects, isDefaultProject } = ProjectsConsumer()
+
+  // Check if we're on settings page
+  const isSettingsPage = location.pathname === '/settings'
+  const activeSettingsSection = searchParams.get('section') || 'providers'
 
   // Get default project for fallback
   const defaultProject = projects.find((p) => p.is_default) || projects[0]
@@ -95,56 +162,126 @@ export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSideb
 
         <nav className="flex-1 overflow-y-auto p-4">
           <ul className="space-y-1.5">
-            {mainMenuItems.map((item) => {
-              const Icon = item.icon
-              // Build path with query string for project-scoped routes
-              const itemPath = `${item.path}${projectQueryString}`
-
-              // Check if active (match path)
-              const isActive = location.pathname === item.path
-
-              return (
-                <li key={item.id}>
-                  {isCollapsed ? (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Link
-                          to={itemPath}
-                          className={cn(
-                            "flex items-center rounded-lg text-sm font-medium transition-all duration-200",
-                            isActive
-                              ? "bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]"
-                              : "hover:bg-[rgba(var(--theme-500),0.1)] hover:text-[rgb(var(--theme-500))] text-muted-foreground",
-                            "justify-center p-2 w-10 h-10"
-                          )}
-                          onClick={() => setIsMobileOpen(false)}
-                        >
-                          <Icon className="h-5 w-5 flex-shrink-0" />
-                        </Link>
-                      </TooltipTrigger>
-                      <TooltipContent side="right">
-                        <p>{item.label}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  ) : (
-                    <Link
-                      to={itemPath}
-                      className={cn(
-                        "flex items-center rounded-lg text-sm font-medium transition-all duration-200",
-                        isActive
-                          ? "bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]"
-                          : "hover:bg-[rgba(var(--theme-500),0.1)] hover:text-[rgb(var(--theme-500))] text-muted-foreground",
-                        "gap-3 px-3 py-2"
+            {isSettingsPage ? (
+              // Show settings menu items
+              settingsMenuItems.map((item) => {
+                if (item.type === 'header') {
+                  return (
+                    <li key={item.id} className="px-3 py-2">
+                      {!isCollapsed && (
+                        <div className="text-xs font-semibold text-[rgb(var(--theme-500))] uppercase tracking-wider">
+                          {item.label}
+                        </div>
                       )}
-                      onClick={() => setIsMobileOpen(false)}
-                    >
-                      <Icon className="h-5 w-5 flex-shrink-0" />
-                      <span className="truncate">{item.label}</span>
-                    </Link>
-                  )}
-                </li>
-              )
-            })}
+                    </li>
+                  )
+                }
+
+                const Icon = item.icon!
+                const isActive = activeSettingsSection === item.id
+
+                return (
+                  <li key={item.id}>
+                    {isCollapsed ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Link
+                            to={item.path}
+                            className={cn(
+                              "flex items-center rounded-lg text-sm font-medium transition-all duration-200",
+                              isActive
+                                ? "bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]"
+                                : "hover:bg-[rgba(var(--theme-500),0.1)] hover:text-[rgb(var(--theme-500))] text-muted-foreground",
+                              "justify-center p-2 w-10 h-10"
+                            )}
+                            onClick={() => setIsMobileOpen(false)}
+                          >
+                            <Icon className="h-5 w-5 flex-shrink-0" />
+                          </Link>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          <p>{item.label}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      <Link
+                        to={item.path}
+                        className={cn(
+                          "flex items-center rounded-lg text-sm font-medium transition-all duration-200",
+                          isActive
+                            ? "bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]"
+                            : "hover:bg-[rgba(var(--theme-500),0.1)] hover:text-[rgb(var(--theme-500))] text-muted-foreground",
+                          "gap-3 px-3 py-2"
+                        )}
+                        onClick={() => setIsMobileOpen(false)}
+                      >
+                        <Icon className="h-5 w-5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="truncate">{item.label}</div>
+                          {item.description && (
+                            <div className="text-xs text-muted-foreground truncate">
+                              {item.description}
+                            </div>
+                          )}
+                        </div>
+                      </Link>
+                    )}
+                  </li>
+                )
+              })
+            ) : (
+              // Show regular menu items
+              mainMenuItems.map((item) => {
+                const Icon = item.icon
+                // Build path with query string for project-scoped routes
+                const itemPath = `${item.path}${projectQueryString}`
+
+                // Check if active (match path)
+                const isActive = location.pathname === item.path
+
+                return (
+                  <li key={item.id}>
+                    {isCollapsed ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Link
+                            to={itemPath}
+                            className={cn(
+                              "flex items-center rounded-lg text-sm font-medium transition-all duration-200",
+                              isActive
+                                ? "bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]"
+                                : "hover:bg-[rgba(var(--theme-500),0.1)] hover:text-[rgb(var(--theme-500))] text-muted-foreground",
+                              "justify-center p-2 w-10 h-10"
+                            )}
+                            onClick={() => setIsMobileOpen(false)}
+                          >
+                            <Icon className="h-5 w-5 flex-shrink-0" />
+                          </Link>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          <p>{item.label}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      <Link
+                        to={itemPath}
+                        className={cn(
+                          "flex items-center rounded-lg text-sm font-medium transition-all duration-200",
+                          isActive
+                            ? "bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]"
+                            : "hover:bg-[rgba(var(--theme-500),0.1)] hover:text-[rgb(var(--theme-500))] text-muted-foreground",
+                          "gap-3 px-3 py-2"
+                        )}
+                        onClick={() => setIsMobileOpen(false)}
+                      >
+                        <Icon className="h-5 w-5 flex-shrink-0" />
+                        <span className="truncate">{item.label}</span>
+                      </Link>
+                    )}
+                  </li>
+                )
+              })
+            )}
           </ul>
         </nav>
 
