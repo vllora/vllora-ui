@@ -1,17 +1,27 @@
 import { motion } from "framer-motion";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ModelPricing } from "@/types/models";
+import { ProviderIcon } from "@/components/Icons/ProviderIcons";
 
 interface ModelCardProps {
-  model: any; // We'll use the model type from ellora-ui
+  model: ModelPricing;
   modelKey: string;
   isEnabled: boolean;
   onToggle: (modelKey: string) => void;
 }
 
 export const ModelCard = ({ model, modelKey, isEnabled, onToggle }: ModelCardProps) => {
+  // Get model group if available, otherwise treat as single model
+  const modelGroup = (model as any)._modelGroup || [model];
+  const modelName = (model as any)._modelName || model.model;
+  
+  // Get unique providers from the group
+  const providers = Array.from(new Set(modelGroup.map((m: ModelPricing) => m.inference_provider.provider)));
+  const firstModel = modelGroup[0];
+  const publisher = firstModel.model_provider; // This is the actual publisher
+  
   return (
     <TooltipProvider>
       <Tooltip>
@@ -29,9 +39,7 @@ export const ModelCard = ({ model, modelKey, isEnabled, onToggle }: ModelCardPro
             )}
             onClick={() => onToggle(modelKey)}
           >
-            {/* Main content */}
             <div className="flex flex-col gap-3">
-              {/* Header with checkbox and provider */}
               <div className="flex items-start gap-3">
                 <Checkbox
                   checked={isEnabled}
@@ -45,20 +53,35 @@ export const ModelCard = ({ model, modelKey, isEnabled, onToggle }: ModelCardPro
                   onClick={(e: React.MouseEvent) => e.stopPropagation()}
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <div className="font-semibold text-sm text-foreground truncate flex-1 min-w-0">
-                      {model.model || model.name}
+                  <div className="flex items-center gap-2 mb-2">
+                    {/* Publisher Icon */}
+                    <div className="p-1.5 bg-secondary rounded-lg group-hover:bg-secondary/80 transition-colors">
+                      <ProviderIcon
+                        provider_name={publisher}
+                        className="w-4 h-4"
+                      />
                     </div>
-                    {model.is_private && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Lock className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="text-xs">
-                          Private Model
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
+                    
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm text-foreground truncate">
+                        {modelName}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Providers */}
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">{providers.length > 1 ? 'Providers' : 'Provider'}</span>
+                    <div className="flex flex-wrap gap-1.5 justify-end">
+                      {providers.map((provider, index) => (
+                        <div key={`${provider}-${index}`} className="p-1 bg-secondary rounded hover:bg-secondary/80 transition-colors">
+                          <ProviderIcon
+                            provider_name={provider as string}
+                            className="w-4 h-4"
+                          />
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -66,10 +89,13 @@ export const ModelCard = ({ model, modelKey, isEnabled, onToggle }: ModelCardPro
           </motion.div>
         </TooltipTrigger>
         <TooltipContent side="bottom" className="border border-border max-w-[35vw]">
-          <div className="p-2">
-            <div className="text-sm font-medium mb-2">{model.model || model.name}</div>
+          <div className="p-3 space-y-2">
+            <div className="text-sm font-medium">{modelName}</div>
             <div className="text-xs text-muted-foreground">
-              {model.description || 'No description available'}
+              <div className="flex items-center gap-2">
+                <span className="font-medium">Providers:</span>
+                <span className="capitalize">{providers.join(", ")}</span>
+              </div>
             </div>
           </div>
         </TooltipContent>

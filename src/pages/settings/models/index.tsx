@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { IndeterminateCheckbox } from "@/components/ui/indeterminate-checkbox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ModelListSkeleton, ConfigSummarySkeleton } from "./ModelListSkeleton";
@@ -36,6 +36,7 @@ export const ModelsPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedProviders, setExpandedProviders] = useState<Set<string>>(new Set());
   const [currentConfigModels, setCurrentConfigModels] = useState<string[]>([]);
+  const [groupByName, setGroupByName] = useState(true); // Default to grouped by name
 
   // Reference for the scrollable container
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -64,30 +65,70 @@ export const ModelsPage = () => {
 
   // Group and filter models
   const groupedModels: GroupedModels = useMemo(() => {
-    const groups: GroupedModels = {};
-    models?.forEach(model => {
-      const matchesSearch = searchTerm === "" ||
-        model.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        model.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        model.inference_provider.provider.toLowerCase().includes(searchTerm.toLowerCase());
+    if (!groupByName) {
+      // Original grouping by provider
+      const groups: GroupedModels = {};
+      models?.forEach(model => {
+        const matchesSearch = searchTerm === "" ||
+        model.model.toLowerCase().includes(searchTerm.toLowerCase());
 
-      if (matchesSearch) {
-        const provider = model.inference_provider.provider;
-        if (!groups[provider]) {
-          groups[provider] = [];
+        if (matchesSearch) {
+          const provider = model.inference_provider.provider;
+          if (!groups[provider]) {
+            groups[provider] = [];
+          }
+          groups[provider].push(model);
         }
-        groups[provider].push(model);
-      }
-    });
+      });
 
-    // Sort providers alphabetically
-    const sortedGroups: GroupedModels = {};
-    Object.keys(groups).sort().forEach(provider => {
-      sortedGroups[provider] = groups[provider];
-    });
+      // Sort providers alphabetically
+      const sortedGroups: GroupedModels = {};
+      Object.keys(groups).sort().forEach(provider => {
+        sortedGroups[provider] = groups[provider];
+      });
 
-    return sortedGroups;
-  }, [models, searchTerm]);
+      return sortedGroups;
+    } else {
+      // Group by publisher (not provider)
+      const groups: GroupedModels = {};
+      const modelGroups = new Map<string, any[]>();
+
+      models?.forEach(model => {
+        const matchesSearch = searchTerm === "" ||
+        model.model.toLowerCase().includes(searchTerm.toLowerCase());
+
+        if (matchesSearch) {
+          const modelName = model.model.toLowerCase();
+          if (!modelGroups.has(modelName)) {
+            modelGroups.set(modelName, []);
+          }
+          modelGroups.get(modelName)!.push(model);
+        }
+      });
+
+      // Convert to grouped format with _modelGroup property
+      modelGroups.forEach((modelGroup, modelName) => {
+        const firstModel = { ...modelGroup[0] };
+        (firstModel as any)._modelGroup = modelGroup;
+        (firstModel as any)._modelName = modelName;
+        
+        // Use the publisher (not provider) as the group key
+        const publisher = firstModel.model_provider; // This is the actual publisher
+        if (!groups[publisher]) {
+          groups[publisher] = [];
+        }
+        groups[publisher].push(firstModel);
+      });
+
+      // Sort publishers alphabetically
+      const sortedGroups: GroupedModels = {};
+      Object.keys(groups).sort().forEach(publisher => {
+        sortedGroups[publisher] = groups[publisher];
+      });
+
+      return sortedGroups;
+    }
+  }, [models, searchTerm, groupByName]);
 
   const isEnabledSave = useMemo(() => {
     if (loadingModelRestrictions || updatingModelRestrictions) {
@@ -111,15 +152,47 @@ export const ModelsPage = () => {
   const toggleModel = useCallback((modelId: string) => {
     setCurrentConfigModels(prev => {
       const newModels = [...prev];
-      const index = newModels.indexOf(modelId);
-      if (index > -1) {
-        newModels.splice(index, 1);
+      
+      if (groupByName) {
+        // For grouped models, find the model group and toggle all models in the group
+        const modelGroup = models?.find(m => {
+          const group = (m as any)._modelGroup || [m];
+          return group.some((groupModel: any) => getModelFullName(groupModel) === modelId);
+        });
+        
+        if (modelGroup) {
+          const group = (modelGroup as any)._modelGroup || [modelGroup];
+          const groupModelKeys = group.map((groupModel: any) => getModelFullName(groupModel));
+          
+          // Check if all models in the group are currently enabled
+          const allEnabled = groupModelKeys.every((key: string) => newModels.includes(key));
+          
+          if (allEnabled) {
+            // Remove all models in the group
+            return newModels.filter(model => !groupModelKeys.includes(model));
+          } else {
+            // Add all models in the group
+            groupModelKeys.forEach((key: string) => {
+              if (!newModels.includes(key)) {
+                newModels.push(key);
+              }
+            });
+            return newModels.sort();
+          }
+        }
       } else {
-        newModels.push(modelId);
+        // Original logic for non-grouped models
+        const index = newModels.indexOf(modelId);
+        if (index > -1) {
+          newModels.splice(index, 1);
+        } else {
+          newModels.push(modelId);
+        }
       }
+      
       return newModels;
     });
-  }, []);
+  }, [groupByName, models]);
 
   // Select all models
   const selectAllModels = useCallback(() => {
@@ -140,7 +213,7 @@ export const ModelsPage = () => {
     }
   }, [models]);
 
-  // Toggle provider
+  // Toggle provider/publisher
   const toggleProvider = useCallback(({
     provider,
     selectAll,
@@ -149,26 +222,55 @@ export const ModelsPage = () => {
     selectAll: boolean;
   }) => {
     if (selectAll) {
-      const modelsByProviderNames = models?.filter(m => m.inference_provider.provider === provider).map(m => getModelFullName(m)) || [];
-      setCurrentConfigModels(prev => {
-        let newModels = [...prev];
-        modelsByProviderNames.forEach(model => {
-          if (!newModels.includes(model)) {
-            newModels.push(model);
-          }
+      if (groupByName) {
+        // When grouping by publisher, select all models from that publisher across all providers
+        const modelsByPublisherNames = models?.filter(m => m.model_provider === provider).map(m => getModelFullName(m)) || [];
+        setCurrentConfigModels(prev => {
+          let newModels = [...prev];
+          modelsByPublisherNames.forEach(model => {
+            if (!newModels.includes(model)) {
+              newModels.push(model);
+            }
+          });
+          newModels.sort();
+          return newModels;
         });
-        newModels.sort();
-        return newModels;
-      });
+      } else {
+        // Original logic: select all models from that provider
+        const modelsByProviderNames = models?.filter(m => m.inference_provider.provider === provider).map(m => getModelFullName(m)) || [];
+        setCurrentConfigModels(prev => {
+          let newModels = [...prev];
+          modelsByProviderNames.forEach(model => {
+            if (!newModels.includes(model)) {
+              newModels.push(model);
+            }
+          });
+          newModels.sort();
+          return newModels;
+        });
+      }
     } else {
-      setCurrentConfigModels(prev => {
-        const newModels = [...prev].filter(m => {
-          return !m.startsWith(`${provider}/`);
+      if (groupByName) {
+        // When grouping by publisher, remove all models from that publisher across all providers
+        setCurrentConfigModels(prev => {
+          const newModels = [...prev].filter(m => {
+            // Find the model and check if it belongs to this publisher
+            const model = models?.find(model => getModelFullName(model) === m);
+            return model ? model.model_provider !== provider : true;
+          });
+          return newModels;
         });
-        return newModels;
-      });
+      } else {
+        // Original logic: remove all models from that provider
+        setCurrentConfigModels(prev => {
+          const newModels = [...prev].filter(m => {
+            return !m.startsWith(`${provider}/`);
+          });
+          return newModels;
+        });
+      }
     }
-  }, [models]);
+  }, [models, groupByName]);
 
   // Reset to defaults
   const resetToDefaults = useCallback(() => {
@@ -213,15 +315,36 @@ export const ModelsPage = () => {
     });
   };
 
-  // Get provider statistics
-  const getProviderStats = useCallback((provider: string) => {
-    const providerModels = groupedModels[provider] || [];
-    const enabled = providerModels.filter(model => {
-      const keyName = getModelFullName(model);
-      return currentConfigModels.includes(keyName);
-    }).length;
-    return { enabled, total: providerModels.length };
-  }, [groupedModels, currentConfigModels]);
+  // Get provider/publisher statistics
+  const getProviderStats = useCallback((providerOrPublisher: string) => {
+    const models = groupedModels[providerOrPublisher] || [];
+    
+    if (groupByName) {
+      // For grouped models, count each group as one item
+      let enabled = 0;
+      let total = models.length;
+      
+      models.forEach(model => {
+        const modelGroup = (model as any)._modelGroup || [model];
+        const groupModelKeys = modelGroup.map((groupModel: any) => getModelFullName(groupModel));
+        
+        // Check if all models in the group are enabled
+        const allEnabled = groupModelKeys.every((key: string) => currentConfigModels.includes(key));
+        if (allEnabled) {
+          enabled++;
+        }
+      });
+      
+      return { enabled, total };
+    } else {
+      // Original logic for non-grouped models
+      const enabled = models.filter(model => {
+        const keyName = getModelFullName(model);
+        return currentConfigModels.includes(keyName);
+      }).length;
+      return { enabled, total: models.length };
+    }
+  }, [groupedModels, currentConfigModels, groupByName]);
 
   return (
     <div className="flex flex-col flex-1 bg-background text-foreground h-full w-full">
@@ -249,6 +372,25 @@ export const ModelsPage = () => {
             </div>
 
             <div className="flex flex-wrap gap-2 w-full md:w-auto">
+              {/* Group By Name Toggle */}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={groupByName ? "secondary" : "outline"}
+                      size="sm"
+                      onClick={() => setGroupByName(!groupByName)}
+                      className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-all duration-200"
+                    >
+                      <span className="text-xs">Group by Publisher</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{groupByName ? "Disable" : "Enable"} grouping models by publisher</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -345,18 +487,18 @@ export const ModelsPage = () => {
               </CardContent>
             </Card>
           ) : (
-            Object.entries(groupedModels).map(([provider, providerModels]) => {
-              const isExpanded = expandedProviders.has(provider);
-              const stats = getProviderStats(provider);
+            Object.entries(groupedModels).map(([providerOrPublisher, providerModels]) => {
+              const isExpanded = expandedProviders.has(providerOrPublisher);
+              const stats = getProviderStats(providerOrPublisher);
               const allEnabled = stats.enabled === stats.total;
               const someEnabled = stats.enabled > 0 && stats.enabled < stats.total;
               const enabledPercentage = stats.total > 0 ? (stats.enabled / stats.total) * 100 : 0;
 
               return (
-                <Card key={provider} className="bg-zinc-900 border-zinc-800 shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md">
-                  <CardHeader
+                <Card key={providerOrPublisher} className="bg-zinc-900 border-zinc-800 shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md">
+                  <div
                     className="cursor-pointer hover:bg-zinc-800/50 transition-all duration-200 py-3 px-4"
-                    onClick={() => toggleProviderExpansion(provider)}
+                    onClick={() => toggleProviderExpansion(providerOrPublisher)}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -364,7 +506,7 @@ export const ModelsPage = () => {
                           checked={allEnabled}
                           indeterminate={someEnabled}
                           onCheckedChange={() => toggleProvider({
-                            provider,
+                            provider: providerOrPublisher,
                             selectAll: !allEnabled,
                           })}
                           indeterminateColor="bg-white"
@@ -376,13 +518,13 @@ export const ModelsPage = () => {
                         />
                         <div className="flex items-center gap-3">
                           <div className="p-2 rounded-md bg-zinc-800">
-                            <ProviderIcon provider_name={provider} className="w-4 h-4" />
+                            <ProviderIcon provider_name={providerOrPublisher} className="w-4 h-4" />
                           </div>
                           <div className="flex flex-col">
                             <div className="flex items-center gap-2">
-                              <CardTitle className="text-sm font-semibold capitalize text-zinc-100">
-                                {provider}
-                              </CardTitle>
+                              <div className="text-sm font-semibold capitalize text-zinc-100">
+                                {providerOrPublisher}
+                              </div>
                               <span className="text-xs text-zinc-500">
                                 {stats.enabled} of {stats.total}
                               </span>
@@ -412,7 +554,7 @@ export const ModelsPage = () => {
                         </motion.div>
                       </div>
                     </div>
-                  </CardHeader>
+                  </div>
 
                   <AnimatePresence>
                     {isExpanded && (
@@ -425,13 +567,13 @@ export const ModelsPage = () => {
                         <CardContent className="pt-0 pb-4">
                           <div className="border-t border-border pt-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                              {providerModels.map(model => {
+                              {providerModels.map((model, index) => {
                                 const modelKey = getModelFullName(model);
                                 const isEnabled = currentConfigModels.includes(modelKey);
 
                                 return (
                                   <ModelCard
-                                    key={modelKey}
+                                    key={`${modelKey}-${index}`}
                                     model={model}
                                     modelKey={modelKey}
                                     isEnabled={isEnabled}
