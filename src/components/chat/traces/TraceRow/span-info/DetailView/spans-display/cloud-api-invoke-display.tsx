@@ -2,23 +2,21 @@ import { Span } from "@/types/common-type";
 import { BaseSpanUIDetailsDisplay } from ".."
 import { getStatus } from "../index";
 import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ExclamationTriangleIcon, CheckCircleIcon, ClockIcon, CpuChipIcon, CodeBracketIcon, ChatBubbleLeftRightIcon, DocumentTextIcon, WrenchScrewdriverIcon, BoltIcon } from "@heroicons/react/24/outline";
+import { ClockIcon, DocumentTextIcon } from "@heroicons/react/24/outline";
 import { ErrorViewer } from "../error-viewer";
 import { UsageViewer } from "../usage-viewer";
 import { OutputViewer } from "../output-viewer";
-import { ExtraParameters } from "../input-viewer";
-import { MessageViewer } from "../message-viewer";
-import { HeadersViewer } from "../headers-viewer";
 import { tryParseJson } from "@/utils/modelUtils";
-import { ToolInfoCall } from "./tool-display";
-import { ToolDefinitionsViewer } from "../tool-definitions-viewer";
 import { BasicSpanInfo } from "../basic-span-info-section";
-import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { InputViewer } from "../input_viewer";
-import { HeaderViewer } from "../header-viewer";
-export const CloudApiInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
-    const { spansOfSelectedRun } = ChatWindowConsumer();
-    const status = getStatus(spansOfSelectedRun, span.span_id);
+
+interface CloudApiInvokeUIDetailsDisplayProps {
+    span: Span;
+    relatedSpans?: Span[];
+}
+
+export const CloudApiInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: CloudApiInvokeUIDetailsDisplayProps) => {
+    const status = getStatus(relatedSpans, span.span_id);
     const apiInvokeSpan = span
     const modelCallSpan = span
     const currentAttribute = span.attribute as any;
@@ -33,24 +31,12 @@ export const CloudApiInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
     const cost_str = apiInvokeAttribute?.cost;
     const ttf_str = modelCallAttribute?.ttft;
     const usage_str = currentAttribute?.usage;
-    const modelJsonStr = apiInvokeAttribute?.model || modelCallAttribute?.model;
-    const modelJson = modelJsonStr ? tryParseJson(modelJsonStr) : null;
-    const modelName = modelJson?.name;
-
-    const entityByName = undefined
-
 
     const costInfo = cost_str ? tryParseJson(cost_str) : null;
     const usageInfo = usage_str ? tryParseJson(usage_str) : null;
     const inputInfo = request ? tryParseJson(request) : null;
 
     const triggerClassName = "px-3 py-3 hover:bg-[#1a1a1a] transition-colors";
-    const keys = inputInfo && Object.keys(inputInfo);
-    const hasExtraParameters = keys && keys.filter((key: string) => key !== 'messages' && key !== 'tools').length > 0;
-    const messageCount = inputInfo?.messages?.length || 0;
-    const parameterCount = keys?.filter((key: string) => key !== 'messages' && key !== 'tools').length || 0;
-
-    const toolDefinitions: ToolInfoCall[] = inputInfo?.tools || [];
 
     return (
         <BaseSpanUIDetailsDisplay>

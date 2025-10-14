@@ -7,10 +7,10 @@ import { JsonViewer } from "../../JsonViewer";
 import { ServerIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
-import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { tryParseJson } from "@/utils/modelUtils";
 import { Span, ToolCall } from "@/types/common-type";
 import { cn } from "@/lib/utils";
+
 export interface ToolInfoCall {
     type: string;
     id?: string;
@@ -21,8 +21,13 @@ export interface ToolInfoCall {
         arguments?: any;
     }
 }
-export const ToolUIDetailsDisplay = ({ span }: { span: Span }) => {
-    const { spansOfSelectedRun } = ChatWindowConsumer();
+
+interface ToolUIDetailsDisplayProps {
+    span: Span;
+    relatedSpans?: Span[];
+}
+
+export const ToolUIDetailsDisplay = ({ span, relatedSpans = [] }: ToolUIDetailsDisplayProps) => {
 
     const currentSpan = span;
     const attributeTool = currentSpan.attribute as ToolCall;
@@ -30,7 +35,7 @@ export const ToolUIDetailsDisplay = ({ span }: { span: Span }) => {
     const labelTitles: string[] = attributeTool.label && attributeTool.label.split(',') || [];
     const jsonToolCalls: any[] | undefined = toolCalls && tryParseJson(toolCalls);
     const toolCallCount = jsonToolCalls?.length || 0;
-    const parentApiInvoke = getParentApiInvoke(spansOfSelectedRun, currentSpan.span_id);
+    const parentApiInvoke = getParentApiInvoke(relatedSpans, currentSpan.span_id);
     const parentApiInvokeAttribute = parentApiInvoke?.attribute as any;
     const requestParentApiInvokeStr = parentApiInvokeAttribute?.request;
     const requestParentApiInvoke = requestParentApiInvokeStr && tryParseJson(requestParentApiInvokeStr);

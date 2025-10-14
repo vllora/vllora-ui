@@ -2,23 +2,24 @@ import { Span } from "@/types/common-type";
 import { BaseSpanUIDetailsDisplay, getParentApiInvoke, getParentCloudApiInvoke } from ".."
 import { getStatus } from "../index";
 import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ExclamationTriangleIcon, CheckCircleIcon, ClockIcon, CpuChipIcon, CodeBracketIcon, DocumentTextIcon } from "@heroicons/react/24/outline";
+import { ExclamationTriangleIcon, CheckCircleIcon, CpuChipIcon } from "@heroicons/react/24/outline";
 import { ErrorViewer } from "../error-viewer";
 import { UsageViewer } from "../usage-viewer";
-import { HeadersViewer } from "../headers-viewer";
 import { BasicSpanInfo } from "../basic-span-info-section";
 import { InputViewer } from "../input_viewer";
-import { SimpleTabsList, SimpleTabsTrigger, Tabs } from "@/components/ui/tabs";
-import { ArrowRightLeftIcon } from "lucide-react";
 import { useState } from "react";
 import { ResponseViewer } from "../response-viewer";
 import { tryParseJson } from "@/utils/modelUtils";
-import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
-export const ModelCallUIDetailsDisplay = ({ span }: { span: Span }) => {
-    const { spansOfSelectedRun } = ChatWindowConsumer();
-    const status = getStatus(spansOfSelectedRun, span.span_id);
-    const apiCloudInvokeSpan = getParentCloudApiInvoke(spansOfSelectedRun, span.span_id);
-    const apiInvokeSpan = getParentApiInvoke(spansOfSelectedRun, span.span_id);
+
+interface ModelCallUIDetailsDisplayProps {
+    span: Span;
+    relatedSpans?: Span[];
+}
+
+export const ModelCallUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelCallUIDetailsDisplayProps) => {
+    const status = getStatus(relatedSpans, span.span_id);
+    const apiCloudInvokeSpan = getParentCloudApiInvoke(relatedSpans, span.span_id);
+    const apiInvokeSpan = getParentApiInvoke(relatedSpans, span.span_id);
     const modelCallSpan = span
     const modelCallAttribute = modelCallSpan?.attribute as any;
     const apiInvokeAttribute = apiInvokeSpan?.attribute as any;
@@ -27,8 +28,6 @@ export const ModelCallUIDetailsDisplay = ({ span }: { span: Span }) => {
     const headers = headersStr ? tryParseJson(headersStr) : undefined;
     const error = modelCallAttribute?.error || apiInvokeAttribute?.error;
 
-    const [requestViewMode, setRequestViewMode] = useState<'ui' | 'raw'>('ui');
-    const [responseViewMode, setResponseViewMode] = useState<'ui' | 'raw'>('ui');
     const [openAccordionItems, setOpenAccordionItems] = useState<string[]>(error ? ['error'] : []);
     const currentAttribute = span?.attribute as any;
     let output: string | undefined = currentAttribute?.output || modelCallAttribute?.output
@@ -51,7 +50,6 @@ export const ModelCallUIDetailsDisplay = ({ span }: { span: Span }) => {
     const usageInfo = usage_str ? tryParseJson(usage_str) : null;
 
     const triggerClassName = "px-3 py-3 hover:bg-[#1a1a1a] transition-colors";
-    const headerCount = headers ? Object.keys(headers).length : 0;
 
     return (
         <BaseSpanUIDetailsDisplay
@@ -117,7 +115,7 @@ export const ModelCallUIDetailsDisplay = ({ span }: { span: Span }) => {
 
             {/* Response section with UI/Raw toggle */}
             {raw_response_json && (
-                <ResponseViewer response={raw_response_json} viewMode={responseViewMode} />
+                <ResponseViewer response={raw_response_json} />
             )}
 
 

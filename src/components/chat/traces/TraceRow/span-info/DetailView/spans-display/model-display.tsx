@@ -1,18 +1,20 @@
 import { BaseSpanUIDetailsDisplay, getApiInvokeSpans, getModelCallSpans, getApiCloudInvokeSpans } from "..";
 import { ResponseViewer } from "../response-viewer";
 import { tryParseJson } from "@/utils/modelUtils";
-import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { Span } from "@/types/common-type";
 import { InputViewer } from "../input_viewer";
 import { BasicSpanInfo } from "../basic-span-info-section";
 import { UsageViewer } from "../usage-viewer";
 
+interface ModelInvokeUIDetailsDisplayProps {
+    span: Span;
+    relatedSpans?: Span[];
+}
 
-export const ModelInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
-    const { spansOfSelectedRun } = ChatWindowConsumer();
-    const apiCloudInvokeSpan = getApiCloudInvokeSpans(spansOfSelectedRun, span.span_id);
-    const apiInvokeSpan = getApiInvokeSpans(spansOfSelectedRun, span.span_id);
-    const modelCallSpan = getModelCallSpans(spansOfSelectedRun, span.span_id);
+export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelInvokeUIDetailsDisplayProps) => {
+    const apiCloudInvokeSpan = getApiCloudInvokeSpans(relatedSpans, span.span_id);
+    const apiInvokeSpan = getApiInvokeSpans(relatedSpans, span.span_id);
+    const modelCallSpan = getModelCallSpans(relatedSpans, span.span_id);
     const currentAttribute = span.attribute as any;
     const modelCallAttribute = modelCallSpan?.attribute as any;
     const apiInvokeAttribute = apiInvokeSpan?.attribute as any;

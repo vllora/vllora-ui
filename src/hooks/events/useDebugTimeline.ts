@@ -30,6 +30,8 @@ export interface DebugTrace {
   lastActivity: number;
 }
 
+export type GroupingLevel = 'threads' | 'runs' | 'traces' | 'spans';
+
 export interface UseDebugTimelineProps {
   projectId: string;
 }
@@ -38,13 +40,11 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
   const { subscribe } = ProjectEventsConsumer();
   const [threads, setThreads] = useState<Map<string, DebugThread>>(new Map());
   const [isPaused, setIsPaused] = useState(false);
-  const [isGrouped, setIsGrouped] = useState(true);
+  const [groupingLevel, setGroupingLevel] = useState<GroupingLevel>('spans');
   const pausedEventsRef = useRef<ProjectEventUnion[]>([]);
 
   // Process a single event and update the hierarchy
   const processEvent = useCallback((event: ProjectEventUnion) => {
-
-    console.log('====== Processing event:', event);
     setThreads((prevThreads) => {
       const newThreads = new Map(prevThreads);
 
@@ -290,6 +290,7 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
       if (isPaused) {
         pausedEventsRef.current.push(event);
       } else {
+        console.log('==== Processing event:', event);
         processEvent(event);
       }
     });
@@ -335,18 +336,39 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
     return entries.sort((a, b) => a.start_time_us - b.start_time_us);
   }, [threads]);
 
-  const toggleGrouping = useCallback(() => {
-    setIsGrouped((prev) => !prev);
-  }, []);
+  // Flatten to runs (all runs from all threads)
+  const flatRuns = useMemo<DebugRun[]>(() => {
+    const entries: DebugRun[] = [];
+    for (const thread of threads.values()) {
+      for (const run of thread.runs) {
+        entries.push(run);
+      }
+    }
+    return entries.sort((a, b) => a.start_time_us - b.start_time_us);
+  }, [threads]);
+
+  // Flatten to traces (all traces from all runs)
+  const flatTraces = useMemo<DebugTrace[]>(() => {
+    const entries: DebugTrace[] = [];
+    for (const thread of threads.values()) {
+      for (const run of thread.runs) {
+        for (const trace of run.traces) {
+          entries.push(trace);
+        }
+      }
+    }
+    return entries.sort((a, b) => a.start_time_us - b.start_time_us);
+  }, [threads]);
 
   const pausedCount = pausedEventsRef.current.length;
 
   return {
     threads: sortedThreads,
-    spans: flatSpans,
-    isGrouped,
-    setIsGrouped,
-    toggleGrouping,
+    runs: flatRuns,
+    traces: flatTraces,
+    spans: flatSpans.filter((span) => !skipThisSpan(span)),
+    groupingLevel,
+    setGroupingLevel,
     isPaused,
     pausedCount,
     pause,

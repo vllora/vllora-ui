@@ -1,13 +1,12 @@
-import React, { useState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import React from 'react';
 import { Span } from '@/types/common-type';
 import {
   getSpanTitle,
   getOperationIcon,
   getOperationIconColor,
   getTimelineBgColor,
-  getOperationTitle
 } from '@/components/chat/traces/TraceRow/new-timeline/utils';
+import { useDebugSelection } from '@/contexts/DebugSelectionContext';
 
 interface SpanItemProps {
   span: Span;
@@ -33,7 +32,7 @@ export const SpanItem: React.FC<SpanItemProps> = ({
   titleWidth,
   variant = 'hierarchy',
 }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const { selectedSpan, setSelectedSpan } = useDebugSelection();
 
   // Calculate timeline visualization percentages relative to thread timeline
   const duration = span.finish_time_us - span.start_time_us;
@@ -49,29 +48,24 @@ export const SpanItem: React.FC<SpanItemProps> = ({
   const icon = getOperationIcon({ span, relatedSpans: [] });
   const iconColorClass = getOperationIconColor({ span, relatedSpans: [] });
   const timelineColor = getTimelineBgColor({ span, relatedSpans: [] });
-  const operationTitle = getOperationTitle({ operation_name: span.operation_name, span });
 
   const containerClasses =
     variant === 'hierarchy'
       ? 'border-l-2 border-purple-500/30 ml-12 pl-4'
       : 'pl-2';
 
+  const isSelected = selectedSpan?.span_id === span.span_id;
+
   return (
     <div className={containerClasses}>
-      <div className="flex items-start gap-2 py-1">
+      <div
+        className={`flex items-start gap-2 py-1 px-2 rounded cursor-pointer transition-colors ${
+          isSelected ? 'bg-accent' : 'hover:bg-accent/50'
+        }`}
+        onClick={() => setSelectedSpan(span)}
+      >
         {/* Left panel - Fixed width with icon, title, duration */}
         <div className="flex items-center gap-2 flex-shrink-0" style={{ width: titleWidth }}>
-          <div
-            className="flex-shrink-0 cursor-pointer"
-            onClick={() => setIsExpanded(!isExpanded)}
-          >
-            {isExpanded ? (
-              <ChevronDown className="w-3 h-3 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="w-3 h-3 text-muted-foreground" />
-            )}
-          </div>
-
           {/* Icon in colored circle */}
           <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${iconColorClass}`}>
             {icon}
@@ -105,27 +99,6 @@ export const SpanItem: React.FC<SpanItemProps> = ({
           </div>
         </div>
       </div>
-
-      {/* Expandable JSON details */}
-      {isExpanded && (
-        <div className="ml-6 mt-1 mb-2 bg-muted/20 rounded p-2 text-xs font-mono">
-          <pre className="text-foreground/70 overflow-x-auto">
-            {JSON.stringify(
-              {
-                trace_id: span.trace_id,
-                span_id: span.span_id,
-                parent_span_id: span.parent_span_id,
-                operation_name: span.operation_name,
-                start_time: new Date(span.start_time_us / 1000).toISOString(),
-                finish_time: new Date(span.finish_time_us / 1000).toISOString(),
-                attribute: span.attribute,
-              },
-              null,
-              2
-            )}
-          </pre>
-        </div>
-      )}
     </div>
   );
 };

@@ -11,14 +11,18 @@ import { SimpleTabsList, SimpleTabsTrigger, Tabs } from "@/components/ui/tabs";
 import { useState } from "react";
 import { ArrowRightLeftIcon } from "lucide-react";
 import { ResponseViewer } from "../response-viewer";
-import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { Span } from "@/types/common-type";
 import { tryParseJson } from "@/utils/modelUtils";
-export const VirtualModelCallUIDetailsDisplay = ({ span }: { span: Span }) => {
-    const { spansOfSelectedRun } = ChatWindowConsumer();
-    const status = getStatus(spansOfSelectedRun, span.span_id);
-    const apiCloudInvokeSpan = getParentCloudApiInvoke(spansOfSelectedRun, span.span_id);
-    const apiInvokeSpan = getParentApiInvoke(spansOfSelectedRun, span.span_id);
+
+interface VirtualModelCallUIDetailsDisplayProps {
+    span: Span;
+    relatedSpans?: Span[];
+}
+
+export const VirtualModelCallUIDetailsDisplay = ({ span, relatedSpans = [] }: VirtualModelCallUIDetailsDisplayProps) => {
+    const status = getStatus(relatedSpans, span.span_id);
+    const apiCloudInvokeSpan = getParentCloudApiInvoke(relatedSpans, span.span_id);
+    const apiInvokeSpan = getParentApiInvoke(relatedSpans, span.span_id);
     const modelCallSpan = span
     const modelCallAttribute = modelCallSpan?.attribute as any;
     const apiInvokeAttribute = apiInvokeSpan?.attribute as any;
