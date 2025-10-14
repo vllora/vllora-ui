@@ -38,47 +38,6 @@ export const UsageViewer = (props: {
     const typeOfCost = typeof cost;
     return (
         <div className="flex flex-col gap-6 overflow-y-auto text-xs">
-            {/* Cost Section */}
-            {(cost !== undefined || typeOfCost !== 'undefined') && (
-                <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2">
-                        <div className="h-px flex-1 bg-border/40" />
-                        <div className="flex items-center gap-2">
-                            <CurrencyDollarIcon className="h-3.5 w-3.5 text-zinc-400" />
-                            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                                Cost
-                            </div>
-                        </div>
-                        <div className="h-px flex-1 bg-border/40" />
-                    </div>
-                    <div className="flex items-center justify-center">
-                        <span className="text-sm font-medium text-white">
-                            {typeOfCost === 'number' && cost ? `$${cost.toFixed(6)}` : (typeOfCost === 'string' ? cost : typeOfCost === 'undefined' ? 'N/A' : typeOfCost === 'object' && cost?.cost && typeof cost?.cost === 'number' ? `$${cost?.cost.toFixed(6)}` : 'N/A')}
-                        </span>
-                    </div>
-                </div>
-            )}
-
-            {/* TTFT Section */}
-            {ttfNumber && (
-                <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2">
-                        <div className="h-px flex-1 bg-border/40" />
-                        <div className="flex items-center gap-2">
-                            <ClockIcon className="h-3.5 w-3.5 text-zinc-400" />
-                            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                                Time to First Token
-                            </div>
-                        </div>
-                        <div className="h-px flex-1 bg-border/40" />
-                    </div>
-                    <div className="flex items-center justify-center">
-                        <span className="text-sm font-medium text-white">
-                            {ttfNumber ? `${ttfNumber.toFixed(2)} ms` : ttft || 'N/A'}
-                        </span>
-                    </div>
-                </div>
-            )}
 
             {/* Token Usage Section */}
             {usage && (
@@ -156,6 +115,16 @@ export const UsageViewer = (props: {
                                 </div>
                             </div>
                         )}
+
+                        {(cost !== undefined || typeOfCost !== 'undefined') &&<div className="flex items-center justify-between pt-2 border-t border-border/40">
+                            <div className="flex items-center gap-2">
+                                <ArrowsRightLeftIcon className="h-3 w-3 text-zinc-400" />
+                                <span className="text-xs text-zinc-500">Total Cost:</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <span className="text-xs font-medium text-white">{typeOfCost === 'number' && cost ? `$${cost.toFixed(6)}` : (typeOfCost === 'string' ? cost : typeOfCost === 'undefined' ? 'N/A' : typeOfCost === 'object' && cost?.cost && typeof cost?.cost === 'number' ? `$${cost?.cost.toFixed(6)}` : 'N/A')}</span>
+                            </div>
+                        </div>}
                     </div>
                 </div>
             )}
