@@ -1,12 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MarkdownViewer } from "./markdown-viewer";
 import { JsonViewer } from "../JsonViewer";
-import {
-    DatabaseIcon,
-    WrenchIcon,
-    ChevronDown,
-    ChevronUp,
-} from "lucide-react";
+import { DatabaseIcon, ChevronDown, ChevronUp } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,

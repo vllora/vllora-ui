@@ -14,11 +14,15 @@ export const InputViewer = (props: { jsonRequest: any, viewMode?: 'ui' | 'raw' }
 
     const tool_choice = jsonRequest?.tool_choice;
     return (
-        <div className="flex flex-col gap-4 overflow-y-auto rounded-lg text-xs">
+        <div className="flex flex-col gap-6 overflow-y-auto text-xs">
             {messages && (
-                <div className="rounded-2xl bg-[#101010] px-2 space-y-1">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                        Messages
+                <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                        <div className="h-px flex-1 bg-border/40" />
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                            Messages
+                        </div>
+                        <div className="h-px flex-1 bg-border/40" />
                     </div>
                     <MessageViewer
                         messages={messages as any}
@@ -28,16 +32,20 @@ export const InputViewer = (props: { jsonRequest: any, viewMode?: 'ui' | 'raw' }
 
 
             {tools && (
-                <div className="rounded-2xl bg-[#101010] px-2 space-y-1">
-                    <div className="flex items-center justify-between">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                            Tools
-                        </div>
-                        {tool_choice && (
-                            <div className="text-xs font-semibold tracking-wide text-zinc-500">
-                                {tool_choice}
+                <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                        <div className="h-px flex-1 bg-border/40" />
+                        <div className="flex items-center gap-3">
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                                Tools
                             </div>
-                        )}
+                            {tool_choice && (
+                                <div className="text-[10px] font-medium tracking-wide text-zinc-500">
+                                    ({tool_choice})
+                                </div>
+                            )}
+                        </div>
+                        <div className="h-px flex-1 bg-border/40" />
                     </div>
                     <ToolDefinitionsViewer toolCalls={tools} />
                 </div>

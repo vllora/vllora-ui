@@ -4,7 +4,7 @@ import { JsonViewer } from "./JsonViewer";
 import { useState } from "react";
 import { CheckCircleIcon, DatabaseIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getStatus, isActualModelCall, SpanUIDetailsDisplay } from "./DetailView";
+import { getStatus, SpanUIDetailsDisplay } from "./DetailView";
 import { ClientSdkIcon } from "@/components/Icons/ClientSdkIcon";
 import { getOperationIcon, getOperationIconColor, getSpanTitle } from "../new-timeline/utils";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
@@ -31,7 +31,6 @@ export const SpanDetailsDisplay = () => {
   let logoLink = '';
   const sdkName = currentSpan && getClientSDKName(currentSpan);
   const isPromptCached = currentSpan && isPromptCachingApplied(currentSpan);
-  const isModelInvokSpan = currentSpan && isActualModelCall(currentSpan);
   const status = currentSpan && getStatus(spansOfSelectedRun, currentSpan.span_id);
   const isSuccessStatus = status && ['200', 200].includes(status);
   return (

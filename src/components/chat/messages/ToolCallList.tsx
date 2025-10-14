@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Wrench } from "lucide-react";
 import { CheckIcon, ClipboardDocumentIcon } from "@heroicons/react/24/outline";
 import ReactJson from "react-json-view";
