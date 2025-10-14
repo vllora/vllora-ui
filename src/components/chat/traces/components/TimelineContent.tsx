@@ -38,7 +38,11 @@ export const TimelineContent: React.FC<TimelineContentProps> = ({
                 index={index}
                 isInSidebar={isInSidebar}
                 selectedSpanId={selectedSpanInfo?.spanId}
-                onSpanSelect={(spanId, runId) => setSelectedSpanInfo({ spanId, runId })}
+                onSpanSelect={(spanId, runId) => {
+                  if (runId) {
+                    setSelectedSpanInfo({ spanId, runId });
+                  }
+                }}
               />
             ))
           ) : (

@@ -181,7 +181,7 @@ export function DebugPageContent() {
               {groupingLevel === 'threads' && <HierarchicalTimeline threads={threads} />}
               {groupingLevel === 'runs' && <RunList runs={runs} />}
               {groupingLevel === 'traces' && <TraceList traces={traces} />}
-              {groupingLevel === 'spans' && <SpanList hierarchies={spanHierarchies} spans={spans} onSpanSelect={(spanId) => setSelectedSpanId(spanId)} />}
+              {groupingLevel === 'spans' && <SpanList hierarchies={spanHierarchies} spans={spans} selectedSpanId={selectedSpanId} onSpanSelect={(spanId) => setSelectedSpanId(spanId)} />}
               {!isAtBottom && isScrollable && (
                 <div className="sticky bottom-4 flex justify-end pr-4">
                   <Button
@@ -204,7 +204,7 @@ export function DebugPageContent() {
             <SpanDetailPanel
               span={selectedSpan}
               relatedSpans={spansOfSelectedRun}
-              onClose={() => setSelectedSpanId(null)}
+              onClose={() => setSelectedSpanId(undefined)}
             />
           </div>
         )}

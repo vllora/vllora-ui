@@ -10,7 +10,6 @@ import {
 import { RunDTO, Span } from '@/types/common-type';
 import { Thread } from '@/types/chat';
 import { convertToNormalSpan, convertSpanToRunDTO, convertToThreadInfo } from '@/contexts/project-events/util';
-import { skipThisSpan } from '@/utils/graph-utils';
 import { constructHierarchy, Hierarchy } from '@/contexts/RunDetailContext';
 
 export interface DebugThread extends Thread {
@@ -42,7 +41,7 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
   const [threads, setThreads] = useState<Map<string, DebugThread>>(new Map());
   const [isPaused, setIsPaused] = useState(false);
   const [groupingLevel, setGroupingLevel] = useState<GroupingLevel>('spans');
-  const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
+  const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(undefined);
   const pausedEventsRef = useRef<ProjectEventUnion[]>([]);
 
   
@@ -50,7 +49,9 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
   // Process a single event and update the hierarchy
   const processEvent = useCallback((event: ProjectEventUnion) => {
     setThreads((prevThreads) => {
-      const newThreads = new Map(prevThreads);
+      // Ensure prevThreads is a valid Map
+      const validPrevThreads = prevThreads instanceof Map ? prevThreads : new Map();
+      const newThreads = new Map(validPrevThreads);
 
       // Handle thread events
       if (event.type === 'Custom') {
@@ -106,7 +107,7 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
             }
 
             // Find or create run
-            const runIndex = thread.runs.findIndex((r) => r.run_id === span.run_id);
+            const runIndex = thread.runs.findIndex((r: DebugRun) => r.run_id === span.run_id);
             if (runIndex === -1) {
               // Create new run with trace
               const newTrace: DebugTrace = {
@@ -133,7 +134,7 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
               const updatedRuns = [...thread.runs];
 
               // Find or create trace within run
-              const traceIndex = existingRun.traces.findIndex((t) => t.trace_id === span.trace_id);
+              const traceIndex = existingRun.traces.findIndex((t: DebugTrace) => t.trace_id === span.trace_id);
               let updatedTraces: DebugTrace[];
 
               if (traceIndex === -1) {
@@ -197,7 +198,7 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
           }
 
           // Check if run exists
-          const runIndex = thread.runs.findIndex((r) => r.run_id === customEvent.run_id);
+          const runIndex = thread.runs.findIndex((r: DebugRun) => r.run_id === customEvent.run_id);
           if (runIndex === -1) {
             // Create new run with empty traces
             const startTime = event.timestamp ? event.timestamp * 1000 : Date.now() * 1000;
@@ -248,7 +249,7 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
           thread = newThread;
         }
 
-        const runIndex = thread.runs.findIndex((r) => r.run_id === event.run_id);
+        const runIndex = thread.runs.findIndex((r: DebugRun) => r.run_id === event.run_id);
         if (runIndex === -1) {
           // Create basic run with empty traces
           const startTime = event.timestamp ? event.timestamp * 1000 : Date.now() * 1000;
@@ -318,16 +319,21 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
   const clear = useCallback(() => {
     setThreads(new Map());
     pausedEventsRef.current = [];
+    setSelectedSpanId(undefined);
   }, []);
 
   // Convert map to sorted array
   const sortedThreads = useMemo(
-    () => Array.from(threads.values()).sort((a, b) => a.lastActivity - b.lastActivity),
+    () => {
+      if (!threads || !(threads instanceof Map)) return [];
+      return Array.from(threads.values()).sort((a, b) => a.lastActivity - b.lastActivity);
+    },
     [threads]
   );
 
   const flatSpans = useMemo<Span[]>(() => {
     const entries: Span[] = [];
+    if (!threads || !(threads instanceof Map)) return entries;
     for (const thread of threads.values()) {
       for (const run of thread.runs) {
         for (const trace of run.traces) {
@@ -348,6 +354,7 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
   // Flatten to runs (all runs from all threads)
   const flatRuns = useMemo<DebugRun[]>(() => {
     const entries: DebugRun[] = [];
+    if (!threads || !(threads instanceof Map)) return entries;
     for (const thread of threads.values()) {
       for (const run of thread.runs) {
         entries.push(run);
@@ -359,6 +366,7 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
   // Flatten to traces (all traces from all runs)
   const flatTraces = useMemo<DebugTrace[]>(() => {
     const entries: DebugTrace[] = [];
+    if (!threads || !(threads instanceof Map)) return entries;
     for (const thread of threads.values()) {
       for (const run of thread.runs) {
         for (const trace of run.traces) {

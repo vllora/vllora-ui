@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight, MessageSquare } from 'lucide-react';
 import { DebugThread } from '@/hooks/events/useDebugTimeline';
 import { RunItem } from './RunItem';
+import { TimelineHeader } from './TimelineHeader';
 
 interface ThreadItemProps {
   thread: DebugThread;
@@ -86,28 +87,8 @@ export const ThreadItem: React.FC<ThreadItemProps> = ({ thread, defaultExpanded 
       {isExpanded && thread.runs.length > 0 && (
         <div className="pb-2">
           {/* Timeline header with ticks */}
-          <div className="flex w-full px-3 mb-2">
-            <div style={{ width: titleWidth }} className="flex-shrink-0"></div>
-            <div className="flex-grow relative ml-2">
-              <div className="relative w-full h-5">
-                {/* Time markers */}
-                <div className="absolute left-0 bottom-1 text-[10px] text-foreground/60 font-semibold whitespace-nowrap">
-                  0.0s
-                </div>
-                <div className="absolute left-1/4 bottom-1 -translate-x-1/2 text-[10px] font-semibold text-foreground/60 whitespace-nowrap">
-                  {(threadTotalDuration * 0.25 / 1000000).toFixed(1)}s
-                </div>
-                <div className="absolute left-1/2 bottom-1 -translate-x-1/2 text-[10px] font-semibold text-foreground/60 whitespace-nowrap">
-                  {(threadTotalDuration * 0.5 / 1000000).toFixed(1)}s
-                </div>
-                <div className="absolute left-3/4 bottom-1 -translate-x-1/2 text-[10px] font-semibold text-foreground/60 whitespace-nowrap">
-                  {(threadTotalDuration * 0.75 / 1000000).toFixed(1)}s
-                </div>
-                <div className="absolute right-0 bottom-1 text-right text-[10px] font-semibold text-foreground/60 whitespace-nowrap">
-                  {(threadTotalDuration / 1000000).toFixed(1)}s
-                </div>
-              </div>
-            </div>
+          <div className="mb-2">
+            <TimelineHeader titleWidth={titleWidth} totalDuration={threadTotalDuration} />
           </div>
 
           {/* Runs with timeline visualization */}
