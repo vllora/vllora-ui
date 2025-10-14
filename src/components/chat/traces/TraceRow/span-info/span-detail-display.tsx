@@ -4,7 +4,7 @@ import { JsonViewer } from "./JsonViewer";
 import { useState } from "react";
 import { CheckCircleIcon, DatabaseIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getStatus, SpanUIDetailsDisplay } from "./DetailView";
+import { getStatus, isToolSpan, SpanUIDetailsDisplay } from "./DetailView";
 import { ClientSdkIcon } from "@/components/Icons/ClientSdkIcon";
 import { getOperationIcon, getOperationIconColor, getSpanTitle } from "../new-timeline/utils";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
@@ -67,13 +67,13 @@ export const SpanDetailsDisplay = () => {
               <h3 className="text-xs font-medium text-white hover:cursor-help">{spanTitle}</h3>
             </div>
              {status && (
-                            <div className={`flex items-center px-2 py-1 rounded-md text-xs ${isSuccessStatus? 'bg-[#1a2e1a] text-green-500 border border-green-800' : 'bg-[#2e1a1a] text-red-500 border border-red-800'}`}>
+                            <div className={`flex items-center px-2 py-1 rounded-md text-xs ${isSuccessStatus? ' text-green-500' : 'text-red-500'}`}>
                                 {isSuccessStatus ? (
                                     <CheckCircleIcon className="w-3 h-3 mr-1" />
                                 ) : (
                                     <ExclamationTriangleIcon className="w-3 h-3 mr-1" />
                                 )}
-                                {status}
+                                { isSuccessStatus ? 'Success' : 'Failed'}
                             </div>
                         )}
           </div>

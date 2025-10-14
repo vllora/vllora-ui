@@ -48,7 +48,6 @@ export const ParameterItem = ({
         }`}
       >
         <div className="flex items-center gap-2">
-          <CodeBracketIcon className="h-3 w-3 text-zinc-500" />
           <span className="font-medium">{name}</span>
         </div>
         <div className="flex items-center gap-1 text-[10px] text-zinc-500">
@@ -71,7 +70,7 @@ export const ParameterItem = ({
       </button>
 
       {stringifiedValue !== undefined && (
-        <div className="mt-2 overflow-hidden rounded-md bg-[#1d1d1d] px-2 py-1 font-mono text-[11px] text-zinc-300 whitespace-pre-wrap break-words">
+        <div className="mt-2 overflow-hidden rounded-md py-1 font-mono text-[11px] text-zinc-400 whitespace-pre-wrap break-words">
           {stringifiedValue}
         </div>
       )}
