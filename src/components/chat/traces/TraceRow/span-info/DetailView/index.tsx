@@ -71,6 +71,7 @@ export const isToolSpan = (span: Span) => {
 }
 
 export const getStatus = (spans: Span[], currentSpanId: string) => {
+
   let currentSpan = spans.find(span => span.span_id === currentSpanId);
   let currentSpanAttribute = currentSpan?.attribute as any;
   if(currentSpanAttribute && currentSpanAttribute.status) {

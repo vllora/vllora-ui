@@ -14,6 +14,7 @@ import { ArrowRightLeftIcon } from "lucide-react";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { tryParseJson } from "@/utils/modelUtils";
 import { Span } from "@/types/common-type";
+import { HeaderViewer } from "../header-viewer";
 export const ApiInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
     const { spansOfSelectedRun } = ChatWindowConsumer();
     const currentAttribute = span.attribute as any;
@@ -40,8 +41,7 @@ export const ApiInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
     const headersStr = apiCloudInvokeAttribute?.['http.request.header'];
     const headers = headersStr ? tryParseJson(headersStr) : undefined;
     const error = modelCallAttribute?.error || apiInvokeAttribute?.error || currentAttribute?.error;
-    
-    const [requestViewMode, setRequestViewMode] = useState<'ui' | 'raw'>('ui');
+
     const [responseViewMode, setResponseViewMode] = useState<'ui' | 'raw'>('ui');
     const [openAccordionItems, setOpenAccordionItems] = useState<string[]>(error ? ['error'] : []);
     const cost_str = apiInvokeAttribute?.cost;
@@ -58,172 +58,38 @@ export const ApiInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
     const usageInfo = usage_str ? tryParseJson(usage_str) : null;
 
     const triggerClassName = "px-3 py-3 hover:bg-[#1a1a1a] transition-colors";
-   
+
     const headerCount = headers ? Object.keys(headers).length : 0;
 
     return (
-        <BaseSpanUIDetailsDisplay 
-            value={openAccordionItems} 
+        <BaseSpanUIDetailsDisplay
+            value={openAccordionItems}
             onValueChange={setOpenAccordionItems}
         >
-            {/* Header section with model info and status */}
-            <div className="flex flex-col gap-2 p-3 border-b border-border rounded-t-md">
-                <div className="flex items-center justify-between">
-                    {modelName && !entityByName && (
-                        <div className="flex items-center gap-2">
-                            <CpuChipIcon className="w-4 h-4 text-teal-500" />
-                            <span className="text-sm font-medium text-white">{modelName}</span>
-                        </div>
-                    )}
-                    {/* {entityByName && (entityByName as ModelPricing).inference_provider && (
-                        <div className="flex items-center gap-2">
-                            <ProviderIcon className="w-4 h-4 text-teal-500" provider_name={(entityByName as ModelPricing).inference_provider.provider} />
-                            <span className="text-sm font-medium text-white">{(entityByName as ModelPricing).model}</span>
-                        </div>
-                    )} */}
-                    {/* {entityByName && (entityByName as LLMRouter).strategy && (
-                        <div className="flex items-center gap-2">
-                            <ProviderIcon className="w-4 h-4 text-teal-500" provider_name={'routers'} />
-                            <span className="text-sm font-medium text-white">{(entityByName as LLMRouter).name}</span>
-                        </div>
-                    )} */}
-                    {status && (
-                        <div className={`flex items-center px-2 py-1 rounded-md text-xs ${status === '200' ? 'bg-[#1a2e1a] text-green-500 border border-green-800' : 'bg-[#2e1a1a] text-red-500 border border-red-800'}`}>
-                            {status === '200' ? (
-                                <CheckCircleIcon className="w-3 h-3 mr-1" />
-                            ) : (
-                                <ExclamationTriangleIcon className="w-3 h-3 mr-1" />
-                            )}
-                            {status}
-                        </div>
-                    )}
+            <div className="flex flex-col gap-4 mt-4">
+                {/* ID information section */}
+                <BasicSpanInfo span={span} />
 
-                </div>
+                {/* Error section - only shown when there's an error */}
+                {error && (
+                    <ErrorViewer error={error} />
+                )}
 
+                {/* Request section with UI/Raw toggle */}
+                {raw_request_json && (
+                    <InputViewer jsonRequest={raw_request_json} headers={headers} />
+                )}
+                {raw_response_json && (
+                    <ResponseViewer response={raw_response_json} viewMode={responseViewMode} />
+                )}
+
+                {/* Usage section */}
+                <UsageViewer
+                    cost={costInfo || undefined}
+                    ttft={ttf_str || undefined}
+                    usage={usageInfo || undefined}
+                />
             </div>
-            {/* ID information section */}
-            <BasicSpanInfo span={span} />
-
-            {/* Error section - only shown when there's an error */}
-            {error && (
-                <AccordionItem value="error">
-                    <AccordionTrigger className={triggerClassName}>
-                        <div className="flex items-center gap-2">
-                            <ExclamationTriangleIcon className="w-4 h-4 text-yellow-500" />
-                            <span className="font-medium text-xs text-white">Error</span>
-                        </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="bg-[#0a0a0a] border-t border-border p-2">
-                        <ErrorViewer error={error} />
-                    </AccordionContent>
-                </AccordionItem>
-            )}
-            {/* Headers section */}
-            {headers && (
-                <AccordionItem value="headers">
-                    <AccordionTrigger className={triggerClassName}>
-                        <div className="flex items-center justify-between w-full">
-                            <div className="flex items-center gap-2">
-                                <CodeBracketIcon className="w-4 h-4 text-blue-500" />
-                                <span className="font-medium text-xs text-white">Headers</span>
-                            </div>
-                            {headerCount && <span className="text-xs text-gray-400 bg-[#1a1a1a] px-2 py-0.5 rounded-md">
-                                {headerCount}
-                            </span>}
-                        </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="p-2 bg-[#0a0a0a] border-t border-border">
-                        <HeadersViewer input={headers} />
-                    </AccordionContent>
-                </AccordionItem>
-            )}
-
-            {/* Request section with UI/Raw toggle */}
-            {raw_request_json && (
-                <AccordionItem value="raw_request">
-                    <div className="relative">
-                        <AccordionTrigger className={triggerClassName}>
-                            <div className="flex items-center gap-2">
-                                <ArrowRightLeftIcon className="w-4 h-4 text-blue-500" />
-                                <span className="font-medium text-xs text-white">Request</span>
-                            </div>
-                        </AccordionTrigger>
-                        {/* Mode toggle using SimpleTabsList - positioned absolutely */}
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 z-10" onClick={(e) => e.stopPropagation()}>
-                            <Tabs value={requestViewMode} onValueChange={(value) => {
-                                setRequestViewMode(value as 'ui' | 'raw');
-                                if (!openAccordionItems.includes('raw_request')) {
-                                    setOpenAccordionItems(prev => [...prev, 'raw_request']);
-                                }
-                            }}>
-                                <SimpleTabsList className="h-6 p-0.5 bg-[#1a1a1a]">
-                                    <SimpleTabsTrigger value="ui" className="text-xs">
-                                        UI
-                                    </SimpleTabsTrigger>
-                                    <SimpleTabsTrigger value="raw" className="text-xs">
-                                        JSON
-                                    </SimpleTabsTrigger>
-                                </SimpleTabsList>
-                            </Tabs>
-                        </div>
-                    </div>
-                    <AccordionContent className="p-2 bg-[#0a0a0a] border-t border-border">
-                        <InputViewer jsonRequest={raw_request_json} viewMode={requestViewMode} />
-                    </AccordionContent>
-                </AccordionItem>
-            )}
-
-            {raw_response_json && (
-                <AccordionItem value="raw_response">
-                    <div className="relative">
-                        <AccordionTrigger className={triggerClassName}>
-                            <div className="flex items-center gap-2">
-                                <DocumentTextIcon className="w-4 h-4 text-blue-500" />
-                                <span className="font-medium text-xs text-white">Response</span>
-                            </div>
-                        </AccordionTrigger>
-                        {/* Mode toggle using SimpleTabsList - positioned absolutely */}
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 z-10" onClick={(e) => e.stopPropagation()}>
-                            <Tabs value={responseViewMode} onValueChange={(value) => {
-                                setResponseViewMode(value as 'ui' | 'raw');
-                                if (!openAccordionItems.includes('raw_response')) {
-                                    setOpenAccordionItems(prev => [...prev, 'raw_response']);
-                                }
-                            }}>
-                                <SimpleTabsList className="h-6 p-0.5 bg-[#1a1a1a]">
-                                    <SimpleTabsTrigger value="ui" className="text-xs">
-                                        UI
-                                    </SimpleTabsTrigger>
-                                    <SimpleTabsTrigger value="raw" className="text-xs">
-                                        JSON
-                                    </SimpleTabsTrigger>
-                                </SimpleTabsList>
-                            </Tabs>
-                        </div>
-                    </div>
-                    <AccordionContent className="bg-[#0a0a0a] border-t border-border p-2">
-                        <ResponseViewer response={raw_response_json} viewMode={responseViewMode} />
-                    </AccordionContent>
-                </AccordionItem>
-            )}
-
-            {/* Usage section */}
-            <AccordionItem value="usage">
-                <AccordionTrigger className={triggerClassName}>
-                    <div className="flex items-center gap-2">
-                        <ClockIcon className="w-4 h-4 text-teal-500" />
-                        <span className="font-medium text-xs text-white">Usage & Cost</span>
-                    </div>
-                </AccordionTrigger>
-                <AccordionContent className="border-t border-border p-2">
-                    <UsageViewer
-                        cost={costInfo || undefined}
-                        ttft={ttf_str || undefined}
-                        usage={usageInfo || undefined}
-                    />
-                </AccordionContent>
-            </AccordionItem>
-
 
         </BaseSpanUIDetailsDisplay>
     );

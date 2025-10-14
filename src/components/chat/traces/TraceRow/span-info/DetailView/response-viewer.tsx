@@ -2,13 +2,13 @@ import { JsonViewer } from "../JsonViewer";
 import { MessageViewer } from "./message-viewer";
 import { ToolDefinitionsViewer } from "./tool-definitions-viewer";
 import {
-  WrenchScrewdriverIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-  ClockIcon,
-  StopIcon,
-  FlagIcon,
-  CodeBracketIcon,
+    WrenchScrewdriverIcon,
+    CheckCircleIcon,
+    XCircleIcon,
+    ClockIcon,
+    StopIcon,
+    FlagIcon,
+    CodeBracketIcon,
 } from "@heroicons/react/24/outline";
 import { AlertTriangle } from "lucide-react";
 import { SingleMessage } from "./single-message";
@@ -16,7 +16,7 @@ import { SingleMessage } from "./single-message";
 // Helper function to get finish reason styling and information
 const getFinishReasonInfo = (finishReason: string) => {
     const reason = finishReason?.toLowerCase();
-    
+
     switch (reason) {
         case 'stop':
             return {
@@ -66,7 +66,7 @@ const getFinishReasonInfo = (finishReason: string) => {
 // UI View Component
 const ResponseUIView = ({ response, otherLevelMessages }: { response: any, otherLevelMessages?: string[] }) => {
     // Extract common parameters for UI view
-    const {  tool_calls: responseToolCalls } = response || {};
+    const { tool_calls: responseToolCalls } = response || {};
     const keys = response && Object.keys(response);
     let messages = response && response.messages as any[];
     let finish_reason = response && response.finish_reason;
@@ -74,39 +74,39 @@ const ResponseUIView = ({ response, otherLevelMessages }: { response: any, other
     const choices: any[] = response && response.choices as any[];
     const candidates = response && response.candidates as any[];
 
-    if(!finish_reason && choices && choices.length === 1){
+    if (!finish_reason && choices && choices.length === 1) {
         finish_reason = choices[0].finish_reason;
     }
-    if(!finish_reason && candidates && candidates.length === 1){
+    if (!finish_reason && candidates && candidates.length === 1) {
         finish_reason = candidates[0].finishReason;
     }
-    if(!finish_reason && response && response.stop_reason){
+    if (!finish_reason && response && response.stop_reason) {
         finish_reason = response.stop_reason;
     }
-    if(!messages && choices && choices.length === 1){
+    if (!messages && choices && choices.length === 1) {
         messages = [choices[0].message];
     }
-    if(!messages && candidates && candidates.length === 1){
+    if (!messages && candidates && candidates.length === 1) {
         messages = [candidates[0].content];
     }
-    if(otherLevelMessages && !messages){
+    if (otherLevelMessages && !messages) {
         messages = otherLevelMessages.map((message: string) => ({ content: message, role: 'assistant' }));
     }
-    if((!messages || messages.length === 0 ) && response && response.content) {
+    if ((!messages || messages.length === 0) && response && response.content) {
         messages = [{ content: response.content, role: response.role || 'assistant' }];
     }
 
-    const hideChoices = choices && choices.length === 1 ;
+    const hideChoices = choices && choices.length === 1;
     let extraDataKeys = keys?.filter((key: string) => key !== 'finish_reason' && key !== 'tool_calls' && key !== 'messages' && key !== 'usage');
-    if(hideChoices && extraDataKeys && extraDataKeys.length > 0){
+    if (hideChoices && extraDataKeys && extraDataKeys.length > 0) {
         extraDataKeys = extraDataKeys?.filter((key: string) => key !== 'choices');
     }
-    
+
     let extraDataDisplay: any = {}
-    if(extraDataKeys && extraDataKeys.length > 0){
-       extraDataKeys.forEach((key: string) => {
-           extraDataDisplay[key] = response[key];
-       })
+    if (extraDataKeys && extraDataKeys.length > 0) {
+        extraDataKeys.forEach((key: string) => {
+            extraDataDisplay[key] = response[key];
+        })
     }
     return (
         <>
@@ -194,7 +194,7 @@ const ResponseUIView = ({ response, otherLevelMessages }: { response: any, other
 
 
 // Main RequestViewer Component
-export const ResponseViewer = (props: { 
+export const ResponseViewer = (props: {
     response: any,
     otherLevelMessages?: string[],
     viewMode?: 'ui' | 'raw'
@@ -210,9 +210,17 @@ export const ResponseViewer = (props: {
             </div>
         );
     }
-    return (
+    if (!response) {
+        return null;
+    }
+    return (<div className="relative flex flex-col gap-4 rounded-lg border border-border/40 bg-zinc-50/30 p-4 pt-6 dark:bg-zinc-900/20">
+        <div className="absolute -top-[10px] left-0 right-0 flex justify-center items-center gap-2">
+            <span className="px-2 rounded bg-border text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                Output
+            </span>
+        </div>
         <div className="flex flex-col gap-6 overflow-y-auto text-xs">
             <ResponseUIView response={response} otherLevelMessages={otherLevelMessages} />
         </div>
-    );
+    </div>);
 }
