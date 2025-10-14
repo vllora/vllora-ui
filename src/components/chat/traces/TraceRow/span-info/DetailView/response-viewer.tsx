@@ -113,7 +113,6 @@ const ResponseUIView = ({ response, otherLevelMessages }: { response: any, other
             {/* Finish reason */}
             {finish_reason && (() => {
                 const finishInfo = getFinishReasonInfo(finish_reason);
-                const FinishIcon = finishInfo.icon;
                 return (
                     <div className="flex flex-col gap-3">
                         <div className="flex items-center gap-2">
@@ -126,11 +125,7 @@ const ResponseUIView = ({ response, otherLevelMessages }: { response: any, other
                         <div className="flex items-center gap-2 text-xs text-zinc-200">
                             <FlagIcon className="h-3.5 w-3.5 text-zinc-400" />
                             <div className="flex items-center gap-1">
-                                <FinishIcon className="h-3.5 w-3.5 text-zinc-400" />
                                 <span className="font-medium">{finishInfo.label}</span>
-                                <span className="text-[11px] text-zinc-500">
-                                    ({finish_reason})
-                                </span>
                             </div>
                         </div>
                         <p className="text-[11px] leading-relaxed text-zinc-500">

@@ -4,8 +4,8 @@ import { ToolDefinitionsViewer } from "./tool-definitions-viewer";
 
 // Main RequestViewer Component
 export const InputViewer = (props: { jsonRequest: any, viewMode?: 'ui' | 'raw' }) => {
-    const { jsonRequest} = props;
-     let messages = jsonRequest?.messages;
+    const { jsonRequest } = props;
+    let messages = jsonRequest?.messages;
     if (!messages && jsonRequest?.contents) {
         messages = jsonRequest?.contents;
     }
@@ -22,6 +22,9 @@ export const InputViewer = (props: { jsonRequest: any, viewMode?: 'ui' | 'raw' }
                         <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
                             Messages
                         </div>
+                        <span className="text-[10px] font-medium text-zinc-500">
+                            ({messages.length})
+                        </span>
                         <div className="h-px flex-1 bg-border/40" />
                     </div>
                     <MessageViewer

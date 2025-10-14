@@ -117,7 +117,7 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
     return (
         <div className={`flex flex-col gap-3 py-2`}>
             <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-zinc-300">{roleLabel}</span>
+                <span className="text-xs font-semibold uppercase tracking-wide text-zinc-400">{roleLabel}</span>
                 
                 {metaSummary && (
                     <span className="text-[11px] text-zinc-500">{metaSummary}</span>
@@ -128,14 +128,14 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
                 <div className="relative">
                     <div
                         ref={contentRef}
-                        className={`whitespace-pre-wrap text-xs text-gray-200 ${!isExpanded && showExpandButton ? 'line-clamp-3 overflow-hidden' : ''}`}
+                        className={`whitespace-pre-wrap text-xs text-zinc-400 ${!isExpanded && showExpandButton ? 'line-clamp-3 overflow-hidden' : ''}`}
                     >
                         <MarkdownViewer message={displayText} />
                     </div>
                     {showExpandButton && (
                         <button
                             onClick={() => setIsExpanded(!isExpanded)}
-                            className="mt-2 inline-flex items-center gap-1 text-xs text-zinc-300 transition-colors hover:text-white"
+                            className="mt-2 inline-flex items-center gap-1 text-xs text-zinc-400 transition-colors hover:text-white"
                         >
                             {isExpanded ? (
                                 <>
