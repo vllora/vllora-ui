@@ -5,9 +5,11 @@ import { TimelineHeader } from './TimelineHeader';
 
 interface TraceListProps {
   traces: DebugTrace[];
+  selectedSpanId?: string;
+  onSpanSelect?: (spanId: string) => void;
 }
 
-export const TraceList: React.FC<TraceListProps> = ({ traces }) => {
+export const TraceList: React.FC<TraceListProps> = ({ traces, selectedSpanId, onSpanSelect }) => {
   if (traces.length === 0) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
@@ -32,24 +34,27 @@ export const TraceList: React.FC<TraceListProps> = ({ traces }) => {
 
   return (
     <div className="flex flex-col">
-      <div className="px-3 py-2 text-xs text-muted-foreground border-b border-border/50 bg-muted/20">
-        Showing {traces.length} trace{traces.length !== 1 ? 's' : ''}
+      <div className="sticky top-0 z-10 bg-background">
+        <div className="px-3 py-2 text-xs text-muted-foreground border-b border-border/50 bg-muted/20">
+          Showing {traces.length} trace{traces.length !== 1 ? 's' : ''}
+        </div>
+
+        {/* Timeline header with ticks */}
+        <TimelineHeader titleWidth={titleWidth} totalDuration={globalTotalDuration} />
       </div>
 
-      {/* Timeline header with ticks */}
-      <TimelineHeader titleWidth={titleWidth} totalDuration={globalTotalDuration} />
-
-      <div className="flex-1">
-        {sortedTraces.map((trace, index) => (
-          <div key={trace.trace_id} className="border-b border-border/50 px-3 py-2">
-            <TraceItem
-              trace={trace}
-              threadStartTime={globalStartTime}
-              threadTotalDuration={globalTotalDuration}
-              titleWidth={titleWidth}
-              defaultExpanded={index === sortedTraces.length - 1}
-            />
-          </div>
+      <div className="flex flex-col gap-2 p-2">
+        {sortedTraces.map((trace) => (
+          <TraceItem
+            key={trace.trace_id}
+            trace={trace}
+            totalDuration={globalTotalDuration}
+            startTime={globalStartTime}
+            endTime={globalEndTime}
+            titleWidth={titleWidth}
+            selectedSpanId={selectedSpanId}
+            onSpanSelect={onSpanSelect}
+          />
         ))}
       </div>
     </div>

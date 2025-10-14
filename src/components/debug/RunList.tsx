@@ -5,9 +5,11 @@ import { TimelineHeader } from './TimelineHeader';
 
 interface RunListProps {
   runs: DebugRun[];
+  selectedSpanId?: string;
+  onSpanSelect?: (spanId: string) => void;
 }
 
-export const RunList: React.FC<RunListProps> = ({ runs }) => {
+export const RunList: React.FC<RunListProps> = ({ runs, selectedSpanId, onSpanSelect }) => {
   if (runs.length === 0) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
@@ -32,22 +34,26 @@ export const RunList: React.FC<RunListProps> = ({ runs }) => {
 
   return (
     <div className="flex flex-col">
-      <div className="px-3 py-2 text-xs text-muted-foreground border-b border-border/50 bg-muted/20">
-        Showing {runs.length} run{runs.length !== 1 ? 's' : ''}
+      <div className="sticky top-0 z-10 bg-background">
+        <div className="px-3 py-2 text-xs text-muted-foreground border-b border-border/50 bg-muted/20">
+          Showing {runs.length} run{runs.length !== 1 ? 's' : ''}
+        </div>
+
+        {/* Timeline header with ticks */}
+        <TimelineHeader titleWidth={titleWidth} totalDuration={globalTotalDuration} />
       </div>
 
-      {/* Timeline header with ticks */}
-      <TimelineHeader titleWidth={titleWidth} totalDuration={globalTotalDuration} />
-
-      <div className="flex-1">
-        {sortedRuns.map((run, index) => (
+      <div className="flex flex-col gap-2 p-2">
+        {sortedRuns.map((run) => (
           <RunItem
             key={run.run_id}
             run={run}
-            threadStartTime={globalStartTime}
-            threadTotalDuration={globalTotalDuration}
+            totalDuration={globalTotalDuration}
+            startTime={globalStartTime}
+            endTime={globalEndTime}
             titleWidth={titleWidth}
-            defaultExpanded={index === sortedRuns.length - 1}
+            selectedSpanId={selectedSpanId}
+            onSpanSelect={onSpanSelect}
           />
         ))}
       </div>

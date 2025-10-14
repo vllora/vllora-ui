@@ -100,7 +100,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
     }
 
     return (
-        <div className="flex flex-col divide-y divide-border ">
+        <div className="flex flex-col divide-y divide-border/70 ">
             <TimelineRow
                 span={root}
                 level={level}
@@ -118,7 +118,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                 selectedSpanId={selectedSpanId}
                 onSpanSelect={onSpanSelect}
             />
-            <div className="flex flex-col divide-y divide-border">
+            <div className="flex flex-col divide-y divide-border/70">
                 {children.map(child => (
                     <HierarchyRow
                         level={level + 1}

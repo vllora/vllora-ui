@@ -179,8 +179,8 @@ export function DebugPageContent() {
           <div ref={containerRef} className="h-full overflow-y-auto">
             <div className="relative min-h-full flex flex-col">
               {groupingLevel === 'threads' && <HierarchicalTimeline threads={threads} />}
-              {groupingLevel === 'runs' && <RunList runs={runs} />}
-              {groupingLevel === 'traces' && <TraceList traces={traces} />}
+              {groupingLevel === 'runs' && <RunList runs={runs} selectedSpanId={selectedSpanId} onSpanSelect={(spanId) => setSelectedSpanId(spanId)} />}
+              {groupingLevel === 'traces' && <TraceList traces={traces} selectedSpanId={selectedSpanId} onSpanSelect={(spanId) => setSelectedSpanId(spanId)} />}
               {groupingLevel === 'spans' && <SpanList hierarchies={spanHierarchies} spans={spans} selectedSpanId={selectedSpanId} onSpanSelect={(spanId) => setSelectedSpanId(spanId)} />}
               {!isAtBottom && isScrollable && (
                 <div className="sticky bottom-4 flex justify-end pr-4">

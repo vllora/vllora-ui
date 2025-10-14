@@ -30,6 +30,22 @@ export const constructHierarchy = (props: {
     })
     return { root, children: childrenSpan };
 }
+
+export const convertToHierarchy = (props: {
+    spans: Span[],
+    isDisplayGraph?: boolean
+}): Record<string, Hierarchy> => {
+    const { spans, isDisplayGraph } = props;
+    const originRootSpans = spans
+        .sort((a, b) => a.start_time_us - b.start_time_us)
+        .filter(span => span.parent_span_id === null || span.parent_span_id === "0" || span.parent_span_id === "" || span.parent_span_id === undefined || span.parent_span_id === "")
+    let rootSpans = originRootSpans && originRootSpans.length > 0 ? originRootSpans : (spans && spans.length > 0 ? [spans.sort((a, b) => a.start_time_us - b.start_time_us)[0]] : [])
+    const hierarchies: Record<string, Hierarchy> = rootSpans.reduce((acc, span) => {
+        acc[span.span_id] = constructHierarchy({ spans: spans, rootSpan: span, isDisplayGraph: isDisplayGraph });
+        return acc;
+    }, {} as Record<string, Hierarchy>);
+    return hierarchies;
+}
 export const RunDetailContext = createContext<RunDetailContextType | null>(null);
 function runDetails(props: {
     runId: string,
@@ -43,10 +59,7 @@ function runDetails(props: {
         .sort((a, b) => a.start_time_us - b.start_time_us)
         .filter(span => span.parent_span_id === null || span.parent_span_id === "0")
     let rootSpans = originRootSpans && originRootSpans.length > 0 ? originRootSpans : (spans && spans.length > 0 ? [spans.sort((a, b) => a.start_time_us - b.start_time_us)[0]] : [])
-    const hierarchies: Record<string, Hierarchy> = rootSpans.reduce((acc, span) => {
-        acc[span.span_id] = constructHierarchy({ spans: spans, rootSpan: span, isDisplayGraph: false });
-        return acc;
-    }, {} as Record<string, Hierarchy>);
+    const hierarchies: Record<string, Hierarchy> = convertToHierarchy({ spans: spans, isDisplayGraph: false });
     return {
         runId,
         projectId,

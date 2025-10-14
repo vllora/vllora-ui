@@ -10,7 +10,7 @@ import {
 import { RunDTO, Span } from '@/types/common-type';
 import { Thread } from '@/types/chat';
 import { convertToNormalSpan, convertSpanToRunDTO, convertToThreadInfo } from '@/contexts/project-events/util';
-import { constructHierarchy, Hierarchy } from '@/contexts/RunDetailContext';
+import { constructHierarchy, convertToHierarchy, Hierarchy } from '@/contexts/RunDetailContext';
 
 export interface DebugThread extends Thread {
   runs: DebugRun[];
@@ -379,13 +379,7 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
 
   const pausedCount = pausedEventsRef.current.length;
 
-  const rootSortedSpans = useMemo(() => {
-    return flatSpans.sort((a, b) => a.start_time_us - b.start_time_us).filter(span => span.parent_span_id === null || span.parent_span_id === "0" || span.parent_span_id === "" || span.parent_span_id === undefined || span.parent_span_id === "");
-  }, [flatSpans]);
-  const spanHierarchies: Record<string, Hierarchy> = rootSortedSpans.reduce((acc, span) => {
-    acc[span.span_id] = constructHierarchy({ spans: flatSpans, rootSpan: span, isDisplayGraph: false });
-    return acc;
-  }, {} as Record<string, Hierarchy>);
+  const spanHierarchies: Record<string, Hierarchy> = useMemo(() => convertToHierarchy({ spans: flatSpans, isDisplayGraph: false }), [flatSpans]);
 
   return {
     threads: sortedThreads,

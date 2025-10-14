@@ -36,22 +36,24 @@ export const SpanList: React.FC<SpanListProps> = ({ hierarchies, spans, onSpanSe
   const titleWidth = 200;
 
   return (
-    <div className="flex flex-col divide-y divide-border/50">
-      <TimelineHeader titleWidth={titleWidth} totalDuration={totalDuration} />
+    <div className="flex flex-col">
+      <div className="sticky top-0 z-10 bg-background">
+        <TimelineHeader titleWidth={titleWidth} totalDuration={totalDuration} />
+      </div>
 
       <div className="flex flex-col divide-y divide-border">
-      {Object.values(hierarchies).map((hierarchy) => {
-        return <HierarchyRow
-          key={hierarchy.root.span_id}
-          hierarchy={hierarchy}
-          totalDuration={totalDuration}
-          startTime={startTime}
-          titleWidth={titleWidth}
-          relatedSpans={spans}
-          level={0}
-          selectedSpanId={selectedSpanId}
-          onSpanSelect={onSpanSelect}
-        />})}
+        {Object.values(hierarchies).map((hierarchy) => {
+          return <HierarchyRow
+            key={hierarchy.root.span_id}
+            hierarchy={hierarchy}
+            totalDuration={totalDuration}
+            startTime={startTime}
+            titleWidth={titleWidth}
+            relatedSpans={spans}
+            level={0}
+            selectedSpanId={selectedSpanId}
+            onSpanSelect={onSpanSelect}
+          />})}
       </div>
     </div>
   );
