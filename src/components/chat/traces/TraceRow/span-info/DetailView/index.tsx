@@ -15,7 +15,7 @@ import { ClientActivityUIDetailsDisplay } from "./spans-display/client-span";
 import { CloudApiInvokeUIDetailsDisplay } from "./spans-display/cloud-api-invoke-display";
 import { isClientSDK } from "@/utils/graph-utils";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
-import { Span } from "@/types/common-type";
+import { Span, ToolCall } from "@/types/common-type";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
 
@@ -59,12 +59,19 @@ const getParentCloudModelCall = (spans: Span[], currentSpanId: string) => {
   return getParentWithOperationName(spans, currentSpanId, 'model_call');
 }
 
-const isActualModelCall = (span: Span) => {
+export const isActualModelCall = (span: Span) => {
  let operationName = span.operation_name;
  return operationName && !['api_invoke', 'cloud_api_invoke', 'model_call', 'tool_call', 'tools'].includes(operationName) && !operationName.startsWith('guard_');
 }
 
+
+export const isToolSpan = (span: Span) => {
+  let operationName = span.operation_name;
+  return operationName && operationName.startsWith('tools');
+}
+
 export const getStatus = (spans: Span[], currentSpanId: string) => {
+
   let currentSpan = spans.find(span => span.span_id === currentSpanId);
   let currentSpanAttribute = currentSpan?.attribute as any;
   if(currentSpanAttribute && currentSpanAttribute.status) {
@@ -74,9 +81,14 @@ export const getStatus = (spans: Span[], currentSpanId: string) => {
      let parentCloudApiInvoke = getParentCloudApiInvoke(spans, currentSpanId);
      if(parentCloudApiInvoke) {
       let parentCloudApiInvokeAttribute = parentCloudApiInvoke.attribute as any;
-      return parentCloudApiInvokeAttribute.status;
+      return parentCloudApiInvokeAttribute.status
 
      }
+  }
+  if(currentSpan && isToolSpan(currentSpan)) {
+     const attributeTool = currentSpan.attribute as ToolCall;
+       const isSuccess = !attributeTool.error;
+       return isSuccess ? '200' : '500';
   }
   return undefined;
 }

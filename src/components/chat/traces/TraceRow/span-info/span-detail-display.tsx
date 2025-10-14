@@ -2,22 +2,20 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 // import { RenderArray } from "./utils";
 import { JsonViewer } from "./JsonViewer";
 import { useState } from "react";
-import { DatabaseIcon } from "lucide-react";
+import { CheckCircleIcon, DatabaseIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { SpanUIDetailsDisplay } from "./DetailView";
+import { getStatus, isToolSpan, SpanUIDetailsDisplay } from "./DetailView";
 import { ClientSdkIcon } from "@/components/Icons/ClientSdkIcon";
 import { getOperationIcon, getOperationIconColor, getSpanTitle } from "../new-timeline/utils";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { getClientSDKName, isPromptCachingApplied } from "@/utils/graph-utils";
+import { ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 
 export const SpanDetailsDisplay = () => {
   const [currentTab, setCurrentTab] = useState<string>("details");
-  const { spanMap, selectedSpanInfo } = ChatWindowConsumer();
+  const { spanMap, selectedSpanInfo, spansOfSelectedRun } = ChatWindowConsumer();
     const spanId = selectedSpanInfo?.spanId;
     const spanOrRunId = selectedSpanInfo?.runId || selectedSpanInfo?.spanId || '';
-
-
-
 
   // Use the obj directly as the currentSpan since it's already the selected span
   const currentSpan = spanOrRunId ? spanMap[spanOrRunId]?.find(span => span.span_id === spanId) : undefined;
@@ -31,10 +29,10 @@ export const SpanDetailsDisplay = () => {
 
   // get prefix from tool_name
   let logoLink = '';
-  const linkReference = ''; //getLinkFromAttribute({ attributes, projectId: params?.projectId as string, mcp_template_definition_id, currentSpan, relatedSpans });
   const sdkName = currentSpan && getClientSDKName(currentSpan);
   const isPromptCached = currentSpan && isPromptCachingApplied(currentSpan);
-
+  const status = currentSpan && getStatus(spansOfSelectedRun, currentSpan.span_id);
+  const isSuccessStatus = status && ['200', 200].includes(status);
   return (
     <div className="w-full flex flex-col h-full">
       <Tabs value={currentTab} onValueChange={(v) => setCurrentTab(v)} className="flex flex-col h-full">
@@ -66,36 +64,20 @@ export const SpanDetailsDisplay = () => {
                   )}
                 </div>
               </>}
-              {linkReference ? <a
-                      href={linkReference}
-                      className="text-xs font-medium text-white hover:underline hover:cursor-help"
-                    >
-                      <h3 className="text-xs font-medium text-white">{spanTitle}</h3>
-                    </a> : <h3 className="text-xs font-medium text-white hover:cursor-help">{spanTitle}</h3>}
-              {/* {mcp_slug ? <Link
-                href={params.projectId ? `/projects/${params.projectId}/mcp-servers/${mcp_slug}/details` : (mcp_template_definition_id ? `/mcp-servers/${mcp_template_definition_id}` : ``)}
-                className="text-xs font-medium text-white hover:underline">
-                <h3 className="text-xs font-medium text-white">{spanTitle}</h3>
-              </Link> : virtual_model_slug ? <Link
-                href={params.projectId ? `/projects/${params.projectId}/models/virtual-models/${virtual_model_slug}/edit` : ''}
-                className="text-xs font-medium text-white hover:underline">
-                <h3 className="text-xs font-medium text-white">{spanTitle}</h3>
-              </Link> : <h3 className="text-xs font-medium text-white">{spanTitle}</h3>} */}
+              <h3 className="text-xs font-medium text-white hover:cursor-help">{spanTitle}</h3>
             </div>
-            {/* <SimpleTabsList>
-              <SimpleTabsTrigger value="details" className="text-xs">UI</SimpleTabsTrigger>
-              <SimpleTabsTrigger value="json" className="text-xs">JSON</SimpleTabsTrigger>
-            </SimpleTabsList> */}
+             {status && (
+                            <div className={`flex items-center px-2 py-1 rounded-md text-xs ${isSuccessStatus? ' text-green-500' : 'text-red-500'}`}>
+                                {isSuccessStatus ? (
+                                    <CheckCircleIcon className="w-3 h-3 mr-1" />
+                                ) : (
+                                    <ExclamationTriangleIcon className="w-3 h-3 mr-1" />
+                                )}
+                                { isSuccessStatus ? 'Success' : 'Failed'}
+                            </div>
+                        )}
           </div>
-          {/* {!isInSidebar && <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 rounded-full hover:bg-gray-800"
-            onClick={onClose}
-            aria-label="Close span details"
-          >
-            <X className="h-4 w-4 text-gray-400" />
-          </Button>} */}
+         
         </div>
 
         {/* Scrollable content container */}

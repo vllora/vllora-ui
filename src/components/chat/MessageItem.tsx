@@ -3,6 +3,7 @@ import { Message, MessageType } from '@/types/chat';
 import { HumanMessage } from './messages/HumanMessage';
 import { AiMessage } from './messages/AiMessage';
 import { SystemMessage } from './messages/System';
+import { ToolMessage } from './messages/ToolMessage';
 
 interface MessageItemProps {
   message: Message;
@@ -36,6 +37,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, isTyping }) =
         ) : message.type === MessageType.SystemMessage ? (
           <SystemMessage
             msg={message}
+          />
+        ) : message.type === MessageType.ToolMessage ? (
+          <ToolMessage
+          message={message} isTyping={isTyping}
           />
         ) : (
           <AiMessage

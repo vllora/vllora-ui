@@ -2,6 +2,7 @@ export enum MessageType {
   HumanMessage = 'human',
   AIMessage = 'assistant',
   SystemMessage = 'system',
+  ToolMessage = 'tool',
 }
 
 export enum MessageContentType {

@@ -1,6 +1,6 @@
 import { BaseSpanUIDetailsDisplay, getParentApiInvoke } from "..";
 import { ToolCallsViewer } from "../tool-calls-viewer";
-import { ArrowTopRightOnSquareIcon, BoltIcon, CheckCircleIcon, DocumentTextIcon, ExclamationTriangleIcon, WrenchScrewdriverIcon } from "@heroicons/react/24/outline";
+import { ArrowTopRightOnSquareIcon, DocumentTextIcon, ExclamationTriangleIcon, WrenchScrewdriverIcon } from "@heroicons/react/24/outline";
 import { ToolDefinitionsViewer } from "../tool-definitions-viewer";
 import { BasicSpanInfo } from "../basic-span-info-section";
 import { JsonViewer } from "../../JsonViewer";
@@ -36,8 +36,6 @@ export const ToolUIDetailsDisplay = ({ span }: { span: Span }) => {
     const requestParentApiInvoke = requestParentApiInvokeStr && tryParseJson(requestParentApiInvokeStr);
     const tools: ToolInfoCall[] = requestParentApiInvoke?.tools || [];
     const currentToolsInfo = tools.filter((t: ToolInfoCall) => labelTitles.includes(t['function'].name));
-
-    const isSuccess = !attributeTool.error;
     const toolResponse = attributeTool.response;
     const toolResult = attributeTool.tool_results;
     const mcp_server_string = attributeTool.mcp_server;
@@ -57,30 +55,11 @@ export const ToolUIDetailsDisplay = ({ span }: { span: Span }) => {
         isError: boolean;
     } : undefined;
     const toolResultJson = toolResult ? tryParseJson(toolResult) as any : undefined;
-
     return (
         <BaseSpanUIDetailsDisplay>
-            <div className="flex flex-col gap-2 p-3 border-b border-border rounded-t-md">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <BoltIcon className="h-3.5 w-3.5 text-white" />
-                        <span className="text-xs text-white">Status</span>
-                    </div>
-
-                    <div className={`flex items-center px-2 py-1 rounded-md text-xs ${isSuccess ? 'bg-[#1a2e1a] text-green-500 border border-green-800' : 'bg-[#2e1a1a] text-red-500 border border-red-800'}`}>
-                        {isSuccess ? (
-                            <CheckCircleIcon className="w-3 h-3 mr-1" />
-                        ) : (
-                            <ExclamationTriangleIcon className="w-3 h-3 mr-1" />
-                        )}
-                        {isSuccess ? "Success" : "Failed"}
-                    </div>
-                </div>
-
-
-            </div>
             {/* ID information section */}
             <BasicSpanInfo span={span} />
+            <div className="flex flex-col gap-6 mt-4">
             {/* MCP Info section */}
             {mcp_server_json && (
                 <a
@@ -125,134 +104,156 @@ export const ToolUIDetailsDisplay = ({ span }: { span: Span }) => {
                 </a>
             )}
             {/* Tool Info section */}
-            {currentToolsInfo && currentToolsInfo.length > 0 && (<div className="flex flex-col gap-2 border-b border-border">
-                <div className="flex items-center justify-between w-full px-3 py-2 border-border border-b">
+            {currentToolsInfo && currentToolsInfo.length > 0 && (
+                <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
-                        <WrenchScrewdriverIcon className="w-4 h-4 text-blue-500" />
-                        <span className="font-medium text-xs text-white">Definitions</span>
+                        <div className="h-px flex-1 bg-border/40" />
+                        <div className="flex items-center gap-2">
+                            <WrenchScrewdriverIcon className="h-3.5 w-3.5 text-zinc-400" />
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                                Definitions
+                            </div>
+                            <span className="text-[10px] font-medium text-zinc-500">
+                                ({currentToolsInfo.length})
+                            </span>
+                        </div>
+                        <div className="h-px flex-1 bg-border/40" />
                     </div>
-                    <span className="text-xs text-gray-400 bg-[#1a1a1a] px-2 py-0.5 rounded-md">
-                        {currentToolsInfo.length}
-                    </span>
-                </div>
-                <div className="px-2 mb-2">
                     <ToolDefinitionsViewer toolCalls={currentToolsInfo} />
                 </div>
-            </div>)}
+            )}
             {/* Tool Calls section */}
-            {jsonToolCalls && jsonToolCalls.length > 0 && (<div className="flex flex-col gap-2 border-b border-border">
-                <div className="flex items-center justify-between w-full px-3 py-2 border-border border-b">
+            {jsonToolCalls && jsonToolCalls.length > 0 && (
+                <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
-                        <WrenchScrewdriverIcon className="w-4 h-4 text-amber-500" />
-                        <span className="font-medium text-xs text-white">Execution</span>
+                        <div className="h-px flex-1 bg-border/40" />
+                        <div className="flex items-center gap-2">
+                            <WrenchScrewdriverIcon className="h-3.5 w-3.5 text-zinc-400" />
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                                Execution
+                            </div>
+                            {toolCallCount > 0 && (
+                                <span className="text-[10px] font-medium text-zinc-500">
+                                    ({toolCallCount})
+                                </span>
+                            )}
+                        </div>
+                        <div className="h-px flex-1 bg-border/40" />
                     </div>
-                    {toolCallCount && <span className="text-xs text-gray-400 bg-[#1a1a1a] px-2 py-0.5 rounded-md">
-                        {toolCallCount}
-                    </span>}
-                </div>
-                <div className="px-2 mb-2">
                     <ToolCallsViewer input={jsonToolCalls} />
                 </div>
-            </div>)}
+            )}
             {attributeTool && attributeTool.error && (
                 <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2 p-2 px-2">
-                        <ExclamationTriangleIcon className="w-4 h-4 text-red-500" />
-                        <span className="font-medium text-xs text-white">Error</span>
+                    <div className="flex items-center gap-2">
+                        <div className="h-px flex-1 bg-border/40" />
+                        <div className="flex items-center gap-2">
+                            <ExclamationTriangleIcon className="h-3.5 w-3.5 text-red-400" />
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                                Error
+                            </div>
+                        </div>
+                        <div className="h-px flex-1 bg-border/40" />
                     </div>
-                    <div className="bg-[#0a0a0a] rounded-md p-3 border border-border">
+                    <div className="rounded-md p-3 border border-border/40">
                         <span className="text-xs text-muted-foreground">{attributeTool.error}</span>
                     </div>
                 </div>
             )}
             {toolResponseJson && (
                 <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2 p-2 px-2">
-                        <DocumentTextIcon className="w-4 h-4 text-blue-500" />
-                        <span className="font-medium text-xs text-white">Response</span>
+                    <div className="flex items-center gap-2">
+                        <div className="h-px flex-1 bg-border/40" />
+                        <div className="flex items-center gap-2">
+                            <DocumentTextIcon className="h-3.5 w-3.5 text-zinc-400" />
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                                Response
+                            </div>
+                        </div>
+                        <div className="h-px flex-1 bg-border/40" />
                     </div>
-                    <div className="px-2">
-                        {toolResponseJson.content ? (
-                            <div className="bg-[#0a0a0a] rounded-md p-3 border border-border">
-                                {toolResponseJson.content.map((item: { text: string; type: string }, index: number) => {
-                                    // try parse json
-                                    const parsed = tryParseJson(item.text);
-                                    if (parsed) {
-                                        return (
-                                            <JsonViewer
-                                                data={parsed}
-                                                style={{
-                                                    fontSize: '10px',
-                                                }}
-                                            />
-                                        );
-                                    }
+                    {toolResponseJson.content ? (
+                        <div className="rounded-md p-3 border border-border/40">
+                            {toolResponseJson.content.map((item: { text: string; type: string }, index: number) => {
+                                // try parse json
+                                const parsed = tryParseJson(item.text);
+                                if (parsed) {
                                     return (
-                                        <pre
-                                            key={`${index}-${item.text.substring(0, 20)}`}
-                                            className={cn(
-                                                'mb-1 last:mb-0 whitespace-pre-wrap text-wrap',
-                                                item.type === 'text' ? 'text-white' : 'text-red-500',
-                                                'text-xs leading-relaxed'
-                                            )}
-                                        >
-                                            {item.text}
-                                        </pre>
-                                    )
-                                })}
-                            </div>
-                        ) : (
-                            <div className="bg-[#0a0a0a] rounded-md p-3 border border-border">
-                                <span className="text-xs text-gray-400">No content in response</span>
-                            </div>
-                        )}
-                    </div>
+                                        <JsonViewer
+                                            key={index}
+                                            data={parsed}
+                                            style={{
+                                                fontSize: '10px',
+                                            }}
+                                        />
+                                    );
+                                }
+                                return (
+                                    <pre
+                                        key={`${index}-${item.text.substring(0, 20)}`}
+                                        className={cn(
+                                            'mb-1 last:mb-0 whitespace-pre-wrap text-wrap',
+                                            item.type === 'text' ? 'text-white' : 'text-red-500',
+                                            'text-xs leading-relaxed'
+                                        )}
+                                    >
+                                        {item.text}
+                                    </pre>
+                                )
+                            })}
+                        </div>
+                    ) : (
+                        <div className="rounded-md p-3 border border-border/40">
+                            <span className="text-xs text-gray-400">No content in response</span>
+                        </div>
+                    )}
                 </div>
             )}
             {toolResultJson || toolResult ? (
                 <div className="flex flex-col gap-2">
-                    <div className="flex items-center justify-between w-full px-3 py-2 border-border border-b">
+                    <div className="flex items-center gap-2">
+                        <div className="h-px flex-1 bg-border/40" />
                         <div className="flex items-center gap-2">
-                            <DocumentTextIcon className="w-4 h-4 text-blue-500" />
-                            <span className="font-medium text-xs text-white">Response</span>
+                            <DocumentTextIcon className="h-3.5 w-3.5 text-zinc-400" />
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                                Response
+                            </div>
+                            {toolResultJson && (
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger>
+                                            <Badge className="text-[10px] text-zinc-400 bg-transparent border border-border/40 px-1.5 py-0 rounded cursor-help">
+                                                JSON
+                                            </Badge>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="left" className="bg-background border-border">
+                                            <p className="text-xs max-w-[250px]">Response formatted as JSON</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            )}
                         </div>
-                        {toolResultJson && (
-                            <TooltipProvider>
-                                <Tooltip>
-                                    <TooltipTrigger>
-                                        <Badge
-                                            className="text-xs text-white bg-[#1a1a1a] px-2 py-0.5 rounded-md cursor-help"
-                                        >
-                                            JSON
-                                        </Badge>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="left" className="bg-[#1a1a1a] border-border text-white">
-                                        <p className="text-xs max-w-[250px]">Response formatted as JSON</p>
-                                    </TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
-                        )}
+                        <div className="h-px flex-1 bg-border/40" />
                     </div>
 
                     {toolResultJson ? (
-                        <div className="bg-[#0a0a0a] border border-border rounded-md overflow-hidden">
+                        <div className="border border-border/40 rounded-md overflow-hidden">
                             <JsonViewer
                                 data={toolResultJson}
                                 style={{
                                     fontSize: '11px',
                                     padding: '12px',
-                                    backgroundColor: '#0a0a0a',
                                 }}
                             />
                         </div>
                     ) : (
-                        <div className="bg-[#0a0a0a] border border-border rounded-md p-3 overflow-auto max-h-[300px]">
-                            
+                        <div className="border border-border/40 rounded-md p-3 overflow-auto max-h-[300px]">
                             <pre className="text-xs text-gray-400 whitespace-pre-wrap font-mono">{toolResult}</pre>
                         </div>
                     )}
                 </div>
             ) : null}
+            </div>
         </BaseSpanUIDetailsDisplay>
     );
 }

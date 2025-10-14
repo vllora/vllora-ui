@@ -12,11 +12,18 @@ export const ToolCallsViewer = (props: {
     }[] | undefined
 }) => {
     const { input } = props;
-    return <div className="flex flex-col gap-2">
-        {input?.map((toolCall: any, index: number) => (
-            <SingleToolCallViewer key={index} {...toolCall} />
-        ))}
-    </div>
+    return (
+        <div className="flex flex-col gap-4">
+            {input?.map((toolCall: any, index: number) => (
+                <div
+                    key={index}
+                    className={`${index > 0 ? 'border-t border-border/50 pt-4' : ''}`}
+                >
+                    <SingleToolCallViewer {...toolCall} />
+                </div>
+            ))}
+        </div>
+    );
 }
 
 export const SingleToolCallViewer = (props: {
@@ -28,22 +35,19 @@ export const SingleToolCallViewer = (props: {
     const { id, type, 'function': func } = props;
     const functionName = func?.name || 'Unknown Function';
     let argumentsJson = func?.arguments ? tryParseJson(func.arguments as string) : undefined;
-    
-    return <div
-        key={`tool_${id}`}
-        className="border border-border rounded-md overflow-hidden bg-[#0d0d0d]"
-    >
-        <div className="flex items-center justify-between w-full p-2 hover:bg-[#151515] transition-colors">
-            <div className="flex items-center gap-3">
-                <div className="flex flex-col gap-0.5">
-                    <span className="font-medium text-xs text-white">{functionName}</span>
+    const argumentsCount = argumentsJson ? Object.keys(argumentsJson).length : 0;
+
+    return (
+        <div key={`tool_${id}`} className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-zinc-100">{functionName}</span>
                     {id && (
-                        <div className="flex items-center gap-1">
-                            <FingerPrintIcon className="h-3 w-3 text-gray-500" />
+                        <div className="flex items-center gap-2 text-[11px] text-zinc-500">
                             <TooltipProvider>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                        <span className="text-[10px] text-gray-500 font-mono cursor-help hover:text-gray-400 transition-colors">
+                                        <span className="font-mono cursor-help hover:text-zinc-400 transition-colors">
                                             {id}
                                         </span>
                                     </TooltipTrigger>
@@ -58,34 +62,42 @@ export const SingleToolCallViewer = (props: {
                         </div>
                     )}
                 </div>
+                <div className="flex items-center gap-2 text-[11px] text-zinc-500">
+                    {argumentsCount > 0 && (
+                        <span>{argumentsCount} {argumentsCount === 1 ? 'arg' : 'args'}</span>
+                    )}
+                    {type && type !== 'function' && (
+                        <span className="rounded bg-[#1f1f1f] px-1.5 py-0.5 text-zinc-400">
+                            {type}
+                        </span>
+                    )}
+                </div>
             </div>
-            {type && type !== 'function' && (
-                <span className="text-[10px] bg-[#1a1a1a] text-gray-400 px-1.5 py-0.5 rounded">
-                    {type}
-                </span>
+
+
+
+            {argumentsJson ? (
+                <div className="space-y-2">
+                    <span className="text-[11px] uppercase tracking-wide text-zinc-500">
+                        Arguments
+                    </span>
+                    <div className="space-y-1">
+                        {Object.entries(argumentsJson).map(([argName, argValue]: [string, any]) => (
+                            <ParameterItem
+                                key={argName}
+                                name={argName}
+                                valueInput={argValue}
+                            />
+                        ))}
+                    </div>
+                </div>
+            ) : (
+                typeof func === 'object' && (
+                    <JsonViewer data={func} style={{ fontSize: '10px' }} />
+                )
             )}
         </div>
-        <div className="border-t border-border">
-            <div key={id} className="flex flex-col gap-1 bg-[#111111] p-2 mt-2 rounded-md">
-                {typeof func !== 'object' && <span className="text-xs text-gray-400 font-mono break-all">
-                    {typeof func === 'object' ? JSON.stringify(func) : String(func)}
-                </span>}
-                {argumentsJson ? <div className="space-y-1">
-                                                {Object.entries(argumentsJson).map(([argName, argValue]: [string, any]) => (
-                                                    <ParameterItem 
-                                                        key={argName} 
-                                                        name={argName} 
-                                                        valueInput={argValue}
-                                                    />
-                                                ))}
-                                            </div>: (typeof func === 'object' && <JsonViewer data={func} style={{
-                    fontSize: '10px',
-                }} />)}
-            </div>
-        </div>
-
-    </div>
-   
+    );
 }
 
 interface FunctionCall {

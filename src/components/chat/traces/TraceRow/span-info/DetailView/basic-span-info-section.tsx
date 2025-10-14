@@ -229,7 +229,7 @@ export const BasicSpanInfo = ({ span, ttf_str }: { span: Span, ttf_str?: string 
             }
         }, [ttf_str]);
     return (
-        <div className="flex flex-col">
+        <div className="flex flex-col divide-y divide-[#1a1a1a]">
             {span.trace_id && <IdDisplay id={span.trace_id} type="trace" />}
             {span.run_id && <IdDisplay id={span.run_id} type="run" />}
             {span.thread_id && <IdDisplay id={span.thread_id} type="thread" />}
