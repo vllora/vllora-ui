@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Hierarchy, RunDetailConsumer } from "@/contexts/RunDetailContext";
+import { Hierarchy } from "@/contexts/RunDetailContext";
 import { getSpanTitle, getOperationIcon, getOperationIconColor, getTimelineBgColor } from "./utils";
 import { TimelineRow } from "./timeline-row";
 import { skipThisSpan, isClientSDK } from "@/utils/graph-utils";
+import { Span } from "@/types/common-type";
 
 export interface HierarchyRowProps {
     hierarchy: Hierarchy;
@@ -10,10 +11,11 @@ export interface HierarchyRowProps {
     startTime: number;
     level: number;
     titleWidth?: number | string;
+    relatedSpans?: Span[];
 }
 
 export const HierarchyRow = (props: HierarchyRowProps) => {
-    const { hierarchy, totalDuration, startTime, level, titleWidth: propTitleWidth = 180 } = props;
+    const { hierarchy, totalDuration, startTime, level, titleWidth: propTitleWidth = 180, relatedSpans = [] } = props;
     const [isOpen, setIsOpen] = useState(false);
 
     // In ellora-ui, we're always in sidebar mode (chat sidebar)
@@ -37,6 +39,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                             totalDuration={totalDuration}
                             startTime={startTime}
                             titleWidth={titleWidth}
+                            relatedSpans={relatedSpans}
                         />
                     ))}
                 </div>
@@ -45,9 +48,6 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
             return <></>
         }
     }
-
-    // Get context data at the component level
-    const { spans } = RunDetailConsumer();
 
     // Calculate duration and position for the timeline bar
     const duration = root.finish_time_us - root.start_time_us;
@@ -63,14 +63,14 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
     const durationSeconds = (duration / 1000000);
 
     // Get operation name and icon
-    const spanTitle = getSpanTitle({ span: root, relatedSpans: spans });
+    const spanTitle = getSpanTitle({ span: root, relatedSpans });
     // Ensure title is always a string
     const title = spanTitle || root.operation_name || 'Unknown';
-    let operationIcon = getOperationIcon({ span: root, relatedSpans: spans });
+    let operationIcon = getOperationIcon({ span: root, relatedSpans });
 
-    
-    const operationIconColor = getOperationIconColor({ span: root, relatedSpans: spans });
-    const timelineBgColor = getTimelineBgColor({ span: root, relatedSpans: spans });
+
+    const operationIconColor = getOperationIconColor({ span: root, relatedSpans });
+    const timelineBgColor = getTimelineBgColor({ span: root, relatedSpans });
 
     // Leaf node (no children)
     if (children.length === 0) {
@@ -119,6 +119,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                         totalDuration={totalDuration}
                         startTime={startTime}
                         titleWidth={titleWidth}
+                        relatedSpans={relatedSpans}
                     />
                 ))}
             </div>

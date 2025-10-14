@@ -60,6 +60,7 @@ export const SingleRunTimelineView = (props: SingleRunTimelineViewProps) => {
                     totalDuration={totalDuration}
                     startTime={startTime}
                     titleWidth={titleWidth}
+                    relatedSpans={spans}
                 />
             </div>
         </div>
