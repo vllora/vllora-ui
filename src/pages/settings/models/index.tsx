@@ -382,6 +382,11 @@ export const ModelsPage = () => {
                       onClick={() => setGroupByName(!groupByName)}
                       className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-all duration-200"
                     >
+                      {groupByName ? (
+                        <CheckSquare className="h-4 w-4 mr-2" />
+                      ) : (
+                        <Square className="h-4 w-4 mr-2" />
+                      )}
                       <span className="text-xs">Group by Publisher</span>
                     </Button>
                   </TooltipTrigger>
