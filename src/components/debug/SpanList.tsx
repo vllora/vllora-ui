@@ -1,14 +1,17 @@
 import React from 'react';
-import { Span } from '@/types/common-type';
-import { SpanItem } from './SpanItem';
 import { skipThisSpan } from '@/utils/graph-utils';
+import { Hierarchy } from '@/contexts/RunDetailContext';
+import { Span } from '@/types/common-type';
+import { HierarchyRow } from '../chat/traces/TraceRow/new-timeline/hierarchy-row';
 
 interface SpanListProps {
+  hierarchies: Record<string, Hierarchy>;
   spans: Span[];
+  onSpanSelect?: (spanId: string) => void;
 }
 
-export const SpanList: React.FC<SpanListProps> = ({ spans }) => {
-  if (spans.length === 0) {
+export const SpanList: React.FC<SpanListProps> = ({ hierarchies, spans, onSpanSelect }) => {
+  if (!hierarchies || Object.keys(hierarchies).length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center py-16 text-sm text-muted-foreground">
         No spans captured yet.
@@ -25,9 +28,9 @@ export const SpanList: React.FC<SpanListProps> = ({ spans }) => {
     );
   }
 
-  const earliestStart = Math.min(...filteredSpans.map((span) => span.start_time_us));
-  const latestFinish = Math.max(...filteredSpans.map((span) => span.finish_time_us));
-  const totalDuration = latestFinish - earliestStart || 1;
+   const startTime = Math.min(...spans.map(span => span.start_time_us));
+    const endTime = Math.max(...spans.map(span => span.finish_time_us));
+    const totalDuration = endTime - startTime;
   const titleWidth = 200;
 
   return (
@@ -55,17 +58,19 @@ export const SpanList: React.FC<SpanListProps> = ({ spans }) => {
         </div>
       </div>
 
-      {filteredSpans.map((span) => (
-        <div key={span.span_id} className="pl-3">
-          <SpanItem
-            span={span}
-            threadStartTime={earliestStart}
-            threadTotalDuration={totalDuration}
-            titleWidth={titleWidth}
-            variant="flat"
-          />
-        </div>
-      ))}
+      <div className="flex flex-col divide-y divide-border">
+      {Object.values(hierarchies).map((hierarchy) => {
+        return <HierarchyRow
+          key={hierarchy.root.span_id}
+          hierarchy={hierarchy}
+          totalDuration={totalDuration}
+          startTime={startTime}
+          titleWidth={titleWidth}
+          relatedSpans={spans}
+          level={0}
+          onSpanSelect={onSpanSelect}
+        />})}
+      </div>
     </div>
   );
 };

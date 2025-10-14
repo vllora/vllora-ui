@@ -6,10 +6,12 @@ export interface SingleRunTimelineViewProps {
     rootSpanId: string;
     index: number;
     isInSidebar?: boolean;
+    selectedSpanId?: string;
+    onSpanSelect?: (spanId: string, runId?: string) => void;
 }
 
 export const SingleRunTimelineView = (props: SingleRunTimelineViewProps) => {
-    const { rootSpanId, index, isInSidebar = false } = props;
+    const { rootSpanId, index, isInSidebar = false, selectedSpanId, onSpanSelect } = props;
     const { spans, hierarchies, rootSpans } = RunDetailConsumer();
     // Dynamic title width based on display mode - wider when not in sidebar
     const titleWidth: string | number = useMemo(() => isInSidebar ? `${180}px` : '20vw', [isInSidebar]);
@@ -61,6 +63,8 @@ export const SingleRunTimelineView = (props: SingleRunTimelineViewProps) => {
                     startTime={startTime}
                     titleWidth={titleWidth}
                     relatedSpans={spans}
+                    selectedSpanId={selectedSpanId}
+                    onSpanSelect={onSpanSelect}
                 />
             </div>
         </div>

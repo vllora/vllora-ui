@@ -18,7 +18,7 @@ export const TimelineContent: React.FC<TimelineContentProps> = ({
 
   // Get run ID from first span (all spans should belong to same run)
   const runId = rootSpans &&rootSpans.length > 0 ? rootSpans[0]?.run_id : '';
-  const {projectId} =  ChatWindowConsumer()// Temporary: get from run data
+  const { projectId, selectedSpanInfo, setSelectedSpanInfo } = ChatWindowConsumer()// Temporary: get from run data
 
   return (
     <RunDetailProvider runId={runId} projectId={projectId} spans={rootSpans}>
@@ -37,6 +37,8 @@ export const TimelineContent: React.FC<TimelineContentProps> = ({
                 rootSpanId={rootSpan.span_id}
                 index={index}
                 isInSidebar={isInSidebar}
+                selectedSpanId={selectedSpanInfo?.spanId}
+                onSpanSelect={(spanId, runId) => setSelectedSpanInfo({ spanId, runId })}
               />
             ))
           ) : (

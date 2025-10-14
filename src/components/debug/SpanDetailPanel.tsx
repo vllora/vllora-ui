@@ -50,6 +50,7 @@ export const SpanDetailPanel: React.FC<SpanDetailPanelProps> = ({ span, relatedS
       <div className="flex-1 overflow-y-auto">
         {/* Span-specific UI details */}
           <StandaloneSpanUIDetailsDisplay span={span} relatedSpans={relatedSpans} />
+          
       </div>
     </div>
   );

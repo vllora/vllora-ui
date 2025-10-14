@@ -13,19 +13,22 @@ import { SpanDetailPanel } from '@/components/debug/SpanDetailPanel';
 
 export function DebugPageContent() {
   const { currentProjectId } = ProjectsConsumer();
-  const { selectedSpan, setSelectedSpan } = useDebugSelection();
   const {
     threads,
     runs,
     traces,
-    spans,
+    spanHierarchies,
     isPaused,
+    spans,
     pausedCount,
     pause,
     resume,
     clear,
     groupingLevel,
     setGroupingLevel,
+    selectedSpanId,
+    setSelectedSpanId,
+    selectedSpan,
   } = useDebugTimeline({
     projectId: currentProjectId || '',
   });
@@ -77,11 +80,11 @@ export function DebugPageContent() {
   }
 
   return (
-    <div className="flex w-full h-full bg-background">
+    <div className="flex w-full flex-col flex-1 h-full">
       {/* Main content area */}
-      <div className="flex flex-col flex-1 min-w-0">
+      <div className="flex flex-col min-w-0">
         {/* Header */}
-        <div className="border-b border-border bg-background">
+        <div className="border-b border-border">
           <div className="flex items-center justify-between px-4 py-3">
             <div>
               <h1 className="text-xl font-semibold">Debug Console</h1>
@@ -90,94 +93,95 @@ export function DebugPageContent() {
               </p>
             </div>
 
-          {/* Controls */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center rounded border border-border overflow-hidden">
-              <Button
-                variant={groupingLevel === 'threads' ? 'default' : 'ghost'}
-                size="sm"
-                className="h-9 rounded-none"
-                onClick={() => setGroupingLevel('threads')}
-              >
-                Threads
-              </Button>
-              <Button
-                variant={groupingLevel === 'runs' ? 'default' : 'ghost'}
-                size="sm"
-                className="h-9 rounded-none"
-                onClick={() => setGroupingLevel('runs')}
-              >
-                Runs
-              </Button>
-              <Button
-                variant={groupingLevel === 'traces' ? 'default' : 'ghost'}
-                size="sm"
-                className="h-9 rounded-none"
-                onClick={() => setGroupingLevel('traces')}
-              >
-                Traces
-              </Button>
-              <Button
-                variant={groupingLevel === 'spans' ? 'default' : 'ghost'}
-                size="sm"
-                className="h-9 rounded-none"
-                onClick={() => setGroupingLevel('spans')}
-              >
-                Spans
-              </Button>
-            </div>
+            {/* Controls */}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center rounded border border-border overflow-hidden">
+                <Button
+                  variant={groupingLevel === 'threads' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-9 rounded-none"
+                  onClick={() => setGroupingLevel('threads')}
+                >
+                  Threads
+                </Button>
+                <Button
+                  variant={groupingLevel === 'runs' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-9 rounded-none"
+                  onClick={() => setGroupingLevel('runs')}
+                >
+                  Runs
+                </Button>
+                <Button
+                  variant={groupingLevel === 'traces' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-9 rounded-none"
+                  onClick={() => setGroupingLevel('traces')}
+                >
+                  Traces
+                </Button>
+                <Button
+                  variant={groupingLevel === 'spans' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-9 rounded-none"
+                  onClick={() => setGroupingLevel('spans')}
+                >
+                  Spans
+                </Button>
+              </div>
 
-            {/* Pause/Resume */}
-            {isPaused ? (
-              <Button
-                variant="default"
-                size="sm"
-                onClick={resume}
-                className="h-9"
-              >
-                <Play className="w-4 h-4 mr-2" />
-                Resume
-                {pausedCount > 0 && (
-                  <span className="ml-2 px-1.5 py-0.5 bg-background/20 rounded text-xs">
-                    +{pausedCount}
-                  </span>
-                )}
-              </Button>
-            ) : (
+              {/* Pause/Resume */}
+              {isPaused ? (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={resume}
+                  className="h-9"
+                >
+                  <Play className="w-4 h-4 mr-2" />
+                  Resume
+                  {pausedCount > 0 && (
+                    <span className="ml-2 px-1.5 py-0.5 bg-background/20 rounded text-xs">
+                      +{pausedCount}
+                    </span>
+                  )}
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={pause}
+                  className="h-9"
+                >
+                  <Pause className="w-4 h-4 mr-2" />
+                  Pause
+                </Button>
+              )}
+
+              {/* Clear */}
               <Button
                 variant="outline"
                 size="sm"
-                onClick={pause}
+                onClick={clear}
+                disabled={threads.length === 0}
                 className="h-9"
               >
-                <Pause className="w-4 h-4 mr-2" />
-                Pause
+                <Trash2 className="w-4 h-4 mr-2" />
+                Clear
               </Button>
-            )}
-
-            {/* Clear */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={clear}
-              disabled={threads.length === 0}
-              className="h-9"
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Clear
-            </Button>
+            </div>
           </div>
         </div>
       </div>
 
-        {/* Hierarchical Timeline */}
+      <div className='flex flex-1 flex-row'>
         <div className="flex-1 overflow-hidden">
           <div ref={containerRef} className="h-full overflow-y-auto">
             <div className="relative min-h-full flex flex-col">
               {groupingLevel === 'threads' && <HierarchicalTimeline threads={threads} />}
               {groupingLevel === 'runs' && <RunList runs={runs} />}
               {groupingLevel === 'traces' && <TraceList traces={traces} />}
-              {groupingLevel === 'spans' && <SpanList spans={spans} />}
+              {groupingLevel === 'spans' && <SpanList hierarchies={spanHierarchies} spans={spans} onSpanSelect={(spanId) => setSelectedSpanId(spanId)} />}
               {!isAtBottom && isScrollable && (
                 <div className="sticky bottom-4 flex justify-end pr-4">
                   <Button
@@ -194,18 +198,17 @@ export function DebugPageContent() {
             </div>
           </div>
         </div>
+        {/* Detail Panel */}
+        {selectedSpan && (
+          <div className="w-[40vw]">
+            <SpanDetailPanel
+              span={selectedSpan}
+              relatedSpans={spansOfSelectedRun}
+              onClose={() => setSelectedSpanId(null)}
+            />
+          </div>
+        )}
       </div>
-
-      {/* Detail Panel */}
-      {selectedSpan && (
-        <div className="w-96 flex-shrink-0">
-          <SpanDetailPanel
-            span={selectedSpan}
-            relatedSpans={spansOfSelectedRun}
-            onClose={() => setSelectedSpan(null)}
-          />
-        </div>
-      )}
     </div>
   );
 }

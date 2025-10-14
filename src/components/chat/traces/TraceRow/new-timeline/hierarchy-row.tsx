@@ -12,10 +12,12 @@ export interface HierarchyRowProps {
     level: number;
     titleWidth?: number | string;
     relatedSpans?: Span[];
+    selectedSpanId?: string;
+    onSpanSelect?: (spanId: string, runId?: string) => void;
 }
 
 export const HierarchyRow = (props: HierarchyRowProps) => {
-    const { hierarchy, totalDuration, startTime, level, titleWidth: propTitleWidth = 180, relatedSpans = [] } = props;
+    const { hierarchy, totalDuration, startTime, level, titleWidth: propTitleWidth = 180, relatedSpans = [], selectedSpanId, onSpanSelect } = props;
     const [isOpen, setIsOpen] = useState(false);
 
     // In ellora-ui, we're always in sidebar mode (chat sidebar)
@@ -40,6 +42,8 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                             startTime={startTime}
                             titleWidth={titleWidth}
                             relatedSpans={relatedSpans}
+                            selectedSpanId={selectedSpanId}
+                            onSpanSelect={onSpanSelect}
                         />
                     ))}
                 </div>
@@ -89,12 +93,14 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                 offsetPercent={offsetPercent}
                 onToggle={() => { }}
                 timelineBgColor={timelineBgColor}
+                selectedSpanId={selectedSpanId}
+                onSpanSelect={onSpanSelect}
             />
         );
     }
 
     return (
-        <div className="flex flex-col divide-y divide-border">
+        <div className="flex flex-col divide-y divide-border ">
             <TimelineRow
                 span={root}
                 level={level}
@@ -109,6 +115,8 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                 offsetPercent={offsetPercent}
                 onToggle={() => setIsOpen(!isOpen)}
                 timelineBgColor={timelineBgColor}
+                selectedSpanId={selectedSpanId}
+                onSpanSelect={onSpanSelect}
             />
             <div className="flex flex-col divide-y divide-border">
                 {children.map(child => (
@@ -120,6 +128,8 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                         startTime={startTime}
                         titleWidth={titleWidth}
                         relatedSpans={relatedSpans}
+                        selectedSpanId={selectedSpanId}
+                        onSpanSelect={onSpanSelect}
                     />
                 ))}
             </div>

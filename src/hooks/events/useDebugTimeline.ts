@@ -11,6 +11,7 @@ import { RunDTO, Span } from '@/types/common-type';
 import { Thread } from '@/types/chat';
 import { convertToNormalSpan, convertSpanToRunDTO, convertToThreadInfo } from '@/contexts/project-events/util';
 import { skipThisSpan } from '@/utils/graph-utils';
+import { constructHierarchy, Hierarchy } from '@/contexts/RunDetailContext';
 
 export interface DebugThread extends Thread {
   runs: DebugRun[];
@@ -41,7 +42,10 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
   const [threads, setThreads] = useState<Map<string, DebugThread>>(new Map());
   const [isPaused, setIsPaused] = useState(false);
   const [groupingLevel, setGroupingLevel] = useState<GroupingLevel>('spans');
+  const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
   const pausedEventsRef = useRef<ProjectEventUnion[]>([]);
+
+  
 
   // Process a single event and update the hierarchy
   const processEvent = useCallback((event: ProjectEventUnion) => {
@@ -336,6 +340,11 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
     return entries.sort((a, b) => a.start_time_us - b.start_time_us);
   }, [threads]);
 
+  const selectedSpan = useMemo(() => {
+    if (!selectedSpanId) return null;
+    return flatSpans.find(span => span.span_id === selectedSpanId);
+  }, [selectedSpanId, flatSpans]);
+
   // Flatten to runs (all runs from all threads)
   const flatRuns = useMemo<DebugRun[]>(() => {
     const entries: DebugRun[] = [];
@@ -362,11 +371,20 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
 
   const pausedCount = pausedEventsRef.current.length;
 
+  const rootSortedSpans = useMemo(() => {
+    return flatSpans.sort((a, b) => a.start_time_us - b.start_time_us).filter(span => span.parent_span_id === null || span.parent_span_id === "0" || span.parent_span_id === "" || span.parent_span_id === undefined || span.parent_span_id === "");
+  }, [flatSpans]);
+  const spanHierarchies: Record<string, Hierarchy> = rootSortedSpans.reduce((acc, span) => {
+    acc[span.span_id] = constructHierarchy({ spans: flatSpans, rootSpan: span, isDisplayGraph: false });
+    return acc;
+  }, {} as Record<string, Hierarchy>);
+
   return {
     threads: sortedThreads,
     runs: flatRuns,
     traces: flatTraces,
-    spans: flatSpans.filter((span) => !skipThisSpan(span)),
+    spans: flatSpans,
+    spanHierarchies,
     groupingLevel,
     setGroupingLevel,
     isPaused,
@@ -374,5 +392,8 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
     pause,
     resume,
     clear,
+    selectedSpan,
+    setSelectedSpanId,
+    selectedSpanId
   };
 }

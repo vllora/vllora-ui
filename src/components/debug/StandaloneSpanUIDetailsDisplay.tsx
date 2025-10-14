@@ -14,5 +14,5 @@ interface StandaloneSpanUIDetailsDisplayProps {
  * Uses the shared BaseSpanUIDisplay component for routing logic.
  */
 export const StandaloneSpanUIDetailsDisplay = ({ span, relatedSpans = [] }: StandaloneSpanUIDetailsDisplayProps) => {
-  return <BaseSpanUIDisplay span={span} relatedSpans={relatedSpans} />;
+  return <div className="p-2"><BaseSpanUIDisplay span={span} relatedSpans={relatedSpans} /></div>;
 };
