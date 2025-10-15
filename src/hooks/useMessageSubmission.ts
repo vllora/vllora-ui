@@ -16,10 +16,8 @@ interface MessageSubmissionProps {
   setCurrentInput: React.Dispatch<React.SetStateAction<string>>;
   setTyping: React.Dispatch<React.SetStateAction<boolean>>;
   setError: React.Dispatch<React.SetStateAction<string | undefined>>;
-  setMessageId: React.Dispatch<React.SetStateAction<string | undefined>>;
   setTraceId: React.Dispatch<React.SetStateAction<string | undefined>>;
   appendUsage: (usage: any) => void;
-  messageId?: string;
   traceId?: string;
 }
 
@@ -29,10 +27,8 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
     setCurrentInput,
     setTyping,
     setError,
-    setMessageId,
     setTraceId,
     appendUsage,
-    messageId,
     traceId,
   } = props;
 
@@ -118,10 +114,8 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
             widgetId,
             state: 'SubmitStart',
             threadId: currentThreadId,
-            messageId: messageId,
           });
 
-        let currentMessageId = messageId;
         let currentTraceId = traceId;
         let currentRunId: string | undefined = undefined;
         let isFirstSignal = true;
@@ -202,11 +196,9 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
 
         // Extract headers
         const threadIdHeader = response.headers.get('X-Thread-Id');
-        const messageIdHeader = response.headers.get('X-Message-Id');
         const traceIdHeader = response.headers.get('X-Trace-Id');
         const runIdHeader = response.headers.get('X-Run-Id');
         currentThreadId = threadIdHeader || currentThreadId;
-        currentMessageId = messageIdHeader || currentMessageId;
         currentTraceId = traceIdHeader || currentTraceId;
         currentRunId = runIdHeader || currentRunId;
         // setMessageId(currentMessageId);
@@ -217,7 +209,6 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
             widgetId,
             state: 'Processing',
             threadId: currentThreadId,
-            messageId: currentMessageId,
             traceId: currentTraceId,
           });
 
@@ -241,7 +232,6 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
                     widgetId,
                     state: 'Processing',
                     threadId: currentThreadId,
-                    messageId: currentMessageId,
                     traceId: currentTraceId,
                     runId: currentRunId,
                   });
@@ -267,12 +257,10 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
             widgetId,
             state: 'SubmitEnd',
             threadId: currentThreadId,
-            messageId: currentMessageId,
             traceId: currentTraceId,
             runId: currentRunId,
           });
 
-        setMessageId(undefined);
         setTyping(false);
       } catch (error) {
         widgetId &&
@@ -281,7 +269,6 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
             state: 'SubmitError',
             error: error instanceof Error ? error.message : String(error),
             threadId: currentThreadId,
-            messageId: messageId,
             traceId: traceId,
           });
           
@@ -299,7 +286,6 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
             widgetId,
             state: 'SubmitEnd',
             threadId: currentThreadId,
-            messageId: messageId,
             traceId: traceId,
           });
           setTimeout(() => {
@@ -313,9 +299,7 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
       setError,
       scrollToBottom,
       props,
-      messageId,
       traceId,
-      setMessageId,
       setTraceId,
       handleMessage,
     ]
@@ -327,8 +311,7 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
       abortControllerRef.current = null;
     }
     setTyping(false);
-    setMessageId(undefined);
-  }, [setTyping, setMessageId]);
+  }, [setTyping]);
 
   return {
     submitMessageFn,

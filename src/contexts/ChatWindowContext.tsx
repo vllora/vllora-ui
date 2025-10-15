@@ -1,14 +1,16 @@
 import { createContext, useContext, ReactNode, useCallback, useState, useMemo } from 'react';
 import { useRequest, useLatest } from 'ahooks';
 import { toast } from 'sonner';
-import { getMessageById, queryMessages } from '@/services/messages-api';
 import { listRuns } from '@/services/runs-api';
+import { listSpans } from '@/services/spans-api';
 import { Message, MessageMetrics } from '@/types/chat';
 import { fetchAllSpansByRunId } from '@/utils/traces';
 import { RunDTO, Span } from '@/types/common-type';
 import { LangDBEventSpan } from './project-events/dto';
 import { convertSpanToRunDTO, convertToNormalSpan } from './project-events/util';
 import { skipThisSpan } from '@/utils/graph-utils';
+import { buildSpanHierarchy } from '@/utils/span-hierarchy';
+import { convertSpansToMessages } from '@/utils/span-to-message';
 
 export interface SelectedSpanInfo {
   spanId: string;
@@ -56,103 +58,49 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   const threadIdRef = useLatest(threadId);
   const projectIdRef = useLatest(projectId);
 
-
-  const [serverMessages, setServerMessages] = useState<Message[]>([]);
+  // Conversation spans state (for span-based message rendering)
+  const [conversationSpans, setConversationSpans] = useState<Span[]>([]);
+  const [hierarchicalSpans, setHierarchicalSpans] = useState<Span[]>([]);
 
   // UI state
   const [currentInput, setCurrentInput] = useState<string>('');
   const [typing, setTyping] = useState(false);
   const [error, setError] = useState<string | undefined>();
-  const [messageId, setMessageId] = useState<string | undefined>();
   const [traceId, setTraceId] = useState<string | undefined>();
   const [usageInfo, setUsageInfo] = useState<any[]>([]);
 
 
-  // Use ahooks useRequest for fetching messages
-  const { loading: isLoadingMessages, error: loadError, run: refreshMessages } = useRequest(
+  // Use ahooks useRequest for fetching conversation spans
+  const { loading: isLoadingSpans, error: loadSpansError, run: refreshSpans } = useRequest(
     async () => {
       if (!threadId || !projectId) {
         return [];
       }
-      const response = await queryMessages(projectId, threadId, {
-        order_by: [['created_at', 'asc']],
-        limit: 100,
-        offset: 0,
+      const response = await listSpans({
+        projectId,
+        params: {
+          threadIds: threadId,
+          limit: 1000, // Fetch all spans for this thread
+          offset: 0,
+        },
       });
-      return response;
+      return response.data;
     },
     {
       manual: true,
       onError: (err: any) => {
-        toast.error('Failed to load messages', {
-          description: err.message || 'An error occurred while loading messages',
+        toast.error('Failed to load conversation spans', {
+          description: err.message || 'An error occurred while loading conversation spans',
         });
       },
-      onSuccess: (data) => {
-        setServerMessages(data);
+      onSuccess: (spans) => {
+        setConversationSpans(spans);
+        // Build hierarchy from flat span list
+        const hierarchy = buildSpanHierarchy(spans);
+        setHierarchicalSpans(hierarchy);
       },
-
     }
   );
-
-
-  const refreshMessageById = useCallback(async (input: {
-    messageId: string;
-    threadId: string;
-    projectId: string;
-  }) => {
-    try {
-      if (input.threadId !== threadIdRef.current || input.projectId !== projectIdRef.current) {
-        return;
-      }
-      const message: Message = await getMessageById({
-        messageId: input.messageId,
-        projectId: input.projectId,
-        threadId: input.threadId
-      });
-
-      setServerMessages(prev => {
-        let newMessages = [...prev];
-
-        let index = newMessages.findIndex(m => m.id === input.messageId);
-        if (index === -1) {
-          //newMessages.push(message);
-        } else {
-          let prevMessage = newMessages[index];
-
-          // NOTE: work around for metrics not being returned in the message since message is commited but not the metrics
-          if (message.metrics && message.metrics.length > 0) {
-            newMessages[index] = message;
-          } else {
-            newMessages[index] = {
-              ...message,
-              metrics: prevMessage.metrics
-            }
-
-          }
-        }
-        // sort messages by created_at, if created_at is empty, keep the order
-        newMessages.sort((a, b) => {
-          if (a.created_at && b.created_at) {
-            return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-          } else if (a.created_at) {
-            return -1;
-          } else if (b.created_at) {
-            return 1;
-          } else {
-            return 0;
-          }
-        });
-        
-        return newMessages;
-      });
-
-    } catch (err) {
-      toast.error('Failed to load message', {
-        description: (err as Error).message || 'An error occurred while loading message',
-      });
-    }
-  }, []);
 
   // Use ahooks useRequest for fetching runs of this thread (initial load)
   const {
@@ -259,7 +207,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
         return updated;
       });
     }
-    
+
     currentRunId && setSpanMap(prev => {
       let runMap = prev[currentRunId];
       if (runMap) {
@@ -268,7 +216,31 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
         return { ...prev, [currentRunId]: [span] };
       }
     });
-  }, []);
+
+    // NEW: Update conversation spans if this span belongs to current thread
+    if (span.thread_id === threadIdRef.current) {
+      setConversationSpans(prev => {
+        // Check if span already exists
+        const existingIndex = prev.findIndex(s => s.span_id === span.span_id);
+        if (existingIndex !== -1) {
+          // Update existing span
+          const updated = [...prev];
+          updated[existingIndex] = span;
+          return updated;
+        } else {
+          // Add new span
+          return [...prev, span];
+        }
+      });
+
+      // Rebuild hierarchy when conversation spans change
+      setConversationSpans(currentSpans => {
+        const hierarchy = buildSpanHierarchy(currentSpans);
+        setHierarchicalSpans(hierarchy);
+        return currentSpans;
+      });
+    }
+  }, [threadIdRef]);
 
 
   const upsertRun = useCallback((input: {
@@ -349,148 +321,6 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   // Map API messages to local Message type
   const runs = rawRuns;
 
-
-
-  const updateMessageMetrics: (input: {
-    message_id: string;
-    thread_id: string;
-    run_id?: string;
-    metrics: MessageMetrics;
-  }) => void = useCallback((input) => {
-    setServerMessages((prev) => {
-      const messageIndex = prev.findIndex(
-        (msg) =>
-          msg.id === input.message_id && msg.thread_id === input.thread_id
-      );
-      if (messageIndex === -1) return prev;
-
-      const existingMessage = prev[messageIndex];
-      const existingMetrics = existingMessage.metrics || [];
-
-      // Find if there's already a metric entry for this run_id
-      const sameRunIndex = existingMetrics.findIndex(
-        (metric) => metric.run_id === input.run_id
-      );
-      let updatedMetrics: MessageMetrics[];
-
-      if (sameRunIndex !== -1) {
-        // Same run exists - merge the metrics, preferring non-undefined values from input
-        const existingMetric = existingMetrics[sameRunIndex];
-        const mergedMetric: MessageMetrics = {
-          run_id: input.metrics.run_id ?? existingMetric.run_id,
-          trace_id: input.metrics.trace_id ?? existingMetric.trace_id,
-          cost: (input.metrics.cost && input.metrics.cost > 0) ? input.metrics.cost : existingMetric.cost,
-          ttft: (input.metrics.ttft && input.metrics.ttft > 0) ? input.metrics.ttft : existingMetric.ttft,
-          duration: (input.metrics.duration && input.metrics.duration > 0) ? input.metrics.duration : existingMetric.duration,
-          start_time_us: (input.metrics?.start_time_us && input.metrics?.start_time_us > 0) ? input.metrics?.start_time_us : existingMetric.start_time_us,
-          usage: input.metrics.usage
-            ? {
-              input_tokens: (input.metrics.usage?.input_tokens && input.metrics.usage?.input_tokens > 0) ? input.metrics.usage?.input_tokens : existingMetric.usage?.input_tokens,
-              output_tokens: (input.metrics.usage?.output_tokens && input.metrics.usage?.output_tokens > 0) ? input.metrics.usage?.output_tokens : existingMetric.usage?.output_tokens,
-              prompt_tokens: (input.metrics.usage?.prompt_tokens && input.metrics.usage?.prompt_tokens > 0) ? input.metrics.usage?.prompt_tokens : existingMetric.usage?.prompt_tokens,
-              completion_tokens: input.metrics.usage?.completion_tokens ?? existingMetric.usage?.completion_tokens,
-              cost: input.metrics.usage?.cost ?? existingMetric.usage?.cost,
-            }
-            : existingMetric.usage,
-        };
-
-        updatedMetrics = existingMetrics.map((metric, idx) =>
-          idx === sameRunIndex ? mergedMetric : metric
-        );
-      } else {
-        // Different run - append new metrics
-        updatedMetrics = [...existingMetrics, input.metrics];
-      }
-
-      // Return new array with updated message
-      return prev.map((msg, idx) =>
-        idx === messageIndex
-          ? { ...msg, metrics: updatedMetrics }
-          : msg
-      );
-    });
-  }, []);
-
-  const upsertMessage = useCallback(
-    (input: {
-      message_id: string;
-      thread_id: string;
-      run_id?: string;
-      message_type: string;
-      trace_id?: string;
-      delta?: string;
-      is_loading?: boolean;
-      metrics?: MessageMetrics[];
-      timestamp: number;
-    }) => {
-      setServerMessages((prev) => {
-        const messageIndex = prev.findIndex(
-          (msg) =>
-            msg.id === input.message_id && msg.thread_id === input.thread_id
-        );
-        if (messageIndex === -1) {
-          let newMsg: Message = {
-            id: input.message_id,
-            type: input.message_type,
-            thread_id: input.thread_id,
-            content_type: "Text",
-            content: input.delta || "",
-            timestamp: input.timestamp,
-            trace_id: input.trace_id,
-            metrics: input.metrics || [
-              {
-                run_id: input.run_id,
-              },
-            ],
-          };
-          return [...prev, newMsg];
-        } else {
-          const prevMsg = prev[messageIndex];
-          let newMetrics = prevMsg.metrics || [];
-
-          if (
-            newMetrics.length > 0 &&
-            input.metrics &&
-            input.metrics.length > 0
-          ) {
-            let firstPrevMetric = newMetrics[0];
-            let firstInputMetric = input.metrics[0];
-            firstPrevMetric = {
-              ...firstPrevMetric,
-              ...firstInputMetric,
-            };
-            newMetrics = [firstPrevMetric];
-          } else {
-            newMetrics = input.metrics || [
-              {
-                run_id: input.run_id,
-              },
-            ];
-          }
-
-          // Immutably update the message - avoid mutation
-          const updatedMessage: Message = {
-            ...prevMsg,
-            content: prevMsg.content + (input.delta || ""),
-            timestamp: input.timestamp,
-            trace_id: input.trace_id || prevMsg.trace_id,
-            metrics: newMetrics,
-            is_loading: input.is_loading ?? prevMsg.is_loading,
-          };
-
-          return prev.map((msg, idx) =>
-            idx === messageIndex ? updatedMessage : msg
-          );
-        }
-      });
-    },
-    []
-  );
-
-  const clearMessages = useCallback(() => {
-    setServerMessages([]);
-  }, []);
-
   const appendUsage = useCallback((usage: any) => {
     setUsageInfo((prev) => [...prev, usage]);
   }, []);
@@ -566,9 +396,20 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     return selectedSpanInfo?.spanId ? spansOfSelectedRun.find(s => s.span_id === selectedSpanInfo.spanId) : undefined;
   }, [selectedSpanInfo, spansOfSelectedRun]);
 
-  // Calculate sum of all message metrics
+  // Derive messages from hierarchical spans
+  const displayMessages = useMemo(() => {
+    if (hierarchicalSpans.length === 0) {
+      return [];
+    }
+    // Convert hierarchical spans to messages
+    return convertSpansToMessages(hierarchicalSpans);
+  }, [hierarchicalSpans]);
+
+  console.log('===== displayMessages', displayMessages)
+
+  // Calculate sum of all message metrics from displayMessages
   const conversationMetrics = useMemo(() => {
-    if (!serverMessages || serverMessages.length === 0) return undefined;
+    if (!displayMessages || displayMessages.length === 0) return undefined;
 
     let totalDuration = 0;
     let totalCost = 0;
@@ -577,26 +418,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     let totalTTFT = 0;
     let ttftCount = 0;
 
-    serverMessages.filter(m => m.type !== 'human').forEach(message => {
-      if (message.metrics && Array.isArray(message.metrics)) {
-        message.metrics.forEach(metric => {
-          if (metric.duration && metric.duration > 0) {
-            totalDuration += metric.duration;
-          }
-          if (metric.cost && metric.cost > 0) {
-            totalCost += metric.cost;
-          }
-          if (metric.usage) {
-            totalInputTokens += metric.usage.input_tokens || 0;
-            totalOutputTokens += metric.usage.output_tokens || 0;
-          }
-          if (metric.ttft && metric.ttft > 0) {
-            totalTTFT += metric.ttft;
-            ttftCount++;
-          }
-        });
-      }
-    });
+    
 
     return {
       cost: totalCost > 0 ? totalCost : undefined,
@@ -605,7 +427,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
       duration: totalDuration > 0 ? totalDuration / 1000 : undefined, // Convert ms to seconds
       avgTTFT: ttftCount > 0 ? (totalTTFT / ttftCount) / 1000 : undefined, // Convert ms to seconds and average
     };
-  }, [serverMessages]);
+  }, [displayMessages]);
 
   return {
     spansOfSelectedRun,
@@ -613,14 +435,14 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     selectedSpan,
     conversationMetrics,
 
+    // Span-based messages
+    displayMessages,
+    conversationSpans,
+    hierarchicalSpans,
+    isLoadingSpans,
+    loadSpansError,
+    refreshSpans,
 
-
-    serverMessages,
-    setServerMessages,
-    isLoadingMessages,
-    loadError,
-    clearMessages,
-    refreshMessages,
     runs,
     runsLoading,
     runsError,
@@ -651,18 +473,12 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     setTyping,
     error,
     setError,
-    messageId,
-    setMessageId,
     traceId,
     setTraceId,
     usageInfo,
     appendUsage,
 
-
     upsertRun,
-    upsertMessage,
-    updateMessageMetrics,
-    refreshMessageById,
   };
 }
 export function ChatWindowProvider({ children, threadId, projectId }: { children: ReactNode, threadId: string, projectId: string }) {

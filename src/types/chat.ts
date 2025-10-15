@@ -1,8 +1,11 @@
+import { Span } from "./common-type";
+
 export enum MessageType {
   HumanMessage = 'human',
   AIMessage = 'assistant',
   SystemMessage = 'system',
   ToolMessage = 'tool',
+  UserMessage = 'user',
 }
 
 export enum MessageContentType {
@@ -63,6 +66,10 @@ export interface Message {
 
   is_from_local?: boolean;
   is_loading?: boolean;
+  level?: number;
+  span_id?: string;
+  span?:Span,
+  children?: Message[]
 }
 
 export interface Thread {

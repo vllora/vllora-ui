@@ -14,7 +14,7 @@ interface MessageItemProps {
  * MessageItem component displays chat messages with appropriate styling based on message type
  */
 export const MessageItem: React.FC<MessageItemProps> = ({ message, isTyping }) => {
-  const isHumanMessage = message.type === MessageType.HumanMessage;
+  const isHumanMessage = message.type === MessageType.HumanMessage || message.type === MessageType.UserMessage;
 
   return (
     <article

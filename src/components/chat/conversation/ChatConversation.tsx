@@ -1,14 +1,74 @@
 import React, { useRef } from 'react';
 import { Bot, ArrowDown } from 'lucide-react';
-import { Message, MessageType } from '@/types/chat';
 import { useInViewport } from 'ahooks';
-import { MessageItem } from '../MessageItem';
+import { SpanWithMessages } from '@/utils/span-to-message';
+import { HierarchicalSpanItem } from './HierarchicalMessageItem';
 
 interface ChatConversationProps {
-  messages: Message[];
+  messages: SpanWithMessages[];
   isLoading?: boolean;
   messagesEndRef?: React.RefObject<HTMLDivElement>;
   scrollToBottom?: () => void;
+}
+
+/**
+ * Extracts and deduplicates spans with messages from the hierarchy
+ * When duplicate run_ids are found, keeps the span with the most messages
+ * Preserves original order of appearance
+ */
+const extractValidDisplayMessages = (messages: SpanWithMessages[], level: number = 0): SpanWithMessages[] => {
+  let result: SpanWithMessages[] = [];
+
+  // Recursively collect all spans with messages
+  for (const spanWithMessages of messages) {
+    if (spanWithMessages.messages.length > 0) {
+      result.push(spanWithMessages);
+    }
+    if (spanWithMessages.children && spanWithMessages.children.length > 0) {
+      result.push(...extractValidDisplayMessages(spanWithMessages.children, level + 1));
+    }
+  }
+
+  // Deduplicate by run_id, keeping the span with most messages
+  const runIdMap = new Map<string, { span: SpanWithMessages; index: number }>();
+
+  result.forEach((spanWithMessages, index) => {
+    const runId = spanWithMessages.run_id;
+
+    if (!runId) {
+      // If no run_id, always keep it (can't deduplicate)
+      return;
+    }
+
+    const existing = runIdMap.get(runId);
+
+    if (!existing) {
+      // First occurrence of this run_id
+      runIdMap.set(runId, { span: spanWithMessages, index });
+    } else {
+      // Duplicate found - keep the one with more messages
+      const existingMessageCount = existing.span.messages.length;
+      const currentMessageCount = spanWithMessages.messages.length;
+
+      if (currentMessageCount > existingMessageCount) {
+        // Replace with span that has more messages, but keep original index for ordering
+        runIdMap.set(runId, { span: spanWithMessages, index: existing.index });
+      }
+      // If equal or less, keep the existing one (first occurrence wins)
+    }
+  });
+
+  // Filter result to only include spans that are in the map
+  // This preserves original order while removing duplicates
+  const keptSpans = new Set(Array.from(runIdMap.values()).map(v => v.span));
+
+  return result.filter((span) => {
+    // Keep spans without run_id (can't be duplicates)
+    if (!span.run_id) return true;
+
+    // Keep spans that are in our deduplicated map
+    return keptSpans.has(span);
+  });
 }
 
 export const ChatConversation: React.FC<ChatConversationProps> = ({
@@ -20,6 +80,9 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
   const internalMessagesEndRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = externalMessagesEndRef || internalMessagesEndRef;
   const [inViewport] = useInViewport(messagesEndRef);
+  const validMessages = extractValidDisplayMessages(messages);
+  console.log("===== validMessages", validMessages);
+  
 
   const scrollToBottom = () => {
     if (externalScrollToBottom) {
@@ -47,13 +110,11 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-6 relative">
-      {messages.map((message) => (
-        <MessageItem key={message.id} message={message} />
+      {validMessages.map((spanWithMessages) => (
+        <HierarchicalSpanItem key={`${spanWithMessages.span_id}-${spanWithMessages.run_id}`} spanWithMessages={spanWithMessages} showRunIdHeader={true} />
       ))}
 
-      {isLoading &&
-        (messages.length === 0 ||
-          messages[messages.length - 1].type !== MessageType.AIMessage) && (
+      {isLoading && (
           <div className="flex gap-4 justify-start">
             <div className="flex-shrink-0">
               <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">

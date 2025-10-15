@@ -35,33 +35,27 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
 }) => {
   // Get all state from context
   const {
-    serverMessages,
-    clearMessages,
+    displayMessages,
     setIsChatProcessing,
-    refreshMessages,
+    refreshSpans,
+    isLoadingSpans,
     currentInput,
     setCurrentInput,
     typing,
     setTyping,
     error,
     setError,
-    messageId,
-    setMessageId,
     traceId,
     setTraceId,
     appendUsage,
     conversationMetrics,
-    isLoadingMessages
   } = ChatWindowConsumer();
 
   useEffect(() => {
     if (threadId && !isDraft) {
-      clearMessages();
-      refreshMessages();
-    } else if (threadId && isDraft) {
-      clearMessages();
+      refreshSpans();
     }
-  }, [threadId, isDraft])
+  }, [threadId, isDraft, refreshSpans]);
 
   useConversationEvents({
     currentProjectId: projectId || '',
@@ -84,10 +78,8 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     setCurrentInput,
     setTyping,
     setError,
-    setMessageId,
     setTraceId,
     appendUsage,
-    messageId,
     traceId,
   });
 
@@ -139,7 +131,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     return () => {
       emitter.off('langdb_chatWindow', handlerChatWindowEvent);
     }
-  }, [threadId, widgetId])
+  }, [threadId, widgetId]);
 
   useEffect(() => {
     const handleClearChat = (input: { threadId?: string; widgetId?: string }) => {
@@ -148,14 +140,13 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
         (input.widgetId && input.widgetId === widgetId)
       ) {
         terminateChat();
-        clearMessages();
       }
     };
     emitter.on('langdb_clearChat', handleClearChat);
     return () => {
       emitter.off('langdb_clearChat', handleClearChat);
     };
-  }, [terminateChat, threadId, widgetId, clearMessages]);
+  }, [terminateChat, threadId, widgetId]);
 
   useEffect(() => {
     const handleScrollToBottom = (input: {
@@ -163,8 +154,8 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       widgetId?: string;
     }) => {
       if (
-        serverMessages &&
-        serverMessages.length > 0 &&
+        displayMessages &&
+        displayMessages.length > 0 &&
         ((input.threadId === threadId && input.threadId) ||
           (input.widgetId && input.widgetId === widgetId))
       ) {
@@ -175,7 +166,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     return () => {
       emitter.off('langdb_chat_scrollToBottom', handleScrollToBottom);
     };
-  }, [serverMessages, threadId, scrollToBottom, widgetId]);
+  }, [displayMessages, threadId, scrollToBottom, widgetId]);
 
   useEffect(() => {
     const handleExternalSubmit = ({
@@ -192,14 +183,14 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       threadTitle?: string;
     }) => {
       setCurrentInput(inputText);
-      onSubmitWrapper({ inputText, files, searchToolEnabled, otherTools, threadId, threadTitle, initialMessages: serverMessages });
+      onSubmitWrapper({ inputText, files, searchToolEnabled, otherTools, threadId, threadTitle, initialMessages: [] });
     };
     emitter.on('langdb_input_chatSubmit', handleExternalSubmit);
 
     return () => {
       emitter.off('langdb_input_chatSubmit', handleExternalSubmit);
     };
-  }, [onSubmitWrapper, setCurrentInput, threadId, serverMessages]);
+  }, [onSubmitWrapper, setCurrentInput, threadId, displayMessages]);
 
   // Ensure typing indicator is visible by scrolling to bottom when typing state changes
   useEffect(() => {
@@ -216,8 +207,8 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
         <ConversationHeader
           modelName={modelName}
           onModelChange={onModelChange}
-          onRefresh={refreshMessages}
-          isLoading={isLoadingMessages}
+          onRefresh={refreshSpans}
+          isLoading={isLoadingSpans}
         />
 
         {/* Cost and Tokens Display - Second row aligned with New Chat button */}
@@ -233,7 +224,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
 
       {/* Chat Conversation */}
       <ChatConversation
-        messages={serverMessages}
+        messages={displayMessages} // NEW: Use span-derived messages
         isLoading={typing}
         messagesEndRef={messagesEndRef as React.RefObject<HTMLDivElement>}
         scrollToBottom={scrollToBottom}
