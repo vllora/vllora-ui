@@ -111,9 +111,9 @@ export const getModelCallSpans = (spans: Span[], currentSpanId: string) => {
 
 
 export const SpanUIDetailsDisplay = (_input: { span: Span }) => {
-  const { spanMap, selectedSpanInfo } = ChatWindowConsumer();
-  const currentSpan = selectedSpanInfo ?  spanMap[selectedSpanInfo?.runId]?.find(span => span.span_id === selectedSpanInfo?.spanId) : undefined;
-  const relatedSpans = selectedSpanInfo ? spanMap[selectedSpanInfo?.runId] || [] : [];
+  const { spanMap, selectedSpanId, selectedRunId } = ChatWindowConsumer();
+  const currentSpan = selectedRunId && selectedSpanId ?  spanMap[selectedRunId]?.find(span => span.span_id === selectedSpanId) : undefined;
+  const relatedSpans = selectedRunId ? spanMap[selectedRunId] || [] : [];
 
   if (!currentSpan) {
     return <></>;
@@ -142,8 +142,8 @@ export const BaseSpanUIDetailsDisplay = ({children, defaultOpen, value, onValueC
 
 export const SpanModelDetailsDisplay = ({ obj }: { obj: any }) => {
   let usage = obj.usage;
-  const { spanMap, selectedSpanInfo } = ChatWindowConsumer();
-  let status = selectedSpanInfo ? getStatus(spanMap[selectedSpanInfo?.runId], selectedSpanInfo?.spanId) : undefined;
+  const { spanMap, selectedSpanId, selectedRunId } = ChatWindowConsumer();
+  let status = selectedRunId && selectedSpanId ? getStatus(spanMap[selectedRunId], selectedSpanId) : undefined;
   let error = undefined //modelCallAttribute?.error || apiInvokeAttribute?.error;
   let output = undefined //modelCallAttribute?.response || modelCallAttribute?.output || apiInvokeAttribute?.response;
   let request = undefined //apiInvokeAttribute?.request

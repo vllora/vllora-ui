@@ -7,8 +7,6 @@ import {
   TextMessageBaseEvent,
 } from "@/contexts/project-events/dto";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
-import { MessageMetrics } from "@/types/chat";
-import { tryParseFloat, tryParseInt, tryParseJson } from "@/utils/modelUtils";
 
 export function useConversationEvents(props: {
   currentProjectId: string;
@@ -18,13 +16,11 @@ export function useConversationEvents(props: {
   const { currentProjectId, currentThreadId } = props;
   const {
     isChatProcessing,
-    refreshMessages,
-    serverMessages,
     setTyping,
-    refreshMessageById,
-    upsertMessage,
-    updateMessageMetrics,
   } = ChatWindowConsumer();
+
+  // Note: Message-based events are deprecated. We now use span-based architecture.
+  // These handlers are kept for backward compatibility but no longer update messages directly.
 
   const handleMetricsFromSpan = useCallback(
     (input: {
@@ -33,39 +29,8 @@ export function useConversationEvents(props: {
       runId: string;
       messageId: string;
     }) => {
-      const { span, threadId, runId, messageId } = input;
-
-      const attributes = span.attribute as {
-        [key: string]: any;
-      };
-      const ttffStr = attributes.ttft;
-      const ttft = ttffStr ? tryParseInt(ttffStr) : 0;
-      let duration = 0;
-      if (span.end_time_unix_nano && span.start_time_unix_nano) {
-        const msSeconds = span.end_time_unix_nano - span.start_time_unix_nano;
-        duration = msSeconds / 1000;
-      }
-      let usage = tryParseJson(attributes.usage);
-      let costStr = attributes.cost;
-      const cost = costStr ? tryParseFloat(costStr) : 0;
-      const start_time_us = span.start_time_unix_nano;
-      const metrics: MessageMetrics = {
-        ttft,
-        duration,
-        usage,
-        cost,
-        run_id: runId,
-        trace_id: span.trace_id,
-        start_time_us,
-      };
-      setTimeout(() => {
-        updateMessageMetrics({
-          message_id: messageId,
-          thread_id: threadId,
-          run_id: runId,
-          metrics: metrics,
-        });
-      }, 0);
+      // Deprecated: Metrics are now derived from spans in the ChatWindowContext
+      console.log('Deprecated: handleMetricsFromSpan', input);
     },
     []
   );
@@ -78,23 +43,10 @@ export function useConversationEvents(props: {
       run_id: string;
       timestamp: number;
     }) => {
-      setTimeout(() => {
-        upsertMessage({
-          message_id: input.message_id,
-          thread_id: input.thread_id,
-          run_id: input.run_id,
-          message_type: input.message_type,
-          timestamp: input.timestamp,
-          is_loading: true,
-        });
-        refreshMessageById({
-          messageId: input.message_id,
-          threadId: input.thread_id,
-          projectId: currentProjectId,
-        });
-      }, 0);
+      // Deprecated: Message creation is now handled through spans
+      console.log('Deprecated: handleMessagedCreatedEvent', input);
     },
-    [currentProjectId]
+    []
   );
 
   useEffect(() => {
@@ -143,18 +95,8 @@ export function useConversationEvents(props: {
             setTyping(
               ["TextMessageStart", "TextMessageContent"].includes(event.type)
             );
-            upsertMessage({
-              message_id: message_id,
-              thread_id: thread_id,
-              delta: delta,
-              timestamp: eventMessage.timestamp,
-              message_type: "ai",
-              metrics: [
-                {
-                  run_id: run_id,
-                },
-              ],
-            });
+            // Deprecated: Message upsert is now handled through spans
+            console.log('Text message event:', { message_id, thread_id, delta, run_id });
           }, 0);
           return;
         }
@@ -189,7 +131,8 @@ export function useConversationEvents(props: {
     currentProjectId,
     currentThreadId,
     isChatProcessing,
-    refreshMessages,
-    serverMessages,
+    setTyping,
+    handleMetricsFromSpan,
+    handleMessagedCreatedEvent,
   ]);
 }

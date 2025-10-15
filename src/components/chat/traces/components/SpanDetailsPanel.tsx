@@ -11,13 +11,15 @@ interface SpanDetailsPanelProps {
 export const SpanDetailsPanel: React.FC<SpanDetailsPanelProps> = ({
   className,
 }) => {
-  const { selectedSpanInfo } = ChatWindowConsumer();  
+  const { selectedSpanId } = ChatWindowConsumer();
 
   return (
-    <div className={cn("flex flex-col h-full", className)}>      
-      <div className="flex-1 overflow-hidden bg-[#0f0f0f]">
-        {selectedSpanInfo && selectedSpanInfo.spanId ? (
-            <SpanInfo />
+    <div className={cn("flex flex-col h-full w-full", className)}>
+      <div className="flex-1 overflow-hidden bg-[#0f0f0f] h-full">
+        {selectedSpanId ? (
+            <div className="h-full w-full overflow-hidden">
+              <SpanInfo />
+            </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-full p-4 text-center space-y-3">
             <div className="p-3 bg-[#151515] rounded-full">

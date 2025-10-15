@@ -3,9 +3,9 @@ import { SpanDetailsDisplay } from "./span-detail-display";
 
 
 export const SpanInfo = () => {
-    const { spanMap, selectedSpanInfo } = ChatWindowConsumer();
-    const spanId = selectedSpanInfo?.spanId;
-    const spanOrRunId = selectedSpanInfo?.runId || selectedSpanInfo?.spanId || '';
+    const { spanMap, selectedSpanId, selectedRunId } = ChatWindowConsumer();
+    const spanId = selectedSpanId;
+    const spanOrRunId = selectedRunId || selectedSpanId || '';
 
     const selectedSpan = spanMap[spanOrRunId]?.find(span => span.span_id === spanId);
     if (!selectedSpan) {

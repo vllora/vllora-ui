@@ -4,7 +4,7 @@ import { JsonViewer } from "./JsonViewer";
 import { useState } from "react";
 import { CheckCircleIcon, DatabaseIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getStatus, isToolSpan, SpanUIDetailsDisplay } from "./DetailView";
+import { getStatus, SpanUIDetailsDisplay } from "./DetailView";
 import { ClientSdkIcon } from "@/components/Icons/ClientSdkIcon";
 import { getOperationIcon, getOperationIconColor, getSpanTitle } from "../new-timeline/utils";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
@@ -13,9 +13,9 @@ import { ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 
 export const SpanDetailsDisplay = () => {
   const [currentTab, setCurrentTab] = useState<string>("details");
-  const { spanMap, selectedSpanInfo, spansOfSelectedRun } = ChatWindowConsumer();
-    const spanId = selectedSpanInfo?.spanId;
-    const spanOrRunId = selectedSpanInfo?.runId || selectedSpanInfo?.spanId || '';
+  const { spanMap, selectedSpanId, selectedRunId, spansOfSelectedRun } = ChatWindowConsumer();
+    const spanId = selectedSpanId;
+    const spanOrRunId = selectedRunId || selectedSpanId || '';
 
   // Use the obj directly as the currentSpan since it's already the selected span
   const currentSpan = spanOrRunId ? spanMap[spanOrRunId]?.find(span => span.span_id === spanId) : undefined;

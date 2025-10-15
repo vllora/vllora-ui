@@ -3,7 +3,6 @@ import { useRequest, useLatest } from 'ahooks';
 import { toast } from 'sonner';
 import { listRuns } from '@/services/runs-api';
 import { listSpans } from '@/services/spans-api';
-import { Message, MessageMetrics } from '@/types/chat';
 import { fetchAllSpansByRunId } from '@/utils/traces';
 import { RunDTO, Span } from '@/types/common-type';
 import { LangDBEventSpan } from './project-events/dto';
@@ -11,11 +10,6 @@ import { convertSpanToRunDTO, convertToNormalSpan } from './project-events/util'
 import { skipThisSpan } from '@/utils/graph-utils';
 import { buildSpanHierarchy } from '@/utils/span-hierarchy';
 import { convertSpansToMessages } from '@/utils/span-to-message';
-
-export interface SelectedSpanInfo {
-  spanId: string;
-  runId: string;
-}
 
 export interface SpanMap {
   [key: string]: Span[];
@@ -44,8 +38,9 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
   const [isChatProcessing, setIsChatProcessing] = useState<boolean>(false);
 
-  // Selection state
-  const [selectedSpanInfo, setSelectedSpanInfo] = useState<SelectedSpanInfo | null>(null);
+  // Selection state - split into separate values
+  const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   // should the the run be expanded
   const [openTraces, setOpenTraces] = useState<{ run_id: string; tab: 'trace' | 'code' }[]>([]);
   // hovered run id (for highlighting related traces when hovering messages)
@@ -131,7 +126,8 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
       setRunsOffset(newOffset);
       setHasMoreRuns(newHasMore);
       setRawRuns(runs);
-      setSelectedSpanInfo(null);
+      setSelectedSpanId(null);
+      setSelectedRunId(null);
       setOpenTraces([]);
 
       return response;
@@ -363,10 +359,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
         setSpanMap((prev) => ({ ...prev, [runId]: relatedSpans }));
         // auto select the first span
         if (firstSpan) {
-          setSelectedSpanInfo({
-            runId,
-            spanId: firstSpan.span_id,
-          });
+          setSelectedRunId(runId);
         }
       } catch (e: any) {
         console.error('==== Error fetching spans by run id:', e);
@@ -386,15 +379,16 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   );
 
   const spansOfSelectedRun = useMemo(() => {
-    return selectedSpanInfo?.runId ? spanMap[selectedSpanInfo.runId] : [];
-  }, [selectedSpanInfo, spanMap]);
+    return selectedRunId ? spanMap[selectedRunId] : [];
+  }, [selectedRunId, spanMap]);
+
   const selectedRun = useMemo(() => {
-    return selectedSpanInfo?.runId ? runs.find(r => r.run_id === selectedSpanInfo.runId) : undefined;
-  }, [selectedSpanInfo, runs]);
+    return selectedRunId ? runs.find(r => r.run_id === selectedRunId) : undefined;
+  }, [selectedRunId, runs]);
 
   const selectedSpan = useMemo(() => {
-    return selectedSpanInfo?.spanId ? spansOfSelectedRun.find(s => s.span_id === selectedSpanInfo.spanId) : undefined;
-  }, [selectedSpanInfo, spansOfSelectedRun]);
+    return selectedSpanId ? spansOfSelectedRun.find(s => s.span_id === selectedSpanId) : undefined;
+  }, [selectedSpanId, spansOfSelectedRun]);
 
   // Derive messages from hierarchical spans
   const displayMessages = useMemo(() => {
@@ -452,8 +446,10 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     runsTotal,
     loadingMoreRuns,
     // Selection state
-    selectedSpanInfo,
-    setSelectedSpanInfo,
+    selectedSpanId,
+    setSelectedSpanId,
+    selectedRunId,
+    setSelectedRunId,
     openTraces,
     setOpenTraces,
     hoveredRunId,
