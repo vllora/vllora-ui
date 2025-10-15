@@ -53,8 +53,8 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
   } = ChatWindowConsumer();
 
   useEffect(() => {
+    clearAll();
     if (threadId && !isDraft) {
-      clearAll();
       refreshSpans();
     }
   }, [threadId, isDraft, refreshSpans]);

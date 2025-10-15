@@ -1,7 +1,7 @@
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 // import { RenderArray } from "./utils";
 import { JsonViewer } from "./JsonViewer";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { getStatus, SpanUIDetailsDisplay } from "./DetailView";
 import { getOperationIcon, getOperationIconColor, getSpanTitle } from "../new-timeline/utils";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
@@ -10,9 +10,26 @@ import { SpanHeader } from "./SpanHeader";
 
 export const SpanDetailsDisplay = () => {
   const [currentTab, setCurrentTab] = useState<string>("details");
-  const { spanMap, selectedSpanId, selectedRunId, spansOfSelectedRun, setSelectedSpanId } = ChatWindowConsumer();
-    const spanId = selectedSpanId;
-    const spanOrRunId = selectedRunId || selectedSpanId || '';
+  const { spanMap, detailSpanId, selectedRunId, spansOfSelectedRun, setDetailSpanId } = ChatWindowConsumer();
+    const spanId = detailSpanId;
+    const spanOrRunId = selectedRunId || detailSpanId || '';
+
+  const onClose = useCallback(() => {
+    setDetailSpanId(null);
+  }, [setDetailSpanId]);
+  // Handle ESC key to close
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
 
   // Use the obj directly as the currentSpan since it's already the selected span
   const currentSpan = spanOrRunId ? spanMap[spanOrRunId]?.find(span => span.span_id === spanId) : undefined;
@@ -36,9 +53,7 @@ export const SpanDetailsDisplay = () => {
         {/* Sticky Header section */}
         <div className="sticky top-0 z-10 flex flex-row items-center p-2 px-4 justify-between w-full bg-[#161616] border-b border-border">
           <SpanHeader
-            onClose={()=> {
-              setSelectedSpanId(null);
-            }}
+            onClose={onClose}
             logoLink={logoLink}
             spanTitle={spanTitle}
             operationIcon={operationIcon}

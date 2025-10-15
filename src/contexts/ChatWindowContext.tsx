@@ -38,8 +38,12 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
   const [isChatProcessing, setIsChatProcessing] = useState<boolean>(false);
 
-  // Selection state - split into separate values
+  // selected span is for highlighting 
   const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
+
+  const [detailSpanId, setDetailSpanId] = useState<string | null>(null);
+
+
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   // should the the run be expanded
   const [openTraces, setOpenTraces] = useState<{ run_id: string; tab: 'trace' | 'code' }[]>([]);
@@ -404,6 +408,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     setSpanMap({});
     setSelectedRunId(null);
     setSelectedSpanId(null);
+    setDetailSpanId(null);
     setHierarchicalSpans([]);
     setConversationSpans([]);
   }, []);
@@ -482,6 +487,9 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     appendUsage,
     clearAll,
     upsertRun,
+    
+    detailSpanId,
+    setDetailSpanId,
   };
 }
 export function ChatWindowProvider({ children, threadId, projectId }: { children: ReactNode, threadId: string, projectId: string }) {

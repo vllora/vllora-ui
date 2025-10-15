@@ -3,12 +3,12 @@ import { SpanDetailsDisplay } from "./span-detail-display";
 
 
 export const SpanInfo = () => {
-    const { spanMap, selectedSpanId, selectedRunId } = ChatWindowConsumer();
-    const spanId = selectedSpanId;
-    const spanOrRunId = selectedRunId || selectedSpanId || '';
+    const { spanMap, detailSpanId, selectedRunId } = ChatWindowConsumer();
+    const spanId = detailSpanId;
+    const spanOrRunId = selectedRunId || detailSpanId || '';
 
-    const selectedSpan = spanMap[spanOrRunId]?.find(span => span.span_id === spanId);
-    if (!selectedSpan) {
+    const detailSpan = spanMap[spanOrRunId]?.find(span => span.span_id === spanId);
+    if (!detailSpan) {
         return <div className="p-4 text-sm text-gray-400">Span information not available</div>;
     }
 

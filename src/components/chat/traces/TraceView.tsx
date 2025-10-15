@@ -21,7 +21,7 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
     loadMoreRuns,
     hasMoreRuns,
     loadingMoreRuns,
-    selectedSpanId,
+    detailSpanId,
   } = ChatWindowConsumer();
 
   const [_, setShowErrorDialog] = useState(false);
@@ -99,7 +99,7 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
       </div>
 
       {/* Overlay Sidebar for Span Details */}
-      {selectedSpanId && (
+      {detailSpanId && (
         <SpanDetailsOverlay
         />
       )}
