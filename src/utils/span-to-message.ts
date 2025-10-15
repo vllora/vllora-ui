@@ -23,6 +23,7 @@ export function isActualModelCall(span: Span): boolean {
 export interface SpanWithMessages {
   span_id: string;
   run_id: string;
+  trace_id: string;
   messages: Message[];
   level: number;
   children?: SpanWithMessages[];
@@ -50,6 +51,7 @@ export function convertSpansToMessages(spans: Span[], level: number = 0): SpanWi
     const newSpanWithMessages: SpanWithMessages = {
       span_id: span.span_id,
       run_id: span.run_id,
+      trace_id: span.trace_id,
       messages: [],
       level,
     };
@@ -298,6 +300,7 @@ export function convertSpansToSpanWithMessages(spans: Span[], level: number = 0)
       return {
         span_id: span.span_id,
         run_id: span.run_id,
+        trace_id: span.trace_id,
         span,
         messages,
         level,

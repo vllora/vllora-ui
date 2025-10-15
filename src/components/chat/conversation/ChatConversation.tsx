@@ -12,8 +12,54 @@ interface ChatConversationProps {
 }
 
 /**
+ * Compares two messages for equality based on role, content, and content_array
+ */
+const areMessagesEqual = (msg1: any, msg2: any): boolean => {
+  if (msg1.role !== msg2.role) return false;
+  if (msg1.content !== msg2.content) return false;
+
+  // Compare content_array
+  const arr1 = msg1.content_array || [];
+  const arr2 = msg2.content_array || [];
+
+  if (arr1.length !== arr2.length) return false;
+
+  return arr1.every((item1: any, idx: number) => {
+    const item2 = arr2[idx];
+    return JSON.stringify(item1) === JSON.stringify(item2);
+  });
+};
+
+/**
+ * Checks if spanA's messages are completely included in spanB (in the same order)
+ * Returns true if spanB contains all of spanA's messages as a contiguous subsequence
+ */
+const isSubsetOfMessages = (spanA: SpanWithMessages, spanB: SpanWithMessages): boolean => {
+  const messagesA = spanA.messages;
+  const messagesB = spanB.messages;
+
+  if (messagesA.length === 0) return true;
+  if (messagesA.length > messagesB.length) return false;
+
+  // Try to find messagesA as a contiguous subsequence in messagesB
+  for (let i = 0; i <= messagesB.length - messagesA.length; i++) {
+    let allMatch = true;
+    for (let j = 0; j < messagesA.length; j++) {
+      if (!areMessagesEqual(messagesA[j], messagesB[i + j])) {
+        allMatch = false;
+        break;
+      }
+    }
+    if (allMatch) return true;
+  }
+
+  return false;
+};
+
+/**
  * Extracts and deduplicates spans with messages from the hierarchy
- * When duplicate run_ids are found, keeps the span with the most messages
+ * Within the same run_id, removes spans whose messages are completely included
+ * in another span's messages (in the same order)
  * Preserves original order of appearance
  */
 const extractValidDisplayMessages = (messages: SpanWithMessages[], level: number = 0): SpanWithMessages[] => {
@@ -29,46 +75,50 @@ const extractValidDisplayMessages = (messages: SpanWithMessages[], level: number
     }
   }
 
-  // Deduplicate by run_id, keeping the span with most messages
-  const runIdMap = new Map<string, { span: SpanWithMessages; index: number }>();
+  // Group spans by run_id
+  const spansByRunId = new Map<string, SpanWithMessages[]>();
 
-  result.forEach((spanWithMessages, index) => {
-    const runId = spanWithMessages.run_id;
+  result.forEach((span) => {
+    const runId = span.run_id || `unique:${span.span_id}`;
+    if (!spansByRunId.has(runId)) {
+      spansByRunId.set(runId, []);
+    }
+    spansByRunId.get(runId)!.push(span);
+  });
 
-    if (!runId) {
-      // If no run_id, always keep it (can't deduplicate)
+  // Within each run_id group, remove spans that are subsets of other spans
+  const spansToKeep = new Set<SpanWithMessages>();
+
+  spansByRunId.forEach((spans) => {
+    if (spans.length === 1) {
+      // Only one span for this run_id, keep it
+      spansToKeep.add(spans[0]);
       return;
     }
 
-    const existing = runIdMap.get(runId);
+    // Check each span to see if it's a subset of any other span
+    spans.forEach((spanA) => {
+      let isSubset = false;
 
-    if (!existing) {
-      // First occurrence of this run_id
-      runIdMap.set(runId, { span: spanWithMessages, index });
-    } else {
-      // Duplicate found - keep the one with more messages
-      const existingMessageCount = existing.span.messages.length;
-      const currentMessageCount = spanWithMessages.messages.length;
+      for (const spanB of spans) {
+        if (spanA === spanB) continue;
 
-      if (currentMessageCount > existingMessageCount) {
-        // Replace with span that has more messages, but keep original index for ordering
-        runIdMap.set(runId, { span: spanWithMessages, index: existing.index });
+        // If spanA's messages are completely included in spanB, mark spanA as subset
+        if (isSubsetOfMessages(spanA, spanB)) {
+          isSubset = true;
+          break;
+        }
       }
-      // If equal or less, keep the existing one (first occurrence wins)
-    }
+
+      // Keep spanA only if it's not a subset of any other span
+      if (!isSubset) {
+        spansToKeep.add(spanA);
+      }
+    });
   });
 
-  // Filter result to only include spans that are in the map
-  // This preserves original order while removing duplicates
-  const keptSpans = new Set(Array.from(runIdMap.values()).map(v => v.span));
-
-  return result.filter((span) => {
-    // Keep spans without run_id (can't be duplicates)
-    if (!span.run_id) return true;
-
-    // Keep spans that are in our deduplicated map
-    return keptSpans.has(span);
-  });
+  // Filter result to preserve original order
+  return result.filter((span) => spansToKeep.has(span));
 }
 
 export const ChatConversation: React.FC<ChatConversationProps> = ({
@@ -81,8 +131,7 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
   const messagesEndRef = externalMessagesEndRef || internalMessagesEndRef;
   const [inViewport] = useInViewport(messagesEndRef);
   const validMessages = extractValidDisplayMessages(messages);
-  console.log("===== validMessages", validMessages);
-  
+  console.log("=== validMessages", validMessages);
 
   const scrollToBottom = () => {
     if (externalScrollToBottom) {
