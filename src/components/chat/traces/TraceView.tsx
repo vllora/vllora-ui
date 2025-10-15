@@ -22,10 +22,6 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
     hasMoreRuns,
     loadingMoreRuns,
     selectedSpanId,
-    selectedRunId,
-    setSelectedSpanId,
-    setSelectedRunId,
-    fetchSpansByRunId,
   } = ChatWindowConsumer();
 
   const [_, setShowErrorDialog] = useState(false);
@@ -37,17 +33,6 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
   };
 
   const errorMessage = runsError?.message || null;
-
-  const handleCloseSidebar = () => {
-    setSelectedSpanId(null);
-    setSelectedRunId(null);
-  };
-
-  const handleRefreshSpan = () => {
-    if (selectedRunId) {
-      fetchSpansByRunId(selectedRunId);
-    }
-  };
 
   return (
     <div className="relative h-full w-full">
@@ -116,8 +101,6 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
       {/* Overlay Sidebar for Span Details */}
       {selectedSpanId && (
         <SpanDetailsOverlay
-          onClose={handleCloseSidebar}
-          onRefresh={handleRefreshSpan}
         />
       )}
     </div>

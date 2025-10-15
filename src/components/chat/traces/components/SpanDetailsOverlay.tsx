@@ -1,25 +1,18 @@
 import React from "react";
 import { SpanDetailsPanel } from "./SpanDetailsPanel";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft, RefreshCw } from "lucide-react";
 
 const TRACE_PANEL_WIDTH = 450;
 
 interface SpanDetailsOverlayProps {
-  onClose: () => void;
-  onRefresh: () => void;
 }
 
 export const SpanDetailsOverlay: React.FC<SpanDetailsOverlayProps> = ({
-  onClose,
-  onRefresh,
 }) => {
   return (
     <>
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm z-40 transition-opacity"
-        onClick={onClose}
       />
 
       {/* Sidebar Panel */}
@@ -28,7 +21,7 @@ export const SpanDetailsOverlay: React.FC<SpanDetailsOverlayProps> = ({
         style={{ width: TRACE_PANEL_WIDTH }}
       >
         {/* Span Details Header */}
-        <div className="sticky top-0 z-10 flex flex-row items-center px-4 py-3 justify-between w-full bg-[#161616] border-b border-border">
+        {/* <div className="sticky top-0 z-10 flex flex-row items-center px-4 py-3 justify-between w-full bg-[#161616] border-b border-border">
           <div className="flex items-center gap-3">
             <Button
               variant="ghost"
@@ -47,7 +40,7 @@ export const SpanDetailsOverlay: React.FC<SpanDetailsOverlayProps> = ({
           >
             <RefreshCw className="w-4 h-4 text-muted-foreground hover:text-foreground" />
           </button>
-        </div>
+        </div> */}
 
         {/* Span Details Content */}
         <div className="flex-1 overflow-hidden">

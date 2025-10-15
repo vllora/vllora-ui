@@ -12,6 +12,5 @@ export const SpanInfo = () => {
         return <div className="p-4 text-sm text-gray-400">Span information not available</div>;
     }
 
-    return <SpanDetailsDisplay
-    />
+    return <SpanDetailsDisplay/>
 }
