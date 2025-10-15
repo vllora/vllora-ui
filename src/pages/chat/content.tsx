@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useEffect } from 'react';
-import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { ThreadsSidebar } from '@/components/chat/ThreadsSidebar';
 import { ConversationWindow } from '@/components/chat/conversation/ConversationWindow';
@@ -24,7 +24,6 @@ export function ChatPage() {
     setIsRightSidebarCollapsed
   } = ThreadsConsumer();
   const navigate = useNavigate();
-  const location = useLocation();
 
   const currentThread = useMemo(() => {
     return threads.find((t) => t.id === selectedThreadId);
@@ -107,18 +106,7 @@ export function ChatPage() {
     }
   }, [selectedThreadId, threads, handleSelectThread]);
 
-  const handleProjectChange = useCallback((newProjectId: string) => {
-    localStorage.setItem('currentProjectId', newProjectId);
-    // Update the project_id query param while keeping current path (omit if default)
-    const params = new URLSearchParams(searchParams);
-    if (isDefaultProject(newProjectId)) {
-      params.delete('project_id');
-    } else {
-      params.set('project_id', newProjectId);
-    }
-    const queryString = params.toString();
-    navigate(`${location.pathname}${queryString ? '?' + queryString : ''}`);
-  }, [location.pathname, navigate, searchParams, isDefaultProject]);
+  
 
   const isCurrentThreadDraft = useMemo(()=> {
     if(threads && threads.length > 0) {
@@ -139,7 +127,6 @@ export function ChatPage() {
         selectedThreadId={selectedThreadId}
         onSelectThread={handleSelectThread}
         onNewThread={handleNewThread}
-        onProjectChange={handleProjectChange}
       />
 
       {/* Main Chat Area and Right Sidebar */}

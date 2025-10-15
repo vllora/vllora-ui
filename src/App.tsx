@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom"
 import { Layout } from "./components/layout"
 import { HomePage } from "./pages/home"
-import { ChatPageWrapper } from "./pages/chat"
+import { ChatAndDebugPageWrapper, ChatPageWrapper } from "./pages/chat"
 import { ProjectsPage } from "./pages/projects"
 import { AnalyticsPage } from "./pages/analytics"
 import { SettingsPage } from "./pages/settings"
@@ -29,7 +29,7 @@ function App() {
             <Route path="/" element={<ProjectProvider><Layout /></ProjectProvider>}>
               {/* Project-scoped routes (now using query string ?project_id=...) */}
               <Route index element={<HomePage />} />
-              <Route path="chat" element={<ChatPageWrapper />} />
+              <Route path="chat" element={<ChatAndDebugPageWrapper />} />
               <Route path="debug" element={<DebugPage />} />
 
               <Route path="analytics" element={<AnalyticsPage />} />
