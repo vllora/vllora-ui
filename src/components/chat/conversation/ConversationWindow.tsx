@@ -49,10 +49,12 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     setTraceId,
     appendUsage,
     conversationMetrics,
+    clearAll,
   } = ChatWindowConsumer();
 
   useEffect(() => {
     if (threadId && !isDraft) {
+      clearAll();
       refreshSpans();
     }
   }, [threadId, isDraft, refreshSpans]);

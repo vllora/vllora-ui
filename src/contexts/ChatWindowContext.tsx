@@ -399,6 +399,15 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     return convertSpansToMessages(hierarchicalSpans);
   }, [hierarchicalSpans]);
 
+
+  const clearAll = useCallback(() => {
+    setSpanMap({});
+    setSelectedRunId(null);
+    setSelectedSpanId(null);
+    setHierarchicalSpans([]);
+    setConversationSpans([]);
+  }, []);
+
   // Calculate sum of all message metrics from displayMessages
   const conversationMetrics = useMemo(() => {
     if (!displayMessages || displayMessages.length === 0) return undefined;
@@ -410,7 +419,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     let totalTTFT = 0;
     let ttftCount = 0;
 
-    
+
 
     return {
       cost: totalCost > 0 ? totalCost : undefined,
@@ -471,7 +480,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     setTraceId,
     usageInfo,
     appendUsage,
-
+    clearAll,
     upsertRun,
   };
 }
