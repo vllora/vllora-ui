@@ -7,7 +7,6 @@ import { ErrorViewer } from "../error-viewer";
 import { UsageViewer } from "../usage-viewer";
 import { OutputViewer } from "../output-viewer";
 import { tryParseJson } from "@/utils/modelUtils";
-import { BasicSpanInfo } from "../basic-span-info-section";
 import { InputViewer } from "../input_viewer";
 
 interface CloudApiInvokeUIDetailsDisplayProps {
@@ -40,10 +39,6 @@ export const CloudApiInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: Clou
 
     return (
         <BaseSpanUIDetailsDisplay>
-            
-            {/* ID information section */}
-            <BasicSpanInfo span={span} />
-
             {/* Error section - only shown when there's an error */}
             {error && (
                  <ErrorViewer error={error} />

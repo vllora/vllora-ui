@@ -5,7 +5,6 @@ import { ExclamationTriangleIcon, CheckCircleIcon, ClockIcon, CodeBracketIcon, D
 import { ErrorViewer } from "../error-viewer";
 import { UsageViewer } from "../usage-viewer";
 import { HeadersViewer } from "../headers-viewer";
-import { BasicSpanInfo } from "../basic-span-info-section";
 import { InputViewer } from "../input_viewer";
 import { SimpleTabsList, SimpleTabsTrigger, Tabs } from "@/components/ui/tabs";
 import { useState } from "react";
@@ -78,8 +77,6 @@ export const VirtualModelCallUIDetailsDisplay = ({ span, relatedSpans = [] }: Vi
                 </div>}
 
             </div>
-            {/* ID information section */}
-            <BasicSpanInfo span={span} ttf_str={ttf_str} />
 
             {/* Error section - only shown when there's an error */}
             {error && (

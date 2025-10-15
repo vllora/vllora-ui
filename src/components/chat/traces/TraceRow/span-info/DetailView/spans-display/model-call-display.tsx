@@ -5,7 +5,6 @@ import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/
 import { ExclamationTriangleIcon, CheckCircleIcon, CpuChipIcon } from "@heroicons/react/24/outline";
 import { ErrorViewer } from "../error-viewer";
 import { UsageViewer } from "../usage-viewer";
-import { BasicSpanInfo } from "../basic-span-info-section";
 import { InputViewer } from "../input_viewer";
 import { useState } from "react";
 import { ResponseViewer } from "../response-viewer";
@@ -91,8 +90,6 @@ export const ModelCallUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelCall
                 </div>
 
             </div>
-            {/* ID information section */}
-            <BasicSpanInfo span={span} ttf_str={ttf_str} />
 
             {/* Error section - only shown when there's an error */}
             {error && (

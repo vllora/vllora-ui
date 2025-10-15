@@ -49,6 +49,7 @@ export const SpanDetailsDisplay = () => {
             status={status}
             startTime={currentSpan.start_time_us}
             endTime={currentSpan.finish_time_us}
+            span={currentSpan}
           />
         </div>
 

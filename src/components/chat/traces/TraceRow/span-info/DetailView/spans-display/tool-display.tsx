@@ -2,7 +2,6 @@ import { BaseSpanUIDetailsDisplay, getParentApiInvoke } from "..";
 import { ToolCallsViewer } from "../tool-calls-viewer";
 import { ArrowTopRightOnSquareIcon, DocumentTextIcon, ExclamationTriangleIcon, WrenchScrewdriverIcon } from "@heroicons/react/24/outline";
 import { ToolDefinitionsViewer } from "../tool-definitions-viewer";
-import { BasicSpanInfo } from "../basic-span-info-section";
 import { JsonViewer } from "../../JsonViewer";
 import { ServerIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -62,9 +61,7 @@ export const ToolUIDetailsDisplay = ({ span, relatedSpans = [] }: ToolUIDetailsD
     const toolResultJson = toolResult ? tryParseJson(toolResult) as any : undefined;
     return (
         <BaseSpanUIDetailsDisplay>
-            {/* ID information section */}
-            <BasicSpanInfo span={span} />
-            <div className="flex flex-col gap-6 mt-4">
+            <div className="flex flex-col gap-6">
             {/* MCP Info section */}
             {mcp_server_json && (
                 <a

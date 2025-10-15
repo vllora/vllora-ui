@@ -40,25 +40,12 @@ export const ApiInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ApiInvoke
     const headers = headersStr ? tryParseJson(headersStr) : undefined;
     const error = modelCallAttribute?.error || apiInvokeAttribute?.error || currentAttribute?.error;
 
-    const [responseViewMode, setResponseViewMode] = useState<'ui' | 'raw'>('ui');
     const [openAccordionItems, setOpenAccordionItems] = useState<string[]>(error ? ['error'] : []);
     const cost_str = apiInvokeAttribute?.cost;
     const ttf_str = modelCallAttribute?.ttft;
     const usage_str = currentAttribute?.usage;
-    const modelJsonStr = apiInvokeAttribute?.model || modelCallAttribute?.model;
-    const modelJson = modelJsonStr ? tryParseJson(modelJsonStr) : null;
-    const modelName = modelJson?.name;
-
-    const entityByName = undefined
-
-
     const costInfo = cost_str ? tryParseJson(cost_str) : null;
     const usageInfo = usage_str ? tryParseJson(usage_str) : null;
-
-    const triggerClassName = "px-3 py-3 hover:bg-[#1a1a1a] transition-colors";
-
-    const headerCount = headers ? Object.keys(headers).length : 0;
-
     return (
         <BaseSpanUIDetailsDisplay
             value={openAccordionItems}
@@ -78,7 +65,7 @@ export const ApiInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ApiInvoke
                     <InputViewer jsonRequest={raw_request_json} headers={headers} />
                 )}
                 {raw_response_json && (
-                    <ResponseViewer response={raw_response_json} viewMode={responseViewMode} />
+                    <ResponseViewer response={raw_response_json} />
                 )}
 
                 {/* Usage section */}

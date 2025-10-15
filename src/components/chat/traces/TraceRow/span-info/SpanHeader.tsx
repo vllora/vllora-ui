@@ -5,6 +5,8 @@ import { ArrowLeft, DatabaseIcon, Timer } from "lucide-react";
 import { ClientSdkIcon } from "@/components/Icons/ClientSdkIcon";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Span } from "@/types/common-type";
+import { BasicSpanInfo } from "./DetailView/basic-span-info-section";
 
 const getDuration = (startTime?: number, endTime?: number): string | null => {
   if (!startTime || !endTime) return null;
@@ -43,6 +45,7 @@ interface SpanHeaderProps {
   onClose?: () => void;
   startTime?: number;
   endTime?: number;
+  span?: Span;
 }
 
 export const SpanHeader: React.FC<SpanHeaderProps> = ({
@@ -57,6 +60,7 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
   onClose,
   startTime,
   endTime,
+  span,
 }) => {
   const isSuccessStatus = status && ['200', 200].includes(status);
   const duration = getDuration(startTime, endTime);
@@ -105,24 +109,53 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
         )}
         <div className="flex items-center gap-2">
           <h3 className="text-xs font-medium text-white hover:cursor-help">{spanTitle}</h3>
-          {duration && (
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#1a1a1a] text-teal-500">
-              <Timer className="h-3 w-3" />
-              <span className="text-xs font-mono">{duration}s</span>
-            </div>
+          {duration && startTime && endTime && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#1a1a1a] text-teal-500 cursor-help">
+                    <Timer className="h-3 w-3" />
+                    <span className="text-xs font-mono">{duration}s</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="flex flex-col gap-2 p-3 max-w-xs bg-background border border-border rounded-md shadow-md">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Timer className="h-4 w-4 text-purple-500" />
+                    <span>Duration Information</span>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-muted-foreground">Start time:</span>
+                      <span className="text-xs font-mono">{formatTimestamp(startTime)}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-muted-foreground">End time:</span>
+                      <span className="text-xs font-mono">{formatTimestamp(endTime)}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-border">
+                      <span className="text-xs font-medium">Duration:</span>
+                      <span className="text-xs font-mono">{duration}s ({((endTime - startTime) / 1000).toFixed(0)} ms)</span>
+                    </div>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </div>
       </div>
-      {status && (
-        <div className={`flex items-center px-2 py-1 rounded-md text-xs ${isSuccessStatus ? ' text-green-500' : 'text-red-500'}`}>
-          {isSuccessStatus ? (
-            <CheckCircleIcon className="w-3 h-3 mr-1" />
-          ) : (
-            <ExclamationTriangleIcon className="w-3 h-3 mr-1" />
-          )}
-          {isSuccessStatus ? 'Success' : 'Failed'}
-        </div>
-      )}
+      <div className="flex items-center gap-2">
+        {status && (
+          <div className={`flex items-center px-2 py-1 rounded-md text-xs ${isSuccessStatus ? ' text-green-500' : 'text-red-500'}`}>
+            {isSuccessStatus ? (
+              <CheckCircleIcon className="w-3 h-3 mr-1" />
+            ) : (
+              <ExclamationTriangleIcon className="w-3 h-3 mr-1" />
+            )}
+            {isSuccessStatus ? 'Success' : 'Failed'}
+          </div>
+        )}
+        {span && <BasicSpanInfo span={span} />}
+      </div>
     </div>
   );
 };

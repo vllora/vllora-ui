@@ -18,7 +18,8 @@
       "Bash(npx tsc:*)",
       "Bash(for file in tool-display.tsx virtual-model-display.tsx model-display.tsx api-invoke-display.tsx cloud-api-invoke-display.tsx model-call-display.tsx)",
       "Bash(do echo \"=== $file ===\")",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(for file in cloud-api-invoke-display.tsx virtual-model-display.tsx guard-display.tsx)"
     ],
     "deny": [],
     "ask": []

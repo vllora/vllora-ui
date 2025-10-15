@@ -3,7 +3,6 @@ import { ResponseViewer } from "../response-viewer";
 import { tryParseJson } from "@/utils/modelUtils";
 import { Span } from "@/types/common-type";
 import { InputViewer } from "../input_viewer";
-import { BasicSpanInfo } from "../basic-span-info-section";
 import { UsageViewer } from "../usage-viewer";
 
 interface ModelInvokeUIDetailsDisplayProps {
@@ -45,8 +44,7 @@ export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelIn
 
     return (
         <BaseSpanUIDetailsDisplay>
-            <BasicSpanInfo span={span} ttf_str={ttf_str} />
-            <div className="flex flex-col gap-6 mt-4 pb-4">
+            <div className="flex flex-col gap-6 pb-4">
                 <InputViewer jsonRequest={raw_request_json} headers={headers} />
                 <div className="h-px w-full bg-border/60" />
                 <ResponseViewer response={raw_response_json} />

@@ -1,7 +1,6 @@
 import { BaseSpanUIDetailsDisplay } from "../.."
 import { Badge } from "@/components/ui/badge";
 import { ADKInfoUIDisplay } from "./adk-ui";
-import { BasicSpanInfo } from "../../basic-span-info-section";
 import { OpenAIInfoUIDisplay } from "./openai-ui";
 import { CrewAIInfoUIDisplay } from "./crewai-ui";
 import { LangchainInfoUIDisplay } from "./langchain-ui";
@@ -32,7 +31,6 @@ export const ClientActivityUIDetailsDisplay = ({ span }: { span: Span }) => {
 
 
             </div>
-            <BasicSpanInfo span={span} />
             {clientSDKName === 'adk' && <ADKInfoUIDisplay span={span} />}
             {clientSDKName === 'openai' && <OpenAIInfoUIDisplay span={span} />}
             {clientSDKName === 'crewai' && <CrewAIInfoUIDisplay span={span} />}
