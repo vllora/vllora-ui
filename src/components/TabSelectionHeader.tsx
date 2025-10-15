@@ -24,44 +24,43 @@ export function TabSelectionHeader({ currentTab, onTabChange, onProjectChange }:
   };
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-[#0f0f0f]">
-      {/* Left side - Project Dropdown */}
-      <div className="flex items-center gap-3">
-        <ProjectDropdown onProjectChange={onProjectChange} />
+    <div className="flex items-center justify-center px-6 py-2.5 border-b border-border bg-[#0a0a0a]/80 backdrop-blur-sm relative">
+      {/* Left side - Project Dropdown (absolute positioned) */}
+      <div className="absolute left-4 flex items-center">
+        <div className="scale-90 origin-left">
+          <ProjectDropdown onProjectChange={onProjectChange} />
+        </div>
       </div>
 
       {/* Center - Tab Toggle */}
-      <div className="inline-flex items-center gap-1 bg-[#1a1a1a] rounded-lg p-1 border border-border/40">
+      <div className="inline-flex items-center gap-0.5 bg-[#1a1a1a] rounded-lg p-0.5 border border-border/40 shadow-sm">
         <button
           onClick={() => handleTabChange("threads")}
           className={`
-            flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all
+            flex items-center gap-1.5 px-5 py-1.5 rounded-md text-sm font-medium transition-all
             ${currentTab === "threads"
               ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
             }
           `}
         >
-          <MessageSquare className="h-4 w-4" />
+          <MessageSquare className="h-3.5 w-3.5" />
           <span>Threads</span>
         </button>
         <button
           onClick={() => handleTabChange("debug")}
           className={`
-            flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all
+            flex items-center gap-1.5 px-5 py-1.5 rounded-md text-sm font-medium transition-all
             ${currentTab === "debug"
               ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
             }
           `}
         >
-          <Bug className="h-4 w-4" />
+          <Bug className="h-3.5 w-3.5" />
           <span>Debug</span>
         </button>
       </div>
-
-      {/* Right side - Empty for balance */}
-      <div className="w-[240px]"></div>
     </div>
   );
 }
