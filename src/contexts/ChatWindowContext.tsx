@@ -399,8 +399,6 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     return convertSpansToMessages(hierarchicalSpans);
   }, [hierarchicalSpans]);
 
-  console.log('===== displayMessages', displayMessages)
-
   // Calculate sum of all message metrics from displayMessages
   const conversationMetrics = useMemo(() => {
     if (!displayMessages || displayMessages.length === 0) return undefined;
