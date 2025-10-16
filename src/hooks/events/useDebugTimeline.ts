@@ -3,17 +3,19 @@ import { ProjectEventsConsumer } from '@/contexts/project-events';
 import {
   ProjectEventUnion,
   CustomEvent,
-  AgentStartedEvent,
-  TaskStartedEvent,
-  CustomSpanStartEventType,
-  CustomSpanEndEventType,
-  RunStartedEvent,
-  StepStartedEvent,
-  TextMessageStartEvent,
-  ToolCallStartEvent,
 } from '@/contexts/project-events/dto';
 import { Span } from '@/types/common-type';
 import { buildSpanHierarchy } from '@/utils/span-hierarchy';
+import {
+  convertAgentStartedToSpan,
+  convertTaskStartedToSpan,
+  convertCustomSpanStartToSpan,
+  convertCustomSpanEndToSpan,
+  convertRunStartedToSpan,
+  convertStepStartedToSpan,
+  convertTextMessageStartToSpan,
+  convertToolCallStartToSpan,
+} from './utilities';
 
 export interface UseDebugTimelineProps {
   projectId: string;
@@ -28,138 +30,6 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
   const [isPaused, setIsPaused] = useState(false);
   const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(undefined);
   const pausedEventsRef = useRef<ProjectEventUnion[]>([]);
-
-  /**
-   * Conversion functions for each event type to Span
-   */
-  const convertAgentStartedToSpan = useCallback((event: AgentStartedEvent): Span => {
-    return {
-      span_id: event.span_id || `agent_${Date.now()}`,
-      parent_span_id: event.parent_span_id,
-      operation_name: 'agent',
-      thread_id: event.thread_id || '',
-      run_id: event.run_id || '',
-      trace_id: '',
-      start_time_us: event.timestamp * 1000,
-      finish_time_us: undefined,
-      attribute: event.name ? { 'langdb.agent_name': event.name } : {},
-      isInProgress: true,
-    };
-  }, []);
-
-  const convertTaskStartedToSpan = useCallback((event: TaskStartedEvent): Span => {
-    return {
-      span_id: event.span_id || `task_${Date.now()}`,
-      parent_span_id: event.parent_span_id,
-      operation_name: 'task',
-      thread_id: event.thread_id || '',
-      run_id: event.run_id || '',
-      trace_id: '',
-      start_time_us: event.timestamp * 1000,
-      finish_time_us: undefined,
-      attribute: event.name ? { 'langdb.task_name': event.name } : {},
-      isInProgress: true,
-    };
-  }, []);
-
-  const convertCustomSpanStartToSpan = useCallback((
-    event: CustomEvent,
-    spanStart: CustomSpanStartEventType
-  ): Span => {
-    return {
-      span_id: event.span_id || `span_${Date.now()}`,
-      parent_span_id: event.parent_span_id,
-      operation_name: spanStart.operation_name,
-      thread_id: event.thread_id || '',
-      run_id: event.run_id || '',
-      trace_id: '',
-      start_time_us: event.timestamp * 1000,
-      finish_time_us: undefined,
-      attribute: spanStart.attributes || {},
-      isInProgress: true,
-    };
-  }, []);
-
-  const convertCustomSpanEndToSpan = useCallback((
-    event: CustomEvent,
-    spanEnd: CustomSpanEndEventType
-  ): Span => {
-    return {
-      span_id: event.span_id || '',
-      parent_span_id: event.parent_span_id,
-      operation_name: spanEnd.operation_name,
-      thread_id: event.thread_id || '',
-      run_id: event.run_id || '',
-      trace_id: '',
-      start_time_us: spanEnd.start_time_unix_nano / 1000,
-      finish_time_us: spanEnd.finish_time_unix_nano / 1000,
-      attribute: spanEnd.attributes || {},
-      isInProgress: false,
-    };
-  }, []);
-
-  const convertRunStartedToSpan = useCallback((event: RunStartedEvent): Span => {
-    return {
-      span_id: event.span_id || event.run_id || `run_${Date.now()}`,
-      parent_span_id: event.parent_span_id,
-      operation_name: 'run',
-      thread_id: event.thread_id || '',
-      run_id: event.run_id || '',
-      trace_id: '',
-      start_time_us: event.timestamp * 1000,
-      finish_time_us: undefined,
-      attribute: {},
-      isInProgress: true,
-    };
-  }, []);
-
-  const convertStepStartedToSpan = useCallback((event: StepStartedEvent): Span => {
-    return {
-      span_id: event.span_id || `step_${Date.now()}`,
-      parent_span_id: event.parent_span_id,
-      operation_name: 'step',
-      thread_id: event.thread_id || '',
-      run_id: event.run_id || '',
-      trace_id: '',
-      start_time_us: event.timestamp * 1000,
-      finish_time_us: undefined,
-      attribute: { 'langdb.step_name': event.step_name },
-      isInProgress: true,
-    };
-  }, []);
-
-  const convertTextMessageStartToSpan = useCallback((event: TextMessageStartEvent): Span => {
-    return {
-      span_id: event.span_id || `text_message_${Date.now()}`,
-      parent_span_id: event.parent_span_id,
-      operation_name: 'text_message',
-      thread_id: event.thread_id || '',
-      run_id: event.run_id || '',
-      trace_id: '',
-      start_time_us: event.timestamp * 1000,
-      finish_time_us: undefined,
-      attribute: { role: event.role },
-      isInProgress: true,
-    };
-  }, []);
-
-  const convertToolCallStartToSpan = useCallback((event: ToolCallStartEvent): Span => {
-    return {
-      span_id: event.span_id || event.tool_call_id || `tool_call_${Date.now()}`,
-      parent_span_id: event.parent_span_id,
-      operation_name: 'tool_call',
-      thread_id: event.thread_id || '',
-      run_id: event.run_id || '',
-      trace_id: '',
-      start_time_us: event.timestamp * 1000,
-      finish_time_us: undefined,
-      attribute: {
-        tool_call_id: event.tool_call_id,
-        tool_call_name: event.tool_call_name,
-      },
-      isInProgress: true,
-    };
-  }, []);
 
   /**
    * Process events to build span hierarchy in real-time
@@ -647,16 +517,7 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
         }
       }
     }
-  }, [
-    convertRunStartedToSpan,
-    convertAgentStartedToSpan,
-    convertTaskStartedToSpan,
-    convertStepStartedToSpan,
-    convertTextMessageStartToSpan,
-    convertToolCallStartToSpan,
-    convertCustomSpanStartToSpan,
-    convertCustomSpanEndToSpan,
-  ]);
+  }, []);
 
   // Subscribe to all project events
   useEffect(() => {
