@@ -3,7 +3,7 @@ import { TraceItem } from './TraceItem';
 import { TimelineHeader } from './TimelineHeader';
 
 interface TraceListProps {
-  traces: DebugTrace[];
+  traces: any[];
   selectedSpanId?: string;
   onSpanSelect?: (spanId: string) => void;
 }

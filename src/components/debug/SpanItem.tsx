@@ -35,7 +35,7 @@ export const SpanItem: React.FC<SpanItemProps> = ({
   const { selectedSpan, setSelectedSpan } = useDebugSelection();
 
   // Calculate timeline visualization percentages relative to thread timeline
-  const duration = span.finish_time_us - span.start_time_us;
+  const duration = span.finish_time_us ? span.finish_time_us - span.start_time_us : 0;
   const clamp = (value: number, max = 100) => Math.min(max, Math.max(0, value));
   const formatPercent = (value: number) => Number(value.toFixed(3));
   const rawWidth = threadTotalDuration > 0 ? (duration / threadTotalDuration) * 100 : 0;
@@ -80,7 +80,7 @@ export const SpanItem: React.FC<SpanItemProps> = ({
 
           {/* Duration */}
           <span className="text-[10px] text-muted-foreground flex-shrink-0">
-            {formatDuration(span.start_time_us, span.finish_time_us)}
+            {formatDuration(span.start_time_us, span.finish_time_us || span.start_time_us)}
           </span>
         </div>
 

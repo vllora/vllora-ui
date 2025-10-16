@@ -58,8 +58,12 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   const projectIdRef = useLatest(projectId);
 
   // Conversation spans state (for span-based message rendering)
-  const [conversationSpans, setConversationSpans] = useState<Span[]>([]);
-  const [hierarchicalSpans, setHierarchicalSpans] = useState<Span[]>([]);
+  const [flattenSpans, setFlattenSpans] = useState<Span[]>([]);
+  const spanHierarchies: Span[] = useMemo(
+    () => buildSpanHierarchy(flattenSpans),
+    [flattenSpans]
+  );
+  // const [hierarchicalSpans, setHierarchicalSpans] = useState<Span[]>([]);
 
   // UI state
   const [currentInput, setCurrentInput] = useState<string>('');
@@ -93,10 +97,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
         });
       },
       onSuccess: (spans) => {
-        setConversationSpans(spans);
-        // Build hierarchy from flat span list
-        const hierarchy = buildSpanHierarchy(spans);
-        setHierarchicalSpans(hierarchy);
+        setFlattenSpans(spans);
       },
     }
   );
@@ -219,7 +220,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
     // NEW: Update conversation spans if this span belongs to current thread
     if (span.thread_id === threadIdRef.current) {
-      setConversationSpans(prev => {
+      setFlattenSpans(prev => {
         // Check if span already exists
         const existingIndex = prev.findIndex(s => s.span_id === span.span_id);
         if (existingIndex !== -1) {
@@ -231,13 +232,6 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
           // Add new span
           return [...prev, span];
         }
-      });
-
-      // Rebuild hierarchy when conversation spans change
-      setConversationSpans(currentSpans => {
-        const hierarchy = buildSpanHierarchy(currentSpans);
-        setHierarchicalSpans(hierarchy);
-        return currentSpans;
       });
     }
   }, [threadIdRef]);
@@ -394,12 +388,12 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
   // Derive messages from hierarchical spans
   const displayMessages = useMemo(() => {
-    if (hierarchicalSpans.length === 0) {
+    if (spanHierarchies.length === 0) {
       return [];
     }
     // Convert hierarchical spans to messages
-    return convertSpansToMessages(hierarchicalSpans);
-  }, [hierarchicalSpans]);
+    return convertSpansToMessages(spanHierarchies);
+  }, [spanHierarchies]);
 
 
   const clearAll = useCallback(() => {
@@ -407,8 +401,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     setSelectedRunId(null);
     setSelectedSpanId(null);
     setDetailSpanId(null);
-    setHierarchicalSpans([]);
-    setConversationSpans([]);
+    setFlattenSpans([]);
   }, []);
 
   // Calculate sum of all message metrics from displayMessages
@@ -441,8 +434,8 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
     // Span-based messages
     displayMessages,
-    conversationSpans,
-    hierarchicalSpans,
+    flattenSpans,
+    spanHierarchies,
     isLoadingSpans,
     loadSpansError,
     refreshSpans,
@@ -485,6 +478,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     appendUsage,
     clearAll,
     upsertRun,
+    setFlattenSpans,
     
     detailSpanId,
     setDetailSpanId,

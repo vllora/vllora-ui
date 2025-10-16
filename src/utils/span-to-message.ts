@@ -135,7 +135,7 @@ function extractMessagesFromSpan(span: Span, level: number = 0): Message[] {
       type: 'assistant',
       role: 'assistant',
       content: responseContent,
-      timestamp: span.finish_time_us / 1000, // Use finish time for response
+      timestamp: span.finish_time_us ? span.finish_time_us / 1000 : Date.now(), // Use finish time for response
       thread_id: span.thread_id,
       trace_id: span.trace_id,
       span_id: span.span_id,
@@ -262,7 +262,7 @@ function extractResponseContent(outputJson: any, attribute: any): string | null 
  * @returns MessageMetrics object
  */
 function calculateSpanMetrics(span: Span): MessageMetrics {
-  const duration = span.finish_time_us - span.start_time_us;
+  const duration = span.finish_time_us ? span.finish_time_us - span.start_time_us : 0;
   const attr = span.attribute as any;
 
   const usageStr = attr?.usage;

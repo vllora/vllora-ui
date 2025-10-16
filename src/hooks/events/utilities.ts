@@ -8,8 +8,9 @@ import {
   StepStartedEvent,
   TextMessageStartEvent,
   ToolCallStartEvent,
-} from '@/contexts/project-events/dto';
-import { Span } from '@/types/common-type';
+  ProjectEventUnion,
+} from "@/contexts/project-events/dto";
+import { Span } from "@/types/common-type";
 
 /**
  * Utility functions to convert various event types to Span objects
@@ -19,13 +20,13 @@ export const convertAgentStartedToSpan = (event: AgentStartedEvent): Span => {
   return {
     span_id: event.span_id || `agent_${Date.now()}`,
     parent_span_id: event.parent_span_id,
-    operation_name: 'agent',
-    thread_id: event.thread_id || '',
-    run_id: event.run_id || '',
-    trace_id: '',
+    operation_name: "agent",
+    thread_id: event.thread_id || "",
+    run_id: event.run_id || "",
+    trace_id: "",
     start_time_us: event.timestamp * 1000,
     finish_time_us: undefined,
-    attribute: event.name ? { 'langdb.agent_name': event.name } : {},
+    attribute: event.name ? { "langdb.agent_name": event.name } : {},
     isInProgress: true,
   };
 };
@@ -34,13 +35,13 @@ export const convertTaskStartedToSpan = (event: TaskStartedEvent): Span => {
   return {
     span_id: event.span_id || `task_${Date.now()}`,
     parent_span_id: event.parent_span_id,
-    operation_name: 'task',
-    thread_id: event.thread_id || '',
-    run_id: event.run_id || '',
-    trace_id: '',
+    operation_name: "task",
+    thread_id: event.thread_id || "",
+    run_id: event.run_id || "",
+    trace_id: "",
     start_time_us: event.timestamp * 1000,
     finish_time_us: undefined,
-    attribute: event.name ? { 'langdb.task_name': event.name } : {},
+    attribute: event.name ? { "langdb.task_name": event.name } : {},
     isInProgress: true,
   };
 };
@@ -53,9 +54,9 @@ export const convertCustomSpanStartToSpan = (
     span_id: event.span_id || `span_${Date.now()}`,
     parent_span_id: event.parent_span_id,
     operation_name: spanStart.operation_name,
-    thread_id: event.thread_id || '',
-    run_id: event.run_id || '',
-    trace_id: '',
+    thread_id: event.thread_id || "",
+    run_id: event.run_id || "",
+    trace_id: "",
     start_time_us: event.timestamp * 1000,
     finish_time_us: undefined,
     attribute: spanStart.attributes || {},
@@ -68,12 +69,12 @@ export const convertCustomSpanEndToSpan = (
   spanEnd: CustomSpanEndEventType
 ): Span => {
   return {
-    span_id: event.span_id || '',
+    span_id: event.span_id || "",
     parent_span_id: event.parent_span_id,
     operation_name: spanEnd.operation_name,
-    thread_id: event.thread_id || '',
-    run_id: event.run_id || '',
-    trace_id: '',
+    thread_id: event.thread_id || "",
+    run_id: event.run_id || "",
+    trace_id: "",
     start_time_us: spanEnd.start_time_unix_nano / 1000,
     finish_time_us: spanEnd.finish_time_unix_nano / 1000,
     attribute: spanEnd.attributes || {},
@@ -85,10 +86,10 @@ export const convertRunStartedToSpan = (event: RunStartedEvent): Span => {
   return {
     span_id: event.span_id || event.run_id || `run_${Date.now()}`,
     parent_span_id: event.parent_span_id,
-    operation_name: 'run',
-    thread_id: event.thread_id || '',
-    run_id: event.run_id || '',
-    trace_id: '',
+    operation_name: "run",
+    thread_id: event.thread_id || "",
+    run_id: event.run_id || "",
+    trace_id: "",
     start_time_us: event.timestamp * 1000,
     finish_time_us: undefined,
     attribute: {},
@@ -100,25 +101,27 @@ export const convertStepStartedToSpan = (event: StepStartedEvent): Span => {
   return {
     span_id: event.span_id || `step_${Date.now()}`,
     parent_span_id: event.parent_span_id,
-    operation_name: 'step',
-    thread_id: event.thread_id || '',
-    run_id: event.run_id || '',
-    trace_id: '',
+    operation_name: "step",
+    thread_id: event.thread_id || "",
+    run_id: event.run_id || "",
+    trace_id: "",
     start_time_us: event.timestamp * 1000,
     finish_time_us: undefined,
-    attribute: { 'langdb.step_name': event.step_name },
+    attribute: { "langdb.step_name": event.step_name },
     isInProgress: true,
   };
 };
 
-export const convertTextMessageStartToSpan = (event: TextMessageStartEvent): Span => {
+export const convertTextMessageStartToSpan = (
+  event: TextMessageStartEvent
+): Span => {
   return {
     span_id: event.span_id || `text_message_${Date.now()}`,
     parent_span_id: event.parent_span_id,
-    operation_name: 'text_message',
-    thread_id: event.thread_id || '',
-    run_id: event.run_id || '',
-    trace_id: '',
+    operation_name: "text_message",
+    thread_id: event.thread_id || "",
+    run_id: event.run_id || "",
+    trace_id: "",
     start_time_us: event.timestamp * 1000,
     finish_time_us: undefined,
     attribute: { role: event.role },
@@ -130,10 +133,10 @@ export const convertToolCallStartToSpan = (event: ToolCallStartEvent): Span => {
   return {
     span_id: event.span_id || event.tool_call_id || `tool_call_${Date.now()}`,
     parent_span_id: event.parent_span_id,
-    operation_name: 'tool_call',
-    thread_id: event.thread_id || '',
-    run_id: event.run_id || '',
-    trace_id: '',
+    operation_name: "tool_call",
+    thread_id: event.thread_id || "",
+    run_id: event.run_id || "",
+    trace_id: "",
     start_time_us: event.timestamp * 1000,
     finish_time_us: undefined,
     attribute: {
@@ -142,4 +145,424 @@ export const convertToolCallStartToSpan = (event: ToolCallStartEvent): Span => {
     },
     isInProgress: true,
   };
+};
+
+/**
+ * Pure function to process a single event and return updated spans array
+ * This function doesn't mutate state - it returns a new array based on the event type
+ */
+export const processEvent = (
+  currentSpans: Span[],
+  event: ProjectEventUnion
+): Span[] => {
+  const timestamp = event.timestamp || Date.now();
+  console.log('==== processEvent ====', event);
+  console.log('==== currentSpans ====', currentSpans);
+  console.log('')
+  // === Run Lifecycle Events ===
+  if (event.type === "RunStarted") {
+    const span = convertRunStartedToSpan(event);
+    return [...currentSpans, span];
+  }
+
+  if (event.type === "RunFinished" || event.type === "RunError") {
+    const spanId = event.span_id || event.run_id;
+    if (!spanId) return currentSpans;
+
+    const existingIndex = currentSpans.findIndex((s) => s.span_id === spanId);
+    if (existingIndex === -1) return currentSpans;
+
+    const updated = [...currentSpans];
+    updated[existingIndex] = {
+      ...updated[existingIndex],
+      finish_time_us: timestamp * 1000,
+      isInProgress: false,
+      ...(event.type === "RunError" && {
+        attribute: {
+          ...updated[existingIndex].attribute,
+          error: event.message,
+          error_code: event.code,
+        },
+      }),
+    };
+    return updated;
+  }
+
+  // === Agent/Task/Step Lifecycle Events ===
+  if (event.type === "AgentStarted") {
+    const span = convertAgentStartedToSpan(event);
+    return [...currentSpans, span];
+  }
+
+  if (event.type === "TaskStarted") {
+    const span = convertTaskStartedToSpan(event);
+    return [...currentSpans, span];
+  }
+
+  if (event.type === "StepStarted") {
+    const span = convertStepStartedToSpan(event);
+    return [...currentSpans, span];
+  }
+
+  if (
+    event.type === "AgentFinished" ||
+    event.type === "TaskFinished" ||
+    event.type === "StepFinished"
+  ) {
+    if (!event.span_id) return currentSpans;
+
+    const existingIndex = currentSpans.findIndex(
+      (s) => s.span_id === event.span_id
+    );
+    if (existingIndex === -1) return currentSpans;
+
+    const updated = [...currentSpans];
+    updated[existingIndex] = {
+      ...updated[existingIndex],
+      finish_time_us: timestamp * 1000,
+      isInProgress: false,
+    };
+    return updated;
+  }
+
+  // === Text Message Events ===
+  if (event.type === "TextMessageStart") {
+    const span = convertTextMessageStartToSpan(event);
+    return [...currentSpans, span];
+  }
+
+  if (event.type === "TextMessageContent") {
+    if (!event.span_id) return currentSpans;
+
+    const existingIndex = currentSpans.findIndex(
+      (s) => s.span_id === event.span_id
+    );
+    if (existingIndex >= 0) {
+      const updated = [...currentSpans];
+      const attr = updated[existingIndex].attribute as any;
+      const currentContent = attr.content || "";
+      updated[existingIndex] = {
+        ...updated[existingIndex],
+        attribute: {
+          ...updated[existingIndex].attribute,
+          content: currentContent + event.delta,
+        } as any,
+      };
+      return updated;
+    } else {
+      // Create new span if it doesn't exist
+      const newSpan: Span = {
+        span_id: event.span_id,
+        parent_span_id: event.parent_span_id,
+        operation_name: "text_message",
+        thread_id: event.thread_id || "",
+        run_id: event.run_id || "",
+        trace_id: "",
+        start_time_us: timestamp * 1000,
+        finish_time_us: undefined,
+        attribute: { content: event.delta } as any,
+        isInProgress: true,
+      };
+      return [...currentSpans, newSpan];
+    }
+  }
+
+  if (event.type === "TextMessageEnd") {
+    if (!event.span_id) return currentSpans;
+
+    const existingIndex = currentSpans.findIndex(
+      (s) => s.span_id === event.span_id
+    );
+    if (existingIndex === -1) return currentSpans;
+
+    const updated = [...currentSpans];
+    updated[existingIndex] = {
+      ...updated[existingIndex],
+      finish_time_us: timestamp * 1000,
+      isInProgress: false,
+    };
+    return updated;
+  }
+
+  // === Tool Call Events ===
+  if (event.type === "ToolCallStart") {
+    const span = convertToolCallStartToSpan(event);
+    return [...currentSpans, span];
+  }
+
+  if (event.type === "ToolCallArgs") {
+    const spanId = event.span_id || event.tool_call_id;
+    if (!spanId) return currentSpans;
+
+    const existingIndex = currentSpans.findIndex((s) => s.span_id === spanId);
+    if (existingIndex >= 0) {
+      const updated = [...currentSpans];
+      const attr = updated[existingIndex].attribute as any;
+      const currentArgs = attr.tool_arguments || "";
+      updated[existingIndex] = {
+        ...updated[existingIndex],
+        attribute: {
+          ...updated[existingIndex].attribute,
+          tool_arguments: currentArgs + event.delta,
+        } as any,
+      };
+      return updated;
+    } else {
+      // Create new span if it doesn't exist
+      const newSpan: Span = {
+        span_id: spanId,
+        parent_span_id: event.parent_span_id,
+        operation_name: "tool_call",
+        thread_id: event.thread_id || "",
+        run_id: event.run_id || "",
+        trace_id: "",
+        start_time_us: timestamp * 1000,
+        finish_time_us: undefined,
+        attribute: {
+          tool_call_id: event.tool_call_id,
+          tool_arguments: event.delta,
+        } as any,
+        isInProgress: true,
+      };
+      return [...currentSpans, newSpan];
+    }
+  }
+
+  if (event.type === "ToolCallEnd") {
+    const spanId = event.span_id || event.tool_call_id;
+    if (!spanId) return currentSpans;
+
+    const existingIndex = currentSpans.findIndex((s) => s.span_id === spanId);
+    if (existingIndex === -1) return currentSpans;
+
+    const updated = [...currentSpans];
+    updated[existingIndex] = {
+      ...updated[existingIndex],
+      finish_time_us: timestamp * 1000,
+      isInProgress: false,
+    };
+    return updated;
+  }
+
+  if (event.type === "ToolCallResult") {
+    const spanId = event.span_id || event.tool_call_id;
+    if (!spanId) return currentSpans;
+
+    const existingIndex = currentSpans.findIndex((s) => s.span_id === spanId);
+    if (existingIndex >= 0) {
+      const updated = [...currentSpans];
+      updated[existingIndex] = {
+        ...updated[existingIndex],
+        attribute: {
+          ...updated[existingIndex].attribute,
+          result: event.content,
+          result_role: event.role,
+        },
+      };
+      return updated;
+    } else {
+      // Create new span if it doesn't exist
+      const newSpan: Span = {
+        span_id: spanId,
+        parent_span_id: event.parent_span_id,
+        operation_name: "tool_call",
+        thread_id: event.thread_id || "",
+        run_id: event.run_id || "",
+        trace_id: "",
+        start_time_us: timestamp * 1000,
+        finish_time_us: undefined,
+        attribute: {
+          tool_call_id: event.tool_call_id,
+          result: event.content,
+          result_role: event.role,
+        } as any,
+        isInProgress: true,
+      };
+      return [...currentSpans, newSpan];
+    }
+  }
+
+  // === State Management Events ===
+  if (event.type === "StateSnapshot") {
+    if (!event.span_id) return currentSpans;
+
+    const existingIndex = currentSpans.findIndex(
+      (s) => s.span_id === event.span_id
+    );
+    if (existingIndex >= 0) {
+      const updated = [...currentSpans];
+      updated[existingIndex] = {
+        ...updated[existingIndex],
+        attribute: {
+          ...updated[existingIndex].attribute,
+          state_snapshot: event.snapshot,
+        },
+      };
+      return updated;
+    } else {
+      // Create new span if it doesn't exist
+      const newSpan: Span = {
+        span_id: event.span_id,
+        parent_span_id: event.parent_span_id,
+        operation_name: "span",
+        thread_id: event.thread_id || "",
+        run_id: event.run_id || "",
+        trace_id: "",
+        start_time_us: timestamp * 1000,
+        finish_time_us: undefined,
+        attribute: {
+          state_snapshot: event.snapshot,
+        } as any,
+        isInProgress: true,
+      };
+      return [...currentSpans, newSpan];
+    }
+  }
+
+  if (event.type === "StateDelta") {
+    if (!event.span_id) return currentSpans;
+
+    const existingIndex = currentSpans.findIndex(
+      (s) => s.span_id === event.span_id
+    );
+    if (existingIndex >= 0) {
+      const updated = [...currentSpans];
+      updated[existingIndex] = {
+        ...updated[existingIndex],
+        attribute: {
+          ...updated[existingIndex].attribute,
+          state_delta: event.delta,
+        },
+      };
+      return updated;
+    } else {
+      // Create new span if it doesn't exist
+      const newSpan: Span = {
+        span_id: event.span_id,
+        parent_span_id: event.parent_span_id,
+        operation_name: "span",
+        thread_id: event.thread_id || "",
+        run_id: event.run_id || "",
+        trace_id: "",
+        start_time_us: timestamp * 1000,
+        finish_time_us: undefined,
+        attribute: {
+          state_delta: event.delta,
+        } as any,
+        isInProgress: true,
+      };
+      return [...currentSpans, newSpan];
+    }
+  }
+
+  if (event.type === "MessagesSnapshot") {
+    if (!event.span_id) return currentSpans;
+
+    const existingIndex = currentSpans.findIndex(
+      (s) => s.span_id === event.span_id
+    );
+    if (existingIndex >= 0) {
+      const updated = [...currentSpans];
+      updated[existingIndex] = {
+        ...updated[existingIndex],
+        attribute: {
+          ...updated[existingIndex].attribute,
+          messages_snapshot: event.messages,
+        },
+      };
+      return updated;
+    } else {
+      // Create new span if it doesn't exist
+      const newSpan: Span = {
+        span_id: event.span_id,
+        parent_span_id: event.parent_span_id,
+        operation_name: "span",
+        thread_id: event.thread_id || "",
+        run_id: event.run_id || "",
+        trace_id: "",
+        start_time_us: timestamp * 1000,
+        finish_time_us: undefined,
+        attribute: {
+          messages_snapshot: event.messages,
+        } as any,
+        isInProgress: true,
+      };
+      return [...currentSpans, newSpan];
+    }
+  }
+
+  // === Special Events ===
+  if (event.type === "Raw") {
+    if (!event.span_id) return currentSpans;
+
+    const existingIndex = currentSpans.findIndex(
+      (s) => s.span_id === event.span_id
+    );
+    if (existingIndex >= 0) {
+      const updated = [...currentSpans];
+      updated[existingIndex] = {
+        ...updated[existingIndex],
+        attribute: {
+          ...updated[existingIndex].attribute,
+          raw_event: event.event,
+          raw_event_source: event.source,
+        },
+      };
+      return updated;
+    } else {
+      // Create new span if it doesn't exist
+      const newSpan: Span = {
+        span_id: event.span_id,
+        parent_span_id: event.parent_span_id,
+        operation_name: "raw",
+        thread_id: event.thread_id || "",
+        run_id: event.run_id || "",
+        trace_id: "",
+        start_time_us: timestamp * 1000,
+        finish_time_us: undefined,
+        attribute: {
+          raw_event: event.event,
+          raw_event_source: event.source,
+        } as any,
+        isInProgress: true,
+      };
+      return [...currentSpans, newSpan];
+    }
+  }
+
+  // Handle Custom events
+  if (event.type === "Custom") {
+    const customEvent = event as CustomEvent;
+
+    // Handle Custom events with typed event field
+    if ("event" in customEvent && customEvent.event) {
+      const eventType = customEvent.event;
+
+      // Handle span_start
+      if (eventType.type === "span_start") {
+        const span = convertCustomSpanStartToSpan(customEvent, eventType);
+        return [...currentSpans, span];
+      }
+
+      // Handle span_end
+      if (eventType.type === "span_end") {
+        const span = convertCustomSpanEndToSpan(customEvent, eventType);
+        const existingIndex = currentSpans.findIndex(
+          (s) => s.span_id === span.span_id
+        );
+        if (existingIndex >= 0) {
+          // Update existing in-progress span
+          const updated = [...currentSpans];
+          updated[existingIndex] = span;
+          return updated;
+        } else {
+          // Add new completed span
+          return [...currentSpans, span];
+        }
+      }
+    }
+  }
+
+  // No matching event type - return unchanged
+  return currentSpans;
 };
