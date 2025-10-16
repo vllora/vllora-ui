@@ -210,7 +210,7 @@ export const ResponseViewer = (props: {
             </div>
         );
     }
-    if (!response) {
+    if (!response || (!response.messages && !response.tool_calls && !response.choices && !response.candidates)) {
         return null;
     }
     return (<div className="relative flex flex-col gap-4 rounded-lg border border-border/40 bg-zinc-50/30 p-4 pt-6 dark:bg-zinc-900/20">

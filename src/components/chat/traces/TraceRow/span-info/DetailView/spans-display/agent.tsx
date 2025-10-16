@@ -1,23 +1,23 @@
 import { BaseSpanUIDetailsDisplay } from ".."
 import { Span } from "@/types/common-type";
-import { getClientSDKDisplayName } from "@/utils/graph-utils";
+import { OtherPropertyViewer } from "../other-property-viewer";
 
 interface AgentUIDisplayProps {
     span: Span;
 }
 
 export const AgentUIDisplay = ({ span }: AgentUIDisplayProps) => {
-    const agentName = getClientSDKDisplayName(span);
-    
+    const attributes = span.attribute as any;
+
+    const otherProps = attributes;
+
     return (
         <BaseSpanUIDetailsDisplay>
-            <div className="flex flex-col gap-6 pb-4">
-                <span className="text-xs text-muted-foreground">{agentName}</span>
-                <span className="text-xs text-muted-foreground">{span.operation_name}</span>
-                <span className="text-xs text-muted-foreground">{span.span_id}</span>
-                <span className="text-xs text-muted-foreground">{span.parent_span_id}</span>
-                <span className="text-xs text-muted-foreground">{span.trace_id}</span>
-                <span className="text-xs text-muted-foreground">{span.start_time_us}</span>
+            <div className="flex flex-col gap-6 pb-4 divide-y divide-border/40">
+
+                {otherProps && <>
+                    <OtherPropertyViewer attributes={otherProps} />
+                </>}
             </div>
 
         </BaseSpanUIDetailsDisplay>
