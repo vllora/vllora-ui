@@ -5,12 +5,13 @@ export interface Span {
   parent_span_id?: string;
   operation_name: string;
   start_time_us: number;
-  finish_time_us: number;
+  finish_time_us?: number; // Optional for in-progress spans
   attribute: Attributes;
   child_attribute?: Attributes;
   run_id: string;
   parent_trace_id?: string;
   spans?: Span[];
+  isInProgress?: boolean; // True if span has started but not finished
 }
 
 export type Attributes =

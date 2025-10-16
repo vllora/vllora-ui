@@ -1,5 +1,4 @@
 import React from 'react';
-import { DebugTrace } from '@/hooks/events/useDebugTimeline';
 import { TraceItem } from './TraceItem';
 import { TimelineHeader } from './TimelineHeader';
 

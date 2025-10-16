@@ -137,6 +137,7 @@ export const getColorByType = (type: string) => {
  * Check if span should be skipped in display
  */
 export function skipThisSpan(span: Span, isClientSDKTrace?: boolean): boolean {
+  return false;
   let operation_name = span.operation_name;
   if (isClientSDKTrace) {
       let sdkName = getClientSDKName(span);

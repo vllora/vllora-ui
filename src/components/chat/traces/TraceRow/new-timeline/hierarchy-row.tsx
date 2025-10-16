@@ -6,7 +6,7 @@ import { skipThisSpan, isClientSDK } from "@/utils/graph-utils";
 import { Span } from "@/types/common-type";
 
 export interface HierarchyRowProps {
-    hierarchy: Hierarchy;
+    hierarchy: Span;
     totalDuration: number;
     startTime: number;
     level: number;
@@ -23,20 +23,20 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
     // In ellora-ui, we're always in sidebar mode (chat sidebar)
     const titleWidth: string | number = `${propTitleWidth}px`.replace('pxpx', 'px');
 
-    let root = hierarchy.root;
-    let children = hierarchy.children;
+    let root = hierarchy;
+    let childrenSpan = hierarchy.spans || [];
     let isClientSDKTrace = isClientSDK(root);
     let skipCondition = skipThisSpan(root, isClientSDKTrace)
-    let isSingleTrace = level == 0 && hierarchy.children.length === 0;
+    let isSingleTrace = level == 0 && childrenSpan.length === 0;
     // Skip certain operation types and render their children directly
     if (skipCondition && !isSingleTrace) {
-        if (children && children.length > 0) {
+        if (childrenSpan && childrenSpan.length > 0) {
             return (
                 <div key={root.span_id} className="flex flex-col divide-y divide-border">
-                    {children.map(child => (
+                    {childrenSpan.map(child => (
                         <HierarchyRow
                             level={level}
-                            key={child.root.span_id}
+                            key={child.span_id}
                             hierarchy={child}
                             totalDuration={totalDuration}
                             startTime={startTime}
@@ -54,7 +54,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
     }
 
     // Calculate duration and position for the timeline bar
-    const duration = root.finish_time_us - root.start_time_us;
+    const duration = root.finish_time_us ? root.finish_time_us - root.start_time_us : 0;
     const toPercent = (value: number) => Number.isFinite(value) ? value : 0;
     const clamp = (value: number, max = 100) => Math.min(max, Math.max(0, value));
     const rawWidth = toPercent((duration / totalDuration) * 100);
@@ -77,7 +77,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
     const timelineBgColor = getTimelineBgColor({ span: root, relatedSpans });
 
     // Leaf node (no children)
-    if (children.length === 0) {
+    if (childrenSpan.length === 0) {
         return (
             <TimelineRow
                 span={root}
@@ -119,10 +119,10 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                 onSpanSelect={onSpanSelect}
             />
             <div className="flex flex-col divide-y divide-border/70">
-                {children.map(child => (
+                {childrenSpan.map(child => (
                     <HierarchyRow
                         level={level + 1}
-                        key={child.root.span_id}
+                        key={child.span_id}
                         hierarchy={child}
                         totalDuration={totalDuration}
                         startTime={startTime}

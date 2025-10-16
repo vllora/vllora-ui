@@ -2,7 +2,7 @@ import { AcademicCapIcon, ArrowsUpDownIcon, CloudIcon, ShieldCheckIcon, ShieldEx
 import { ProviderIcon } from "@/components/Icons/ProviderIcons";
 import { tryParseJson } from "@/utils/modelUtils";
 import { getColorByType, getClientSDKName, isAgentSpan, isClientSDK, isPromptCachingApplied, isRouterSpan } from "@/utils/graph-utils";
-import { BotIcon, ClapperboardIcon } from "lucide-react";
+import { BotIcon, ClapperboardIcon, PlayIcon } from "lucide-react";
 import { ArrowsPointingOutIcon } from "@heroicons/react/24/outline"
 import { ModelCall, Span } from "@/types/common-type";
 
@@ -403,6 +403,9 @@ export const getOperationIcon = (props: {
     let isAgent = isAgentSpan(span);
     if (isAgent) {
         return <BotIcon className="w-4 h-4" />;
+    }
+    if(operationName === 'run') {
+        return <PlayIcon className="w-4 h-4" />;
     }
     if (isClientSDKSpan) {
         return <ClapperboardIcon className="w-4 h-4" />;

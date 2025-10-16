@@ -2,35 +2,18 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { ProjectEventsConsumer } from '@/contexts/project-events';
 import {
   ProjectEventUnion,
-  LangDBCustomEvent,
-  LangDBEventSpan,
-  ThreadEventValue,
-  ThreadModelStartEvent,
+  CustomEvent,
+  AgentStartedEvent,
+  TaskStartedEvent,
+  CustomSpanStartEventType,
+  CustomSpanEndEventType,
+  RunStartedEvent,
+  StepStartedEvent,
+  TextMessageStartEvent,
+  ToolCallStartEvent,
 } from '@/contexts/project-events/dto';
-import { RunDTO, Span } from '@/types/common-type';
-import { Thread } from '@/types/chat';
-import { convertToNormalSpan, convertSpanToRunDTO, convertToThreadInfo } from '@/contexts/project-events/util';
-import { constructHierarchy, convertToHierarchy, Hierarchy } from '@/contexts/RunDetailContext';
-
-export interface DebugThread extends Thread {
-  runs: DebugRun[];
-  lastActivity: number;
-}
-
-export interface DebugRun extends RunDTO {
-  traces: DebugTrace[];
-  lastActivity: number;
-}
-
-export interface DebugTrace {
-  trace_id: string;
-  spans: Span[];
-  start_time_us: number;
-  finish_time_us: number;
-  lastActivity: number;
-}
-
-export type GroupingLevel = 'threads' | 'runs' | 'traces' | 'spans';
+import { Span } from '@/types/common-type';
+import { buildSpanHierarchy } from '@/utils/span-hierarchy';
 
 export interface UseDebugTimelineProps {
   projectId: string;
@@ -38,257 +21,642 @@ export interface UseDebugTimelineProps {
 
 export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
   const { subscribe } = ProjectEventsConsumer();
-  const [threads, setThreads] = useState<Map<string, DebugThread>>(new Map());
+
+  // Flat span collection - spans added immediately when started, updated when finished
+  const [flattenSpans, setFlattenSpans] = useState<Span[]>([]);
+
   const [isPaused, setIsPaused] = useState(false);
-  const [groupingLevel, setGroupingLevel] = useState<GroupingLevel>('spans');
   const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(undefined);
   const pausedEventsRef = useRef<ProjectEventUnion[]>([]);
 
-  
+  /**
+   * Conversion functions for each event type to Span
+   */
+  const convertAgentStartedToSpan = useCallback((event: AgentStartedEvent): Span => {
+    return {
+      span_id: event.span_id || `agent_${Date.now()}`,
+      parent_span_id: event.parent_span_id,
+      operation_name: 'agent',
+      thread_id: event.thread_id || '',
+      run_id: event.run_id || '',
+      trace_id: '',
+      start_time_us: event.timestamp * 1000,
+      finish_time_us: undefined,
+      attribute: event.name ? { 'langdb.agent_name': event.name } : {},
+      isInProgress: true,
+    };
+  }, []);
 
-  // Process a single event and update the hierarchy
-  const processEvent = useCallback((event: ProjectEventUnion) => {
-    console.log("=== useDebugTimeline event", event);
-    setThreads((prevThreads) => {
-      // Ensure prevThreads is a valid Map
-      const validPrevThreads = prevThreads instanceof Map ? prevThreads : new Map();
-      const newThreads = new Map(validPrevThreads);
+  const convertTaskStartedToSpan = useCallback((event: TaskStartedEvent): Span => {
+    return {
+      span_id: event.span_id || `task_${Date.now()}`,
+      parent_span_id: event.parent_span_id,
+      operation_name: 'task',
+      thread_id: event.thread_id || '',
+      run_id: event.run_id || '',
+      trace_id: '',
+      start_time_us: event.timestamp * 1000,
+      finish_time_us: undefined,
+      attribute: event.name ? { 'langdb.task_name': event.name } : {},
+      isInProgress: true,
+    };
+  }, []);
 
-      // Handle thread events
-      if (event.type === 'Custom') {
-        const customEvent = event as LangDBCustomEvent;
+  const convertCustomSpanStartToSpan = useCallback((
+    event: CustomEvent,
+    spanStart: CustomSpanStartEventType
+  ): Span => {
+    return {
+      span_id: event.span_id || `span_${Date.now()}`,
+      parent_span_id: event.parent_span_id,
+      operation_name: spanStart.operation_name,
+      thread_id: event.thread_id || '',
+      run_id: event.run_id || '',
+      trace_id: '',
+      start_time_us: event.timestamp * 1000,
+      finish_time_us: undefined,
+      attribute: spanStart.attributes || {},
+      isInProgress: true,
+    };
+  }, []);
 
-        // Thread creation/update
-        if (customEvent.name === 'thread_event' && customEvent.thread_id) {
-          const threadValue = customEvent.value as ThreadEventValue;
-          const threadInfo = convertToThreadInfo(threadValue);
+  const convertCustomSpanEndToSpan = useCallback((
+    event: CustomEvent,
+    spanEnd: CustomSpanEndEventType
+  ): Span => {
+    return {
+      span_id: event.span_id || '',
+      parent_span_id: event.parent_span_id,
+      operation_name: spanEnd.operation_name,
+      thread_id: event.thread_id || '',
+      run_id: event.run_id || '',
+      trace_id: '',
+      start_time_us: spanEnd.start_time_unix_nano / 1000,
+      finish_time_us: spanEnd.finish_time_unix_nano / 1000,
+      attribute: spanEnd.attributes || {},
+      isInProgress: false,
+    };
+  }, []);
 
-          let thread = newThreads.get(customEvent.thread_id);
-          if (thread) {
-            // Update existing thread
-            newThreads.set(customEvent.thread_id, {
-              ...thread,
-              ...threadInfo,
-              runs: thread.runs,
-              lastActivity: event.timestamp || Date.now(),
-            });
+  const convertRunStartedToSpan = useCallback((event: RunStartedEvent): Span => {
+    return {
+      span_id: event.span_id || event.run_id || `run_${Date.now()}`,
+      parent_span_id: event.parent_span_id,
+      operation_name: 'run',
+      thread_id: event.thread_id || '',
+      run_id: event.run_id || '',
+      trace_id: '',
+      start_time_us: event.timestamp * 1000,
+      finish_time_us: undefined,
+      attribute: {},
+      isInProgress: true,
+    };
+  }, []);
+
+  const convertStepStartedToSpan = useCallback((event: StepStartedEvent): Span => {
+    return {
+      span_id: event.span_id || `step_${Date.now()}`,
+      parent_span_id: event.parent_span_id,
+      operation_name: 'step',
+      thread_id: event.thread_id || '',
+      run_id: event.run_id || '',
+      trace_id: '',
+      start_time_us: event.timestamp * 1000,
+      finish_time_us: undefined,
+      attribute: { 'langdb.step_name': event.step_name },
+      isInProgress: true,
+    };
+  }, []);
+
+  const convertTextMessageStartToSpan = useCallback((event: TextMessageStartEvent): Span => {
+    return {
+      span_id: event.span_id || `text_message_${Date.now()}`,
+      parent_span_id: event.parent_span_id,
+      operation_name: 'text_message',
+      thread_id: event.thread_id || '',
+      run_id: event.run_id || '',
+      trace_id: '',
+      start_time_us: event.timestamp * 1000,
+      finish_time_us: undefined,
+      attribute: { role: event.role },
+      isInProgress: true,
+    };
+  }, []);
+
+  const convertToolCallStartToSpan = useCallback((event: ToolCallStartEvent): Span => {
+    return {
+      span_id: event.span_id || event.tool_call_id || `tool_call_${Date.now()}`,
+      parent_span_id: event.parent_span_id,
+      operation_name: 'tool_call',
+      thread_id: event.thread_id || '',
+      run_id: event.run_id || '',
+      trace_id: '',
+      start_time_us: event.timestamp * 1000,
+      finish_time_us: undefined,
+      attribute: {
+        tool_call_id: event.tool_call_id,
+        tool_call_name: event.tool_call_name,
+      },
+      isInProgress: true,
+    };
+  }, []);
+
+  /**
+   * Process events to build span hierarchy in real-time
+   *
+   * Event Flow:
+   * 1. AgentStarted/TaskStarted -> Convert to in-progress span
+   * 2. Custom(span_start) -> Convert to in-progress span
+   * 3. AgentFinished/TaskFinished -> Update span to completed
+   * 4. Custom(span_end) -> Update or add complete span
+   *
+   * Hierarchy Construction:
+   * - Each event has span_id and parent_span_id for building parent-child relationships
+   * - Spans are stored in a flat array, hierarchy is computed on-demand via convertToHierarchy
+   * - In-progress spans are visible immediately in the UI
+   */
+  const processEvents = useCallback((event: ProjectEventUnion) => {
+
+    const timestamp = event.timestamp || Date.now();
+
+    // === Run Lifecycle Events ===
+
+    // Handle RunStarted - Add in-progress span
+    if (event.type === 'RunStarted') {
+      const span = convertRunStartedToSpan(event);
+      setFlattenSpans((prevSpans) => [...prevSpans, span]);
+      return;
+    }
+
+    // Handle RunFinished/RunError - Update span to completed
+    if (event.type === 'RunFinished' || event.type === 'RunError') {
+      const spanId = event.span_id || event.run_id;
+      if (spanId) {
+        setFlattenSpans((prevSpans) => {
+          const existingIndex = prevSpans.findIndex(s => s.span_id === spanId);
+          if (existingIndex >= 0) {
+            const updated = [...prevSpans];
+            updated[existingIndex] = {
+              ...updated[existingIndex],
+              finish_time_us: timestamp * 1000,
+              isInProgress: false,
+              ...(event.type === 'RunError' && {
+                attribute: {
+                  ...updated[existingIndex].attribute,
+                  error: event.message,
+                  error_code: event.code,
+                }
+              })
+            };
+            return updated;
+          }
+          return prevSpans;
+        });
+      }
+      return;
+    }
+
+    // === Agent/Task/Step Lifecycle Events ===
+
+    // Handle AgentStarted - Add in-progress span
+    if (event.type === 'AgentStarted') {
+      const span = convertAgentStartedToSpan(event);
+      setFlattenSpans((prevSpans) => [...prevSpans, span]);
+      return;
+    }
+
+    // Handle TaskStarted - Add in-progress span
+    if (event.type === 'TaskStarted') {
+      const span = convertTaskStartedToSpan(event);
+      setFlattenSpans((prevSpans) => [...prevSpans, span]);
+      return;
+    }
+
+    // Handle StepStarted - Add in-progress span
+    if (event.type === 'StepStarted') {
+      const span = convertStepStartedToSpan(event);
+      setFlattenSpans((prevSpans) => [...prevSpans, span]);
+      return;
+    }
+
+    // Handle AgentFinished/TaskFinished/StepFinished - Update span to completed
+    if (event.type === 'AgentFinished' || event.type === 'TaskFinished' || event.type === 'StepFinished') {
+      if (event.span_id) {
+        setFlattenSpans((prevSpans) => {
+          const existingIndex = prevSpans.findIndex(s => s.span_id === event.span_id);
+          if (existingIndex >= 0) {
+            const updated = [...prevSpans];
+            updated[existingIndex] = {
+              ...updated[existingIndex],
+              finish_time_us: timestamp * 1000,
+              isInProgress: false,
+            };
+            return updated;
+          }
+          return prevSpans;
+        });
+      }
+      return;
+    }
+
+    // === Text Message Events ===
+
+    // Handle TextMessageStart - Add in-progress span
+    if (event.type === 'TextMessageStart') {
+      const span = convertTextMessageStartToSpan(event);
+      setFlattenSpans((prevSpans) => [...prevSpans, span]);
+      return;
+    }
+
+    // Handle TextMessageContent - Update span with content delta
+    if (event.type === 'TextMessageContent') {
+      if (event.span_id) {
+        setFlattenSpans((prevSpans) => {
+          const existingIndex = prevSpans.findIndex(s => s.span_id === event.span_id);
+          if (existingIndex >= 0) {
+            const updated = [...prevSpans];
+            const attr = updated[existingIndex].attribute as any;
+            const currentContent = attr.content || '';
+            updated[existingIndex] = {
+              ...updated[existingIndex],
+              attribute: {
+                ...updated[existingIndex].attribute,
+                content: currentContent + event.delta,
+              } as any,
+            };
+            return updated;
           } else {
-            // Create new thread
-            newThreads.set(customEvent.thread_id, {
-              ...threadInfo,
-              runs: [],
-              lastActivity: event.timestamp || Date.now(),
-            });
+            if (!event.span_id) {
+              return prevSpans;
+            }
+            // Create new span if it doesn't exist (can happen if subscribed mid-stream)
+            const newSpan: Span = {
+              span_id: event.span_id,
+              parent_span_id: event.parent_span_id,
+              operation_name: 'text_message',
+              thread_id: event.thread_id || '',
+              run_id: event.run_id || '',
+              trace_id: '',
+              start_time_us: timestamp * 1000,
+              finish_time_us: undefined,
+              attribute: { content: event.delta } as any,
+              isInProgress: true,
+            };
+            return [...prevSpans, newSpan];
           }
+        });
+      }
+      return;
+    }
+
+    // Handle TextMessageEnd - Update span to completed
+    if (event.type === 'TextMessageEnd') {
+      if (event.span_id) {
+        setFlattenSpans((prevSpans) => {
+          const existingIndex = prevSpans.findIndex(s => s.span_id === event.span_id);
+          if (existingIndex >= 0) {
+            const updated = [...prevSpans];
+            updated[existingIndex] = {
+              ...updated[existingIndex],
+              finish_time_us: timestamp * 1000,
+              isInProgress: false,
+            };
+            return updated;
+          }
+          return prevSpans;
+        });
+      }
+      return;
+    }
+
+    // === Tool Call Events ===
+
+    // Handle ToolCallStart - Add in-progress span
+    if (event.type === 'ToolCallStart') {
+      const span = convertToolCallStartToSpan(event);
+      setFlattenSpans((prevSpans) => [...prevSpans, span]);
+      return;
+    }
+
+    // Handle ToolCallArgs - Update span with arguments delta
+    if (event.type === 'ToolCallArgs') {
+      const spanId = event.span_id || event.tool_call_id;
+      if (spanId) {
+        setFlattenSpans((prevSpans) => {
+          const existingIndex = prevSpans.findIndex(s => s.span_id === spanId);
+          if (existingIndex >= 0) {
+            const updated = [...prevSpans];
+            const attr = updated[existingIndex].attribute as any;
+            const currentArgs = attr.tool_arguments || '';
+            updated[existingIndex] = {
+              ...updated[existingIndex],
+              attribute: {
+                ...updated[existingIndex].attribute,
+                tool_arguments: currentArgs + event.delta,
+              } as any,
+            };
+            return updated;
+          } else {
+            // Create new span if it doesn't exist (can happen if subscribed mid-stream)
+            const newSpan: Span = {
+              span_id: spanId,
+              parent_span_id: event.parent_span_id,
+              operation_name: 'tool_call',
+              thread_id: event.thread_id || '',
+              run_id: event.run_id || '',
+              trace_id: '',
+              start_time_us: timestamp * 1000,
+              finish_time_us: undefined,
+              attribute: {
+                tool_call_id: event.tool_call_id,
+                tool_arguments: event.delta
+              } as any,
+              isInProgress: true,
+            };
+            return [...prevSpans, newSpan];
+          }
+        });
+      }
+      return;
+    }
+
+    // Handle ToolCallEnd - Update span to completed
+    if (event.type === 'ToolCallEnd') {
+      const spanId = event.span_id || event.tool_call_id;
+      if (spanId) {
+        setFlattenSpans((prevSpans) => {
+          const existingIndex = prevSpans.findIndex(s => s.span_id === spanId);
+          if (existingIndex >= 0) {
+            const updated = [...prevSpans];
+            updated[existingIndex] = {
+              ...updated[existingIndex],
+              finish_time_us: timestamp * 1000,
+              isInProgress: false,
+            };
+            return updated;
+          }
+          return prevSpans;
+        });
+      }
+      return;
+    }
+
+    // Handle ToolCallResult - Update span with result
+    if (event.type === 'ToolCallResult') {
+      const spanId = event.span_id || event.tool_call_id;
+      if (spanId) {
+        setFlattenSpans((prevSpans) => {
+          const existingIndex = prevSpans.findIndex(s => s.span_id === spanId);
+          if (existingIndex >= 0) {
+            const updated = [...prevSpans];
+            updated[existingIndex] = {
+              ...updated[existingIndex],
+              attribute: {
+                ...updated[existingIndex].attribute,
+                result: event.content,
+                result_role: event.role,
+              },
+            };
+            return updated;
+          } else {
+            // Create new span if it doesn't exist (can happen if subscribed mid-stream)
+            const newSpan: Span = {
+              span_id: spanId,
+              parent_span_id: event.parent_span_id,
+              operation_name: 'tool_call',
+              thread_id: event.thread_id || '',
+              run_id: event.run_id || '',
+              trace_id: '',
+              start_time_us: timestamp * 1000,
+              finish_time_us: undefined,
+              attribute: {
+                tool_call_id: event.tool_call_id,
+                result: event.content,
+                result_role: event.role,
+              } as any,
+              isInProgress: true,
+            };
+            return [...prevSpans, newSpan];
+          }
+        });
+      }
+      return;
+    }
+
+    // === State Management Events ===
+
+    // Handle StateSnapshot - Update span with state
+    if (event.type === 'StateSnapshot') {
+      if (event.span_id) {
+        setFlattenSpans((prevSpans) => {
+          const existingIndex = prevSpans.findIndex(s => s.span_id === event.span_id);
+          if (existingIndex >= 0) {
+            const updated = [...prevSpans];
+            updated[existingIndex] = {
+              ...updated[existingIndex],
+              attribute: {
+                ...updated[existingIndex].attribute,
+                state_snapshot: event.snapshot,
+              },
+            };
+            return updated;
+          } else {
+            if (!event.span_id) {
+              return prevSpans;
+            }
+            // Create new span if it doesn't exist (can happen if subscribed mid-stream)
+            const newSpan: Span = {
+              span_id: event.span_id,
+              parent_span_id: event.parent_span_id,
+              operation_name: 'span',
+              thread_id: event.thread_id || '',
+              run_id: event.run_id || '',
+              trace_id: '',
+              start_time_us: timestamp * 1000,
+              finish_time_us: undefined,
+              attribute: {
+                state_snapshot: event.snapshot,
+              } as any,
+              isInProgress: true,
+            };
+            return [...prevSpans, newSpan];
+          }
+        });
+      }
+      return;
+    }
+
+    // Handle StateDelta - Update span with state delta
+    if (event.type === 'StateDelta') {
+      if (event.span_id) {
+        setFlattenSpans((prevSpans) => {
+          const existingIndex = prevSpans.findIndex(s => s.span_id === event.span_id);
+          if (existingIndex >= 0) {
+            const updated = [...prevSpans];
+            updated[existingIndex] = {
+              ...updated[existingIndex],
+              attribute: {
+                ...updated[existingIndex].attribute,
+                state_delta: event.delta,
+              },
+            };
+            return updated;
+          } else {
+            if (!event.span_id) {
+              return prevSpans;
+            }
+            // Create new span if it doesn't exist (can happen if subscribed mid-stream)
+            const newSpan: Span = {
+              span_id: event.span_id,
+              parent_span_id: event.parent_span_id,
+              operation_name: 'span',
+              thread_id: event.thread_id || '',
+              run_id: event.run_id || '',
+              trace_id: '',
+              start_time_us: timestamp * 1000,
+              finish_time_us: undefined,
+              attribute: {
+                state_delta: event.delta,
+              } as any,
+              isInProgress: true,
+            };
+            return [...prevSpans, newSpan];
+          }
+        });
+      }
+      return;
+    }
+
+    // Handle MessagesSnapshot - Update span with messages
+    if (event.type === 'MessagesSnapshot') {
+      if (event.span_id) {
+        setFlattenSpans((prevSpans) => {
+          const existingIndex = prevSpans.findIndex(s => s.span_id === event.span_id);
+          if (existingIndex >= 0) {
+            const updated = [...prevSpans];
+            updated[existingIndex] = {
+              ...updated[existingIndex],
+              attribute: {
+                ...updated[existingIndex].attribute,
+                messages_snapshot: event.messages,
+              },
+            };
+            return updated;
+          } else {
+            if (!event.span_id) {
+              return prevSpans;
+            }
+            // Create new span if it doesn't exist (can happen if subscribed mid-stream)
+            const newSpan: Span = {
+              span_id: event.span_id,
+              parent_span_id: event.parent_span_id,
+              operation_name: 'span',
+              thread_id: event.thread_id || '',
+              run_id: event.run_id || '',
+              trace_id: '',
+              start_time_us: timestamp * 1000,
+              finish_time_us: undefined,
+              attribute: {
+                messages_snapshot: event.messages,
+              } as any,
+              isInProgress: true,
+            };
+            return [...prevSpans, newSpan];
+          }
+        });
+      }
+      return;
+    }
+
+    // === Special Events ===
+
+    // Handle RawEvent - Store raw event data
+    if (event.type === 'Raw') {
+      if (event.span_id) {
+        setFlattenSpans((prevSpans) => {
+          const existingIndex = prevSpans.findIndex(s => s.span_id === event.span_id);
+          if (existingIndex >= 0) {
+            const updated = [...prevSpans];
+            updated[existingIndex] = {
+              ...updated[existingIndex],
+              attribute: {
+                ...updated[existingIndex].attribute,
+                raw_event: event.event,
+                raw_event_source: event.source,
+              },
+            };
+            return updated;
+          } else {
+            if (!event.span_id) {
+              return prevSpans;
+            }
+            // Create new span if it doesn't exist (can happen if subscribed mid-stream)
+            const newSpan: Span = {
+              span_id: event.span_id,
+              parent_span_id: event.parent_span_id,
+              operation_name: 'raw',
+              thread_id: event.thread_id || '',
+              run_id: event.run_id || '',
+              trace_id: '',
+              start_time_us: timestamp * 1000,
+              finish_time_us: undefined,
+              attribute: {
+                raw_event: event.event,
+                raw_event_source: event.source,
+              } as any,
+              isInProgress: true,
+            };
+            return [...prevSpans, newSpan];
+          }
+        });
+      }
+      return;
+    }
+
+    // Handle Custom events
+    if (event.type === 'Custom') {
+      const customEvent = event as CustomEvent;
+
+      // Handle Custom events with typed event field
+      if ('event' in customEvent && customEvent.event) {
+        const eventType = customEvent.event;
+
+        // Handle span_start
+        if (eventType.type === 'span_start') {
+          const span = convertCustomSpanStartToSpan(customEvent, eventType);
+          setFlattenSpans((prevSpans) => [...prevSpans, span]);
+          return;
         }
 
-        // Span events - create/update run and add span
-        if (customEvent.name === 'span_end' && customEvent.value?.span) {
-          const eventSpan = customEvent.value.span as LangDBEventSpan;
-          const span = convertToNormalSpan(eventSpan);
-
-          if (span.thread_id && span.run_id) {
-            let thread = newThreads.get(span.thread_id);
-
-            // Ensure thread exists
-            if (!thread) {
-              const newThread: DebugThread = {
-                id: span.thread_id,
-                project_id: projectId,
-                user_id: '',
-                model_name: '',
-                created_at: new Date(span.start_time_us / 1000).toISOString(),
-                updated_at: new Date(span.finish_time_us / 1000).toISOString(),
-                runs: [],
-                lastActivity: span.finish_time_us / 1000,
-                is_from_local: false,
-              };
-              newThreads.set(span.thread_id, newThread);
-              thread = newThread;
-            }
-
-            // Find or create run
-            const runIndex = thread.runs.findIndex((r: DebugRun) => r.run_id === span.run_id);
-            if (runIndex === -1) {
-              // Create new run with trace
-              const newTrace: DebugTrace = {
-                trace_id: span.trace_id,
-                spans: [span],
-                start_time_us: span.start_time_us,
-                finish_time_us: span.finish_time_us,
-                lastActivity: span.finish_time_us / 1000,
-              };
-              const newRun: DebugRun = {
-                ...convertSpanToRunDTO(span),
-                traces: [newTrace],
-                lastActivity: span.finish_time_us / 1000,
-              };
-              thread = {
-                ...thread,
-                runs: [newRun, ...thread.runs],
-                lastActivity: span.finish_time_us / 1000,
-              };
+        // Handle span_end
+        if (eventType.type === 'span_end') {
+          const span = convertCustomSpanEndToSpan(customEvent, eventType);
+          setFlattenSpans((prevSpans) => {
+            const existingIndex = prevSpans.findIndex(s => s.span_id === span.span_id);
+            if (existingIndex >= 0) {
+              // Update existing in-progress span
+              const updated = [...prevSpans];
+              updated[existingIndex] = span;
+              return updated;
             } else {
-              // Update existing run - add span to trace or create new trace
-              const existingRun = thread.runs[runIndex];
-              const updatedRunDTO = convertSpanToRunDTO(span, existingRun);
-              const updatedRuns = [...thread.runs];
-
-              // Find or create trace within run
-              const traceIndex = existingRun.traces.findIndex((t: DebugTrace) => t.trace_id === span.trace_id);
-              let updatedTraces: DebugTrace[];
-
-              if (traceIndex === -1) {
-                // Create new trace
-                const newTrace: DebugTrace = {
-                  trace_id: span.trace_id,
-                  spans: [span],
-                  start_time_us: span.start_time_us,
-                  finish_time_us: span.finish_time_us,
-                  lastActivity: span.finish_time_us / 1000,
-                };
-                updatedTraces = [newTrace, ...existingRun.traces];
-              } else {
-                // Add span to existing trace
-                updatedTraces = [...existingRun.traces];
-                const existingTrace = updatedTraces[traceIndex];
-                updatedTraces[traceIndex] = {
-                  ...existingTrace,
-                  spans: [...existingTrace.spans, span],
-                  start_time_us: Math.min(existingTrace.start_time_us, span.start_time_us),
-                  finish_time_us: Math.max(existingTrace.finish_time_us, span.finish_time_us),
-                  lastActivity: span.finish_time_us / 1000,
-                };
-              }
-
-              updatedRuns[runIndex] = {
-                ...updatedRunDTO,
-                traces: updatedTraces,
-                lastActivity: span.finish_time_us / 1000,
-              };
-              thread = {
-                ...thread,
-                runs: updatedRuns,
-                lastActivity: span.finish_time_us / 1000,
-              };
+              // Add new completed span
+              return [...prevSpans, span];
             }
-
-            newThreads.set(span.thread_id, thread);
-          }
-        }
-
-        // Model start events - create run if it doesn't exist
-        if (customEvent.name === 'model_start' && customEvent.thread_id && customEvent.run_id) {
-          const modelStartEvent = event as ThreadModelStartEvent;
-          let thread = newThreads.get(customEvent.thread_id);
-
-          if (!thread) {
-            const newThread: DebugThread = {
-              id: customEvent.thread_id,
-              project_id: projectId,
-              user_id: '',
-              model_name: '',
-              created_at: new Date(event.timestamp || Date.now()).toISOString(),
-              updated_at: new Date(event.timestamp || Date.now()).toISOString(),
-              runs: [],
-              lastActivity: event.timestamp || Date.now(),
-              is_from_local: false,
-            };
-            newThreads.set(customEvent.thread_id, newThread);
-            thread = newThread;
-          }
-
-          // Check if run exists
-          const runIndex = thread.runs.findIndex((r: DebugRun) => r.run_id === customEvent.run_id);
-          if (runIndex === -1) {
-            // Create new run with empty traces
-            const startTime = event.timestamp ? event.timestamp * 1000 : Date.now() * 1000;
-            const newRun: DebugRun = {
-              run_id: customEvent.run_id,
-              thread_ids: [customEvent.thread_id],
-              trace_ids: [],
-              used_models: [`${modelStartEvent.value.provider_name}/${modelStartEvent.value.model_name}`],
-              request_models: [`${modelStartEvent.value.provider_name}/${modelStartEvent.value.model_name}`],
-              used_tools: [],
-              mcp_template_definition_ids: [],
-              cost: 0,
-              input_tokens: 0,
-              output_tokens: 0,
-              start_time_us: startTime,
-              finish_time_us: startTime,
-              errors: [],
-              traces: [],
-              lastActivity: event.timestamp || Date.now(),
-            };
-            thread = {
-              ...thread,
-              runs: [newRun, ...thread.runs],
-              lastActivity: event.timestamp || Date.now(),
-            };
-            newThreads.set(customEvent.thread_id, thread);
-          }
+          });
+          return;
         }
       }
-
-      // Handle events with run_id and thread_id (generic run updates)
-      if (event.run_id && event.thread_id) {
-        let thread = newThreads.get(event.thread_id);
-
-        if (!thread) {
-          const newThread: DebugThread = {
-            id: event.thread_id,
-            project_id: projectId,
-            user_id: '',
-            model_name: '',
-            created_at: new Date(event.timestamp || Date.now()).toISOString(),
-            updated_at: new Date(event.timestamp || Date.now()).toISOString(),
-            runs: [],
-            lastActivity: event.timestamp || Date.now(),
-            is_from_local: false,
-          };
-          newThreads.set(event.thread_id, newThread);
-          thread = newThread;
-        }
-
-        const runIndex = thread.runs.findIndex((r: DebugRun) => r.run_id === event.run_id);
-        if (runIndex === -1) {
-          // Create basic run with empty traces
-          const startTime = event.timestamp ? event.timestamp * 1000 : Date.now() * 1000;
-          const newRun: DebugRun = {
-            run_id: event.run_id,
-            thread_ids: [event.thread_id],
-            trace_ids: [],
-            used_models: [],
-            request_models: [],
-            used_tools: [],
-            mcp_template_definition_ids: [],
-            cost: 0,
-            input_tokens: 0,
-            output_tokens: 0,
-            start_time_us: startTime,
-            finish_time_us: startTime,
-            errors: [],
-            traces: [],
-            lastActivity: event.timestamp || Date.now(),
-          };
-          thread = {
-            ...thread,
-            runs: [newRun, ...thread.runs],
-            lastActivity: event.timestamp || Date.now(),
-          };
-        } else {
-          thread = {
-            ...thread,
-            lastActivity: event.timestamp || Date.now(),
-          };
-        }
-
-        newThreads.set(event.thread_id, thread);
-      }
-
-      return newThreads;
-    });
-  }, [projectId]);
+    }
+  }, [
+    convertRunStartedToSpan,
+    convertAgentStartedToSpan,
+    convertTaskStartedToSpan,
+    convertStepStartedToSpan,
+    convertTextMessageStartToSpan,
+    convertToolCallStartToSpan,
+    convertCustomSpanStartToSpan,
+    convertCustomSpanEndToSpan,
+  ]);
 
   // Subscribe to all project events
   useEffect(() => {
@@ -296,100 +664,88 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
       if (isPaused) {
         pausedEventsRef.current.push(event);
       } else {
-        console.log('==== Processing event:', event);
-        processEvent(event);
+        processEvents(event);
       }
     });
 
     return unsubscribe;
-  }, [subscribe, projectId, processEvent, isPaused]);
+  }, [subscribe, projectId, processEvents, isPaused]);
 
   // Resume and process paused events
   const resume = useCallback(() => {
     setIsPaused(false);
     if (pausedEventsRef.current.length > 0) {
-      pausedEventsRef.current.forEach(processEvent);
+      pausedEventsRef.current.forEach(processEvents);
       pausedEventsRef.current = [];
     }
-  }, [processEvent]);
+  }, [processEvents]);
 
   const pause = useCallback(() => {
     setIsPaused(true);
   }, []);
 
   const clear = useCallback(() => {
-    setThreads(new Map());
+    setFlattenSpans([]);
     pausedEventsRef.current = [];
     setSelectedSpanId(undefined);
   }, []);
 
-  // Convert map to sorted array
-  const sortedThreads = useMemo(
-    () => {
-      if (!threads || !(threads instanceof Map)) return [];
-      return Array.from(threads.values()).sort((a, b) => a.lastActivity - b.lastActivity);
-    },
-    [threads]
-  );
-
-  const flatSpans = useMemo<Span[]>(() => {
-    const entries: Span[] = [];
-    if (!threads || !(threads instanceof Map)) return entries;
-    for (const thread of threads.values()) {
-      for (const run of thread.runs) {
-        for (const trace of run.traces) {
-          for (const span of trace.spans) {
-            entries.push(span);
-          }
-        }
-      }
-    }
-    return entries.sort((a, b) => a.start_time_us - b.start_time_us);
-  }, [threads]);
-
+  // Memoized selected span
   const selectedSpan = useMemo(() => {
     if (!selectedSpanId) return null;
-    return flatSpans.find(span => span.span_id === selectedSpanId);
-  }, [selectedSpanId, flatSpans]);
+    return flattenSpans.find(span => span.span_id === selectedSpanId) || null;
+  }, [selectedSpanId, flattenSpans]);
 
-  // Flatten to runs (all runs from all threads)
-  const flatRuns = useMemo<DebugRun[]>(() => {
-    const entries: DebugRun[] = [];
-    if (!threads || !(threads instanceof Map)) return entries;
-    for (const thread of threads.values()) {
-      for (const run of thread.runs) {
-        entries.push(run);
-      }
-    }
-    return entries.sort((a, b) => a.start_time_us - b.start_time_us);
-  }, [threads]);
+  // Build hierarchy from flat spans
+  const spanHierarchies: Span[] = useMemo(
+    () => buildSpanHierarchy(flattenSpans),
+    [flattenSpans]
+  );
 
-  // Flatten to traces (all traces from all runs)
-  const flatTraces = useMemo<DebugTrace[]>(() => {
-    const entries: DebugTrace[] = [];
-    if (!threads || !(threads instanceof Map)) return entries;
-    for (const thread of threads.values()) {
-      for (const run of thread.runs) {
-        for (const trace of run.traces) {
-          entries.push(trace);
-        }
+  // Group spans by thread
+  const spansByThread = useMemo(() => {
+    const grouped = new Map<string, Span[]>();
+    flattenSpans.forEach(span => {
+      if (span.thread_id) {
+        const existing = grouped.get(span.thread_id) || [];
+        grouped.set(span.thread_id, [...existing, span]);
       }
-    }
-    return entries.sort((a, b) => a.start_time_us - b.start_time_us);
-  }, [threads]);
+    });
+    return grouped;
+  }, [flattenSpans]);
+
+  // Group spans by run
+  const spansByRun = useMemo(() => {
+    const grouped = new Map<string, Span[]>();
+    flattenSpans.forEach(span => {
+      if (span.run_id) {
+        const existing = grouped.get(span.run_id) || [];
+        grouped.set(span.run_id, [...existing, span]);
+      }
+    });
+    return grouped;
+  }, [flattenSpans]);
+
+  // Group spans by trace
+  const spansByTrace = useMemo(() => {
+    const grouped = new Map<string, Span[]>();
+    flattenSpans.forEach(span => {
+      if (span.trace_id) {
+        const existing = grouped.get(span.trace_id) || [];
+        grouped.set(span.trace_id, [...existing, span]);
+      }
+    });
+    return grouped;
+  }, [flattenSpans]);
 
   const pausedCount = pausedEventsRef.current.length;
 
-  const spanHierarchies: Record<string, Hierarchy> = useMemo(() => convertToHierarchy({ spans: flatSpans, isDisplayGraph: false }), [flatSpans]);
-
   return {
-    threads: sortedThreads,
-    runs: flatRuns,
-    traces: flatTraces,
-    spans: flatSpans,
+    flattenSpans,
     spanHierarchies,
-    groupingLevel,
-    setGroupingLevel,
+    spansByThread,
+    spansByRun,
+    spansByTrace,
     isPaused,
     pausedCount,
     pause,

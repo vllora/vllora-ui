@@ -3,65 +3,33 @@ import { ArrowDown, Pause, Play, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { useDebugTimeline } from '@/hooks/events/useDebugTimeline';
-import { HierarchicalTimeline } from '@/components/debug/HierarchicalTimeline';
-import { useAutoScrollToBottom } from '@/hooks/useAutoScrollToBottom';
 import { SpanList } from '@/components/debug/SpanList';
-import { RunList } from '@/components/debug/RunList';
-import { TraceList } from '@/components/debug/TraceList';
 import { SpanDetailPanel } from '@/components/debug/SpanDetailPanel';
 
 export function DebugPageContent() {
   const { currentProjectId } = ProjectsConsumer();
   const {
-    threads,
-    runs,
-    traces,
     spanHierarchies,
     isPaused,
-    spans,
+    flattenSpans,
     pausedCount,
     pause,
     resume,
     clear,
-    groupingLevel,
-    setGroupingLevel,
     selectedSpanId,
     setSelectedSpanId,
     selectedSpan,
   } = useDebugTimeline({
     projectId: currentProjectId || '',
   });
-  const {
-    containerRef,
-    isAtBottom,
-    isScrollable,
-    scrollToBottom,
-  } = useAutoScrollToBottom<HTMLDivElement>({
-    isActive: !isPaused,
-    dependencies: useMemo(() => {
-      const latestThreadActivity = threads.length > 0 ? threads[threads.length - 1].lastActivity : 0;
-      const latestRunActivity = runs.length > 0 ? runs[runs.length - 1].lastActivity : 0;
-      const latestTraceActivity = traces.length > 0 ? traces[traces.length - 1].lastActivity : 0;
-      const latestSpanActivity = spans.length > 0 ? spans[spans.length - 1].finish_time_us : 0;
 
-      if (groupingLevel === 'threads') {
-        return [groupingLevel, threads.length, latestThreadActivity];
-      } else if (groupingLevel === 'runs') {
-        return [groupingLevel, runs.length, latestRunActivity];
-      } else if (groupingLevel === 'traces') {
-        return [groupingLevel, traces.length, latestTraceActivity];
-      } else {
-        return [groupingLevel, spans.length, latestSpanActivity];
-      }
-    }, [groupingLevel, threads, runs, traces, spans]),
-    threshold: 10,
-  });
+  
 
   // Get spans from the same run as the selected span
   const spansOfSelectedRun = useMemo(() => {
     if (!selectedSpan?.run_id) return [];
-    return spans.filter(s => s.run_id === selectedSpan.run_id);
-  }, [selectedSpan, spans]);
+    return flattenSpans.filter(s => s.run_id === selectedSpan.run_id);
+  }, [selectedSpan, flattenSpans]);
 
   if (!currentProjectId) {
     return (
@@ -88,47 +56,12 @@ export function DebugPageContent() {
             <div>
               <h1 className="text-xl font-semibold">Debug Console</h1>
               <p className="text-sm text-muted-foreground">
-                Real-time hierarchical timeline: Threads → Runs → Traces → Spans
+                Real-time span hierarchy with parent-child relationships
               </p>
             </div>
 
             {/* Controls */}
             <div className="flex items-center gap-2">
-              <div className="flex items-center rounded border border-border overflow-hidden">
-                <Button
-                  variant={groupingLevel === 'threads' ? 'default' : 'ghost'}
-                  size="sm"
-                  className="h-9 rounded-none"
-                  onClick={() => setGroupingLevel('threads')}
-                >
-                  Threads
-                </Button>
-                <Button
-                  variant={groupingLevel === 'runs' ? 'default' : 'ghost'}
-                  size="sm"
-                  className="h-9 rounded-none"
-                  onClick={() => setGroupingLevel('runs')}
-                >
-                  Runs
-                </Button>
-                <Button
-                  variant={groupingLevel === 'traces' ? 'default' : 'ghost'}
-                  size="sm"
-                  className="h-9 rounded-none"
-                  onClick={() => setGroupingLevel('traces')}
-                >
-                  Traces
-                </Button>
-                <Button
-                  variant={groupingLevel === 'spans' ? 'default' : 'ghost'}
-                  size="sm"
-                  className="h-9 rounded-none"
-                  onClick={() => setGroupingLevel('spans')}
-                >
-                  Spans
-                </Button>
-              </div>
-
               {/* Pause/Resume */}
               {isPaused ? (
                 <Button
@@ -162,7 +95,7 @@ export function DebugPageContent() {
                 variant="outline"
                 size="sm"
                 onClick={clear}
-                disabled={threads.length === 0}
+                disabled={flattenSpans.length === 0}
                 className="h-9"
               >
                 <Trash2 className="w-4 h-4 mr-2" />
@@ -175,25 +108,15 @@ export function DebugPageContent() {
 
       <div className='flex flex-1 flex-row'>
         <div className="flex-1 overflow-hidden">
-          <div ref={containerRef} className="h-full overflow-y-auto">
+          <div className="h-full overflow-y-auto">
             <div className="relative min-h-full flex flex-col">
-              {groupingLevel === 'threads' && <HierarchicalTimeline threads={threads} />}
-              {groupingLevel === 'runs' && <RunList runs={runs} selectedSpanId={selectedSpanId} onSpanSelect={(spanId) => setSelectedSpanId(spanId)} />}
-              {groupingLevel === 'traces' && <TraceList traces={traces} selectedSpanId={selectedSpanId} onSpanSelect={(spanId) => setSelectedSpanId(spanId)} />}
-              {groupingLevel === 'spans' && <SpanList hierarchies={spanHierarchies} spans={spans} selectedSpanId={selectedSpanId} onSpanSelect={(spanId) => setSelectedSpanId(spanId)} />}
-              {!isAtBottom && isScrollable && (
-                <div className="sticky bottom-4 flex justify-end pr-4">
-                  <Button
-                    size="sm"
-                    onClick={scrollToBottom}
-                    variant="secondary"
-                    className="shadow-md"
-                  >
-                    <ArrowDown className="w-4 h-4 mr-2" />
-                    Scroll to latest
-                  </Button>
-                </div>
-              )}
+              <SpanList
+                hierarchies={spanHierarchies}
+                flattenSpans={flattenSpans}
+                selectedSpanId={selectedSpanId}
+                onSpanSelect={(spanId) => setSelectedSpanId(spanId)}
+              />
+             
             </div>
           </div>
         </div>
