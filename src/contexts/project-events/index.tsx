@@ -148,7 +148,6 @@ export const useProjectEvents = (props: ProjectEventsHookProps) => {
         onmessage: (event) => {
           try {
             const parsedData = JSON.parse(event.data);
-
             // The backend sends events with proper structure, use directly
             const projectEvent: ProjectEventUnion = {
               ...parsedData,
@@ -156,7 +155,6 @@ export const useProjectEvents = (props: ProjectEventsHookProps) => {
             } as ProjectEventUnion;
             let ignoreThisEvent = projectEvent.type === 'Custom' && (projectEvent.event?.type === 'ping' || (projectEvent.type === 'Custom' &&projectEvent.event && !projectEvent.run_id))
             if (!ignoreThisEvent) {
-              console.log('==== Received event:', parsedData);
               // Emit to subscribers instead of storing in array
               emit(projectEvent);
             }

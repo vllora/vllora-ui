@@ -178,7 +178,7 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
   const processEvents = useCallback((event: ProjectEventUnion) => {
 
     const timestamp = event.timestamp || Date.now();
-
+    console.log('==== processEvents Received event:', event);
     // === Run Lifecycle Events ===
 
     // Handle RunStarted - Add in-progress span
