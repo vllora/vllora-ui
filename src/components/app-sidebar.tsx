@@ -21,7 +21,6 @@ import {
 const mainMenuItems = [
   { id: "home", label: "Home", icon: Home, path: "/" },
   { id: "chat", label: "Chat", icon: MessageSquare, path: "/chat" },
-  { id: "debug", label: "Debug", icon: BugPlayIcon, path: "/debug" },
 ]
 
 const bottomMenuItems = [
