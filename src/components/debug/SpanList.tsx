@@ -20,7 +20,6 @@ export const SpanList: React.FC<SpanListProps> = ({ hierarchies, flattenSpans, o
     );
   }
 
-  console.log('==== hierarchies', hierarchies);
   if (hierarchies.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center py-16 text-sm text-muted-foreground">

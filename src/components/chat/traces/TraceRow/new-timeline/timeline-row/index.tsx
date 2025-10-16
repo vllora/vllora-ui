@@ -77,10 +77,7 @@ export const TimelineRow = (props: TimelineRowProps) => {
         timelineBgColor: timelineBgColor,
         operation_name: span.operation_name,
         span
-    };
-
-    console.log('===== span', span)
-    
+    };    
     return (
         <div
             key={span.span_id}
