@@ -43,7 +43,7 @@ export const TaskUIDisplay = ({ span }: TaskUIDisplayProps) => {
     }, {} as any);
     return (
         <BaseSpanUIDetailsDisplay>
-            <div className="flex flex-col gap-6 pb-4 divide-y divide-border/40">
+            <div className="flex flex-col gap-6 pb-4">
                 <InputViewer jsonRequest={requestJson} />
                 <ResponseViewer response={responseJson} />
                 {otherPropsKeys && otherPropsKeys.length > 0 && <>

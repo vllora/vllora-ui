@@ -46,7 +46,6 @@ export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelIn
         <BaseSpanUIDetailsDisplay>
             <div className="flex flex-col gap-6 pb-4">
                 <InputViewer jsonRequest={raw_request_json} headers={headers} />
-                <div className="h-px w-full bg-border/60" />
                 <ResponseViewer response={raw_response_json} />
                 <UsageViewer
                     cost={costInfo || undefined}
