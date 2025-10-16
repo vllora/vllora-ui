@@ -30,7 +30,7 @@ export function ChatPage() {
   }, [threads, selectedThreadId]);
   // Read selectedModel from URL query string, fallback to default
   const selectedModel = useMemo(() => {
-    return searchParams.get('model')  || (currentThread?.input_models && currentThread.input_models.length > 0 ? currentThread.input_models[currentThread.input_models.length - 1] : undefined) || currentThread?.request_model_name || 'openai/o1-mini';
+    return searchParams.get('model')  || (currentThread?.input_models && currentThread.input_models.length > 0 ? currentThread.input_models[currentThread.input_models.length - 1] : undefined) || 'openai/o1-mini';
   }, [searchParams, currentThread]);
 
   useEffect(() => {
@@ -40,7 +40,7 @@ export function ChatPage() {
   const handleSelectThread = useCallback((threadId: string) => {
     const thread = threads.find((t) => t.id === threadId);
     // Navigate to update the threadId and model in URL
-    const modelParam = thread?.model_name || selectedModel;
+    const modelParam = thread?.input_models && thread.input_models.length > 0 ? thread.input_models[thread.input_models.length - 1] : selectedModel;
     const params = new URLSearchParams(searchParams);
     params.set('threadId', threadId);
     params.set('model', modelParam);
@@ -60,11 +60,17 @@ export function ChatPage() {
   });
 
   const handleNewThread = useCallback(() => {
+    const now = Date.now() * 1000; // Convert to microseconds
+    const newThreadId = uuidv4();
+
     const newThread: Thread = {
-      id: uuidv4(),
-      model_name: selectedModel,
-      project_id: currentProjectId || '',
-      user_id: '', // TODO: Get from auth context
+      thread_id: newThreadId,
+      id: newThreadId,
+      start_time_us: now,
+      finish_time_us: now,
+      run_ids: [],
+      input_models: selectedModel ? [selectedModel] : [],
+      cost: 0,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       is_from_local: true,
@@ -88,9 +94,16 @@ export function ChatPage() {
     params.set('model', modelId);
     if (selectedThreadId) {
       params.set('threadId', selectedThreadId);
-      updateThread(selectedThreadId, {
-        model_name: modelId,
-      });
+      // Update the thread's input_models
+      const thread = threads.find((t) => t.id === selectedThreadId);
+      if (thread) {
+        const updatedModels = thread.input_models.includes(modelId)
+          ? thread.input_models
+          : [...thread.input_models, modelId];
+        updateThread(selectedThreadId, {
+          input_models: updatedModels,
+        });
+      }
     }
     if (currentProjectId && !isDefaultProject(currentProjectId)) {
       params.set('project_id', currentProjectId);
@@ -98,7 +111,7 @@ export function ChatPage() {
       params.delete('project_id');
     }
     navigate(`/chat?${params.toString()}`);
-  }, [selectedThreadId, searchParams, currentProjectId, updateThread, navigate, isDefaultProject]);
+  }, [selectedThreadId, threads, searchParams, currentProjectId, updateThread, navigate, isDefaultProject]);
 
   useEffect(() => {
     if (!selectedThreadId && threads.length > 0) {

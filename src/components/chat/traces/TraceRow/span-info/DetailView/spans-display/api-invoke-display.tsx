@@ -52,9 +52,7 @@ export const ApiInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ApiInvoke
             onValueChange={setOpenAccordionItems}
         >
             <div className="flex flex-col gap-4 mt-4">
-                {/* ID information section */}
-                <BasicSpanInfo span={span} />
-
+              
                 {/* Error section - only shown when there's an error */}
                 {error && (
                     <ErrorViewer error={error} />

@@ -2,7 +2,7 @@ import { AcademicCapIcon, ArrowsUpDownIcon, CloudIcon, ShieldCheckIcon, ShieldEx
 import { ProviderIcon } from "@/components/Icons/ProviderIcons";
 import { tryParseJson } from "@/utils/modelUtils";
 import { getColorByType, getClientSDKName, isAgentSpan, isClientSDK, isPromptCachingApplied, isRouterSpan } from "@/utils/graph-utils";
-import { BotIcon, ClapperboardIcon, ClipboardCheckIcon, PlayIcon } from "lucide-react";
+import { BotIcon, CircleQuestionMarkIcon, ClapperboardIcon, ClipboardCheckIcon, PlayIcon } from "lucide-react";
 import { ArrowsPointingOutIcon } from "@heroicons/react/24/outline"
 import { ModelCall, Span } from "@/types/common-type";
 
@@ -17,7 +17,7 @@ export const getRouterTitle = (props: { span: Span }) => {
 export const getTaskTitle = (props: { span: Span }) => {
     const { span } = props;
     let attributes = span.attribute as any;
-    let task_name =  attributes['langdb.task_name'] || attributes['task_name'];
+    let task_name = attributes['langdb.task_name'] || attributes['task_name'];
     return task_name || 'task';
 }
 
@@ -33,7 +33,7 @@ export const getAgentTitle = (props: { span: Span }) => {
             case 'adk': {
                 let attributes = span.attribute as any;
                 let agent_name = attributes ? (attributes['langdb.agent_name'] || attributes['agent_name'] || attributes['langdb_agent_name']) : '';
-                if(agent_name) {
+                if (agent_name) {
                     return agent_name;
                 }
                 let operation_name = span.operation_name;
@@ -187,7 +187,7 @@ export const getSpanTitle = (props: { span: Span, relatedSpans: Span[] }) => {
     let isTask = isTaskSpan(span);
     if (isTask) {
         return getTaskTitle({ span });
-    }    
+    }
 
     if (isClientSDKSpan) {
         let operation_name = span.operation_name;
@@ -199,7 +199,7 @@ export const getSpanTitle = (props: { span: Span, relatedSpans: Span[] }) => {
         }
         return operation_name;
     }
-    if (span.operation_name.startsWith('guard_')) {
+    if (span.operation_name && span.operation_name.startsWith('guard_')) {
         let attributes = span.attribute;
         let label = attributes['label'] as string;
         return label;
@@ -226,12 +226,12 @@ export const getSpanTitle = (props: { span: Span, relatedSpans: Span[] }) => {
         let attributes = span.attribute as any;
         return attributes['router_name'] || span.operation_name;
     }
-    if (span.operation_name.startsWith('virtual_model')) {
+    if (span.operation_name && span.operation_name.startsWith('virtual_model')) {
         let attributes = span.attribute as any;
         let model_id = attributes?.model_id;
         return model_id ?? span.operation_name;
     }
-    if (!['api_invoke', 'cloud_api_invoke', 'model_call', 'tools'].includes(span.operation_name) && !span.operation_name.startsWith('guard_')) {
+    if (!['api_invoke', 'cloud_api_invoke', 'model_call', 'tools'].includes(span.operation_name) && span.operation_name && !span.operation_name.startsWith('guard_')) {
         const parentSpans = relatedSpans.filter(s => s.span_id === span.parent_span_id);
         if (parentSpans.length > 0) {
             let parentSpan = parentSpans[0];
@@ -256,6 +256,9 @@ export const getOperationIconColor = (props: {
     let isClientSDKSpan = isClientSDK(span);
     let isAgent = isAgentSpan(span);
     let isRouter = isRouterSpan(span);
+    if (!operationName) {
+        return 'bg-[#1a1a1a]';
+    }
     if (isAgent) {
         return 'bg-[#1a1a1a] border-[1px] border-[#ec4899] border-opacity-30 shadow-[0_4px_20px_#ec4899_30] text-[#ec4899]';
     }
@@ -300,7 +303,7 @@ export const getOperationIconColor = (props: {
 export const getOperationTitle = (props: {
     operation_name: string,
     span?: Span
-}) => {
+}): string => {
     const { operation_name, span } = props;
     if (span) {
         let isClientSDKSpan = isClientSDK(span);
@@ -315,9 +318,14 @@ export const getOperationTitle = (props: {
             title = title.charAt(0).toUpperCase() + title.slice(1);
             return `${title} Action`;
         }
+        if (span && isPromptCachingApplied(span)) {
+            return 'Model with prompt caching';
+        }
+        return getOperationTitle({ operation_name: span.operation_name });
     }
-    if (span && isRouterSpan(span)) {
-        return 'Router';
+
+    if (!operation_name) {
+        return 'Unknown';
     }
     if (operation_name === 'cloud_api_invoke') {
         return 'Cloud API Invoke';
@@ -340,9 +348,7 @@ export const getOperationTitle = (props: {
     if (operation_name === 'cache') {
         return 'Cache Model Response';
     }
-    if (span && isPromptCachingApplied(span)) {
-        return 'Model with prompt caching';
-    }
+
     return 'Model';
 }
 
@@ -352,6 +358,9 @@ export const getTimelineBgColor = (props: {
 }) => {
     const { span, relatedSpans } = props;
     let operationName = span.operation_name;
+    if (!operationName) {
+        return getColorByType('SpanToolNode');
+    }
     let isClientSDKSpan = isClientSDK(span);
     if (isClientSDKSpan) {
         if (isAgentSpan(span)) {
@@ -401,13 +410,16 @@ export const getOperationIcon = (props: {
     let operationName = span.operation_name;
     let isClientSDKSpan = isClientSDK(span);
     let isAgent = isAgentSpan(span);
+    if (!operationName) {
+        return <CircleQuestionMarkIcon className="w-4 h-4" />;
+    }
     if (isAgent) {
         return <BotIcon className="w-4 h-4" />;
     }
-    if(operationName === 'run') {
+    if (operationName === 'run') {
         return <PlayIcon className="w-4 h-4" />;
     }
-    if(operationName === 'task') {
+    if (operationName === 'task') {
         return <ClipboardCheckIcon className="w-4 h-4" />;
     }
     if (isClientSDKSpan) {

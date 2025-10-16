@@ -1,21 +1,19 @@
 import { Thread } from "@/types/chat";
 import { ThreadsConsumer } from "@/contexts/ThreadsContext";
 import { ProjectsConsumer } from "@/contexts/ProjectContext";
-import { CurrencyDollarIcon, ExclamationTriangleIcon, PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { CurrencyDollarIcon, PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
 import React, { useCallback, useRef, useState, useMemo } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Input } from "../../ui/input";
-import { ListProviders } from "./ListProviders";
 import { ThreadCopiableId } from "./ThreadCopiableId";
 import { cn } from "@/lib/utils";
 import { useClickAway } from "ahooks";
-import { ThreadTagsDisplay } from "./ThreadTagsDisplay";
 import { Card } from "../../ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../ui/tooltip";
 import { motion } from "framer-motion";
-import { ErrorTooltip } from "./ErrorTooltip";
-import { formatCost } from "@/utils/formatCost";
 import { ThreadTimeDisplay } from './ThreadTimeDisplay';
+import { ListProviders } from "./ListProviders";
+import { formatCost } from "@/utils/formatCost";
 
 export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
     const { renameThread, deleteDraftThread, selectedThreadId, threadsHaveChanges } = ThreadsConsumer();
@@ -31,14 +29,6 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
     const isSelected = urlThreadId ? urlThreadId === thread.id : selectedThreadId === thread.id;
 
     const handleThreadClick = useCallback(() => {
-        let modelParam = '';
-        if (thread.request_model_name && thread.request_model_name.startsWith('router/')) {
-            modelParam = thread.request_model_name;
-        } else {
-            if (thread.input_models && thread.input_models.length > 0) {
-                modelParam = thread.input_models[thread.input_models.length - 1];
-            }
-        }
         if (!currentProjectId) return;
         const params = new URLSearchParams(searchParams);
         params.set('threadId', thread.id);
@@ -47,40 +37,33 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
         } else {
             params.delete('project_id');
         }
-        if (modelParam) {
-            params.set('model', modelParam);
+        // Set model parameter from input_models if available
+        if (thread.input_models && thread.input_models.length > 0) {
+            const lastModel = thread.input_models[thread.input_models.length - 1];
+            params.set('model', lastModel);
         }
         navigate(`/chat?${params.toString()}`);
-    }, [currentProjectId, thread.id, thread.input_models, thread.request_model_name, navigate, searchParams, isDefaultProject]);
+    }, [currentProjectId, thread.id, thread.input_models, navigate, searchParams, isDefaultProject]);
 
-    // Memoize expensive calculations
-    const { tagsDisplay, providersInfo } = useMemo(() => {
+    // Extract provider info from input_models
+    const providersInfo = useMemo(() => {
         const inputModels = thread.input_models || [];
-        const tags = thread.tags_info || [];
-        const tagsDisplay = [...new Set(tags.map(t => t.split(';')).flat())];
+        const providersMap: { provider: string, models: string[] }[] = [];
 
-        // Simplified: Extract provider from model name (format: provider/model)
-        const providersInfo: { provider: string, models: string[] }[] = [];
-        const modelsToProcess = inputModels.length > 0 ? inputModels : (thread.model_name ? [thread.model_name] : []);
-
-        modelsToProcess.forEach(modelFullName => {
+        inputModels.forEach(modelFullName => {
             if (modelFullName && modelFullName.includes('/')) {
                 const [provider, model] = modelFullName.split('/');
-                const existingProviderIndex = providersInfo.findIndex(p => p.provider === provider);
+                const existingProviderIndex = providersMap.findIndex(p => p.provider === provider);
                 if (existingProviderIndex !== -1) {
-                    providersInfo[existingProviderIndex].models.push(model);
+                    providersMap[existingProviderIndex].models.push(model);
                 } else {
-                    providersInfo.push({ provider: provider, models: [model] });
+                    providersMap.push({ provider: provider, models: [model] });
                 }
             }
         });
 
-        return { tagsDisplay, providersInfo };
-    }, [thread.input_models, thread.tags_info, thread.model_name]);
-    const haveErrors = useMemo(() => {
-        const haveErrors = thread.errors && thread.errors.length > 0;
-        return haveErrors;
-    }, [thread.errors]);
+        return providersMap;
+    }, [thread.input_models]);
 
 
 
@@ -138,10 +121,9 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                 key={thread.id}
                 onClick={handleThreadClick}
                 className={cn(
-                    "py-3 px-4 transition-all duration-200 flex flex-col gap-2 cursor-pointer rounded-md border border-[#161616] border-l-4 border-r-4 active:bg-sidebar-accent/40",
+                    "py-3 px-4 transition-all duration-200 flex flex-col gap-2 cursor-pointer rounded-md border border-[#161616] border-r-4 active:bg-sidebar-accent/40",
                     isSelected ? '!border-r-4 !border-r-[rgb(var(--theme-500))] bg-secondary shadow-sm' :
-                        '!border-r !border-r-[#161616] bg-[#161616] hover:bg-sidebar-accent/50',
-                    haveErrors ? '!border-l-4 !border-l-yellow-500' : '!border-l !border-l-[#161616]',
+                        '!border-r !border-r-[#161616] bg-[#161616] hover:bg-sidebar-accent/50'
                 )}
             >
                 {/* Header row with title and metadata */}
@@ -201,18 +183,6 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
 
                     {/* Right side metadata */}
                     <div className="flex items-center gap-2">
-
-
-                        {/* Error indicator */}
-                        {haveErrors && (
-                            <ErrorTooltip errors={thread.errors || []} side="top">
-                                <div className="flex items-center text-xs text-yellow-500 hover:text-yellow-400 transition-colors hover:cursor-help">
-                                    <ExclamationTriangleIcon className="w-3.5 h-3.5 mr-1" />
-                                    <span>{thread.errors?.length || 0}</span>
-                                </div>
-                            </ErrorTooltip>
-                        )}
-
                         {/* Thread ID */}
                         <div className="flex items-center gap-1">
                             <ThreadCopiableId id={thread.id} />
@@ -220,40 +190,49 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                     </div>
                 </div>
 
-                {/* Second row with time, cost and tags */}
+                {/* Second row with time and run IDs */}
                 <div className="flex justify-between flex-1 items-center">
                     <div className="flex flex-1 items-center gap-2">
                         {/* Time info */}
-                        <ThreadTimeDisplay updatedAt={thread.updated_at} />
+                        <ThreadTimeDisplay finishTimeUs={thread.finish_time_us} updatedAt={thread.updated_at} />
 
                         {/* Cost info */}
-                        {thread.cost !== undefined && (
+                        {thread.cost !== undefined && thread.cost > 0 && (
                             <TooltipProvider>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
                                         <div className="flex items-center text-xs text-muted-foreground hover:text-foreground transition-colors hover:cursor-help truncate">
                                             <CurrencyDollarIcon className="w-3.5 h-3.5 mr-1.5 text-teal-500" />
-                                            <span className="font-mono tabular-nums"> {formatCost(thread.cost)}</span>
+                                            <span className="font-mono tabular-nums">{formatCost(thread.cost)}</span>
                                         </div>
                                     </TooltipTrigger>
                                     <TooltipContent side="top" className="text-xs p-1.5">
                                         <div>Total cost: {formatCost(thread.cost, 6)}</div>
-                                        {thread.input_tokens && <div>Input tokens: {thread.input_tokens.toLocaleString()}</div>}
-                                        {thread.output_tokens && <div>Output tokens: {thread.output_tokens.toLocaleString()}</div>}
                                     </TooltipContent>
                                 </Tooltip>
                             </TooltipProvider>
                         )}
 
-
+                        {/* Run IDs count */}
+                        {thread.run_ids && thread.run_ids.length > 0 && (
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <div className="flex items-center text-xs text-muted-foreground hover:text-foreground transition-colors hover:cursor-help truncate">
+                                            <span className="font-mono tabular-nums">{thread.run_ids.length} run{thread.run_ids.length !== 1 ? 's' : ''}</span>
+                                        </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="text-xs p-1.5">
+                                        <div>Run IDs:</div>
+                                        {thread.run_ids.slice(0, 5).map((runId, idx) => (
+                                            <div key={idx} className="font-mono">{runId}</div>
+                                        ))}
+                                        {thread.run_ids.length > 5 && <div>... and {thread.run_ids.length - 5} more</div>}
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        )}
                     </div>
-
-                    {/* Tags */}
-                    {tagsDisplay && tagsDisplay.length > 0 && (
-                        <div>
-                            <ThreadTagsDisplay tags={tagsDisplay} />
-                        </div>
-                    )}
                     {/* Unread indicator */}
                     {currentThreadChanges?.messages?.length > 0 && !isSelected && (
                         <TooltipProvider>

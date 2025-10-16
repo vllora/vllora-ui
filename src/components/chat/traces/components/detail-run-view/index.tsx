@@ -30,7 +30,7 @@ export const DetailedRunView: React.FC<{run: RunDTO}> = ({
                         <div className="overflow-hidden relative">
                             <ErrorBoundary FallbackComponent={CustomErrorFallback}>
                                 <TimelineContent
-                                    rootSpans={spansByRunId}
+                                    spansByRunId={spansByRunId}
                                 />
                             </ErrorBoundary>
                         </div>

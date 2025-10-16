@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Hierarchy } from "@/contexts/RunDetailContext";
 import { getSpanTitle, getOperationIcon, getOperationIconColor, getTimelineBgColor } from "./utils";
 import { TimelineRow } from "./timeline-row";
 import { skipThisSpan, isClientSDK } from "@/utils/graph-utils";
@@ -19,7 +18,6 @@ export interface HierarchyRowProps {
 export const HierarchyRow = (props: HierarchyRowProps) => {
     const { hierarchy, totalDuration, startTime, level, titleWidth: propTitleWidth = 180, relatedSpans = [], selectedSpanId, onSpanSelect } = props;
     const [isOpen, setIsOpen] = useState(false);
-
     // In ellora-ui, we're always in sidebar mode (chat sidebar)
     const titleWidth: string | number = `${propTitleWidth}px`.replace('pxpx', 'px');
 

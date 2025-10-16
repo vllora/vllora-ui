@@ -78,6 +78,8 @@ export const TimelineRow = (props: TimelineRowProps) => {
         operation_name: span.operation_name,
         span
     };
+
+    console.log('===== span', span)
     
     return (
         <div

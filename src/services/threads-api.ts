@@ -7,12 +7,49 @@ export interface QueryThreadsRequest {
   offset?: number;
 }
 
+// API response type (matches backend ThreadSpan structure)
+interface ThreadSpan {
+  thread_id: string;
+  start_time_us: number;
+  finish_time_us: number;
+  run_ids: string[];
+  input_models: string[];
+  cost: number;
+}
+
+interface ApiThreadsResponse {
+  data: ThreadSpan[];
+  pagination: {
+    total: number;
+    offset: number;
+    limit: number;
+  };
+}
+
 export interface QueryThreadsResponse {
   data: Thread[];
   pagination: {
     total: number;
     offset: number;
     limit: number;
+  };
+}
+
+/**
+ * Transform API ThreadSpan to frontend Thread type
+ */
+function transformThreadSpan(span: ThreadSpan): Thread {
+  return {
+    thread_id: span.thread_id,
+    id: span.thread_id, // For backward compatibility
+    start_time_us: span.start_time_us,
+    finish_time_us: span.finish_time_us,
+    run_ids: span.run_ids,
+    input_models: span.input_models,
+    cost: span.cost,
+    // Convert microseconds to ISO string for created_at/updated_at
+    created_at: new Date(span.start_time_us / 1000).toISOString(),
+    updated_at: new Date(span.finish_time_us / 1000).toISOString(),
   };
 }
 
@@ -45,8 +82,13 @@ export async function queryThreads(
       throw new Error(`Failed to query threads: ${response.status} ${response.statusText}`);
     }
 
-    const data: QueryThreadsResponse = await response.json();
-    return data;
+    const apiData: ApiThreadsResponse = await response.json();
+
+    // Transform API response to frontend Thread type
+    return {
+      data: apiData.data.map(transformThreadSpan),
+      pagination: apiData.pagination,
+    };
   } catch (error) {
     console.error('Error querying threads:', error);
     throw error;

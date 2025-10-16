@@ -354,9 +354,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
         const relatedSpans = await fetchAllSpansByRunId(runId, projectIdRef.current);
         let firstSpan = undefined
         for (let i = 0; i < relatedSpans.length; i++) {
-          if (skipThisSpan(relatedSpans[i])) {
-            continue;
-          }
+          
           firstSpan = relatedSpans[i];
           break;
         }

@@ -27,12 +27,12 @@ export function buildSpanHierarchy(spans: Span[]): Span[] {
   const rootSpans: Span[] = [];
 
   // First pass: Create map and initialize children arrays
-  spans.forEach(span => {
+  spans.sort((a, b) => a.start_time_us - b.start_time_us).forEach(span => {
     spanMap.set(span.span_id, { ...span, spans: [] });
   });
 
   // Second pass: Build hierarchy
-  spans.forEach(span => {
+  spans.sort((a, b) => a.start_time_us - b.start_time_us).forEach(span => {
     const spanWithChildren = spanMap.get(span.span_id)!;
 
     if (!span.parent_span_id) {

@@ -1,13 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { DebugTrace } from '@/hooks/events/useDebugTimeline';
 import { SpanItem } from './SpanItem';
 import { skipThisSpan } from '@/utils/graph-utils';
-import { convertToHierarchy } from '@/contexts/RunDetailContext';
 import { HierarchyRow } from '../chat/traces/TraceRow/new-timeline/hierarchy-row';
 
 interface TraceItemProps {
-  trace: DebugTrace;
+  trace: any;
   titleWidth: number;
   selectedSpanId?: string;
   onSpanSelect?: (spanId: string) => void;
@@ -26,11 +24,10 @@ export const TraceItem: React.FC<TraceItemProps> = ({
   }) => {
 
   const sortedSpans = [...trace.spans].sort((a, b) => a.start_time_us - b.start_time_us).filter((span) => !skipThisSpan(span));
-  const hierarchies = convertToHierarchy({ spans: sortedSpans, isDisplayGraph: false });
   return (
     <div key={`${trace.trace_id}`} className="border border-border/70 rounded-md">
 
-      <div className="flex flex-col divide-y divide-border">
+      {/* <div className="flex flex-col divide-y divide-border">
         {Object.values(hierarchies).map((hierarchy) => {
            
 
@@ -46,7 +43,7 @@ export const TraceItem: React.FC<TraceItemProps> = ({
             onSpanSelect={onSpanSelect}
           />
         })}
-      </div>
+      </div> */}
 
     </div>
   );

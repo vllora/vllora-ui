@@ -73,25 +73,20 @@ export interface Message {
 }
 
 export interface Thread {
-  id: string;
-  cost?: number;
-  output_tokens?: number;
-  input_tokens?: number;
-  project_id: string;
-  mcp_template_definition_ids?: string[];
-  description?: string;
-  model_name: string;
-  user_id: string;
-  created_at: string;
-  updated_at: string;
-  score?: number;
-  title?: string;
-  tags_info?: string[];
-  errors?: string[];
-  input_models?: string[];
-  request_model_name?: string;
-  is_public?: boolean;
-  is_from_local?: boolean;
+  // Core fields from API
+  thread_id: string;
+  start_time_us: number;
+  finish_time_us: number;
+  run_ids: string[];
+  input_models: string[]; // Unique model names extracted from traces with same thread_id
+  cost: number; // Sum of all costs from spans with same thread_id
+
+  // UI-specific fields (derived or fetched separately)
+  id: string; // Same as thread_id, for compatibility with existing UI code
+  created_at: string; // ISO timestamp derived from start_time_us
+  updated_at: string; // ISO timestamp derived from finish_time_us
+  title?: string; // Fetched from threads table or generated
+  is_from_local?: boolean; // For draft threads
 }
 
 export interface CreateThreadRequest {
