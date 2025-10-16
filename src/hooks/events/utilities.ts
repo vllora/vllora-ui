@@ -9,6 +9,9 @@ import {
   TextMessageStartEvent,
   ToolCallStartEvent,
   ProjectEventUnion,
+  CustomLlmStartEventType,
+  CustomLlmStopEventType,
+  CustomCostEventType,
 } from "@/contexts/project-events/dto";
 import { Span } from "@/types/common-type";
 
@@ -156,9 +159,6 @@ export const processEvent = (
   event: ProjectEventUnion
 ): Span[] => {
   const timestamp = event.timestamp || Date.now();
-  console.log('==== processEvent ====', event);
-  console.log('==== currentSpans ====', currentSpans);
-  console.log('')
   // === Run Lifecycle Events ===
   if (event.type === "RunStarted") {
     const span = convertRunStartedToSpan(event);
@@ -227,8 +227,42 @@ export const processEvent = (
 
   // === Text Message Events ===
   if (event.type === "TextMessageStart") {
-    const span = convertTextMessageStartToSpan(event);
-    return [...currentSpans, span];
+    if (!event.span_id) return currentSpans;
+    let textMessageStartEvent: TextMessageStartEvent =
+      event as TextMessageStartEvent;
+    if (!textMessageStartEvent) return currentSpans;
+    // check if span exists
+    const existingIndex = currentSpans.findIndex(
+      (s) => s.span_id === event.span_id
+    );
+    if (existingIndex >= 0) {
+      const updated = [...currentSpans];
+      const attr = updated[existingIndex].attribute as any;
+      const currentContent = attr.content || "";
+      updated[existingIndex] = {
+        ...updated[existingIndex],
+        attribute: {
+          ...updated[existingIndex].attribute,
+          content: currentContent,
+        } as any,
+      };
+      return updated;
+    } else {
+      // Create new span if it doesn't exist
+      const newSpan: Span = {
+        span_id: event.span_id,
+        parent_span_id: event.parent_span_id,
+        operation_name: "text_message",
+        thread_id: event.thread_id || "",
+        run_id: event.run_id || "",
+        trace_id: "",
+        start_time_us: timestamp * 1000,
+        finish_time_us: undefined,
+        attribute: {} as any,
+        isInProgress: true,
+      };
+      return [...currentSpans, newSpan];
+    }
   }
 
   if (event.type === "TextMessageContent") {
@@ -243,6 +277,7 @@ export const processEvent = (
       const currentContent = attr.content || "";
       updated[existingIndex] = {
         ...updated[existingIndex],
+        finish_time_us: timestamp * 1000,
         attribute: {
           ...updated[existingIndex].attribute,
           content: currentContent + event.delta,
@@ -259,7 +294,7 @@ export const processEvent = (
         run_id: event.run_id || "",
         trace_id: "",
         start_time_us: timestamp * 1000,
-        finish_time_us: undefined,
+        finish_time_us: timestamp * 1000,
         attribute: { content: event.delta } as any,
         isInProgress: true,
       };
@@ -393,10 +428,9 @@ export const processEvent = (
       const updated = [...currentSpans];
       updated[existingIndex] = {
         ...updated[existingIndex],
-        attribute: {
-          ...updated[existingIndex].attribute,
-          state_snapshot: event.snapshot,
-        },
+        trace_id: event.snapshot.trace_id,
+        finish_time_us: timestamp * 1000,
+        isInProgress: false,
       };
       return updated;
     } else {
@@ -407,13 +441,11 @@ export const processEvent = (
         operation_name: "span",
         thread_id: event.thread_id || "",
         run_id: event.run_id || "",
-        trace_id: "",
         start_time_us: timestamp * 1000,
-        finish_time_us: undefined,
-        attribute: {
-          state_snapshot: event.snapshot,
-        } as any,
-        isInProgress: true,
+        finish_time_us: timestamp * 1000,
+        trace_id: event.snapshot.trace_id,
+        isInProgress: false,
+        attribute: {} as any,
       };
       return [...currentSpans, newSpan];
     }
@@ -533,11 +565,11 @@ export const processEvent = (
   // Handle Custom events
   if (event.type === "Custom") {
     const customEvent = event as CustomEvent;
+    const customEventSpanId = event.span_id;
 
     // Handle Custom events with typed event field
     if ("event" in customEvent && customEvent.event) {
       const eventType = customEvent.event;
-
       // Handle span_start
       if (eventType.type === "span_start") {
         const span = convertCustomSpanStartToSpan(customEvent, eventType);
@@ -560,6 +592,138 @@ export const processEvent = (
           return [...currentSpans, span];
         }
       }
+
+      if (eventType.type === "llm_start") {
+        if (!customEventSpanId) return currentSpans;
+        let llmStartEvent: CustomLlmStartEventType =
+          eventType as CustomLlmStartEventType;
+        if (!llmStartEvent) return currentSpans;
+
+        const existingIndex = currentSpans.findIndex(
+          (s) => s.span_id === customEventSpanId
+        );
+        if (existingIndex >= 0) {
+          // Update existing in-progress span
+          const updated = [...currentSpans];
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            attribute: {
+              ...updated[existingIndex].attribute,
+              model_name: llmStartEvent.model_name,
+              input: llmStartEvent.input,
+            },
+          };
+          return updated;
+        } else {
+          let newSpanFromLLMStart: Span = {
+            span_id: customEventSpanId,
+            parent_span_id: event.parent_span_id,
+            operation_name: llmStartEvent.provider_name,
+            thread_id: event.thread_id || "",
+            run_id: event.run_id || "",
+            trace_id: "",
+            start_time_us: timestamp * 1000,
+            finish_time_us: undefined,
+            attribute: {
+              ...llmStartEvent,
+            } as any,
+            isInProgress: true,
+          };
+          // Add new completed span
+          return [...currentSpans, newSpanFromLLMStart];
+        }
+      }
+      if (eventType.type === "llm_stop") {
+        if (!customEventSpanId) return currentSpans;
+        let llmStopEvent: CustomLlmStopEventType =
+          eventType as CustomLlmStopEventType;
+        if (!llmStopEvent) return currentSpans;
+
+        const existingIndex = currentSpans.findIndex(
+          (s) => s.span_id === customEventSpanId
+        );
+        if (existingIndex >= 0) {
+          // Update existing in-progress span
+          const updated = [...currentSpans];
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            finish_time_us: timestamp * 1000,
+            isInProgress: false,
+          };
+          return updated;
+        } else {
+          let newSpanFromLLMStop: Span = {
+            span_id: customEventSpanId,
+            parent_span_id: event.parent_span_id,
+            operation_name: "llm_stop",
+            thread_id: event.thread_id || "",
+            run_id: event.run_id || "",
+            trace_id: "",
+            start_time_us: timestamp * 1000,
+            finish_time_us: timestamp * 1000,
+            attribute: {
+              ...llmStopEvent,
+            } as any,
+            isInProgress: false,
+          };
+          // Add new completed span
+          return [...currentSpans, newSpanFromLLMStop];
+        }
+      }
+      if(eventType.type === "cost") {
+        if (!customEventSpanId) return currentSpans;
+        let costEvent: CustomCostEventType =
+          eventType as CustomCostEventType;
+        if (!costEvent) return currentSpans;
+
+        const existingIndex = currentSpans.findIndex(
+          (s) => s.span_id === customEventSpanId
+        );
+        if (existingIndex >= 0) {
+          // Update existing in-progress span
+          const updated = [...currentSpans];
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            finish_time_us: timestamp * 1000,
+            isInProgress: false,
+            attribute: {
+              ...updated[existingIndex].attribute,
+              ...costEvent.value,
+            },
+          };
+          return updated;
+        } else {
+          let newSpanFromCost: Span = {
+            span_id: customEventSpanId,
+            parent_span_id: event.parent_span_id,
+            operation_name: "cost",
+            thread_id: event.thread_id || "",
+            run_id: event.run_id || "",
+            trace_id: "",
+            start_time_us: timestamp * 1000,
+            finish_time_us: undefined,
+            attribute: {
+              ...costEvent.value,
+            } as any,
+            isInProgress: true,
+          };
+          // Add new completed span
+          return [...currentSpans, newSpanFromCost];
+        }
+      }
+
+      // Handle ping events (ignore them)
+      if (eventType.type === "ping") {
+        return currentSpans;
+      }
+
+      // Unknown custom event type - log warning but don't crash
+      console.warn(
+        `===== [processEvent] not process event type:`,
+        eventType,
+        customEvent
+      );
+      return currentSpans;
     }
   }
 
