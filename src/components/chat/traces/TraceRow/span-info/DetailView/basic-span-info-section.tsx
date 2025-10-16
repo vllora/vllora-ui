@@ -1,6 +1,6 @@
 import { IdDisplay } from "./spans-display/span-id-display";
 import { Span } from "@/types/common-type";
-import { Clock, ClockFadingIcon, Timer } from "lucide-react";
+import { ClockFadingIcon } from "lucide-react";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useEffect, useState } from "react";

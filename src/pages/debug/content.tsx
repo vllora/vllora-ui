@@ -8,7 +8,6 @@ import { useAutoScrollToBottom } from '@/hooks/useAutoScrollToBottom';
 import { SpanList } from '@/components/debug/SpanList';
 import { RunList } from '@/components/debug/RunList';
 import { TraceList } from '@/components/debug/TraceList';
-import { useDebugSelection } from '@/contexts/DebugSelectionContext';
 import { SpanDetailPanel } from '@/components/debug/SpanDetailPanel';
 
 export function DebugPageContent() {

@@ -9,6 +9,8 @@ import { CloudApiInvokeUIDetailsDisplay } from "./spans-display/cloud-api-invoke
 import { isClientSDK } from "@/utils/graph-utils";
 import { Span } from "@/types/common-type";
 import { isActualModelCall } from "./index";
+import { AgentUIDisplay } from "./spans-display/agent";
+import { TaskUIDisplay } from "./spans-display/task";
 
 interface BaseSpanUIDisplayProps {
   span: Span;
@@ -25,6 +27,12 @@ export const BaseSpanUIDisplay = ({ span, relatedSpans = [] }: BaseSpanUIDisplay
   const operation_name = span.operation_name;
   const isClientSDKSpan = isClientSDK(span);
 
+  if (operation_name === 'task') {
+    return <TaskUIDisplay span={span} />;
+  }
+  if (operation_name === 'agent') {
+    return <AgentUIDisplay span={span} />;
+  }
   if (isClientSDKSpan) {
     return <ClientActivityUIDetailsDisplay span={span} />;
   }
@@ -56,6 +64,5 @@ export const BaseSpanUIDisplay = ({ span, relatedSpans = [] }: BaseSpanUIDisplay
   if (operation_name === 'cloud_api_invoke') {
     return <CloudApiInvokeUIDetailsDisplay span={span} relatedSpans={relatedSpans} />;
   }
-
   return null;
 };

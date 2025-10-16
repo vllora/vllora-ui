@@ -14,6 +14,13 @@ export const getRouterTitle = (props: { span: Span }) => {
     return router_name || 'router';
 }
 
+export const getTaskTitle = (props: { span: Span }) => {
+    const { span } = props;
+    let attributes = span.attribute as any;
+    let task_name =  attributes['langdb.task_name'] || attributes['task_name'];
+    return task_name || 'task';
+}
+
 export const getAgentTitle = (props: { span: Span }) => {
     const { span } = props;
     let isAgent = isAgentSpan(span);
@@ -23,12 +30,18 @@ export const getAgentTitle = (props: { span: Span }) => {
     let sdkName = getClientSDKName(span);
     if (sdkName) {
         switch (sdkName.toLowerCase()) {
-            case 'adk':
+            case 'adk': {
+                let attributes = span.attribute as any;
+                let agent_name = attributes ? (attributes['langdb.agent_name'] || attributes['agent_name'] || attributes['langdb_agent_name']) : '';
+                if(agent_name) {
+                    return agent_name;
+                }
                 let operation_name = span.operation_name;
                 if (operation_name.startsWith('agent_run')) {
                     return operation_name.replace('agent_run ', '').replace('[', '').replace(']', '');
                 }
                 return operation_name;
+            }
             case 'crewai':
                 let attribute = span.attribute as any;
                 let crew_agent = attribute['input.value'];
@@ -53,7 +66,7 @@ export const getAgentTitle = (props: { span: Span }) => {
         }
     }
     let attributes = span.attribute as any;
-    let agent_name = attributes['agent_name'];
+    let agent_name = attributes ? (attributes['langdb.agent_name'] || attributes['agent_name'] || attributes['langdb_agent_name']) : '';
     return agent_name || 'Unknown Agent';
 }
 export const getToolDisplayName = (props: { span: Span }) => {
@@ -152,6 +165,14 @@ export const getModelDetailName = (span: Span, relatedSpans: Span[]) => {
     }
     return undefined;
 }
+
+export const isTaskSpan = (span: Span) => {
+    const operationName = span.operation_name;
+    if (!operationName) {
+        return false;
+    }
+    return operationName == 'task';
+}
 export const getSpanTitle = (props: { span: Span, relatedSpans: Span[] }) => {
     const { span, relatedSpans } = props;
     let isAgent = isAgentSpan(span);
@@ -163,6 +184,10 @@ export const getSpanTitle = (props: { span: Span, relatedSpans: Span[] }) => {
     if (isRouter) {
         return getRouterTitle({ span });
     }
+    let isTask = isTaskSpan(span);
+    if (isTask) {
+        return getTaskTitle({ span });
+    }    
 
     if (isClientSDKSpan) {
         let operation_name = span.operation_name;

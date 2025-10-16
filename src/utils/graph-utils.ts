@@ -6,12 +6,8 @@ import { Span } from '@/services/runs-api';
 export function getClientSDKName(span: Span): string | null {
   if (!span.attribute) return null;
 
-  // Check for client_name in attributes
-  if ('client_name' in span.attribute) {
-    return span.attribute.client_name as string;
-  }
-
-  return null;
+  let attributes = span.attribute as any;
+  return attributes ? (attributes['langdb.client_name'] || attributes['client_name'] || attributes['langdb_client_name']) : null;
 }
 export const getClientSDKDisplayName = (span: Span) => {
   let name = getClientSDKName(span);

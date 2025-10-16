@@ -48,6 +48,7 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
 
   // Process a single event and update the hierarchy
   const processEvent = useCallback((event: ProjectEventUnion) => {
+    console.log("=== useDebugTimeline event", event);
     setThreads((prevThreads) => {
       // Ensure prevThreads is a valid Map
       const validPrevThreads = prevThreads instanceof Map ? prevThreads : new Map();

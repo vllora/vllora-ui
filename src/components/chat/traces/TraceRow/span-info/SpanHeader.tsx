@@ -2,11 +2,11 @@ import React from "react";
 import { cn } from "@/lib/utils";
 import { CheckCircleIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 import { ArrowLeft, DatabaseIcon, Timer } from "lucide-react";
-import { ClientSdkIcon } from "@/components/Icons/ClientSdkIcon";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Span } from "@/types/common-type";
 import { BasicSpanInfo } from "./DetailView/basic-span-info-section";
+import { ClientSdkIcon } from "@/components/client-sdk-icon";
 
 const getDuration = (startTime?: number, endTime?: number): string | null => {
   if (!startTime || !endTime) return null;
