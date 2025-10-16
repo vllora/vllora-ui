@@ -26,7 +26,7 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
   const handleEvent = useCallback((event: ProjectEventUnion) => {
     // Note: In development with React StrictMode, effects run twice
     // This is intentional React behavior and won't happen in production
-    console.log('[DEBUG-TIMELINE] Received event:', event);
+    console.log('=== [DEBUG-TIMELINE] Received event:', event);
     setFlattenSpans((currentSpans) => processEvent(currentSpans, event));
   }, []);
 

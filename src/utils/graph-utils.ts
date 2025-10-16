@@ -7,7 +7,7 @@ export function getClientSDKName(span: Span): string | null {
   if (!span.attribute) return null;
 
   let attributes = span.attribute as any;
-  return attributes ? (attributes['langdb.client_name'] || attributes['client_name'] || attributes['langdb_client_name']) : null;
+  return attributes ? (attributes['langdb.client_name'] || attributes['client_name']) : null;
 }
 export const getClientSDKDisplayName = (span: Span) => {
   let name = getClientSDKName(span);
@@ -137,7 +137,6 @@ export const getColorByType = (type: string) => {
  * Check if span should be skipped in display
  */
 export function skipThisSpan(span: Span, isClientSDKTrace?: boolean): boolean {
-  return false;
   let operation_name = span.operation_name;
   if (isClientSDKTrace) {
       let sdkName = getClientSDKName(span);

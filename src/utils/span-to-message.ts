@@ -82,14 +82,14 @@ export function convertSpansToMessages(spans: Span[], level: number = 0): SpanWi
 function extractMessagesFromSpan(span: Span, level: number = 0): Message[] {
   const attribute = span.attribute as any;
   const messages: Message[] = [];
-
   // Parse the request JSON to get messages
-  const requestStr = attribute?.request;
+  const requestStr = attribute?.request || attribute?.input;
   const requestJson = requestStr ? tryParseJson(requestStr) : null;
 
   if (!requestJson) {
     return messages;
   }
+
 
   // Extract messages array from request
   let requestMessages = requestJson?.messages || requestJson?.contents;
@@ -101,8 +101,7 @@ function extractMessagesFromSpan(span: Span, level: number = 0): Message[] {
   // Also extract the response/output to create an assistant message
   const outputStr = attribute?.output;
   const outputJson = outputStr ? tryParseJson(outputStr) : null;
-  const responseContent = extractResponseContent(outputJson, attribute);
-
+  const responseContent = extractResponseContent(outputJson, attribute) ;
   // Calculate metrics for this span
   const spanMetrics = calculateSpanMetrics(span);
 
@@ -201,7 +200,7 @@ function extractMessageContent(msg: any): string {
  * @returns String content for the assistant message
  */
 function extractResponseContent(outputJson: any, attribute: any): string | null {
-  if (!outputJson) return null;
+  if (!outputJson) return attribute?.content;
 
   // Try different fields for response content
   if (outputJson.content) {
