@@ -30,8 +30,6 @@ function App() {
               {/* Project-scoped routes (now using query string ?project_id=...) */}
               <Route index element={<HomePage />} />
               <Route path="chat" element={<ChatAndDebugPageWrapper />} />
-              <Route path="debug" element={<DebugPage />} />
-
               <Route path="analytics" element={<AnalyticsPage />} />
 
               {/* Global routes */}
