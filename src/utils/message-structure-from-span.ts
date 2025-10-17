@@ -9,7 +9,6 @@ export interface MessageStructure {
 
 const skipSpanNotRelatedToMessage = (span: Span) => {
   if (skipThisSpan(span)) return true;
-  if (['tools'].includes(span.operation_name)) return true;
   return false;
 }
 // Helper function to find the nearest non-skipped ancestor

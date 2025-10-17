@@ -2,7 +2,6 @@ import React, { useRef } from 'react';
 import { Bot, ArrowDown } from 'lucide-react';
 import { useInViewport } from 'ahooks';
 import { HierarchicalSpanItem } from './HierarchiMessageItem';
-import { extractValidDisplayMessages } from './utility';
 import { MessageStructure } from '@/utils/message-structure-from-span';
 
 interface ChatConversationProps {
