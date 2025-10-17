@@ -24,6 +24,7 @@ export function useSpanById(
   spanId: string
 ): Span | undefined {
   // Find the span and memoize based on its actual data, not the array reference
+  const span = useMemo(() => {
     return flattenSpans.find(s => s.span_id === spanId);
   }, [flattenSpans, spanId]);
 
