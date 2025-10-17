@@ -44,21 +44,19 @@ export function TabSelectionHeader({ currentTab, onTabChange, onProjectChange }:
             }
           `}
         >
-          <MessageSquare className="h-3.5 w-3.5" />
           <span>Threads</span>
         </button>
         <button
-          onClick={() => handleTabChange("debug")}
+          onClick={() => handleTabChange("traces")}
           className={`
             flex items-center gap-1.5 px-5 py-1.5 rounded-md text-sm font-medium transition-all
-            ${currentTab === "debug"
+            ${currentTab === "traces"
               ? 'bg-primary text-primary-foreground shadow-sm'
               : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
             }
           `}
         >
-          <Bug className="h-3.5 w-3.5" />
-          <span>Debug</span>
+          <span>Traces</span>
         </button>
       </div>
     </div>
