@@ -1,7 +1,6 @@
-import { BaseSpanUIDetailsDisplay, getParentApiInvoke } from "..";
+import { BaseSpanUIDetailsDisplay } from "..";
 import { ToolCallsViewer } from "../tool-calls-viewer";
 import { ArrowTopRightOnSquareIcon, DocumentTextIcon, ExclamationTriangleIcon, WrenchScrewdriverIcon } from "@heroicons/react/24/outline";
-import { ToolDefinitionsViewer } from "../tool-definitions-viewer";
 import { JsonViewer } from "../../JsonViewer";
 import { ServerIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -27,19 +26,45 @@ interface ToolUIDetailsDisplayProps {
 }
 
 export const ToolUIDetailsDisplay = ({ span, relatedSpans = [] }: ToolUIDetailsDisplayProps) => {
-
     const currentSpan = span;
+    // find all model_call span
+    const modelCallSpanIds = relatedSpans.filter((span: Span) => span.operation_name === 'model_call').map((span: Span) => span.span_id);
+    // find all span that has parent_span_id in modelCallSpanIds
+    const inputsFromModelCall = relatedSpans.filter((span: Span) => span.parent_span_id && modelCallSpanIds.includes(span.parent_span_id) && span.attribute && (span.attribute as any).input).map((span: Span) => {
+        const input = (span.attribute as any).input;
+        return {
+            input,
+            span: span
+        };
+    });
+    
     const attributeTool = currentSpan.attribute as ToolCall;
     const toolCalls = attributeTool.tool_calls;
-    const labelTitles: string[] = attributeTool.label && attributeTool.label.split(',') || [];
+    // const labelTitles: string[] = attributeTool.label && attributeTool.label.split(',') || [];
     const jsonToolCalls: any[] | undefined = toolCalls && tryParseJson(toolCalls);
+    const toolExecutionIds: string[] = jsonToolCalls?.map((toolCall: any) => toolCall.id) || [];
+
+    const executeMessagesResult: {content: string, tool_call_id: string, role: string}[]= toolExecutionIds.map((id: string) => {
+        return inputsFromModelCall.filter((input: {
+            input: string;
+            span: Span;
+        }) => {
+            return input.input.includes(id) && input.span.span_id !== currentSpan.span_id;
+        }).map(input => {
+            let inputStr = input.input;
+            let inputJson = tryParseJson(inputStr);
+            if(inputJson  && Array.isArray(inputJson)) {
+                // get the tool id from the inputJson
+                const toolMessage = inputJson.find((item: {
+                    role: string;
+                    [key: string]: any;
+                }) => item.role === 'tool' && item.tool_call_id === id);
+                return toolMessage;
+            }
+            return undefined;
+        });
+    }).filter((item: any) => item !== undefined).flatMap((item: any) => item);
     const toolCallCount = jsonToolCalls?.length || 0;
-    const parentApiInvoke = getParentApiInvoke(relatedSpans, currentSpan.span_id);
-    const parentApiInvokeAttribute = parentApiInvoke?.attribute as any;
-    const requestParentApiInvokeStr = parentApiInvokeAttribute?.request;
-    const requestParentApiInvoke = requestParentApiInvokeStr && tryParseJson(requestParentApiInvokeStr);
-    const tools: ToolInfoCall[] = requestParentApiInvoke?.tools || [];
-    const currentToolsInfo = tools.filter((t: ToolInfoCall) => labelTitles.includes(t['function'].name));
     const toolResponse = attributeTool.response;
     const toolResult = attributeTool.tool_results;
     const mcp_server_string = attributeTool.mcp_server;
@@ -106,7 +131,7 @@ export const ToolUIDetailsDisplay = ({ span, relatedSpans = [] }: ToolUIDetailsD
                 </a>
             )}
             {/* Tool Info section */}
-            {currentToolsInfo && currentToolsInfo.length > 0 && (
+            {/* {currentToolsInfo && currentToolsInfo.length > 0 && (
                 <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
                         <div className="h-px flex-1 bg-border/40" />
@@ -123,7 +148,7 @@ export const ToolUIDetailsDisplay = ({ span, relatedSpans = [] }: ToolUIDetailsD
                     </div>
                     <ToolDefinitionsViewer toolCalls={currentToolsInfo} />
                 </div>
-            )}
+            )} */}
             {/* Tool Calls section */}
             {jsonToolCalls && jsonToolCalls.length > 0 && (
                 <div className="flex flex-col gap-2">
@@ -142,7 +167,7 @@ export const ToolUIDetailsDisplay = ({ span, relatedSpans = [] }: ToolUIDetailsD
                         </div>
                         <div className="h-px flex-1 bg-border/40" />
                     </div>
-                    <ToolCallsViewer input={jsonToolCalls} />
+                    <ToolCallsViewer input={jsonToolCalls} executeMessagesResult={executeMessagesResult} />
                 </div>
             )}
             {attributeTool && attributeTool.error && (

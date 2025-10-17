@@ -9,9 +9,10 @@ export const ToolCallsViewer = (props: {
         type: string;
         'function': FunctionCall;
         [key: string]: any
-    }[] | undefined
+    }[] | undefined,
+    executeMessagesResult: {content: string, tool_call_id: string, role: string}[]
 }) => {
-    const { input } = props;
+    const { input, executeMessagesResult } = props;
     return (
         <div className="flex flex-col gap-4">
             {input?.map((toolCall: any, index: number) => (
@@ -19,7 +20,7 @@ export const ToolCallsViewer = (props: {
                     key={index}
                     className={`${index > 0 ? 'border-t border-border/50 pt-4' : ''}`}
                 >
-                    <SingleToolCallViewer {...toolCall} />
+                    <SingleToolCallViewer {...toolCall} executeMessagesResult={executeMessagesResult} />
                 </div>
             ))}
         </div>
@@ -30,12 +31,18 @@ export const SingleToolCallViewer = (props: {
     id: string;
     type: string;
     'function': FunctionCall;
+    executeMessagesResult?: {content: string, tool_call_id: string, role: string}[];
     [key: string]: any
 }) => {
-    const { id, type, 'function': func } = props;
+    const { id, type, 'function': func, executeMessagesResult = [] } = props;
     const functionName = func?.name || 'Unknown Function';
     let argumentsJson = func?.arguments ? tryParseJson(func.arguments as string) : undefined;
     const argumentsCount = argumentsJson ? Object.keys(argumentsJson).length : 0;
+
+    // Find the execution result for this specific tool call
+    const executionResult = executeMessagesResult.find(
+        (result) => result.tool_call_id === id
+    );
 
     return (
         <div key={`tool_${id}`} className="space-y-3">
@@ -95,6 +102,33 @@ export const SingleToolCallViewer = (props: {
                 typeof func === 'object' && (
                     <JsonViewer data={func} style={{ fontSize: '10px' }} />
                 )
+            )}
+
+            {/* Execution Result */}
+            {executionResult && (
+                <div className="space-y-2">
+                    <span className="text-[11px] uppercase tracking-wide text-zinc-500">
+                        Result
+                    </span>
+                    <div className="rounded-md bg-[#1a1a1a] border border-border/40 p-3">
+                        {(() => {
+                            const parsedContent = tryParseJson(executionResult.content);
+                            if (parsedContent) {
+                                return (
+                                    <JsonViewer
+                                        data={parsedContent}
+                                        style={{ fontSize: '10px' }}
+                                    />
+                                );
+                            }
+                            return (
+                                <pre className="text-xs text-zinc-300 whitespace-pre-wrap break-words">
+                                    {executionResult.content}
+                                </pre>
+                            );
+                        })()}
+                    </div>
+                </div>
             )}
         </div>
     );
