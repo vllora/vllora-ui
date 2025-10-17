@@ -5,6 +5,7 @@ import { useCallback, useState, useEffect } from 'react';
 import { DebugPage } from '../debug';
 import { TabSelectionHeader } from '@/components/TabSelectionHeader';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { TracesPage } from './traces';
 
 export function ChatPageWrapper() {
   const { currentProjectId } = ProjectsConsumer();

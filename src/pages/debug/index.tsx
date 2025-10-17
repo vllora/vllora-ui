@@ -4,7 +4,6 @@ import { DebugPageContent } from './content';
 
 export const DebugPage = () => {
   const { currentProjectId } = ProjectsConsumer();
-
   if (!currentProjectId) {
     return (
       <div className="flex items-center justify-center h-full">
