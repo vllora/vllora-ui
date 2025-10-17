@@ -40,7 +40,6 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
   // selected span is for highlighting 
   const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
-
   const [detailSpanId, setDetailSpanId] = useState<string | null>(null);
 
 
@@ -63,8 +62,6 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     () => buildSpanHierarchy(flattenSpans),
     [flattenSpans]
   );
-  // const [hierarchicalSpans, setHierarchicalSpans] = useState<Span[]>([]);
-
   // UI state
   const [currentInput, setCurrentInput] = useState<string>('');
   const [typing, setTyping] = useState(false);

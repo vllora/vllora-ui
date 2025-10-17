@@ -7,14 +7,16 @@ import { processEvent } from './utilities';
 
 export interface UseDebugTimelineProps {
   projectId: string;
+  flattenSpans: Span[];
+  setFlattenSpans: React.Dispatch<React.SetStateAction<Span[]>>;
 }
 
-export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
+export function useDebugTimeline({
+  projectId,
+  flattenSpans,
+  setFlattenSpans
+}: UseDebugTimelineProps) {
   const { subscribe } = ProjectEventsConsumer();
-
-  // Flat span collection - spans added immediately when started, updated when finished
-  const [flattenSpans, setFlattenSpans] = useState<Span[]>([]);
-
   const [isPaused, setIsPaused] = useState(false);
   const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(undefined);
   const pausedEventsRef = useRef<ProjectEventUnion[]>([]);
@@ -85,38 +87,12 @@ export function useDebugTimeline({ projectId }: UseDebugTimelineProps) {
     return grouped;
   }, [flattenSpans]);
 
-  // Group spans by run
-  const spansByRun = useMemo(() => {
-    const grouped = new Map<string, Span[]>();
-    flattenSpans.forEach(span => {
-      if (span.run_id) {
-        const existing = grouped.get(span.run_id) || [];
-        grouped.set(span.run_id, [...existing, span]);
-      }
-    });
-    return grouped;
-  }, [flattenSpans]);
-
-  // Group spans by trace
-  const spansByTrace = useMemo(() => {
-    const grouped = new Map<string, Span[]>();
-    flattenSpans.forEach(span => {
-      if (span.trace_id) {
-        const existing = grouped.get(span.trace_id) || [];
-        grouped.set(span.trace_id, [...existing, span]);
-      }
-    });
-    return grouped;
-  }, [flattenSpans]);
 
   const pausedCount = pausedEventsRef.current.length;
 
   return {
-    flattenSpans,
     spanHierarchies,
     spansByThread,
-    spansByRun,
-    spansByTrace,
     isPaused,
     pausedCount,
     pause,

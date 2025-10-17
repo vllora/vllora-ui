@@ -1,5 +1,4 @@
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
-import { ProjectEventsProvider } from '@/contexts/project-events';
 import { DebugSelectionProvider } from '@/contexts/DebugSelectionContext';
 import { DebugPageContent } from './content';
 
@@ -21,11 +20,8 @@ export const DebugPage = () => {
     );
   }
 
-  return (
-    <ProjectEventsProvider projectId={currentProjectId}>
-      <DebugSelectionProvider>
+  return (<DebugSelectionProvider>
         <DebugPageContent />
       </DebugSelectionProvider>
-    </ProjectEventsProvider>
   );
 };
