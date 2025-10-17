@@ -41,22 +41,22 @@ export function ChatAndDebugPageWrapper() {
   }
 
   const handleProjectChange = useCallback((newProjectId: string) => {
-      localStorage.setItem('currentProjectId', newProjectId);
-      // Update the project_id query param while keeping current path (omit if default)
-      const params = new URLSearchParams(searchParams);
-      if (isDefaultProject(newProjectId)) {
-        params.delete('project_id');
-      } else {
-        params.set('project_id', newProjectId);
-      }
-      const queryString = params.toString();
-      navigate(`${location.pathname}${queryString ? '?' + queryString : ''}`);
-    }, [location.pathname, navigate, searchParams, isDefaultProject]);
+    localStorage.setItem('currentProjectId', newProjectId);
+    // Update the project_id query param while keeping current path (omit if default)
+    const params = new URLSearchParams(searchParams);
+    if (isDefaultProject(newProjectId)) {
+      params.delete('project_id');
+    } else {
+      params.set('project_id', newProjectId);
+    }
+    const queryString = params.toString();
+    navigate(`${location.pathname}${queryString ? '?' + queryString : ''}`);
+  }, [location.pathname, navigate, searchParams, isDefaultProject]);
 
   return <div className="flex flex-col h-full flex-1">
     <TabSelectionHeader onProjectChange={handleProjectChange} currentTab={currentTab} onTabChange={setCurrentTab} />
 
     {/* Content Area */}
-      {currentTab === "threads" ? <ChatPageWrapper /> : <DebugPage />}
+    {currentTab === "threads" ? <ChatPageWrapper /> : <DebugPage />}
   </div>
 }

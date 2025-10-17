@@ -14,7 +14,7 @@ interface TraceRowProps {
 
 // Component implementation
 const TraceRowImpl = ({ run, index = 0, isInSidebar = false }: TraceRowProps) => {
-  const { openTraces, setOpenTraces, fetchSpansByRunId } = ChatWindowConsumer();
+  const { openTraces, setOpenTraces, fetchSpansByRunId, setSelectedSpanId } = ChatWindowConsumer();
   const traceOrRunId = run.run_id || '';
   const isOpen = openTraces.some(t => t.run_id === traceOrRunId);
   const toggleAccordion = useCallback(() => {
@@ -32,6 +32,7 @@ const TraceRowImpl = ({ run, index = 0, isInSidebar = false }: TraceRowProps) =>
         return [{ run_id: traceOrRunId, tab: 'trace' }];
       }
     });
+    setSelectedSpanId(null);
   }, [traceOrRunId, setOpenTraces, fetchSpansByRunId]);
   return (<motion.div
     className={cn(

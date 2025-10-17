@@ -40,7 +40,6 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
   // selected span is for highlighting 
   const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
-
   const [detailSpanId, setDetailSpanId] = useState<string | null>(null);
 
 

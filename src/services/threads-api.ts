@@ -59,6 +59,24 @@ export interface UpdateThreadTitleRequest {
   projectId: string;
 }
 
+// Backend MessageThread type (returned by GET /threads/{id})
+export interface MessageThread {
+  id: string;
+  project_id: string;
+  title?: string | null;
+  user_id?: string | null;
+  model_name?: string | null;
+  is_public: boolean;
+  description?: string | null;
+  keywords?: string[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface GetThreadByIdResponse {
+  thread: MessageThread;
+}
+
 /**
  * Query threads with pagination
  */
@@ -91,6 +109,39 @@ export async function queryThreads(
     };
   } catch (error) {
     console.error('Error querying threads:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get thread by ID
+ */
+export async function getThreadById(
+  projectId: string,
+  threadId: string
+): Promise<MessageThread> {
+  const url = `${getThreadsUrl()}/${threadId}`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-project-id': projectId,
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error(`Thread not found: ${threadId}`);
+      }
+      throw new Error(`Failed to get thread: ${response.status} ${response.statusText}`);
+    }
+
+    const data: GetThreadByIdResponse = await response.json();
+    return data.thread;
+  } catch (error) {
+    console.error(`Error getting thread ${threadId}:`, error);
     throw error;
   }
 }
