@@ -3,6 +3,8 @@ import { MessageStructure } from '@/utils/message-structure-from-span';
 import { RunSpanMessage } from './run-wrapper';
 import { TaskSpanMessage } from './task-wrapper';
 import { RawSpanMessage } from './raw-span';
+import { AgentSpanMessage } from './agent-wrapper';
+import { ToolSpanMessage } from './tool-wrapper';
 
 interface HierarchicalSpanItemProps {
   messageStructure: MessageStructure;
@@ -20,12 +22,18 @@ export const HierarchicalSpanItem: React.FC<HierarchicalSpanItemProps> = React.m
   level = 0,
 }) => {
   const { type, span_id, children } = messageStructure;  
+  if(type === 'agent') {
+    return <AgentSpanMessage spanId={span_id} messages={children} level={level} />
+  }
   if(type === 'run') {
     return <RunSpanMessage runId={span_id} messages={children} level={level} />
   }
 
   if(type === 'task') {
     return <TaskSpanMessage spanId={span_id} messages={children} level={level} />
+  }
+  if(type === 'tools') {
+    return <ToolSpanMessage spanId={span_id} messages={children} level={level} />
   }
 
   return <RawSpanMessage messageStructure={messageStructure} level={level} />;
