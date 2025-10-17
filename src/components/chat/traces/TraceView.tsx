@@ -22,6 +22,7 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
     hasMoreRuns,
     loadingMoreRuns,
     detailSpanId,
+    openTraces
   } = ChatWindowConsumer();
 
   const [_, setShowErrorDialog] = useState(false);
@@ -95,6 +96,7 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
           loadMoreRuns={loadMoreRuns}
           loadingMore={loadingMoreRuns}
           threadId={threadId}
+          openTraces={openTraces}
         />
       </div>
 
