@@ -1,0 +1,41 @@
+import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
+import { useMessageExtraceSpanById } from "@/hooks/useSpanById";
+import { MessageStructure } from "@/utils/message-structure-from-span";
+import React from "react";
+import { Span } from "@/types/common-type";
+import { MessageItem } from "../../MessageItem";
+import { HierarchicalSpanItem } from "./index";
+
+
+export const RawSpanMessage = React.memo((props: {
+    messageStructure: MessageStructure;
+    level?: number;
+}) => {
+    const { messageStructure, level = 0 } = props;
+    const { flattenSpans } = ChatWindowConsumer()
+    return <div>
+        <InnerRawSpanMessage messageStructure={messageStructure} flattenSpans={flattenSpans} level={level} />
+        {messageStructure.children && messageStructure.children.length > 0 && (
+            <div className="space-y-4">
+                {messageStructure.children.map((child) => (
+                    <HierarchicalSpanItem key={child.span_id} messageStructure={child} level={level + 1} />
+                ))}
+            </div>
+        )}
+    </div>
+})
+
+const InnerRawSpanMessage = React.memo(({ messageStructure, flattenSpans, level = 0 }: { messageStructure: MessageStructure; flattenSpans: Span[]; level?: number}) => {
+    const messages = useMessageExtraceSpanById(flattenSpans, messageStructure.span_id);
+    if(messages.length === 0) return null;
+    return <div>{messages.length > 0 && (
+        <div className="space-y-4">
+          {messages.map((message) => (
+            <MessageItem key={message.id} message={message} />
+          ))}
+        </div>
+
+      )}
+      </div>
+});
+

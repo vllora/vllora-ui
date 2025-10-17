@@ -26,13 +26,16 @@ export function buildSpanHierarchy(spans: Span[]): Span[] {
   const spanMap = new Map<string, Span>();
   const rootSpans: Span[] = [];
 
+  // Sort once and avoid mutating the original array
+  const sortedSpans = [...spans].sort((a, b) => a.start_time_us - b.start_time_us);
+
   // First pass: Create map and initialize children arrays
-  spans.sort((a, b) => a.start_time_us - b.start_time_us).forEach(span => {
+  sortedSpans.forEach(span => {
     spanMap.set(span.span_id, { ...span, spans: [] });
   });
 
   // Second pass: Build hierarchy
-  spans.sort((a, b) => a.start_time_us - b.start_time_us).forEach(span => {
+  sortedSpans.forEach(span => {
     const spanWithChildren = spanMap.get(span.span_id)!;
 
     if (!span.parent_span_id) {
@@ -51,9 +54,7 @@ export function buildSpanHierarchy(spans: Span[]): Span[] {
     }
   });
 
-  // Sort by start_time_us
-  const sortByTime = (a: Span, b: Span) => a.start_time_us - b.start_time_us;
-  rootSpans.sort(sortByTime);
+  // Sort children recursively
   rootSpans.forEach(root => sortSpanChildren(root));
 
   return rootSpans;

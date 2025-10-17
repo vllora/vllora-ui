@@ -1,12 +1,12 @@
 import React, { useRef } from 'react';
 import { Bot, ArrowDown } from 'lucide-react';
 import { useInViewport } from 'ahooks';
-import { SpanWithMessages } from '@/utils/span-to-message';
-import { HierarchicalSpanItem } from './HierarchicalMessageItem';
+import { HierarchicalSpanItem } from './HierarchiMessageItem';
 import { extractValidDisplayMessages } from './utility';
+import { MessageStructure } from '@/utils/message-structure-from-span';
 
 interface ChatConversationProps {
-  messages: SpanWithMessages[];
+  messages: MessageStructure[];
   isLoading?: boolean;
   messagesEndRef?: React.RefObject<HTMLDivElement>;
   scrollToBottom?: () => void;
@@ -16,18 +16,19 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
   messages,
   isLoading = false,
   messagesEndRef: externalMessagesEndRef,
-  scrollToBottom: externalScrollToBottom,
 }) => {
   const internalMessagesEndRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = externalMessagesEndRef || internalMessagesEndRef;
   const [inViewport] = useInViewport(messagesEndRef);
-  const validMessages = extractValidDisplayMessages(messages);
+
+  console.log('==== message structure', messages)
+  // const validMessages = extractValidDisplayMessages(messages);
   const scrollToBottom = () => {
-    if (externalScrollToBottom) {
-      externalScrollToBottom();
-    } else {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
+    // if (externalScrollToBottom) {
+    //   externalScrollToBottom();
+    // } else {
+    //   messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // }
   };
 
   if (messages.length === 0 && !isLoading) {
@@ -48,8 +49,8 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-6 relative">
-      {validMessages.map((spanWithMessages) => (
-        <HierarchicalSpanItem key={`${spanWithMessages.span_id}-${spanWithMessages.run_id}`} spanWithMessages={spanWithMessages} showRunIdHeader={true} />
+      {messages.map((message) => (
+        <HierarchicalSpanItem key={`message-${message.span_id}`} messageStructure={message} />
       ))}
 
       {isLoading && (

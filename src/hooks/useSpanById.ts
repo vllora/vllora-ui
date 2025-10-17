@@ -1,5 +1,8 @@
 import { useMemo } from 'react';
 import { Span } from '@/types/common-type';
+import { MessageStructure } from '@/utils/message-structure-from-span';
+import { convertSpansToMessages, extractMessagesFromSpan } from '@/utils/span-to-message';
+import { Message } from '@/types/chat';
 
 /**
  * Hook that returns a specific span by span_id from the flattenSpans array.
@@ -46,3 +49,11 @@ export function useSpanById(
     span?.attribute ? JSON.stringify(span.attribute) : undefined,
   ]);
 }
+
+export const useMessageExtraceSpanById = (flattenSpans: Span[],
+  spanId: string): Message[] => {
+    const span = useSpanById(flattenSpans, spanId);
+    const message = span && extractMessagesFromSpan(span);
+    return useMemo(() => message || [], [span]);
+}
+    

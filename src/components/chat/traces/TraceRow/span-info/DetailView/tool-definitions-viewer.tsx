@@ -39,7 +39,7 @@ export const ParameterItem = ({
       : JSON.stringify(valueInput, null, 2);
 
   return (
-    <div className="rounded-lg bg-[#151515] px-3 py-2">
+    <div className="rounded-lg px-3 py-2">
       <button
         type="button"
         onClick={() => isExpandable && setIsOpen((prev) => !prev)}

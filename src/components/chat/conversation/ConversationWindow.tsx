@@ -35,7 +35,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
 }) => {
   // Get all state from context
   const {
-    displayMessages,
+    messageHierarchies,
     setIsChatProcessing,
     refreshSpans,
     isLoadingSpans,
@@ -150,25 +150,25 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     };
   }, [terminateChat, threadId, widgetId]);
 
-  useEffect(() => {
-    const handleScrollToBottom = (input: {
-      threadId?: string;
-      widgetId?: string;
-    }) => {
-      if (
-        displayMessages &&
-        displayMessages.length > 0 &&
-        ((input.threadId === threadId && input.threadId) ||
-          (input.widgetId && input.widgetId === widgetId))
-      ) {
-        scrollToBottom();
-      }
-    };
-    emitter.on('langdb_chat_scrollToBottom', handleScrollToBottom);
-    return () => {
-      emitter.off('langdb_chat_scrollToBottom', handleScrollToBottom);
-    };
-  }, [displayMessages, threadId, scrollToBottom, widgetId]);
+  // useEffect(() => {
+  //   const handleScrollToBottom = (input: {
+  //     threadId?: string;
+  //     widgetId?: string;
+  //   }) => {
+  //     if (
+  //       displayMessages &&
+  //       displayMessages.length > 0 &&
+  //       ((input.threadId === threadId && input.threadId) ||
+  //         (input.widgetId && input.widgetId === widgetId))
+  //     ) {
+  //       scrollToBottom();
+  //     }
+  //   };
+  //   emitter.on('langdb_chat_scrollToBottom', handleScrollToBottom);
+  //   return () => {
+  //     emitter.off('langdb_chat_scrollToBottom', handleScrollToBottom);
+  //   };
+  // }, [displayMessages, threadId, scrollToBottom, widgetId]);
 
   useEffect(() => {
     const handleExternalSubmit = ({
@@ -192,7 +192,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     return () => {
       emitter.off('langdb_input_chatSubmit', handleExternalSubmit);
     };
-  }, [onSubmitWrapper, setCurrentInput, threadId, displayMessages]);
+  }, [onSubmitWrapper, setCurrentInput, threadId]);
 
   // Ensure typing indicator is visible by scrolling to bottom when typing state changes
   useEffect(() => {
@@ -226,7 +226,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
 
       {/* Chat Conversation */}
       <ChatConversation
-        messages={displayMessages} // NEW: Use span-derived messages
+        messages={messageHierarchies}
         isLoading={typing}
         messagesEndRef={messagesEndRef as React.RefObject<HTMLDivElement>}
         scrollToBottom={scrollToBottom}

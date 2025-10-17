@@ -79,7 +79,7 @@ export function convertSpansToMessages(spans: Span[], level: number = 0): SpanWi
  * @param span - The span to extract messages from
  * @returns Array of Message objects extracted from the span's request
  */
-function extractMessagesFromSpan(span: Span, level: number = 0): Message[] {
+export function extractMessagesFromSpan(span: Span, level: number = 0): Message[] {
   const attribute = span.attribute as any;
   const messages: Message[] = [];
   // Parse the request JSON to get messages

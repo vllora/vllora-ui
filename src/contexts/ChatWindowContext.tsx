@@ -9,7 +9,7 @@ import { LangDBEventSpan } from './project-events/dto';
 import { convertSpanToRunDTO, convertToNormalSpan } from './project-events/util';
 import { skipThisSpan } from '@/utils/graph-utils';
 import { buildSpanHierarchy } from '@/utils/span-hierarchy';
-import { convertSpansToMessages } from '@/utils/span-to-message';
+import { buildMessageHierarchyFromSpan, MessageStructure } from '@/utils/message-structure-from-span';
 
 export interface SpanMap {
   [key: string]: Span[];
@@ -63,7 +63,11 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     () => buildSpanHierarchy(flattenSpans),
     [flattenSpans]
   );
-  // const [hierarchicalSpans, setHierarchicalSpans] = useState<Span[]>([]);
+
+  const messageHierarchies: MessageStructure[] = useMemo(
+    () => buildMessageHierarchyFromSpan(flattenSpans),
+    [flattenSpans]
+  );
 
   // UI state
   const [currentInput, setCurrentInput] = useState<string>('');
@@ -237,72 +241,6 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   }, [threadIdRef]);
 
 
-  const upsertRun = useCallback((input: {
-    runId: string;
-    timestamp: number;
-    threadId: string;
-    request_models?: string[];
-    used_models?: string[];
-    used_tools?: string[];
-    mcp_template_definition_ids?: string[];
-    cost?: number;
-    input_tokens?: number;
-    output_tokens?: number;
-    errors?: string[];
-  }) => {
-    if (input.threadId !== threadId) return;
-    setRawRuns(prev => {
-      const runIndex = prev.findIndex(r => r.run_id === input.runId && r.thread_ids.includes(input.threadId));
-      // Create new run
-      if (runIndex === -1) {
-        const startTime_micro = input.timestamp * 1000;
-        const newRunDTO: RunDTO = {
-          run_id: input.runId,
-          thread_ids: [input.threadId],
-          trace_ids: [],
-          used_models: input.used_models || [],
-          request_models: input.request_models || [],
-          used_tools: input.used_tools || [],
-          mcp_template_definition_ids: input.mcp_template_definition_ids || [],
-          cost: input.cost || 0,
-          input_tokens: input.input_tokens || 0,
-          output_tokens: input.output_tokens || 0,
-          start_time_us: startTime_micro,
-          finish_time_us: startTime_micro,
-          errors: input.errors || [],
-        };
-        return [newRunDTO, ...prev];
-      }
-
-      // Update existing run
-      const existingRun = prev[runIndex];
-      const newRun: RunDTO = {
-        ...existingRun,
-        used_models: input.used_models?.length
-          ? [...new Set([...existingRun.used_models, ...input.used_models])]
-          : existingRun.used_models,
-        request_models: input.request_models?.length
-          ? [...new Set([...existingRun.request_models, ...input.request_models])]
-          : existingRun.request_models,
-        used_tools: input.used_tools?.length
-          ? [...new Set([...existingRun.used_tools, ...input.used_tools])]
-          : existingRun.used_tools,
-        mcp_template_definition_ids: input.mcp_template_definition_ids?.length
-          ? [...new Set([...existingRun.mcp_template_definition_ids, ...input.mcp_template_definition_ids])]
-          : existingRun.mcp_template_definition_ids,
-        cost: input.cost ?? existingRun.cost,
-        input_tokens: input.input_tokens ?? existingRun.input_tokens,
-        output_tokens: input.output_tokens ?? existingRun.output_tokens,
-        errors: input.errors?.length ? input.errors : existingRun.errors,
-      };
-
-      const updated = [...prev];
-      updated[runIndex] = newRun;
-      return updated;
-    });
-  }, [threadId])
-
-
   // Refresh runs function (reset and reload from beginning)
   const refreshRuns = useCallback(() => {
     setRunsOffset(0);
@@ -387,13 +325,13 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   }, [selectedSpanId, spansOfSelectedRun]);
 
   // Derive messages from hierarchical spans
-  const displayMessages = useMemo(() => {
-    if (spanHierarchies.length === 0) {
-      return [];
-    }
-    // Convert hierarchical spans to messages
-    return convertSpansToMessages(spanHierarchies);
-  }, [spanHierarchies]);
+  // const displayMessages = useMemo(() => {
+  //   if (spanHierarchies.length === 0) {
+  //     return [];
+  //   }
+  //   // Convert hierarchical spans to messages
+  //   return convertSpansToMessages(spanHierarchies);
+  // }, [spanHierarchies]);
 
 
   const clearAll = useCallback(() => {
@@ -406,25 +344,32 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
   // Calculate sum of all message metrics from displayMessages
   const conversationMetrics = useMemo(() => {
-    if (!displayMessages || displayMessages.length === 0) return undefined;
-
-    let totalDuration = 0;
-    let totalCost = 0;
-    let totalInputTokens = 0;
-    let totalOutputTokens = 0;
-    let totalTTFT = 0;
-    let ttftCount = 0;
-
-
-
     return {
-      cost: totalCost > 0 ? totalCost : undefined,
-      inputTokens: totalInputTokens > 0 ? totalInputTokens : undefined,
-      outputTokens: totalOutputTokens > 0 ? totalOutputTokens : undefined,
-      duration: totalDuration > 0 ? totalDuration / 1000 : undefined, // Convert ms to seconds
-      avgTTFT: ttftCount > 0 ? (totalTTFT / ttftCount) / 1000 : undefined, // Convert ms to seconds and average
-    };
-  }, [displayMessages]);
+      cost: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      duration: 0,
+      avgTTFT: 0,
+    }
+    // if (!displayMessages || displayMessages.length === 0) return undefined;
+
+    // let totalDuration = 0;
+    // let totalCost = 0;
+    // let totalInputTokens = 0;
+    // let totalOutputTokens = 0;
+    // let totalTTFT = 0;
+    // let ttftCount = 0;
+
+
+
+    // return {
+    //   cost: totalCost > 0 ? totalCost : undefined,
+    //   inputTokens: totalInputTokens > 0 ? totalInputTokens : undefined,
+    //   outputTokens: totalOutputTokens > 0 ? totalOutputTokens : undefined,
+    //   duration: totalDuration > 0 ? totalDuration / 1000 : undefined, // Convert ms to seconds
+    //   avgTTFT: ttftCount > 0 ? (totalTTFT / ttftCount) / 1000 : undefined, // Convert ms to seconds and average
+    // };
+  }, []);
 
   return {
     spansOfSelectedRun,
@@ -433,7 +378,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     conversationMetrics,
 
     // Span-based messages
-    displayMessages,
+    // displayMessages,
     flattenSpans,
     spanHierarchies,
     isLoadingSpans,
@@ -477,11 +422,11 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     usageInfo,
     appendUsage,
     clearAll,
-    upsertRun,
     setFlattenSpans,
     
     detailSpanId,
     setDetailSpanId,
+    messageHierarchies
   };
 }
 export function ChatWindowProvider({ children, threadId, projectId }: { children: ReactNode, threadId: string, projectId: string }) {
