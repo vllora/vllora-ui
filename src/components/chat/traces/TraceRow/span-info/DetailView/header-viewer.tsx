@@ -23,12 +23,12 @@ export const HeaderViewer = (props: { headers: any }) => {
             </div>
             <div className="space-y-1">
                 {headersFilteredKeys.map((key: string) => (
-                    <div key={key} className="rounded-lg px-3 py-2">
+                    <div key={key} className="rounded-lg">
                         <div className="flex items-start justify-between gap-3">
                             <span className="text-xs font-medium text-zinc-100 break-all">
                                 {key}
                             </span>
-                            <span className="text-xs text-zinc-400 break-all font-mono">
+                            <span className="text-xs text-zinc-400 break-all font-mono text-right">
                                 {typeof headers[key] === 'string' ? headers[key] : JSON.stringify(headers[key])}
                             </span>
                         </div>

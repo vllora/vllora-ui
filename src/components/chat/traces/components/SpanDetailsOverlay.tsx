@@ -17,7 +17,7 @@ export const SpanDetailsOverlay: React.FC<SpanDetailsOverlayProps> = ({
 
       {/* Sidebar Panel */}
       <div
-        className="absolute top-0 right-0 bottom-0 bg-[#0f0f0f] border-l border-border z-50 shadow-2xl animate-in slide-in-from-right duration-300 flex flex-col"
+        className="absolute top-0 right-0 bottom-0 bg-[#0f0f0f] z-50 shadow-2xl animate-in slide-in-from-right duration-300 flex flex-col"
         style={{ width: TRACE_PANEL_WIDTH }}
       >
        

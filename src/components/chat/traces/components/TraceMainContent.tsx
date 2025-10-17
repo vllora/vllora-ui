@@ -11,6 +11,10 @@ interface TraceMainContentProps {
   loadMoreRuns: () => Promise<void>;
   loadingMore: boolean;
   threadId: string;
+  openTraces: {
+    run_id: string;
+    tab: "trace" | "code";
+  }[];
 }
 
 // Component implementation
@@ -21,6 +25,7 @@ const TraceMainContentImpl: React.FC<TraceMainContentProps> = ({
   loadMoreRuns,
   loadingMore,
   threadId,
+  openTraces,
 }) => {
   const observerTarget = useRef<HTMLDivElement>(null);
 
@@ -36,6 +41,7 @@ const TraceMainContentImpl: React.FC<TraceMainContentProps> = ({
           loadingMore={loadingMore}
           threadId={threadId}
           observerTarget={observerTarget}
+          openTraces={openTraces}
         />
       </div>
     </div>

@@ -29,7 +29,7 @@ export const TracesRightSidebar: React.FC<TracesRightSidebarProps> = ({
     currentThreadId: threadId,
   });
   return (
-    <div className="flex h-full">
+    <div className="flex h-full border-l border-border">
       <AnimatePresence mode="wait">
         {isOpen && (
           <motion.div

@@ -6,7 +6,7 @@ import {
   ClockIcon,
   CurrencyDollarIcon,
 } from "@heroicons/react/24/outline";
-import { ChevronRight, Download, Upload, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Upload, X } from "lucide-react";
 import {
   Tooltip,
   TooltipProvider,
@@ -296,7 +296,7 @@ const SidebarModelCallSummaryTracesImpl = ({
             <TooltipTrigger asChild>
               <button className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-8 w-8 !p-1">
                 {isOpen ? (
-                  <X
+                  <ChevronDown
                     className="w-4 h-4 text-text transition-all duration-200 hover:text-white"
                     aria-hidden="true"
                   />
@@ -310,7 +310,7 @@ const SidebarModelCallSummaryTracesImpl = ({
               </button>
             </TooltipTrigger>
             <TooltipContent>
-              {isOpen ? "Hide details" : "Expand to view more details"}
+              {isOpen ? "Collapse" : "Expand to view more details"}
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
