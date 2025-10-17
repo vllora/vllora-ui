@@ -12,7 +12,7 @@ export function isActualModelCall(span: Span): boolean {
   const operationName = span.operation_name;
   return !!(
     operationName &&
-    !['api_invoke', 'cloud_api_invoke', 'model_call', 'tool_call', 'tools'].includes(operationName) &&
+    !['api_invoke', 'cloud_api_invoke', 'model_call', 'tool_call', 'tools', 'run','agent'].includes(operationName) &&
     !operationName.startsWith('guard_')
   );
 }
