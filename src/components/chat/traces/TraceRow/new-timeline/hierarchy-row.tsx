@@ -17,7 +17,7 @@ export interface HierarchyRowProps {
 
 export const HierarchyRow = (props: HierarchyRowProps) => {
     const { hierarchy, totalDuration, startTime, level, titleWidth: propTitleWidth = 180, relatedSpans = [], selectedSpanId, onSpanSelect } = props;
-    const [isOpen, setIsOpen] = useState(false);
+    const [isOpen, setIsOpen] = useState(true);
     // In ellora-ui, we're always in sidebar mode (chat sidebar)
     const titleWidth: string | number = `${propTitleWidth}px`.replace('pxpx', 'px');
 
@@ -116,21 +116,23 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                 selectedSpanId={selectedSpanId}
                 onSpanSelect={onSpanSelect}
             />
-            <div className="flex flex-col divide-y divide-border/70">
-                {childrenSpan.map(child => (
-                    <HierarchyRow
-                        level={level + 1}
-                        key={child.span_id}
-                        hierarchy={child}
-                        totalDuration={totalDuration}
-                        startTime={startTime}
-                        titleWidth={titleWidth}
-                        relatedSpans={relatedSpans}
-                        selectedSpanId={selectedSpanId}
-                        onSpanSelect={onSpanSelect}
-                    />
-                ))}
-            </div>
+            {isOpen && (
+                <div className="flex flex-col divide-y divide-border/70">
+                    {childrenSpan.map(child => (
+                        <HierarchyRow
+                            level={level + 1}
+                            key={child.span_id}
+                            hierarchy={child}
+                            totalDuration={totalDuration}
+                            startTime={startTime}
+                            titleWidth={titleWidth}
+                            relatedSpans={relatedSpans}
+                            selectedSpanId={selectedSpanId}
+                            onSpanSelect={onSpanSelect}
+                        />
+                    ))}
+                </div>
+            )}
         </div>
     );
 }

@@ -3,7 +3,7 @@ import { TimelineContentBaseProps } from ".";
 import { classNames } from "@/utils/modelUtils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getOperationTitle } from "../utils";
-import { DatabaseIcon } from "lucide-react";
+import { DatabaseIcon, ChevronRight, ChevronDown } from "lucide-react";
 import { getClientSDKName, isAgentSpan, isPromptCachingApplied } from "@/utils/graph-utils";
 import { ClientSdkIcon } from "@/components/client-sdk-icon";
 
@@ -14,13 +14,16 @@ interface SidebarTimelineContentProps extends TimelineContentBaseProps { }
 export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
     const {
         level,
+        hasChildren,
+        isOpen,
         titleWidth,
         title,
         operationIcon,
         operationIconColor,
         durationSeconds,
         operation_name,
-        span
+        span,
+        onToggle
     } = props;
     const sdkName = span && getClientSDKName(span);
     const agentSpan = span && isAgentSpan(span);
@@ -33,6 +36,25 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
             <div className="flex items-center w-full">
                 {/* Fake indentation by adding left padding - smaller in sidebar */}
                 <div style={{ width: `${level * 8}px` }} className="flex-shrink-0"></div>
+
+                {/* Expand/Collapse Chevron */}
+                {hasChildren ? (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onToggle();
+                        }}
+                        className="flex-shrink-0 mr-1 hover:bg-accent rounded p-0.5 transition-colors"
+                    >
+                        {isOpen ? (
+                            <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                        ) : (
+                            <ChevronRight className="w-3 h-3 text-muted-foreground" />
+                        )}
+                    </button>
+                ) : (
+                    <div className="w-4 flex-shrink-0" />
+                )}
 
                 {/* Super compact title and duration */}
                 <div className="flex justify-between items-center w-full">
