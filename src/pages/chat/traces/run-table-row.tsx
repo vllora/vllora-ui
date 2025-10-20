@@ -6,15 +6,14 @@ import { TracesPageConsumer } from "@/contexts/TracesPageContext";
 import { DetailedRunViewWrapper } from "./detailed-run-view-wrapper";
 import {
   ExclamationTriangleIcon,
-  ClockIcon as ClockIconHero,
 } from "@heroicons/react/24/outline";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { ProviderIcon } from "@/components/Icons/ProviderIcons";
 import { formatCost } from "@/utils/formatCost";
 import { formatMessageTime } from "@/utils/dateUtils";
 import { useRelativeTime } from "@/hooks/useRelativeTime";
 import { RUN_TABLE_GRID_COLUMNS } from './table-layout';
 import { RunIdCell } from './cells/RunIdCell';
+import { ProviderCell } from './cells/ProviderCell';
 
 interface RunTableRowProps {
   run: RunDTO;
@@ -135,21 +134,7 @@ export const RunTableRow: React.FC<RunTableRowProps> = ({ run, index = 0 }) => {
         <RunIdCell runId={runId} />
 
         {/* Provider/Models */}
-        <div className="flex items-center gap-2 py-3 px-3 h-full ">
-          {providers.length > 0 && (
-            <>
-              <ProviderIcon
-                provider_name={providers[0]}
-                className="h-5 w-5 rounded-full flex-shrink-0"
-              />
-              {providers.length > 1 && (
-                <span className="text-xs text-muted-foreground">
-                  +{providers.length - 1}
-                </span>
-              )}
-            </>
-          )}
-        </div>
+        <ProviderCell providers={providers} />
 
         {/* Cost */}
         <div className="flex items-center justify-center py-3 px-2 h-full ">
