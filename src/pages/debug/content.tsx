@@ -61,7 +61,7 @@ export function DebugPageContent() {
         </div>
         {/* Detail Panel */}
         {selectedSpan && (
-          <div className="w-[40vw]">
+          <div className="w-[40vw] animate-in slide-in-from-right duration-300">
             <SpanDetailPanel
               span={selectedSpan}
               relatedSpans={spansOfSelectedRun}

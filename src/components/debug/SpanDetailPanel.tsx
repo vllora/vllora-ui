@@ -9,6 +9,7 @@ import {
   getOperationTitle,
 } from '@/components/chat/traces/TraceRow/new-timeline/utils';
 import { StandaloneSpanUIDetailsDisplay } from './StandaloneSpanUIDetailsDisplay';
+import { SpanHeader } from '../chat/traces/TraceRow/span-info/SpanHeader';
 
 interface SpanDetailPanelProps {
   span: Span;
@@ -24,7 +25,7 @@ export const SpanDetailPanel: React.FC<SpanDetailPanelProps> = ({ span, relatedS
   return (
     <div className="h-full flex flex-col bg-background border-l border-border">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+      {/* <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${iconColorClass}`}>
             {icon}
@@ -44,13 +45,23 @@ export const SpanDetailPanel: React.FC<SpanDetailPanelProps> = ({ span, relatedS
         >
           <X className="w-4 h-4" />
         </Button>
+      </div> */}
+      <div className="sticky top-0 z-10 h-16 flex flex-row items-center p-1 px-1 justify-between w-full bg-[#161616] border-b border-border">
+        <SpanHeader
+          span={span}
+          onClose={onClose}
+          spanTitle={operationTitle}
+          operationIcon={icon}
+          operationIconColor={iconColorClass}
+          closePosition="right"
+        />
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         {/* Span-specific UI details */}
-          <StandaloneSpanUIDetailsDisplay span={span} relatedSpans={relatedSpans} />
-          
+        <StandaloneSpanUIDetailsDisplay span={span} relatedSpans={relatedSpans} />
+
       </div>
     </div>
   );

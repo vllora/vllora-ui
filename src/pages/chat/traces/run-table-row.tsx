@@ -107,7 +107,7 @@ export const RunTableRow: React.FC<RunTableRowProps> = ({ run, index = 0 }) => {
     <motion.div
       className={cn(
         "overflow-hidden transition-all ",
-        isOpen ? "shadow-md bg-[#171717]" : "hover:shadow-md hover:bg-[#171717]"
+        isOpen ? "shadow-md " : "hover:shadow-md hover:bg-[#171717]"
       )}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
@@ -153,13 +153,6 @@ export const RunTableRow: React.FC<RunTableRowProps> = ({ run, index = 0 }) => {
           )}
         </div>
 
-        {/* Time - Col 4 */}
-        <div className="col-span-2 flex items-center gap-1 py-3 px-3 h-full " ref={messageRef}>
-          <span className="text-xs text-muted-foreground truncate" title={startTime ? convertTimeMiliSecondsToLocalDateTime(startTimeMs, true) : ''}>
-            {timeAgo}
-          </span>
-        </div>
-
         {/* Cost - Col 5 */}
         <div className="col-span-1 flex items-center justify-center py-3 px-2 h-full ">
           <span className="text-xs font-medium tabular-nums">{formatCost(totalCost)}</span>
@@ -174,6 +167,15 @@ export const RunTableRow: React.FC<RunTableRowProps> = ({ run, index = 0 }) => {
         <div className="col-span-1 flex items-center justify-center py-3 px-2 h-full ">
           <span className="text-xs font-medium tabular-nums">{tokensInfo.outputTokens.toLocaleString()}</span>
         </div>
+
+        {/* Time - Col 4 */}
+        <div className="col-span-2 flex items-center gap-1 py-3 px-3 h-full " ref={messageRef}>
+          <span className="text-xs text-muted-foreground truncate" title={startTime ? convertTimeMiliSecondsToLocalDateTime(startTimeMs, true) : ''}>
+            {timeAgo}
+          </span>
+        </div>
+
+        
 
         {/* Duration - Col 8 */}
         <div className="col-span-1 flex items-center justify-center py-3 px-2 h-full ">

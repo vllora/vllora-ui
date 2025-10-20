@@ -1,7 +1,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { CheckCircleIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
-import { ArrowLeft, DatabaseIcon, Timer } from "lucide-react";
+import { ArrowLeft, DatabaseIcon, Timer, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Span } from "@/types/common-type";
@@ -46,6 +46,7 @@ interface SpanHeaderProps {
   startTime?: number;
   endTime?: number;
   span?: Span;
+  closePosition?: 'left' | 'right';
 }
 
 export const SpanHeader: React.FC<SpanHeaderProps> = ({
@@ -61,6 +62,7 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
   startTime,
   endTime,
   span,
+  closePosition = 'left'
 }) => {
   const isSuccessStatus = status && ['200', 200].includes(status);
   const duration = getDuration(startTime, endTime);
@@ -68,7 +70,7 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
   return (
     <div className="flex flex-row items-center gap-1 justify-between w-full">
       <div className="flex items-center gap-1">
-        {onClose && <Button
+        {onClose && closePosition === 'left' && <Button
           variant="ghost"
           size="icon"
           onClick={(e) => {
@@ -155,7 +157,20 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
           </div>
         )}
         {span && <BasicSpanInfo span={span} />}
+
+        {onClose && closePosition === 'right' && <Button
+          variant="ghost"
+          size="icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose?.();
+          }}
+          className="h-8 w-8"
+        >
+          <X className="h-4 w-4" />
+        </Button>}
       </div>
+
     </div>
   );
 };
