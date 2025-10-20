@@ -66,8 +66,8 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
   const duration = getDuration(startTime, endTime);
 
   return (
-    <div className="flex flex-row items-center gap-4 justify-between w-full">
-      <div className="flex items-center gap-2">
+    <div className="flex flex-row items-center gap-1 justify-between w-full">
+      <div className="flex items-center gap-1">
         {onClose && <Button
           variant="ghost"
           size="icon"
@@ -78,7 +78,7 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
           className="h-8 w-8"
         >
           <ArrowLeft className="h-4 w-4" />
-      </Button>}
+        </Button>}
         {logoLink ? (
           <img src={logoLink} alt={spanTitle} width={20} height={20} />
         ) : (
@@ -143,9 +143,9 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
           )}
         </div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         {status && (
-          <div className={`flex items-center px-2 py-1 rounded-md text-xs ${isSuccessStatus ? ' text-green-500' : 'text-red-500'}`}>
+          <div className={`flex items-center py-1 rounded-md text-xs ${isSuccessStatus ? ' text-green-500' : 'text-red-500'}`}>
             {isSuccessStatus ? (
               <CheckCircleIcon className="w-3 h-3 mr-1" />
             ) : (

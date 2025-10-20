@@ -20,7 +20,6 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
   const messagesEndRef = externalMessagesEndRef || internalMessagesEndRef;
   const [inViewport] = useInViewport(messagesEndRef);
 
-  console.log('==== message structure', messages)
   // const validMessages = extractValidDisplayMessages(messages);
   const scrollToBottom = () => {
     // if (externalScrollToBottom) {

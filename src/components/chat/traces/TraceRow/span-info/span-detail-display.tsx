@@ -51,7 +51,7 @@ export const SpanDetailsDisplay = () => {
     <div className="w-full flex flex-col h-full">
       <Tabs value={currentTab} onValueChange={(v) => setCurrentTab(v)} className="flex flex-col h-full">
         {/* Sticky Header section */}
-        <div className="sticky top-0 z-10 h-16 flex flex-row items-center p-2 px-4 justify-between w-full bg-[#161616] border-b border-border">
+        <div className="sticky top-0 z-10 h-16 flex flex-row items-center p-1 px-1 justify-between w-full bg-[#161616] border-b border-border">
           <SpanHeader
             onClose={onClose}
             logoLink={logoLink}

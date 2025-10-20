@@ -20,12 +20,79 @@ export const getTaskTitle = (props: { span: Span }) => {
     let task_name = attributes['langdb.task_name'] || attributes['task_name'];
     return task_name || 'task';
 }
+/**
+ * Extracts execution message results for tool calls from related spans
+ * @param executionIds - Array of tool call IDs to find results for
+ * @param relatedSpans - Array of related spans to search through
+ * @param currentSpanId - ID of the current span to exclude from results
+ * @returns Array of execution message results with content, tool_call_id, and role
+ */
+export const getExecuteMessagesResult = (
+    executionIds: string[],
+    relatedSpans: Span[],
+    currentSpanId?: string
+): { content: string; tool_call_id: string; role: string }[] => {
+    // Find all model_call spans
+    const modelCallSpanIds = relatedSpans
+        .filter((span: Span) => span.operation_name === 'model_call')
+        .map((span: Span) => span.span_id);
+
+    // Find all spans that have parent_span_id in modelCallSpanIds and have input attribute
+    const inputsFromModelCall = relatedSpans
+        .filter(
+            (span: Span) =>
+                span.parent_span_id &&
+                modelCallSpanIds.includes(span.parent_span_id) &&
+                span.attribute &&
+                (span.attribute as any).input
+        )
+        .map((span: Span) => ({
+            input: (span.attribute as any).input,
+            span: span,
+        }));
+
+    // Map through execution IDs to find matching tool messages
+    const results = executionIds
+        .map((id: string) => {
+            return inputsFromModelCall
+                .filter((input) => {
+                    // Filter inputs that contain the ID and are not from the current span
+                    return (
+                        input.input.includes(id) &&
+                        (!currentSpanId || input.span.span_id !== currentSpanId)
+                    );
+                })
+                .map((input) => {
+                    const inputStr = input.input;
+                    const inputJson = tryParseJson(inputStr);
+
+                    if (inputJson && Array.isArray(inputJson)) {
+                        // Find the tool message with matching tool_call_id
+                        const toolMessage = inputJson.find(
+                            (item: { role: string; [key: string]: any }) =>
+                                item.role === 'tool' && item.tool_call_id === id
+                        );
+                        return toolMessage;
+                    }
+                    return undefined;
+                });
+        })
+        .filter((item: any) => item !== undefined)
+        .flatMap((item: any) => item);
+
+    return results;
+};
 
 export const getAgentTitle = (props: { span: Span }) => {
     const { span } = props;
     let isAgent = isAgentSpan(span);
     if (!isAgent) {
         return 'Unknown Agent';
+    }
+    let attributeOfAgent = span.attribute as any;
+    let agent_name_from_attribute = attributeOfAgent ? (attributeOfAgent['langdb.agent_name'] || attributeOfAgent['agent_name'] || attributeOfAgent['langdb_agent_name']) : '';
+    if (agent_name_from_attribute) {
+        return agent_name_from_attribute;
     }
     let sdkName = getClientSDKName(span);
     if (sdkName) {

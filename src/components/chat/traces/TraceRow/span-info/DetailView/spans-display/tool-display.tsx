@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { tryParseJson } from "@/utils/modelUtils";
 import { Span, ToolCall } from "@/types/common-type";
 import { cn } from "@/lib/utils";
+import { getExecuteMessagesResult } from "../../../new-timeline/utils";
 
 export interface ToolInfoCall {
     type: string;
@@ -25,45 +26,22 @@ interface ToolUIDetailsDisplayProps {
     relatedSpans?: Span[];
 }
 
+
+
 export const ToolUIDetailsDisplay = ({ span, relatedSpans = [] }: ToolUIDetailsDisplayProps) => {
     const currentSpan = span;
-    // find all model_call span
-    const modelCallSpanIds = relatedSpans.filter((span: Span) => span.operation_name === 'model_call').map((span: Span) => span.span_id);
-    // find all span that has parent_span_id in modelCallSpanIds
-    const inputsFromModelCall = relatedSpans.filter((span: Span) => span.parent_span_id && modelCallSpanIds.includes(span.parent_span_id) && span.attribute && (span.attribute as any).input).map((span: Span) => {
-        const input = (span.attribute as any).input;
-        return {
-            input,
-            span: span
-        };
-    });
-    
     const attributeTool = currentSpan.attribute as ToolCall;
     const toolCalls = attributeTool.tool_calls;
-    // const labelTitles: string[] = attributeTool.label && attributeTool.label.split(',') || [];
     const jsonToolCalls: any[] | undefined = toolCalls && tryParseJson(toolCalls);
     const toolExecutionIds: string[] = jsonToolCalls?.map((toolCall: any) => toolCall.id) || [];
 
-    const executeMessagesResult: {content: string, tool_call_id: string, role: string}[]= toolExecutionIds.map((id: string) => {
-        return inputsFromModelCall.filter((input: {
-            input: string;
-            span: Span;
-        }) => {
-            return input.input.includes(id) && input.span.span_id !== currentSpan.span_id;
-        }).map(input => {
-            let inputStr = input.input;
-            let inputJson = tryParseJson(inputStr);
-            if(inputJson  && Array.isArray(inputJson)) {
-                // get the tool id from the inputJson
-                const toolMessage = inputJson.find((item: {
-                    role: string;
-                    [key: string]: any;
-                }) => item.role === 'tool' && item.tool_call_id === id);
-                return toolMessage;
-            }
-            return undefined;
-        });
-    }).filter((item: any) => item !== undefined).flatMap((item: any) => item);
+    // Use the extracted function to get execution messages result
+    const executeMessagesResult = getExecuteMessagesResult(
+        toolExecutionIds,
+        relatedSpans,
+        currentSpan.span_id
+    );
+
     const toolCallCount = jsonToolCalls?.length || 0;
     const toolResponse = attributeTool.response;
     const toolResult = attributeTool.tool_results;
