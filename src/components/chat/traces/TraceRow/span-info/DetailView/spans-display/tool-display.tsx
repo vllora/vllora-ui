@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { tryParseJson } from "@/utils/modelUtils";
 import { Span, ToolCall } from "@/types/common-type";
 import { cn } from "@/lib/utils";
-import { getExecuteMessagesResult } from "../../../new-timeline/utils";
+import { getExecuteMessagesResult, getToolCallIds } from "../../../new-timeline/utils";
 
 export interface ToolInfoCall {
     type: string;
@@ -33,7 +33,7 @@ export const ToolUIDetailsDisplay = ({ span, relatedSpans = [] }: ToolUIDetailsD
     const attributeTool = currentSpan.attribute as ToolCall;
     const toolCalls = attributeTool.tool_calls;
     const jsonToolCalls: any[] | undefined = toolCalls && tryParseJson(toolCalls);
-    const toolExecutionIds: string[] = jsonToolCalls?.map((toolCall: any) => toolCall.id) || [];
+    const toolExecutionIds: string[] = getToolCallIds({ span: currentSpan });
 
     // Use the extracted function to get execution messages result
     const executeMessagesResult = getExecuteMessagesResult(
@@ -42,7 +42,7 @@ export const ToolUIDetailsDisplay = ({ span, relatedSpans = [] }: ToolUIDetailsD
         currentSpan.span_id
     );
 
-    const toolCallCount = jsonToolCalls?.length || 0;
+    const toolCallCount = toolExecutionIds.length || 0;
     const toolResponse = attributeTool.response;
     const toolResult = attributeTool.tool_results;
     const mcp_server_string = attributeTool.mcp_server;

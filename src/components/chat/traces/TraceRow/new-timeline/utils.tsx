@@ -20,6 +20,34 @@ export const getTaskTitle = (props: { span: Span }) => {
     let task_name = attributes['langdb.task_name'] || attributes['task_name'];
     return task_name || 'task';
 }
+
+
+export const getToolExecuteMessageResult = (props: { span: Span, relatedSpans: Span[] }) => {
+    const { span } = props;
+     let executeMessagesResult = getExecuteMessagesResult(
+        getToolCallIds(props),
+        props.relatedSpans,
+        span.span_id
+    );
+    return executeMessagesResult;
+}
+
+
+export const getToolCallMessage = (props: { span: Span }) => {
+    const { span } = props;
+    let attributes = span.attribute as any;
+    let tool_calls = attributes['tool_calls'];
+    let tool_calls_json = tryParseJson(tool_calls);
+    return tool_calls_json;
+}
+export const getToolCallIds = (props: { span: Span }) => {
+    const { span } = props;
+    let attributes = span.attribute as any;
+    let tool_calls = attributes['tool_calls'];
+    let tool_calls_json = tryParseJson(tool_calls);
+    let tool_calls_ids = tool_calls_json?.map((tool_call: any) => tool_call.id) || [];
+    return tool_calls_ids;
+}
 /**
  * Extracts execution message results for tool calls from related spans
  * @param executionIds - Array of tool call IDs to find results for
@@ -263,6 +291,9 @@ export const getSpanTitle = (props: { span: Span, relatedSpans: Span[] }) => {
         }
         if (operation_name.startsWith('execute_tool ')) {
             return operation_name.replace('execute_tool ', '').replace('[', '').replace(']', '');
+        }
+        if(operation_name=== 'tool' && span.attribute && (span.attribute as any)['langdb.tool_name']){
+            return (span.attribute as any)['langdb.tool_name'];
         }
         return operation_name;
     }

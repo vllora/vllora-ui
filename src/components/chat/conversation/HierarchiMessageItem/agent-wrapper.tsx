@@ -3,7 +3,7 @@
 
 import { MessageStructure } from "@/utils/message-structure-from-span";
 import { HierarchicalMessageSpanItem } from ".";
-import { AgentStartSeparator } from "../SpanSeparator";
+import { SpanSeparator } from "../SpanSeparator";
 import { useState, memo } from "react";
 import { INDENT_PER_LEVEL } from "./constants";
 
@@ -24,7 +24,7 @@ export const AgentSpanMessage = memo((props: {
     const indentStyle = level > 0 ? { marginLeft: `${INDENT_PER_LEVEL}px` } : {};
 
     return <div id={`agent-span-conversation-${spanId}`} className="agent-wrapper" style={indentStyle}>
-        <AgentStartSeparator
+        <SpanSeparator
             spanId={spanId}
             isCollapsed={isCollapsed}
             onToggle={toggleCollapse}

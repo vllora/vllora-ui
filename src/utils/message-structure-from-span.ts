@@ -48,7 +48,9 @@ function areMessageStructureItemsEqual(
 }
 
 const skipSpanNotRelatedToMessage = (span: Span) => {
+  if(span.operation_name === 'tool') return false;
   if (skipThisSpan(span)) return true;
+  if(span.operation_name === 'run') return true;
   return false;
 }
 // Helper function to find the nearest non-skipped ancestor

@@ -56,4 +56,4 @@ export const useMessageExtraceSpanById = (flattenSpans: Span[],
     const message = span && extractMessagesFromSpan(span);
     return useMemo(() => message || [], [span]);
 }
-    
+

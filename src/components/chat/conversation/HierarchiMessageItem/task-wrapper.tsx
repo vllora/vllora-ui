@@ -1,6 +1,6 @@
 import { MessageStructure } from "@/utils/message-structure-from-span";
 import { HierarchicalMessageSpanItem } from ".";
-import { TaskStartSeparator } from "../SpanSeparator";
+import { SpanSeparator } from "../SpanSeparator";
 import { useState, memo } from "react";
 import { INDENT_PER_LEVEL } from "./constants";
 
@@ -21,7 +21,7 @@ export const TaskSpanMessage = memo((props: {
     const indentStyle = level > 0 ? { marginLeft: `${INDENT_PER_LEVEL}px` } : {};
 
     return <div id={`task-span-conversation-${spanId}`} className="task-wrapper" style={indentStyle}>
-        <TaskStartSeparator
+        <SpanSeparator
             spanId={spanId}
             isCollapsed={isCollapsed}
             onToggle={toggleCollapse}

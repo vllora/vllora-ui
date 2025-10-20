@@ -143,6 +143,9 @@ export function skipThisSpan(span: Span, isClientSDKTrace?: boolean): boolean {
       if (sdkName === 'adk') {
           return ['invocation', 'tools', 'call_llm'].includes(operation_name)
       }
+      if(sdkName === 'openai') {
+          return false
+      }
       if (sdkName === 'crewai') {
           // let isAgent = isAgentSpan(span);
           return false
