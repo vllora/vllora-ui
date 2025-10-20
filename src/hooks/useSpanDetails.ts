@@ -73,8 +73,6 @@ export function useSpanDetails({ projectId }: UseSpanDetailsProps) {
     return detailSpanId ? spanMap[selectedRunId || '']?.find(span => span.span_id === detailSpanId) : null;
   }, [detailSpanId, selectedRunId, spanMap]);
 
-  console.log("==== detailSpan", detailSpan);
-
   return {
     spanMap,
     setSpanMap,

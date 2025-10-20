@@ -13,6 +13,8 @@ import { ProviderIcon } from "@/components/Icons/ProviderIcons";
 import { formatCost } from "@/utils/formatCost";
 import { formatMessageTime } from "@/utils/dateUtils";
 import { useRelativeTime } from "@/hooks/useRelativeTime";
+import { RUN_TABLE_GRID_COLUMNS } from './table-layout';
+import { RunIdCell } from './cells/RunIdCell';
 
 interface RunTableRowProps {
   run: RunDTO;
@@ -115,13 +117,13 @@ export const RunTableRow: React.FC<RunTableRowProps> = ({ run, index = 0 }) => {
       data-testid={`trace-row-${runId}`}
       data-run-id={runId}
     >
-      {/* Table Row Header */}
       <div
         onClick={toggleAccordion}
-        className="grid grid-cols-12 divide-x divide-border gap-0 cursor-pointer items-center text-sm"
+        className="grid divide-x divide-border gap-0 cursor-pointer items-center text-sm"
+        style={{ gridTemplateColumns: RUN_TABLE_GRID_COLUMNS }}
       >
-        {/* Expand/Collapse Button - Col 1 */}
-        <div className="col-span-1 flex items-center justify-center py-3 px-2 ">
+        {/* Expand/Collapse Button */}
+        <div className="flex items-center justify-center py-3 px-2 ">
           {isOpen ? (
             <ChevronDown className="w-5 h-5 text-muted-foreground hover:text-foreground transition-colors" />
           ) : (
@@ -129,15 +131,11 @@ export const RunTableRow: React.FC<RunTableRowProps> = ({ run, index = 0 }) => {
           )}
         </div>
 
-        {/* Run ID - Col 2 */}
-        <div className="col-span-2 flex items-center py-3 px-3">
-          <span className="font-mono text-xs text-muted-foreground truncate" title={runId}>
-            {runId.slice(0, 12)}...
-          </span>
-        </div>
+        {/* Run ID */}
+        <RunIdCell runId={runId} />
 
-        {/* Provider/Models - Col 3 */}
-        <div className="col-span-2 flex items-center gap-2 py-3 px-3 h-full ">
+        {/* Provider/Models */}
+        <div className="flex items-center gap-2 py-3 px-3 h-full ">
           {providers.length > 0 && (
             <>
               <ProviderIcon
@@ -153,37 +151,35 @@ export const RunTableRow: React.FC<RunTableRowProps> = ({ run, index = 0 }) => {
           )}
         </div>
 
-        {/* Cost - Col 5 */}
-        <div className="col-span-1 flex items-center justify-center py-3 px-2 h-full ">
+        {/* Cost */}
+        <div className="flex items-center justify-center py-3 px-2 h-full ">
           <span className="text-xs font-medium tabular-nums">{formatCost(totalCost)}</span>
         </div>
 
-        {/* Input Tokens - Col 6 */}
-        <div className="col-span-1 flex items-center justify-center py-3 px-2 h-full ">
+        {/* Input Tokens */}
+        <div className="flex items-center justify-center py-3 px-2 h-full ">
           <span className="text-xs font-medium tabular-nums">{tokensInfo.inputTokens.toLocaleString()}</span>
         </div>
 
-        {/* Output Tokens - Col 7 */}
-        <div className="col-span-1 flex items-center justify-center py-3 px-2 h-full ">
+        {/* Output Tokens */}
+        <div className="flex items-center justify-center py-3 px-2 h-full ">
           <span className="text-xs font-medium tabular-nums">{tokensInfo.outputTokens.toLocaleString()}</span>
         </div>
 
-        {/* Time - Col 4 */}
-        <div className="col-span-2 flex items-center gap-1 py-3 px-3 h-full " ref={messageRef}>
+        {/* Time */}
+        <div className="flex items-center gap-1 py-3 px-3 h-full " ref={messageRef}>
           <span className="text-xs text-muted-foreground truncate" title={startTime ? convertTimeMiliSecondsToLocalDateTime(startTimeMs, true) : ''}>
             {timeAgo}
           </span>
         </div>
 
-        
-
-        {/* Duration - Col 8 */}
-        <div className="col-span-1 flex items-center justify-center py-3 px-2 h-full ">
+        {/* Duration */}
+        <div className="flex items-center justify-center py-3 px-2 h-full ">
           <span className="text-xs font-medium tabular-nums">{duration}s</span>
         </div>
 
-        {/* Errors - Col 9 */}
-        <div className="col-span-1 flex items-center justify-center py-3 px-2 h-full ">
+        {/* Errors */}
+        <div className="flex items-center justify-center py-3 px-2 h-full ">
           {errors && errors.length > 0 ? (
             <>
               <ExclamationTriangleIcon className="w-4 h-4 text-yellow-500 flex-shrink-0" />

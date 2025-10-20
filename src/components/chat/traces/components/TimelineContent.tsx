@@ -22,9 +22,6 @@ export const TimelineContent: React.FC<TimelineContentProps> = ({
   setDetailSpanId
 }) => {
 
-  // Determine if in sidebar or main view
-  const isInSidebar = true;
-
   // Get run ID from first span (all spans should belong to same run)
   const runId = spansByRunId && spansByRunId.length > 0 ? spansByRunId[0]?.run_id : '';
   return (
@@ -34,7 +31,6 @@ export const TimelineContent: React.FC<TimelineContentProps> = ({
         <div
           className={cn(
             "flex-1 overflow-auto mt-2",
-            isInSidebar ? "bg-[#0f0f0f]" : "bg-[#0f0f0f] px-2"
           )}
         >
           <TimelineContentInner

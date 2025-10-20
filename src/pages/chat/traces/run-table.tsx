@@ -1,7 +1,8 @@
 import { useRef } from 'react';
-import { Loader2, Clock, DollarSign, Download, Upload, AlertTriangle } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { TracesPageConsumer } from '@/contexts/TracesPageContext';
 import { RunTableRow } from './run-table-row';
+import { RunTableHeader } from './run-table-header';
 
 export function RunTable() {
   const {
@@ -65,38 +66,7 @@ export function RunTable() {
     <div className="flex-1 w-full overflow-auto px-2">
       <div className="divide-y divide-border">
         {/* Table Header */}
-        <div className="grid grid-cols-12 gap-0 bg-[#0a0a0a] text-xs font-semibold text-muted-foreground uppercase tracking-wider overflow-hidden">
-          <div className="col-span-1 flex items-center justify-center py-3 px-2 border-r border-border">
-            
-          </div>
-          <div className="col-span-2 py-3 px-3 border-r border-border">Run ID</div>
-          <div className="col-span-2 py-3 px-3 border-r border-border">Provider</div>
-           <div className="col-span-1 flex items-center gap-1 py-3 px-2 border-r border-border justify-center">
-            <DollarSign className="w-3.5 h-3.5" />
-            Cost
-          </div>
-          <div className="col-span-1 flex items-center gap-1 py-3 px-2 border-r border-border justify-center">
-            <Upload className="w-3.5 h-3.5" />
-            Input
-          </div>
-          <div className="col-span-1 flex items-center gap-1 py-3 px-2 border-r border-border justify-center">
-            <Download className="w-3.5 h-3.5" />
-            Output
-          </div>
-          <div className="col-span-2 flex items-center gap-1 py-3 px-3 border-r border-border">
-            <Clock className="w-3.5 h-3.5" />
-            Time
-          </div>
-         
-          <div className="col-span-1 flex items-center gap-1 py-3 px-2 border-r border-border justify-center">
-            <Clock className="w-3.5 h-3.5" />
-            Duration
-          </div>
-          <div className="col-span-1 flex items-center gap-1 py-3 px-2 justify-center">
-            <AlertTriangle className="w-3.5 h-3.5" />
-            Errors
-          </div>
-        </div>
+        <RunTableHeader />
 
         {/* Table Rows */}
         {runs.map((run, index) => (
