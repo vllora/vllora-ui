@@ -3,14 +3,23 @@ import { SingleRunTimelineView } from "../TraceRow/new-timeline/single-run-timel
 import { cn } from "@/lib/utils";
 import { Span } from "@/types/common-type";
 import { RunDetailConsumer, RunDetailProvider } from "@/contexts/RunDetailContext";
-import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 
 interface TimelineContentProps {
   spansByRunId: Span[];
+  projectId: string;
+  selectedSpanId: string | null;
+  setSelectedSpanId: (spanId: string | null) => void;
+  setSelectedRunId: (runId: string | null) => void;
+  setDetailSpanId: (spanId: string | null) => void;
 }
 
 export const TimelineContent: React.FC<TimelineContentProps> = ({
   spansByRunId,
+  projectId,
+  selectedSpanId,
+  setSelectedSpanId,
+  setSelectedRunId,
+  setDetailSpanId
 }) => {
 
   // Determine if in sidebar or main view
@@ -18,7 +27,6 @@ export const TimelineContent: React.FC<TimelineContentProps> = ({
 
   // Get run ID from first span (all spans should belong to same run)
   const runId = spansByRunId && spansByRunId.length > 0 ? spansByRunId[0]?.run_id : '';
-  const { projectId } = ChatWindowConsumer()// Temporary: get from run data
   return (
     <RunDetailProvider runId={runId} projectId={projectId} spansByRunId={spansByRunId}>
       <div className={cn("flex flex-col h-full overflow-hidden")}>
@@ -29,15 +37,25 @@ export const TimelineContent: React.FC<TimelineContentProps> = ({
             isInSidebar ? "bg-[#0f0f0f]" : "bg-[#0f0f0f] px-2"
           )}
         >
-          <TimelineContentInner />
+          <TimelineContentInner
+            selectedSpanId={selectedSpanId}
+            setSelectedSpanId={setSelectedSpanId}
+            setSelectedRunId={setSelectedRunId}
+            setDetailSpanId={setDetailSpanId}
+          />
         </div>
       </div>
     </RunDetailProvider>
   );
 };
-const TimelineContentInner = () => {
+const TimelineContentInner = (props: {
+  selectedSpanId: string | null;
+  setSelectedSpanId: (spanId: string | null) => void;
+  setSelectedRunId: (runId: string | null) => void;
+  setDetailSpanId: (spanId: string | null) => void;
+}) => {
   const { hierarchies, runId } = RunDetailConsumer()
-  const {  selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId } = ChatWindowConsumer()// Temporary: get from run data
+  const { selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId } = props
 
   if (!hierarchies || hierarchies.length === 0) {
     return <div className="flex items-center justify-center p-4 text-sm text-gray-400">
@@ -54,6 +72,7 @@ const TimelineContentInner = () => {
         selectedSpanId={selectedSpanId || undefined}
         level={0}
         onSpanSelect={(spanId, runId) => {
+          console.log("==== onSpanSelect", spanId, runId);
           if (runId) {
             setSelectedSpanId(spanId);
             setSelectedRunId(runId);

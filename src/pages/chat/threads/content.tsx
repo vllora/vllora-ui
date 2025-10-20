@@ -11,7 +11,7 @@ import { Thread } from '@/types/chat';
 import { API_CONFIG } from '@/config/api';
 import { useThreadsEvents } from '@/hooks/events/useThreadsEvents';
 
-export function ChatPage() {
+export function ThreadsPageContent() {
   const { currentProjectId, isDefaultProject } = ProjectsConsumer();
   const [searchParams] = useSearchParams();
   const {

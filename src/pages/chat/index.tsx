@@ -1,27 +1,14 @@
-import { ThreadsProvider } from '@/contexts/ThreadsContext';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
-import { ChatPage } from './content';
 import { useCallback, useState, useEffect } from 'react';
-import { DebugPage } from '../debug';
 import { TabSelectionHeader } from '@/components/TabSelectionHeader';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
-
-export function ChatPageWrapper() {
-  const { currentProjectId } = ProjectsConsumer();
-
-  if (!currentProjectId) {
-    return null;
-  }
-
-  return (
-    <ThreadsProvider projectId={currentProjectId}>
-      <ChatPage />
-    </ThreadsProvider>
-  );
-}
+import { TracesPage } from './traces';
+import { ThreadPage } from './threads';
 
 
-export function ChatAndDebugPageWrapper() {
+
+
+export function ThreadsAndTracesPage() {
   const { currentProjectId, isDefaultProject } = ProjectsConsumer();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -57,6 +44,6 @@ export function ChatAndDebugPageWrapper() {
     <TabSelectionHeader onProjectChange={handleProjectChange} currentTab={currentTab} onTabChange={setCurrentTab} />
 
     {/* Content Area */}
-    {currentTab === "threads" ? <ChatPageWrapper /> : <DebugPage />}
+    {currentTab === "threads" ? <ThreadPage /> : <TracesPage />}
   </div>
 }

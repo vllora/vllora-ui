@@ -11,12 +11,12 @@ interface SpanDetailsPanelProps {
 export const SpanDetailsPanel: React.FC<SpanDetailsPanelProps> = ({
   className,
 }) => {
-  const { detailSpanId } = ChatWindowConsumer();
+  const { detailSpan } = ChatWindowConsumer();
 
   return (
     <div className={cn("flex flex-col h-full w-full", className)}>
       <div className="flex-1 overflow-hidden bg-[#0f0f0f] h-full">
-        {detailSpanId ? (
+        { detailSpan ? (
             <div className="h-full w-full overflow-hidden">
               <SpanInfo />
             </div>
