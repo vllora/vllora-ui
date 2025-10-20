@@ -68,7 +68,6 @@ const TimelineContentInner = (props: {
         selectedSpanId={selectedSpanId || undefined}
         level={0}
         onSpanSelect={(spanId, runId) => {
-          console.log("==== onSpanSelect", spanId, runId);
           if (runId) {
             setSelectedSpanId(spanId);
             setSelectedRunId(runId);
