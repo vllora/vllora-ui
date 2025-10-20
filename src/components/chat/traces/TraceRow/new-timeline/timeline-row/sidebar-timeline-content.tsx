@@ -4,7 +4,7 @@ import { classNames } from "@/utils/modelUtils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getOperationTitle } from "../utils";
 import { DatabaseIcon } from "lucide-react";
-import { getClientSDKName, isPromptCachingApplied } from "@/utils/graph-utils";
+import { getClientSDKName, isAgentSpan, isPromptCachingApplied } from "@/utils/graph-utils";
 import { ClientSdkIcon } from "@/components/client-sdk-icon";
 
 // Props for the SidebarTimelineContent component
@@ -23,6 +23,7 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
         span
     } = props;
     const sdkName = span && getClientSDKName(span);
+    const agentSpan = span && isAgentSpan(span);
     const isPromptCached = span && isPromptCachingApplied(span);
     return (
         <div
@@ -46,7 +47,7 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                                                 <div className={classNames("p-1 rounded-full ", operationIconColor)}>
                                                     {operationIcon}
                                                 </div>
-                                                {sdkName && (
+                                                {sdkName && !agentSpan && (
                                                     <div className="absolute -bottom-1 -right-1  bg-gray-800 rounded-full p-0.5 border border-gray-700 shadow-sm">
                                                         <ClientSdkIcon client_name={sdkName} className="w-2.5 h-2.5" />
                                                     </div>

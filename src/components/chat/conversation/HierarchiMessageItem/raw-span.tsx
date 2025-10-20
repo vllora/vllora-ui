@@ -4,7 +4,7 @@ import { MessageStructure } from "@/utils/message-structure-from-span";
 import React from "react";
 import { Span } from "@/types/common-type";
 import { MessageItem } from "../../MessageItem";
-import { HierarchicalSpanItem } from "./index";
+import { HierarchicalMessageSpanItem } from "./index";
 import { INDENT_PER_LEVEL } from "./constants";
 
 
@@ -23,7 +23,7 @@ export const RawSpanMessage = React.memo((props: {
         {messageStructure.children && messageStructure.children.length > 0 && (
             <div className="space-y-4">
                 {messageStructure.children.map((child) => (
-                    <HierarchicalSpanItem key={child.span_id} messageStructure={child} level={level + 1} />
+                    <HierarchicalMessageSpanItem key={child.span_id} messageStructure={child} level={level + 1} />
                 ))}
             </div>
         )}

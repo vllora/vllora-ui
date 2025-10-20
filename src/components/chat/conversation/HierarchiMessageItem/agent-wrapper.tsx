@@ -2,7 +2,7 @@
 
 
 import { MessageStructure } from "@/utils/message-structure-from-span";
-import { HierarchicalSpanItem } from ".";
+import { HierarchicalMessageSpanItem } from ".";
 import { AgentStartSeparator } from "../SpanSeparator";
 import { useState } from "react";
 import { INDENT_PER_LEVEL } from "./constants";
@@ -33,7 +33,7 @@ export const AgentSpanMessage = (props: {
         {!isCollapsed && (
             <div className={level > 0 ? "border-l-2 border-green-500/20 pl-4 ml-2" : ""}>
                 {messages.map((message) => (
-                    <HierarchicalSpanItem key={`message-${message.span_id}`} messageStructure={message} level={level + 1} />
+                    <HierarchicalMessageSpanItem key={`message-${message.span_id}`} messageStructure={message} level={level + 1} />
                 ))}
             </div>
         )}

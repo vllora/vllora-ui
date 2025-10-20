@@ -17,7 +17,7 @@ interface HierarchicalSpanItemProps {
  * Renders a span with its messages and nested child spans in a hierarchical structure
  * Uses indentation to show nesting levels
  */
-export const HierarchicalSpanItem: React.FC<HierarchicalSpanItemProps> = React.memo(({
+export const HierarchicalMessageSpanItem: React.FC<HierarchicalSpanItemProps> = React.memo(({
   messageStructure,
   level = 0,
 }) => {

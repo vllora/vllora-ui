@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { Bot, ArrowDown } from 'lucide-react';
 import { useInViewport } from 'ahooks';
-import { HierarchicalSpanItem } from './HierarchiMessageItem';
+import { HierarchicalMessageSpanItem } from './HierarchiMessageItem';
 import { MessageStructure } from '@/utils/message-structure-from-span';
 
 interface ChatConversationProps {
@@ -48,7 +48,7 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-6 relative">
       {messages.map((message) => (
-        <HierarchicalSpanItem key={`message-${message.span_id}`} messageStructure={message} />
+        <HierarchicalMessageSpanItem key={`message-${message.span_id}`} messageStructure={message} />
       ))}
 
       {isLoading && (

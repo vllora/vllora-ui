@@ -214,14 +214,14 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
         />
 
         {/* Cost and Tokens Display - Second row aligned with New Chat button */}
-        {!isDraft && threadId && conversationMetrics && (conversationMetrics.cost || conversationMetrics.inputTokens || conversationMetrics.outputTokens || conversationMetrics.duration || conversationMetrics.avgTTFT) && <ConversationMetrics
+        {/* {!isDraft && threadId && conversationMetrics && (conversationMetrics.cost || conversationMetrics.inputTokens || conversationMetrics.outputTokens || conversationMetrics.duration || conversationMetrics.avgTTFT) && <ConversationMetrics
           threadId={threadId}
           cost={conversationMetrics.cost}
           inputTokens={conversationMetrics.inputTokens}
           outputTokens={conversationMetrics.outputTokens}
           duration={conversationMetrics.duration}
           avgTTFT={conversationMetrics.avgTTFT}
-        />}
+        />} */}
       </div>
 
       {/* Chat Conversation */}
