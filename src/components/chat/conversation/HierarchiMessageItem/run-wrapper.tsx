@@ -1,11 +1,11 @@
 import { MessageStructure } from "@/utils/message-structure-from-span";
 import { HierarchicalMessageSpanItem } from ".";
 import { RunStartSeparator } from "../SpanSeparator";
-import { useState } from "react";
+import { useState, memo } from "react";
 import { INDENT_PER_LEVEL } from "./constants";
 
 
-export const RunSpanMessage = (props: {
+export const RunSpanMessage = memo((props: {
     runId: string;
     messages: MessageStructure[];
     level?: number;
@@ -35,4 +35,4 @@ export const RunSpanMessage = (props: {
             </div>
         )}
     </div>
-}
+});

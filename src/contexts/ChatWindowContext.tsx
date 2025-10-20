@@ -10,6 +10,7 @@ import { convertSpanToRunDTO, convertToNormalSpan } from './project-events/util'
 import { skipThisSpan } from '@/utils/graph-utils';
 import { buildSpanHierarchy } from '@/utils/span-hierarchy';
 import { buildMessageHierarchyFromSpan, MessageStructure } from '@/utils/message-structure-from-span';
+import { useStableMessageHierarchies } from '@/hooks/useStableMessageHierarchies';
 
 export interface SpanMap {
   [key: string]: Span[];
@@ -63,10 +64,13 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     [flattenSpans]
   );
 
-  const messageHierarchies: MessageStructure[] = useMemo(
+  const unstableMessageHierarchies: MessageStructure[] = useMemo(
     () => buildMessageHierarchyFromSpan(flattenSpans),
     [flattenSpans]
   );
+
+  // Stabilize messageHierarchies to prevent unnecessary re-renders
+  const messageHierarchies = useStableMessageHierarchies(unstableMessageHierarchies);
 
   // UI state
   const [currentInput, setCurrentInput] = useState<string>('');

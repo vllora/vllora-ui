@@ -26,7 +26,8 @@
       "Bash(python3:*)",
       "Bash(pip install:*)",
       "Bash(source:*)",
-      "Bash(cargo add:*)"
+      "Bash(cargo add:*)",
+      "Bash(node --version)"
     ],
     "deny": [],
     "ask": []

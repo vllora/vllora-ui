@@ -4,11 +4,11 @@
 import { MessageStructure } from "@/utils/message-structure-from-span";
 import { HierarchicalMessageSpanItem } from ".";
 import { AgentStartSeparator } from "../SpanSeparator";
-import { useState } from "react";
+import { useState, memo } from "react";
 import { INDENT_PER_LEVEL } from "./constants";
 
 
-export const AgentSpanMessage = (props: {
+export const AgentSpanMessage = memo((props: {
     spanId: string;
     messages: MessageStructure[];
     level?: number;
@@ -38,4 +38,4 @@ export const AgentSpanMessage = (props: {
             </div>
         )}
     </div>
-}
+});

@@ -11,7 +11,7 @@ interface ChatConversationProps {
   scrollToBottom?: () => void;
 }
 
-export const ChatConversation: React.FC<ChatConversationProps> = ({
+const ChatConversationComponent: React.FC<ChatConversationProps> = ({
   messages,
   isLoading = false,
   messagesEndRef: externalMessagesEndRef,
@@ -92,3 +92,25 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
     </div>
   );
 };
+
+// Memoize with custom comparison to only re-render when messages array structure changes
+export const ChatConversation = React.memo(ChatConversationComponent, (prevProps, nextProps) => {
+  // Re-render if isLoading changes
+  if (prevProps.isLoading !== nextProps.isLoading) return false;
+
+  // Re-render if messagesEndRef changes
+  if (prevProps.messagesEndRef !== nextProps.messagesEndRef) return false;
+
+  // Re-render if messages array length changes
+  if (prevProps.messages.length !== nextProps.messages.length) return false;
+
+  // Re-render if any message span_id changes (structure change)
+  for (let i = 0; i < prevProps.messages.length; i++) {
+    if (prevProps.messages[i].span_id !== nextProps.messages[i].span_id) {
+      return false;
+    }
+  }
+
+  // Don't re-render (props are equal)
+  return true;
+});
