@@ -53,11 +53,10 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
   const handleEvent = useCallback((event: ProjectEventUnion) => {
     if (event.thread_id) {
       setThreads((prevThreads) => {
-        const threadIndex = prevThreads.findIndex((thread) => thread.id === event.thread_id);
+        const threadIndex = prevThreads.findIndex((thread) => thread.thread_id === event.thread_id);
         if (threadIndex === -1) {
           let newThread: Thread = {
             thread_id: event.thread_id!,
-            id: event.thread_id!,
             is_from_local: false,
             start_time_us: event.timestamp,
             finish_time_us: event.timestamp,
