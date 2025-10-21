@@ -10,7 +10,7 @@ import { Message } from '@/types/chat';
 import React, { useCallback, useMemo } from 'react';
 import { MessageDisplay } from '../MessageDisplay';
 import { ContentArrayDisplay } from './ContentArrayDisplay';
-import { formatMessageTime } from '@/utils/dateUtils';
+import { formatMessageTime, formatMessageTimestamp } from '@/utils/dateUtils';
 import { MessageMetrics } from './MessageMetrics';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
@@ -109,11 +109,11 @@ export const AiMessage: React.FC<{
 
         {/* Metadata */}
         <div className="flex items-center gap-2 flex-1">
-          <span className="text-neutral-300 font-medium text-sm">{msg?.model_name ? msg.model_name : 'Assistant'}</span>
-          {msg?.created_at && (
+          <span className="text-neutral-300 font-medium text-sm">{msg?.model_name.includes('/') ? msg.model_name.split('/')[1] : (msg.model_name || 'Assistant')}</span>
+          {msg?.timestamp && (
             <div className="flex items-center text-xs text-neutral-500">
               <Clock className="h-3 w-3 mr-1" />
-              <span>{formatMessageTime(msg.created_at)}</span>
+              <span>{formatMessageTimestamp(msg.timestamp)}</span>
             </div>
           )}
           {canClickToOpenTrace && (

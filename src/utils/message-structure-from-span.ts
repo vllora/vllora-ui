@@ -81,6 +81,8 @@ export function buildMessageHierarchyFromSpan(
     (a, b) => a.start_time_us - b.start_time_us
   );
 
+  console.log('==== sortedSpans', sortedSpans)
+
   // Create span lookup map
   sortedSpans.forEach((span) => {
     spanMap.set(span.span_id, span);

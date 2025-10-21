@@ -129,6 +129,9 @@ export function extractMessagesFromSpan(span: Span, level: number = 0): Message[
 
   // Add the assistant response message if available
   if (responseContent) {
+    let requestStr = attribute?.request;
+    let requestJson = requestStr ? tryParseJson(requestStr) : null;
+    let model_name = span.operation_name ? `${span.operation_name}/${requestJson?.model}` : requestJson?.model;
     const assistantMessage: Message = {
       id: `${span.span_id}_response`,
       type: 'assistant',
@@ -140,6 +143,7 @@ export function extractMessagesFromSpan(span: Span, level: number = 0): Message[
       span_id: span.span_id,
       span,
       metrics: [spanMetrics],
+      model_name: model_name,
     };
 
     messages.push(assistantMessage);
