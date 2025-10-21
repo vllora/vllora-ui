@@ -1,6 +1,10 @@
-import { createContext, useContext, ReactNode, useState, useMemo } from "react";
+import { createContext, useContext, ReactNode, useState, useMemo, useCallback } from "react";
 import { useRunsPagination } from '@/hooks/useRunsPagination';
 import { useSpanDetails } from '@/hooks/useSpanDetails';
+import { useDebugControl } from "@/hooks/events/useDebugControl";
+import { ProjectEventUnion } from "./project-events/dto";
+import { RunDTO } from "@/types/common-type";
+import { processEvent } from "@/hooks/events/utilities";
 
 export type TracesPageContextType = ReturnType<typeof useTracesPageContext>;
 
@@ -13,6 +17,7 @@ export function useTracesPageContext(props: { projectId: string }) {
   // Use the runs pagination hook (no threadId filter for traces page)
   const {
     runs,
+    setRuns,
     runsLoading,
     runsError,
     refreshRuns,
@@ -34,8 +39,32 @@ export function useTracesPageContext(props: { projectId: string }) {
     detailSpanId,
     setDetailSpanId,
     detailSpan,
-    spansOfSelectedRun
+    spansOfSelectedRun,
+    setSpanMap
   } = useSpanDetails({ projectId });
+
+  const handleEvent = useCallback((event: ProjectEventUnion) => {
+    if(event.run_id) {
+      //processEvent(spanMap, event);
+      // setRuns(prev => {
+      //   const indexOfExistingRun = prev.findIndex(run => run.run_id === event.run_id);
+      //   if(indexOfExistingRun != -1) {
+      //     let existingRun = prev[indexOfExistingRun]
+      //     prev[indexOfExistingRun] = {
+      //       ...existingRun,
+      //     }
+      //     return [...prev];
+      //   }
+      //   return [...prev, { run_id: event.run_id, thread_ids: [], trace_ids: [], start_time_us: Date.now(), finish_time_us: Date.now(), used_models: [], request_models: [], used_tools: [], mcp_template_definition_ids: [], cost: 0, input_tokens: 0, output_tokens: 0, errors: [] }];
+      // });
+      // setSelectedRunId(event.run_id);
+      // setOpenTraces( [{ run_id: event.run_id, tab: 'trace' }]);
+    }
+  }, []);
+
+  useDebugControl({ handleEvent, channel_name: 'debug-traces-timeline-events' });
+
+  
 
   // Trace expansion state
   const [openTraces, setOpenTraces] = useState<{ run_id: string; tab: 'trace' | 'code' }[]>([]);

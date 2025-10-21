@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom"
 import { Layout } from "./components/layout"
 import { HomePage } from "./pages/home"
-import { ThreadsAndTracesPage, ChatPageWrapper } from "./pages/chat"
+import { ThreadsAndTracesPage } from "./pages/chat"
 import { ProjectsPage } from "./pages/projects"
 import { AnalyticsPage } from "./pages/analytics"
 import { SettingsPage } from "./pages/settings"
@@ -12,7 +12,6 @@ import { Toaster } from "sonner"
 import { useEffect } from "react"
 import { applyTheme, getThemeFromStorage } from "./themes/themes"
 import { ProviderKeysProvider } from "./contexts/ProviderKeysContext"
-import { DebugPage } from "./pages/debug"
 
 function App() {
   useEffect(() => {

@@ -6,7 +6,7 @@ import { ProjectsConsumer } from "@/contexts/ProjectContext"
 import { ProjectEventsProvider } from "@/contexts/project-events"
 
 export function Layout() {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true)
   const { currentProjectId } = ProjectsConsumer()
 
   const handleProjectChange = (newProjectId: string) => {

@@ -37,7 +37,7 @@ export const CloudApiInvokeUIDetailsDisplay = ({ span }: CloudApiInvokeUIDetails
                 <InputViewer jsonRequest={inputInfo} headers={headers} />
                 <ResponseViewer response={output} />
                 {otherPropsKeys && otherPropsKeys.length > 0 && <>
-                    <OtherPropertyViewer attributes={otherProps} label="Properties" />
+                    <OtherPropertyViewer  attributes={otherProps} label="Properties" />
                 </>}
             </div>
 

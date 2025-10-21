@@ -47,7 +47,7 @@ export const ClientActivityUIDetailsDisplay = ({ span }: ClientActivityUIDisplay
                 <InputViewer jsonRequest={requestJson} />
                 <ResponseViewer response={responseJson} />
                 { otherPropsKeys && otherPropsKeys.length > 0 && <>
-                    <OtherPropertyViewer attributes={otherProps} />
+                    <OtherPropertyViewer attributes={otherProps} label="Properties" />
                 </>}
             </div>
 

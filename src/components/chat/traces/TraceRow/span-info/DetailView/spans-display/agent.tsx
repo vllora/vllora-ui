@@ -16,7 +16,7 @@ export const AgentUIDisplay = ({ span }: AgentUIDisplayProps) => {
             <div className="flex flex-col gap-6 pb-4 divide-y divide-border/40">
 
                 {otherProps && <>
-                    <OtherPropertyViewer attributes={otherProps} />
+                    <OtherPropertyViewer label="Properties" attributes={otherProps} />
                 </>}
             </div>
 

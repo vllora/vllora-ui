@@ -47,7 +47,7 @@ export const TaskUIDisplay = ({ span }: TaskUIDisplayProps) => {
                 <InputViewer jsonRequest={requestJson} />
                 <ResponseViewer response={responseJson} />
                 {otherPropsKeys && otherPropsKeys.length > 0 && <>
-                    <OtherPropertyViewer attributes={otherProps} />
+                    <OtherPropertyViewer label="Properties" attributes={otherProps} />
                 </>}
             </div>
 

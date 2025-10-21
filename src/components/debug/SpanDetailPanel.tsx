@@ -17,7 +17,6 @@ interface SpanDetailPanelProps {
   onClose: () => void;
 }
 export const SpanDetailPanel: React.FC<SpanDetailPanelProps> = ({ span, relatedSpans = [], onClose }) => {
-  const title = getSpanTitle({ span, relatedSpans });
   const icon = getOperationIcon({ span, relatedSpans });
   const iconColorClass = getOperationIconColor({ span, relatedSpans });
   const operationTitle = getOperationTitle({ operation_name: span.operation_name, span });
