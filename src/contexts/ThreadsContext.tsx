@@ -8,6 +8,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { useDebugControl } from '@/hooks/events/useDebugControl';
 import { ProjectEventUnion } from './project-events/dto';
 import { Thread } from '@/types/chat';
+import { updateThreadFromEvent } from '@/hooks/events/utilities/update-thread-from-event';
 
 export type ThreadsContextType = ReturnType<typeof useThreads>;
 
@@ -50,6 +51,8 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
     navigate(`/chat?${params.toString()}`);
   }, [currentProjectId, navigate, searchParams, isDefaultProject, selectedThreadId]);
 
+  
+  
   const handleEvent = useCallback((event: ProjectEventUnion) => {
     if (event.thread_id) {
       setThreads((prevThreads) => {
@@ -64,13 +67,10 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
             input_models: [],
             cost: 0,
           };
+          newThread = updateThreadFromEvent(newThread, event);
           return [newThread, ...prevThreads];
         } else {
-          let updatedThread: Thread = {
-            ...prevThreads[threadIndex],
-            finish_time_us: event.timestamp,
-            run_ids: event.run_id ? [event.run_id] : [],
-          }
+          let updatedThread: Thread = updateThreadFromEvent(prevThreads[threadIndex], event)
           return [...prevThreads.slice(0, threadIndex), updatedThread, ...prevThreads.slice(threadIndex + 1)];
         }
       });

@@ -14,7 +14,7 @@ import {
   CustomCostEventType,
 } from "@/contexts/project-events/dto";
 import { RunDTO, Span } from "@/types/common-type";
-import { SpanMap } from "../useSpanDetails";
+import { SpanMap } from "../../useSpanDetails";
 import { convertSpanToRun, getDataFromSpan } from "@/utils/span-converter";
 
 /**

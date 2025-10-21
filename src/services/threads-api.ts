@@ -97,7 +97,6 @@ export async function queryThreads(
     }
 
     const apiData: ApiThreadsResponse = await response.json();
-    console.log('==== apiData', apiData)
 
     // Transform API response to frontend Thread type
     return {
