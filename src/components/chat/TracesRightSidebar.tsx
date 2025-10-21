@@ -5,8 +5,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { PanelRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { TraceView } from './traces/TraceView';
-import { ProjectsConsumer } from '@/contexts/ProjectContext';
-import { useTraceEvents } from '@/hooks/events/useTraceEvents';
 import { CONTROL_PANEL_WIDTH, TRACE_PANEL_WIDTH } from '@/utils/constant';
 
 
@@ -22,11 +20,6 @@ export const TracesRightSidebar: React.FC<TracesRightSidebarProps> = ({
   onToggle,
 }) => {
   const isOpen = !isCollapsed;
-  const { currentProjectId } = ProjectsConsumer();
-  useTraceEvents({
-    currentProjectId: currentProjectId || '',
-    currentThreadId: threadId,
-  });
   return (
     <div className="flex h-full border-l border-border">
       <AnimatePresence mode="wait">

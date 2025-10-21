@@ -9,7 +9,6 @@ import { ThreadsConsumer } from '@/contexts/ThreadsContext';
 import { ChatWindowProvider } from '@/contexts/ChatWindowContext';
 import { Thread } from '@/types/chat';
 import { API_CONFIG } from '@/config/api';
-import { useThreadsEvents } from '@/hooks/events/useThreadsEvents';
 
 export function ThreadsPageContent() {
   const { currentProjectId, isDefaultProject } = ProjectsConsumer();
@@ -52,12 +51,6 @@ export function ThreadsPageContent() {
     navigate(`/chat?${params.toString()}`);
   }, [threads, selectedModel, navigate, searchParams, currentProjectId, isDefaultProject]);
 
-  // Subscribe to project events
-  useThreadsEvents({
-    currentProjectId: currentProjectId || '',
-    currentThreadId: selectedThreadId || '',
-    onSelectThread: handleSelectThread,
-  });
 
   const handleNewThread = useCallback(() => {
     const now = Date.now() * 1000; // Convert to microseconds
