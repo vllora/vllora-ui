@@ -18,7 +18,7 @@ interface ThreadSpan {
 }
 
 interface ApiThreadsResponse {
-  data: ThreadSpan[];
+  data: Thread[];
   pagination: {
     total: number;
     offset: number;
@@ -41,15 +41,11 @@ export interface QueryThreadsResponse {
 function transformThreadSpan(span: ThreadSpan): Thread {
   return {
     thread_id: span.thread_id,
-    id: span.thread_id, // For backward compatibility
     start_time_us: span.start_time_us,
     finish_time_us: span.finish_time_us,
     run_ids: span.run_ids,
     input_models: span.input_models,
-    cost: span.cost,
-    // Convert microseconds to ISO string for created_at/updated_at
-    created_at: new Date(span.start_time_us / 1000).toISOString(),
-    updated_at: new Date(span.finish_time_us / 1000).toISOString(),
+    cost: span.cost
   };
 }
 
@@ -101,10 +97,11 @@ export async function queryThreads(
     }
 
     const apiData: ApiThreadsResponse = await response.json();
+    console.log('==== apiData', apiData)
 
     // Transform API response to frontend Thread type
     return {
-      data: apiData.data.map(transformThreadSpan),
+      data: apiData.data,
       pagination: apiData.pagination,
     };
   } catch (error) {

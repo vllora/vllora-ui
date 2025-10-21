@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
-import { Thread } from '@/types/chat';
 import { queryThreads } from '@/services/threads-api';
 import { ThreadState, ThreadChangesState } from './types';
 
@@ -30,11 +29,7 @@ export function useThreadPagination(
         offset: 0,
       });
       const pagination = response.pagination;
-      const newThreads = response.data.map((t: Thread) => ({
-        ...t,
-        created_at: new Date(Date.parse(t.created_at + 'Z')).toString(),
-        updated_at: new Date(Date.parse(t.updated_at + 'Z')).toString(),
-      }));
+      const newThreads = response.data
       setThreads(newThreads);
       setThreadsHaveChanges({});
       setTotal(pagination.total);

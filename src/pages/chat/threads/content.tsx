@@ -26,7 +26,7 @@ export function ThreadsPageContent() {
   const navigate = useNavigate();
 
   const currentThread = useMemo(() => {
-    return threads.find((t) => t.id === selectedThreadId);
+    return threads.find((t) => t.thread_id === selectedThreadId);
   }, [threads, selectedThreadId]);
   // Read selectedModel from URL query string, fallback to default
   const selectedModel = useMemo(() => {
@@ -38,7 +38,7 @@ export function ThreadsPageContent() {
   }, [refreshThreads]);
 
   const handleSelectThread = useCallback((threadId: string) => {
-    const thread = threads.find((t) => t.id === threadId);
+    const thread = threads.find((t) => t.thread_id === threadId);
     // Navigate to update the threadId and model in URL
     const modelParam = thread?.input_models && thread.input_models.length > 0 ? thread.input_models[thread.input_models.length - 1] : selectedModel;
     const params = new URLSearchParams(searchParams);
@@ -65,20 +65,17 @@ export function ThreadsPageContent() {
 
     const newThread: Thread = {
       thread_id: newThreadId,
-      id: newThreadId,
       start_time_us: now,
       finish_time_us: now,
       run_ids: [],
       input_models: selectedModel ? [selectedModel] : [],
       cost: 0,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
       is_from_local: true,
     };
     addThread(newThread);
     // Navigate to the new thread with model in URL and project_id (only if not default)
     const params = new URLSearchParams(searchParams);
-    params.set('threadId', newThread.id);
+    params.set('threadId', newThread.thread_id);
     params.set('model', selectedModel);
     if (currentProjectId && !isDefaultProject(currentProjectId)) {
       params.set('project_id', currentProjectId);
@@ -95,7 +92,7 @@ export function ThreadsPageContent() {
     if (selectedThreadId) {
       params.set('threadId', selectedThreadId);
       // Update the thread's input_models
-      const thread = threads.find((t) => t.id === selectedThreadId);
+      const thread = threads.find((t) => t.thread_id === selectedThreadId);
       if (thread) {
         const updatedModels = thread.input_models.includes(modelId)
           ? thread.input_models
@@ -115,7 +112,7 @@ export function ThreadsPageContent() {
 
   useEffect(() => {
     if (!selectedThreadId && threads.length > 0) {
-      handleSelectThread(threads[0].id);
+      handleSelectThread(threads[0].thread_id);
     }
   }, [selectedThreadId, threads, handleSelectThread]);
 
@@ -123,7 +120,7 @@ export function ThreadsPageContent() {
 
   const isCurrentThreadDraft = useMemo(()=> {
     if(threads && threads.length > 0) {
-      const thread = threads.find((t) => t.id === selectedThreadId);
+      const thread = threads.find((t) => t.thread_id === selectedThreadId);
       if(thread) {
         return thread.is_from_local
       }
@@ -148,7 +145,7 @@ export function ThreadsPageContent() {
           <div className="flex-1 flex flex-col overflow-hidden">
             <ConversationWindow
               threadId={selectedThreadId}
-              threadTitle={threads.find((t) => t.id === selectedThreadId)?.title}
+              threadTitle={threads.find((t) => t.thread_id === selectedThreadId)?.title}
               modelName={selectedModel}
               apiUrl={API_CONFIG.url}
               projectId={currentProjectId}

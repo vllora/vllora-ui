@@ -21,9 +21,9 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
     const [searchParams] = useSearchParams();
     const urlThreadId = searchParams?.get('threadId');
 
-    const currentThreadChanges = useMemo(() => threadsHaveChanges[thread.id], [thread.id, threadsHaveChanges]);
+    const currentThreadChanges = useMemo(() => threadsHaveChanges[thread.thread_id], [thread.thread_id, threadsHaveChanges]);
     // Use URL parameter for immediate feedback, fallback to context only if URL param is null
-    const isSelected = urlThreadId ? urlThreadId === thread.id : selectedThreadId === thread.id;
+    const isSelected = urlThreadId ? urlThreadId === thread.thread_id : selectedThreadId === thread.thread_id;
 
     
 
@@ -58,17 +58,17 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
 
     const handleTitleSave = useCallback(() => {
         if (newTitle?.trim()) {
-            renameThread(thread.id, newTitle.trim());
+            renameThread(thread.thread_id, newTitle.trim());
         }
         setNewTitle(undefined);
         setIsEditing(false);
-    }, [newTitle, renameThread, thread.id]);
+    }, [newTitle, renameThread, thread.thread_id]);
 
     const handleDelete = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        deleteDraftThread(thread.id);
-    }, [deleteDraftThread, thread.id]);
+        deleteDraftThread(thread.thread_id);
+    }, [deleteDraftThread, thread.thread_id]);
 
     const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         e.stopPropagation();
@@ -99,11 +99,11 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
             transition={{ duration: 0.2 }}
         >
             <Card
-                id={`thread-row-${thread.id}`}
-                key={thread.id}
+                id={`thread-row-${thread.thread_id}`}
+                key={thread.thread_id}
                 onClick={(e) => {
                     e.stopPropagation();
-                    handleThreadClick(thread.id, thread.input_models);
+                    handleThreadClick(thread.thread_id, thread.input_models);
                 }}
                 className={cn(
                     "py-3 px-4 transition-all duration-200 flex flex-col gap-2 cursor-pointer rounded-md border border-[#161616] border-r-4 active:bg-sidebar-accent/40",
@@ -113,12 +113,10 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
             >
                 {/* Header row with title and metadata */}
                 <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
                         {/* Provider Icons */}
                         {providersInfo.length > 0 && (
-                            <div className="mr-2">
                                 <ListProviders providersInfo={providersInfo} />
-                            </div>
                         )}
 
                         {/* Thread title */}
@@ -139,7 +137,7 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                                     <Tooltip>
                                         <TooltipTrigger asChild>
                                             <span className={cn(
-                                                "text-sm max-w-[140px] truncate font-medium",
+                                                "text-sm max-w-[120px] truncate font-medium",
                                                 isSelected ? 'text-white' : 'text-foreground'
                                             )}>
                                                 {thread.title || 'Untitled'}
@@ -170,7 +168,7 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                     <div className="flex items-center gap-2">
                         {/* Thread ID */}
                         <div className="flex items-center gap-1">
-                            <ThreadCopiableId id={thread.id} />
+                            <ThreadCopiableId id={thread.thread_id} />
                         </div>
                     </div>
                 </div>
@@ -179,7 +177,7 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                 <div className="flex justify-between flex-1 items-center">
                     <div className="flex flex-1 items-center gap-2">
                         {/* Time info */}
-                        <ThreadTimeDisplay finishTimeUs={thread.finish_time_us} updatedAt={thread.updated_at} />
+                        <ThreadTimeDisplay finishTimeUs={thread.finish_time_us} />
 
                         {/* Cost info */}
                         {thread.cost !== undefined && thread.cost > 0 && (

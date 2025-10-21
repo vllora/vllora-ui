@@ -82,9 +82,6 @@ export interface Thread {
   cost: number; // Sum of all costs from spans with same thread_id
 
   // UI-specific fields (derived or fetched separately)
-  id: string; // Same as thread_id, for compatibility with existing UI code
-  created_at: string; // ISO timestamp derived from start_time_us
-  updated_at: string; // ISO timestamp derived from finish_time_us
   title?: string; // Fetched from threads table or generated
   is_from_local?: boolean; // For draft threads
 }

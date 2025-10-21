@@ -64,8 +64,6 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
             run_ids: event.run_id ? [event.run_id] : [],
             input_models: [],
             cost: 0,
-            created_at: '',
-            updated_at: ''
           };
           return [newThread, ...prevThreads];
         } else {
