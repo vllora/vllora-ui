@@ -195,26 +195,6 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                                 </Tooltip>
                             </TooltipProvider>
                         )}
-
-                        {/* Run IDs count */}
-                        {thread.run_ids && thread.run_ids.length > 0 && (
-                            <TooltipProvider>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <div className="flex items-center text-xs text-muted-foreground hover:text-foreground transition-colors hover:cursor-help truncate">
-                                            <span className="font-mono tabular-nums">{thread.run_ids.length} run{thread.run_ids.length !== 1 ? 's' : ''}</span>
-                                        </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="top" className="text-xs p-1.5">
-                                        <div>Run IDs:</div>
-                                        {thread.run_ids.slice(0, 5).map((runId, idx) => (
-                                            <div key={idx} className="font-mono">{runId}</div>
-                                        ))}
-                                        {thread.run_ids.length > 5 && <div>... and {thread.run_ids.length - 5} more</div>}
-                                    </TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
-                        )}
                     </div>
                     {/* Unread indicator */}
                     {currentThreadChanges?.messages?.length > 0 && !isSelected && (

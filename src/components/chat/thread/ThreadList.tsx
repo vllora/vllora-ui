@@ -71,7 +71,7 @@ export const ThreadList: React.FC<ThreadListProps> = ({
               const thread = threads[virtualRow.index];
               return (
                 <div
-                  key={thread.id}
+                  key={thread.thread_id}
                   data-index={virtualRow.index}
                   ref={rowVirtualizer.measureElement}
                   style={{
