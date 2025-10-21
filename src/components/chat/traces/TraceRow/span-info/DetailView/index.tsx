@@ -135,7 +135,7 @@ export const BaseSpanUIDetailsDisplay = ({children, defaultOpen, value, onValueC
     </Accordion>
   }
   // Uncontrolled mode (existing behavior)
-  return <Accordion type="multiple" className="mt-4" defaultValue={defaultOpen ? defaultOpen : []}>
+  return <Accordion type="multiple" className="mt-4 flex-1 flex flex-col" defaultValue={defaultOpen ? defaultOpen : []}>
     {children}
   </Accordion>
 }

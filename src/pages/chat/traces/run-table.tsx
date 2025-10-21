@@ -63,36 +63,40 @@ export function RunTable() {
 
   // Runs list
   return (
-    <div className="flex-1 w-full overflow-auto px-2">
-      <div className="divide-y divide-border">
-        {/* Table Header */}
-        <RunTableHeader />
+    <div className="flex-1 w-full h-full overflow-auto">
+      <div className="px-2">
+        {/* Table Header - Sticky */}
+        <div className="sticky top-0 z-10">
+          <RunTableHeader />
+        </div>
 
         {/* Table Rows */}
-        {runs.map((run, index) => (
-          <RunTableRow key={run.run_id} run={run} index={index} />
-        ))}
+        <div className="divide-y divide-border">
+          {runs.map((run, index) => (
+            <RunTableRow key={run.run_id} run={run} index={index} />
+          ))}
 
-        {/* Load More Button */}
-        {hasMoreRuns && (
-          <button
-            onClick={loadMoreRuns}
-            disabled={loadingMoreRuns}
-            className="w-full p-4 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg hover:bg-accent/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loadingMoreRuns ? (
-              <span className="flex items-center justify-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Loading more traces...
-              </span>
-            ) : (
-              `Load More (${runs.length} loaded)`
-            )}
-          </button>
-        )}
+          {/* Load More Button */}
+          {hasMoreRuns && (
+            <button
+              onClick={loadMoreRuns}
+              disabled={loadingMoreRuns}
+              className="w-full p-4 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg hover:bg-accent/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loadingMoreRuns ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading more traces...
+                </span>
+              ) : (
+                `Load More (${runs.length} loaded)`
+              )}
+            </button>
+          )}
 
-        {/* Observer target for infinite scroll (optional future enhancement) */}
-        <div ref={observerTarget} className="h-4" />
+          {/* Observer target for infinite scroll (optional future enhancement) */}
+          <div ref={observerTarget} className="h-4" />
+        </div>
       </div>
     </div>
   );
