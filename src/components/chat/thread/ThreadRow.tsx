@@ -1,9 +1,8 @@
 import { Thread } from "@/types/chat";
 import { ThreadsConsumer } from "@/contexts/ThreadsContext";
-import { ProjectsConsumer } from "@/contexts/ProjectContext";
 import { CurrencyDollarIcon, PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
 import React, { useCallback, useRef, useState, useMemo } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { Input } from "../../ui/input";
 import { ThreadCopiableId } from "./ThreadCopiableId";
 import { cn } from "@/lib/utils";
@@ -16,34 +15,17 @@ import { ListProviders } from "./ListProviders";
 import { formatCost } from "@/utils/formatCost";
 
 export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
-    const { renameThread, deleteDraftThread, selectedThreadId, threadsHaveChanges } = ThreadsConsumer();
-    const { currentProjectId, isDefaultProject } = ProjectsConsumer();
+    const { renameThread, deleteDraftThread, selectedThreadId, threadsHaveChanges, handleThreadClick } = ThreadsConsumer();
     const [isEditing, setIsEditing] = useState(false);
     const [newTitle, setNewTitle] = useState(thread.title);
     const [searchParams] = useSearchParams();
-    const navigate = useNavigate();
     const urlThreadId = searchParams?.get('threadId');
 
     const currentThreadChanges = useMemo(() => threadsHaveChanges[thread.id], [thread.id, threadsHaveChanges]);
     // Use URL parameter for immediate feedback, fallback to context only if URL param is null
     const isSelected = urlThreadId ? urlThreadId === thread.id : selectedThreadId === thread.id;
 
-    const handleThreadClick = useCallback(() => {
-        if (!currentProjectId) return;
-        const params = new URLSearchParams(searchParams);
-        params.set('threadId', thread.id);
-        if (!isDefaultProject(currentProjectId)) {
-            params.set('project_id', currentProjectId);
-        } else {
-            params.delete('project_id');
-        }
-        // Set model parameter from input_models if available
-        if (thread.input_models && thread.input_models.length > 0) {
-            const lastModel = thread.input_models[thread.input_models.length - 1];
-            params.set('model', lastModel);
-        }
-        navigate(`/chat?${params.toString()}`);
-    }, [currentProjectId, thread.id, thread.input_models, navigate, searchParams, isDefaultProject]);
+    
 
     // Extract provider info from input_models
     const providersInfo = useMemo(() => {
@@ -119,7 +101,10 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
             <Card
                 id={`thread-row-${thread.id}`}
                 key={thread.id}
-                onClick={handleThreadClick}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    handleThreadClick(thread.id, thread.input_models);
+                }}
                 className={cn(
                     "py-3 px-4 transition-all duration-200 flex flex-col gap-2 cursor-pointer rounded-md border border-[#161616] border-r-4 active:bg-sidebar-accent/40",
                     isSelected ? '!border-r-4 !border-r-[rgb(var(--theme-500))] bg-secondary shadow-sm' :

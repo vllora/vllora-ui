@@ -3,7 +3,7 @@ import { useRequest, useLatest } from 'ahooks';
 import { toast } from 'sonner';
 import { listSpans } from '@/services/spans-api';
 import { Span } from '@/types/common-type';
-import { LangDBEventSpan } from './project-events/dto';
+import { LangDBEventSpan, ProjectEventUnion } from './project-events/dto';
 import { convertSpanToRunDTO, convertToNormalSpan } from './project-events/util';
 import { skipThisSpan } from '@/utils/graph-utils';
 import { buildSpanHierarchy } from '@/utils/span-hierarchy';
@@ -11,6 +11,8 @@ import { buildMessageHierarchyFromSpan, MessageStructure } from '@/utils/message
 import { useStableMessageHierarchies } from '@/hooks/useStableMessageHierarchies';
 import { useRunsPagination } from '@/hooks/useRunsPagination';
 import { useSpanDetails } from '@/hooks/useSpanDetails';
+import { useDebugControl } from '@/hooks/events/useDebugControl';
+import { processEventWithSpanMap, updatedRunWithSpans } from '@/hooks/events/utilities';
 
 
 export type ChatWindowContextType = ReturnType<typeof useChatWindow>;
@@ -53,7 +55,35 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   } = useSpanDetails({ projectId });
 
   const [isChatProcessing, setIsChatProcessing] = useState<boolean>(false);
-
+  const handleEvent = useCallback((event: ProjectEventUnion) => {
+    if (event.run_id && event.thread_id === threadId) {
+      let updatedSpanMap = processEventWithSpanMap(spanMap, event);
+      let spanByRunId = updatedSpanMap[event.run_id];
+      setRawRuns(prev => {
+        let newRuns = [...prev];
+        let runIndex = newRuns.findIndex(run => run.run_id === event.run_id);
+        if (runIndex >= 0) {
+          let runById = prev[runIndex]!;
+          newRuns[runIndex] = updatedRunWithSpans({
+            spans: spanByRunId!,
+            prevRun: runById,
+            run_id: event.run_id!
+          });
+        } else {
+          newRuns = [updatedRunWithSpans({
+            spans: spanByRunId!,
+            prevRun: undefined,
+            run_id: event.run_id!
+          }), ...prev];
+        }
+        return newRuns;
+      });
+      setSpanMap(updatedSpanMap);
+      setSelectedRunId(event.run_id);
+      setOpenTraces([{ run_id: event.run_id, tab: 'trace' }]);
+    }
+  }, [spanMap, threadId]);
+  useDebugControl({ handleEvent, channel_name: 'debug-thread-trace-timeline-events' });
 
   // should the the run be expanded
   const [openTraces, setOpenTraces] = useState<{ run_id: string; tab: 'trace' | 'code' }[]>([]);

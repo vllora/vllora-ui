@@ -1,10 +1,9 @@
-import { createContext, useContext, ReactNode, useState, useMemo, useCallback, useEffect } from "react";
+import { createContext, useContext, ReactNode, useState, useCallback } from "react";
 import { useRunsPagination } from '@/hooks/useRunsPagination';
 import { useSpanDetails } from '@/hooks/useSpanDetails';
 import { useDebugControl } from "@/hooks/events/useDebugControl";
 import { ProjectEventUnion } from "./project-events/dto";
-import { convertRunToSpan, convertSpanToRun } from "@/utils/span-converter";
-import { processEvent, processEventWithSpanMap, updatedRunWithSpans } from "@/hooks/events/utilities";
+import {  processEventWithSpanMap, updatedRunWithSpans } from "@/hooks/events/utilities";
 
 export type TracesPageContextType = ReturnType<typeof useTracesPageContext>;
 
