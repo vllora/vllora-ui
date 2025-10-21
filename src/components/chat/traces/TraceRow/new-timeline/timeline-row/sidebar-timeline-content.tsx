@@ -6,6 +6,7 @@ import { getOperationTitle } from "../utils";
 import { DatabaseIcon, ChevronRight, ChevronDown } from "lucide-react";
 import { getClientSDKName, isAgentSpan, isPromptCachingApplied } from "@/utils/graph-utils";
 import { ClientSdkIcon } from "@/components/client-sdk-icon";
+import { getTimelineTitleWidth, TIMELINE_INDENTATION, TIMELINE_MAX_TITLE_WIDTH } from "@/utils/constant";
 
 // Props for the SidebarTimelineContent component
 interface SidebarTimelineContentProps extends TimelineContentBaseProps { }
@@ -35,7 +36,7 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
         >
             <div className="flex items-center w-full">
                 {/* Fake indentation by adding left padding - smaller in sidebar */}
-                <div style={{ width: `${level * 8}px` }} className="flex-shrink-0"></div>
+                <div style={{ width: `${level * TIMELINE_INDENTATION}px` }} className="flex-shrink-0"></div>
 
                 {/* Expand/Collapse Chevron */}
                 {hasChildren ? (
@@ -57,8 +58,8 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                 )}
 
                 {/* Super compact title and duration */}
-                <div className="flex justify-between items-center w-full">
-                    <div className="flex items-center min-w-0 flex-1 mr-1">
+                <div className="flex justify-between items-center w-full gap-1">
+                    <div className="flex items-center min-w-0 flex-1 truncate">
                         {operationIcon && (
                             <TooltipProvider>
                                 <Tooltip>
@@ -99,8 +100,8 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <span
-                                        className="text-xs text-gray-300 truncate"
-                                        style={{ maxWidth: `${Math.max(100 - level * 8, 20)}px` }}
+                                        className="text-xs text-gray-300 truncate w-full"
+                                        style={{ maxWidth: `${Math.max(getTimelineTitleWidth({ level }), 20)}px` }}
                                     >
                                         {title}
                                     </span>

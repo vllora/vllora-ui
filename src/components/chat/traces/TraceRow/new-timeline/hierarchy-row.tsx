@@ -3,6 +3,7 @@ import { getSpanTitle, getOperationIcon, getOperationIconColor, getTimelineBgCol
 import { TimelineRow } from "./timeline-row";
 import { skipThisSpan, isClientSDK } from "@/utils/graph-utils";
 import { Span } from "@/types/common-type";
+import { TIMELINE_DYNAMIC_TITLE_WIDTH_IN_SIDEBAR } from "@/utils/constant";
 
 export interface HierarchyRowProps {
     hierarchy: Span;
@@ -16,7 +17,7 @@ export interface HierarchyRowProps {
 }
 
 export const HierarchyRow = (props: HierarchyRowProps) => {
-    const { hierarchy, totalDuration, startTime, level, titleWidth: propTitleWidth = 180, relatedSpans = [], selectedSpanId, onSpanSelect } = props;
+    const { hierarchy, totalDuration, startTime, level, titleWidth: propTitleWidth = TIMELINE_DYNAMIC_TITLE_WIDTH_IN_SIDEBAR, relatedSpans = [], selectedSpanId, onSpanSelect } = props;
     const [isOpen, setIsOpen] = useState(true);
     // In ellora-ui, we're always in sidebar mode (chat sidebar)
     const titleWidth: string | number = `${propTitleWidth}px`.replace('pxpx', 'px');

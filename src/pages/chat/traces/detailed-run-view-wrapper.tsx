@@ -29,6 +29,7 @@ export const DetailedRunViewWrapper: React.FC<{ run: RunDTO }> = ({ run }) => {
                   setSelectedSpanId={setSelectedSpanId}
                   setSelectedRunId={setSelectedRunId}
                   setDetailSpanId={setDetailSpanId}
+                  isInSidebar={false}
                 />
               </ErrorBoundary>
             </div>

@@ -1,7 +1,7 @@
 import React from "react";
 import { SpanDetailsPanel } from "./SpanDetailsPanel";
+import { TRACE_PANEL_WIDTH } from "@/utils/constant";
 
-const TRACE_PANEL_WIDTH = 450;
 
 interface SpanDetailsOverlayProps {
 }

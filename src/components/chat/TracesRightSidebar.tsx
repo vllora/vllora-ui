@@ -7,9 +7,8 @@ import { Button } from '@/components/ui/button';
 import { TraceView } from './traces/TraceView';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { useTraceEvents } from '@/hooks/events/useTraceEvents';
+import { CONTROL_PANEL_WIDTH, TRACE_PANEL_WIDTH } from '@/utils/constant';
 
-const TRACE_PANEL_WIDTH = 450;
-const CONTROL_PANEL_WIDTH = 40;
 
 interface TracesRightSidebarProps {
   threadId: string;

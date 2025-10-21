@@ -2,6 +2,7 @@ import { HierarchyRow } from "./hierarchy-row";
 import { RunDetailConsumer } from "@/contexts/RunDetailContext";
 import { useMemo } from "react";
 import { Span } from "@/types/common-type";
+import { TIMELINE_DYNAMIC_TITLE_WIDTH_FULL_SIZE, TIMELINE_DYNAMIC_TITLE_WIDTH_IN_SIDEBAR } from "@/utils/constant";
 
 export interface SingleRunTimelineViewProps {
     index: number;
@@ -13,10 +14,10 @@ export interface SingleRunTimelineViewProps {
 }
 
 export const SingleRunTimelineView = (props: SingleRunTimelineViewProps) => {
-    const { isInSidebar = false, selectedSpanId, onSpanSelect, currentSpanHierarchy, level, index } = props;
+    const { isInSidebar = true, selectedSpanId, onSpanSelect, currentSpanHierarchy, level, index } = props;
     const { spansByRunId, startTime, totalDuration } = RunDetailConsumer();
     // Dynamic title width based on display mode - wider when not in sidebar
-    const titleWidth: string | number = useMemo(() => isInSidebar ? `${180}px` : '20vw', [isInSidebar]);
+    const titleWidth: string | number = useMemo(() => isInSidebar ? `${TIMELINE_DYNAMIC_TITLE_WIDTH_IN_SIDEBAR}px` : `${TIMELINE_DYNAMIC_TITLE_WIDTH_FULL_SIZE}px`, [isInSidebar]);
 
     // Calculate total duration and start time for width calculations
 

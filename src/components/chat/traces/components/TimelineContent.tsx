@@ -11,6 +11,7 @@ interface TimelineContentProps {
   setSelectedSpanId: (spanId: string | null) => void;
   setSelectedRunId: (runId: string | null) => void;
   setDetailSpanId: (spanId: string | null) => void;
+  isInSidebar?: boolean;
 }
 
 export const TimelineContent: React.FC<TimelineContentProps> = ({
@@ -19,7 +20,8 @@ export const TimelineContent: React.FC<TimelineContentProps> = ({
   selectedSpanId,
   setSelectedSpanId,
   setSelectedRunId,
-  setDetailSpanId
+  setDetailSpanId,
+  isInSidebar = true
 }) => {
 
   // Get run ID from first span (all spans should belong to same run)
@@ -38,6 +40,7 @@ export const TimelineContent: React.FC<TimelineContentProps> = ({
             setSelectedSpanId={setSelectedSpanId}
             setSelectedRunId={setSelectedRunId}
             setDetailSpanId={setDetailSpanId}
+            isInSidebar={isInSidebar}
           />
         </div>
       </div>
@@ -49,9 +52,10 @@ const TimelineContentInner = (props: {
   setSelectedSpanId: (spanId: string | null) => void;
   setSelectedRunId: (runId: string | null) => void;
   setDetailSpanId: (spanId: string | null) => void;
+  isInSidebar?: boolean;
 }) => {
   const { hierarchies, runId } = RunDetailConsumer()
-  const { selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId } = props
+  const { selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, isInSidebar = true } = props
 
   if (!hierarchies || hierarchies.length === 0) {
     return <div className="flex items-center justify-center p-4 text-sm text-gray-400">
@@ -64,7 +68,7 @@ const TimelineContentInner = (props: {
         key={`${runId}-${hierarchy.span_id}`}
         currentSpanHierarchy={hierarchy}
         index={index}
-        isInSidebar={true}
+        isInSidebar={isInSidebar}
         selectedSpanId={selectedSpanId || undefined}
         level={0}
         onSpanSelect={(spanId, runId) => {
