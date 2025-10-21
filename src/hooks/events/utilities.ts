@@ -13,7 +13,9 @@ import {
   CustomLlmStopEventType,
   CustomCostEventType,
 } from "@/contexts/project-events/dto";
-import { Span } from "@/types/common-type";
+import { RunDTO, Span } from "@/types/common-type";
+import { SpanMap } from "../useSpanDetails";
+import { convertSpanToRun, getDataFromSpan } from "@/utils/span-converter";
 
 /**
  * Utility functions to convert various event types to Span objects
@@ -149,6 +151,70 @@ export const convertToolCallStartToSpan = (event: ToolCallStartEvent): Span => {
     isInProgress: true,
   };
 };
+
+
+const createNewRun = (run_id: string): RunDTO => {
+  let run: RunDTO = {
+    run_id: run_id,
+    thread_ids: [],
+    trace_ids: [],
+    root_span_ids: [],
+    start_time_us: 0,
+    finish_time_us: 0,
+    cost: 0,
+    input_tokens: 0,
+    output_tokens: 0,
+    errors: [],
+    used_models: [],
+    request_models: [],
+    used_tools: [],
+    mcp_template_definition_ids: []
+   }  
+   return run;
+}
+export const updatedRunWithSpans = ({
+  spans,
+  prevRun,
+  run_id
+}: {
+  spans: Span[];
+  prevRun?: RunDTO;
+  run_id: string;
+}): RunDTO => {
+  if(!spans || spans.length === 0) return createNewRun(run_id);
+  let processRun = prevRun || createNewRun(run_id);
+  processRun.cost = 0;
+  processRun.input_tokens = 0;
+  processRun.output_tokens = 0;
+  processRun.errors = [];
+  spans.forEach(span => {
+    let {cost, inputTokens, outputTokens, errors} = getDataFromSpan(span);
+    processRun.cost += cost;
+    processRun.input_tokens += inputTokens;
+    processRun.output_tokens += outputTokens;
+    processRun.errors = [...processRun.errors, ...errors];
+  })
+  if(processRun.start_time_us === 0){
+    processRun.start_time_us = spans[0].start_time_us;
+  }
+  if(!processRun.finish_time_us && spans[spans.length - 1].finish_time_us){
+    processRun.finish_time_us = spans[spans.length - 1].finish_time_us!;
+  }
+  return processRun;
+};
+
+
+
+export function processEventWithSpanMap(spanMap: SpanMap, event: ProjectEventUnion): SpanMap {
+   if(event.run_id){
+    let spansByRunId = spanMap[event.run_id];
+    if(!spansByRunId){
+      spansByRunId = [];
+    }
+     spanMap[event.run_id] = processEvent(spansByRunId, event);
+   }
+   return spanMap;
+}
 
 /**
  * Pure function to process a single event and return updated spans array

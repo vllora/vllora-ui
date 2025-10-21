@@ -77,6 +77,7 @@ export interface RunDTO {
   trace_ids: string[];
   used_models: string[];
   request_models: string[];
+  root_span_ids: string[];
   used_tools: string[];
   mcp_template_definition_ids: string[];
   cost: number;
