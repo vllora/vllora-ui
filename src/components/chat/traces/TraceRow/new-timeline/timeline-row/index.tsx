@@ -19,6 +19,7 @@ export interface TimelineContentBaseProps {
     onToggle: () => void;
     operation_name: string;
     span?: Span;
+    isInSidebar?: boolean;
 }
 
 // Main TimelineRow component props
@@ -59,10 +60,8 @@ export const TimelineRow = (props: TimelineRowProps) => {
         onToggle,
         selectedSpanId,
         onSpanSelect,
-    } = props;
-    // In ellora-ui, we're always in sidebar mode (chat sidebar)
-    const isInSidebar = true;
-    
+        isInSidebar = true
+    } = props;    
     // Common props for timeline content components
     const contentProps = {
         level,
@@ -76,7 +75,7 @@ export const TimelineRow = (props: TimelineRowProps) => {
         onToggle,
         timelineBgColor: timelineBgColor,
         operation_name: span.operation_name,
-        span
+        span,
     };    
     return (
         <div
@@ -96,10 +95,11 @@ export const TimelineRow = (props: TimelineRowProps) => {
         >
             <div className={classNames("flex w-full divide-x divide-border px-1")}>
                 {/* Render either fullscreen or sidebar content based on mode */}
-                {!isInSidebar
-                    ? <FullscreenTimelineContent {...contentProps} />
-                    : <SidebarTimelineContent {...contentProps} />
-                }
+                <SidebarTimelineContent {...contentProps} isInSidebar={isInSidebar} />
+                {/* {!isInSidebar
+                    ? <FullscreenTimelineContent {...contentProps} isInSidebar={isInSidebar}/>
+                    : <SidebarTimelineContent {...contentProps} isInSidebar={isInSidebar} />
+                } */}
 
                 {/* Timeline visualization */}
                 <TimelineVisualization

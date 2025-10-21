@@ -61,6 +61,7 @@ export const SingleRunTimelineView = (props: SingleRunTimelineViewProps) => {
                     relatedSpans={spansByRunId}
                     selectedSpanId={selectedSpanId}
                     onSpanSelect={onSpanSelect}
+                    isInSidebar={isInSidebar}
                 />
             </div>
         </div>

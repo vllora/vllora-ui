@@ -6,7 +6,7 @@ import { getOperationTitle } from "../utils";
 import { DatabaseIcon, ChevronRight, ChevronDown } from "lucide-react";
 import { getClientSDKName, isAgentSpan, isPromptCachingApplied } from "@/utils/graph-utils";
 import { ClientSdkIcon } from "@/components/client-sdk-icon";
-import { getTimelineTitleWidth, TIMELINE_INDENTATION, TIMELINE_MAX_TITLE_WIDTH } from "@/utils/constant";
+import { getTimelineTitleWidth, TIMELINE_INDENTATION } from "@/utils/constant";
 
 // Props for the SidebarTimelineContent component
 interface SidebarTimelineContentProps extends TimelineContentBaseProps { }
@@ -24,7 +24,8 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
         durationSeconds,
         operation_name,
         span,
-        onToggle
+        onToggle,
+        isInSidebar = true
     } = props;
     const sdkName = span && getClientSDKName(span);
     const agentSpan = span && isAgentSpan(span);
@@ -101,7 +102,7 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                                 <TooltipTrigger asChild>
                                     <span
                                         className="text-xs text-gray-300 truncate w-full"
-                                        style={{ maxWidth: `${Math.max(getTimelineTitleWidth({ level }), 20)}px` }}
+                                        style={{ maxWidth: `${Math.max(getTimelineTitleWidth({ level, isInSidebar }), 20)}px` }}
                                     >
                                         {title}
                                     </span>

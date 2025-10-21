@@ -14,10 +14,11 @@ export interface HierarchyRowProps {
     relatedSpans?: Span[];
     selectedSpanId?: string;
     onSpanSelect?: (spanId: string, runId?: string) => void;
+    isInSidebar?: boolean;
 }
 
 export const HierarchyRow = (props: HierarchyRowProps) => {
-    const { hierarchy, totalDuration, startTime, level, titleWidth: propTitleWidth = TIMELINE_DYNAMIC_TITLE_WIDTH_IN_SIDEBAR, relatedSpans = [], selectedSpanId, onSpanSelect } = props;
+    const { hierarchy, totalDuration, startTime, level, titleWidth: propTitleWidth = TIMELINE_DYNAMIC_TITLE_WIDTH_IN_SIDEBAR, relatedSpans = [], selectedSpanId, onSpanSelect, isInSidebar = true } = props;
     const [isOpen, setIsOpen] = useState(true);
     // In ellora-ui, we're always in sidebar mode (chat sidebar)
     const titleWidth: string | number = `${propTitleWidth}px`.replace('pxpx', 'px');
@@ -43,6 +44,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                             relatedSpans={relatedSpans}
                             selectedSpanId={selectedSpanId}
                             onSpanSelect={onSpanSelect}
+                            isInSidebar={isInSidebar}
                         />
                     ))}
                 </div>
@@ -94,6 +96,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                 timelineBgColor={timelineBgColor}
                 selectedSpanId={selectedSpanId}
                 onSpanSelect={onSpanSelect}
+                isInSidebar={isInSidebar}
             />
         );
     }
@@ -116,6 +119,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                 timelineBgColor={timelineBgColor}
                 selectedSpanId={selectedSpanId}
                 onSpanSelect={onSpanSelect}
+                isInSidebar={isInSidebar}
             />
             {isOpen && (
                 <div className="flex flex-col divide-y divide-border/70">
@@ -130,6 +134,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                             relatedSpans={relatedSpans}
                             selectedSpanId={selectedSpanId}
                             onSpanSelect={onSpanSelect}
+                            isInSidebar={isInSidebar}
                         />
                     ))}
                 </div>
