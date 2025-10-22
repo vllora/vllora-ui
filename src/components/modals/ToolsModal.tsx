@@ -82,7 +82,7 @@ export const ToolsModal: React.FC<ToolsModalProps> = ({
     }
   };
 
-  const handleUseAllTools = () => {
+  const handleSelectAllTools = () => {
     if (!setToolsUsage || !mcpData?.configs?.[0]?.config?.mcpServers) return;
     
     const newToolsUsage = new Map<string, McpServerConfig>();
@@ -109,6 +109,32 @@ export const ToolsModal: React.FC<ToolsModalProps> = ({
     
     setToolsUsage(newToolsUsage);
     console.log('All tools selected:', newToolsUsage);
+  };
+
+  const handleUnselectAllTools = () => {
+    if (!setToolsUsage || !mcpData?.configs?.[0]?.config?.mcpServers) return;
+    
+    const newToolsUsage = new Map<string, McpServerConfig>();
+    
+    // Create one config per server with no tools selected
+    for (const serverName in toolsByServer) {
+      const serverConfig = mcpData.configs[0].config.mcpServers[serverName];
+      if (serverConfig) {
+        newToolsUsage.set(serverName, {
+          definition: {
+            filter: null,
+            type: 'http',
+            server_url: serverConfig.url,
+            headers: serverConfig.headers || {},
+            env: null,
+          },
+          selectedTools: [], // Empty array - no tools selected
+        });
+      }
+    }
+    
+    setToolsUsage(newToolsUsage);
+    console.log('All tools unselected:', newToolsUsage);
   };
 
   const handleToggleTool = (toolName: string, serverName: string) => {
@@ -279,13 +305,22 @@ export const ToolsModal: React.FC<ToolsModalProps> = ({
           </h3>
           <div className="flex gap-2">
             {Object.keys(toolsByServer).length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleUseAllTools}
-              >
-                Use All Tools
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSelectAllTools}
+                >
+                  Select All
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleUnselectAllTools}
+                >
+                  Unselect All
+                </Button>
+              </>
             )}
             <Button onClick={handleRefresh} disabled={toolsLoading} variant="outline" size="sm">
               {toolsLoading ? (
