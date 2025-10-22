@@ -3,6 +3,7 @@ import { Message, FileWithPreview, ChatCompletionChunk } from '@/types/chat';
 import { useScrollToBottom } from './useScrollToBottom';
 import { emitter } from '@/utils/eventEmitter';
 import { getChatCompletionsUrl } from '@/config/api';
+import { McpServerConfig } from '@/services/mcp-api';
 
 interface MessageSubmissionProps {
   apiUrl: string;
@@ -80,11 +81,14 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
       threadId?: string;
       threadTitle?: string;
       initialMessages?: Message[];
+      toolsUsage?: Map<string, McpServerConfig>;
     }) => {
       abortControllerRef.current = new AbortController();
 
-      const { inputText, files, threadId, threadTitle, initialMessages } = inputProps;
+      const { inputText, files, threadId, threadTitle, initialMessages, toolsUsage } = inputProps;
 
+      console.log('toolsUsage', toolsUsage);
+      
       if (inputText.trim() === '') return;
 
       // const newMessage: Message = {
@@ -160,6 +164,42 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
           return content;
         };
 
+        let requestBody: any = {
+          model: props.modelName,
+          messages: [
+            ...(initialMessages?.map((msg) => ({
+              role: msg.type,
+              content: msg.files && msg.files.length > 0
+                ? buildMessageContent(msg.content, msg.files)
+                : msg.content,
+            })) || []),
+            {
+              role: 'user',
+              content: buildMessageContent(inputText, files),
+            },
+          ],
+          stream: true,
+          ...(threadId && { thread_id: threadId }),
+        };
+
+        console.log('toolsUsageSize', toolsUsage?.size);
+        if (toolsUsage && toolsUsage.size > 0) {
+          console.log('toolsUsage', toolsUsage);
+          
+          // Convert Map to array - each server config becomes one entry
+          const mcpServers: any[] = [];
+          for (const [serverName, config] of toolsUsage.entries()) {
+            console.log('Processing server:', serverName, 'with config:', config);
+            mcpServers.push({
+              ...config.definition,
+              filter: config.selectedTools.map((tool) => ({ name: tool })),
+            });
+          }
+          
+          requestBody.mcp_servers = mcpServers;
+          console.log('requestBody.mcp_servers', requestBody.mcp_servers);
+        }
+
         const response = await fetch(chatUrl, {
           method: 'POST',
           headers: {
@@ -169,23 +209,7 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
             ...(threadId && { 'X-Thread-Id': threadId }),
             ...(threadTitle && { 'X-Thread-Title': threadTitle }),
           },
-          body: JSON.stringify({
-            model: props.modelName,
-            messages: [
-              ...(initialMessages?.map((msg) => ({
-                role: msg.type,
-                content: msg.files && msg.files.length > 0
-                  ? buildMessageContent(msg.content, msg.files)
-                  : msg.content,
-              })) || []),
-              {
-                role: 'user',
-                content: buildMessageContent(inputText, files),
-              },
-            ],
-            stream: true,
-            ...(threadId && { thread_id: threadId }),
-          }),
+          body: JSON.stringify(requestBody),
           signal: abortControllerRef.current?.signal,
         });
 

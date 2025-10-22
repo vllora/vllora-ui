@@ -6,9 +6,12 @@ import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 import { useMessageSubmission } from '@/hooks/useMessageSubmission';
 import { emitter } from '@/utils/eventEmitter';
 import { XCircle } from 'lucide-react';
+import { ModalProvider } from '@/contexts/ModalContext';
+import { ModalManager } from '@/components/modals/ModalManager';
 import { useConversationEvents } from '@/hooks/events/useConversationEvents';
 import { Message } from '@/types/chat';
 import { extractMessageFromApiInvokeSpan } from '@/utils/span-to-message';
+import { McpServerConfig } from '@/services/mcp-api';
 
 interface ChatWindowProps {
   threadId?: string;
@@ -94,6 +97,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       otherTools?: string[];
       threadId?: string;
       threadTitle?: string;
+      toolsUsage?: Map<string, McpServerConfig>;
     }) => {
       return handleSubmit(inputProps);
     },
@@ -177,12 +181,14 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     searchToolEnabled,
     otherTools,
     threadTitle,
+    toolsUsage,
   }: {
     inputText: string;
     files: any[];
     searchToolEnabled?: boolean;
     otherTools?: string[];
     threadTitle?: string;
+    toolsUsage?: Map<string, McpServerConfig>;
   }) => {
     setCurrentInput(inputText);
     // construct initial messages based on last api_invoke span
@@ -192,7 +198,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       continousMessage = extractMessageFromApiInvokeSpan(lastApiInvokeSpan);
     }
 
-    onSubmitWrapper({ inputText, files, searchToolEnabled, otherTools, threadId, threadTitle, initialMessages: continousMessage });
+    onSubmitWrapper({ inputText, files, searchToolEnabled, otherTools, threadId, threadTitle, initialMessages: continousMessage, toolsUsage });
   }, [onSubmitWrapper, setCurrentInput, threadId, flattenSpans]);
   useEffect(() => {
     emitter.on('langdb_input_chatSubmit', handleExternalSubmit);
@@ -258,17 +264,20 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
 
       {/* Chat Input */}
       <div className="flex-shrink-0">
-        <ChatInput
-          onSubmit={(props) => {
-            emitter.emit('langdb_input_chatSubmit', props);
-            setCurrentInput('');
-            return Promise.resolve();
-          }}
-          currentInput={currentInput}
-          setCurrentInput={setCurrentInput}
-          disabled={typing}
-          threadTitle={threadTitle}
-        />
+        <ModalProvider>
+          <ChatInput
+            onSubmit={(props) => {
+              emitter.emit('langdb_input_chatSubmit', props);
+              setCurrentInput('');
+              return Promise.resolve();
+            }}
+            currentInput={currentInput}
+            setCurrentInput={setCurrentInput}
+            disabled={typing}
+            threadTitle={threadTitle}
+          />
+          <ModalManager />
+        </ModalProvider>
       </div>
     </>
   );
