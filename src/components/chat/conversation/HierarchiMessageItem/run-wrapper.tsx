@@ -20,7 +20,7 @@ const RunSpanMessageComponent = (props: {
     // Memoize the className for connector line - subtle vertical line on the left
     const contentClassName = useMemo(() =>
         "relative before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[1px] before:bg-border",
-        [level]
+        []
     );
 
     // Add padding for nested content

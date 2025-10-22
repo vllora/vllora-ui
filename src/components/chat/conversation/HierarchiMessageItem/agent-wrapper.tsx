@@ -18,12 +18,9 @@ export const AgentSpanMessage = memo((props: {
         setIsCollapsed(prev => !prev);
     }, []);
 
-    // Memoize the className for connector line - subtle vertical line on the left
     const contentClassName = useMemo(() =>
-        level > 0
-            ? "relative before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px] before:bg-green-500/10"
-            : "",
-        [level]
+        "relative before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[1px] before:bg-border",
+        []
     );
 
     // Add padding for nested content
