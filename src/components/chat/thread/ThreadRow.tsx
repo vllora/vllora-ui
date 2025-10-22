@@ -134,7 +134,7 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                         ) : (
                             <div className="flex items-center group gap-2">
                                 <TooltipProvider>
-                                    <Tooltip>
+                                    <Tooltip delayDuration={300}>
                                         <TooltipTrigger asChild>
                                             <span className={cn(
                                                 "text-sm max-w-[120px] truncate font-medium",
@@ -143,8 +143,13 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                                                 {thread.title || 'Untitled'}
                                             </span>
                                         </TooltipTrigger>
-                                        <TooltipContent side="top">
-                                            {thread.title || 'Untitled'}
+                                        <TooltipContent
+                                            side="right"
+                                            align="start"
+                                            sideOffset={8}
+                                            className="max-w-md bg-background border border-border rounded-md shadow-md z-50"
+                                        >
+                                            <p className="text-sm break-words">{thread.title || 'Untitled'}</p>
                                         </TooltipContent>
                                     </Tooltip>
                                 </TooltipProvider>
