@@ -87,7 +87,7 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
       {/* Separator badge with colored left border - compact design */}
       <button
         onClick={handleClick}
-        className={`flex items-center gap-2 px-2.5 py-1 rounded-md bg-muted/30 border-l-2 border-[${iconColor}] hover:bg-muted/50 transition-colors cursor-pointer group`}
+        className={`flex items-center gap-2 px-2.5 py-1 rounded-md  hover:bg-muted/50 transition-colors cursor-pointer group`}
         title={`Click to ${isCollapsed ? 'expand' : 'collapse'}`}
       >
         {onToggle && (
