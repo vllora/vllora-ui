@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { Span } from '@/types/common-type';
-import { MessageStructure } from '@/utils/message-structure-from-span';
-import { convertSpansToMessages, extractMessagesFromSpan } from '@/utils/span-to-message';
+import { extractMessagesFromSpan } from '@/utils/span-to-message';
 import { Message } from '@/types/chat';
 
 /**
@@ -55,7 +54,8 @@ export const useMessageExtraceSpanById = (flattenSpans: Span[],
     const span = useSpanById(flattenSpans, spanId);
     return useMemo(() => {
         if (!span) return [];
-        return extractMessagesFromSpan(span);
+        let messages = extractMessagesFromSpan(span);
+        return messages;
     }, [span]);
 }
 

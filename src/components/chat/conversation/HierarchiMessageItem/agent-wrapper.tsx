@@ -2,7 +2,7 @@ import { MessageStructure } from "@/utils/message-structure-from-span";
 import { HierarchicalMessageSpanItem } from ".";
 import { SpanSeparator } from "../SpanSeparator";
 import { useState, memo, useMemo, useCallback } from "react";
-import { CONNECTOR_WIDTH, CONTENT_PADDING_LEFT } from "./constants";
+import { CONTENT_PADDING_LEFT } from "./constants";
 
 
 export const AgentSpanMessage = memo((props: {

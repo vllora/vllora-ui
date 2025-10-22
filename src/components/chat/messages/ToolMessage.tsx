@@ -10,7 +10,7 @@ import { Message } from '@/types/chat';
 import React, { useCallback, useMemo } from 'react';
 import { MessageDisplay } from '../MessageDisplay';
 import { ContentArrayDisplay } from './ContentArrayDisplay';
-import { formatMessageTime, formatMessageTimestamp } from '@/utils/dateUtils';
+import { formatMessageTimestamp } from '@/utils/dateUtils';
 import { MessageMetrics } from './MessageMetrics';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
