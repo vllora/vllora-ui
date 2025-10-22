@@ -9,8 +9,8 @@ interface CodeViewProps {
 }
 
 export const TraceCodeView: React.FC<CodeViewProps> = ({ runId }) => {
-  const { spanMap } = ChatWindowConsumer();
-  const spans = spanMap[runId] || [];
+  const { runMap } = ChatWindowConsumer();
+  const spans = runMap[runId] || [];
   const cloudSpan = spans && spans.length > 0 ? spans[0] : undefined 
   const apiInvokeSpans = spans.filter(s => s.operation_name === 'api_invoke')
   const apiInvokeSpan = apiInvokeSpans[apiInvokeSpans.length - 1]

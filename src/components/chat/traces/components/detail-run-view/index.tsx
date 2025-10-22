@@ -13,9 +13,9 @@ import { ProjectsConsumer } from "@/contexts/ProjectContext";
 export const DetailedRunView: React.FC<{run: RunDTO}> = ({
     run
 }) => {
-    const {spanMap, loadingSpansById, selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId} = ChatWindowConsumer()
+    const {runMap, loadingSpansById, selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId} = ChatWindowConsumer()
     const {currentProjectId} = ProjectsConsumer()
-    const spansByRunId: Span[] = run.run_id ? spanMap[run.run_id] || [] : []
+    const spansByRunId: Span[] = run.run_id ? runMap[run.run_id] || [] : []
     const detailViewRef = useRef<HTMLDivElement>(null);
     if (spansByRunId?.length > 0) {
         

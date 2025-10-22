@@ -3,8 +3,10 @@ import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 import { useSpanById } from '@/hooks/useSpanById';
 import { getOperationIcon, getSpanTitle, getTimelineBgColor, getToolCallMessage } from '@/components/chat/traces/TraceRow/new-timeline/utils';
-import { classNames } from '@/utils/modelUtils';
+import { classNames, tryParseFloat, tryParseJson } from '@/utils/modelUtils';
 import { ToolCallList } from '../messages/ToolCallList';
+import { Message } from '@/types/chat';
+import { AiMessage } from '../messages/AiMessage';
 
 interface SpanSeparatorProps {
   spanId: string;
@@ -124,36 +126,53 @@ export const SpanSeparator = React.memo(
 );
 
 
-// export const ToolStartSeparator: React.FC<{
-//   spanId: string;
-//   onClick?: (spanId: string) => void;
-//   isCollapsed?: boolean;
-//   onToggle?: () => void;
-//   level?: number;
-//   icon?: React.ReactNode;
-//   colorClassName?: string;
-// }> = (props) => {
-
-//   return <div className='flex flex-col gap-1'>
-//     <SpanSeparator {...props} />
-//     {!props.isCollapsed && <ToolStartMessageDisplay spanId={props.spanId} />}
-//   </div>;
-// };
-
 export const ToolStartMessageDisplay = (props: {
   spanId: string;
 }) => {
+  const { spanId } = props;
   const { flattenSpans } = ChatWindowConsumer();
 
-  const span = useSpanById(flattenSpans, props.spanId);
-  const toolCallMessages = useMemo(() => {
+  const span = useSpanById(flattenSpans, spanId);
+  const parentSpan = span?.parent_span_id ? useSpanById(flattenSpans, span?.parent_span_id) : null;
+
+  let parrentAttr = parentSpan?.attribute as any || {};
+  let usageStr = parrentAttr?.['usage'] || '';
+  let usageJson = tryParseJson(usageStr);
+  let costStr = parrentAttr?.['cost'] || '';
+  let cost = tryParseFloat(costStr) || 0;
+  let requestStr = parrentAttr?.['request'] || '';
+  let requestJson = tryParseJson(requestStr);
+
+  console.log('====== parrent span', parentSpan)
+  let providerName = parentSpan?.operation_name
+  console.log('====== providerName', providerName)
+  console.log('====== requestJson', requestJson)
+  let modelName = requestJson?.model || '';
+  console.log('====== modelName', modelName)
+  let metrics = {
+    usage: usageJson ,
+    cost: cost,
+    ttft: parrentAttr?.['ttft'] || undefined,
+  }
+  const toolCallsJson = useMemo(() => {
     if (!span) return [];
     return getToolCallMessage({
       span,
     })
   }, [span]);
-  return <>{
-    toolCallMessages.length > 0 &&  <ToolCallList toolCalls={toolCallMessages} />
-  }</>
+  const displayMessage: Message = {
+    id: `tool-${spanId}` || '',
+    type: 'assistant',
+    timestamp: parentSpan?.finish_time_us || 0,
+    content: '',
+    tool_calls: toolCallsJson,
+    metrics: [metrics],
+    model_name: providerName && modelName ? `${providerName}/${modelName}` : '',
+    
+  }
+  return <AiMessage message={displayMessage} />
+  // return <>{
+  //   toolCallsJson.length > 0 &&  <ToolCallList toolCalls={toolCallsJson} />
+  // }</>
 
 }

@@ -1,19 +1,15 @@
 import { createContext, useContext, ReactNode, useCallback, useState, useMemo } from 'react';
-import { useRequest, useLatest } from 'ahooks';
+import { useRequest } from 'ahooks';
 import { toast } from 'sonner';
 import { listSpans } from '@/services/spans-api';
 import { Span } from '@/types/common-type';
-import { LangDBEventSpan, ProjectEventUnion } from './project-events/dto';
-import { convertSpanToRunDTO, convertToNormalSpan } from './project-events/util';
-import { skipThisSpan } from '@/utils/graph-utils';
+import { ProjectEventUnion } from './project-events/dto';
 import { buildSpanHierarchy } from '@/utils/span-hierarchy';
 import { buildMessageHierarchyFromSpan, MessageStructure } from '@/utils/message-structure-from-span';
 import { useStableMessageHierarchies } from '@/hooks/useStableMessageHierarchies';
-import { useRunsPagination } from '@/hooks/useRunsPagination';
-import { useSpanDetails } from '@/hooks/useSpanDetails';
 import { useDebugControl } from '@/hooks/events/useDebugControl';
-import { processEventWithSpanMap, updatedRunWithSpans } from '@/hooks/events/utilities';
-
+import { processEventWithRunMap, updatedRunWithSpans } from '@/hooks/events/utilities';
+import { useWrapperHook } from '@/hooks/useWrapperHook';
 
 export type ChatWindowContextType = ReturnType<typeof useChatWindow>;
 
@@ -36,12 +32,8 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     hasMoreRuns,
     runsTotal,
     loadingMoreRuns,
-  } = useRunsPagination({ projectId, threadId });
-
-  // Use the span details hook
-  const {
-    spanMap,
-    setSpanMap,
+    runMap,
+    setRunMap,
     loadingSpansById,
     fetchSpansByRunId,
     selectedRunId,
@@ -51,13 +43,24 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     setSelectedSpanId,
     detailSpanId,
     setDetailSpanId,
-    detailSpan
-  } = useSpanDetails({ projectId });
+    detailSpan,
+    flattenSpans,
+    setFlattenSpans,
+    openTraces,
+    setOpenTraces,
+    hoveredRunId,
+    setHoveredRunId,
+    isLoadingSpans,
+    loadSpansError,
+    refreshSpans,
+  } = useWrapperHook({ projectId, threadId });
+
+ 
 
   const [isChatProcessing, setIsChatProcessing] = useState<boolean>(false);
   const handleEvent = useCallback((event: ProjectEventUnion) => {
     if (event.run_id && event.thread_id === threadId) {
-      let updatedSpanMap = processEventWithSpanMap(spanMap, event);
+      let updatedSpanMap = processEventWithRunMap(runMap, event);
       let spanByRunId = updatedSpanMap[event.run_id];
       setRawRuns(prev => {
         let newRuns = [...prev];
@@ -78,22 +81,18 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
         }
         return newRuns;
       });
-      setSpanMap(updatedSpanMap);
+      setRunMap(updatedSpanMap);
       setSelectedRunId(event.run_id);
       setOpenTraces([{ run_id: event.run_id, tab: 'trace' }]);
     }
-  }, [spanMap, threadId]);
+  }, [runMap, threadId]);
+  
+  
   useDebugControl({ handleEvent, channel_name: 'debug-thread-trace-timeline-events' });
 
   // should the the run be expanded
-  const [openTraces, setOpenTraces] = useState<{ run_id: string; tab: 'trace' | 'code' }[]>([]);
   // hovered run id (for highlighting related traces when hovering messages)
-  const [hoveredRunId, setHoveredRunId] = useState<string | null>(null);
-
-  const threadIdRef = useLatest(threadId);
-
   // Conversation spans state (for span-based message rendering)
-  const [flattenSpans, setFlattenSpans] = useState<Span[]>([]);
   const spanHierarchies: Span[] = useMemo(
     () => buildSpanHierarchy(flattenSpans),
     [flattenSpans]
@@ -114,89 +113,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   const [usageInfo, setUsageInfo] = useState<any[]>([]);
 
 
-  // Use ahooks useRequest for fetching conversation spans
-  const { loading: isLoadingSpans, error: loadSpansError, run: refreshSpans } = useRequest(
-    async () => {
-      if (!threadId || !projectId) {
-        return [];
-      }
-      const response = await listSpans({
-        projectId,
-        params: {
-          threadIds: threadId,
-          limit: 1000, // Fetch all spans for this thread
-          offset: 0,
-        },
-      });
-      return response.data;
-    },
-    {
-      manual: true,
-      onError: (err: any) => {
-        toast.error('Failed to load conversation spans', {
-          description: err.message || 'An error occurred while loading conversation spans',
-        });
-      },
-      onSuccess: (spans) => {
-        setFlattenSpans(spans);
-      },
-    }
-  );
-
-
-
-  const addEventSpans = useCallback((eventSpans: LangDBEventSpan[]) => {
-    eventSpans.sort((a, b) => a.start_time_unix_nano - b.start_time_unix_nano).forEach(span => {
-      addEventSpan(span as LangDBEventSpan);
-    });
-  }, []);
-
-  const addEventSpan = useCallback((eventSpan: LangDBEventSpan) => {
-    const span = convertToNormalSpan(eventSpan);
-    let currentRunId = span.run_id;
-
-    let ignoreThisSpan = skipThisSpan(span);
-
-    if (!ignoreThisSpan) {
-      setRawRuns(prev => {
-        let runIndex = prev.findIndex(r => r.run_id === currentRunId);
-        if (runIndex === -1) {
-          return [...prev, convertSpanToRunDTO(span)];
-        }
-        let newRun = convertSpanToRunDTO(span, prev[runIndex]);
-        // Create a new array instead of mutating prev
-        const updated = [...prev];
-        updated[runIndex] = newRun;
-        return updated;
-      });
-    }
-
-    currentRunId && setSpanMap(prev => {
-      let runMap = prev[currentRunId];
-      if (runMap) {
-        return { ...prev, [currentRunId]: [...runMap, span] };
-      } else {
-        return { ...prev, [currentRunId]: [span] };
-      }
-    });
-
-    // NEW: Update conversation spans if this span belongs to current thread
-    if (span.thread_id === threadIdRef.current) {
-      setFlattenSpans(prev => {
-        // Check if span already exists
-        const existingIndex = prev.findIndex(s => s.span_id === span.span_id);
-        if (existingIndex !== -1) {
-          // Update existing span
-          const updated = [...prev];
-          updated[existingIndex] = span;
-          return updated;
-        } else {
-          // Add new span
-          return [...prev, span];
-        }
-      });
-    }
-  }, [threadIdRef]);
+  
 
 
   // Wrap refreshRuns to also reset UI state
@@ -236,7 +153,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
 
   const clearAll = useCallback(() => {
-    setSpanMap({});
+    setRunMap({});
     setSelectedRunId(null);
     setSelectedSpanId(null);
     setDetailSpanId(null);
@@ -304,13 +221,12 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     hoveredRunId,
     setHoveredRunId,
     // Span data
-    spanMap,
+    runMap,
     fetchSpansByRunId,
     loadingSpansById,
     projectId,
     isChatProcessing,
     setIsChatProcessing,
-    addEventSpans,
     // UI state
     currentInput,
     setCurrentInput,

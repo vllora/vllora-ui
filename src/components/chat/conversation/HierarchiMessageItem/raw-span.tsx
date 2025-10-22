@@ -20,7 +20,7 @@ export const RawSpanMessage = React.memo((props: {
         [level]
     );
 
-    return <div style={indentStyle} className="pt-2">
+    return <div style={indentStyle} className="">
         <InnerRawSpanMessage spanId={messageStructure.span_id} flattenSpans={flattenSpans} />
         {messageStructure.children && messageStructure.children.length > 0 && (
             <div className="space-y-4">

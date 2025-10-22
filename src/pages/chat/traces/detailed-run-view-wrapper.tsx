@@ -10,8 +10,8 @@ import { TimelineContent } from "@/components/chat/traces/components/TimelineCon
 
 // DetailedRunView component that uses TracesPageContext instead of ChatWindowContext
 export const DetailedRunViewWrapper: React.FC<{ run: RunDTO }> = ({ run }) => {
-  const { spanMap, loadingSpansById, selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, projectId } = TracesPageConsumer();
-  const spansByRunId: Span[] = run.run_id ? spanMap[run.run_id] || [] : [];
+  const { runMap, loadingSpansById, selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, projectId } = TracesPageConsumer();
+  const spansByRunId: Span[] = run.run_id ? runMap[run.run_id] || [] : [];
   const detailViewRef = useRef<HTMLDivElement>(null);
 
   if (spansByRunId?.length > 0) {

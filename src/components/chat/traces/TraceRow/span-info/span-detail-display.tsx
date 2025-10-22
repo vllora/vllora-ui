@@ -10,7 +10,7 @@ import { SpanHeader } from "./SpanHeader";
 
 export const SpanDetailsDisplay = () => {
   const [currentTab, setCurrentTab] = useState<string>("details");
-  const { spanMap, detailSpanId, selectedRunId, spansOfSelectedRun, setDetailSpanId } = ChatWindowConsumer();
+  const { runMap, detailSpanId, selectedRunId, spansOfSelectedRun, setDetailSpanId } = ChatWindowConsumer();
     const spanId = detailSpanId;
     const spanOrRunId = selectedRunId || detailSpanId || '';
 
@@ -32,8 +32,8 @@ export const SpanDetailsDisplay = () => {
   }, [onClose]);
 
   // Use the obj directly as the currentSpan since it's already the selected span
-  const currentSpan = spanOrRunId ? spanMap[spanOrRunId]?.find(span => span.span_id === spanId) : undefined;
-  let relatedSpans = spanOrRunId ? spanMap[spanOrRunId] : spanMap[spanOrRunId];
+  const currentSpan = spanOrRunId ? runMap[spanOrRunId]?.find(span => span.span_id === spanId) : undefined;
+  let relatedSpans = spanOrRunId ? runMap[spanOrRunId] : runMap[spanOrRunId];
   if (!currentSpan) {
     return <></>;
   }

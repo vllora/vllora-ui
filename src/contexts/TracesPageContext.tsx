@@ -1,9 +1,8 @@
 import { createContext, useContext, ReactNode, useState, useCallback } from "react";
-import { useRunsPagination } from '@/hooks/useRunsPagination';
-import { useSpanDetails } from '@/hooks/useSpanDetails';
 import { useDebugControl } from "@/hooks/events/useDebugControl";
 import { ProjectEventUnion } from "./project-events/dto";
-import {  processEventWithSpanMap, updatedRunWithSpans } from "@/hooks/events/utilities";
+import { processEventWithRunMap, updatedRunWithSpans } from "@/hooks/events/utilities";
+import { useWrapperHook } from "@/hooks/useWrapperHook";
 
 export type TracesPageContextType = ReturnType<typeof useTracesPageContext>;
 
@@ -23,12 +22,8 @@ export function useTracesPageContext(props: { projectId: string }) {
     hasMoreRuns,
     runsTotal,
     loadingMoreRuns,
-    setRuns
-  } = useRunsPagination({ projectId });
-
-  // Use the span details hook
-  const {
-    spanMap,
+    setRuns,
+    runMap,
     loadingSpansById,
     fetchSpansByRunId,
     selectedRunId,
@@ -39,12 +34,16 @@ export function useTracesPageContext(props: { projectId: string }) {
     setDetailSpanId,
     detailSpan,
     spansOfSelectedRun,
-    setSpanMap,
-  } = useSpanDetails({ projectId });
+    setRunMap,
+    openTraces,
+    setOpenTraces,
+    hoveredRunId,
+    setHoveredRunId,
+  } = useWrapperHook({ projectId });
 
   const handleEvent = useCallback((event: ProjectEventUnion) => {
     if (event.run_id) {
-      let updatedSpanMap = processEventWithSpanMap(spanMap, event);
+      let updatedSpanMap = processEventWithRunMap(runMap, event);
       let spanByRunId = updatedSpanMap[event.run_id];
       setRuns(prev => {
         let newRuns = [...prev];
@@ -65,15 +64,14 @@ export function useTracesPageContext(props: { projectId: string }) {
         }
         return newRuns;
       });
-      setSpanMap(updatedSpanMap);
+      setRunMap(updatedSpanMap);
       setSelectedRunId(event.run_id);
-      setOpenTraces( [{ run_id: event.run_id, tab: 'trace' }]);
+      setOpenTraces([{ run_id: event.run_id, tab: 'trace' }]);
     }
-  }, [spanMap]);
+  }, [runMap]);
   useDebugControl({ handleEvent, channel_name: 'debug-traces-timeline-events' });
   // Trace expansion state
-  const [openTraces, setOpenTraces] = useState<{ run_id: string; tab: 'trace' | 'code' }[]>([]);
-  const [hoveredRunId, setHoveredRunId] = useState<string | null>(null);
+  
 
   return {
     projectId,
@@ -95,7 +93,7 @@ export function useTracesPageContext(props: { projectId: string }) {
     hoveredRunId,
     setHoveredRunId,
     // Span data
-    spanMap,
+    runMap,
     fetchSpansByRunId,
     loadingSpansById,
     detailSpanId,

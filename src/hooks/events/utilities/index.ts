@@ -14,8 +14,8 @@ import {
   CustomCostEventType,
 } from "@/contexts/project-events/dto";
 import { RunDTO, Span } from "@/types/common-type";
-import { SpanMap } from "../../useSpanDetails";
-import { convertSpanToRun, getDataFromSpan } from "@/utils/span-converter";
+import { RunMap } from "../../useSpanDetails";
+import { getDataFromSpan } from "@/utils/span-converter";
 
 /**
  * Utility functions to convert various event types to Span objects
@@ -205,15 +205,15 @@ export const updatedRunWithSpans = ({
 
 
 
-export function processEventWithSpanMap(spanMap: SpanMap, event: ProjectEventUnion): SpanMap {
+export function processEventWithRunMap(runMap: RunMap, event: ProjectEventUnion): RunMap {
    if(event.run_id){
-    let spansByRunId = spanMap[event.run_id];
+    let spansByRunId = runMap[event.run_id];
     if(!spansByRunId){
       spansByRunId = [];
     }
-     spanMap[event.run_id] = processEvent(spansByRunId, event);
+     runMap[event.run_id] = processEvent(spansByRunId, event);
    }
-   return spanMap;
+   return runMap;
 }
 
 /**

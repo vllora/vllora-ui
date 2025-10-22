@@ -1,8 +1,10 @@
 import { MessageStructure } from "@/utils/message-structure-from-span";
 import { HierarchicalMessageSpanItem } from ".";
 import { SpanSeparator } from "../SpanSeparator";
-import { useState, memo, useMemo, useCallback } from "react";
+import { memo, useMemo, useCallback } from "react";
 import { CONTENT_PADDING_LEFT } from "./constants";
+import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
+import { useSpanById } from "@/hooks/useSpanById";
 
 const RunSpanMessageComponent = (props: {
     span_id: string;
@@ -10,12 +12,30 @@ const RunSpanMessageComponent = (props: {
     level?: number;
 }) => {
     const { span_id, messages, level = 0 } = props;
-    const [isCollapsed, setIsCollapsed] = useState(false);
+
+    const { openTraces, setOpenTraces, flattenSpans } = ChatWindowConsumer();
+    const span = useSpanById(flattenSpans, span_id);
+    // const [isCollapsed, setIsCollapsed] = useState(false);
 
     // Memoize the toggle callback to prevent child re-renders
     const toggleCollapse = useCallback(() => {
-        setIsCollapsed(prev => !prev);
-    }, []);
+        if (span && span.run_id) {
+            setOpenTraces(prev => {
+                let alreadyOpen = prev?.find((trace) => trace.run_id === span.run_id);
+                if (alreadyOpen) {
+                    return prev?.filter((trace) => trace.run_id !== span.run_id);
+                } else {
+                    return [...(prev || []), { run_id: span.run_id, tab: "trace" }];
+                }
+            });
+        }
+    }, [span, setOpenTraces]);
+
+    const isCollapsed = useMemo(() => {
+        let isOpen = openTraces.find((trace) => trace.run_id === span?.run_id);
+        return isOpen ? false : true;
+    }, [openTraces, span]);
+
 
     // Memoize the className for connector line - subtle vertical line on the left
     const contentClassName = useMemo(() =>
