@@ -24,6 +24,13 @@ export function McpConfigPage() {
     if (mcpData?.configs?.[0]) {
       setConfigJson(mcpData.configs[0].config);
       setRawJson(JSON.stringify(mcpData.configs[0].config, null, 2));
+    } else if (mcpData && (!mcpData.configs || mcpData.configs.length === 0)) {
+      // Initialize with empty config if none exists
+      const emptyConfig = {
+        mcpServers: {}
+      };
+      setConfigJson(emptyConfig);
+      setRawJson(JSON.stringify(emptyConfig, null, 2));
     }
   }, [mcpData]);
 
@@ -103,19 +110,35 @@ export function McpConfigPage() {
   };
 
   const handleSave = async () => {
-    if (!mcpData?.configs?.[0]?.id || !configJson) return;
+    if (!configJson) return;
 
     setSaving(true);
     try {
-      const response = await fetch(`${getBackendUrl()}/mcp-configs/${mcpData.configs[0].id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          config: configJson,
-        }),
-      });
+      let response;
+      
+      if (mcpData?.configs?.[0]?.id) {
+        // Update existing config
+        response = await fetch(`${getBackendUrl()}/mcp-configs/${mcpData.configs[0].id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            config: configJson,
+          }),
+        });
+      } else {
+        // Create new config
+        response = await fetch(`${getBackendUrl()}/mcp-configs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            config: configJson,
+          }),
+        });
+      }
 
       if (!response.ok) {
         throw new Error(`Failed to save config: ${response.statusText}`);
@@ -150,15 +173,6 @@ export function McpConfigPage() {
         <AlertCircle className="w-12 h-12 text-destructive mb-4" />
         <p className="text-destructive">Failed to load MCP configuration</p>
         <p className="text-sm text-muted-foreground mt-2">{error.message}</p>
-      </div>
-    );
-  }
-
-  if (!mcpData?.configs?.[0]) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12">
-        <AlertCircle className="w-12 h-12 text-muted-foreground mb-4" />
-        <p className="text-muted-foreground">No MCP configuration found</p>
       </div>
     );
   }
@@ -212,6 +226,34 @@ export function McpConfigPage() {
           </Button>
         </div>
       </div>
+
+      {/* Config Info */}
+      {mcpData?.configs?.[0] ? (
+        <div className="grid grid-cols-2 gap-4 p-4 bg-muted/30 rounded-lg border border-border">
+          <div>
+            <p className="text-xs text-muted-foreground">Config ID</p>
+            <p className="text-sm font-mono">{mcpData.configs[0].id}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Company</p>
+            <p className="text-sm">{mcpData.configs[0].company_slug}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Created</p>
+            <p className="text-sm">{new Date(mcpData.configs[0].created_at).toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Updated</p>
+            <p className="text-sm">{new Date(mcpData.configs[0].updated_at).toLocaleString()}</p>
+          </div>
+        </div>
+      ) : (
+        <div className="p-4 bg-muted/30 rounded-lg border border-border">
+          <p className="text-sm text-muted-foreground">
+            No existing configuration found. Create a new MCP configuration below.
+          </p>
+        </div>
+      )}
 
       {/* JSON Editor */}
       <div className="border border-border rounded-lg overflow-hidden">
