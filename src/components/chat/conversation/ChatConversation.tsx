@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useCallback } from 'react';
 import { Bot, ArrowDown } from 'lucide-react';
 import { useInViewport } from 'ahooks';
 import { HierarchicalMessageSpanItem } from './HierarchiMessageItem';
@@ -15,19 +15,20 @@ const ChatConversationComponent: React.FC<ChatConversationProps> = ({
   messages,
   isLoading = false,
   messagesEndRef: externalMessagesEndRef,
+  scrollToBottom: externalScrollToBottom,
 }) => {
   const internalMessagesEndRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = externalMessagesEndRef || internalMessagesEndRef;
   const [inViewport] = useInViewport(messagesEndRef);
 
   // const validMessages = extractValidDisplayMessages(messages);
-  const scrollToBottom = () => {
-    // if (externalScrollToBottom) {
-    //   externalScrollToBottom();
-    // } else {
-    //   messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    // }
-  };
+  const scrollToBottom = useCallback(() => {
+    if (externalScrollToBottom) {
+      externalScrollToBottom();
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [externalScrollToBottom, messagesEndRef]);
 
   if (messages.length === 0 && !isLoading) {
     return (

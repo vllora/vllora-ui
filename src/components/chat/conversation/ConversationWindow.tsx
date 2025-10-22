@@ -154,25 +154,25 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     };
   }, [terminateChat, threadId, widgetId]);
 
-  // useEffect(() => {
-  //   const handleScrollToBottom = (input: {
-  //     threadId?: string;
-  //     widgetId?: string;
-  //   }) => {
-  //     if (
-  //       displayMessages &&
-  //       displayMessages.length > 0 &&
-  //       ((input.threadId === threadId && input.threadId) ||
-  //         (input.widgetId && input.widgetId === widgetId))
-  //     ) {
-  //       scrollToBottom();
-  //     }
-  //   };
-  //   emitter.on('langdb_chat_scrollToBottom', handleScrollToBottom);
-  //   return () => {
-  //     emitter.off('langdb_chat_scrollToBottom', handleScrollToBottom);
-  //   };
-  // }, [displayMessages, threadId, scrollToBottom, widgetId]);
+  useEffect(() => {
+    const handleScrollToBottom = (input: {
+      threadId?: string;
+      widgetId?: string;
+    }) => {
+      if (
+        messageHierarchies &&
+        messageHierarchies.length > 0 &&
+        ((input.threadId === threadId && input.threadId) ||
+          (input.widgetId && input.widgetId === widgetId))
+      ) {
+        scrollToBottom();
+      }
+    };
+    emitter.on('langdb_chat_scrollToBottom', handleScrollToBottom);
+    return () => {
+      emitter.off('langdb_chat_scrollToBottom', handleScrollToBottom);
+    };
+  }, [messageHierarchies, threadId, scrollToBottom, widgetId]);
 
 
   const handleExternalSubmit = useCallback(({
