@@ -48,7 +48,7 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
       return `${shortId}`;
     }
     if(span.operation_name === 'run') {
-      return `Run ${span.span_id.slice(0, 8)}`
+      return `Run ${span.run_id.slice(0, 8)}`
     }
 
     // Use getSpanTitle to get the proper title based on span attributes
