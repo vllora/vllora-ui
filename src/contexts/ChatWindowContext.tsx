@@ -24,7 +24,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   // Use the runs pagination hook
   const {
     runs: rawRuns,
-    setRuns: setRawRuns,
+    setRuns,
     runsLoading,
     runsError,
     refreshRuns,
@@ -53,6 +53,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     isLoadingSpans,
     loadSpansError,
     refreshSpans,
+    updateBySpansOfARun
   } = useWrapperHook({ projectId, threadId });
 
  
@@ -60,28 +61,29 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   const [isChatProcessing, setIsChatProcessing] = useState<boolean>(false);
   const handleEvent = useCallback((event: ProjectEventUnion) => {
     if (event.run_id && event.thread_id === threadId) {
+      //console.log('==== event', event)
       let updatedSpanMap = processEventWithRunMap(runMap, event);
-      let spanByRunId = updatedSpanMap[event.run_id];
-      setRawRuns(prev => {
+      let spansByRunId = updatedSpanMap[event.run_id];
+      setRuns(prev => {
         let newRuns = [...prev];
         let runIndex = newRuns.findIndex(run => run.run_id === event.run_id);
         if (runIndex >= 0) {
           let runById = prev[runIndex]!;
           newRuns[runIndex] = updatedRunWithSpans({
-            spans: spanByRunId!,
+            spans: spansByRunId!,
             prevRun: runById,
             run_id: event.run_id!
           });
         } else {
           newRuns = [updatedRunWithSpans({
-            spans: spanByRunId!,
+            spans: spansByRunId!,
             prevRun: undefined,
             run_id: event.run_id!
           }), ...prev];
         }
         return newRuns;
       });
-      setRunMap(updatedSpanMap);
+      updateBySpansOfARun(event.run_id, spansByRunId);
       setSelectedRunId(event.run_id);
       setOpenTraces([{ run_id: event.run_id, tab: 'trace' }]);
     }
@@ -105,6 +107,8 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
   // Stabilize messageHierarchies to prevent unnecessary re-renders
   const messageHierarchies = useStableMessageHierarchies(unstableMessageHierarchies);
+
+  console.log('===== messageHierarchies', messageHierarchies)
   // UI state
   const [currentInput, setCurrentInput] = useState<string>('');
   const [typing, setTyping] = useState(false);

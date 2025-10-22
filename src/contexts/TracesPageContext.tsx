@@ -1,4 +1,4 @@
-import { createContext, useContext, ReactNode, useState, useCallback } from "react";
+import { createContext, useContext, ReactNode, useCallback } from "react";
 import { useDebugControl } from "@/hooks/events/useDebugControl";
 import { ProjectEventUnion } from "./project-events/dto";
 import { processEventWithRunMap, updatedRunWithSpans } from "@/hooks/events/utilities";
@@ -34,37 +34,37 @@ export function useTracesPageContext(props: { projectId: string }) {
     setDetailSpanId,
     detailSpan,
     spansOfSelectedRun,
-    setRunMap,
     openTraces,
     setOpenTraces,
     hoveredRunId,
     setHoveredRunId,
+    updateBySpansOfARun
   } = useWrapperHook({ projectId });
 
   const handleEvent = useCallback((event: ProjectEventUnion) => {
     if (event.run_id) {
       let updatedSpanMap = processEventWithRunMap(runMap, event);
-      let spanByRunId = updatedSpanMap[event.run_id];
+      let spansByRunId = updatedSpanMap[event.run_id];
       setRuns(prev => {
         let newRuns = [...prev];
         let runIndex = newRuns.findIndex(run => run.run_id === event.run_id);
         if (runIndex >= 0) {
           let runById = prev[runIndex]!;
           newRuns[runIndex] = updatedRunWithSpans({
-            spans: spanByRunId!,
+            spans: spansByRunId!,
             prevRun: runById,
             run_id: event.run_id!
           });
         } else {
           newRuns = [updatedRunWithSpans({
-            spans: spanByRunId!,
+            spans: spansByRunId!,
             prevRun: undefined,
             run_id: event.run_id!
           }), ...prev];
         }
         return newRuns;
       });
-      setRunMap(updatedSpanMap);
+      updateBySpansOfARun(event.run_id, spansByRunId);
       setSelectedRunId(event.run_id);
       setOpenTraces([{ run_id: event.run_id, tab: 'trace' }]);
     }

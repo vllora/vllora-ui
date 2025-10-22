@@ -26,9 +26,39 @@ export const useWrapperHook = (props: {
   >([]);
   const [hoveredRunId, setHoveredRunId] = useState<string | null>(null);
 
-
-// Use ahooks useRequest for fetching conversation spans
-  const { loading: isLoadingSpans, error: loadSpansError, run: refreshSpans } = useRequest(
+  const updateBySpansOfAThread = useCallback((spans: Span[]) => {
+    setFlattenSpans(spans);
+    // update RunMap
+    setRunMap((prev) => {
+      let newRunMap = { ...prev };
+      for (let span of spans) {
+        let runId = span.run_id;
+        if (runId) {
+          let spansByRunId = prev[runId];
+          if (spansByRunId && spansByRunId.length > 0) {
+            let indexBySpanId = spansByRunId.findIndex(
+              (s) => s.span_id === span.span_id
+            );
+            if (indexBySpanId >= 0) {
+              spansByRunId[indexBySpanId] = span;
+            } else {
+              spansByRunId.push(span);
+            }
+            newRunMap[runId] = [...spansByRunId];
+          } else {
+            newRunMap[runId] = [span];
+          }
+        }
+      }
+      return newRunMap;
+    });
+  }, []);
+  // Use ahooks useRequest for fetching conversation spans
+  const {
+    loading: isLoadingSpans,
+    error: loadSpansError,
+    run: refreshSpans,
+  } = useRequest(
     async () => {
       if (!threadId || !projectId) {
         return [];
@@ -46,37 +76,42 @@ export const useWrapperHook = (props: {
     {
       manual: true,
       onError: (err: any) => {
-        toast.error('Failed to load conversation spans', {
-          description: err.message || 'An error occurred while loading conversation spans',
+        toast.error("Failed to load conversation spans", {
+          description:
+            err.message || "An error occurred while loading conversation spans",
         });
       },
       onSuccess: (spans) => {
-        setFlattenSpans(spans);
-        // update RunMap
-        setRunMap(prev => {
-          let newRunMap = {...prev};
-          for (let span of spans) {
-            let runId = span.run_id;
-            if (runId) {
-              let spansByRunId = prev[runId];
-              if (spansByRunId && spansByRunId.length> 0) {
-                 let indexBySpanId = spansByRunId.findIndex((s) => s.span_id === span.span_id);
-                 if (indexBySpanId >= 0) {
-                   spansByRunId[indexBySpanId] = span;
-                 } else {
-                   spansByRunId.push(span);
-                 }
-                 newRunMap[runId] = [...spansByRunId];
-              } else {
-                newRunMap[runId] = [span]
-              }
-            }
-          }
-          return newRunMap;
-        })
+       updateBySpansOfAThread(spans);
       },
     }
   );
+
+  const updateBySpansOfARun = useCallback((runId: string, spans: Span[]) => {
+    setRunMap((prev) => {
+      let newRunMap = { ...prev };
+      if (newRunMap[runId]) {
+        newRunMap[runId] = spans;
+      } else {
+        newRunMap[runId] = spans;
+      }
+      return newRunMap;
+    });
+    setFlattenSpans((prev) => {
+      let newFlattenSpans = [...prev];
+      for (let span of spans) {
+        let flattenSpanIndex = newFlattenSpans.findIndex(
+          (s) => s.span_id === span.span_id
+        );
+        if (flattenSpanIndex >= 0) {
+          newFlattenSpans[flattenSpanIndex] = span;
+        } else {
+          newFlattenSpans.push(span);
+        }
+      }
+      return newFlattenSpans;
+    });
+  }, []);
   /**
    * Fetches detailed span data for a specific run when user expands a row
    * Prevents concurrent duplicate requests but allows re-fetching after collapse/expand
@@ -101,19 +136,7 @@ export const useWrapperHook = (props: {
 
       try {
         const relatedSpans = await fetchAllSpansByRunId(runId, projectId);
-        setRunMap((prev) => ({ ...prev, [runId]: relatedSpans }));
-        setFlattenSpans((prev) => {
-          let newFlattenSpans = [...prev];
-          for (let span of relatedSpans) {
-            let flattenSpanIndex = newFlattenSpans.findIndex((s) => s.span_id === span.span_id);
-            if (flattenSpanIndex >= 0) {
-              newFlattenSpans[flattenSpanIndex] = span;
-            } else {
-              newFlattenSpans.push(span);
-            }
-          }
-          return newFlattenSpans;
-        });
+        updateBySpansOfARun(runId, relatedSpans);
       } catch (e: any) {
         toast.error("Failed to fetch span details", {
           description:
@@ -144,5 +167,8 @@ export const useWrapperHook = (props: {
     isLoadingSpans,
     loadSpansError,
     refreshSpans,
+    updateBySpansOfAThread,
+    updateBySpansOfARun
+
   };
 };
