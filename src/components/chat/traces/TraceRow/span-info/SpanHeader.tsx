@@ -110,7 +110,23 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
           </>
         )}
         <div className="flex items-center gap-2">
-          <h3 className="text-xs font-medium text-white hover:cursor-help">{spanTitle}</h3>
+          <TooltipProvider>
+            <Tooltip delayDuration={300}>
+              <TooltipTrigger asChild>
+                <h3 className="text-xs font-medium text-white hover:cursor-help max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap">
+                  {spanTitle}
+                </h3>
+              </TooltipTrigger>
+              <TooltipContent
+                side="bottom"
+                align="start"
+                sideOffset={5}
+                className="max-w-md bg-background border border-border rounded-md shadow-md z-50"
+              >
+                <p className="text-sm break-words">{spanTitle}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           {duration && startTime && endTime && (
             <TooltipProvider>
               <Tooltip>
