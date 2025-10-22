@@ -1,17 +1,17 @@
-import React, { useRef } from 'react';
+import React, { useRef, useCallback } from 'react';
 import { Bot, ArrowDown } from 'lucide-react';
-import { Message, MessageType } from '@/types/chat';
 import { useInViewport } from 'ahooks';
-import { MessageItem } from '../MessageItem';
+import { HierarchicalMessageSpanItem } from './HierarchiMessageItem';
+import { MessageStructure } from '@/utils/message-structure-from-span';
 
 interface ChatConversationProps {
-  messages: Message[];
+  messages: MessageStructure[];
   isLoading?: boolean;
   messagesEndRef?: React.RefObject<HTMLDivElement>;
   scrollToBottom?: () => void;
 }
 
-export const ChatConversation: React.FC<ChatConversationProps> = ({
+const ChatConversationComponent: React.FC<ChatConversationProps> = ({
   messages,
   isLoading = false,
   messagesEndRef: externalMessagesEndRef,
@@ -21,13 +21,14 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
   const messagesEndRef = externalMessagesEndRef || internalMessagesEndRef;
   const [inViewport] = useInViewport(messagesEndRef);
 
-  const scrollToBottom = () => {
+  // const validMessages = extractValidDisplayMessages(messages);
+  const scrollToBottom = useCallback(() => {
     if (externalScrollToBottom) {
       externalScrollToBottom();
     } else {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  };
+  }, [externalScrollToBottom, messagesEndRef]);
 
   if (messages.length === 0 && !isLoading) {
     return (
@@ -48,12 +49,10 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-6 relative">
       {messages.map((message) => (
-        <MessageItem key={message.id} message={message} />
+        <HierarchicalMessageSpanItem key={`message-${message.span_id}`} messageStructure={message} />
       ))}
 
-      {isLoading &&
-        (messages.length === 0 ||
-          messages[messages.length - 1].type !== MessageType.AIMessage) && (
+      {isLoading && (
           <div className="flex gap-4 justify-start">
             <div className="flex-shrink-0">
               <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
@@ -94,3 +93,25 @@ export const ChatConversation: React.FC<ChatConversationProps> = ({
     </div>
   );
 };
+
+// Memoize with custom comparison to only re-render when messages array structure changes
+export const ChatConversation = React.memo(ChatConversationComponent, (prevProps, nextProps) => {
+  // Re-render if isLoading changes
+  if (prevProps.isLoading !== nextProps.isLoading) return false;
+
+  // Re-render if messagesEndRef changes
+  if (prevProps.messagesEndRef !== nextProps.messagesEndRef) return false;
+
+  // Re-render if messages array length changes
+  if (prevProps.messages.length !== nextProps.messages.length) return false;
+
+  // Re-render if any message span_id changes (structure change)
+  for (let i = 0; i < prevProps.messages.length; i++) {
+    if (prevProps.messages[i].span_id !== nextProps.messages[i].span_id) {
+      return false;
+    }
+  }
+
+  // Don't re-render (props are equal)
+  return true;
+});

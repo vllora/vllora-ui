@@ -7,6 +7,25 @@ export interface QueryThreadsRequest {
   offset?: number;
 }
 
+// API response type (matches backend ThreadSpan structure)
+interface ThreadSpan {
+  thread_id: string;
+  start_time_us: number;
+  finish_time_us: number;
+  run_ids: string[];
+  input_models: string[];
+  cost: number;
+}
+
+interface ApiThreadsResponse {
+  data: Thread[];
+  pagination: {
+    total: number;
+    offset: number;
+    limit: number;
+  };
+}
+
 export interface QueryThreadsResponse {
   data: Thread[];
   pagination: {
@@ -16,10 +35,42 @@ export interface QueryThreadsResponse {
   };
 }
 
+/**
+ * Transform API ThreadSpan to frontend Thread type
+ */
+function transformThreadSpan(span: ThreadSpan): Thread {
+  return {
+    thread_id: span.thread_id,
+    start_time_us: span.start_time_us,
+    finish_time_us: span.finish_time_us,
+    run_ids: span.run_ids,
+    input_models: span.input_models,
+    cost: span.cost
+  };
+}
+
 export interface UpdateThreadTitleRequest {
   threadId: string;
   title: string;
   projectId: string;
+}
+
+// Backend MessageThread type (returned by GET /threads/{id})
+export interface MessageThread {
+  id: string;
+  project_id: string;
+  title?: string | null;
+  user_id?: string | null;
+  model_name?: string | null;
+  is_public: boolean;
+  description?: string | null;
+  keywords?: string[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface GetThreadByIdResponse {
+  thread: MessageThread;
 }
 
 /**
@@ -45,10 +96,48 @@ export async function queryThreads(
       throw new Error(`Failed to query threads: ${response.status} ${response.statusText}`);
     }
 
-    const data: QueryThreadsResponse = await response.json();
-    return data;
+    const apiData: ApiThreadsResponse = await response.json();
+
+    // Transform API response to frontend Thread type
+    return {
+      data: apiData.data,
+      pagination: apiData.pagination,
+    };
   } catch (error) {
     console.error('Error querying threads:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get thread by ID
+ */
+export async function getThreadById(
+  projectId: string,
+  threadId: string
+): Promise<MessageThread> {
+  const url = `${getThreadsUrl()}/${threadId}`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-project-id': projectId,
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error(`Thread not found: ${threadId}`);
+      }
+      throw new Error(`Failed to get thread: ${response.status} ${response.statusText}`);
+    }
+
+    const data: GetThreadByIdResponse = await response.json();
+    return data.thread;
+  } catch (error) {
+    console.error(`Error getting thread ${threadId}:`, error);
     throw error;
   }
 }

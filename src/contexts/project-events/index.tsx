@@ -153,8 +153,7 @@ export const useProjectEvents = (props: ProjectEventsHookProps) => {
               ...parsedData,
               timestamp: parsedData.timestamp || Date.now()
             } as ProjectEventUnion;
-
-            let ignoreThisEvent = projectEvent.type === 'Custom' && (projectEvent.name === 'ping' || (projectEvent.name === 'span_end' &&projectEvent.value && projectEvent.value.span && !projectEvent.value.span.run_id))
+            let ignoreThisEvent = projectEvent.type === 'Custom' && (projectEvent.event?.type === 'ping' || (projectEvent.type === 'Custom' &&projectEvent.event && !projectEvent.run_id))
             if (!ignoreThisEvent) {
               // Emit to subscribers instead of storing in array
               emit(projectEvent);

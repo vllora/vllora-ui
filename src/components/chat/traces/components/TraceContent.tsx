@@ -1,11 +1,10 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { TraceLoadingState } from "./TraceLoadingState";
 import { TraceEmptyState } from "./TraceEmptyState";
 import { TraceList } from "./TraceList";
-import { SidebarExpandedRun } from "./SidebarExpandedRun";
 import { cn } from "@/lib/utils";
 import { RunDTO } from "@/services/runs-api";
-import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
+import { TraceCodeView } from "./TraceCodeView";
 
 interface TraceContentProps {
   loadingSpans: boolean;
@@ -15,6 +14,10 @@ interface TraceContentProps {
   loadingMore: boolean;
   threadId: string;
   observerTarget: React.RefObject<HTMLDivElement | null>;
+  openTraces:  {
+    run_id: string;
+    tab: "trace" | "code";
+}[];
 }
 
 const TraceContentImpl: React.FC<TraceContentProps> = ({
@@ -24,9 +27,15 @@ const TraceContentImpl: React.FC<TraceContentProps> = ({
   loadMoreRuns,
   loadingMore,
   observerTarget,
-}) => {
-  const { openTraces } = ChatWindowConsumer();
-
+  openTraces,
+}) => {   
+   const currentRunId: string = useMemo(()=> {
+      return openTraces && openTraces.length && openTraces[0] ? openTraces[0].run_id : ''
+    }, [openTraces])
+  
+    const currentTab: 'trace' | 'code' = useMemo(()=> {
+      return openTraces && openTraces.length && openTraces[0] ? openTraces[0].tab : 'trace'
+    }, [openTraces])
   if (loadingSpans && (!runs || runs.length === 0)) {
     return <TraceLoadingState />;
   }
@@ -35,15 +44,10 @@ const TraceContentImpl: React.FC<TraceContentProps> = ({
     return <TraceEmptyState />;
   }
 
-  // Show expanded single run view when exactly one trace is open
-  const isShowingExpandedRun =  openTraces && openTraces.length > 0;
-
   return (
-    <div className={cn("h-full flex flex-col")}>
+    <div className={cn("h-full flex flex-col relative")}>
       <div className="flex-1 overflow-y-auto overflow-x-hidden min-w-0">
-        {isShowingExpandedRun ? (
-          <SidebarExpandedRun  />
-        ) : (
+        {(currentTab === 'trace' || !currentRunId) ? (
           <TraceList
             runs={runs}
             hasMore={hasMore}
@@ -51,6 +55,8 @@ const TraceContentImpl: React.FC<TraceContentProps> = ({
             loadingMore={loadingMore}
             observerTarget={observerTarget}
           />
+        ) : (
+          <TraceCodeView runId={currentRunId} />
         )}
       </div>
     </div>

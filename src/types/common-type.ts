@@ -5,12 +5,13 @@ export interface Span {
   parent_span_id?: string;
   operation_name: string;
   start_time_us: number;
-  finish_time_us: number;
+  finish_time_us?: number; // Optional for in-progress spans
   attribute: Attributes;
   child_attribute?: Attributes;
   run_id: string;
   parent_trace_id?: string;
   spans?: Span[];
+  isInProgress?: boolean; // True if span has started but not finished
 }
 
 export type Attributes =
@@ -76,6 +77,7 @@ export interface RunDTO {
   trace_ids: string[];
   used_models: string[];
   request_models: string[];
+  root_span_ids: string[];
   used_tools: string[];
   mcp_template_definition_ids: string[];
   cost: number;

@@ -1,5 +1,6 @@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { ProviderKeysPage } from "./provider-keys"
+import { McpConfigPage } from "./mcp-config"
 
 export function SettingsPage() {
   return (
@@ -12,6 +13,11 @@ export function SettingsPage() {
             Providers
           </TabsTrigger>
           <TabsTrigger
+            className="data-[state=active]:bg-secondary data-[state=active]:text-white"
+            value="mcp-config">
+            MCP Config
+          </TabsTrigger>
+          <TabsTrigger
             disabled
             className="data-[state=active]:bg-secondary data-[state=active]:text-white"
             value="settings">
@@ -22,6 +28,10 @@ export function SettingsPage() {
 
       <TabsContent value="providers" className="mt-6 overflow-auto flex-1 max-h-[calc(100vh-80px)]">
         <ProviderKeysPage />
+      </TabsContent>
+
+      <TabsContent value="mcp-config" className="mt-6 overflow-auto flex-1 max-h-[calc(100vh-80px)]">
+        <McpConfigPage />
       </TabsContent>
     </Tabs>
   )

@@ -6,17 +6,27 @@ import { formatThreadTime } from '@/utils/dateUtils';
 import { useRelativeTime } from '@/hooks/useRelativeTime';
 
 interface ThreadTimeDisplayProps {
-  updatedAt: string;
+  finishTimeUs?: number; // Microseconds timestamp
+  updatedAt?: string; // ISO string fallback for backward compatibility
 }
 
 // Not memoized - needs to re-render when time updates
-export const ThreadTimeDisplay: React.FC<ThreadTimeDisplayProps> = ({ updatedAt }) => {
+export const ThreadTimeDisplay: React.FC<ThreadTimeDisplayProps> = ({ finishTimeUs, updatedAt }) => {
   const threadRowTimeRef = useRef<HTMLDivElement>(null);
 
   const updatedDateISOString = (() => {
-    const result = new Date(updatedAt);
-    const isValidDate = !isNaN(result.getTime());
-    return isValidDate ? result.toISOString() : '';
+    // Prefer finishTimeUs if available, otherwise fall back to updatedAt
+    if (finishTimeUs) {
+      const result = new Date(finishTimeUs / 1000); // Convert microseconds to milliseconds
+      const isValidDate = !isNaN(result.getTime());
+      return isValidDate ? result.toISOString() : '';
+    }
+    if (updatedAt) {
+      const result = new Date(updatedAt);
+      const isValidDate = !isNaN(result.getTime());
+      return isValidDate ? result.toISOString() : '';
+    }
+    return '';
   })();
 
   // Only update time display when visible and recent (24 hours = 86400 seconds)

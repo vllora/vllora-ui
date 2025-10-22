@@ -65,8 +65,8 @@ export const ToolCallList = ({ toolCalls }: { toolCalls: ToolCall[] }) => {
   }
 
   return (
-    <div className="mb-3 overflow-hidden rounded-lg border border-neutral-800/50 bg-neutral-900/30">
-      <div className="flex items-center justify-between bg-neutral-800/20 px-3 py-2">
+    <div className="mb-3 overflow-hidden rounded-lg border border-border">
+      <div className="flex items-center justify-between border-b border-border  px-3 py-2">
         <div className="flex items-center gap-2">
           <Wrench className="h-3.5 w-3.5 text-neutral-400" />
           <span className="text-xs font-medium text-neutral-300">Tool Calls</span>
@@ -75,7 +75,7 @@ export const ToolCallList = ({ toolCalls }: { toolCalls: ToolCall[] }) => {
           </span>
         </div>
       </div>
-      <div className="divide-y divide-neutral-800/30">
+      <div className="divide-y divide-border">
         {toolCalls.map((toolCall, index) => {
           if (!toolCall?.function) {
             return null;
@@ -89,7 +89,7 @@ export const ToolCallList = ({ toolCalls }: { toolCalls: ToolCall[] }) => {
           return (
             <div
               key={toolId}
-              className="transition-colors hover:bg-neutral-800/20"
+              className="transition-colors"
             >
               <div
                 className="cursor-pointer px-3 py-2"
@@ -134,7 +134,7 @@ export const ToolCallList = ({ toolCalls }: { toolCalls: ToolCall[] }) => {
               </div>
               {isExpanded && (
                 <div className="max-w-full overflow-x-auto px-3 pb-2">
-                  <div className="rounded bg-neutral-900/40 p-2">
+                  <div className="rounded p-2">
                     {functionDisplay && typeof functionDisplay === "object" ? (
                       <ReactJson
                         key={toolId}

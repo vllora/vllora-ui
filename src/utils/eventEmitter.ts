@@ -1,3 +1,4 @@
+import { McpServerConfig } from '@/services/mcp-api';
 import mitt, { Emitter } from 'mitt';
 
 type Events = {
@@ -7,6 +8,7 @@ type Events = {
     files: any[];
     searchToolEnabled?: boolean;
     otherTools?: string[];
+    toolsUsage?: Map<string, McpServerConfig>;
   };
   langdb_chatTerminate: { threadId: string; widgetId?: string };
   langdb_clearChat: { threadId?: string; widgetId?: string };

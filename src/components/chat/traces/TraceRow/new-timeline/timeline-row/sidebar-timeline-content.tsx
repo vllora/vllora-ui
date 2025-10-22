@@ -3,9 +3,10 @@ import { TimelineContentBaseProps } from ".";
 import { classNames } from "@/utils/modelUtils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getOperationTitle } from "../utils";
-import { DatabaseIcon } from "lucide-react";
-import { getClientSDKName, isPromptCachingApplied } from "@/utils/graph-utils";
-import { ClientSdkIcon } from "@/components/Icons/ClientSdkIcon";
+import { DatabaseIcon, ChevronRight, ChevronDown } from "lucide-react";
+import { getClientSDKName, isAgentSpan, isPromptCachingApplied } from "@/utils/graph-utils";
+import { ClientSdkIcon } from "@/components/client-sdk-icon";
+import { getTimelineTitleWidth, TIMELINE_INDENTATION } from "@/utils/constant";
 
 // Props for the SidebarTimelineContent component
 interface SidebarTimelineContentProps extends TimelineContentBaseProps { }
@@ -14,15 +15,20 @@ interface SidebarTimelineContentProps extends TimelineContentBaseProps { }
 export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
     const {
         level,
+        hasChildren,
+        isOpen,
         titleWidth,
         title,
         operationIcon,
         operationIconColor,
         durationSeconds,
         operation_name,
-        span
+        span,
+        onToggle,
+        isInSidebar = true
     } = props;
     const sdkName = span && getClientSDKName(span);
+    const agentSpan = span && isAgentSpan(span);
     const isPromptCached = span && isPromptCachingApplied(span);
     return (
         <div
@@ -31,11 +37,30 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
         >
             <div className="flex items-center w-full">
                 {/* Fake indentation by adding left padding - smaller in sidebar */}
-                <div style={{ width: `${level * 8}px` }} className="flex-shrink-0"></div>
+                <div style={{ width: `${level * TIMELINE_INDENTATION}px` }} className="flex-shrink-0"></div>
+
+                {/* Expand/Collapse Chevron */}
+                {hasChildren ? (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onToggle();
+                        }}
+                        className="flex-shrink-0 mr-1 hover:bg-accent rounded p-0.5 transition-colors"
+                    >
+                        {isOpen ? (
+                            <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                        ) : (
+                            <ChevronRight className="w-3 h-3 text-muted-foreground" />
+                        )}
+                    </button>
+                ) : (
+                    <div className="w-4 flex-shrink-0" />
+                )}
 
                 {/* Super compact title and duration */}
-                <div className="flex justify-between items-center w-full">
-                    <div className="flex items-center min-w-0 flex-1 mr-1">
+                <div className="flex justify-between items-center w-full gap-1">
+                    <div className="flex items-center min-w-0 flex-1 truncate">
                         {operationIcon && (
                             <TooltipProvider>
                                 <Tooltip>
@@ -46,7 +71,7 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                                                 <div className={classNames("p-1 rounded-full ", operationIconColor)}>
                                                     {operationIcon}
                                                 </div>
-                                                {sdkName && (
+                                                {sdkName && !agentSpan && (
                                                     <div className="absolute -bottom-1 -right-1  bg-gray-800 rounded-full p-0.5 border border-gray-700 shadow-sm">
                                                         <ClientSdkIcon client_name={sdkName} className="w-2.5 h-2.5" />
                                                     </div>
@@ -76,8 +101,8 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <span
-                                        className="text-xs text-gray-300 truncate"
-                                        style={{ maxWidth: `${Math.max(100 - level * 8, 20)}px` }}
+                                        className="text-xs text-gray-300 truncate w-full"
+                                        style={{ maxWidth: `${Math.max(getTimelineTitleWidth({ level, isInSidebar }), 20)}px` }}
                                     >
                                         {title}
                                     </span>

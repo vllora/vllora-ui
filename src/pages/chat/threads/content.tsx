@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useEffect } from 'react';
-import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { ThreadsSidebar } from '@/components/chat/ThreadsSidebar';
 import { ConversationWindow } from '@/components/chat/conversation/ConversationWindow';
@@ -9,9 +9,8 @@ import { ThreadsConsumer } from '@/contexts/ThreadsContext';
 import { ChatWindowProvider } from '@/contexts/ChatWindowContext';
 import { Thread } from '@/types/chat';
 import { API_CONFIG } from '@/config/api';
-import { useThreadsEvents } from '@/hooks/events/useThreadsEvents';
 
-export function ChatPage() {
+export function ThreadsPageContent() {
   const { currentProjectId, isDefaultProject } = ProjectsConsumer();
   const [searchParams] = useSearchParams();
   const {
@@ -24,14 +23,13 @@ export function ChatPage() {
     setIsRightSidebarCollapsed
   } = ThreadsConsumer();
   const navigate = useNavigate();
-  const location = useLocation();
 
   const currentThread = useMemo(() => {
-    return threads.find((t) => t.id === selectedThreadId);
+    return threads.find((t) => t.thread_id === selectedThreadId);
   }, [threads, selectedThreadId]);
   // Read selectedModel from URL query string, fallback to default
   const selectedModel = useMemo(() => {
-    return searchParams.get('model')  || (currentThread?.input_models && currentThread.input_models.length > 0 ? currentThread.input_models[currentThread.input_models.length - 1] : undefined) || currentThread?.request_model_name || 'openai/o1-mini';
+    return searchParams.get('model')  || (currentThread?.input_models && currentThread.input_models.length > 0 ? currentThread.input_models[currentThread.input_models.length - 1] : undefined) || 'openai/o1-mini';
   }, [searchParams, currentThread]);
 
   useEffect(() => {
@@ -39,9 +37,9 @@ export function ChatPage() {
   }, [refreshThreads]);
 
   const handleSelectThread = useCallback((threadId: string) => {
-    const thread = threads.find((t) => t.id === threadId);
+    const thread = threads.find((t) => t.thread_id === threadId);
     // Navigate to update the threadId and model in URL
-    const modelParam = thread?.model_name || selectedModel;
+    const modelParam = thread?.input_models && thread.input_models.length > 0 ? thread.input_models[thread.input_models.length - 1] : selectedModel;
     const params = new URLSearchParams(searchParams);
     params.set('threadId', threadId);
     params.set('model', modelParam);
@@ -53,27 +51,24 @@ export function ChatPage() {
     navigate(`/chat?${params.toString()}`);
   }, [threads, selectedModel, navigate, searchParams, currentProjectId, isDefaultProject]);
 
-  // Subscribe to project events
-  useThreadsEvents({
-    currentProjectId: currentProjectId || '',
-    currentThreadId: selectedThreadId || '',
-    onSelectThread: handleSelectThread,
-  });
 
   const handleNewThread = useCallback(() => {
+    const now = Date.now() * 1000; // Convert to microseconds
+    const newThreadId = uuidv4();
+
     const newThread: Thread = {
-      id: uuidv4(),
-      model_name: selectedModel,
-      project_id: currentProjectId || '',
-      user_id: '', // TODO: Get from auth context
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      thread_id: newThreadId,
+      start_time_us: now,
+      finish_time_us: now,
+      run_ids: [],
+      input_models: selectedModel ? [selectedModel] : [],
+      cost: 0,
       is_from_local: true,
     };
     addThread(newThread);
     // Navigate to the new thread with model in URL and project_id (only if not default)
     const params = new URLSearchParams(searchParams);
-    params.set('threadId', newThread.id);
+    params.set('threadId', newThread.thread_id);
     params.set('model', selectedModel);
     if (currentProjectId && !isDefaultProject(currentProjectId)) {
       params.set('project_id', currentProjectId);
@@ -89,9 +84,16 @@ export function ChatPage() {
     params.set('model', modelId);
     if (selectedThreadId) {
       params.set('threadId', selectedThreadId);
-      updateThread(selectedThreadId, {
-        model_name: modelId,
-      });
+      // Update the thread's input_models
+      const thread = threads.find((t) => t.thread_id === selectedThreadId);
+      if (thread) {
+        const updatedModels = thread.input_models.includes(modelId)
+          ? thread.input_models
+          : [...thread.input_models, modelId];
+        updateThread(selectedThreadId, {
+          input_models: updatedModels,
+        });
+      }
     }
     if (currentProjectId && !isDefaultProject(currentProjectId)) {
       params.set('project_id', currentProjectId);
@@ -99,30 +101,19 @@ export function ChatPage() {
       params.delete('project_id');
     }
     navigate(`/chat?${params.toString()}`);
-  }, [selectedThreadId, searchParams, currentProjectId, updateThread, navigate, isDefaultProject]);
+  }, [selectedThreadId, threads, searchParams, currentProjectId, updateThread, navigate, isDefaultProject]);
 
   useEffect(() => {
     if (!selectedThreadId && threads.length > 0) {
-      handleSelectThread(threads[0].id);
+      handleSelectThread(threads[0].thread_id);
     }
   }, [selectedThreadId, threads, handleSelectThread]);
 
-  const handleProjectChange = useCallback((newProjectId: string) => {
-    localStorage.setItem('currentProjectId', newProjectId);
-    // Update the project_id query param while keeping current path (omit if default)
-    const params = new URLSearchParams(searchParams);
-    if (isDefaultProject(newProjectId)) {
-      params.delete('project_id');
-    } else {
-      params.set('project_id', newProjectId);
-    }
-    const queryString = params.toString();
-    navigate(`${location.pathname}${queryString ? '?' + queryString : ''}`);
-  }, [location.pathname, navigate, searchParams, isDefaultProject]);
+  
 
   const isCurrentThreadDraft = useMemo(()=> {
     if(threads && threads.length > 0) {
-      const thread = threads.find((t) => t.id === selectedThreadId);
+      const thread = threads.find((t) => t.thread_id === selectedThreadId);
       if(thread) {
         return thread.is_from_local
       }
@@ -139,7 +130,6 @@ export function ChatPage() {
         selectedThreadId={selectedThreadId}
         onSelectThread={handleSelectThread}
         onNewThread={handleNewThread}
-        onProjectChange={handleProjectChange}
       />
 
       {/* Main Chat Area and Right Sidebar */}
@@ -148,7 +138,7 @@ export function ChatPage() {
           <div className="flex-1 flex flex-col overflow-hidden">
             <ConversationWindow
               threadId={selectedThreadId}
-              threadTitle={threads.find((t) => t.id === selectedThreadId)?.title}
+              threadTitle={threads.find((t) => t.thread_id === selectedThreadId)?.title}
               modelName={selectedModel}
               apiUrl={API_CONFIG.url}
               projectId={currentProjectId}

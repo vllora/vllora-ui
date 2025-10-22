@@ -5,7 +5,15 @@
  */
 import { differenceInHours, differenceInMinutes, differenceInSeconds } from 'date-fns';
 
+// input : 1761049798063.392
+
+export const formatMessageTimestamp = (input: number) => {
+  const date = new Date(input);
+  return formatMessageDisplayTime(date);
+}
+
 /// dateString have format 2025-10-08T04:06:41.405607Z
+
 export const formatMessageTime = (dateString?: string): string => {
   if (!dateString) return '';
 
@@ -21,6 +29,11 @@ export const formatMessageTime = (dateString?: string): string => {
   }
 
   const date = new Date(isoString);
+  return formatMessageDisplayTime(date);
+};
+
+
+export const formatMessageDisplayTime = (date: Date) => {
   if (isNaN(date.getTime())) return '';
 
   const now = new Date();
@@ -70,8 +83,7 @@ export const formatMessageTime = (dateString?: string): string => {
   });
 
   return `${month} ${day} ${time}`;
-};
-
+}
 
 
 /// dateString have format 2025-10-08T04:06:41.405607Z

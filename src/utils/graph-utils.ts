@@ -6,12 +6,8 @@ import { Span } from '@/services/runs-api';
 export function getClientSDKName(span: Span): string | null {
   if (!span.attribute) return null;
 
-  // Check for client_name in attributes
-  if ('client_name' in span.attribute) {
-    return span.attribute.client_name as string;
-  }
-
-  return null;
+  let attributes = span.attribute as any;
+  return attributes ? (attributes['langdb.client_name'] || attributes['client_name']) : null;
 }
 export const getClientSDKDisplayName = (span: Span) => {
   let name = getClientSDKName(span);
@@ -146,6 +142,9 @@ export function skipThisSpan(span: Span, isClientSDKTrace?: boolean): boolean {
       let sdkName = getClientSDKName(span);
       if (sdkName === 'adk') {
           return ['invocation', 'tools', 'call_llm'].includes(operation_name)
+      }
+      if(sdkName === 'openai') {
+          return false
       }
       if (sdkName === 'crewai') {
           // let isAgent = isAgentSpan(span);

@@ -1,12 +1,8 @@
 "use client";
 
-import React, { useRef, useEffect, useMemo } from "react";
+import React, { useRef } from "react";
 import { TraceContent } from "./TraceContent";
-import { SpanDetailsPanel } from "./SpanDetailsPanel";
 import { RunDTO } from "@/services/runs-api";
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
-import { ImperativePanelGroupHandle } from "react-resizable-panels";
-import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 
 interface TraceMainContentProps {
   loadingSpans: boolean;
@@ -15,6 +11,10 @@ interface TraceMainContentProps {
   loadMoreRuns: () => Promise<void>;
   loadingMore: boolean;
   threadId: string;
+  openTraces: {
+    run_id: string;
+    tab: "trace" | "code";
+  }[];
 }
 
 // Component implementation
@@ -25,74 +25,26 @@ const TraceMainContentImpl: React.FC<TraceMainContentProps> = ({
   loadMoreRuns,
   loadingMore,
   threadId,
+  openTraces,
 }) => {
   const observerTarget = useRef<HTMLDivElement>(null);
 
-  // Get selectedSpanInfo from context to ensure consistency
-  const { openTraces } = ChatWindowConsumer();
-
-  // Memoize panel sizes to prevent unnecessary re-calculations
-  const { defaultSizes, minSizes } = useMemo(() => {
-    const hasSelectedSpan = Boolean(openTraces?.length);
-    const selectedInfo = openTraces && openTraces.length > 0 && openTraces[0];
-    const defaultSizes: [number, number] = hasSelectedSpan && selectedInfo && selectedInfo.tab === 'trace' ?  [40, 60] : [100, 0];
-    const minSizes: [number, number] = hasSelectedSpan && selectedInfo && selectedInfo.tab === 'trace' ? [20, 30] : [100, 0];
-
-    return { defaultSizes, minSizes };
-  }, [openTraces]);
-
-  const panelGroupRef = useRef<ImperativePanelGroupHandle>(null);
-
-  // Effect to handle panel layout changes - debounced to prevent rapid updates
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (panelGroupRef.current && panelGroupRef.current.setLayout) {
-        panelGroupRef.current.setLayout(defaultSizes);
-      }
-    }, 0);
-
-    return () => clearTimeout(timer);
-  }, [defaultSizes]);
-
   return (
-    <ResizablePanelGroup
-      direction="vertical"
-      id="traces-panel-group"
-      className="bg-black"
-      ref={panelGroupRef}
-    >
-      <ResizablePanel
-        defaultSize={defaultSizes[0]}
-        minSize={minSizes[0]}
-        id="trace-content"
-        className="overflow-hidden"
-      >
-        <div className="h-full w-full">
-          <div className="h-full overflow-y-auto overflow-x-hidden p-2">
-            <TraceContent
-              loadingSpans={loadingSpans}
-              runs={runs}
-              hasMore={hasMore}
-              loadMoreRuns={loadMoreRuns}
-              loadingMore={loadingMore}
-              threadId={threadId}
-              observerTarget={observerTarget}
-            />
-          </div>
-        </div>
-      </ResizablePanel>
-      <ResizableHandle
-        withHandle={false}
-        className="hover:bg-secondary transition-colors"
-      />
-      <ResizablePanel
-        defaultSize={defaultSizes[1]}
-        minSize={minSizes[1]}
-        id="span-details"
-      >
-        <SpanDetailsPanel className="border-l border-border bg-black" />
-      </ResizablePanel>
-    </ResizablePanelGroup>
+    <div className="h-full w-full bg-black">
+      {/* Main Trace Content */}
+      <div className="h-full overflow-y-auto overflow-x-hidden p-2">
+        <TraceContent
+          loadingSpans={loadingSpans}
+          runs={runs}
+          hasMore={hasMore}
+          loadMoreRuns={loadMoreRuns}
+          loadingMore={loadingMore}
+          threadId={threadId}
+          observerTarget={observerTarget}
+          openTraces={openTraces}
+        />
+      </div>
+    </div>
   );
 };
 

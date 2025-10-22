@@ -68,6 +68,10 @@ export const getRunsUrl = () => {
   return `${getBackendUrl()}/runs`;
 }
 
+export const getSpansUrl = () => {
+  return `${getBackendUrl()}/spans`;
+}
+
 export const getEventsUrl = () => {
   return `${getBackendUrl()}/events`;
 }

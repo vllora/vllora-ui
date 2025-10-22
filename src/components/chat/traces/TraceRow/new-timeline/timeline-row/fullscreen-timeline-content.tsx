@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { getOperationTitle } from "../utils";
 import { DatabaseIcon } from "lucide-react";
 import { getClientSDKName, isPromptCachingApplied } from "@/utils/graph-utils";
-import { ClientSdkIcon } from "@/components/Icons/ClientSdkIcon";
+import { ClientSdkIcon } from "@/components/client-sdk-icon";
 
 
 

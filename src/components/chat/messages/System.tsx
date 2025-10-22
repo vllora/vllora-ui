@@ -54,7 +54,10 @@ export const SystemMessage: React.FC<{ msg: Message }> = ({ msg }) => {
   const providerName = getProviderName(msg?.model_name);
 
   return (
-    <div className="flex flex-col gap-2 group mb-6" ref={messageRef}>
+    <div
+      className="flex flex-col gap-2 group hover:bg-neutral-800/30 rounded-lg p-2 -m-2 transition-colors"
+      ref={messageRef}
+    >
       {/* Header with Avatar and Metadata */}
       <div className="flex items-center gap-3">
         <div className="flex-shrink-0">
@@ -67,7 +70,7 @@ export const SystemMessage: React.FC<{ msg: Message }> = ({ msg }) => {
                     className="h-6 w-6 rounded-full"
                   />
                 ) : (
-                  <CogIcon className="h-6 w-6 rounded-full text-neutral-400" />
+                  <CogIcon className="h-6 w-6 rounded-full text-primary/70" />
                 )}
               </TooltipTrigger>
               <TooltipContent>
@@ -108,7 +111,7 @@ export const SystemMessage: React.FC<{ msg: Message }> = ({ msg }) => {
                 .catch((err) => console.error("Failed to copy:", err));
             }
           }}
-          className="text-neutral-500 hover:text-neutral-300 transition-colors p-0.5 hover:bg-neutral-700/30 rounded"
+          className="opacity-0 group-hover:opacity-100 transition-all text-neutral-500 hover:text-neutral-300 p-1.5 hover:bg-neutral-700/40 rounded"
           title={copied ? "Copied!" : "Copy message"}
         >
           {copied ? (
@@ -120,26 +123,30 @@ export const SystemMessage: React.FC<{ msg: Message }> = ({ msg }) => {
       </div>
 
       {/* Content */}
-      <div className="w-full rounded-md p-3 bg-neutral-900/30 border border-neutral-800/50">
+      <div className="w-full rounded-md overflow-hidden bg-neutral-900/20 border border-neutral-800/40">
         {msg?.content_array && msg.content_array.length > 0 ? (
-          <ContentArrayDisplay contentArray={msg.content_array} />
+          <div className="px-3 py-2.5">
+            <ContentArrayDisplay contentArray={msg.content_array} />
+          </div>
         ) : (
-          <div className="text-neutral-300">
-            <MessageDisplay message={displayMessage} />
+          <div className="px-3 py-2.5">
+            <div className="whitespace-normal text-neutral-100 break-words overflow-wrap break-all leading-relaxed text-sm">
+              <MessageDisplay message={displayMessage} />
+            </div>
             {hasMoreLines && (
               <button
                 onClick={() => setExpanded(!expanded)}
-                className="flex items-center gap-1 mt-2 text-neutral-500 hover:text-neutral-300 transition-colors font-medium text-sm"
+                className="inline-flex items-center gap-1.5 mt-3 px-2.5 py-1 rounded-md text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50 transition-all font-medium text-xs border border-neutral-800/40 hover:border-neutral-700/60"
               >
                 {expanded ? (
                   <>
-                    <ChevronUpIcon className="h-4 w-4" />
+                    <ChevronUpIcon className="h-3.5 w-3.5" />
                     Show less
                   </>
                 ) : (
                   <>
-                    <ChevronDownIcon className="h-4 w-4" />
-                    Read more ({lineCount - 5} more lines)
+                    <ChevronDownIcon className="h-3.5 w-3.5" />
+                    Show {lineCount - 5} more line{lineCount - 5 !== 1 ? 's' : ''}
                   </>
                 )}
               </button>

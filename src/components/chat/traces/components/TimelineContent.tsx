@@ -2,50 +2,83 @@ import React from "react";
 import { SingleRunTimelineView } from "../TraceRow/new-timeline/single-run-timeline";
 import { cn } from "@/lib/utils";
 import { Span } from "@/types/common-type";
-import { RunDetailProvider } from "@/contexts/RunDetailContext";
-import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
+import { RunDetailConsumer, RunDetailProvider } from "@/contexts/RunDetailContext";
 
 interface TimelineContentProps {
-  rootSpans: Span[];
+  spansByRunId: Span[];
+  projectId: string;
+  selectedSpanId: string | null;
+  setSelectedSpanId: (spanId: string | null) => void;
+  setSelectedRunId: (runId: string | null) => void;
+  setDetailSpanId: (spanId: string | null) => void;
+  isInSidebar?: boolean;
 }
 
 export const TimelineContent: React.FC<TimelineContentProps> = ({
-  rootSpans,
+  spansByRunId,
+  projectId,
+  selectedSpanId,
+  setSelectedSpanId,
+  setSelectedRunId,
+  setDetailSpanId,
+  isInSidebar = true
 }) => {
 
-  // Determine if in sidebar or main view
-  const isInSidebar = true;
-
   // Get run ID from first span (all spans should belong to same run)
-  const runId = rootSpans &&rootSpans.length > 0 ? rootSpans[0]?.run_id : '';
-  const {projectId} =  ChatWindowConsumer()// Temporary: get from run data
-
+  const runId = spansByRunId && spansByRunId.length > 0 ? spansByRunId[0]?.run_id : '';
   return (
-    <RunDetailProvider runId={runId} projectId={projectId} spans={rootSpans}>
+    <RunDetailProvider runId={runId} projectId={projectId} spansByRunId={spansByRunId}>
       <div className={cn("flex flex-col h-full overflow-hidden")}>
         {/* Timeline Content */}
         <div
           className={cn(
             "flex-1 overflow-auto mt-2",
-            isInSidebar ? "bg-[#0f0f0f]" : "bg-[#0f0f0f] px-2"
           )}
         >
-          {rootSpans.length > 0 ? (
-            rootSpans.map((rootSpan, index) => (
-              <SingleRunTimelineView
-                key={rootSpan.span_id}
-                rootSpanId={rootSpan.span_id}
-                index={index}
-                isInSidebar={isInSidebar}
-              />
-            ))
-          ) : (
-            <div className="flex items-center justify-center p-4 text-sm text-gray-400">
-              No spans available for this run
-            </div>
-          )}
+          <TimelineContentInner
+            selectedSpanId={selectedSpanId}
+            setSelectedSpanId={setSelectedSpanId}
+            setSelectedRunId={setSelectedRunId}
+            setDetailSpanId={setDetailSpanId}
+            isInSidebar={isInSidebar}
+          />
         </div>
       </div>
     </RunDetailProvider>
   );
 };
+const TimelineContentInner = (props: {
+  selectedSpanId: string | null;
+  setSelectedSpanId: (spanId: string | null) => void;
+  setSelectedRunId: (runId: string | null) => void;
+  setDetailSpanId: (spanId: string | null) => void;
+  isInSidebar?: boolean;
+}) => {
+  const { hierarchies, runId } = RunDetailConsumer()
+  const { selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, isInSidebar = true } = props
+
+  if (!hierarchies || hierarchies.length === 0) {
+    return <div className="flex items-center justify-center p-4 text-sm text-gray-400">
+      No spans available for this run
+    </div>
+  }
+  return <>
+    {hierarchies.map((hierarchy, index) => (
+      <SingleRunTimelineView
+        key={`${runId}-${hierarchy.span_id}`}
+        currentSpanHierarchy={hierarchy}
+        index={index}
+        isInSidebar={isInSidebar}
+        selectedSpanId={selectedSpanId || undefined}
+        level={0}
+        onSpanSelect={(spanId, runId) => {
+          if (runId) {
+            setSelectedSpanId(spanId);
+            setSelectedRunId(runId);
+            setDetailSpanId(spanId);
+          }
+        }}
+      />
+    ))}
+  </>
+}
