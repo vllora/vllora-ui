@@ -4,7 +4,6 @@ import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 import { useSpanById } from '@/hooks/useSpanById';
 import { getOperationIcon, getSpanTitle, getTimelineBgColor, getToolCallMessage } from '@/components/chat/traces/TraceRow/new-timeline/utils';
 import { classNames, tryParseFloat, tryParseJson } from '@/utils/modelUtils';
-import { ToolCallList } from '../messages/ToolCallList';
 import { Message } from '@/types/chat';
 import { AiMessage } from '../messages/AiMessage';
 
@@ -47,6 +46,9 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
     if (!span) {
       const shortId = spanId.slice(0, 8);
       return `${shortId}`;
+    }
+    if(span.operation_name === 'run') {
+      return `Run ${span.span_id.slice(0, 8)}`
     }
 
     // Use getSpanTitle to get the proper title based on span attributes
@@ -143,12 +145,8 @@ export const ToolStartMessageDisplay = (props: {
   let requestStr = parrentAttr?.['request'] || '';
   let requestJson = tryParseJson(requestStr);
 
-  console.log('====== parrent span', parentSpan)
   let providerName = parentSpan?.operation_name
-  console.log('====== providerName', providerName)
-  console.log('====== requestJson', requestJson)
   let modelName = requestJson?.model || '';
-  console.log('====== modelName', modelName)
   let metrics = {
     usage: usageJson ,
     cost: cost,
