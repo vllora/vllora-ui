@@ -2,7 +2,6 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import {
   WrenchScrewdriverIcon,
-  CodeBracketIcon,
   FingerPrintIcon,
 } from "@heroicons/react/24/outline";
 
@@ -39,7 +38,7 @@ export const ParameterItem = ({
       : JSON.stringify(valueInput, null, 2);
 
   return (
-    <div className="rounded-lg bg-[#151515] px-3 py-2">
+    <div className="rounded-lg px-1 py-1">
       <button
         type="button"
         onClick={() => isExpandable && setIsOpen((prev) => !prev)}
@@ -172,7 +171,7 @@ export const ToolDefinitionsViewer = ({
         return (
           <div
             key={`${name}-${index}`}
-            className={`${index > 0 ? "border-t border-border/50 pt-4" : ""}`}
+            className={`${index > 0 ? "border-t border-border/70 pt-4" : ""}`}
           >
             <button
               type="button"

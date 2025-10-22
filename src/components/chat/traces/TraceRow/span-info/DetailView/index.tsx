@@ -5,19 +5,11 @@ import { ExclamationTriangleIcon } from "@heroicons/react/24/solid";
 import { ErrorViewer } from "./error-viewer";
 import { useEffect, useState } from "react";
 import { MessageViewer } from "./message-viewer";
-import { GuardUIDetailsDisplay } from "./spans-display/guard-display";
-import { ModelInvokeUIDetailsDisplay } from "./spans-display/model-display";
-import { ToolUIDetailsDisplay } from "./spans-display/tool-display";
-import { ModelCallUIDetailsDisplay } from "./spans-display/model-call-display";
-import { ApiInvokeUIDetailsDisplay } from "./spans-display/api-invoke-display";
-import { VirtualModelCallUIDetailsDisplay } from "./spans-display/virtual-model-display";
-import { ClientActivityUIDetailsDisplay } from "./spans-display/client-span";
-import { CloudApiInvokeUIDetailsDisplay } from "./spans-display/cloud-api-invoke-display";
-import { isClientSDK } from "@/utils/graph-utils";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { Span, ToolCall } from "@/types/common-type";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
+import { BaseSpanUIDisplay } from "./BaseSpanUIDisplay";
 
 const findParentApiInvoke = (spans: Span[], parent_span_id: string) => {
   let span = spans.find(span => span.span_id === parent_span_id);
@@ -119,35 +111,15 @@ export const getModelCallSpans = (spans: Span[], currentSpanId: string) => {
 
 
 export const SpanUIDetailsDisplay = (_input: { span: Span }) => {
-  const { spanMap, selectedSpanInfo } = ChatWindowConsumer();
-  let currentSpan = selectedSpanInfo ?  spanMap[selectedSpanInfo?.runId]?.find(span => span.span_id === selectedSpanInfo?.spanId) : undefined;
-  let operation_name = currentSpan?.operation_name;
-  let isClientSDKSpan = currentSpan && isClientSDK(currentSpan);
-  if(currentSpan && isClientSDKSpan) {
-    return <ClientActivityUIDetailsDisplay span={currentSpan!} />
+  const { runMap, selectedSpanId, selectedRunId } = ChatWindowConsumer();
+  const currentSpan = selectedRunId && selectedSpanId ?  runMap[selectedRunId]?.find(span => span.span_id === selectedSpanId) : undefined;
+  const relatedSpans = selectedRunId ? runMap[selectedRunId] || [] : [];
+
+  if (!currentSpan) {
+    return <></>;
   }
-  if(currentSpan &&operation_name && operation_name.startsWith('guard_')) {
-    return <GuardUIDetailsDisplay span={currentSpan!} />
-  }
-  if(currentSpan &&operation_name && operation_name.startsWith('tools')) {
-    return <ToolUIDetailsDisplay span={currentSpan!} />
-  }
-  if(currentSpan && operation_name == 'virtual_model') {
-    return <VirtualModelCallUIDetailsDisplay span={currentSpan!} />
-  }
-  if(currentSpan && isActualModelCall(currentSpan)) {
-    return <ModelInvokeUIDetailsDisplay span={currentSpan!} />
-  }
-  if(currentSpan && operation_name == 'model_call') {
-    return <ModelCallUIDetailsDisplay span={currentSpan!} />
-  }
-  if(currentSpan && operation_name == 'api_invoke') {
-    return <ApiInvokeUIDetailsDisplay span={currentSpan!} />
-  }
-  if(currentSpan && operation_name == 'cloud_api_invoke') {
-    return <CloudApiInvokeUIDetailsDisplay span={currentSpan!} />
-  }
-  return <></>
+
+  return <BaseSpanUIDisplay span={currentSpan} relatedSpans={relatedSpans} />;
 }
 
 
@@ -163,15 +135,15 @@ export const BaseSpanUIDetailsDisplay = ({children, defaultOpen, value, onValueC
     </Accordion>
   }
   // Uncontrolled mode (existing behavior)
-  return <Accordion type="multiple" defaultValue={defaultOpen ? defaultOpen : []}>
+  return <Accordion type="multiple" className="mt-4 flex-1 flex flex-col" defaultValue={defaultOpen ? defaultOpen : []}>
     {children}
   </Accordion>
 }
 
 export const SpanModelDetailsDisplay = ({ obj }: { obj: any }) => {
   let usage = obj.usage;
-  const { spanMap, selectedSpanInfo } = ChatWindowConsumer();
-  let status = selectedSpanInfo ? getStatus(spanMap[selectedSpanInfo?.runId], selectedSpanInfo?.spanId) : undefined;
+  const { runMap, selectedSpanId, selectedRunId } = ChatWindowConsumer();
+  let status = selectedRunId && selectedSpanId ? getStatus(runMap[selectedRunId], selectedSpanId) : undefined;
   let error = undefined //modelCallAttribute?.error || apiInvokeAttribute?.error;
   let output = undefined //modelCallAttribute?.response || modelCallAttribute?.output || apiInvokeAttribute?.response;
   let request = undefined //apiInvokeAttribute?.request

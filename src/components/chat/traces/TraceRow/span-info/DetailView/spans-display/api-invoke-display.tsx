@@ -1,22 +1,20 @@
 import { BaseSpanUIDetailsDisplay, getParentCloudApiInvoke } from ".."
 import { getStatus } from "../index";
-import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ExclamationTriangleIcon, CheckCircleIcon, ClockIcon, CpuChipIcon, CodeBracketIcon, DocumentTextIcon } from "@heroicons/react/24/outline";
 import { ErrorViewer } from "../error-viewer";
 import { UsageViewer } from "../usage-viewer";
-import { HeadersViewer } from "../headers-viewer";
 import { BasicSpanInfo } from "../basic-span-info-section";
 import { useState } from "react";
-import { SimpleTabsList, SimpleTabsTrigger, Tabs } from "@/components/ui/tabs";
 import { ResponseViewer } from "../response-viewer";
 import { InputViewer } from "../input_viewer";
-import { ArrowRightLeftIcon } from "lucide-react";
-import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { tryParseJson } from "@/utils/modelUtils";
 import { Span } from "@/types/common-type";
-import { HeaderViewer } from "../header-viewer";
-export const ApiInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
-    const { spansOfSelectedRun } = ChatWindowConsumer();
+
+interface ApiInvokeUIDetailsDisplayProps {
+    span: Span;
+    relatedSpans?: Span[];
+}
+
+export const ApiInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ApiInvokeUIDetailsDisplayProps) => {
     const currentAttribute = span.attribute as any;
     let output: string | undefined = currentAttribute?.output || currentAttribute?.response;
     if (!output || output === "\"\"") {
@@ -31,8 +29,8 @@ export const ApiInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
     const raw_response_json = raw_response_string ? tryParseJson(raw_response_string) : null;
     const raw_request_json = raw_request_string ? tryParseJson(raw_request_string) : null;
 
-    const status = getStatus(spansOfSelectedRun, span.span_id);
-    const apiCloudInvokeSpan = getParentCloudApiInvoke(spansOfSelectedRun, span.span_id);
+    const status = getStatus(relatedSpans, span.span_id);
+    const apiCloudInvokeSpan = getParentCloudApiInvoke(relatedSpans, span.span_id);
     const apiInvokeSpan = span
     const modelCallSpan = span
     const modelCallAttribute = modelCallSpan?.attribute as any;
@@ -42,34 +40,19 @@ export const ApiInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
     const headers = headersStr ? tryParseJson(headersStr) : undefined;
     const error = modelCallAttribute?.error || apiInvokeAttribute?.error || currentAttribute?.error;
 
-    const [responseViewMode, setResponseViewMode] = useState<'ui' | 'raw'>('ui');
     const [openAccordionItems, setOpenAccordionItems] = useState<string[]>(error ? ['error'] : []);
     const cost_str = apiInvokeAttribute?.cost;
     const ttf_str = modelCallAttribute?.ttft;
     const usage_str = currentAttribute?.usage;
-    const modelJsonStr = apiInvokeAttribute?.model || modelCallAttribute?.model;
-    const modelJson = modelJsonStr ? tryParseJson(modelJsonStr) : null;
-    const modelName = modelJson?.name;
-
-    const entityByName = undefined
-
-
     const costInfo = cost_str ? tryParseJson(cost_str) : null;
     const usageInfo = usage_str ? tryParseJson(usage_str) : null;
-
-    const triggerClassName = "px-3 py-3 hover:bg-[#1a1a1a] transition-colors";
-
-    const headerCount = headers ? Object.keys(headers).length : 0;
-
     return (
         <BaseSpanUIDetailsDisplay
             value={openAccordionItems}
             onValueChange={setOpenAccordionItems}
         >
             <div className="flex flex-col gap-4 mt-4">
-                {/* ID information section */}
-                <BasicSpanInfo span={span} />
-
+              
                 {/* Error section - only shown when there's an error */}
                 {error && (
                     <ErrorViewer error={error} />
@@ -80,7 +63,7 @@ export const ApiInvokeUIDetailsDisplay = ({ span }: { span: Span }) => {
                     <InputViewer jsonRequest={raw_request_json} headers={headers} />
                 )}
                 {raw_response_json && (
-                    <ResponseViewer response={raw_response_json} viewMode={responseViewMode} />
+                    <ResponseViewer response={raw_response_json} />
                 )}
 
                 {/* Usage section */}

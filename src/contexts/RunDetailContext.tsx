@@ -1,62 +1,44 @@
 'use client'
 import { ReactNode, createContext, useContext } from "react";
 import { RunDTO, Span } from "@/types/common-type";
+import { buildSpanHierarchy } from "@/utils/span-hierarchy";
 export type RunDetailContextType = ReturnType<typeof runDetails>;
 
 export interface Hierarchy {
     root: Span,
     children: Hierarchy[]
 }
-export const constructHierarchy = (props: {
-    spans: Span[],
-    rootSpan: Span,
-    isDisplayGraph?: boolean
-}): Hierarchy => {
-    const { spans, rootSpan, isDisplayGraph } = props;
-    let root = rootSpan;
 
-    if (!root) {
-        throw new Error("No root span found");
-    }
-    let rootSpanId = root.span_id;
-    const spansNotRoot = spans.filter(span => span.span_id !== rootSpanId);
-    let childSpans = spansNotRoot.filter(span => span.parent_span_id === rootSpanId);
-
-    if (!childSpans.length) {
-        return { root, children: [] };
-    }
-    let childrenSpan = childSpans.map(currentChild => {
-        return constructHierarchy({ spans: spansNotRoot, rootSpan: currentChild, isDisplayGraph })
-    })
-    return { root, children: childrenSpan };
-}
 export const RunDetailContext = createContext<RunDetailContextType | null>(null);
 function runDetails(props: {
     runId: string,
     projectId: string,
-    spans: Span[],
+    spansByRunId: Span[],
     run?: RunDTO
 }) {
-    const { runId, projectId, spans } = props;
+    const { runId, projectId, spansByRunId } = props;
 
-    const originRootSpans = spans
+    const originRootSpans = spansByRunId
         .sort((a, b) => a.start_time_us - b.start_time_us)
-        .filter(span => span.parent_span_id === null || span.parent_span_id === "0")
-    let rootSpans = originRootSpans && originRootSpans.length > 0 ? originRootSpans : (spans && spans.length > 0 ? [spans.sort((a, b) => a.start_time_us - b.start_time_us)[0]] : [])
-    const hierarchies: Record<string, Hierarchy> = rootSpans.reduce((acc, span) => {
-        acc[span.span_id] = constructHierarchy({ spans: spans, rootSpan: span, isDisplayGraph: false });
-        return acc;
-    }, {} as Record<string, Hierarchy>);
+    let rootSpans = originRootSpans && originRootSpans.length > 0 ? originRootSpans : (spansByRunId && spansByRunId.length > 0 ? [spansByRunId.sort((a, b) => a.start_time_us - b.start_time_us)[0]] : [])
+    const hierarchies: Span[] = buildSpanHierarchy(spansByRunId);
+
+    const startTime = Math.min(...spansByRunId.map(span => span.start_time_us));
+    const endTime = Math.max(...spansByRunId.filter(span => span.finish_time_us !== undefined).map(span => span.finish_time_us || 0));
+    const totalDuration = endTime - startTime;
     return {
         runId,
         projectId,
-        spans,
+        spansByRunId,
         rootSpans,
-        hierarchies
+        hierarchies,
+        startTime,
+        endTime,
+        totalDuration
     }
 }
-export function RunDetailProvider({ children, runId, projectId, spans, run }: { children: ReactNode, runId: string, projectId: string, spans: Span[], run?: RunDTO }) {
-    const value = runDetails({ runId, projectId, spans, run });
+export function RunDetailProvider({ children, runId, projectId, spansByRunId, run }: { children: ReactNode, runId: string, projectId: string, spansByRunId: Span[], run?: RunDTO }) {
+    const value = runDetails({ runId, projectId, spansByRunId, run });
     return <RunDetailContext.Provider value={value}>{children}</RunDetailContext.Provider>;
 }
 export function RunDetailConsumer() {

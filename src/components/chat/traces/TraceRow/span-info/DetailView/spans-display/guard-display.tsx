@@ -2,7 +2,6 @@ import { Span } from "@/types/common-type";
 import { BaseSpanUIDetailsDisplay } from "..";
 import { ShieldCheckIcon, ShieldExclamationIcon, DocumentTextIcon, BoltIcon } from "@heroicons/react/24/outline";
 import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { BasicSpanInfo } from "../basic-span-info-section";
 import { JsonViewer } from "../../JsonViewer";
 import { tryParseJson } from "@/utils/modelUtils";
 import { cn } from "@/lib/utils";
@@ -56,8 +55,6 @@ export const GuardUIDetailsDisplay = ({ span }: { span: Span }) => {
 
 
             </div>
-            {/* ID information section */}
-            <BasicSpanInfo span={span} />
             {/* User Input section */}
             {jsonUserInput && Object.keys(jsonUserInput).length > 0 && (
                 <AccordionItem value="user_input">

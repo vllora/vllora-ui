@@ -6,9 +6,12 @@ import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 import { useMessageSubmission } from '@/hooks/useMessageSubmission';
 import { emitter } from '@/utils/eventEmitter';
 import { XCircle } from 'lucide-react';
+import { ModalProvider } from '@/contexts/ModalContext';
+import { ModalManager } from '@/components/modals/ModalManager';
 import { useConversationEvents } from '@/hooks/events/useConversationEvents';
 import { Message } from '@/types/chat';
-import { ConversationMetrics } from './ConversationMetrics';
+import { extractMessageFromApiInvokeSpan } from '@/utils/span-to-message';
+import { McpServerConfig } from '@/services/mcp-api';
 
 interface ChatWindowProps {
   threadId?: string;
@@ -35,33 +38,29 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
 }) => {
   // Get all state from context
   const {
-    serverMessages,
-    clearMessages,
+    messageHierarchies,
     setIsChatProcessing,
-    refreshMessages,
+    refreshSpans,
+    isLoadingSpans,
     currentInput,
     setCurrentInput,
     typing,
     setTyping,
     error,
     setError,
-    messageId,
-    setMessageId,
     traceId,
     setTraceId,
     appendUsage,
-    conversationMetrics,
-    isLoadingMessages
+    flattenSpans,
+    clearAll,
   } = ChatWindowConsumer();
 
   useEffect(() => {
+    clearAll();
     if (threadId && !isDraft) {
-      clearMessages();
-      refreshMessages();
-    } else if (threadId && isDraft) {
-      clearMessages();
+      refreshSpans();
     }
-  }, [threadId, isDraft])
+  }, [threadId, isDraft, refreshSpans]);
 
   useConversationEvents({
     currentProjectId: projectId || '',
@@ -84,10 +83,8 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     setCurrentInput,
     setTyping,
     setError,
-    setMessageId,
     setTraceId,
     appendUsage,
-    messageId,
     traceId,
   });
 
@@ -100,6 +97,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       otherTools?: string[];
       threadId?: string;
       threadTitle?: string;
+      toolsUsage?: Map<string, McpServerConfig>;
     }) => {
       return handleSubmit(inputProps);
     },
@@ -139,7 +137,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     return () => {
       emitter.off('langdb_chatWindow', handlerChatWindowEvent);
     }
-  }, [threadId, widgetId])
+  }, [threadId, widgetId]);
 
   useEffect(() => {
     const handleClearChat = (input: { threadId?: string; widgetId?: string }) => {
@@ -148,14 +146,13 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
         (input.widgetId && input.widgetId === widgetId)
       ) {
         terminateChat();
-        clearMessages();
       }
     };
     emitter.on('langdb_clearChat', handleClearChat);
     return () => {
       emitter.off('langdb_clearChat', handleClearChat);
     };
-  }, [terminateChat, threadId, widgetId, clearMessages]);
+  }, [terminateChat, threadId, widgetId]);
 
   useEffect(() => {
     const handleScrollToBottom = (input: {
@@ -163,8 +160,8 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       widgetId?: string;
     }) => {
       if (
-        serverMessages &&
-        serverMessages.length > 0 &&
+        messageHierarchies &&
+        messageHierarchies.length > 0 &&
         ((input.threadId === threadId && input.threadId) ||
           (input.widgetId && input.widgetId === widgetId))
       ) {
@@ -175,31 +172,41 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     return () => {
       emitter.off('langdb_chat_scrollToBottom', handleScrollToBottom);
     };
-  }, [serverMessages, threadId, scrollToBottom, widgetId]);
+  }, [messageHierarchies, threadId, scrollToBottom, widgetId]);
 
+
+  const handleExternalSubmit = useCallback(({
+    inputText,
+    files,
+    searchToolEnabled,
+    otherTools,
+    threadTitle,
+    toolsUsage,
+  }: {
+    inputText: string;
+    files: any[];
+    searchToolEnabled?: boolean;
+    otherTools?: string[];
+    threadTitle?: string;
+    toolsUsage?: Map<string, McpServerConfig>;
+  }) => {
+    setCurrentInput(inputText);
+    // construct initial messages based on last api_invoke span
+    const lastApiInvokeSpan = flattenSpans.filter(span => span.operation_name === 'api_invoke').pop();
+    let continousMessage: Message[] = []
+    if (lastApiInvokeSpan) {
+      continousMessage = extractMessageFromApiInvokeSpan(lastApiInvokeSpan);
+    }
+
+    onSubmitWrapper({ inputText, files, searchToolEnabled, otherTools, threadId, threadTitle, initialMessages: continousMessage, toolsUsage });
+  }, [onSubmitWrapper, setCurrentInput, threadId, flattenSpans]);
   useEffect(() => {
-    const handleExternalSubmit = ({
-      inputText,
-      files,
-      searchToolEnabled,
-      otherTools,
-      threadTitle,
-    }: {
-      inputText: string;
-      files: any[];
-      searchToolEnabled?: boolean;
-      otherTools?: string[];
-      threadTitle?: string;
-    }) => {
-      setCurrentInput(inputText);
-      onSubmitWrapper({ inputText, files, searchToolEnabled, otherTools, threadId, threadTitle, initialMessages: serverMessages });
-    };
     emitter.on('langdb_input_chatSubmit', handleExternalSubmit);
 
     return () => {
       emitter.off('langdb_input_chatSubmit', handleExternalSubmit);
     };
-  }, [onSubmitWrapper, setCurrentInput, threadId, serverMessages]);
+  }, [handleExternalSubmit]);
 
   // Ensure typing indicator is visible by scrolling to bottom when typing state changes
   useEffect(() => {
@@ -216,24 +223,24 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
         <ConversationHeader
           modelName={modelName}
           onModelChange={onModelChange}
-          onRefresh={refreshMessages}
-          isLoading={isLoadingMessages}
+          onRefresh={refreshSpans}
+          isLoading={isLoadingSpans}
         />
 
         {/* Cost and Tokens Display - Second row aligned with New Chat button */}
-        {!isDraft && threadId && conversationMetrics && (conversationMetrics.cost || conversationMetrics.inputTokens || conversationMetrics.outputTokens || conversationMetrics.duration || conversationMetrics.avgTTFT) && <ConversationMetrics
+        {/* {!isDraft && threadId && conversationMetrics && (conversationMetrics.cost || conversationMetrics.inputTokens || conversationMetrics.outputTokens || conversationMetrics.duration || conversationMetrics.avgTTFT) && <ConversationMetrics
           threadId={threadId}
           cost={conversationMetrics.cost}
           inputTokens={conversationMetrics.inputTokens}
           outputTokens={conversationMetrics.outputTokens}
           duration={conversationMetrics.duration}
           avgTTFT={conversationMetrics.avgTTFT}
-        />}
+        />} */}
       </div>
 
       {/* Chat Conversation */}
       <ChatConversation
-        messages={serverMessages}
+        messages={messageHierarchies}
         isLoading={typing}
         messagesEndRef={messagesEndRef as React.RefObject<HTMLDivElement>}
         scrollToBottom={scrollToBottom}
@@ -257,17 +264,20 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
 
       {/* Chat Input */}
       <div className="flex-shrink-0">
-        <ChatInput
-          onSubmit={(props) => {
-            emitter.emit('langdb_input_chatSubmit', props);
-            setCurrentInput('');
-            return Promise.resolve();
-          }}
-          currentInput={currentInput}
-          setCurrentInput={setCurrentInput}
-          disabled={typing}
-          threadTitle={threadTitle}
-        />
+        <ModalProvider>
+          <ChatInput
+            onSubmit={(props) => {
+              emitter.emit('langdb_input_chatSubmit', props);
+              setCurrentInput('');
+              return Promise.resolve();
+            }}
+            currentInput={currentInput}
+            setCurrentInput={setCurrentInput}
+            disabled={typing}
+            threadTitle={threadTitle}
+          />
+          <ModalManager />
+        </ModalProvider>
       </div>
     </>
   );

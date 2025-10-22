@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run",
     "start:backend": "cd ai-gateway && cargo run serve --port 8080",
     "start:backend:release": "cd ai-gateway && cargo run --release serve --port 8080"
   },
@@ -25,16 +27,21 @@
   "homepage": "https://github.com/langdb/ellora-ui#readme",
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
     "@types/react": "^19.1.15",
     "@types/react-dom": "^19.1.9",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/uuid": "^11.0.0",
     "@vitejs/plugin-react": "^5.0.4",
+    "@vitest/ui": "^3.2.4",
     "autoprefixer": "^10.4.21",
+    "jsdom": "^27.0.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.9.2",
-    "vite": "^7.1.7"
+    "vite": "^7.1.7",
+    "vitest": "^3.2.4"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",

@@ -7,13 +7,15 @@ import { CustomErrorFallback } from "../custom-error-fallback";
 import { RunDTO, Span } from "@/types/common-type";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { LoadingState } from "./LoadingState";
+import { ProjectsConsumer } from "@/contexts/ProjectContext";
 
 // Main component that uses the above components
 export const DetailedRunView: React.FC<{run: RunDTO}> = ({
     run
 }) => {
-    const {spanMap, loadingSpansById} = ChatWindowConsumer()
-    const spansByRunId: Span[] = run.run_id ? spanMap[run.run_id] || [] : []
+    const {runMap, loadingSpansById, selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId} = ChatWindowConsumer()
+    const {currentProjectId} = ProjectsConsumer()
+    const spansByRunId: Span[] = run.run_id ? runMap[run.run_id] || [] : []
     const detailViewRef = useRef<HTMLDivElement>(null);
     if (spansByRunId?.length > 0) {
         
@@ -30,7 +32,12 @@ export const DetailedRunView: React.FC<{run: RunDTO}> = ({
                         <div className="overflow-hidden relative">
                             <ErrorBoundary FallbackComponent={CustomErrorFallback}>
                                 <TimelineContent
-                                    rootSpans={spansByRunId}
+                                    spansByRunId={spansByRunId}
+                                    projectId={currentProjectId || ''}
+                                    selectedSpanId={selectedSpanId}
+                                    setSelectedSpanId={setSelectedSpanId}
+                                    setSelectedRunId={setSelectedRunId}
+                                    setDetailSpanId={setDetailSpanId}
                                 />
                             </ErrorBoundary>
                         </div>

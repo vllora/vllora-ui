@@ -1,9 +1,11 @@
 import React, { useState, useRef, KeyboardEvent, useCallback, useEffect } from 'react';
-import { Send, Paperclip, X, Mic } from 'lucide-react';
+import { Send, Paperclip, X, Mic, Plug } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useDropzone } from 'react-dropzone';
 import { FileWithPreview } from '@/types/chat';
 import { emitter } from '@/utils/eventEmitter';
+import { openModal, useModal } from '@/contexts/ModalContext';
+import { McpServerConfig } from '@/services/mcp-api';
 
 interface ChatInputProps {
   onSubmit: (props: {
@@ -12,6 +14,7 @@ interface ChatInputProps {
     searchToolEnabled?: boolean;
     otherTools?: string[];
     threadTitle?: string;
+    toolsUsage?: Map<string, McpServerConfig>;
   }) => Promise<void>;
   currentInput: string;
   setCurrentInput: (input: string) => void;
@@ -44,6 +47,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [error, setError] = useState('');
   const [isSupportingSpeechRecognition, setIsSupportingSpeechRecognition] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Get toolsUsage from modal context
+  const { toolsUsage } = useModal();
+
+  // Check if any MCP tools are configured
+  const hasToolsConfigured = toolsUsage && toolsUsage.size > 0 && 
+    Array.from(toolsUsage.values()).some(config => config.selectedTools.length > 0);
 
   useEffect(() => {
     // Check if the browser supports SpeechRecognition
@@ -150,6 +160,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         searchToolEnabled,
         otherTools: [],
         threadTitle,
+        toolsUsage,
       });
     };
 
@@ -162,7 +173,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     };
 
     recognition.start();
-  }, [files, searchToolEnabled, onSubmit, threadTitle]);
+  }, [files, searchToolEnabled, onSubmit, threadTitle, toolsUsage]);
 
   const handleSend = () => {
     if (currentInput.trim() && !disabled) {
@@ -174,6 +185,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         searchToolEnabled,
         otherTools: [],
         threadTitle,
+        toolsUsage,
       });
       setCurrentInput('');
       if (textareaRef.current) {
@@ -284,6 +296,26 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   <Mic className={`h-4 w-4 ${isListening ? 'text-red-500 animate-pulse' : 'text-muted-foreground'}`} />
                 </button>
               )}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  openModal('tools');
+                }}
+                className={`flex items-center justify-center h-8 w-8 rounded-md transition-colors disabled:opacity-50 ${
+                  hasToolsConfigured 
+                    ? 'bg-[rgb(var(--theme-500))]/10 hover:bg-[rgb(var(--theme-500))]/20' 
+                    : 'hover:bg-accent'
+                }`}
+                title={hasToolsConfigured ? "MCP Tools Active" : "MCP Choices Menu"}
+              >
+                <Plug className={`h-4 w-4 ${
+                  hasToolsConfigured 
+                    ? 'text-[rgb(var(--theme-600))]' 
+                    : 'text-muted-foreground'
+                }`} />
+              </button>
             </div>
             <Button
               onClick={handleSend}

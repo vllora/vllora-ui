@@ -1,28 +1,26 @@
 import { HierarchyRow } from "./hierarchy-row";
 import { RunDetailConsumer } from "@/contexts/RunDetailContext";
 import { useMemo } from "react";
+import { Span } from "@/types/common-type";
+import { TIMELINE_DYNAMIC_TITLE_WIDTH_FULL_SIZE, TIMELINE_DYNAMIC_TITLE_WIDTH_IN_SIDEBAR } from "@/utils/constant";
 
 export interface SingleRunTimelineViewProps {
-    rootSpanId: string;
     index: number;
     isInSidebar?: boolean;
+    currentSpanHierarchy: Span;
+    selectedSpanId?: string;
+    onSpanSelect?: (spanId: string, runId?: string) => void;
+    level: number;
 }
 
 export const SingleRunTimelineView = (props: SingleRunTimelineViewProps) => {
-    const { rootSpanId, index, isInSidebar = false } = props;
-    const { spans, hierarchies, rootSpans } = RunDetailConsumer();
+    const { isInSidebar = true, selectedSpanId, onSpanSelect, currentSpanHierarchy, level, index } = props;
+    const { spansByRunId, startTime, totalDuration } = RunDetailConsumer();
     // Dynamic title width based on display mode - wider when not in sidebar
-    const titleWidth: string | number = useMemo(() => isInSidebar ? `${180}px` : '20vw', [isInSidebar]);
-    const rootSpan = rootSpans.find(span => `${span.span_id}` === `${rootSpanId}`);
-    const hierarchy = rootSpan ? hierarchies[rootSpan.span_id] : null;    
-    if (!hierarchy) {
-        return <></>;
-    }
+    const titleWidth: string | number = useMemo(() => isInSidebar ? `${TIMELINE_DYNAMIC_TITLE_WIDTH_IN_SIDEBAR}px` : `${TIMELINE_DYNAMIC_TITLE_WIDTH_FULL_SIZE}px`, [isInSidebar]);
 
     // Calculate total duration and start time for width calculations
-    const startTime = Math.min(...spans.map(span => span.start_time_us));
-    const endTime = Math.max(...spans.map(span => span.finish_time_us));
-    const totalDuration = endTime - startTime;
+
     return (
         <div className="flex flex-col space-y-1 mt-2 first:mt-0">
             {/* Timeline header with ticks */}
@@ -55,11 +53,15 @@ export const SingleRunTimelineView = (props: SingleRunTimelineViewProps) => {
             {/* Hierarchy tree with timeline bars */}
             <div className="rounded-md border border-border overflow-hidden">
                 <HierarchyRow
-                    level={0}
-                    hierarchy={hierarchy}
+                    level={level}
+                    hierarchy={currentSpanHierarchy}
                     totalDuration={totalDuration}
                     startTime={startTime}
                     titleWidth={titleWidth}
+                    relatedSpans={spansByRunId}
+                    selectedSpanId={selectedSpanId}
+                    onSpanSelect={onSpanSelect}
+                    isInSidebar={isInSidebar}
                 />
             </div>
         </div>

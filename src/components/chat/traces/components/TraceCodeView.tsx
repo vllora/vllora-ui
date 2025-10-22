@@ -9,8 +9,8 @@ interface CodeViewProps {
 }
 
 export const TraceCodeView: React.FC<CodeViewProps> = ({ runId }) => {
-  const { spanMap } = ChatWindowConsumer();
-  const spans = spanMap[runId] || [];
+  const { runMap } = ChatWindowConsumer();
+  const spans = runMap[runId] || [];
   const cloudSpan = spans && spans.length > 0 ? spans[0] : undefined 
   const apiInvokeSpans = spans.filter(s => s.operation_name === 'api_invoke')
   const apiInvokeSpan = apiInvokeSpans[apiInvokeSpans.length - 1]
@@ -23,13 +23,14 @@ export const TraceCodeView: React.FC<CodeViewProps> = ({ runId }) => {
   // header 
   const headerStr = cloudAttribute && cloudAttribute['http.request.header'];
   const method: string = cloudAttribute && cloudAttribute['http.request.method'] || 'POST';
+  const apiCloudBody:string = cloudAttribute && cloudAttribute['http.request.body'] || '';
   const url: string = cloudAttribute && cloudAttribute['http.request.path'] || '/v1/chat/completions';
 
   const fullUrl = `${getBackendUrl()}${url}`
 
   const requestStr: string = apiInvokeAttribute && apiInvokeAttribute['request'] || '';
   const headerObj: any = headerStr && tryParseJson(headerStr)
-  const requestObj: any = requestStr && tryParseJson(requestStr)
+  const requestObj: any = (apiCloudBody || requestStr) && tryParseJson(apiCloudBody || requestStr) || undefined
 
   // Generate curl command
   const generateCurlCommand = () => {
@@ -43,7 +44,8 @@ export const TraceCodeView: React.FC<CodeViewProps> = ({ runId }) => {
     // Add headers
     if (headerObj) {
       const filteredHeaders = Object.entries(headerObj).filter(h => {
-        return h[0].startsWith('x-') || h[0].startsWith('authorization') || h[0].startsWith('Authorization')
+        const validHeaders = ["x-project-id", 'x-thread-id', 'x-tag', 'x-thread-title', 'content-type', 'authorization', 'Authorization']
+        return validHeaders.includes(h[0].toLowerCase())
       });
 
       filteredHeaders.forEach(([key, value], idx) => {
@@ -52,9 +54,9 @@ export const TraceCodeView: React.FC<CodeViewProps> = ({ runId }) => {
       });
     }
     // Add request body
-    if (requestObj && method !== 'GET') {
+    if ((requestObj) && method !== 'GET') {
       lines.push(`  -d '{`);
-      const bodyStr = JSON.stringify(requestObj, null, 2);
+      const bodyStr = JSON.stringify(requestObj, null, 2).replace(/'/g, "'\\''");
       // Skip first and last lines (the outer braces)
       const bodyLines = bodyStr.split('\n');
       bodyLines.slice(1, -1).forEach((line) => {

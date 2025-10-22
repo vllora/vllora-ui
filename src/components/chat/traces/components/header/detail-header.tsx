@@ -1,11 +1,10 @@
 import React from 'react';
-import { RefreshCw, ArrowLeft } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface TraceDetailHeaderProps {
     currentTab: 'trace' | 'code';
     onTabChange: (tab: 'trace' | 'code') => void;
-    onBack: () => void;
     onRefresh: () => void;
     isLoading: boolean;
   }
@@ -13,20 +12,13 @@ interface TraceDetailHeaderProps {
  export const TraceDetailHeader: React.FC<TraceDetailHeaderProps> = ({
     currentTab,
     onTabChange,
-    onBack,
     onRefresh,
     isLoading
   }) => {
     return (
       <div className="h-16 px-4 border-b border-border flex items-center justify-between bg-card/95 backdrop-blur-xl flex-shrink-0">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onBack}
-          className="h-8 w-8"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
+        <div>
+        </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1 bg-muted/50 rounded-md p-1">
             <button

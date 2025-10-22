@@ -2,7 +2,7 @@ import { AcademicCapIcon, ArrowsUpDownIcon, CloudIcon, ShieldCheckIcon, ShieldEx
 import { ProviderIcon } from "@/components/Icons/ProviderIcons";
 import { tryParseJson } from "@/utils/modelUtils";
 import { getColorByType, getClientSDKName, isAgentSpan, isClientSDK, isPromptCachingApplied, isRouterSpan } from "@/utils/graph-utils";
-import { BotIcon, ClapperboardIcon } from "lucide-react";
+import { BotIcon, CircleQuestionMarkIcon, ClapperboardIcon, ClipboardCheckIcon, PlayIcon } from "lucide-react";
 import { ArrowsPointingOutIcon } from "@heroicons/react/24/outline"
 import { ModelCall, Span } from "@/types/common-type";
 
@@ -14,21 +14,129 @@ export const getRouterTitle = (props: { span: Span }) => {
     return router_name || 'router';
 }
 
+export const getTaskTitle = (props: { span: Span }) => {
+    const { span } = props;
+    let attributes = span.attribute as any;
+    let task_name = attributes['langdb.task_name'] || attributes['task_name'];
+    return task_name || 'task';
+}
+
+
+export const getToolExecuteMessageResult = (props: { span: Span, relatedSpans: Span[] }) => {
+    const { span } = props;
+     let executeMessagesResult = getExecuteMessagesResult(
+        getToolCallIds(props),
+        props.relatedSpans,
+        span.span_id
+    );
+    return executeMessagesResult;
+}
+
+
+export const getToolCallMessage = (props: { span: Span }) => {
+    const { span } = props;
+    let attributes = span.attribute as any;
+    let tool_calls = attributes['tool_calls'];
+    let tool_calls_json = tryParseJson(tool_calls);
+    return tool_calls_json;
+}
+export const getToolCallIds = (props: { span: Span }) => {
+    const { span } = props;
+    let attributes = span.attribute as any;
+    let tool_calls = attributes['tool_calls'];
+    let tool_calls_json = tryParseJson(tool_calls);
+    let tool_calls_ids = tool_calls_json?.map((tool_call: any) => tool_call.id) || [];
+    return tool_calls_ids;
+}
+/**
+ * Extracts execution message results for tool calls from related spans
+ * @param executionIds - Array of tool call IDs to find results for
+ * @param relatedSpans - Array of related spans to search through
+ * @param currentSpanId - ID of the current span to exclude from results
+ * @returns Array of execution message results with content, tool_call_id, and role
+ */
+export const getExecuteMessagesResult = (
+    executionIds: string[],
+    relatedSpans: Span[],
+    currentSpanId?: string
+): { content: string; tool_call_id: string; role: string }[] => {
+    // Find all model_call spans
+    const modelCallSpanIds = relatedSpans
+        .filter((span: Span) => span.operation_name === 'model_call')
+        .map((span: Span) => span.span_id);
+
+    // Find all spans that have parent_span_id in modelCallSpanIds and have input attribute
+    const inputsFromModelCall = relatedSpans
+        .filter(
+            (span: Span) =>
+                span.parent_span_id &&
+                modelCallSpanIds.includes(span.parent_span_id) &&
+                span.attribute &&
+                (span.attribute as any).input
+        )
+        .map((span: Span) => ({
+            input: (span.attribute as any).input,
+            span: span,
+        }));
+
+    // Map through execution IDs to find matching tool messages
+    const results = executionIds
+        .map((id: string) => {
+            return inputsFromModelCall
+                .filter((input) => {
+                    // Filter inputs that contain the ID and are not from the current span
+                    return (
+                        input.input.includes(id) &&
+                        (!currentSpanId || input.span.span_id !== currentSpanId)
+                    );
+                })
+                .map((input) => {
+                    const inputStr = input.input;
+                    const inputJson = tryParseJson(inputStr);
+
+                    if (inputJson && Array.isArray(inputJson)) {
+                        // Find the tool message with matching tool_call_id
+                        const toolMessage = inputJson.find(
+                            (item: { role: string; [key: string]: any }) =>
+                                item.role === 'tool' && item.tool_call_id === id
+                        );
+                        return toolMessage;
+                    }
+                    return undefined;
+                });
+        })
+        .filter((item: any) => item !== undefined)
+        .flatMap((item: any) => item);
+
+    return results;
+};
+
 export const getAgentTitle = (props: { span: Span }) => {
     const { span } = props;
     let isAgent = isAgentSpan(span);
     if (!isAgent) {
         return 'Unknown Agent';
     }
+    let attributeOfAgent = span.attribute as any;
+    let agent_name_from_attribute = attributeOfAgent ? (attributeOfAgent['langdb.agent_name'] || attributeOfAgent['agent_name'] || attributeOfAgent['langdb_agent_name']) : '';
+    if (agent_name_from_attribute) {
+        return agent_name_from_attribute;
+    }
     let sdkName = getClientSDKName(span);
     if (sdkName) {
         switch (sdkName.toLowerCase()) {
-            case 'adk':
+            case 'adk': {
+                let attributes = span.attribute as any;
+                let agent_name = attributes ? (attributes['langdb.agent_name'] || attributes['agent_name'] || attributes['langdb_agent_name']) : '';
+                if (agent_name) {
+                    return agent_name;
+                }
                 let operation_name = span.operation_name;
                 if (operation_name.startsWith('agent_run')) {
                     return operation_name.replace('agent_run ', '').replace('[', '').replace(']', '');
                 }
                 return operation_name;
+            }
             case 'crewai':
                 let attribute = span.attribute as any;
                 let crew_agent = attribute['input.value'];
@@ -53,7 +161,7 @@ export const getAgentTitle = (props: { span: Span }) => {
         }
     }
     let attributes = span.attribute as any;
-    let agent_name = attributes['agent_name'];
+    let agent_name = attributes ? (attributes['langdb.agent_name'] || attributes['agent_name'] || attributes['langdb_agent_name']) : '';
     return agent_name || 'Unknown Agent';
 }
 export const getToolDisplayName = (props: { span: Span }) => {
@@ -152,6 +260,14 @@ export const getModelDetailName = (span: Span, relatedSpans: Span[]) => {
     }
     return undefined;
 }
+
+export const isTaskSpan = (span: Span) => {
+    const operationName = span.operation_name;
+    if (!operationName) {
+        return false;
+    }
+    return operationName == 'task';
+}
 export const getSpanTitle = (props: { span: Span, relatedSpans: Span[] }) => {
     const { span, relatedSpans } = props;
     let isAgent = isAgentSpan(span);
@@ -163,6 +279,10 @@ export const getSpanTitle = (props: { span: Span, relatedSpans: Span[] }) => {
     if (isRouter) {
         return getRouterTitle({ span });
     }
+    let isTask = isTaskSpan(span);
+    if (isTask) {
+        return getTaskTitle({ span });
+    }
 
     if (isClientSDKSpan) {
         let operation_name = span.operation_name;
@@ -172,9 +292,12 @@ export const getSpanTitle = (props: { span: Span, relatedSpans: Span[] }) => {
         if (operation_name.startsWith('execute_tool ')) {
             return operation_name.replace('execute_tool ', '').replace('[', '').replace(']', '');
         }
+        if(operation_name=== 'tool' && span.attribute && (span.attribute as any)['langdb.tool_name']){
+            return (span.attribute as any)['langdb.tool_name'];
+        }
         return operation_name;
     }
-    if (span.operation_name.startsWith('guard_')) {
+    if (span.operation_name && span.operation_name.startsWith('guard_')) {
         let attributes = span.attribute;
         let label = attributes['label'] as string;
         return label;
@@ -201,12 +324,12 @@ export const getSpanTitle = (props: { span: Span, relatedSpans: Span[] }) => {
         let attributes = span.attribute as any;
         return attributes['router_name'] || span.operation_name;
     }
-    if (span.operation_name.startsWith('virtual_model')) {
+    if (span.operation_name && span.operation_name.startsWith('virtual_model')) {
         let attributes = span.attribute as any;
         let model_id = attributes?.model_id;
         return model_id ?? span.operation_name;
     }
-    if (!['api_invoke', 'cloud_api_invoke', 'model_call', 'tools'].includes(span.operation_name) && !span.operation_name.startsWith('guard_')) {
+    if (!['api_invoke', 'cloud_api_invoke', 'model_call', 'tools'].includes(span.operation_name) && span.operation_name && !span.operation_name.startsWith('guard_')) {
         const parentSpans = relatedSpans.filter(s => s.span_id === span.parent_span_id);
         if (parentSpans.length > 0) {
             let parentSpan = parentSpans[0];
@@ -231,6 +354,9 @@ export const getOperationIconColor = (props: {
     let isClientSDKSpan = isClientSDK(span);
     let isAgent = isAgentSpan(span);
     let isRouter = isRouterSpan(span);
+    if (!operationName) {
+        return 'bg-[#1a1a1a]';
+    }
     if (isAgent) {
         return 'bg-[#1a1a1a] border-[1px] border-[#ec4899] border-opacity-30 shadow-[0_4px_20px_#ec4899_30] text-[#ec4899]';
     }
@@ -275,7 +401,7 @@ export const getOperationIconColor = (props: {
 export const getOperationTitle = (props: {
     operation_name: string,
     span?: Span
-}) => {
+}): string => {
     const { operation_name, span } = props;
     if (span) {
         let isClientSDKSpan = isClientSDK(span);
@@ -290,9 +416,14 @@ export const getOperationTitle = (props: {
             title = title.charAt(0).toUpperCase() + title.slice(1);
             return `${title} Action`;
         }
+        if (span && isPromptCachingApplied(span)) {
+            return 'Model with prompt caching';
+        }
+        return getOperationTitle({ operation_name: span.operation_name });
     }
-    if (span && isRouterSpan(span)) {
-        return 'Router';
+
+    if (!operation_name) {
+        return 'Unknown';
     }
     if (operation_name === 'cloud_api_invoke') {
         return 'Cloud API Invoke';
@@ -315,9 +446,7 @@ export const getOperationTitle = (props: {
     if (operation_name === 'cache') {
         return 'Cache Model Response';
     }
-    if (span && isPromptCachingApplied(span)) {
-        return 'Model with prompt caching';
-    }
+
     return 'Model';
 }
 
@@ -327,6 +456,9 @@ export const getTimelineBgColor = (props: {
 }) => {
     const { span, relatedSpans } = props;
     let operationName = span.operation_name;
+    if (!operationName) {
+        return getColorByType('SpanToolNode');
+    }
     let isClientSDKSpan = isClientSDK(span);
     if (isClientSDKSpan) {
         if (isAgentSpan(span)) {
@@ -376,8 +508,17 @@ export const getOperationIcon = (props: {
     let operationName = span.operation_name;
     let isClientSDKSpan = isClientSDK(span);
     let isAgent = isAgentSpan(span);
+    if (!operationName) {
+        return <CircleQuestionMarkIcon className="w-4 h-4" />;
+    }
     if (isAgent) {
         return <BotIcon className="w-4 h-4" />;
+    }
+    if (operationName === 'run') {
+        return <PlayIcon className="w-4 h-4" />;
+    }
+    if (operationName === 'task') {
+        return <ClipboardCheckIcon className="w-4 h-4" />;
     }
     if (isClientSDKSpan) {
         return <ClapperboardIcon className="w-4 h-4" />;

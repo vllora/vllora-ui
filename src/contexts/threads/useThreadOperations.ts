@@ -3,7 +3,6 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Thread } from '@/types/chat';
 import { updateThreadTitle, deleteThread as deleteThreadApi } from '@/services/threads-api';
-import { CostValueData, ThreadEventValue } from '../project-events/dto';
 import { convertToThreadInfo } from '../project-events/util';
 import { ThreadState } from './types';
 import { sortThreads } from './utils';
