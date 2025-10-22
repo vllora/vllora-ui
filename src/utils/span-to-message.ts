@@ -85,14 +85,13 @@ export function extractMessagesFromSpan(span: Span, level: number = 0): Message[
   // Parse the request JSON to get messages
   const requestStr = attribute?.request || attribute?.input;
   const requestJson = requestStr ? tryParseJson(requestStr) : null;
-
   if (!requestJson) {
     return messages;
   }
 
 
   // Extract messages array from request
-  let requestMessages = requestJson?.messages || requestJson?.contents;
+  let requestMessages = Array.isArray(requestJson) ? requestJson : (requestJson?.messages || requestJson?.contents);
 
   if (!requestMessages || !Array.isArray(requestMessages)) {
     return messages;

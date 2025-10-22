@@ -10,7 +10,7 @@ import { Message } from '@/types/chat';
 import React, { useCallback, useMemo } from 'react';
 import { MessageDisplay } from '../MessageDisplay';
 import { ContentArrayDisplay } from './ContentArrayDisplay';
-import { formatMessageTime, formatMessageTimestamp } from '@/utils/dateUtils';
+import { formatMessageTimestamp } from '@/utils/dateUtils';
 import { MessageMetrics } from './MessageMetrics';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
@@ -24,7 +24,6 @@ export const AiMessage: React.FC<{
 }> = ({ message: msg, isTyping }) => {
   const { setOpenTraces, fetchSpansByRunId, setHoveredRunId } = ChatWindowConsumer();
   const { setIsRightSidebarCollapsed } = ThreadsConsumer();
-
   const messageRef = React.useRef<HTMLDivElement>(null);
 
   // Only update relative time when message is visible and less than 60 seconds old

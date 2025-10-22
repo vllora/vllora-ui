@@ -53,7 +53,9 @@ export function useSpanById(
 export const useMessageExtraceSpanById = (flattenSpans: Span[],
   spanId: string): Message[] => {
     const span = useSpanById(flattenSpans, spanId);
-    const message = span && extractMessagesFromSpan(span);
-    return useMemo(() => message || [], [span]);
+    return useMemo(() => {
+        if (!span) return [];
+        return extractMessagesFromSpan(span);
+    }, [span]);
 }
 

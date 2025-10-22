@@ -16,7 +16,7 @@ interface HierarchicalSpanItemProps {
 /**
  * Deep comparison for MessageStructure to detect structural changes
  */
-const compareMessageStructure = (
+export const compareMessageStructure = (
   prevStructure: MessageStructure,
   nextStructure: MessageStructure
 ): boolean => {
@@ -42,7 +42,14 @@ const compareMessageStructure = (
 
   return true;
 };
+export const propsHierarchicalAreEqual = (prevProps: Readonly<HierarchicalSpanItemProps>, nextProps: Readonly<HierarchicalSpanItemProps>) => {
+   // Re-render if level changes
+    if (prevProps.level !== nextProps.level) return false;
 
+    // Compare messageStructure deeply
+    let isEqual = compareMessageStructure(prevProps.messageStructure, nextProps.messageStructure);
+    return isEqual
+}
 /**
  * Renders a span with its messages and nested child spans in a hierarchical structure
  * Uses indentation to show nesting levels
@@ -53,20 +60,20 @@ const HierarchicalMessageSpanItemComponent: React.FC<HierarchicalSpanItemProps> 
 }) => {
   const { type, span_id, children } = messageStructure;
   if(type === 'agent') {
-    return <AgentSpanMessage spanId={span_id} messages={children} level={level} />
+    return <AgentSpanMessage span_id={span_id} messages={children} level={level} />
   }
   if(type === 'run') {
     return <RunSpanMessage span_id={span_id} messages={children} level={level} />
   }
 
   if(type === 'task') {
-    return <TaskSpanMessage spanId={span_id} messages={children} level={level} />
+    return <TaskSpanMessage span_id={span_id} messages={children} level={level} />
   }
   if(type === 'tools') {
-    return <EloraToolSpanMessage spanId={span_id} messages={children} level={level} />
+    return <EloraToolSpanMessage span_id={span_id} messages={children} level={level} />
   }
   if(type === 'tool') {
-    return <OpenAIToolSpanMessage spanId={span_id} messages={children} level={level} />
+    return <OpenAIToolSpanMessage span_id={span_id} messages={children} level={level} />
   }
   
 
@@ -75,13 +82,9 @@ const HierarchicalMessageSpanItemComponent: React.FC<HierarchicalSpanItemProps> 
 
 export const HierarchicalMessageSpanItem = React.memo(
   HierarchicalMessageSpanItemComponent,
-  (prevProps, nextProps) => {
-    // Re-render if level changes
-    if (prevProps.level !== nextProps.level) return false;
-
-    // Compare messageStructure deeply
-    return compareMessageStructure(prevProps.messageStructure, nextProps.messageStructure);
-  }
+  propsHierarchicalAreEqual
 );
+
+
 
 
