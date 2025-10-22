@@ -2,7 +2,7 @@ import { MessageStructure } from "@/utils/message-structure-from-span";
 import { HierarchicalMessageSpanItem } from ".";
 import { SpanSeparator } from "../SpanSeparator";
 import { useState, memo, useMemo, useCallback } from "react";
-import { INDENT_PER_LEVEL } from "./constants";
+import { CONNECTOR_WIDTH, CONTENT_PADDING_LEFT } from "./constants";
 
 const RunSpanMessageComponent = (props: {
     span_id: string;
@@ -17,20 +17,22 @@ const RunSpanMessageComponent = (props: {
         setIsCollapsed(prev => !prev);
     }, []);
 
-    // Memoize the style object to prevent unnecessary re-renders
-    const indentStyle = useMemo(() =>
-        level > 0 ? { marginLeft: `${INDENT_PER_LEVEL}px` } : {},
+    // Memoize the className for connector line - subtle vertical line on the left
+    const contentClassName = useMemo(() =>
+        level > 0
+            ? "relative before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px] before:bg-purple-500/10"
+            : "relative before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px] before:bg-purple-500/10",
         [level]
     );
 
-    // Memoize the className to prevent recalculation
-    const contentClassName = useMemo(() =>
-        level > 0 ? "border-l-2 border-purple-500/20 pl-4 ml-2" : "",
+    // Add padding for nested content
+    const contentStyle = useMemo(() =>
+        level > 0 ? { paddingLeft: `${CONTENT_PADDING_LEFT}px` } : { paddingLeft: `${CONTENT_PADDING_LEFT}px` },
         [level]
     );
 
     return (
-        <div id={`run-span-conversation-${span_id}`} className="run-wrapper" style={indentStyle}>
+        <div id={`run-span-conversation-${span_id}`} className="run-wrapper">
             {/* SpanSeparator now handles getting span data and displaying status */}
             <SpanSeparator
                 spanId={span_id}
@@ -39,7 +41,7 @@ const RunSpanMessageComponent = (props: {
                 level={level}
             />
             {!isCollapsed && (
-                <div className={contentClassName}>
+                <div className={contentClassName} style={contentStyle}>
                     {messages.map((message) => (
                         <HierarchicalMessageSpanItem
                             key={message.span_id}

@@ -1,13 +1,9 @@
 import React, { useMemo } from 'react';
-import { ChevronDown, ChevronRight, Loader2, CheckCircle2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 import { useSpanById } from '@/hooks/useSpanById';
-import { getExecuteMessagesResult, getOperationIcon, getOperationIconColor, getSpanTitle, getTimelineBgColor, getToolCallMessage, getToolExecuteMessageResult } from '@/components/chat/traces/TraceRow/new-timeline/utils';
-import { classNames, tryParseJson } from '@/utils/modelUtils';
-import { ToolCallsViewer } from '../traces/TraceRow/span-info/DetailView/tool-calls-viewer';
-import { ToolCall } from '@/types/common-type';
-import { ToolMessage } from '../messages/ToolMessage';
-import { Message } from '@/types/chat';
+import { getOperationIcon, getSpanTitle, getTimelineBgColor, getToolCallMessage } from '@/components/chat/traces/TraceRow/new-timeline/utils';
+import { classNames } from '@/utils/modelUtils';
 import { ToolCallList } from '../messages/ToolCallList';
 
 interface SpanSeparatorProps {
@@ -84,13 +80,14 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
     return <></>;
   }, [span]);
 
-  // Consistent left-aligned design for all levels
+  // Consistent left-aligned design for all levels - no indentation
+  // Level is only used for vertical spacing adjustment
   return (
-    <div className={`flex items-center gap-2 ${level === 0 ? 'my-6' : 'my-4'}`}>
-      {/* Separator badge with colored left border */}
+    <div className={`flex items-center gap-2 ${level === 0 ? 'mt-4' : 'my-2'}`}>
+      {/* Separator badge with colored left border - compact design */}
       <button
         onClick={handleClick}
-        className={`flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted/30 border-l-2 border-[${iconColor}] hover:bg-muted/50 transition-colors cursor-pointer group`}
+        className={`flex items-center gap-2 px-2.5 py-1 rounded-md bg-muted/30 border-l-2 border-[${iconColor}] hover:bg-muted/50 transition-colors cursor-pointer group`}
         title={`Click to ${isCollapsed ? 'expand' : 'collapse'}`}
       >
         {onToggle && (
@@ -100,7 +97,7 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
             <ChevronDown className="w-3 h-3 text-muted-foreground/70 group-hover:text-muted-foreground transition-colors" />
           )
         )}
-        <div className={classNames("p-1 rounded-full ", `text-[${iconColor}]`)}>
+        <div className={classNames("p-0.5 rounded-full ", `text-[${iconColor}]`)}>
           {iconComponent}
         </div>
         <span className="text-[11px] font-mono font-medium text-muted-foreground/90 group-hover:text-foreground tracking-wide transition-colors">

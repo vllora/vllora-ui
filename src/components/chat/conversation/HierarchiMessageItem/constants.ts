@@ -4,6 +4,16 @@
 
 /**
  * Indentation in pixels per nesting level
- * Used to create visual hierarchy in the tree structure
+ * Reduced to minimal value - hierarchy shown via connector lines instead
  */
-export const INDENT_PER_LEVEL = 10;
+export const INDENT_PER_LEVEL = 2;
+
+/**
+ * Connector line width for tree structure
+ */
+export const CONNECTOR_WIDTH = 20;
+
+/**
+ * Padding for content after connector line
+ */
+export const CONTENT_PADDING_LEFT = 10;
