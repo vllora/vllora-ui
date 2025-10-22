@@ -8,7 +8,7 @@ import { emitter } from '@/utils/eventEmitter';
 import { XCircle } from 'lucide-react';
 import { useConversationEvents } from '@/hooks/events/useConversationEvents';
 import { Message } from '@/types/chat';
-import { ConversationMetrics } from './ConversationMetrics';
+import { extractMessageFromApiInvokeSpan } from '@/utils/span-to-message';
 
 interface ChatWindowProps {
   threadId?: string;
@@ -48,7 +48,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     traceId,
     setTraceId,
     appendUsage,
-    conversationMetrics,
+    flattenSpans,
     clearAll,
   } = ChatWindowConsumer();
 
@@ -170,29 +170,37 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
   //   };
   // }, [displayMessages, threadId, scrollToBottom, widgetId]);
 
+
+  const handleExternalSubmit = useCallback(({
+    inputText,
+    files,
+    searchToolEnabled,
+    otherTools,
+    threadTitle,
+  }: {
+    inputText: string;
+    files: any[];
+    searchToolEnabled?: boolean;
+    otherTools?: string[];
+    threadTitle?: string;
+  }) => {
+    setCurrentInput(inputText);
+    // construct initial messages based on last api_invoke span
+    const lastApiInvokeSpan = flattenSpans.filter(span => span.operation_name === 'api_invoke').pop();
+    let continousMessage: Message[] = []
+    if (lastApiInvokeSpan) {
+      continousMessage = extractMessageFromApiInvokeSpan(lastApiInvokeSpan);
+    }
+
+    onSubmitWrapper({ inputText, files, searchToolEnabled, otherTools, threadId, threadTitle, initialMessages: continousMessage });
+  }, [onSubmitWrapper, setCurrentInput, threadId, flattenSpans]);
   useEffect(() => {
-    const handleExternalSubmit = ({
-      inputText,
-      files,
-      searchToolEnabled,
-      otherTools,
-      threadTitle,
-    }: {
-      inputText: string;
-      files: any[];
-      searchToolEnabled?: boolean;
-      otherTools?: string[];
-      threadTitle?: string;
-    }) => {
-      setCurrentInput(inputText);
-      onSubmitWrapper({ inputText, files, searchToolEnabled, otherTools, threadId, threadTitle, initialMessages: [] });
-    };
     emitter.on('langdb_input_chatSubmit', handleExternalSubmit);
 
     return () => {
       emitter.off('langdb_input_chatSubmit', handleExternalSubmit);
     };
-  }, [onSubmitWrapper, setCurrentInput, threadId]);
+  }, [handleExternalSubmit]);
 
   // Ensure typing indicator is visible by scrolling to bottom when typing state changes
   useEffect(() => {
