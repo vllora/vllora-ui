@@ -2,7 +2,7 @@ import { MessageStructure } from "@/utils/message-structure-from-span";
 import { HierarchicalMessageSpanItem } from ".";
 import { SpanSeparator } from "../SpanSeparator";
 import { useState, memo, useMemo, useCallback } from "react";
-import { CONNECTOR_WIDTH, CONTENT_PADDING_LEFT } from "./constants";
+import { CONTENT_PADDING_LEFT } from "./constants";
 
 const RunSpanMessageComponent = (props: {
     span_id: string;
@@ -19,9 +19,7 @@ const RunSpanMessageComponent = (props: {
 
     // Memoize the className for connector line - subtle vertical line on the left
     const contentClassName = useMemo(() =>
-        level > 0
-            ? "relative before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px] before:bg-purple-500/10"
-            : "relative before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px] before:bg-purple-500/10",
+        "relative before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[1px] before:bg-border",
         [level]
     );
 

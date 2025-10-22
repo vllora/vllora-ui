@@ -16,4 +16,4 @@ export const CONNECTOR_WIDTH = 20;
 /**
  * Padding for content after connector line
  */
-export const CONTENT_PADDING_LEFT = 10;
+export const CONTENT_PADDING_LEFT = 20;

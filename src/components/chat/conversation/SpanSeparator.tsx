@@ -83,11 +83,11 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
   // Consistent left-aligned design for all levels - no indentation
   // Level is only used for vertical spacing adjustment
   return (
-    <div className={`flex items-center gap-2 ${level === 0 ? 'mt-4' : 'my-2'}`}>
+    <div className={`flex items-center gap-2  ${level === 0 ? 'mt-4' : ''}`}>
       {/* Separator badge with colored left border - compact design */}
       <button
         onClick={handleClick}
-        className={`flex items-center gap-2 px-2.5 py-1 rounded-md  hover:bg-muted/50 transition-colors cursor-pointer group`}
+        className={`flex w-full items-center gap-2 px-2.5 py-2 border-l border-border hover:bg-muted/50 transition-colors cursor-pointer group`}
         title={`Click to ${isCollapsed ? 'expand' : 'collapse'}`}
       >
         {onToggle && (
