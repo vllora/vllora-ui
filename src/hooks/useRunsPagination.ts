@@ -18,7 +18,9 @@ export function useRunsPagination({ projectId, threadId }: UseRunsPaginationPara
   const [hasMoreRuns, setHasMoreRuns] = useState<boolean>(false);
   const [loadingMoreRuns, setLoadingMoreRuns] = useState<boolean>(false);
   const [rawRuns, setRawRuns] = useState<RunDTO[]>([]);
-
+const [openTraces, setOpenTraces] = useState<
+    { run_id: string; tab: "trace" | "code" }[]
+  >([]);
   const projectIdRef = useLatest(projectId);
   const threadIdRef = useLatest(threadId);
 
@@ -42,6 +44,16 @@ export function useRunsPagination({ projectId, threadId }: UseRunsPaginationPara
       });
       // Update pagination state
       const runs = response?.data || [];
+
+     runs && runs.length> 0 && runs[0].run_id && setOpenTraces((prev) => {
+        if(prev && prev.length  == 0){
+          return [{
+            run_id: runs[0].run_id!,
+            tab: "trace"
+          }]
+        }
+        return prev || [];
+      })
       const pagination = response?.pagination || { offset: 0, limit: 0, total: 0 };
 
       const newOffset = runs.length;
@@ -106,7 +118,7 @@ export function useRunsPagination({ projectId, threadId }: UseRunsPaginationPara
     setHasMoreRuns(false);
     setRawRuns([]);
     triggerRefreshRuns();
-  }, [triggerRefreshRuns]);
+  }, []);
 
   return {
     runs: rawRuns,
@@ -118,5 +130,7 @@ export function useRunsPagination({ projectId, threadId }: UseRunsPaginationPara
     hasMoreRuns,
     runsTotal,
     loadingMoreRuns,
+    openTraces,
+    setOpenTraces,
   };
 }

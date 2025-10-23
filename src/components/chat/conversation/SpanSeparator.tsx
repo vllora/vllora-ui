@@ -1,11 +1,10 @@
-import React, { useMemo } from 'react';
-import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
+import React, { useCallback, useMemo, useState } from 'react';
+import { ChevronDown, ChevronRight, Loader2, Copy, Check } from 'lucide-react';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 import { useSpanById } from '@/hooks/useSpanById';
-import { getOperationIcon, getSpanTitle, getTimelineBgColor, getToolCallMessage } from '@/components/chat/traces/TraceRow/new-timeline/utils';
-import { classNames, tryParseFloat, tryParseJson } from '@/utils/modelUtils';
-import { Message } from '@/types/chat';
-import { AiMessage } from '../messages/AiMessage';
+import { getOperationIcon, getSpanTitle, getTimelineBgColor } from '@/components/chat/traces/TraceRow/new-timeline/utils';
+import { classNames } from '@/utils/modelUtils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface SpanSeparatorProps {
   spanId: string;
@@ -14,6 +13,7 @@ interface SpanSeparatorProps {
   onToggle?: () => void;
   level?: number;
   icon?: React.ReactNode;
+  onHover?: (input: {spanId: string, runId: string, isHovering: boolean}) => void;
 }
 
 /**
@@ -27,11 +27,13 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
   isCollapsed = false,
   onToggle,
   level = 0,
+  onHover,
 }) => {
   // Get span data from context - component will re-render on context changes
   const { flattenSpans } = ChatWindowConsumer();
   // But useSpanById returns same reference if THIS span's data didn't change
   const span = useSpanById(flattenSpans, spanId);
+  const [copied, setCopied] = useState(false);
 
   const handleClick = () => {
     if (onToggle) {
@@ -41,20 +43,53 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
     }
   };
 
+  const handleMouseEnter = useCallback(() => {
+    if (onHover) {
+      onHover({spanId, runId: span?.run_id || '', isHovering: true});
+    }
+  }, [spanId, span?.run_id, onHover]);
+
+  const handleMouseLeave = useCallback(() => {
+    if (onHover) {
+      onHover({spanId, runId: span?.run_id || '', isHovering: false});
+    }
+  }, [spanId, span?.run_id, onHover]);
+
+  // Determine if this is a run and what ID to copy
+  const { isRun, idToCopy, displayId } = useMemo(() => {
+    const isRunSpan = span?.operation_name === 'run';
+    const id = isRunSpan && span?.run_id ? span.run_id : spanId;
+    return {
+      isRun: isRunSpan,
+      idToCopy: id,
+      displayId: `${id.slice(0, 8)}...`
+    };
+  }, [span, spanId]);
+
   // Generate title from span data - only recalculates if span changes
   const title = useMemo(() => {
     if (!span) {
-      const shortId = spanId.slice(0, 8);
-      return `${shortId}`;
+      return spanId.slice(0, 8);
     }
     if(span.operation_name === 'run') {
-      return `Run ${span.run_id.slice(0, 8)}`
+      return `Run`;
     }
 
     // Use getSpanTitle to get the proper title based on span attributes
     const spanTitle = getSpanTitle({ span, relatedSpans: [] });
     return spanTitle;
   }, [span, spanId]);
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(idToCopy);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
 
   const iconColor: string = useMemo(() => {
     if (!span) return '';
@@ -87,29 +122,50 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
   // Consistent left-aligned design for all levels - no indentation
   // Level is only used for vertical spacing adjustment
   return (
-    <div className={`flex items-center gap-2  ${level === 0 ? 'mt-4' : ''}`}>
-      {/* Separator badge with colored left border - compact design */}
-      <button
-        onClick={handleClick}
-        className={`flex w-full items-center gap-2 px-2.5 py-2 border-l border-border hover:bg-muted/50 transition-colors cursor-pointer group`}
-        title={`Click to ${isCollapsed ? 'expand' : 'collapse'}`}
-      >
-        {onToggle && (
-          isCollapsed ? (
-            <ChevronRight className="w-3 h-3 text-muted-foreground/70 group-hover:text-muted-foreground transition-colors" />
-          ) : (
-            <ChevronDown className="w-3 h-3 text-muted-foreground/70 group-hover:text-muted-foreground transition-colors" />
-          )
-        )}
-        <div className={classNames("p-0.5 rounded-full ", `text-[${iconColor}]`)}>
-          {iconComponent}
-        </div>
-        <span className="text-[11px] font-mono font-medium text-muted-foreground/90 group-hover:text-foreground tracking-wide transition-colors">
-          {title}
-        </span>
-        {StatusIcon}
-      </button>
-    </div>
+    <TooltipProvider>
+      <div className={`flex items-center gap-2  ${level === 0 ? 'mt-4' : ''}`}>
+        {/* Separator badge with colored left border - compact design */}
+        <button
+          onClick={handleClick}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          className={`flex w-full items-center gap-2 px-2.5 py-2 ${isCollapsed ? 'border-l-2 border-border' : 'border-l border-border'} hover:bg-muted/50 transition-colors cursor-pointer group `}
+        >
+          {onToggle && (
+            isCollapsed ? (
+              <ChevronRight className="w-3 h-3 text-muted-foreground/70 group-hover:text-muted-foreground transition-colors" />
+            ) : (
+              <ChevronDown className="w-3 h-3 text-muted-foreground/70 group-hover:text-muted-foreground transition-colors" />
+            )
+          )}
+          <div className={classNames("p-0.5 rounded-full ", `text-[${iconColor}]`)}>
+            {iconComponent}
+          </div>
+          <span className="text-[12px] font-medium text-muted-foreground/90 group-hover:text-foreground transition-colors">
+            {title}
+          </span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={handleCopy}
+                className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground/60 bg-muted px-1.5 py-0.5 rounded hover:bg-muted/80 hover:text-muted-foreground transition-colors"
+              >
+                <span>{displayId}</span>
+                {copied ? (
+                  <Check className="w-2.5 h-2.5 text-green-500" />
+                ) : (
+                  <Copy className="w-2.5 h-2.5" />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{copied ? 'Copied!' : `Copy full ${isRun ? 'run_id' : 'span_id'}`}</p>
+            </TooltipContent>
+          </Tooltip>
+          {StatusIcon}
+        </button>
+      </div>
+    </TooltipProvider>
   );
 };
 
@@ -128,49 +184,3 @@ export const SpanSeparator = React.memo(
 );
 
 
-export const ToolStartMessageDisplay = (props: {
-  spanId: string;
-}) => {
-  const { spanId } = props;
-  const { flattenSpans } = ChatWindowConsumer();
-
-  const span = useSpanById(flattenSpans, spanId);
-  const parentSpan = span?.parent_span_id ? useSpanById(flattenSpans, span?.parent_span_id) : null;
-
-  let parrentAttr = parentSpan?.attribute as any || {};
-  let usageStr = parrentAttr?.['usage'] || '';
-  let usageJson = tryParseJson(usageStr);
-  let costStr = parrentAttr?.['cost'] || '';
-  let cost = tryParseFloat(costStr) || 0;
-  let requestStr = parrentAttr?.['request'] || '';
-  let requestJson = tryParseJson(requestStr);
-
-  let providerName = parentSpan?.operation_name
-  let modelName = requestJson?.model || '';
-  let metrics = {
-    usage: usageJson ,
-    cost: cost,
-    ttft: parrentAttr?.['ttft'] || undefined,
-  }
-  const toolCallsJson = useMemo(() => {
-    if (!span) return [];
-    return getToolCallMessage({
-      span,
-    })
-  }, [span]);
-  const displayMessage: Message = {
-    id: `tool-${spanId}` || '',
-    type: 'assistant',
-    timestamp: parentSpan?.finish_time_us || 0,
-    content: '',
-    tool_calls: toolCallsJson,
-    metrics: [metrics],
-    model_name: providerName && modelName ? `${providerName}/${modelName}` : '',
-    
-  }
-  return <AiMessage message={displayMessage} />
-  // return <>{
-  //   toolCallsJson.length > 0 &&  <ToolCallList toolCalls={toolCallsJson} />
-  // }</>
-
-}

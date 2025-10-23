@@ -5,7 +5,7 @@ import { buildSpanHierarchy } from '@/utils/span-hierarchy';
 import { buildMessageHierarchyFromSpan, MessageStructure } from '@/utils/message-structure-from-span';
 import { useStableMessageHierarchies } from '@/hooks/useStableMessageHierarchies';
 import { useDebugControl } from '@/hooks/events/useDebugControl';
-import { createNewRun, processEvent, processEventWithRunMap, updatedRunWithSpans } from '@/hooks/events/utilities';
+import { processEvent, updatedRunWithSpans } from '@/hooks/events/utilities';
 import { useWrapperHook } from '@/hooks/useWrapperHook';
 
 export type ChatWindowContextType = ReturnType<typeof useChatWindow>;
@@ -49,34 +49,53 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     isLoadingSpans,
     loadSpansError,
     refreshSpans,
+    hoverSpanId,
+    setHoverSpanId,
   } = useWrapperHook({ projectId, threadId });
 
 
 
   const [isChatProcessing, setIsChatProcessing] = useState<boolean>(false);
+  const [collapsedSpans, setCollapsedSpans] = useState<string[]>([]);
+
+  const [runHighlighted, setRunHighlighted] = useState<string | null>(null);
+
+  const updateRunMetrics = useCallback((run_id: string, updatedSpans: Span[]) => {
+    setRuns(prevRuns => {
+      let runById = prevRuns.find(r => r.run_id === run_id)
+      if(!runById) {
+        let newRun = updatedRunWithSpans({
+          spans: updatedSpans.filter(s => s.run_id === run_id),
+          run_id
+        })
+        return [newRun, ...prevRuns];
+      };
+      let updatedRun = updatedRunWithSpans({
+        spans: updatedSpans.filter(s => s.run_id === run_id),
+        run_id,
+        prevRun: runById
+      })
+      return prevRuns.map(r => r.run_id === run_id ? updatedRun : r)
+    })
+  }, []);
   const handleEvent = useCallback((event: ProjectEventUnion) => {
     if (event.run_id && event.thread_id === threadId) {
       setTimeout(() => {
         setFlattenSpans(prevSpans => {
           let newFlattenSpans = processEvent(prevSpans, event)
+
+          // Update run metrics with the new spans
+          event.run_id && updateRunMetrics(event.run_id, newFlattenSpans);
+
           return newFlattenSpans
         });
-        event.run_id && setRuns(prevRuns => {
-          // check if run_id exists in prev
-          let existingRun = prevRuns.find(r => r.run_id === event.run_id)
-          if (existingRun) {
-            return prevRuns
-          }
-          if (!event.run_id) return prevRuns;
-          let newRun = createNewRun(event.run_id)
-          return [newRun, ...prevRuns]
-        });
+
         event.run_id && setSelectedRunId(event.run_id);
         event.run_id && setOpenTraces([{ run_id: event.run_id, tab: 'trace' }]);
       }, 0)
 
     }
-  }, [threadId]);
+  }, [threadId, updateRunMetrics]);
 
 
   useDebugControl({ handleEvent, channel_name: 'debug-thread-trace-timeline-events' });
@@ -105,12 +124,9 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   const [traceId, setTraceId] = useState<string | undefined>();
   const [usageInfo, setUsageInfo] = useState<any[]>([]);
 
-
-
-
-
   // Wrap refreshRuns to also reset UI state
   const handleRefreshRuns = useCallback(() => {
+    setFlattenSpans([]);
     setSelectedSpanId(null);
     setSelectedRunId(null);
     setOpenTraces([]);
@@ -135,21 +151,15 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     return selectedSpanId ? spansOfSelectedRun.find((s: Span) => s.span_id === selectedSpanId) : undefined;
   }, [selectedSpanId, spansOfSelectedRun]);
 
-  // Derive messages from hierarchical spans
-  // const displayMessages = useMemo(() => {
-  //   if (spanHierarchies.length === 0) {
-  //     return [];
-  //   }
-  //   // Convert hierarchical spans to messages
-  //   return convertSpansToMessages(spanHierarchies);
-  // }, [spanHierarchies]);
-
-
   const clearAll = useCallback(() => {
     setSelectedRunId(null);
     setSelectedSpanId(null);
     setDetailSpanId(null);
     setFlattenSpans([]);
+    setCollapsedSpans([]);
+    setRunHighlighted(null);
+    setHoverSpanId(undefined);
+    setHoveredRunId(null);
   }, []);
 
   // Calculate sum of all message metrics from displayMessages
@@ -236,7 +246,13 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     detailSpanId,
     setDetailSpanId,
     messageHierarchies,
-    detailSpan
+    detailSpan,
+    runHighlighted,
+    setRunHighlighted,
+    hoverSpanId,
+    setHoverSpanId,
+    collapsedSpans,
+    setCollapsedSpans,
   };
 }
 export function ChatWindowProvider({ children, threadId, projectId }: { children: ReactNode, threadId: string, projectId: string }) {

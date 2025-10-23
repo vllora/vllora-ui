@@ -12,6 +12,10 @@ interface TimelineContentProps {
   setSelectedRunId: (runId: string | null) => void;
   setDetailSpanId: (spanId: string | null) => void;
   isInSidebar?: boolean;
+  hoverSpanId?: string;
+  collapsedSpans: string[];
+  
+  onToggle?: (spanId: string) => void;
 }
 
 export const TimelineContent: React.FC<TimelineContentProps> = ({
@@ -21,7 +25,10 @@ export const TimelineContent: React.FC<TimelineContentProps> = ({
   setSelectedSpanId,
   setSelectedRunId,
   setDetailSpanId,
-  isInSidebar = true
+  isInSidebar = true,
+  hoverSpanId,
+  collapsedSpans,
+  onToggle
 }) => {
 
   // Get run ID from first span (all spans should belong to same run)
@@ -41,6 +48,9 @@ export const TimelineContent: React.FC<TimelineContentProps> = ({
             setSelectedRunId={setSelectedRunId}
             setDetailSpanId={setDetailSpanId}
             isInSidebar={isInSidebar}
+            hoverSpanId={hoverSpanId}
+            collapsedSpans={collapsedSpans}
+            onToggle={onToggle}
           />
         </div>
       </div>
@@ -53,9 +63,12 @@ const TimelineContentInner = (props: {
   setSelectedRunId: (runId: string | null) => void;
   setDetailSpanId: (spanId: string | null) => void;
   isInSidebar?: boolean;
+  hoverSpanId?: string;
+  collapsedSpans: string[];
+  onToggle?: (spanId: string) => void;
 }) => {
   const { hierarchies, runId } = RunDetailConsumer()
-  const { selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, isInSidebar = true } = props
+  const { selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, isInSidebar = true, hoverSpanId, collapsedSpans, onToggle } = props
 
   if (!hierarchies || hierarchies.length === 0) {
     return <div className="flex items-center justify-center p-4 text-sm text-gray-400">
@@ -71,6 +84,9 @@ const TimelineContentInner = (props: {
         isInSidebar={isInSidebar}
         selectedSpanId={selectedSpanId || undefined}
         level={0}
+        hoverSpanId={hoverSpanId}
+        collapsedSpans={collapsedSpans}
+        onToggle={onToggle}
         onSpanSelect={(spanId, runId) => {
           if (runId) {
             setSelectedSpanId(spanId);

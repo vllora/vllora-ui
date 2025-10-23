@@ -13,6 +13,7 @@ export const SpanDetailsPanel: React.FC<SpanDetailsPanelProps> = ({
 }) => {
   const { detailSpan } = ChatWindowConsumer();
 
+  console.log('===== detailSpan', detailSpan)
   return (
     <div className={cn("flex flex-col h-full w-full", className)}>
       <div className="flex-1 overflow-hidden bg-[#0f0f0f] h-full">

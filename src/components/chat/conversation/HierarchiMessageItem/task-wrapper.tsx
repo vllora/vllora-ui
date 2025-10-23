@@ -1,8 +1,9 @@
 import { MessageStructure } from "@/utils/message-structure-from-span";
 import { HierarchicalMessageSpanItem } from ".";
 import { SpanSeparator } from "../SpanSeparator";
-import { useState, memo, useMemo, useCallback } from "react";
-import { CONNECTOR_WIDTH, CONTENT_PADDING_LEFT } from "./constants";
+import { memo, useMemo, useCallback } from "react";
+import {  CONTENT_PADDING_LEFT } from "./constants";
+import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 
 
 export const TaskSpanMessage = memo((props: {
@@ -11,13 +12,18 @@ export const TaskSpanMessage = memo((props: {
     level?: number;
 }) => {
     const { span_id, messages, level = 0 } = props;
-    const [isCollapsed, setIsCollapsed] = useState(false);
-
+    const { setHoverSpanId, setRunHighlighted, setCollapsedSpans, collapsedSpans } = ChatWindowConsumer();
+    const isCollapsed = useMemo(() => collapsedSpans.includes(span_id), [collapsedSpans, span_id]);
     // Memoize the toggle callback to prevent child re-renders
     const toggleCollapse = useCallback(() => {
-        setIsCollapsed(prev => !prev);
+        setCollapsedSpans(prev => {
+            if (prev.includes(span_id)) {
+                return prev.filter(id => id !== span_id);
+            } else {
+                return [...prev, span_id];
+            }
+        });
     }, []);
-
     const contentClassName = useMemo(() =>
         "relative before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[1px] before:bg-border",
         []
@@ -30,12 +36,25 @@ export const TaskSpanMessage = memo((props: {
     );
 
     return (
-        <div id={`task-span-conversation-${span_id}`} className="task-wrapper">
+        <div id={`task-span-conversation-${span_id}`} className="task-wrapper flex flex-col gap-2 group">
             <SpanSeparator
                 spanId={span_id}
                 isCollapsed={isCollapsed}
                 onToggle={toggleCollapse}
                 level={level}
+                onHover={({
+                    runId,
+                    isHovering,
+                    spanId
+                }) => {
+                    if(isHovering) {
+                        setHoverSpanId(spanId);
+                        setRunHighlighted(runId);
+                    } else {
+                        setHoverSpanId(prev => prev === spanId ? '' : prev);
+                        setRunHighlighted(prev => prev === runId ? '' : prev);
+                    }
+                }}
             />
             {!isCollapsed && (
                 <div className={contentClassName} style={contentStyle}>

@@ -1,8 +1,9 @@
 import { MessageStructure } from "@/utils/message-structure-from-span";
 import { HierarchicalMessageSpanItem } from ".";
-import { SpanSeparator, ToolStartMessageDisplay } from "../SpanSeparator";
+import { SpanSeparator } from "../SpanSeparator";
 import { useState, memo, useMemo, useCallback } from "react";
-import { CONNECTOR_WIDTH, CONTENT_PADDING_LEFT } from "./constants";
+import {  CONTENT_PADDING_LEFT } from "./constants";
+import { ToolStartMessageDisplay } from "../ToolStartMessageDisplay";
 
 
 

@@ -1,8 +1,9 @@
 import { MessageStructure } from "@/utils/message-structure-from-span";
 import { HierarchicalMessageSpanItem } from ".";
 import { SpanSeparator } from "../SpanSeparator";
-import { useState, memo, useMemo, useCallback } from "react";
+import { memo, useMemo, useCallback } from "react";
 import { CONTENT_PADDING_LEFT } from "./constants";
+import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 
 
 export const AgentSpanMessage = memo((props: {
@@ -11,11 +12,19 @@ export const AgentSpanMessage = memo((props: {
     level?: number;
 }) => {
     const { span_id, messages, level = 0 } = props;
-    const [isCollapsed, setIsCollapsed] = useState(false);
+    // const [isCollapsed, setIsCollapsed] = useState(false);
+    const { setHoverSpanId, setRunHighlighted, setCollapsedSpans, collapsedSpans } = ChatWindowConsumer();
 
+    const isCollapsed = useMemo(() => collapsedSpans.includes(span_id), [collapsedSpans, span_id]);
     // Memoize the toggle callback to prevent child re-renders
     const toggleCollapse = useCallback(() => {
-        setIsCollapsed(prev => !prev);
+        setCollapsedSpans(prev => {
+            if (prev.includes(span_id)) {
+                return prev.filter(id => id !== span_id);
+            } else {
+                return [...prev, span_id];
+            }
+        });
     }, []);
 
     const contentClassName = useMemo(() =>
@@ -36,6 +45,19 @@ export const AgentSpanMessage = memo((props: {
                 isCollapsed={isCollapsed}
                 onToggle={toggleCollapse}
                 level={level}
+                onHover={({
+                    runId,
+                    isHovering,
+                    spanId
+                }) => {
+                    if(isHovering) {
+                        setHoverSpanId(spanId);
+                        setRunHighlighted(runId);
+                    } else {
+                        setHoverSpanId(prev => prev === spanId ? '' : prev);
+                        setRunHighlighted(prev => prev === runId ? '' : prev);
+                    }
+                }}
             />
             {!isCollapsed && (
                 <div className={contentClassName} style={contentStyle}>

@@ -16,7 +16,7 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
     const {
         level,
         hasChildren,
-        isOpen,
+        collapsedSpans,
         titleWidth,
         title,
         operationIcon,
@@ -44,11 +44,11 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
-                            onToggle();
+                            span && onToggle(span.span_id);
                         }}
                         className="flex-shrink-0 mr-1 hover:bg-accent rounded p-0.5 transition-colors"
                     >
-                        {isOpen ? (
+                        {!(collapsedSpans?.includes(span?.span_id || "")) ? (
                             <ChevronDown className="w-3 h-3 text-muted-foreground" />
                         ) : (
                             <ChevronRight className="w-3 h-3 text-muted-foreground" />

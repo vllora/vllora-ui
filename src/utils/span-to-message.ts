@@ -171,13 +171,16 @@ export function extractMessagesFromSpan(
   const responseContent = extractResponseContent(outputJson, attribute);
   // Calculate metrics for this span
   const spanMetrics = calculateSpanMetrics(span);
-
+    let model_name = span.operation_name
+      ? `${span.operation_name}/${requestJson?.model}`
+      : requestJson?.model;
   // Convert each message in the request
   requestMessages.forEach((msg: any, index: number) => {
     const message: Message = {
       id: `${span.span_id}_msg_${index}`,
       type: msg.role || "system",
       role: msg.role as "user" | "assistant" | "system",
+      model_name: msg.role !== "user" ? model_name : undefined,
       content: extractMessageContent(msg),
       content_array:
         msg.parts || (Array.isArray(msg.content) ? msg.content : undefined),
@@ -197,11 +200,7 @@ export function extractMessagesFromSpan(
 
   // Add the assistant response message if available
   if (responseContent) {
-    let requestStr = attribute?.request;
-    let requestJson = requestStr ? tryParseJson(requestStr) : null;
-    let model_name = span.operation_name
-      ? `${span.operation_name}/${requestJson?.model}`
-      : requestJson?.model;
+    
     const assistantMessage: Message = {
       id: `${span.span_id}_response`,
       type: "assistant",

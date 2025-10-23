@@ -39,7 +39,7 @@ const TraceRowImpl = ({ run, index = 0, isInSidebar = false }: TraceRowProps) =>
       "shadow-sm transition-all border-border border-b-none",
       isOpen ? "shadow-md" : "hover:shadow-md",
       isInSidebar ? 'rounded-md' : 'rounded-none',
-      isInSidebar && isOpen ? "" : "overflow-hidden"
+      isInSidebar && isOpen ? "" : "overflow-hidden",
     )}
     initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}

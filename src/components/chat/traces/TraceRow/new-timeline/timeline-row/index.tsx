@@ -1,7 +1,6 @@
 import { cn } from "@/lib/utils";
-import { ReactNode } from "react";
+import { ReactNode, useMemo } from "react";
 import { TimelineVisualization } from "./timeline-visualization";
-import { FullscreenTimelineContent } from "./fullscreen-timeline-content";
 import { SidebarTimelineContent } from "./sidebar-timeline-content";
 import { classNames } from "@/utils/modelUtils";
 import { Span } from "@/types/common-type";
@@ -10,13 +9,13 @@ import { Span } from "@/types/common-type";
 export interface TimelineContentBaseProps {
     level: number;
     hasChildren: boolean;
-    isOpen: boolean;
+    collapsedSpans?: string[];
     titleWidth: number | string;
     title: string;
     operationIcon: ReactNode;
     operationIconColor: string;
     durationSeconds: number;
-    onToggle: () => void;
+    onToggle: (spanId: string) => void;
     operation_name: string;
     span?: Span;
     isInSidebar?: boolean;
@@ -27,7 +26,7 @@ export interface TimelineRowProps {
     span: Span;
     level: number;
     hasChildren: boolean;
-    isOpen: boolean;
+    collapsedSpans?: string[];
     titleWidth: number | string;
     title: string;
     operationIcon: React.ReactNode;
@@ -35,11 +34,12 @@ export interface TimelineRowProps {
     durationSeconds: number;
     widthPercent: string;
     offsetPercent: string;
-    onToggle: () => void;
+    onToggle: (spanId: string) => void;
     isInSidebar?: boolean;
     timelineBgColor: string;
     selectedSpanId?: string;
     onSpanSelect?: (spanId: string, runId: string) => void;
+    hoverSpanId?: string;
 }
 
 // Main TimelineRow component that uses the sub-components
@@ -48,7 +48,7 @@ export const TimelineRow = (props: TimelineRowProps) => {
         span,
         level,
         hasChildren,
-        isOpen,
+        collapsedSpans,
         titleWidth,
         title,
         operationIcon,
@@ -60,13 +60,14 @@ export const TimelineRow = (props: TimelineRowProps) => {
         onToggle,
         selectedSpanId,
         onSpanSelect,
+        hoverSpanId,
         isInSidebar = true
-    } = props;    
+    } = props;
     // Common props for timeline content components
     const contentProps = {
         level,
         hasChildren,
-        isOpen,
+        collapsedSpans,
         titleWidth,
         title,
         operationIcon,
@@ -76,14 +77,30 @@ export const TimelineRow = (props: TimelineRowProps) => {
         timelineBgColor: timelineBgColor,
         operation_name: span.operation_name,
         span,
-    };    
+    };
+
+    const classNameOfCurrentSpan = useMemo(() => {
+        let isSelected = selectedSpanId && span.span_id === selectedSpanId
+        let isHovered = hoverSpanId && span.span_id === hoverSpanId
+        if(isSelected && isHovered) {
+            return ' border border-amber-500 !border-l-2 !border-l-[rgb(var(--theme-500))]'
+        }
+        if(isSelected){
+            return "border-l-2 !border-l-[rgb(var(--theme-500))]";
+        }
+        if(isHovered){
+            return "border-l-1 border border-amber-500";
+        }
+        return "hover:bg-[#151515] border-l-2 !border-l-transparent";
+    }, [span.span_id, selectedSpanId, hoverSpanId]);
+    
     return (
         <div
-            key={span.span_id}
+            key={`span-timeline-row-${span.span_id}`}
             data-span-id={span.span_id}
             className={cn(
                 "w-full group transition-colors hover:cursor-pointer",
-                selectedSpanId && span.span_id === selectedSpanId ? "border-l-2 !border-l-[rgb(var(--theme-500))]" : "hover:bg-[#151515] border-l-2 !border-l-transparent"
+                classNameOfCurrentSpan
             )}
             onClick={(e) => {
                 e.stopPropagation();
@@ -96,10 +113,7 @@ export const TimelineRow = (props: TimelineRowProps) => {
             <div className={classNames("flex w-full divide-x divide-border px-1")}>
                 {/* Render either fullscreen or sidebar content based on mode */}
                 <SidebarTimelineContent {...contentProps} isInSidebar={isInSidebar} />
-                {/* {!isInSidebar
-                    ? <FullscreenTimelineContent {...contentProps} isInSidebar={isInSidebar}/>
-                    : <SidebarTimelineContent {...contentProps} isInSidebar={isInSidebar} />
-                } */}
+
 
                 {/* Timeline visualization */}
                 <TimelineVisualization

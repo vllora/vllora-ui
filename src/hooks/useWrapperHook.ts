@@ -14,17 +14,15 @@ export const useWrapperHook = (props: {
   const { threadId, projectId } = props;
   // Use the runs pagination hook
   let runsPaginationState = useRunsPagination({ projectId, threadId });
-
   // Use the span details hook
   let spanDetailState = useSpanDetails({ projectId });
 
   const { setLoadingSpansById, selectedRunId, detailSpanId } = spanDetailState;
 
   const [flattenSpans, setFlattenSpans] = useState<Span[]>([]);
-  const [openTraces, setOpenTraces] = useState<
-    { run_id: string; tab: "trace" | "code" }[]
-  >([]);
+  
   const [hoveredRunId, setHoveredRunId] = useState<string | null>(null);
+  const [hoverSpanId, setHoverSpanId] = useState<string | undefined>(undefined);
 
   const updateBySpansOfAThread = useCallback((spans: Span[]) => {
     setFlattenSpans(spans);
@@ -46,12 +44,16 @@ export const useWrapperHook = (props: {
   }, [selectedRunId, runMap]);
 
   const detailSpan = useMemo(() => {
-    return detailSpanId
-      ? runMap[selectedRunId || ""]?.find(
+   console.log('===== detailSpanId', detailSpanId)
+   console.log('===== flattenSpans', flattenSpans)
+   let result = detailSpanId
+      ? flattenSpans.find(
           (span) => span.span_id === detailSpanId
         )
       : null;
-  }, [detailSpanId, selectedRunId, runMap]);
+      console.log('===== result', result)
+    return result;
+  }, [detailSpanId, flattenSpans]);
   // Use ahooks useRequest for fetching conversation spans
   const {
     loading: isLoadingSpans,
@@ -151,8 +153,6 @@ export const useWrapperHook = (props: {
     fetchSpansByRunId,
     flattenSpans,
     setFlattenSpans,
-    openTraces,
-    setOpenTraces,
     hoveredRunId,
     setHoveredRunId,
     isLoadingSpans,
@@ -162,5 +162,7 @@ export const useWrapperHook = (props: {
     updateBySpansOfARun,
     spansOfSelectedRun,
     detailSpan,
+    hoverSpanId,
+    setHoverSpanId,
   };
 };

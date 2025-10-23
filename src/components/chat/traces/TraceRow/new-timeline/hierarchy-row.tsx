@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { getSpanTitle, getOperationIcon, getOperationIconColor, getTimelineBgColor } from "./utils";
 import { TimelineRow } from "./timeline-row";
 import { skipThisSpan, isClientSDK } from "@/utils/graph-utils";
@@ -15,11 +14,13 @@ export interface HierarchyRowProps {
     selectedSpanId?: string;
     onSpanSelect?: (spanId: string, runId?: string) => void;
     isInSidebar?: boolean;
+    hoverSpanId?: string;
+    collapsedSpans?: string[];
+    onToggle?: (spanId: string) => void;
 }
 
 export const HierarchyRow = (props: HierarchyRowProps) => {
-    const { hierarchy, totalDuration, startTime, level, titleWidth: propTitleWidth = TIMELINE_DYNAMIC_TITLE_WIDTH_IN_SIDEBAR, relatedSpans = [], selectedSpanId, onSpanSelect, isInSidebar = true } = props;
-    const [isOpen, setIsOpen] = useState(true);
+    const { hierarchy, totalDuration, startTime, level, titleWidth: propTitleWidth = TIMELINE_DYNAMIC_TITLE_WIDTH_IN_SIDEBAR, relatedSpans = [], selectedSpanId, onSpanSelect, isInSidebar = true, hoverSpanId, collapsedSpans, onToggle } = props;
     // In ellora-ui, we're always in sidebar mode (chat sidebar)
     const titleWidth: string | number = `${propTitleWidth}px`.replace('pxpx', 'px');
 
@@ -32,11 +33,11 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
     if (skipCondition && !isSingleTrace) {
         if (childrenSpan && childrenSpan.length > 0) {
             return (
-                <div key={root.span_id} className="flex flex-col divide-y divide-border">
+                <div key={`span-timeline-hierarchy-${root.span_id}`} className="flex flex-col divide-y divide-border">
                     {childrenSpan.map(child => (
                         <HierarchyRow
                             level={level}
-                            key={child.span_id}
+                            key={`span-timeline-hierarchy-${child.span_id}`}
                             hierarchy={child}
                             totalDuration={totalDuration}
                             startTime={startTime}
@@ -45,6 +46,9 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                             selectedSpanId={selectedSpanId}
                             onSpanSelect={onSpanSelect}
                             isInSidebar={isInSidebar}
+                            hoverSpanId={hoverSpanId}
+                            collapsedSpans={collapsedSpans}
+                            onToggle={onToggle}
                         />
                     ))}
                 </div>
@@ -84,7 +88,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                 span={root}
                 level={level}
                 hasChildren={false}
-                isOpen={false}
+                collapsedSpans={[]}
                 titleWidth={titleWidth}
                 title={title}
                 operationIcon={operationIcon}
@@ -97,6 +101,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                 selectedSpanId={selectedSpanId}
                 onSpanSelect={onSpanSelect}
                 isInSidebar={isInSidebar}
+                hoverSpanId={hoverSpanId}
             />
         );
     }
@@ -107,7 +112,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                 span={root}
                 level={level}
                 hasChildren={true}
-                isOpen={isOpen}
+                collapsedSpans={collapsedSpans}
                 titleWidth={titleWidth}
                 title={title}
                 operationIcon={operationIcon}
@@ -115,18 +120,19 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                 durationSeconds={durationSeconds}
                 widthPercent={widthPercent}
                 offsetPercent={offsetPercent}
-                onToggle={() => setIsOpen(!isOpen)}
+                onToggle={(v) => onToggle?.(v)}
                 timelineBgColor={timelineBgColor}
                 selectedSpanId={selectedSpanId}
                 onSpanSelect={onSpanSelect}
                 isInSidebar={isInSidebar}
+                hoverSpanId={hoverSpanId}
             />
-            {isOpen && (
+            {!(collapsedSpans?.includes(root.span_id)) && (
                 <div className="flex flex-col divide-y divide-border/70">
                     {childrenSpan.map(child => (
                         <HierarchyRow
                             level={level + 1}
-                            key={child.span_id}
+                            key={`span-timeline-hierarchy-${child.span_id}`}
                             hierarchy={child}
                             totalDuration={totalDuration}
                             startTime={startTime}
@@ -135,6 +141,9 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                             selectedSpanId={selectedSpanId}
                             onSpanSelect={onSpanSelect}
                             isInSidebar={isInSidebar}
+                            hoverSpanId={hoverSpanId}
+                            collapsedSpans={collapsedSpans}
+                            onToggle={(v) => onToggle?.(v)}
                         />
                     ))}
                 </div>

@@ -32,10 +32,6 @@ import { handleCustomLlmStartEvent } from "./custom-llm-start";
 import { handleCustomLlmStopEvent } from "./custom-llm-stop";
 import { handleCustomCostEvent } from "./custom-cost";
 
-
-
-
-
 export const convertTextMessageStartToSpan = (
   event: TextMessageStartEvent
 ): Span => {
@@ -53,9 +49,6 @@ export const convertTextMessageStartToSpan = (
   };
 };
 
-
-
-
 export const createNewRun = (run_id: string): RunDTO => {
   let run: RunDTO = {
     run_id: run_id,
@@ -71,52 +64,58 @@ export const createNewRun = (run_id: string): RunDTO => {
     used_models: [],
     request_models: [],
     used_tools: [],
-    mcp_template_definition_ids: []
-   }  
-   return run;
-}
+    mcp_template_definition_ids: [],
+  };
+  return run;
+};
 export const updatedRunWithSpans = ({
   spans,
   prevRun,
-  run_id
+  run_id,
 }: {
   spans: Span[];
   prevRun?: RunDTO;
   run_id: string;
 }): RunDTO => {
-  if(!spans || spans.length === 0) return createNewRun(run_id);
+  if (!spans || spans.length === 0) return createNewRun(run_id);
   let processRun = prevRun || createNewRun(run_id);
   processRun.cost = 0;
   processRun.input_tokens = 0;
   processRun.output_tokens = 0;
   processRun.errors = [];
-  spans.forEach(span => {
-    let {cost, inputTokens, outputTokens, errors} = getDataFromSpan(span);
-    processRun.cost += cost;
-    processRun.input_tokens += inputTokens;
-    processRun.output_tokens += outputTokens;
-    processRun.errors = [...processRun.errors, ...errors];
-  })
-  if(processRun.start_time_us === 0){
+  spans
+    .sort((a, b) => a.start_time_us - b.start_time_us)
+    .forEach((span) => {
+      let { cost, inputTokens, outputTokens, errors } = getDataFromSpan(span);
+      processRun.cost += cost;
+      processRun.input_tokens += inputTokens;
+      processRun.output_tokens += outputTokens;
+      processRun.errors = [...processRun.errors, ...errors];
+    });
+  if (processRun.start_time_us === 0) {
     processRun.start_time_us = spans[0].start_time_us;
   }
-  if(!processRun.finish_time_us && spans[spans.length - 1].finish_time_us){
-    processRun.finish_time_us = spans[spans.length - 1].finish_time_us!;
-  }
+  // finish_time_us should be the max finish_time_us of spans
+  processRun.finish_time_us = spans.reduce(
+    (max, span) =>
+      span.finish_time_us || 0 > max ? span.finish_time_us || 0 : max,
+    0
+  );
   return processRun;
 };
 
-
-
-export function processEventWithRunMap(runMap: RunMap, event: ProjectEventUnion): RunMap {
-   if(event.run_id){
+export function processEventWithRunMap(
+  runMap: RunMap,
+  event: ProjectEventUnion
+): RunMap {
+  if (event.run_id) {
     let spansByRunId = runMap[event.run_id];
-    if(!spansByRunId){
+    if (!spansByRunId) {
       spansByRunId = [];
     }
-     runMap[event.run_id] = processEvent(spansByRunId, event);
-   }
-   return runMap;
+    runMap[event.run_id] = processEvent(spansByRunId, event);
+  }
+  return runMap;
 }
 
 /**
@@ -127,9 +126,6 @@ export const processEvent = (
   currentSpans: Span[],
   event: ProjectEventUnion
 ): Span[] => {
-  console.log('===== processEvent', event)
-  console.log('===== prevSpans', currentSpans)
-  console.log('')
   const timestamp = event.timestamp || Date.now();
   // === Run Lifecycle Events ===
   if (event.type === "RunStarted") {
@@ -163,7 +159,7 @@ export const processEvent = (
 
   // === Text Message Events ===
   if (event.type === "TextMessageStart") {
-     return handleTextMessageStartedEvent(currentSpans, event);
+    return handleTextMessageStartedEvent(currentSpans, event);
   }
 
   if (event.type === "TextMessageContent") {
@@ -229,17 +225,31 @@ export const processEvent = (
       if (eventType.type === "llm_start") {
         let llmStartEvent: CustomLlmStartEventType =
           eventType as CustomLlmStartEventType;
-        return handleCustomLlmStartEvent(currentSpans, customEvent, llmStartEvent, timestamp);
+        return handleCustomLlmStartEvent(
+          currentSpans,
+          customEvent,
+          llmStartEvent,
+          timestamp
+        );
       }
       if (eventType.type === "llm_stop") {
         let llmStopEvent: CustomLlmStopEventType =
           eventType as CustomLlmStopEventType;
-        return handleCustomLlmStopEvent(currentSpans, customEvent, llmStopEvent, timestamp);
+        return handleCustomLlmStopEvent(
+          currentSpans,
+          customEvent,
+          llmStopEvent,
+          timestamp
+        );
       }
-      if(eventType.type === "cost") {
-        let costEvent: CustomCostEventType =
-          eventType as CustomCostEventType;
-        return handleCustomCostEvent(currentSpans, customEvent, costEvent, timestamp);
+      if (eventType.type === "cost") {
+        let costEvent: CustomCostEventType = eventType as CustomCostEventType;
+        return handleCustomCostEvent(
+          currentSpans,
+          customEvent,
+          costEvent,
+          timestamp
+        );
       }
 
       // Handle ping events (ignore them)

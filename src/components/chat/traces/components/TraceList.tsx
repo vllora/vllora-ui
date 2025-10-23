@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { RunDTO } from '@/services/runs-api';
 import { TraceRow } from './TraceRow';
+import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 
 interface TraceListProps {
   runs: RunDTO[];
@@ -17,8 +18,37 @@ export const TraceList: React.FC<TraceListProps> = ({
   loadMoreRuns,
   loadingMore,
 }) => {
+  const { hoverSpanId } = ChatWindowConsumer();
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!hoverSpanId) return;
+
+    // Find the element with the hovered span ID
+    const spanElement = document.querySelector(`[data-span-id="${hoverSpanId}"]`);
+    if (!spanElement) return;
+
+    // Check if element is in viewport
+    const rect = spanElement.getBoundingClientRect();
+    const isInViewport = (
+      rect.top >= 0 &&
+      rect.left >= 0 &&
+      rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+      rect.right <= (window.innerWidth || document.documentElement.clientWidth)
+    );
+
+    // If not in viewport, scroll to it
+    if (!isInViewport) {
+      spanElement.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+        inline: 'nearest'
+      });
+    }
+  }, [hoverSpanId]);
+
   return (
-    <div className="space-y-2">
+    <div ref={containerRef} className="space-y-2">
       {runs.map((run) => (
         <TraceRow key={run.run_id} run={run} isInSidebar={true} />
       ))}
