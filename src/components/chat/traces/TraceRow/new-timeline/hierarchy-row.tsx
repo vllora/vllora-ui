@@ -33,11 +33,11 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
     if (skipCondition && !isSingleTrace) {
         if (childrenSpan && childrenSpan.length > 0) {
             return (
-                <div key={root.span_id} className="flex flex-col divide-y divide-border">
+                <div key={`span-timeline-hierarchy-${root.span_id}`} className="flex flex-col divide-y divide-border">
                     {childrenSpan.map(child => (
                         <HierarchyRow
                             level={level}
-                            key={child.span_id}
+                            key={`span-timeline-hierarchy-${child.span_id}`}
                             hierarchy={child}
                             totalDuration={totalDuration}
                             startTime={startTime}
@@ -132,7 +132,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                     {childrenSpan.map(child => (
                         <HierarchyRow
                             level={level + 1}
-                            key={child.span_id}
+                            key={`span-timeline-hierarchy-${child.span_id}`}
                             hierarchy={child}
                             totalDuration={totalDuration}
                             startTime={startTime}

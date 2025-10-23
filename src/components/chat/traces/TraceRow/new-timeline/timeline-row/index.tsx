@@ -96,7 +96,7 @@ export const TimelineRow = (props: TimelineRowProps) => {
     
     return (
         <div
-            key={span.span_id}
+            key={`span-timeline-row-${span.span_id}`}
             data-span-id={span.span_id}
             className={cn(
                 "w-full group transition-colors hover:cursor-pointer",

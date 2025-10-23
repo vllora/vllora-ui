@@ -57,6 +57,7 @@ export const SingleRunTimelineView = (props: SingleRunTimelineViewProps) => {
             <div className="rounded-md border border-border overflow-hidden">
                 <HierarchyRow
                     level={level}
+                    key={`span-timeline-hierarchy-${currentSpanHierarchy.span_id}`}
                     hierarchy={currentSpanHierarchy}
                     totalDuration={totalDuration}
                     startTime={startTime}
