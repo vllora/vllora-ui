@@ -13,7 +13,7 @@ const RunSpanMessageComponent = (props: {
 }) => {
     const { span_id, messages, level = 0 } = props;
 
-    const { openTraces, setOpenTraces, flattenSpans, runHighlighted, setRunHighlighted } = ChatWindowConsumer();
+    const { openTraces, setOpenTraces, flattenSpans, runHighlighted, setRunHighlighted, setHoverSpanId, collapsedSpans } = ChatWindowConsumer();
     const span = useSpanById(flattenSpans, span_id);
 
     // Memoize the toggle callback to prevent child re-renders
@@ -32,8 +32,8 @@ const RunSpanMessageComponent = (props: {
 
     const isCollapsed = useMemo(() => {
         let isOpen = openTraces.find((trace) => trace.run_id === span?.run_id);
-        return isOpen ? false : true;
-    }, [openTraces, span]);
+        return collapsedSpans.includes(span?.span_id || '') || !isOpen;
+    }, [openTraces, span, collapsedSpans]);
 
    
 
@@ -68,8 +68,10 @@ const RunSpanMessageComponent = (props: {
                 }) => {
                     if(isHovering) {
                         setRunHighlighted(runId);
+                        setHoverSpanId(span_id);
                     } else {
                         setRunHighlighted(prev => prev === runId ? '' : prev);
+                        setHoverSpanId(prev => prev === span_id ? '' : prev);
                     }
                 }}
             />

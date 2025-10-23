@@ -56,6 +56,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
 
   const [isChatProcessing, setIsChatProcessing] = useState<boolean>(false);
+  const [collapsedSpans, setCollapsedSpans] = useState<string[]>([]);
 
   const [runHighlighted, setRunHighlighted] = useState<string | null>(null);
 
@@ -123,10 +124,6 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   const [traceId, setTraceId] = useState<string | undefined>();
   const [usageInfo, setUsageInfo] = useState<any[]>([]);
 
-
-
-
-
   // Wrap refreshRuns to also reset UI state
   const handleRefreshRuns = useCallback(() => {
     setFlattenSpans([]);
@@ -154,21 +151,15 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     return selectedSpanId ? spansOfSelectedRun.find((s: Span) => s.span_id === selectedSpanId) : undefined;
   }, [selectedSpanId, spansOfSelectedRun]);
 
-  // Derive messages from hierarchical spans
-  // const displayMessages = useMemo(() => {
-  //   if (spanHierarchies.length === 0) {
-  //     return [];
-  //   }
-  //   // Convert hierarchical spans to messages
-  //   return convertSpansToMessages(spanHierarchies);
-  // }, [spanHierarchies]);
-
-
   const clearAll = useCallback(() => {
     setSelectedRunId(null);
     setSelectedSpanId(null);
     setDetailSpanId(null);
     setFlattenSpans([]);
+    setCollapsedSpans([]);
+    setRunHighlighted(null);
+    setHoverSpanId(undefined);
+    setHoveredRunId(null);
   }, []);
 
   // Calculate sum of all message metrics from displayMessages
@@ -260,6 +251,8 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     setRunHighlighted,
     hoverSpanId,
     setHoverSpanId,
+    collapsedSpans,
+    setCollapsedSpans,
   };
 }
 export function ChatWindowProvider({ children, threadId, projectId }: { children: ReactNode, threadId: string, projectId: string }) {

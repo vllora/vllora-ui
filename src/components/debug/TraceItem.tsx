@@ -27,23 +27,7 @@ export const TraceItem: React.FC<TraceItemProps> = ({
   return (
     <div key={`${trace.trace_id}`} className="border border-border/70 rounded-md">
 
-      {/* <div className="flex flex-col divide-y divide-border">
-        {Object.values(hierarchies).map((hierarchy) => {
-           
-
-          return <HierarchyRow
-            key={hierarchy.root.span_id}
-            hierarchy={hierarchy}
-            totalDuration={totalDuration}
-            startTime={startTime}
-            titleWidth={titleWidth}
-            relatedSpans={sortedSpans}
-            level={0}
-            selectedSpanId={selectedSpanId}
-            onSpanSelect={onSpanSelect}
-          />
-        })}
-      </div> */}
+     
 
     </div>
   );

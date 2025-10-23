@@ -116,7 +116,7 @@ export const AiMessage: React.FC<{
             </div>
           )}
           {canClickToHighlightTraces && (
-            <span className="text-[10px] text-blue-400/60 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">Click to view details</span>
+            <span className="text-[10px] text-blue-400/60 px-1.5 py-0.5 transition-opacity shrink-0">Click to view details</span>
           )}
         </div>
       </div>}

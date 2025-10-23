@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { getSpanTitle, getOperationIcon, getOperationIconColor, getTimelineBgColor } from "./utils";
 import { TimelineRow } from "./timeline-row";
 import { skipThisSpan, isClientSDK } from "@/utils/graph-utils";
@@ -16,11 +15,12 @@ export interface HierarchyRowProps {
     onSpanSelect?: (spanId: string, runId?: string) => void;
     isInSidebar?: boolean;
     hoverSpanId?: string;
+    collapsedSpans?: string[];
+    onToggle?: (spanId: string) => void;
 }
 
 export const HierarchyRow = (props: HierarchyRowProps) => {
-    const { hierarchy, totalDuration, startTime, level, titleWidth: propTitleWidth = TIMELINE_DYNAMIC_TITLE_WIDTH_IN_SIDEBAR, relatedSpans = [], selectedSpanId, onSpanSelect, isInSidebar = true, hoverSpanId } = props;
-    const [isOpen, setIsOpen] = useState(true);
+    const { hierarchy, totalDuration, startTime, level, titleWidth: propTitleWidth = TIMELINE_DYNAMIC_TITLE_WIDTH_IN_SIDEBAR, relatedSpans = [], selectedSpanId, onSpanSelect, isInSidebar = true, hoverSpanId, collapsedSpans, onToggle } = props;
     // In ellora-ui, we're always in sidebar mode (chat sidebar)
     const titleWidth: string | number = `${propTitleWidth}px`.replace('pxpx', 'px');
 
@@ -47,6 +47,8 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                             onSpanSelect={onSpanSelect}
                             isInSidebar={isInSidebar}
                             hoverSpanId={hoverSpanId}
+                            collapsedSpans={collapsedSpans}
+                            onToggle={onToggle}
                         />
                     ))}
                 </div>
@@ -86,7 +88,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                 span={root}
                 level={level}
                 hasChildren={false}
-                isOpen={false}
+                collapsedSpans={[]}
                 titleWidth={titleWidth}
                 title={title}
                 operationIcon={operationIcon}
@@ -110,7 +112,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                 span={root}
                 level={level}
                 hasChildren={true}
-                isOpen={isOpen}
+                collapsedSpans={collapsedSpans}
                 titleWidth={titleWidth}
                 title={title}
                 operationIcon={operationIcon}
@@ -118,14 +120,14 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                 durationSeconds={durationSeconds}
                 widthPercent={widthPercent}
                 offsetPercent={offsetPercent}
-                onToggle={() => setIsOpen(!isOpen)}
+                onToggle={(v) => onToggle?.(v)}
                 timelineBgColor={timelineBgColor}
                 selectedSpanId={selectedSpanId}
                 onSpanSelect={onSpanSelect}
                 isInSidebar={isInSidebar}
                 hoverSpanId={hoverSpanId}
             />
-            {isOpen && (
+            {!(collapsedSpans?.includes(root.span_id)) && (
                 <div className="flex flex-col divide-y divide-border/70">
                     {childrenSpan.map(child => (
                         <HierarchyRow
@@ -140,6 +142,8 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                             onSpanSelect={onSpanSelect}
                             isInSidebar={isInSidebar}
                             hoverSpanId={hoverSpanId}
+                            collapsedSpans={collapsedSpans}
+                            onToggle={(v) => onToggle?.(v)}
                         />
                     ))}
                 </div>

@@ -9,13 +9,13 @@ import { Span } from "@/types/common-type";
 export interface TimelineContentBaseProps {
     level: number;
     hasChildren: boolean;
-    isOpen: boolean;
+    collapsedSpans?: string[];
     titleWidth: number | string;
     title: string;
     operationIcon: ReactNode;
     operationIconColor: string;
     durationSeconds: number;
-    onToggle: () => void;
+    onToggle: (spanId: string) => void;
     operation_name: string;
     span?: Span;
     isInSidebar?: boolean;
@@ -26,7 +26,7 @@ export interface TimelineRowProps {
     span: Span;
     level: number;
     hasChildren: boolean;
-    isOpen: boolean;
+    collapsedSpans?: string[];
     titleWidth: number | string;
     title: string;
     operationIcon: React.ReactNode;
@@ -34,7 +34,7 @@ export interface TimelineRowProps {
     durationSeconds: number;
     widthPercent: string;
     offsetPercent: string;
-    onToggle: () => void;
+    onToggle: (spanId: string) => void;
     isInSidebar?: boolean;
     timelineBgColor: string;
     selectedSpanId?: string;
@@ -48,7 +48,7 @@ export const TimelineRow = (props: TimelineRowProps) => {
         span,
         level,
         hasChildren,
-        isOpen,
+        collapsedSpans,
         titleWidth,
         title,
         operationIcon,
@@ -62,12 +62,12 @@ export const TimelineRow = (props: TimelineRowProps) => {
         onSpanSelect,
         hoverSpanId,
         isInSidebar = true
-    } = props;    
+    } = props;
     // Common props for timeline content components
     const contentProps = {
         level,
         hasChildren,
-        isOpen,
+        collapsedSpans,
         titleWidth,
         title,
         operationIcon,
@@ -77,14 +77,17 @@ export const TimelineRow = (props: TimelineRowProps) => {
         timelineBgColor: timelineBgColor,
         operation_name: span.operation_name,
         span,
-    };    
+    };
     return (
         <div
             key={span.span_id}
             data-span-id={span.span_id}
             className={cn(
                 "w-full group transition-colors hover:cursor-pointer",
-             (selectedSpanId && span.span_id === selectedSpanId) || (hoverSpanId && span.span_id === hoverSpanId) ? "border-l-2 !border-l-[rgb(var(--theme-500))]" : "hover:bg-[#151515] border-l-2 !border-l-transparent"
+                selectedSpanId && span.span_id === selectedSpanId ? 
+                "border-l-2 !border-l-[rgb(var(--theme-500))]" : hoverSpanId && span.span_id === hoverSpanId ?
+                "border-l-1 border border-amber-500" : 
+                "hover:bg-[#151515] border-l-2 !border-l-transparent"
             )}
             onClick={(e) => {
                 e.stopPropagation();
@@ -97,7 +100,7 @@ export const TimelineRow = (props: TimelineRowProps) => {
             <div className={classNames("flex w-full divide-x divide-border px-1")}>
                 {/* Render either fullscreen or sidebar content based on mode */}
                 <SidebarTimelineContent {...contentProps} isInSidebar={isInSidebar} />
-                
+
 
                 {/* Timeline visualization */}
                 <TimelineVisualization
