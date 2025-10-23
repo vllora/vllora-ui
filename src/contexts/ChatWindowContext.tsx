@@ -1,7 +1,4 @@
 import { createContext, useContext, ReactNode, useCallback, useState, useMemo } from 'react';
-import { useRequest } from 'ahooks';
-import { toast } from 'sonner';
-import { listSpans } from '@/services/spans-api';
 import { Span } from '@/types/common-type';
 import { ProjectEventUnion } from './project-events/dto';
 import { buildSpanHierarchy } from '@/utils/span-hierarchy';
@@ -61,7 +58,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   const [isChatProcessing, setIsChatProcessing] = useState<boolean>(false);
   const handleEvent = useCallback((event: ProjectEventUnion) => {
     if (event.run_id && event.thread_id === threadId) {
-      //console.log('==== event', event)
+      console.log('==== event', event)
       let updatedSpanMap = processEventWithRunMap(runMap, event);
       let spansByRunId = updatedSpanMap[event.run_id];
       setRuns(prev => {
