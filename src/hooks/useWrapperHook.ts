@@ -1,6 +1,6 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRunsPagination } from "./useRunsPagination";
-import { useSpanDetails } from "./useSpanDetails";
+import { RunMap, useSpanDetails } from "./useSpanDetails";
 import { fetchAllSpansByRunId } from "@/utils/traces";
 import { toast } from "sonner";
 import { Span } from "@/types/common-type";
@@ -18,7 +18,7 @@ export const useWrapperHook = (props: {
   // Use the span details hook
   let spanDetailState = useSpanDetails({ projectId });
 
-  const { setLoadingSpansById, setRunMap } = spanDetailState;
+  const { setLoadingSpansById, selectedRunId, detailSpanId } = spanDetailState;
 
   const [flattenSpans, setFlattenSpans] = useState<Span[]>([]);
   const [openTraces, setOpenTraces] = useState<
@@ -29,30 +29,29 @@ export const useWrapperHook = (props: {
   const updateBySpansOfAThread = useCallback((spans: Span[]) => {
     setFlattenSpans(spans);
     // update RunMap
-    setRunMap((prev) => {
-      let newRunMap = { ...prev };
-      for (let span of spans) {
-        let runId = span.run_id;
-        if (runId) {
-          let spansByRunId = prev[runId];
-          if (spansByRunId && spansByRunId.length > 0) {
-            let indexBySpanId = spansByRunId.findIndex(
-              (s) => s.span_id === span.span_id
-            );
-            if (indexBySpanId >= 0) {
-              spansByRunId[indexBySpanId] = span;
-            } else {
-              spansByRunId.push(span);
-            }
-            newRunMap[runId] = [...spansByRunId];
-          } else {
-            newRunMap[runId] = [span];
-          }
-        }
-      }
-      return newRunMap;
-    });
   }, []);
+
+  let runMap = useMemo(() => {
+    return flattenSpans.reduce((acc, span) => {
+      if (!acc[span.run_id]) {
+        acc[span.run_id] = [];
+      }
+      acc[span.run_id].push(span);
+      return acc;
+    }, {} as RunMap);
+  }, [flattenSpans]);
+
+  const spansOfSelectedRun = useMemo(() => {
+    return selectedRunId ? runMap[selectedRunId] : [];
+  }, [selectedRunId, runMap]);
+
+  const detailSpan = useMemo(() => {
+    return detailSpanId
+      ? runMap[selectedRunId || ""]?.find(
+          (span) => span.span_id === detailSpanId
+        )
+      : null;
+  }, [detailSpanId, selectedRunId, runMap]);
   // Use ahooks useRequest for fetching conversation spans
   const {
     loading: isLoadingSpans,
@@ -82,21 +81,12 @@ export const useWrapperHook = (props: {
         });
       },
       onSuccess: (spans) => {
-       updateBySpansOfAThread(spans);
+        updateBySpansOfAThread(spans);
       },
     }
   );
 
-  const updateBySpansOfARun = useCallback((runId: string, spans: Span[]) => {
-    setRunMap((prev) => {
-      let newRunMap = { ...prev };
-      if (newRunMap[runId]) {
-        newRunMap[runId] = spans;
-      } else {
-        newRunMap[runId] = spans;
-      }
-      return newRunMap;
-    });
+  const updateBySpansOfARun = useCallback((spans: Span[]) => {
     setFlattenSpans((prev) => {
       let newFlattenSpans = [...prev];
       for (let span of spans) {
@@ -136,7 +126,7 @@ export const useWrapperHook = (props: {
 
       try {
         const relatedSpans = await fetchAllSpansByRunId(runId, projectId);
-        updateBySpansOfARun(runId, relatedSpans);
+        updateBySpansOfARun(relatedSpans);
       } catch (e: any) {
         toast.error("Failed to fetch span details", {
           description:
@@ -157,6 +147,7 @@ export const useWrapperHook = (props: {
   return {
     ...spanDetailState,
     ...runsPaginationState,
+    runMap,
     fetchSpansByRunId,
     flattenSpans,
     setFlattenSpans,
@@ -168,7 +159,8 @@ export const useWrapperHook = (props: {
     loadSpansError,
     refreshSpans,
     updateBySpansOfAThread,
-    updateBySpansOfARun
-
+    updateBySpansOfARun,
+    spansOfSelectedRun,
+    detailSpan,
   };
 };

@@ -30,7 +30,6 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     runsTotal,
     loadingMoreRuns,
     runMap,
-    setRunMap,
     loadingSpansById,
     fetchSpansByRunId,
     selectedRunId,
@@ -53,40 +52,43 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     updateBySpansOfARun
   } = useWrapperHook({ projectId, threadId });
 
- 
+
 
   const [isChatProcessing, setIsChatProcessing] = useState<boolean>(false);
   const handleEvent = useCallback((event: ProjectEventUnion) => {
     if (event.run_id && event.thread_id === threadId) {
       console.log('==== event', event)
-      let updatedSpanMap = processEventWithRunMap(runMap, event);
-      let spansByRunId = updatedSpanMap[event.run_id];
-      setRuns(prev => {
-        let newRuns = [...prev];
-        let runIndex = newRuns.findIndex(run => run.run_id === event.run_id);
-        if (runIndex >= 0) {
-          let runById = prev[runIndex]!;
-          newRuns[runIndex] = updatedRunWithSpans({
-            spans: spansByRunId!,
-            prevRun: runById,
-            run_id: event.run_id!
-          });
-        } else {
-          newRuns = [updatedRunWithSpans({
-            spans: spansByRunId!,
-            prevRun: undefined,
-            run_id: event.run_id!
-          }), ...prev];
-        }
-        return newRuns;
-      });
-      updateBySpansOfARun(event.run_id, spansByRunId);
-      setSelectedRunId(event.run_id);
-      setOpenTraces([{ run_id: event.run_id, tab: 'trace' }]);
+      setTimeout(() => {
+        let updatedSpanMap = processEventWithRunMap(runMap, event);
+        let spansByRunId = event.run_id && updatedSpanMap[event.run_id];
+        spansByRunId && setRuns(prev => {
+          let newRuns = [...prev];
+          let runIndex = newRuns.findIndex(run => run.run_id === event.run_id);
+          if (runIndex >= 0) {
+            let runById = prev[runIndex]!;
+            newRuns[runIndex] = updatedRunWithSpans({
+              spans: spansByRunId!,
+              prevRun: runById,
+              run_id: event.run_id!
+            });
+          } else {
+            newRuns = [updatedRunWithSpans({
+              spans: spansByRunId!,
+              prevRun: undefined,
+              run_id: event.run_id!
+            }), ...prev];
+          }
+          return newRuns;
+        });
+        event.run_id && spansByRunId && updateBySpansOfARun(spansByRunId);
+        event.run_id && setSelectedRunId(event.run_id);
+        event.run_id && setOpenTraces([{ run_id: event.run_id, tab: 'trace' }]);
+      }, 0)
+
     }
   }, [runMap, threadId]);
-  
-  
+
+
   useDebugControl({ handleEvent, channel_name: 'debug-thread-trace-timeline-events' });
 
   // should the the run be expanded
@@ -105,7 +107,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   // Stabilize messageHierarchies to prevent unnecessary re-renders
   const messageHierarchies = useStableMessageHierarchies(unstableMessageHierarchies);
 
-  console.log('===== messageHierarchies', messageHierarchies)
+  //console.log('===== messageHierarchies', messageHierarchies)
   // UI state
   const [currentInput, setCurrentInput] = useState<string>('');
   const [typing, setTyping] = useState(false);
@@ -114,7 +116,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   const [usageInfo, setUsageInfo] = useState<any[]>([]);
 
 
-  
+
 
 
   // Wrap refreshRuns to also reset UI state
@@ -154,7 +156,6 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
 
   const clearAll = useCallback(() => {
-    setRunMap({});
     setSelectedRunId(null);
     setSelectedSpanId(null);
     setDetailSpanId(null);
