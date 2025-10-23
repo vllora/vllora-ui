@@ -25,5 +25,12 @@ export const handleCustomSpanStartEvent = (
   spanStart: CustomSpanStartEventType
 ): Span[] => {
   const span = convertCustomSpanStartToSpan(event, spanStart);
+  // check span is already exist
+  const spanIndex = currentSpans.findIndex((s) => s.span_id === span.span_id);
+  if (spanIndex !== -1) {
+    // update span
+    currentSpans[spanIndex] = span;
+    return [...currentSpans];
+  }
   return [...currentSpans, span];
 };

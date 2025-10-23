@@ -4,7 +4,7 @@ export const convertToolCallStartToSpan = (event: ToolCallStartEvent): Span => {
   return {
     span_id: event.span_id || event.tool_call_id || `tool_call_${Date.now()}`,
     parent_span_id: event.parent_span_id,
-    operation_name: "tool_call",
+    operation_name: "tools",
     thread_id: event.thread_id || "",
     run_id: event.run_id || "",
     trace_id: "",
@@ -20,5 +20,11 @@ export const convertToolCallStartToSpan = (event: ToolCallStartEvent): Span => {
 
 export const handleToolCallStartedEvent = (currentSpans: Span[], event: ToolCallStartEvent): Span[] => {
    const span = convertToolCallStartToSpan(event);
+   const spanIndex = currentSpans.findIndex((s) => s.span_id === span.span_id);
+   if (spanIndex !== -1) {
+    // update span
+    currentSpans[spanIndex] = span;
+    return [...currentSpans];
+  }
     return [...currentSpans, span];
 };

@@ -74,7 +74,6 @@ export function buildMessageHierarchyFromSpan(
   flattenSpans: Span[]
 ): MessageStructure[] {
 
-  console.log('===== buildMessageHierarchyFromSpan', flattenSpans)
   const spanMap = new Map<string, Span>();
   const messageMap = new Map<string, MessageStructure>();
 

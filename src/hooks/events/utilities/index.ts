@@ -56,7 +56,7 @@ export const convertTextMessageStartToSpan = (
 
 
 
-const createNewRun = (run_id: string): RunDTO => {
+export const createNewRun = (run_id: string): RunDTO => {
   let run: RunDTO = {
     run_id: run_id,
     thread_ids: [],
@@ -127,6 +127,9 @@ export const processEvent = (
   currentSpans: Span[],
   event: ProjectEventUnion
 ): Span[] => {
+  console.log('===== processEvent', event)
+  console.log('===== prevSpans', currentSpans)
+  console.log('')
   const timestamp = event.timestamp || Date.now();
   // === Run Lifecycle Events ===
   if (event.type === "RunStarted") {

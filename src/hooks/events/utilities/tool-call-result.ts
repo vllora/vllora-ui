@@ -22,7 +22,7 @@ export const handleToolCallResultEvent = (currentSpans: Span[], event: ToolCallR
       const newSpan: Span = {
         span_id: spanId,
         parent_span_id: event.parent_span_id,
-        operation_name: "tool_call",
+        operation_name: "tools",
         thread_id: event.thread_id || "",
         run_id: event.run_id || "",
         trace_id: "",

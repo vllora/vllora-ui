@@ -5,7 +5,7 @@ import { buildSpanHierarchy } from '@/utils/span-hierarchy';
 import { buildMessageHierarchyFromSpan, MessageStructure } from '@/utils/message-structure-from-span';
 import { useStableMessageHierarchies } from '@/hooks/useStableMessageHierarchies';
 import { useDebugControl } from '@/hooks/events/useDebugControl';
-import { processEventWithRunMap, updatedRunWithSpans } from '@/hooks/events/utilities';
+import { createNewRun, processEvent, processEventWithRunMap, updatedRunWithSpans } from '@/hooks/events/utilities';
 import { useWrapperHook } from '@/hooks/useWrapperHook';
 
 export type ChatWindowContextType = ReturnType<typeof useChatWindow>;
@@ -49,7 +49,6 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     isLoadingSpans,
     loadSpansError,
     refreshSpans,
-    updateBySpansOfARun
   } = useWrapperHook({ projectId, threadId });
 
 
@@ -57,36 +56,27 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   const [isChatProcessing, setIsChatProcessing] = useState<boolean>(false);
   const handleEvent = useCallback((event: ProjectEventUnion) => {
     if (event.run_id && event.thread_id === threadId) {
-      console.log('==== event', event)
       setTimeout(() => {
-        let updatedSpanMap = processEventWithRunMap(runMap, event);
-        let spansByRunId = event.run_id && updatedSpanMap[event.run_id];
-        spansByRunId && setRuns(prev => {
-          let newRuns = [...prev];
-          let runIndex = newRuns.findIndex(run => run.run_id === event.run_id);
-          if (runIndex >= 0) {
-            let runById = prev[runIndex]!;
-            newRuns[runIndex] = updatedRunWithSpans({
-              spans: spansByRunId!,
-              prevRun: runById,
-              run_id: event.run_id!
-            });
-          } else {
-            newRuns = [updatedRunWithSpans({
-              spans: spansByRunId!,
-              prevRun: undefined,
-              run_id: event.run_id!
-            }), ...prev];
-          }
-          return newRuns;
+        setFlattenSpans(prevSpans => {
+          let newFlattenSpans = processEvent(prevSpans, event)
+          return newFlattenSpans
         });
-        event.run_id && spansByRunId && updateBySpansOfARun(spansByRunId);
+        event.run_id && setRuns(prevRuns => {
+          // check if run_id exists in prev
+          let existingRun = prevRuns.find(r => r.run_id === event.run_id)
+          if (existingRun) {
+            return prevRuns
+          }
+          if (!event.run_id) return prevRuns;
+          let newRun = createNewRun(event.run_id)
+          return [newRun, ...prevRuns]
+        });
         event.run_id && setSelectedRunId(event.run_id);
         event.run_id && setOpenTraces([{ run_id: event.run_id, tab: 'trace' }]);
       }, 0)
 
     }
-  }, [runMap, threadId]);
+  }, [threadId]);
 
 
   useDebugControl({ handleEvent, channel_name: 'debug-thread-trace-timeline-events' });

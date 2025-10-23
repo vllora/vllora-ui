@@ -1,7 +1,7 @@
 import { createContext, useContext, ReactNode, useCallback } from "react";
 import { useDebugControl } from "@/hooks/events/useDebugControl";
 import { ProjectEventUnion } from "./project-events/dto";
-import { processEventWithRunMap, updatedRunWithSpans } from "@/hooks/events/utilities";
+import { processEvent, updatedRunWithSpans } from "@/hooks/events/utilities";
 import { useWrapperHook } from "@/hooks/useWrapperHook";
 
 export type TracesPageContextType = ReturnType<typeof useTracesPageContext>;
@@ -22,8 +22,8 @@ export function useTracesPageContext(props: { projectId: string }) {
     hasMoreRuns,
     runsTotal,
     loadingMoreRuns,
-    setRuns,
-    runMap,
+    flattenSpans,
+    setFlattenSpans,
     loadingSpansById,
     fetchSpansByRunId,
     selectedRunId,
@@ -38,40 +38,28 @@ export function useTracesPageContext(props: { projectId: string }) {
     setOpenTraces,
     hoveredRunId,
     setHoveredRunId,
-    updateBySpansOfARun
+    setRuns,
+    runMap
   } = useWrapperHook({ projectId });
 
   const handleEvent = useCallback((event: ProjectEventUnion) => {
     if (event.run_id) {
-      let updatedSpanMap = processEventWithRunMap(runMap, event);
-      let spansByRunId = updatedSpanMap[event.run_id];
-      setRuns(prev => {
-        let newRuns = [...prev];
-        let runIndex = newRuns.findIndex(run => run.run_id === event.run_id);
-        if (runIndex >= 0) {
-          let runById = prev[runIndex]!;
-          newRuns[runIndex] = updatedRunWithSpans({
-            spans: spansByRunId!,
-            prevRun: runById,
-            run_id: event.run_id!
-          });
-        } else {
-          newRuns = [updatedRunWithSpans({
-            spans: spansByRunId!,
-            prevRun: undefined,
-            run_id: event.run_id!
-          }), ...prev];
-        }
-        return newRuns;
-      });
-      updateBySpansOfARun(event.run_id, spansByRunId);
-      setSelectedRunId(event.run_id);
-      setOpenTraces([{ run_id: event.run_id, tab: 'trace' }]);
+
+      setTimeout(() => {
+        setFlattenSpans(prev => {
+          let newFlattenSpans = processEvent(prev, event)
+          return newFlattenSpans
+        });
+
+        event.run_id && setSelectedRunId(event.run_id);
+        event.run_id && setOpenTraces([{ run_id: event.run_id, tab: 'trace' }]);
+      })
+
     }
-  }, [runMap]);
+  }, [flattenSpans]);
   useDebugControl({ handleEvent, channel_name: 'debug-traces-timeline-events' });
   // Trace expansion state
-  
+
 
   return {
     projectId,
