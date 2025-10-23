@@ -9,6 +9,11 @@ import {
 
 export const ThreadCopiableId = ({ id }: { id: string }) => {
   const [copied, setCopied] = useState(false);
+  
+  if (!id) {
+    return null;
+  }
+  
   const handleCopy = (event: React.MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();

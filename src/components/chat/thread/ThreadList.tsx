@@ -69,6 +69,11 @@ export const ThreadList: React.FC<ThreadListProps> = ({
           >
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
               const thread = threads[virtualRow.index];
+              
+              if (!thread?.thread_id) {
+                return null;
+              }
+              
               return (
                 <div
                   key={thread.thread_id}
