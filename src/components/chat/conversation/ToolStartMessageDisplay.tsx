@@ -44,6 +44,8 @@ export const ToolStartMessageDisplay = (props: {
     content: '',
     tool_calls: toolCallsJson,
     metrics: [metrics],
+    span_id: spanId,
+    span: span,
     model_name: providerName && modelName ? `${providerName}/${modelName}` : '',
     
   }

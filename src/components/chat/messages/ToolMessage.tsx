@@ -34,11 +34,9 @@ export const ToolMessage: React.FC<{
 
     const metrics = msg?.metrics;
     const canClickToOpenTrace = useMemo(() => {
-        if (!metrics) return false;
-        if (!Array.isArray(metrics)) return false;
-        if (metrics.length === 0) return false;
-        return metrics[0]?.trace_id && metrics[0]?.trace_id.length > 0;
-    }, [metrics]);
+        
+     return false;
+    }, [msg]);
 
     // Extract provider name from model_name (e.g., "openai/gpt-4" -> "openai")
     const getProviderName = (modelName?: string) => {
@@ -160,11 +158,11 @@ export const ToolMessage: React.FC<{
             </div>
 
             {/* Footer with Metrics */}
-            {msg && (
+            {/* {msg && (
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                     <MessageMetrics message={msg} />
                 </div>
-            )}
+            )} */}
 
             {isTyping && (
                 <div className="rounded bg-neutral-800/20 px-2 py-1.5 flex items-center gap-2 mt-2 border border-neutral-800/30">

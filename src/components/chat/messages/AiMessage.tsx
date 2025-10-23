@@ -22,7 +22,7 @@ export const AiMessage: React.FC<{
   message?: Message;
   isTyping?: boolean;
 }> = ({ message: msg, isTyping }) => {
-  const { setOpenTraces, fetchSpansByRunId, setSelectedSpanId, setHoverSpanId } = ChatWindowConsumer();
+  const { setOpenTraces, fetchSpansByRunId, setSelectedSpanId, setHoverSpanId, setDetailSpanId } = ChatWindowConsumer();
   const { setIsRightSidebarCollapsed } = ThreadsConsumer();
   const messageRef = React.useRef<HTMLDivElement>(null);
 
@@ -49,11 +49,12 @@ export const AiMessage: React.FC<{
     const runId = msg?.span?.run_id;
     const spanId = msg?.span_id;
     if (!runId || !spanId) return;
-    setSelectedSpanId(spanId);
-
+    
     // Open the trace and fetch spans
     setOpenTraces([{ run_id: runId, tab: 'trace' }]);
     fetchSpansByRunId(runId);
+    setSelectedSpanId(spanId);
+    setDetailSpanId(spanId);
     // Auto-expand the right sidebar
     setIsRightSidebarCollapsed(false);
   }, [msg?.span?.run_id, setOpenTraces, fetchSpansByRunId, setIsRightSidebarCollapsed]);
@@ -71,7 +72,7 @@ export const AiMessage: React.FC<{
   return (
     <div
       ref={messageRef}
-      className={`flex flex-col gap-3 group ${canClickToHighlightTraces ? 'cursor-pointer hover:bg-neutral-800/20 rounded-lg p-2 -m-2 transition-colors' : ''}`}
+      className={`flex flex-col gap-3 group  ${canClickToHighlightTraces ? 'cursor-pointer hover:bg-neutral-800/20 rounded-lg p-2 -m-2 transition-colors' : ''}`}
       onClick={canClickToHighlightTraces ? handleOpenTrace : undefined}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -86,11 +87,11 @@ export const AiMessage: React.FC<{
                   {msg?.model_name ? (
                     <ProviderIcon
                       provider_name={providerName}
-                      className="h-7 w-7 rounded-full"
+                      className="h-4 w-4 rounded-full"
                     />
                   ) : (
                     <AvatarItem
-                      className="h-7 w-7 rounded-full"
+                      className="h-4 w-4 rounded-full"
                       name={'Assistant'}
                     />
                   )}
@@ -115,13 +116,13 @@ export const AiMessage: React.FC<{
             </div>
           )}
           {canClickToHighlightTraces && (
-            <span className="text-[10px] text-blue-400/60 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">Click to view trace details</span>
+            <span className="text-[10px] text-blue-400/60 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">Click to view details</span>
           )}
         </div>
       </div>}
 
       {/* Content */}
-      <div className="w-full">
+      <div className="w-full ">
         {msg?.tool_calls && msg.tool_calls.length > 0 && (
           <ToolCallList toolCalls={msg.tool_calls} />
         )}
@@ -143,7 +144,7 @@ export const AiMessage: React.FC<{
           msg?.content_array && msg.content_array.length > 0 ? (
             <ContentArrayDisplay contentArray={msg.content_array} />
           ) : (
-            <div className="whitespace-normal text-neutral-200 break-words overflow-wrap break-all leading-relaxed text-sm">
+            msg?.content && <div className="whitespace-normal bg-neutral-900/30 border border-neutral-800/50 px-4 py-3 rounded-lg text-neutral-200 break-words overflow-wrap break-all leading-relaxed text-sm">
               <MessageDisplay message={msg?.content || ""} />
             </div>
           )

@@ -16,17 +16,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { ProviderIcon } from "@/components/Icons/ProviderIcons";
 import { MessageDisplay } from "../MessageDisplay";
 import { ContentArrayDisplay } from "./ContentArrayDisplay";
 import { Message } from "@/types/chat";
 import { useRelativeTime } from "@/hooks/useRelativeTime";
 
-const getProviderName = (modelName?: string) => {
-  if (!modelName) return 'default';
-  const parts = modelName.split('/');
-  return parts.length > 1 ? parts[0] : 'default';
-};
 export const SystemMessage: React.FC<{ msg: Message }> = ({ msg }) => {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -51,7 +45,6 @@ export const SystemMessage: React.FC<{ msg: Message }> = ({ msg }) => {
   const hasMoreLines = lineCount > 5;
   const displayMessage =
     expanded || !hasMoreLines ? messageContent : getFirstNLines(messageContent, 5);
-  const providerName = getProviderName(msg?.model_name);
 
   return (
     <div
@@ -65,16 +58,11 @@ export const SystemMessage: React.FC<{ msg: Message }> = ({ msg }) => {
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="relative">
-                  {msg?.model_name ? (
-                    <ProviderIcon
-                      provider_name={providerName}
-                      className="h-7 w-7 rounded-full"
-                    />
-                  ) : (
-                    <div className="h-7 w-7 rounded-full bg-neutral-800 flex items-center justify-center">
+                   
+                    <div className="h-6 w-6 rounded-full bg-neutral-800 flex items-center justify-center">
                       <CogIcon className="h-4 w-4 text-neutral-400" />
                     </div>
-                  )}
+                  
                 </div>
               </TooltipTrigger>
               <TooltipContent>
@@ -87,7 +75,7 @@ export const SystemMessage: React.FC<{ msg: Message }> = ({ msg }) => {
         {/* Metadata */}
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <span className="text-neutral-300 font-medium text-sm truncate">
-            {msg?.model_name ? msg.model_name : 'System'}
+            {'System'}
           </span>
           {msg?.created_at && (
             <div className="flex items-center text-xs text-neutral-500 shrink-0">
