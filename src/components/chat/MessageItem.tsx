@@ -28,8 +28,8 @@ const MessageItemComponent: React.FC<MessageItemProps> = ({ message, isTyping })
     >
       <div
         className={`
-          max-w-[85%] sm:max-w-[75%] text-sm
-          ${isHumanMessage ? 'order-1' : 'order-2'}
+          text-sm flex flex-1
+          ${isHumanMessage ? 'order-1 justify-end' : 'order-2 justify-start'}
         `}
       >
        {isHumanMessage ? (

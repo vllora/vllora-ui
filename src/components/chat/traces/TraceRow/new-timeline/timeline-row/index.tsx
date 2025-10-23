@@ -39,6 +39,7 @@ export interface TimelineRowProps {
     timelineBgColor: string;
     selectedSpanId?: string;
     onSpanSelect?: (spanId: string, runId: string) => void;
+    hoverSpanId?: string;
 }
 
 // Main TimelineRow component that uses the sub-components
@@ -59,6 +60,7 @@ export const TimelineRow = (props: TimelineRowProps) => {
         onToggle,
         selectedSpanId,
         onSpanSelect,
+        hoverSpanId,
         isInSidebar = true
     } = props;    
     // Common props for timeline content components
@@ -82,7 +84,7 @@ export const TimelineRow = (props: TimelineRowProps) => {
             data-span-id={span.span_id}
             className={cn(
                 "w-full group transition-colors hover:cursor-pointer",
-                selectedSpanId && span.span_id === selectedSpanId ? "border-l-2 !border-l-[rgb(var(--theme-500))]" : "hover:bg-[#151515] border-l-2 !border-l-transparent"
+             (selectedSpanId && span.span_id === selectedSpanId) || (hoverSpanId && span.span_id === hoverSpanId) ? "border-l-2 !border-l-[rgb(var(--theme-500))]" : "hover:bg-[#151515] border-l-2 !border-l-transparent"
             )}
             onClick={(e) => {
                 e.stopPropagation();

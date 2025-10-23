@@ -22,14 +22,13 @@ export const AiMessage: React.FC<{
   message?: Message;
   isTyping?: boolean;
 }> = ({ message: msg, isTyping }) => {
-  const { setOpenTraces, fetchSpansByRunId, setHoveredRunId, setSelectedSpanId } = ChatWindowConsumer();
+  const { setOpenTraces, fetchSpansByRunId, setSelectedSpanId, setHoverSpanId } = ChatWindowConsumer();
   const { setIsRightSidebarCollapsed } = ThreadsConsumer();
   const messageRef = React.useRef<HTMLDivElement>(null);
 
   // Only update relative time when message is visible and less than 60 seconds old
   useRelativeTime(messageRef, msg?.created_at);
 
-  const metrics = msg?.metrics;
   const canClickToHighlightTraces = useMemo(() => {
      if(msg?.span_id && msg?.span?.run_id){
       return true;
@@ -60,22 +59,19 @@ export const AiMessage: React.FC<{
   }, [msg?.span?.run_id, setOpenTraces, fetchSpansByRunId, setIsRightSidebarCollapsed]);
 
   const handleMouseEnter = useCallback(() => {
-    if (metrics && Array.isArray(metrics) && metrics.length > 0) {
-      const runId = metrics[0]?.run_id;
-      if (runId) {
-        setHoveredRunId(runId);
-      }
+    if(msg?.span_id){
+      setHoverSpanId(msg.span_id);
     }
-  }, [metrics, setHoveredRunId]);
+  }, [msg?.span_id]);
 
   const handleMouseLeave = useCallback(() => {
-    setHoveredRunId(null);
-  }, [setHoveredRunId]);
+    setHoverSpanId(undefined);
+  }, []);
 
   return (
     <div
       ref={messageRef}
-      className={`flex flex-col gap-2 group ${canClickToHighlightTraces ? 'cursor-pointer hover:bg-neutral-800/30 rounded-lg p-2 -m-2 transition-colors' : ''}`}
+      className={`flex flex-col gap-3 group ${canClickToHighlightTraces ? 'cursor-pointer hover:bg-neutral-800/20 rounded-lg p-2 -m-2 transition-colors' : ''}`}
       onClick={canClickToHighlightTraces ? handleOpenTrace : undefined}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -85,18 +81,20 @@ export const AiMessage: React.FC<{
         <div className="flex-shrink-0">
           <TooltipProvider>
             <Tooltip>
-              <TooltipTrigger>
-                {msg?.model_name ? (
-                  <ProviderIcon
-                    provider_name={providerName}
-                    className="h-6 w-6 rounded-full"
-                  />
-                ) : (
-                  <AvatarItem
-                    className="h-6 w-6 rounded-full"
-                    name={'Assistant'}
-                  />
-                )}
+              <TooltipTrigger asChild>
+                <div className="relative">
+                  {msg?.model_name ? (
+                    <ProviderIcon
+                      provider_name={providerName}
+                      className="h-7 w-7 rounded-full"
+                    />
+                  ) : (
+                    <AvatarItem
+                      className="h-7 w-7 rounded-full"
+                      name={'Assistant'}
+                    />
+                  )}
+                </div>
               </TooltipTrigger>
               <TooltipContent>
                 <p>
@@ -108,16 +106,16 @@ export const AiMessage: React.FC<{
         </div>
 
         {/* Metadata */}
-        <div className="flex items-center gap-2 flex-1">
-          <span className="text-neutral-300 font-medium text-sm">{msg?.model_name.includes('/') ? msg.model_name.split('/')[1] : (msg.model_name || 'Assistant')}</span>
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <span className="text-neutral-300 font-medium text-sm truncate">{msg?.model_name.includes('/') ? msg.model_name.split('/')[1] : (msg.model_name || 'Assistant')}</span>
           {msg?.timestamp && (
-            <div className="flex items-center text-xs text-neutral-500">
+            <div className="flex items-center text-xs text-neutral-500 shrink-0">
               <Clock className="h-3 w-3 mr-1" />
               <span>{formatMessageTimestamp(msg.timestamp)}</span>
             </div>
           )}
           {canClickToHighlightTraces && (
-            <span className="text-[10px] text-blue-400/60 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">Click to view trace details</span>
+            <span className="text-[10px] text-blue-400/60 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">Click to view trace details</span>
           )}
         </div>
       </div>}
@@ -128,14 +126,14 @@ export const AiMessage: React.FC<{
           <ToolCallList toolCalls={msg.tool_calls} />
         )}
         {msg?.type === "tool" && msg?.tool_call_id && (
-          <div className="mb-3 rounded-md overflow-hidden bg-neutral-900/20 border border-neutral-800/40">
-            <div className="px-2 py-1 bg-neutral-800/20">
+          <div className="mb-3 rounded-lg overflow-hidden bg-neutral-900/30 border border-neutral-800/50">
+            <div className="px-3 py-1.5 bg-neutral-800/30">
               <span className="text-xs text-neutral-500">
                 ID: {msg.tool_call_id}
               </span>
             </div>
-            <div className="px-2 py-2">
-              <div className="whitespace-normal text-neutral-100 break-words overflow-wrap break-all text-sm">
+            <div className="px-4 py-3">
+              <div className="whitespace-normal text-neutral-200 break-words overflow-wrap break-all text-sm">
                 <MessageDisplay message={msg?.content || ""} />
               </div>
             </div>
@@ -145,7 +143,7 @@ export const AiMessage: React.FC<{
           msg?.content_array && msg.content_array.length > 0 ? (
             <ContentArrayDisplay contentArray={msg.content_array} />
           ) : (
-            <div className="whitespace-normal text-neutral-100 break-words overflow-wrap break-all leading-relaxed text-sm">
+            <div className="whitespace-normal text-neutral-200 break-words overflow-wrap break-all leading-relaxed text-sm">
               <MessageDisplay message={msg?.content || ""} />
             </div>
           )
@@ -161,7 +159,7 @@ export const AiMessage: React.FC<{
       )}
 
       {isTyping && (
-        <div className="rounded bg-neutral-800/20 px-2 py-1.5 flex items-center gap-2 mt-2 border border-neutral-800/30">
+        <div className="rounded-lg bg-neutral-900/30 px-3 py-2 flex items-center gap-2 border border-neutral-800/50">
           <Pencil className="h-3.5 w-3.5 text-neutral-400 animate-pulse" />
           <span className="text-xs text-neutral-400">Thinking...</span>
         </div>

@@ -30,7 +30,7 @@ export const TaskSpanMessage = memo((props: {
     );
 
     return (
-        <div id={`task-span-conversation-${span_id}`} className="task-wrapper">
+        <div id={`task-span-conversation-${span_id}`} className="task-wrapper flex flex-col gap-2 group">
             <SpanSeparator
                 spanId={span_id}
                 isCollapsed={isCollapsed}

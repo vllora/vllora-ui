@@ -15,10 +15,11 @@ export interface HierarchyRowProps {
     selectedSpanId?: string;
     onSpanSelect?: (spanId: string, runId?: string) => void;
     isInSidebar?: boolean;
+    hoverSpanId?: string;
 }
 
 export const HierarchyRow = (props: HierarchyRowProps) => {
-    const { hierarchy, totalDuration, startTime, level, titleWidth: propTitleWidth = TIMELINE_DYNAMIC_TITLE_WIDTH_IN_SIDEBAR, relatedSpans = [], selectedSpanId, onSpanSelect, isInSidebar = true } = props;
+    const { hierarchy, totalDuration, startTime, level, titleWidth: propTitleWidth = TIMELINE_DYNAMIC_TITLE_WIDTH_IN_SIDEBAR, relatedSpans = [], selectedSpanId, onSpanSelect, isInSidebar = true, hoverSpanId } = props;
     const [isOpen, setIsOpen] = useState(true);
     // In ellora-ui, we're always in sidebar mode (chat sidebar)
     const titleWidth: string | number = `${propTitleWidth}px`.replace('pxpx', 'px');
@@ -45,6 +46,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                             selectedSpanId={selectedSpanId}
                             onSpanSelect={onSpanSelect}
                             isInSidebar={isInSidebar}
+                            hoverSpanId={hoverSpanId}
                         />
                     ))}
                 </div>
@@ -97,6 +99,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                 selectedSpanId={selectedSpanId}
                 onSpanSelect={onSpanSelect}
                 isInSidebar={isInSidebar}
+                hoverSpanId={hoverSpanId}
             />
         );
     }
@@ -120,6 +123,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                 selectedSpanId={selectedSpanId}
                 onSpanSelect={onSpanSelect}
                 isInSidebar={isInSidebar}
+                hoverSpanId={hoverSpanId}
             />
             {isOpen && (
                 <div className="flex flex-col divide-y divide-border/70">
@@ -135,6 +139,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                             selectedSpanId={selectedSpanId}
                             onSpanSelect={onSpanSelect}
                             isInSidebar={isInSidebar}
+                            hoverSpanId={hoverSpanId}
                         />
                     ))}
                 </div>

@@ -11,10 +11,11 @@ export interface SingleRunTimelineViewProps {
     selectedSpanId?: string;
     onSpanSelect?: (spanId: string, runId?: string) => void;
     level: number;
+    hoverSpanId?: string;
 }
 
 export const SingleRunTimelineView = (props: SingleRunTimelineViewProps) => {
-    const { isInSidebar = true, selectedSpanId, onSpanSelect, currentSpanHierarchy, level, index } = props;
+    const { isInSidebar = true, selectedSpanId, onSpanSelect, currentSpanHierarchy, level, index, hoverSpanId } = props;
     const { spansByRunId, startTime, totalDuration } = RunDetailConsumer();
     // Dynamic title width based on display mode - wider when not in sidebar
     const titleWidth: string | number = useMemo(() => isInSidebar ? `${TIMELINE_DYNAMIC_TITLE_WIDTH_IN_SIDEBAR}px` : `${TIMELINE_DYNAMIC_TITLE_WIDTH_FULL_SIZE}px`, [isInSidebar]);
@@ -62,6 +63,7 @@ export const SingleRunTimelineView = (props: SingleRunTimelineViewProps) => {
                     selectedSpanId={selectedSpanId}
                     onSpanSelect={onSpanSelect}
                     isInSidebar={isInSidebar}
+                    hoverSpanId={hoverSpanId}
                 />
             </div>
         </div>

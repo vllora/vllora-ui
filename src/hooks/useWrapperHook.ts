@@ -22,6 +22,7 @@ export const useWrapperHook = (props: {
   const [flattenSpans, setFlattenSpans] = useState<Span[]>([]);
   
   const [hoveredRunId, setHoveredRunId] = useState<string | null>(null);
+  const [hoverSpanId, setHoverSpanId] = useState<string | undefined>(undefined);
 
   const updateBySpansOfAThread = useCallback((spans: Span[]) => {
     setFlattenSpans(spans);
@@ -157,5 +158,7 @@ export const useWrapperHook = (props: {
     updateBySpansOfARun,
     spansOfSelectedRun,
     detailSpan,
+    hoverSpanId,
+    setHoverSpanId,
   };
 };

@@ -12,6 +12,7 @@ interface TimelineContentProps {
   setSelectedRunId: (runId: string | null) => void;
   setDetailSpanId: (spanId: string | null) => void;
   isInSidebar?: boolean;
+  hoverSpanId?: string;
 }
 
 export const TimelineContent: React.FC<TimelineContentProps> = ({
@@ -21,7 +22,8 @@ export const TimelineContent: React.FC<TimelineContentProps> = ({
   setSelectedSpanId,
   setSelectedRunId,
   setDetailSpanId,
-  isInSidebar = true
+  isInSidebar = true,
+  hoverSpanId
 }) => {
 
   // Get run ID from first span (all spans should belong to same run)
@@ -41,6 +43,7 @@ export const TimelineContent: React.FC<TimelineContentProps> = ({
             setSelectedRunId={setSelectedRunId}
             setDetailSpanId={setDetailSpanId}
             isInSidebar={isInSidebar}
+            hoverSpanId={hoverSpanId}
           />
         </div>
       </div>
@@ -53,9 +56,10 @@ const TimelineContentInner = (props: {
   setSelectedRunId: (runId: string | null) => void;
   setDetailSpanId: (spanId: string | null) => void;
   isInSidebar?: boolean;
+  hoverSpanId?: string;
 }) => {
   const { hierarchies, runId } = RunDetailConsumer()
-  const { selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, isInSidebar = true } = props
+  const { selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, isInSidebar = true, hoverSpanId } = props
 
   if (!hierarchies || hierarchies.length === 0) {
     return <div className="flex items-center justify-center p-4 text-sm text-gray-400">
@@ -71,6 +75,7 @@ const TimelineContentInner = (props: {
         isInSidebar={isInSidebar}
         selectedSpanId={selectedSpanId || undefined}
         level={0}
+        hoverSpanId={hoverSpanId}
         onSpanSelect={(spanId, runId) => {
           if (runId) {
             setSelectedSpanId(spanId);

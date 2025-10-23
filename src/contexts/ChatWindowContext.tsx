@@ -49,6 +49,8 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     isLoadingSpans,
     loadSpansError,
     refreshSpans,
+    hoverSpanId,
+    setHoverSpanId,
   } = useWrapperHook({ projectId, threadId });
 
 
@@ -255,7 +257,9 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     messageHierarchies,
     detailSpan,
     runHighlighted,
-    setRunHighlighted
+    setRunHighlighted,
+    hoverSpanId,
+    setHoverSpanId,
   };
 }
 export function ChatWindowProvider({ children, threadId, projectId }: { children: ReactNode, threadId: string, projectId: string }) {

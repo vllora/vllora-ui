@@ -17,37 +17,33 @@ export const HumanMessage: React.FC<HumanMessageProps> = ({ message }) => {
   useRelativeTime(messageRef, message.created_at);
 
   return (
-    <div className="flex flex-col group mb-6" ref={messageRef}>
-      {/* Header with Avatar and Metadata */}
-      <div className="flex items-center gap-3 pb-3 border-b border-neutral-800/30">
-        
-
-        {/* Metadata */}
+    <div className="flex flex-col gap-3 group" ref={messageRef}>
+      {/* Header with Metadata */}
+      <div className="flex items-center gap-3">
         <div className="flex items-center gap-2 flex-1">
           {message.created_at && (
-            <div className="flex items-center gap-2 text-xs text-neutral-500">
-              <span>{formatMessageTime(message.created_at)}</span>
+            <div className="flex items-center text-xs text-neutral-500">
               <Clock className="h-3 w-3 mr-1" />
+              <span>{formatMessageTime(message.created_at)}</span>
             </div>
           )}
         </div>
         <div className="flex-shrink-0">
           <span className="text-sm font-medium text-neutral-300">User</span>
         </div>
-        
       </div>
 
       {/* Content */}
-      <div className="w-full pt-3">
+      <div className="w-full flex flex-1">
         {message.files && message.files.length > 0 && (
-          <div className="mb-3 flex flex-wrap gap-2">
+          <div className="mb-3 flex flex-wrap gap-2 justify-end">
             {message.files.map((file, index) => (
               <div key={index} className="relative">
                 {file.type.startsWith('image/') && file.preview && (
                   <img
                     src={file.preview}
                     alt={file.name}
-                    className="max-w-xs rounded-lg"
+                    className="max-w-xs rounded-lg border border-neutral-800/50"
                   />
                 )}
               </div>
@@ -56,12 +52,16 @@ export const HumanMessage: React.FC<HumanMessageProps> = ({ message }) => {
         )}
 
         {message.content_array && message.content_array.length > 0 ? (
-          <div className="text-right">
-            <ContentArrayDisplay contentArray={message.content_array} />
+          <div className="flex justify-end">
+            <div className="max-w-[80%]">
+              <ContentArrayDisplay contentArray={message.content_array} />
+            </div>
           </div>
         ) : (
-          <div className="text-neutral-100 leading-relaxed whitespace-normal break-words text-sm text-right">
-            <MessageDisplay message={message.content} />
+          <div className="flex justify-end flex-1">
+            <div className="text-neutral-200 flex-1 leading-relaxed whitespace-normal break-words text-sm bg-neutral-900/30 border border-neutral-800/50 rounded-lg px-4 py-3">
+              <MessageDisplay message={message.content} />
+            </div>
           </div>
         )}
       </div>
