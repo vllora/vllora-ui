@@ -32,9 +32,9 @@ const SidebarModelCallSummaryTracesImpl = ({
   isOpen,
   onChevronClick,
 }: ModelCallSummaryTracesProps) => {
-  const { hoveredRunId } = ChatWindowConsumer();
+  const { runHighlighted } = ChatWindowConsumer();
   const runId = run.run_id || "";
-  const isHovered = hoveredRunId === runId;
+  const isHighlighted = runHighlighted === runId;
 
   // Extract models and providers
   const usedModels = run.used_models || [];
@@ -121,7 +121,7 @@ const SidebarModelCallSummaryTracesImpl = ({
       className={cn(
         "py-2 hover:bg-[#171717] bg-[#161616] transition-all gap-1 flex px-2 cursor-pointer",
         isOpen && "bg-[#171717]",
-        isHovered && !isOpen ? " border-r-0 border-y-0 border-l-4 border-[rgb(var(--theme-500))]" : ' border-r-0 border-y-0 border-l-4 border-transparent'
+        isHighlighted ? " border-r-0 border-y-0 border-l-4 border-[rgb(var(--theme-500))]" : ' border-r-0 border-y-0 border-l-4 border-transparent'
 
       )}
     >

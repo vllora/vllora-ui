@@ -13,9 +13,8 @@ const RunSpanMessageComponent = (props: {
 }) => {
     const { span_id, messages, level = 0 } = props;
 
-    const { openTraces, setOpenTraces, flattenSpans } = ChatWindowConsumer();
+    const { openTraces, setOpenTraces, flattenSpans, runHighlighted, setRunHighlighted } = ChatWindowConsumer();
     const span = useSpanById(flattenSpans, span_id);
-    // const [isCollapsed, setIsCollapsed] = useState(false);
 
     // Memoize the toggle callback to prevent child re-renders
     const toggleCollapse = useCallback(() => {
@@ -36,6 +35,7 @@ const RunSpanMessageComponent = (props: {
         return isOpen ? false : true;
     }, [openTraces, span]);
 
+   
 
     // Memoize the className for connector line - subtle vertical line on the left
     const contentClassName = useMemo(() =>
@@ -49,14 +49,29 @@ const RunSpanMessageComponent = (props: {
         [level]
     );
 
+    const isHighlighted = runHighlighted === span_id;
+
     return (
-        <div id={`run-span-conversation-${span_id}`} className="run-wrapper">
+        <div
+            id={`run-span-conversation-${span_id}`}
+            className={`run-wrapper transition-colors ${isHighlighted ? 'bg-muted/30' : ''}`}
+        >
             {/* SpanSeparator now handles getting span data and displaying status */}
             <SpanSeparator
                 spanId={span_id}
                 isCollapsed={isCollapsed}
                 onToggle={toggleCollapse}
                 level={level}
+                onHover={({
+                    runId,
+                    isHovering
+                }) => {
+                    if(isHovering) {
+                        setRunHighlighted(runId);
+                    } else {
+                        setRunHighlighted(prev => prev === runId ? '' : prev);
+                    }
+                }}
             />
             {!isCollapsed && (
                 <div className={contentClassName} style={contentStyle}>

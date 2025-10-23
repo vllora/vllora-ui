@@ -1,7 +1,6 @@
 import { cn } from "@/lib/utils";
 import { ReactNode } from "react";
 import { TimelineVisualization } from "./timeline-visualization";
-import { FullscreenTimelineContent } from "./fullscreen-timeline-content";
 import { SidebarTimelineContent } from "./sidebar-timeline-content";
 import { classNames } from "@/utils/modelUtils";
 import { Span } from "@/types/common-type";
@@ -96,10 +95,7 @@ export const TimelineRow = (props: TimelineRowProps) => {
             <div className={classNames("flex w-full divide-x divide-border px-1")}>
                 {/* Render either fullscreen or sidebar content based on mode */}
                 <SidebarTimelineContent {...contentProps} isInSidebar={isInSidebar} />
-                {/* {!isInSidebar
-                    ? <FullscreenTimelineContent {...contentProps} isInSidebar={isInSidebar}/>
-                    : <SidebarTimelineContent {...contentProps} isInSidebar={isInSidebar} />
-                } */}
+                
 
                 {/* Timeline visualization */}
                 <TimelineVisualization

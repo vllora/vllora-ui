@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Loader2, Copy, Check } from 'lucide-react';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 import { useSpanById } from '@/hooks/useSpanById';
@@ -13,6 +13,7 @@ interface SpanSeparatorProps {
   onToggle?: () => void;
   level?: number;
   icon?: React.ReactNode;
+  onHover?: (input: {spanId: string, runId: string, isHovering: boolean}) => void;
 }
 
 /**
@@ -26,6 +27,7 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
   isCollapsed = false,
   onToggle,
   level = 0,
+  onHover,
 }) => {
   // Get span data from context - component will re-render on context changes
   const { flattenSpans } = ChatWindowConsumer();
@@ -40,6 +42,18 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
       onClick(spanId);
     }
   };
+
+  const handleMouseEnter = useCallback(() => {
+    if (onHover) {
+      onHover({spanId, runId: span?.run_id || '', isHovering: true});
+    }
+  }, [spanId, span?.run_id, onHover]);
+
+  const handleMouseLeave = useCallback(() => {
+    if (onHover) {
+      onHover({spanId, runId: span?.run_id || '', isHovering: false});
+    }
+  }, [spanId, span?.run_id, onHover]);
 
   // Determine if this is a run and what ID to copy
   const { isRun, idToCopy, displayId } = useMemo(() => {
@@ -113,6 +127,8 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
         {/* Separator badge with colored left border - compact design */}
         <button
           onClick={handleClick}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
           className={`flex w-full items-center gap-2 px-2.5 py-2 ${isCollapsed ? 'border-l-2 border-border' : 'border-l border-border'} hover:bg-muted/50 transition-colors cursor-pointer group `}
         >
           {onToggle && (

@@ -55,6 +55,8 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
   const [isChatProcessing, setIsChatProcessing] = useState<boolean>(false);
 
+  const [runHighlighted, setRunHighlighted] = useState<string | null>(null);
+
   const updateRunMetrics = useCallback((run_id: string, updatedSpans: Span[]) => {
     setRuns(prevRuns => {
       let runById = prevRuns.find(r => r.run_id === run_id)
@@ -251,7 +253,9 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     detailSpanId,
     setDetailSpanId,
     messageHierarchies,
-    detailSpan
+    detailSpan,
+    runHighlighted,
+    setRunHighlighted
   };
 }
 export function ChatWindowProvider({ children, threadId, projectId }: { children: ReactNode, threadId: string, projectId: string }) {
