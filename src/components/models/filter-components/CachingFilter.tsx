@@ -59,15 +59,15 @@ export const CachingFilter: React.FC<CachingFilterProps> = ({
         <Database className="w-3.5 h-3.5" />
         <span>{getButtonLabel()}</span>
         {hasActiveFilter && (
-          <button
+          <span
             onClick={(e) => {
               e.stopPropagation();
               clearFilter();
             }}
-            className="ml-1 p-0.5 hover:bg-zinc-700 rounded-full"
+            className="ml-1 p-0.5 hover:bg-zinc-700 rounded-full cursor-pointer inline-flex"
           >
             <X className="w-3 h-3" />
-          </button>
+          </span>
         )}
         <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${
           showDropdown ? 'rotate-180' : ''

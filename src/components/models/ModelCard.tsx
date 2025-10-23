@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { ArrowUpRight, Check, Copy, Upload, Download } from 'lucide-react';
+import { ArrowUpRight, Check, Copy } from 'lucide-react';
 import { ModelPricing } from '@/types/models';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -7,6 +7,9 @@ import { RankingsBadge } from '@/components/shared/RankingsBadge';
 import { CostDisplay } from '@/components/shared/CostDisplay';
 import { NewBadge } from '@/components/shared/NewBadge';
 import { ProvidersSection } from '@/components/home-page/TrendingModelsSection/ProvidersSection';
+import { ModalitiesDisplay } from '@/components/models/card-sections/ModalitiesDisplay';
+import { CapabilitiesIcons } from '@/components/models/card-sections/CapabilitiesIcons';
+import { ProvidersIcons } from '@/components/models/card-sections/ProvidersIcons';
 
 export interface ModelCardProps {
   model: ModelPricing;
@@ -102,11 +105,13 @@ export const ModelCard: React.FC<ModelCardProps> = ({
         )}
 
         <div className="p-5">
+          {/* Header Section */}
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
+              {/* Publisher Icon */}
               <Tooltip>
                 <TooltipTrigger>
-                  <div className="p-1.5 bg-zinc-800/30 rounded-lg group-hover:bg-zinc-800/50 transition-colors mt-0.5 relative z-10">
+                  <div className="p-1 bg-zinc-800/30 rounded-lg group-hover:bg-zinc-800/50 transition-colors relative z-10">
                     <ProviderIcon
                       provider_name={model.model_provider}
                       fallbackProviderName={model.inference_provider.provider}
@@ -118,6 +123,8 @@ export const ModelCard: React.FC<ModelCardProps> = ({
                   <p className="text-xs font-medium">{model.model_provider}</p>
                 </TooltipContent>
               </Tooltip>
+
+              {/* Model Name and Actions */}
               <div className="flex flex-row flex-1 justify-between gap-1">
                 <div className="flex items-center gap-2">
                   <Tooltip>
@@ -156,26 +163,54 @@ export const ModelCard: React.FC<ModelCardProps> = ({
             </div>
           </div>
 
-          <div className="space-y-2 mt-2 mb-3">
-            {showPublisherProvider && (
-              <div className="flex items-center gap-2 text-xs">
-                <div className="flex items-center gap-1.5 min-w-[120px] max-w-[45%]">
-                  <span className="text-zinc-500 flex-shrink-0">Publisher:</span>
-                  <a
-                    href={`/publishers/${encodeURIComponent(model.model_provider)}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                    }}
-                    className="font-medium text-zinc-100 hover:text-white transition-colors duration-200 underline decoration-zinc-600 hover:decoration-zinc-400 underline-offset-2 relative z-10 truncate"
-                    title={model.model_provider}
-                  >
-                    {model.model_provider}
-                  </a>
-                </div>
+          {/* Description Section */}
+          <div className="mt-3 mb-4">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <p className="text-sm text-zinc-400 leading-relaxed line-clamp-2 cursor-help">
+                  {model.description}
+                </p>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="bg-zinc-800 border-zinc-700 text-white max-w-xs">
+                <p className="text-xs">{model.description}</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
 
-                <ProvidersSection providers={uniqueProviders} maxDisplay={2} />
-              </div>
-            )}
+          {/* Main Info Section - 3 Columns */}
+          <div className="grid grid-cols-3 gap-4 pt-3 border-t border-zinc-800/50">
+            {/* Providers Column */}
+            <div className="space-y-1">
+              <p className="text-xs text-zinc-500">Providers</p>
+              <ProvidersIcons 
+                providers={uniqueProviders}
+                maxDisplay={2}
+              />
+            </div>
+
+            {/* Modalities Column */}
+            <div className="space-y-1">
+              <p className="text-xs text-zinc-500">Modalities</p>
+              <ModalitiesDisplay 
+                inputFormats={model.input_formats}
+                outputFormats={model.output_formats}
+              />
+            </div>
+
+            {/* Capabilities Column */}
+            <div className="space-y-1">
+              <p className="text-xs text-zinc-500">Capabilities</p>
+              <CapabilitiesIcons 
+                capabilities={model.capabilities}
+                inputFormats={model.input_formats}
+                outputFormats={model.output_formats}
+                maxDisplay={3}
+              />
+            </div>
+          </div>
+
+          {/* Bottom Info Section */}
+          <div className="space-y-2 mt-4 pt-3 border-t border-zinc-800/50">
             <div className="flex items-center justify-between text-xs">
               <span className="text-zinc-500">Context</span>
               <span className="text-zinc-300 font-medium">
@@ -191,39 +226,6 @@ export const ModelCard: React.FC<ModelCardProps> = ({
                 <CostDisplay model={model} modelsGroup={modelsGroup} />
               </div>
             )}
-          </div>
-
-          <div className="pt-3 border-t border-zinc-800/50">
-            <div className="flex  flex-1 justify-between items-center gap-2">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-2 text-xs text-zinc-500 cursor-help">
-                    <Upload className="w-3 h-3" />
-                    <span>{model.input_formats.join(', ')}</span>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="bg-zinc-800 border-zinc-700 text-white max-w-xs">
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium">Input Formats</p>
-                    <p className="text-xs text-zinc-300">{model.input_formats.join(' • ')}</p>
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-2 text-xs text-zinc-500 cursor-help">
-                    <Download className="w-3 h-3" />
-                    <span>{model.output_formats.join(', ')}</span>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="bg-zinc-800 border-zinc-700 text-white max-w-xs">
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium">Output Formats</p>
-                    <p className="text-xs text-zinc-300">{model.output_formats.join(' • ')}</p>
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </div>
           </div>
         </div>
       </div>

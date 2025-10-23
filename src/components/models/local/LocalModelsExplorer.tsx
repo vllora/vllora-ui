@@ -59,6 +59,10 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
     const formats = searchParams.get('outputFormats');
     return formats ? formats.split(',') : [];
   });
+  const [selectedCapabilities, setSelectedCapabilities] = useState<string[]>(() => {
+    const capabilities = searchParams.get('capabilities');
+    return capabilities ? capabilities.split(',') : [];
+  });
   const [minContextSize, setMinContextSize] = useState<number | undefined>(() => {
     const min = searchParams.get('minContext');
     return min ? parseInt(min) : undefined;
@@ -144,6 +148,12 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
       params.delete('outputFormats');
     } else {
       params.set('outputFormats', selectedOutputFormats.join(','));
+    }
+
+    if (selectedCapabilities.length === 0) {
+      params.delete('capabilities');
+    } else {
+      params.set('capabilities', selectedCapabilities.join(','));
     }
 
     if (minContextSize === undefined) {
@@ -287,6 +297,16 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
     return Array.from(uniqueFormats).sort();
   }, [models]);
 
+  const capabilities = useMemo(() => {
+    const uniqueCapabilities = new Set<string>();
+    models.forEach(m => {
+      if (m.capabilities) {
+        m.capabilities.forEach(capability => uniqueCapabilities.add(capability));
+      }
+    });
+    return Array.from(uniqueCapabilities).sort();
+  }, [models]);
+
   const types = useMemo(() => {
     const uniqueTypes = new Set<string>();
     models.forEach(m => {
@@ -386,6 +406,17 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
           modelOutputFormats.includes(format)
         );
         if (!hasMatchingFormat) {
+          return false;
+        }
+      }
+
+      // Capabilities filter
+      if (selectedCapabilities.length > 0) {
+        const modelCapabilities = model.capabilities || [];
+        const hasMatchingCapability = selectedCapabilities.some(capability => 
+          modelCapabilities.includes(capability)
+        );
+        if (!hasMatchingCapability) {
           return false;
         }
       }
@@ -521,6 +552,8 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
         onInputFormatsChange={setSelectedInputFormats}
         selectedOutputFormats={selectedOutputFormats}
         onOutputFormatsChange={setSelectedOutputFormats}
+        selectedCapabilities={selectedCapabilities}
+        onCapabilitiesChange={setSelectedCapabilities}
         minContextSize={minContextSize}
         onMinContextSizeChange={setMinContextSize}
         maxContextSize={maxContextSize}
@@ -539,6 +572,7 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
         onTypeChange={setSelectedType}
         inputFormats={inputFormats}
         outputFormats={outputFormats}
+        capabilities={capabilities}
         types={types}
         contextSizeRange={contextSizeRange}
         inputCostRange={inputCostRange}
@@ -594,27 +628,6 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
       {filteredModels.length === 0 && (
         <div className="text-center py-12">
           <p className="text-muted-foreground">No local models found matching your filters.</p>
-          <button
-            onClick={() => {
-              setSearchTerm('');
-              setSelectedProviders([]);
-              setSelectedOwners([]);
-              setConfiguredFilter('all');
-              setSelectedInputFormats([]);
-              setSelectedOutputFormats([]);
-              setMinContextSize(undefined);
-              setMaxContextSize(undefined);
-              setMinInputCost(undefined);
-              setMaxInputCost(undefined);
-              setMinOutputCost(undefined);
-              setMaxOutputCost(undefined);
-              setCachingEnabled(undefined);
-              setSelectedType('all');
-            }}
-            className="mt-4 text-sm text-foreground/70 hover:text-foreground underline"
-          >
-            Clear all filters
-          </button>
         </div>
       )}
     </div>

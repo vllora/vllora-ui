@@ -6,6 +6,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { LocalModelCard } from './LocalModelCard';
 import { CostDisplay } from '@/components/shared/CostDisplay';
 import { formatContextSize } from '@/utils/format';
+import { ModalitiesDisplay } from '@/components/models/card-sections/ModalitiesDisplay';
+import { CapabilitiesIcons } from '@/components/models/card-sections/CapabilitiesIcons';
 
 interface LocalModelsTableProps {
   models: LocalModel[];
@@ -91,10 +93,10 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
           <div className="w-full">
             {/* Table Header */}
             <div className="bg-secondary border-b border-border px-4 py-3">
-              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              <div className="flex items-center text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 <button
                   onClick={() => handleSort('id')}
-                  className="w-[35%] flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer group"
+                  className="w-[26%] flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer group"
                 >
                   <span>MODEL ID</span>
                   {sortField === 'id' ? (
@@ -105,7 +107,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                 </button>
                 <button
                   onClick={() => handleSort('context')}
-                  className="w-[12%] flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer group"
+                  className="w-[12%] flex items-center justify-center gap-1 hover:text-foreground transition-colors cursor-pointer group"
                 >
                   <span>CONTEXT SIZE</span>
                   {sortField === 'context' ? (
@@ -116,7 +118,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                 </button>
                 <button
                   onClick={() => handleSort('inputCost')}
-                  className="w-[25%] flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer group"
+                  className="w-[20%] flex items-center justify-center gap-1 hover:text-foreground transition-colors cursor-pointer group"
                 >
                   <span>COST</span>
                   {sortField === 'inputCost' ? (
@@ -125,12 +127,15 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                     <ChevronsUpDown className="w-3 h-3 opacity-0 group-hover:opacity-50" />
                   )}
                 </button>
-                <div className="w-[20%] flex items-center gap-1">
-                  <span>FORMATS</span>
+                <div className="w-[15%] flex items-center justify-center gap-1">
+                  <span>MODALITIES</span>
+                </div>
+                <div className="w-[15%] flex items-center justify-center gap-1">
+                  <span>CAPABILITIES</span>
                 </div>
                 <button
                   onClick={() => handleSort('provider')}
-                  className="w-[8%] flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer group"
+                  className="w-[12%] flex items-center justify-end gap-1 hover:text-foreground transition-colors cursor-pointer group"
                 >
                   <span>PROVIDER</span>
                   {sortField === 'provider' ? (
@@ -153,10 +158,11 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                 const providers = Array.from(new Set(modelGroup.map((m: LocalModel) => m.inference_provider.provider)));
 
                 return (
-                  <div key={`${model.inference_provider.provider}/${model.model}-${index}`} className="group px-4 py-4 hover:bg-accent/50 transition-colors">
-                    <div className="flex items-center gap-2">
+                  <TooltipProvider key={`${model.inference_provider.provider}/${model.model}-${index}`}>
+                    <div className="group px-4 py-4 hover:bg-accent/50 transition-colors">
+                      <div className="flex items-center">
                       {/* Model ID with Model Provider Icon */}
-                      <div className="w-[35%] min-w-0 pr-3">
+                      <div className="w-[26%] min-w-0 pr-3">
                         <div className="flex items-center gap-2">
                           <ProviderIcon
                             provider_name={model.model_provider}
@@ -164,8 +170,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                           />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
-                              <TooltipProvider>
-                                <Tooltip>
+                              <Tooltip>
                                   <TooltipTrigger asChild>
                                     <div className="flex items-center gap-2 flex-1 min-w-0">
                                       <span className="font-medium text-card-foreground truncate text-sm">
@@ -192,7 +197,6 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                                     <span className="text-xs font-mono">{modelName}</span>
                                   </TooltipContent>
                                 </Tooltip>
-                              </TooltipProvider>
                             </div>
                             <div className="text-xs text-muted-foreground mt-0.5">
                               {model.inference_provider.provider}/{model.model}
@@ -202,63 +206,38 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                       </div>
 
                       {/* Context Window */}
-                      <div className="w-[12%]">
+                      <div className="w-[12%] flex justify-center">
                         <span className="text-xs font-mono text-foreground">
                           {formatContextSize(model.limits.max_context_size, true)}
                         </span>
                       </div>
 
                       {/* Price per 1M Tokens */}
-                      <div className="w-[25%]">
+                      <div className="w-[20%] flex justify-center">
                         <CostDisplay model={model} modelsGroup={modelGroup} className="justify-start" />
                       </div>
 
-                      {/* Formats */}
-                      <div className="w-[20%]">
-                        <div className="flex items-center justify-start gap-3">
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="flex items-center gap-1 cursor-help">
-                                  <Upload className="w-3 h-3 text-muted-foreground" />
-                                  <span className="text-xs text-muted-foreground">
-                                    {model.input_formats?.slice(0, 2).join(', ')}
-                                    {model.input_formats && model.input_formats.length > 2 && ` +${model.input_formats.length - 2}`}
-                                  </span>
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="bg-popover border-border">
-                                <div className="space-y-1">
-                                  <p className="text-xs font-medium">Input Formats</p>
-                                  <p className="text-xs text-muted-foreground">{model.input_formats?.join(' • ')}</p>
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="flex items-center gap-1 cursor-help">
-                                  <Download className="w-3 h-3 text-muted-foreground" />
-                                  <span className="text-xs text-muted-foreground">
-                                    {model.output_formats?.slice(0, 2).join(', ')}
-                                    {model.output_formats && model.output_formats.length > 2 && ` +${model.output_formats.length - 2}`}
-                                  </span>
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="bg-popover border-border">
-                                <div className="space-y-1">
-                                  <p className="text-xs font-medium">Output Formats</p>
-                                  <p className="text-xs text-muted-foreground">{model.output_formats?.join(' • ')}</p>
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
+                      {/* Modalities */}
+                      <div className="w-[15%] flex justify-center">
+                        <ModalitiesDisplay 
+                          inputFormats={model.input_formats}
+                          outputFormats={model.output_formats}
+                        />
+                      </div>
+
+                      {/* Capabilities */}
+                      <div className="w-[15%] flex justify-center">
+                        <CapabilitiesIcons 
+                          capabilities={model.capabilities}
+                          inputFormats={model.input_formats}
+                          outputFormats={model.output_formats}
+                          parameters={model.parameters}
+                          maxDisplay={10}
+                        />
                       </div>
 
                       {/* Provider */}
-                      <div className="w-[8%]">
+                      <div className="w-[12%] flex justify-end">
                         <div className="flex flex-wrap gap-1">
                           {(providers as string[]).map((provider: string) => (
                             <TooltipProvider key={provider}>
@@ -267,7 +246,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                                   <div className="flex items-center gap-1">
                                     <ProviderIcon
                                       provider_name={provider}
-                                      className="w-4 h-4"
+                                      className="w-6 h-6"
                                     />
                                     {providers.length === 1 && (
                                       <span className="text-xs text-foreground/80 truncate" title={provider}>
@@ -288,6 +267,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                       </div>
                     </div>
                   </div>
+                  </TooltipProvider>
                 );
               })}
             </div>

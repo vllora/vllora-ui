@@ -6,7 +6,7 @@ export async function fetchModels(): Promise<ModelPricing[]> {
     throw new Error('Missing required environment variables: VITE_LANGDB_API_URL or VITE_LANGDB_PROJECT_ID');
   }
 
-  const url = `${API_CONFIG.url}/projects/${API_CONFIG.projectId}/models?include_parameters=false&include_benchmark=true`;
+  const url = `${API_CONFIG.url}/projects/${API_CONFIG.projectId}/models?include_parameters=true&include_benchmark=true`;
 
   try {
     const response = await fetch(url, {
@@ -30,7 +30,7 @@ export async function fetchModels(): Promise<ModelPricing[]> {
 }
 
 export async function fetchLocalModels(): Promise<LocalModel[]> {
-  const url = `${getBackendUrl()}/v1/pricing?include_parameters=false&include_benchmark=true`;
+  const url = `${getBackendUrl()}/v1/pricing?include_parameters=true&include_benchmark=true`;
 
   try {
     const response = await fetch(url, {

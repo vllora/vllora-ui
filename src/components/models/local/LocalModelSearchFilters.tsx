@@ -27,6 +27,8 @@ interface LocalModelSearchFiltersProps {
   onInputFormatsChange?: (formats: string[]) => void;
   selectedOutputFormats?: string[];
   onOutputFormatsChange?: (formats: string[]) => void;
+  selectedCapabilities?: string[];
+  onCapabilitiesChange?: (capabilities: string[]) => void;
   minContextSize?: number;
   onMinContextSizeChange?: (value?: number) => void;
   maxContextSize?: number;
@@ -45,6 +47,7 @@ interface LocalModelSearchFiltersProps {
   onTypeChange?: (type: string) => void;
   inputFormats?: string[];
   outputFormats?: string[];
+  capabilities?: string[];
   types?: string[];
   contextSizeRange?: { min: number; max: number };
   inputCostRange?: { min: number; max: number };
@@ -67,6 +70,8 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
   onInputFormatsChange = () => {},
   selectedOutputFormats = [],
   onOutputFormatsChange = () => {},
+  selectedCapabilities = [],
+  onCapabilitiesChange = () => {},
   minContextSize,
   onMinContextSizeChange = () => {},
   maxContextSize,
@@ -85,6 +90,7 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
   onTypeChange = () => {},
   inputFormats = [],
   outputFormats = [],
+  capabilities = [],
   types = [],
   contextSizeRange = { min: 0, max: 1000000 },
   inputCostRange = { min: 0, max: 100 },
@@ -119,6 +125,7 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
     onOwnersChange([]);
     if (onInputFormatsChange) onInputFormatsChange([]);
     if (onOutputFormatsChange) onOutputFormatsChange([]);
+    if (onCapabilitiesChange) onCapabilitiesChange([]);
     if (onMinContextSizeChange) onMinContextSizeChange(undefined);
     if (onMaxContextSizeChange) onMaxContextSizeChange(undefined);
     if (onMinInputCostChange) onMinInputCostChange(undefined);
@@ -133,6 +140,7 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
     selectedOwners.length > 0 ||
     (selectedInputFormats && selectedInputFormats.length > 0) ||
     (selectedOutputFormats && selectedOutputFormats.length > 0) ||
+    (selectedCapabilities && selectedCapabilities.length > 0) ||
     minContextSize !== undefined ||
     maxContextSize !== undefined ||
     minInputCost !== undefined ||
@@ -150,7 +158,7 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
         <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5 transition-colors group-focus-within:text-[rgb(var(--theme-500))]" />
         <input
           type="text"
-          placeholder="Search models by name, provider, or owner..."
+          placeholder="Search models by name, provider, or publisher..."
           value={localSearchTerm}
           onChange={handleSearchChange}
           className="w-full pl-12 pr-12 py-3.5 bg-card text-foreground placeholder-muted-foreground
@@ -220,6 +228,17 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
             formats={outputFormats}
             selectedFormats={selectedOutputFormats}
             setSelectedFormats={onOutputFormatsChange}
+          />
+        )}
+
+        {/* Capabilities Filter */}
+        {capabilities.length > 0 && (
+          <FormatDropdown
+            label="Capabilities"
+            placeholder="Search capabilities..."
+            formats={capabilities}
+            selectedFormats={selectedCapabilities}
+            setSelectedFormats={onCapabilitiesChange}
           />
         )}
 
@@ -341,6 +360,18 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
                 <span className="font-bold">{format}</span>
                 <button
                   onClick={() => onOutputFormatsChange && onOutputFormatsChange(selectedOutputFormats.filter(f => f !== format))}
+                  className="ml-1 hover:text-foreground"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            {selectedCapabilities && selectedCapabilities.length > 0 && selectedCapabilities.map(capability => (
+              <div key={capability} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs">
+                <span>capability:</span>
+                <span className="font-bold">{capability}</span>
+                <button
+                  onClick={() => onCapabilitiesChange && onCapabilitiesChange(selectedCapabilities.filter(c => c !== capability))}
                   className="ml-1 hover:text-foreground"
                 >
                   ×
