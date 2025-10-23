@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { ReactNode } from "react";
+import { ReactNode, useMemo } from "react";
 import { TimelineVisualization } from "./timeline-visualization";
 import { SidebarTimelineContent } from "./sidebar-timeline-content";
 import { classNames } from "@/utils/modelUtils";
@@ -78,16 +78,29 @@ export const TimelineRow = (props: TimelineRowProps) => {
         operation_name: span.operation_name,
         span,
     };
+
+    const classNameOfCurrentSpan = useMemo(() => {
+        let isSelected = selectedSpanId && span.span_id === selectedSpanId
+        let isHovered = hoverSpanId && span.span_id === hoverSpanId
+        if(isSelected && isHovered) {
+            return ' border border-amber-500 !border-l-2 !border-l-[rgb(var(--theme-500))]'
+        }
+        if(isSelected){
+            return "border-l-2 !border-l-[rgb(var(--theme-500))]";
+        }
+        if(isHovered){
+            return "border-l-1 border border-amber-500";
+        }
+        return "hover:bg-[#151515] border-l-2 !border-l-transparent";
+    }, [span.span_id, selectedSpanId, hoverSpanId]);
+    
     return (
         <div
             key={span.span_id}
             data-span-id={span.span_id}
             className={cn(
                 "w-full group transition-colors hover:cursor-pointer",
-                selectedSpanId && span.span_id === selectedSpanId ? 
-                "border-l-2 !border-l-[rgb(var(--theme-500))]" : hoverSpanId && span.span_id === hoverSpanId ?
-                "border-l-1 border border-amber-500" : 
-                "hover:bg-[#151515] border-l-2 !border-l-transparent"
+                classNameOfCurrentSpan
             )}
             onClick={(e) => {
                 e.stopPropagation();
