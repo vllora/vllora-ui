@@ -3,6 +3,7 @@ import { useDebugControl } from "@/hooks/events/useDebugControl";
 import { ProjectEventUnion } from "./project-events/dto";
 import { createNewRun, processEvent, updatedRunWithSpans } from "@/hooks/events/utilities";
 import { useWrapperHook } from "@/hooks/useWrapperHook";
+import { Span } from "@/types/common-type";
 
 export type TracesPageContextType = ReturnType<typeof useTracesPageContext>;
 
@@ -42,28 +43,39 @@ export function useTracesPageContext(props: { projectId: string }) {
     runMap
   } = useWrapperHook({ projectId });
 
+  const updateRunMetrics = useCallback((run_id: string, updatedSpans: Span[]) => {
+      setRuns(prevRuns => {
+        let runById = prevRuns.find(r => r.run_id === run_id)
+        if(!runById) {
+          let newRun = updatedRunWithSpans({
+            spans: updatedSpans.filter(s => s.run_id === run_id),
+            run_id
+          })
+          return [newRun, ...prevRuns];
+        };
+        let updatedRun = updatedRunWithSpans({
+          spans: updatedSpans.filter(s => s.run_id === run_id),
+          run_id,
+          prevRun: runById
+        })
+        return prevRuns.map(r => r.run_id === run_id ? updatedRun : r)
+      })
+    }, []);
   const handleEvent = useCallback((event: ProjectEventUnion) => {
     if (event.run_id) {
-
       setTimeout(() => {
-        setFlattenSpans(prev => {
-          let newFlattenSpans = processEvent(prev, event)
+        setFlattenSpans(prevSpans => {
+          let newFlattenSpans = processEvent(prevSpans, event)
+
+          // Update run metrics with the new spans
+          event.run_id && updateRunMetrics(event.run_id, newFlattenSpans);
+
           return newFlattenSpans
-        });
-        event.run_id && setRuns(prevRuns => {
-          // check if run_id exists in prev
-          let existingRun = prevRuns.find(r => r.run_id === event.run_id)
-          if (existingRun) {
-            return prevRuns
-          }
-          if (!event.run_id) return prevRuns;
-          let newRun = createNewRun(event.run_id)
-          return [newRun, ...prevRuns]
         });
 
         event.run_id && setSelectedRunId(event.run_id);
         event.run_id && setOpenTraces([{ run_id: event.run_id, tab: 'trace' }]);
-      })
+      }, 0)
 
     }
   }, [flattenSpans]);

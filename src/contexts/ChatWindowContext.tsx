@@ -72,7 +72,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
       })
       return prevRuns.map(r => r.run_id === run_id ? updatedRun : r)
     })
-  }, [threadId]);
+  }, []);
   const handleEvent = useCallback((event: ProjectEventUnion) => {
     if (event.run_id && event.thread_id === threadId) {
       setTimeout(() => {
