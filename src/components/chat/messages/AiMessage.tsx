@@ -22,7 +22,7 @@ export const AiMessage: React.FC<{
   message?: Message;
   isTyping?: boolean;
 }> = ({ message: msg, isTyping }) => {
-  const { setOpenTraces, fetchSpansByRunId, setHoveredRunId } = ChatWindowConsumer();
+  const { setOpenTraces, fetchSpansByRunId, setHoveredRunId, setSelectedSpanId } = ChatWindowConsumer();
   const { setIsRightSidebarCollapsed } = ThreadsConsumer();
   const messageRef = React.useRef<HTMLDivElement>(null);
 
@@ -30,12 +30,12 @@ export const AiMessage: React.FC<{
   useRelativeTime(messageRef, msg?.created_at);
 
   const metrics = msg?.metrics;
-  const canClickToOpenTrace = useMemo(() => {
-    if (!metrics) return false;
-    if (!Array.isArray(metrics)) return false;
-    if (metrics.length === 0) return false;
-    return metrics[0]?.trace_id && metrics[0]?.trace_id.length > 0;
-  }, [metrics]);
+  const canClickToHighlightTraces = useMemo(() => {
+     if(msg?.span_id && msg?.span?.run_id){
+      return true;
+     }
+     return false;
+  }, [msg]);
 
   // Extract provider name from model_name (e.g., "openai/gpt-4" -> "openai")
   const getProviderName = (modelName?: string) => {
@@ -47,16 +47,17 @@ export const AiMessage: React.FC<{
   const providerName = getProviderName(msg?.model_name);
 
   const handleOpenTrace = useCallback(() => {
-    if (!canClickToOpenTrace || !metrics || !Array.isArray(metrics) || metrics.length === 0) return;
-    const runId = metrics[0]?.run_id;
-    if (!runId) return;
+    const runId = msg?.span?.run_id;
+    const spanId = msg?.span_id;
+    if (!runId || !spanId) return;
+    setSelectedSpanId(spanId);
 
     // Open the trace and fetch spans
     setOpenTraces([{ run_id: runId, tab: 'trace' }]);
     fetchSpansByRunId(runId);
     // Auto-expand the right sidebar
     setIsRightSidebarCollapsed(false);
-  }, [canClickToOpenTrace, metrics, setOpenTraces, fetchSpansByRunId, setIsRightSidebarCollapsed]);
+  }, [msg?.span?.run_id, setOpenTraces, fetchSpansByRunId, setIsRightSidebarCollapsed]);
 
   const handleMouseEnter = useCallback(() => {
     if (metrics && Array.isArray(metrics) && metrics.length > 0) {
@@ -74,8 +75,8 @@ export const AiMessage: React.FC<{
   return (
     <div
       ref={messageRef}
-      className={`flex flex-col gap-2 group ${canClickToOpenTrace ? 'cursor-pointer hover:bg-neutral-800/30 rounded-lg p-2 -m-2 transition-colors' : ''}`}
-      onClick={canClickToOpenTrace ? handleOpenTrace : undefined}
+      className={`flex flex-col gap-2 group ${canClickToHighlightTraces ? 'cursor-pointer hover:bg-neutral-800/30 rounded-lg p-2 -m-2 transition-colors' : ''}`}
+      onClick={canClickToHighlightTraces ? handleOpenTrace : undefined}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
@@ -115,7 +116,7 @@ export const AiMessage: React.FC<{
               <span>{formatMessageTimestamp(msg.timestamp)}</span>
             </div>
           )}
-          {canClickToOpenTrace && (
+          {canClickToHighlightTraces && (
             <span className="text-[10px] text-blue-400/60 px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">Click to view trace details</span>
           )}
         </div>

@@ -14,16 +14,13 @@ export const useWrapperHook = (props: {
   const { threadId, projectId } = props;
   // Use the runs pagination hook
   let runsPaginationState = useRunsPagination({ projectId, threadId });
-
   // Use the span details hook
   let spanDetailState = useSpanDetails({ projectId });
 
   const { setLoadingSpansById, selectedRunId, detailSpanId } = spanDetailState;
 
   const [flattenSpans, setFlattenSpans] = useState<Span[]>([]);
-  const [openTraces, setOpenTraces] = useState<
-    { run_id: string; tab: "trace" | "code" }[]
-  >([]);
+  
   const [hoveredRunId, setHoveredRunId] = useState<string | null>(null);
 
   const updateBySpansOfAThread = useCallback((spans: Span[]) => {
@@ -151,8 +148,6 @@ export const useWrapperHook = (props: {
     fetchSpansByRunId,
     flattenSpans,
     setFlattenSpans,
-    openTraces,
-    setOpenTraces,
     hoveredRunId,
     setHoveredRunId,
     isLoadingSpans,
