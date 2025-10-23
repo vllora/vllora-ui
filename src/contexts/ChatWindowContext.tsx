@@ -5,7 +5,7 @@ import { buildSpanHierarchy } from '@/utils/span-hierarchy';
 import { buildMessageHierarchyFromSpan, MessageStructure } from '@/utils/message-structure-from-span';
 import { useStableMessageHierarchies } from '@/hooks/useStableMessageHierarchies';
 import { useDebugControl } from '@/hooks/events/useDebugControl';
-import { createNewRun, processEvent, updatedRunWithSpans } from '@/hooks/events/utilities';
+import { processEvent, updatedRunWithSpans } from '@/hooks/events/utilities';
 import { useWrapperHook } from '@/hooks/useWrapperHook';
 
 export type ChatWindowContextType = ReturnType<typeof useChatWindow>;
@@ -60,7 +60,6 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
       let runById = prevRuns.find(r => r.run_id === run_id)
       if(!runById) {
         let newRun = updatedRunWithSpans({
-          prevRun: createNewRun(run_id),
           spans: updatedSpans.filter(s => s.run_id === run_id),
           run_id
         })
