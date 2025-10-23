@@ -1,4 +1,4 @@
-import { ModelPricing, LocalModelsResponse } from '@/types/models';
+import { ModelPricing, LocalModel } from '@/types/models';
 import { API_CONFIG, getBackendUrl } from '@/config/api';
 
 export async function fetchModels(): Promise<ModelPricing[]> {
@@ -29,8 +29,8 @@ export async function fetchModels(): Promise<ModelPricing[]> {
   }
 }
 
-export async function fetchLocalModels(): Promise<LocalModelsResponse> {
-  const url = `${getBackendUrl()}/v1/models`;
+export async function fetchLocalModels(): Promise<LocalModel[]> {
+  const url = `${getBackendUrl()}/v1/pricing?include_parameters=false&include_benchmark=true`;
 
   try {
     const response = await fetch(url, {

@@ -10,8 +10,8 @@ const LocalModelsContext = createContext<LocalModelsContextType | undefined>(und
 export function useLocalModels() {
   const { data, loading, error, run: refetchModels } = useRequest(
     async () => {
-      const response = await fetchLocalModels();
-      return response.data;
+      const models = await fetchLocalModels();
+      return models;
     },
     {
       onError: (err) => {

@@ -14,10 +14,10 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model }) => {
 
   // Get model group if available, otherwise treat as single model
   const modelGroup = (model as any)._modelGroup || [model];
-  const modelName = (model as any)._modelName || model.id.split('/').slice(1).join('/');
+  const modelName = (model as any)._modelName || model.model;
 
   // Get unique providers from the group
-  const providers = Array.from(new Set(modelGroup.map((m: LocalModel) => m.id.split('/')[0])));
+  const providers = Array.from(new Set(modelGroup.map((m: LocalModel) => m.inference_provider.provider)));
 
   const copyModelId = useCallback(async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -26,7 +26,7 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model }) => {
     try {
       // If multiple providers (grouped), copy just the model name
       // Otherwise, copy the full model ID with provider prefix
-      const textToCopy = providers.length > 1 ? modelName : modelGroup[0].id;
+      const textToCopy = providers.length > 1 ? modelName : `${modelGroup[0].inference_provider.provider}/${modelGroup[0].model}`;
       await navigator.clipboard.writeText(textToCopy);
       setCopiedModelName(true);
       setTimeout(() => setCopiedModelName(false), 2000);
@@ -49,14 +49,6 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model }) => {
     }
   }, [modelName]);
 
-  // Format timestamp to readable date
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp * 1000).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
 
   return (
     <TooltipProvider>
@@ -70,13 +62,13 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model }) => {
                   <TooltipTrigger>
                     <div className="p-1.5 bg-secondary rounded-lg group-hover:bg-secondary/80 transition-colors">
                       <ProviderIcon
-                        provider_name={modelGroup[0].owned_by}
+                        provider_name={modelGroup[0].model_provider}
                         className="w-4 h-4"
                       />
                     </div>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="bg-popover border-border">
-                    <p className="text-xs font-medium">Publisher: {modelGroup[0].owned_by}</p>
+                    <p className="text-xs font-medium">Model Provider: {modelGroup[0].model_provider}</p>
                   </TooltipContent>
                 </Tooltip>
 
@@ -146,10 +138,6 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model }) => {
                     );
                   })}
                 </div>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Created</span>
-                <span className="text-foreground/80 font-medium">{formatDate(modelGroup[0].created)}</span>
               </div>
             </div>
           </div>

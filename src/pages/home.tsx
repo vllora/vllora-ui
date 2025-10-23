@@ -1,4 +1,5 @@
 import { AlertCircle, RefreshCw, Server, MessageSquare, BookOpen, ExternalLink, ChevronRight } from 'lucide-react';
+import { useMemo } from 'react';
 import { LocalModelsExplorer } from '@/components/models/local/LocalModelsExplorer';
 import { LocalModelsSkeletonLoader } from '@/components/models/local/LocalModelsSkeletonLoader';
 import { LocalModelsConsumer } from '@/contexts/LocalModelsContext';
@@ -9,13 +10,63 @@ import { ProviderKeysConsumer } from '@/contexts/ProviderKeysContext';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { ProviderCredentialModal } from '@/pages/settings/ProviderCredentialModal';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+
+// Helper function to determine model type based on provider info
+function getModelType(providerName: string, providersData: any[]): 'remote' | 'opensource' | 'local' | 'unknown' {
+  const provider = providersData.find(p => p.name.toLowerCase() === providerName.toLowerCase());
+  
+  if (!provider) {
+    return 'unknown';
+  }
+  
+  // Use provider_type if available
+  if (provider.provider_type) {
+    const type = provider.provider_type.toLowerCase();
+    if (type.includes('api_key') || type.includes('aws') || type.includes('vertex')) {
+      return 'remote';
+    } else if (type.includes('local') || type.includes('ollama') || type.includes('self-hosted')) {
+      return 'local';
+    } else if (type.includes('opensource') || type.includes('open-source')) {
+      return 'opensource';
+    }
+  }
+  
+  // Fallback to known remote providers (temporary until backend provides better metadata)
+  const knownRemoteProviders = [
+    'openai', 'anthropic', 'google', 'gemini', 'bedrock', 'azure', 'vertexai', 
+    'cohere', 'mistral', 'groq', 'deepseek', 'xai', 'zai', 'fireworksai', 
+    'deepinfra', 'together-ai', 'togetherai', 'openrouter', 'parasail', 
+    'perplexity', 'lambda', 'huggingface', 'replicate', 'banana', 'modal',
+    'runpod', 'vast', 'beam', 'beam.cloud', 'octoai', 'octo', 'baseten',
+    'cerebrium', 'infermatic', 'infermaticai', 'nousresearch', 'pygmalionai',
+    'upstage', 'minimax', 'moonshot', 'stepfun', 'qwen', 'bytedance', 'baidu',
+    'tencent', 'liquid', 'mancer', 'switchpoint', 'agentica', 'aionlabs',
+    'arcee', 'arli', 'inflection', 'amazon', 'microsoft', 'nvidia', 'meta'
+  ];
+  
+  if (knownRemoteProviders.includes(providerName.toLowerCase())) {
+    return 'remote';
+  }
+  
+  // Default to unknown for now
+  return 'unknown';
+}
 
 export function HomePage() {
   const { models: localModels, loading: localLoading, error: localError, refetchModels: localRefetch } = LocalModelsConsumer();
   const { currentProjectId, isDefaultProject } = ProjectsConsumer();
+  const { providers } = ProviderKeysConsumer();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+
+  // Create provider configuration status mapping
+  const providerStatusMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    providers.forEach(p => {
+      map.set(p.name.toLowerCase(), p.has_credentials);
+    });
+    return map;
+  }, [providers]);
 
   return (
     <section className="flex-1 flex flex-col overflow-auto bg-background text-foreground w-full">
@@ -115,6 +166,9 @@ export function HomePage() {
               showViewModeToggle={true}
               showStats={true}
               statsTitle="Models"
+              providers={providers}
+              providerStatusMap={providerStatusMap}
+              getModelType={getModelType}
             />
           )}
         </div>

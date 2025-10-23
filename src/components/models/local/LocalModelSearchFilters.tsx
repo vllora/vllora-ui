@@ -3,6 +3,11 @@ import { Search, X } from 'lucide-react';
 import { useDebounceFn } from 'ahooks';
 import { LocalProviderFilter } from '../filter-components/LocalProviderFilter';
 import { OwnerFilter } from '../filter-components/OwnerFilter';
+import { FormatDropdown } from '../filter-components/FormatDropdown';
+import { ContextSizeFilter } from '../filter-components/ContextSizeFilter';
+import { CombinedCostFilter } from '../filter-components/CombinedCostFilter';
+import { CachingFilter } from '../filter-components/CachingFilter';
+import { TypeFilter } from '../filter-components/TypeFilter';
 
 interface LocalModelSearchFiltersProps {
   searchTerm: string;
@@ -17,6 +22,33 @@ interface LocalModelSearchFiltersProps {
   totalCount?: number;
   groupByName?: boolean;
   onGroupByNameChange?: (value: boolean) => void;
+  // New optional filter props
+  selectedInputFormats?: string[];
+  onInputFormatsChange?: (formats: string[]) => void;
+  selectedOutputFormats?: string[];
+  onOutputFormatsChange?: (formats: string[]) => void;
+  minContextSize?: number;
+  onMinContextSizeChange?: (value?: number) => void;
+  maxContextSize?: number;
+  onMaxContextSizeChange?: (value?: number) => void;
+  minInputCost?: number;
+  onMinInputCostChange?: (value?: number) => void;
+  maxInputCost?: number;
+  onMaxInputCostChange?: (value?: number) => void;
+  minOutputCost?: number;
+  onMinOutputCostChange?: (value?: number) => void;
+  maxOutputCost?: number;
+  onMaxOutputCostChange?: (value?: number) => void;
+  cachingEnabled?: boolean;
+  onCachingEnabledChange?: (value?: boolean) => void;
+  selectedType?: string;
+  onTypeChange?: (type: string) => void;
+  inputFormats?: string[];
+  outputFormats?: string[];
+  types?: string[];
+  contextSizeRange?: { min: number; max: number };
+  inputCostRange?: { min: number; max: number };
+  outputCostRange?: { min: number; max: number };
 }
 
 export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = ({
@@ -30,6 +62,33 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
   owners,
   groupByName = false,
   onGroupByNameChange,
+  // New optional props with defaults
+  selectedInputFormats = [],
+  onInputFormatsChange = () => {},
+  selectedOutputFormats = [],
+  onOutputFormatsChange = () => {},
+  minContextSize,
+  onMinContextSizeChange = () => {},
+  maxContextSize,
+  onMaxContextSizeChange = () => {},
+  minInputCost,
+  onMinInputCostChange = () => {},
+  maxInputCost,
+  onMaxInputCostChange = () => {},
+  minOutputCost,
+  onMinOutputCostChange = () => {},
+  maxOutputCost,
+  onMaxOutputCostChange = () => {},
+  cachingEnabled,
+  onCachingEnabledChange = () => {},
+  selectedType = 'all',
+  onTypeChange = () => {},
+  inputFormats = [],
+  outputFormats = [],
+  types = [],
+  contextSizeRange = { min: 0, max: 1000000 },
+  inputCostRange = { min: 0, max: 100 },
+  outputCostRange = { min: 0, max: 100 },
 }) => {
   // Local state for immediate UI update
   const [localSearchTerm, setLocalSearchTerm] = useState(searchTerm);
@@ -58,10 +117,30 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
     onSearchChange('');
     onProvidersChange([]);
     onOwnersChange([]);
+    if (onInputFormatsChange) onInputFormatsChange([]);
+    if (onOutputFormatsChange) onOutputFormatsChange([]);
+    if (onMinContextSizeChange) onMinContextSizeChange(undefined);
+    if (onMaxContextSizeChange) onMaxContextSizeChange(undefined);
+    if (onMinInputCostChange) onMinInputCostChange(undefined);
+    if (onMaxInputCostChange) onMaxInputCostChange(undefined);
+    if (onMinOutputCostChange) onMinOutputCostChange(undefined);
+    if (onMaxOutputCostChange) onMaxOutputCostChange(undefined);
+    if (onCachingEnabledChange) onCachingEnabledChange(undefined);
+    if (onTypeChange) onTypeChange('all');
   };
 
   const hasActiveFilters = selectedProviders.length > 0 ||
     selectedOwners.length > 0 ||
+    (selectedInputFormats && selectedInputFormats.length > 0) ||
+    (selectedOutputFormats && selectedOutputFormats.length > 0) ||
+    minContextSize !== undefined ||
+    maxContextSize !== undefined ||
+    minInputCost !== undefined ||
+    maxInputCost !== undefined ||
+    minOutputCost !== undefined ||
+    maxOutputCost !== undefined ||
+    cachingEnabled !== undefined ||
+    (selectedType && selectedType !== 'all') ||
     searchTerm;
 
   return (
@@ -95,6 +174,15 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
 
       {/* Desktop Filter Controls */}
       <div className="hidden sm:flex flex-wrap items-center gap-2">
+        {/* Owner Filter (Publisher) */}
+        {owners.length > 1 && (
+          <OwnerFilter
+            owners={owners}
+            selectedOwners={selectedOwners}
+            setSelectedOwners={onOwnersChange}
+          />
+        )}
+
         {/* Provider Filter */}
         {providers.length > 1 && (
           <LocalProviderFilter
@@ -104,14 +192,72 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
           />
         )}
 
-        {/* Owner Filter */}
-        {owners.length > 1 && (
-          <OwnerFilter
-            owners={owners}
-            selectedOwners={selectedOwners}
-            setSelectedOwners={onOwnersChange}
+        {/* Type Filter */}
+        {types.length > 0 && (
+          <TypeFilter
+            selectedType={selectedType}
+            setSelectedType={onTypeChange}
+            types={types}
           />
         )}
+
+        {/* Input Formats Filter */}
+        {inputFormats.length > 0 && (
+          <FormatDropdown
+            label="Input Formats"
+            placeholder="Search input formats..."
+            formats={inputFormats}
+            selectedFormats={selectedInputFormats}
+            setSelectedFormats={onInputFormatsChange}
+          />
+        )}
+
+        {/* Output Formats Filter */}
+        {outputFormats.length > 0 && (
+          <FormatDropdown
+            label="Output Formats"
+            placeholder="Search output formats..."
+            formats={outputFormats}
+            selectedFormats={selectedOutputFormats}
+            setSelectedFormats={onOutputFormatsChange}
+          />
+        )}
+
+        {/* Context Size Filter */}
+        {contextSizeRange && (
+          <ContextSizeFilter
+            minValue={minContextSize}
+            maxValue={maxContextSize}
+            rangeMin={contextSizeRange.min}
+            rangeMax={contextSizeRange.max}
+            onChange={(min, max) => {
+              onMinContextSizeChange(min);
+              onMaxContextSizeChange(max);
+            }}
+          />
+        )}
+
+        {/* Cost Filter */}
+        {inputCostRange && outputCostRange && (
+          <CombinedCostFilter
+            minInputCost={minInputCost}
+            setMinInputCost={onMinInputCostChange}
+            maxInputCost={maxInputCost}
+            setMaxInputCost={onMaxInputCostChange}
+            minOutputCost={minOutputCost}
+            setMinOutputCost={onMinOutputCostChange}
+            maxOutputCost={maxOutputCost}
+            setMaxOutputCost={onMaxOutputCostChange}
+            inputCostRange={inputCostRange}
+            outputCostRange={outputCostRange}
+          />
+        )}
+
+        {/* Caching Filter */}
+        <CachingFilter
+          cachingEnabled={cachingEnabled}
+          setCachingEnabled={onCachingEnabledChange}
+        />
 
         {/* Group By Model Name Checkbox */}
         {onGroupByNameChange && providers.length > 1 && (
@@ -177,6 +323,88 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
                 </button>
               </div>
             ))}
+            {selectedInputFormats && selectedInputFormats.map(format => (
+              <div key={format} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs">
+                <span>input:</span>
+                <span className="font-bold">{format}</span>
+                <button
+                  onClick={() => onInputFormatsChange && onInputFormatsChange(selectedInputFormats.filter(f => f !== format))}
+                  className="ml-1 hover:text-foreground"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            {selectedOutputFormats && selectedOutputFormats.map(format => (
+              <div key={format} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs">
+                <span>output:</span>
+                <span className="font-bold">{format}</span>
+                <button
+                  onClick={() => onOutputFormatsChange && onOutputFormatsChange(selectedOutputFormats.filter(f => f !== format))}
+                  className="ml-1 hover:text-foreground"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            {(minContextSize !== undefined || maxContextSize !== undefined) && (
+              <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs">
+                <span>context:</span>
+                <span className="font-bold">
+                  {minContextSize || 0} - {maxContextSize || '∞'}
+                </span>
+                <button
+                  onClick={() => {
+                    if (onMinContextSizeChange) onMinContextSizeChange(undefined);
+                    if (onMaxContextSizeChange) onMaxContextSizeChange(undefined);
+                  }}
+                  className="ml-1 hover:text-foreground"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+            {(minInputCost !== undefined || maxInputCost !== undefined || minOutputCost !== undefined || maxOutputCost !== undefined) && (
+              <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs">
+                <span>cost:</span>
+                <span className="font-bold">filtered</span>
+                <button
+                  onClick={() => {
+                    if (onMinInputCostChange) onMinInputCostChange(undefined);
+                    if (onMaxInputCostChange) onMaxInputCostChange(undefined);
+                    if (onMinOutputCostChange) onMinOutputCostChange(undefined);
+                    if (onMaxOutputCostChange) onMaxOutputCostChange(undefined);
+                  }}
+                  className="ml-1 hover:text-foreground"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+            {cachingEnabled !== undefined && (
+              <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs">
+                <span>caching:</span>
+                <span className="font-bold">{cachingEnabled ? 'enabled' : 'disabled'}</span>
+                <button
+                  onClick={() => onCachingEnabledChange && onCachingEnabledChange(undefined)}
+                  className="ml-1 hover:text-foreground"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+            {selectedType !== 'all' && (
+              <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs">
+                <span>type:</span>
+                <span className="font-bold">{selectedType}</span>
+                <button
+                  onClick={() => onTypeChange && onTypeChange('all')}
+                  className="ml-1 hover:text-foreground"
+                >
+                  ×
+                </button>
+              </div>
+            )}
           </div>
           <button
             onClick={clearAllFilters}
