@@ -1,7 +1,7 @@
 import { createContext, useContext, ReactNode, useCallback } from "react";
 import { useDebugControl } from "@/hooks/events/useDebugControl";
 import { ProjectEventUnion } from "./project-events/dto";
-import { processEvent, updatedRunWithSpans } from "@/hooks/events/utilities";
+import { createNewRun, processEvent, updatedRunWithSpans } from "@/hooks/events/utilities";
 import { useWrapperHook } from "@/hooks/useWrapperHook";
 
 export type TracesPageContextType = ReturnType<typeof useTracesPageContext>;
@@ -49,6 +49,16 @@ export function useTracesPageContext(props: { projectId: string }) {
         setFlattenSpans(prev => {
           let newFlattenSpans = processEvent(prev, event)
           return newFlattenSpans
+        });
+        event.run_id && setRuns(prevRuns => {
+          // check if run_id exists in prev
+          let existingRun = prevRuns.find(r => r.run_id === event.run_id)
+          if (existingRun) {
+            return prevRuns
+          }
+          if (!event.run_id) return prevRuns;
+          let newRun = createNewRun(event.run_id)
+          return [newRun, ...prevRuns]
         });
 
         event.run_id && setSelectedRunId(event.run_id);
