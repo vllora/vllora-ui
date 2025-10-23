@@ -127,9 +127,6 @@ export const processEvent = (
   currentSpans: Span[],
   event: ProjectEventUnion
 ): Span[] => {
-  console.log('===== processEvent', event)
-  console.log('===== prevSpans', currentSpans)
-  console.log('')
   const timestamp = event.timestamp || Date.now();
   // === Run Lifecycle Events ===
   if (event.type === "RunStarted") {
