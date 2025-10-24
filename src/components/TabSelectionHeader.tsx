@@ -1,6 +1,6 @@
-import { MessageSquare, Bug } from 'lucide-react';
 import { ProjectDropdown } from './ProjectDropdown';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
+import { DebugControl } from './DebugControl';
 
 interface TabSelectionHeaderProps {
   currentTab: string;
@@ -62,8 +62,10 @@ export function TabSelectionHeader({ currentTab, onTabChange, onProjectChange }:
       </div>
      </div>
      <div className="flex items-center gap-2">
-      
+      {/* Debug control: Pause/Resume */}
+      <DebugControl />
      </div>
     </div>
   );
 }
+
