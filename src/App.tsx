@@ -37,7 +37,7 @@ function App() {
 
               <Route path="/" element={<ProjectProvider><Layout /></ProjectProvider>}>
                 {/* Project-scoped routes (now using query string ?project_id=...) */}
-                <Route index element={<HomePage />} />
+                <Route index element={<ProviderKeysProvider><HomePage /></ProviderKeysProvider>} />
                 <Route path="chat" element={<ThreadsAndTracesPage />} />
                 <Route path="analytics" element={<AnalyticsPage />} />
 
