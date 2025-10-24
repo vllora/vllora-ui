@@ -51,17 +51,12 @@ export function useRunsPagination({
       runs &&
         runs.length > 0 &&
         runs[0].run_id &&
-        setOpenTraces((prev) => {
-          if (prev && prev.length == 0) {
-            return [
-              {
-                run_id: runs[0].run_id!,
-                tab: "trace",
-              },
-            ];
-          }
-          return prev || [];
-        });
+        setOpenTraces([
+          {
+            run_id: runs[0].run_id!,
+            tab: "trace",
+          },
+        ]);
       const pagination = response?.pagination || {
         offset: 0,
         limit: 0,
