@@ -4,7 +4,7 @@ import { LocalModel } from '@/types/models';
 import { LocalModelCard } from './LocalModelCard';
 import { LocalModelsTable } from './LocalModelsTable';
 import { LocalModelSearchFilters } from './LocalModelSearchFilters';
-import { LayoutGrid, List } from 'lucide-react';
+import { LayoutGrid, List, ArrowUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ProviderInfo } from '@/services/providers-api';
 
@@ -48,6 +48,7 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
     return searchParams.get('configured') === 'true';
   });
   const [copiedModel, setCopiedModel] = useState<string | null>(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
 
   // New comprehensive filter states
   const [selectedInputFormats, setSelectedInputFormats] = useState<string[]>(() => {
@@ -224,6 +225,34 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
     selectedType,
     // Note: searchParams and setSearchParams are intentionally not in deps to avoid infinite loops
   ]);
+
+  // Track scroll position to show/hide scroll-to-top button
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollContainer = document.querySelector('section.overflow-auto');
+      if (scrollContainer) {
+        if (scrollContainer.scrollTop > 200) {
+          setShowScrollTop(true);
+        } else if (scrollContainer.scrollTop <= 200) {
+          setShowScrollTop(false);
+        }
+      }
+    };
+
+    const scrollContainer = document.querySelector('section.overflow-auto');
+    if (scrollContainer) {
+      scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+      return () => scrollContainer.removeEventListener('scroll', handleScroll);
+    }
+  }, []);
+
+  // Scroll to top function
+  const scrollToTop = () => {
+    const scrollContainer = document.querySelector('section.overflow-auto');
+    if (scrollContainer) {
+      scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   // Group models by model name (without provider prefix) - only if grouping by name is enabled
   const groupedModels = useMemo(() => {
@@ -584,6 +613,17 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
         <div className="text-center py-12">
           <p className="text-muted-foreground">No local models found matching your filters.</p>
         </div>
+      )}
+
+      {/* Scroll to Top Button */}
+      {showScrollTop && (
+        <button
+          onClick={scrollToTop}
+          className="fixed bottom-8 right-8 z-50 p-3 rounded-full bg-[rgb(var(--theme-500))]/30 backdrop-blur-md hover:bg-[rgb(var(--theme-500))]/50 text-white shadow-lg transition-all duration-300 hover:scale-110 animate-in fade-in slide-in-from-bottom-4"
+          aria-label="Scroll to top"
+        >
+          <ArrowUp className="w-5 h-5" />
+        </button>
       )}
     </div>
   );
