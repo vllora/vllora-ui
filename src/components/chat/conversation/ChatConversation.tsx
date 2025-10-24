@@ -107,7 +107,7 @@ export const ChatConversation = React.memo(ChatConversationComponent, (prevProps
 
   // Re-render if any message span_id changes (structure change)
   for (let i = 0; i < prevProps.messages.length; i++) {
-    if (prevProps.messages[i].span_id !== nextProps.messages[i].span_id) {
+    if (prevProps.messages[i] !== nextProps.messages[i]) {
       return false;
     }
   }
