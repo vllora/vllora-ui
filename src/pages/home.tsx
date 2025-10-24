@@ -221,8 +221,18 @@ function ProviderSetupSection() {
     return null;
   }
 
+  // Order providers: OpenAI first, then LangDB, then rest
+  const openaiProvider = providers.find(p => p.name.toLowerCase() === 'openai');
   const langdbProvider = providers.find(p => p.name.toLowerCase() === 'langdb');
-  const otherProviders = providers.filter(p => p.name.toLowerCase() !== 'langdb').slice(0, 6);
+  const otherProviders = providers.filter(p => 
+    p.name.toLowerCase() !== 'openai' && p.name.toLowerCase() !== 'langdb'
+  );
+
+  const orderedProviders = [
+    openaiProvider,
+    langdbProvider,
+    ...otherProviders
+  ].filter(Boolean).slice(0, 6);
 
   const handleStartEditing = (provider: typeof providers[0]) => {
     startEditing(provider.name);
@@ -268,76 +278,42 @@ function ProviderSetupSection() {
       />
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
           <CardTitle>Configure your first provider</CardTitle>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => navigate('/settings')}
+            className="text-xs"
+          >
+            View all
+            <ChevronRight className="w-3 h-3 ml-1" />
+          </Button>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {/* LangDB Featured Provider */}
-          {langdbProvider && (
-            <div className="border border-border rounded-lg p-4 hover:bg-accent/50 transition-colors cursor-pointer group"
-                 onClick={() => handleStartEditing(langdbProvider)}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <ProviderIcon provider_name={langdbProvider.name} className="w-8 h-8" />
-                  <div>
-                    <h3 className="font-semibold capitalize">{langdbProvider.name}</h3>
-                    <p className="text-sm text-muted-foreground">Connect your LangDB account</p>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {orderedProviders.map((provider) => (
+              <div
+                key={provider.name}
+                className="border border-border rounded-lg p-3 hover:bg-accent/50 transition-colors cursor-pointer group"
+                onClick={() => handleStartEditing(provider)}
+              >
+                <div className="flex items-center gap-3">
+                  <ProviderIcon provider_name={provider.name} className="w-5 h-5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm capitalize truncate">{provider.name}</p>
+                    <span className={`text-xs ${
+                      provider.has_credentials 
+                        ? 'text-green-600 dark:text-green-400' 
+                        : 'text-yellow-600 dark:text-yellow-400'
+                    }`}>
+                      {provider.has_credentials ? 'Configured' : 'Not configured'}
+                    </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className={`text-xs px-2 py-1 rounded-full ${
-                    langdbProvider.has_credentials 
-                      ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400' 
-                      : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
-                  }`}>
-                    {langdbProvider.has_credentials ? 'Configured' : 'Not configured'}
-                  </span>
-                  <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-foreground transition-colors" />
-                </div>
               </div>
-            </div>
-          )}
-
-          {/* Other Providers */}
-          {otherProviders.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="text-sm font-medium text-muted-foreground">Other Providers</h4>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => navigate('/settings')}
-                  className="text-xs"
-                >
-                  View all
-                  <ChevronRight className="w-3 h-3 ml-1" />
-                </Button>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {otherProviders.map((provider) => (
-                  <div
-                    key={provider.name}
-                    className="border border-border rounded-lg p-3 hover:bg-accent/50 transition-colors cursor-pointer group"
-                    onClick={() => handleStartEditing(provider)}
-                  >
-                    <div className="flex items-center gap-3">
-                      <ProviderIcon provider_name={provider.name} className="w-5 h-5" />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm capitalize truncate">{provider.name}</p>
-                        <span className={`text-xs ${
-                          provider.has_credentials 
-                            ? 'text-green-600 dark:text-green-400' 
-                            : 'text-yellow-600 dark:text-yellow-400'
-                        }`}>
-                          {provider.has_credentials ? 'Configured' : 'Not configured'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+            ))}
+          </div>
         </CardContent>
       </Card>
     </>
