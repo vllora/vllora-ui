@@ -24,15 +24,16 @@ export function TabSelectionHeader({ currentTab, onTabChange, onProjectChange }:
   };
 
   return (
-    <div className="flex items-center justify-center px-6 py-2.5 border-b border-border bg-[#0a0a0a]/80 backdrop-blur-sm relative">
+    <div className="flex justify-between items-center px-6 py-2.5 border-b border-border bg-[#0a0a0a]/80 backdrop-blur-sm relative">
+     <div className="flex items-center gap-2">
       {/* Left side - Project Dropdown (absolute positioned) */}
-      <div className="absolute left-4 flex items-center">
+      <div className="flex items-center">
         <div className="scale-90 origin-left">
           <ProjectDropdown onProjectChange={onProjectChange} />
         </div>
       </div>
 
-      {/* Center - Tab Toggle */}
+      {/* Tab Toggle */}
       <div className="inline-flex items-center gap-0.5 bg-[#1a1a1a] rounded-lg p-0.5 border border-border/40 shadow-sm">
         <button
           onClick={() => handleTabChange("threads")}
@@ -59,6 +60,10 @@ export function TabSelectionHeader({ currentTab, onTabChange, onProjectChange }:
           <span>Traces</span>
         </button>
       </div>
+     </div>
+     <div className="flex items-center gap-2">
+      
+     </div>
     </div>
   );
 }
