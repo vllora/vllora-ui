@@ -513,7 +513,7 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
   return (
     <div className="flex flex-col space-y-6">
       {/* Sticky container for Filters and View Mode Toggle */}
-      <div className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm pt-8 pb-4 -mt-8 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 space-y-4 border-b border-border/50">
+      <div className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm pt-4 pb-4 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 space-y-4 border-b border-border/50">
         <LocalModelSearchFilters
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}

@@ -70,10 +70,10 @@ export function HomePage() {
 
   return (
     <section className="flex-1 flex flex-col overflow-auto bg-background text-foreground w-full">
-      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-12">
         
         {/* Quick Links Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <Card 
             className="cursor-pointer hover:bg-accent/50 transition-colors"
             onClick={() => {
@@ -119,19 +119,21 @@ export function HomePage() {
         <ProviderSetupSection />
 
         {/* Models Section */}
-        <div className="mt-8">
-          <header className="text-center mb-8">
-            <h2 className="text-3xl font-bold mb-2">Available Models</h2>
-            <p className="text-muted-foreground">
-              Browse and manage your AI models
-            </p>
-            <div className="flex items-center justify-center gap-2 mt-4">
-              <Server className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-              <span className="text-sm text-muted-foreground">
-                Running on <span className="text-[rgb(var(--theme-500))] font-medium">{getBackendUrl()}</span>
-              </span>
+        <div className="mt-6">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold mb-2">Available Models</h2>
+            <div className="flex items-center justify-between">
+              <p className="text-muted-foreground">
+                Browse and manage your AI models
+              </p>
+              <div className="flex items-center gap-2">
+                <Server className="w-4 h-4 text-[rgb(var(--theme-500))]" />
+                <span className="text-sm text-muted-foreground">
+                  Running on <span className="text-[rgb(var(--theme-500))] font-medium">{getBackendUrl()}</span>
+                </span>
+              </div>
             </div>
-          </header>
+          </div>
 
           {/* Loading State */}
           {localLoading && (
@@ -161,15 +163,17 @@ export function HomePage() {
 
           {/* Local Models Explorer */}
           {!localLoading && !localError && (
-            <LocalModelsExplorer
-              models={localModels}
-              showViewModeToggle={true}
-              showStats={true}
-              statsTitle="Models"
-              providers={providers}
-              providerStatusMap={providerStatusMap}
-              getModelType={getModelType}
-            />
+            <div className="relative">
+              <LocalModelsExplorer
+                models={localModels}
+                showViewModeToggle={true}
+                showStats={true}
+                statsTitle="Models"
+                providers={providers}
+                providerStatusMap={providerStatusMap}
+                getModelType={getModelType}
+              />
+            </div>
           )}
         </div>
       </div>
@@ -232,7 +236,7 @@ function ProviderSetupSection() {
     openaiProvider,
     langdbProvider,
     ...otherProviders
-  ].filter(Boolean).slice(0, 6);
+  ].filter((p): p is typeof providers[0] => p !== undefined).slice(0, 6);
 
   const handleStartEditing = (provider: typeof providers[0]) => {
     startEditing(provider.name);
