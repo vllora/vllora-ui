@@ -204,21 +204,13 @@ function ProviderSetupSection() {
   if (providersLoading) {
     return (
       <div>
-        <h2 className="text-2xl font-bold mb-6">Configure your first provider</h2>
+        <h2 className="text-2xl font-bold mb-6">Configure your provider</h2>
         <div className="animate-pulse space-y-4">
           <div className="h-20 bg-muted/50 rounded-lg" />
           <div className="h-16 bg-muted/50 rounded-lg" />
         </div>
       </div>
     );
-  }
-
-  // Check if any providers are configured
-  const hasConfiguredProviders = providers.some(p => p.has_credentials);
-  
-  // Hide the section if providers are already configured
-  if (hasConfiguredProviders) {
-    return null;
   }
 
   // Order providers: OpenAI first, then LangDB, then rest
@@ -279,7 +271,7 @@ function ProviderSetupSection() {
 
       <div>
         <div className="flex flex-row items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold">Configure your first provider</h2>
+          <h2 className="text-2xl font-bold">Configure your provider</h2>
           <Button 
             variant="ghost" 
             size="sm" 
