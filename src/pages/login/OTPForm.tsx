@@ -3,7 +3,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { Hub } from 'aws-amplify/utils';
 import { useNavigate } from 'react-router-dom';
 import { AuthConsumer } from '@/contexts/AuthContext';
 
@@ -15,7 +14,7 @@ interface OTPFormProps {
 
 export function OTPForm({ email, session, onChangeEmail }: OTPFormProps) {
   const navigate = useNavigate();
-  const { refreshAuth } = AuthConsumer();
+  const { setUserEmail } = AuthConsumer();
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -112,26 +111,8 @@ export function OTPForm({ email, session, onChangeEmail }: OTPFormProps) {
         throw new Error('Invalid OTP. Please try again.');
       }
 
-      // Backend returns Cognito tokens
-      const tokens = await response.json();
-
-      // Store tokens in localStorage for Amplify to use
-      const cognitoKey = `CognitoIdentityServiceProvider.${import.meta.env.VITE_COGNITO_CLIENT_ID}`;
-      const username = email;
-
-      localStorage.setItem(`${cognitoKey}.LastAuthUser`, username);
-      localStorage.setItem(`${cognitoKey}.${username}.idToken`, tokens.id_token);
-      localStorage.setItem(`${cognitoKey}.${username}.accessToken`, tokens.access_token);
-      localStorage.setItem(`${cognitoKey}.${username}.refreshToken`, tokens.refresh_token);
-
-      // Notify Amplify Hub about the sign-in
-      Hub.dispatch('auth', {
-        event: 'signedIn',
-        data: { username }
-      });
-
-      // Refresh auth context to pick up the new session
-      await refreshAuth();
+      // Store email in localStorage
+      setUserEmail(email);
 
       toast.success('Login successful!');
       // Redirect to home page

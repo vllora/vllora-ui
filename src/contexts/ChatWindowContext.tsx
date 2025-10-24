@@ -94,6 +94,11 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
         event.run_id && setSelectedRunId(event.run_id);
         event.run_id && setOpenTraces([{ run_id: event.run_id, tab: 'trace' }]);
       }, 0)
+      if((event.type === 'RunFinished' || event.type === 'RunError') && event.run_id) {
+        setTimeout(() => {
+          event.run_id && fetchSpansByRunId(event.run_id);
+        }, 100)
+      }
 
     }
   }, [threadId, updateRunMetrics]);

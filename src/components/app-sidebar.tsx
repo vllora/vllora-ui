@@ -73,7 +73,7 @@ export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSideb
         )}>
           {!isCollapsed && (
             <h2 className="text-lg font-bold tracking-tight">
-              Ellora
+              vLLora
             </h2>
           )}
           <Button

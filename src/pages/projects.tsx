@@ -113,7 +113,8 @@ export function ProjectsPage() {
           <h1 className="text-3xl font-bold">Projects</h1>
         </div>
         <Button
-          onClick={() => setIsCreateDialogOpen(true)}
+          disabled
+          //onClick={() => setIsCreateDialogOpen(true)}
           className="bg-gradient-to-r from-[rgb(var(--theme-400))] to-[rgb(var(--theme-600))] hover:from-[rgb(var(--theme-500))] hover:to-[rgb(var(--theme-700))] text-white"
         >
           <Plus className="h-4 w-4 mr-2" />

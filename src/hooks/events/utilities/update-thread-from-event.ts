@@ -1,5 +1,6 @@
 import { ProjectEventUnion, CustomEvent, CustomLlmStartEventType, CustomCostEventType } from "@/contexts/project-events/dto";
 import { Thread } from "@/types/chat";
+import { tryParseJson } from "@/utils/modelUtils";
 
 
 export const updateThreadFromEvent = (threadInput: Thread, event: ProjectEventUnion): Thread => {
@@ -19,6 +20,36 @@ export const updateThreadFromEvent = (threadInput: Thread, event: ProjectEventUn
     }
     if(customEvent.event.type === 'cost'){
       result = handleCost(result, customEvent);
+    }
+    if(customEvent.event.type === 'span_end' && !threadInput.title){
+      let attributes = customEvent.event.attributes as any
+      if(attributes.input) {
+        let inputStr = attributes.input
+        let jsonMsg = tryParseJson(inputStr)
+        if(jsonMsg && Array.isArray(jsonMsg) && jsonMsg.length > 0){
+          let messages = jsonMsg as any[]
+          // check if any message is a user message
+          let userMsg = messages.find((m) => m.role === 'user' && m.content)
+          if(userMsg){
+            let userMessageContent = userMsg.content
+            let splitContent = userMessageContent.split(' ')
+            // only take first 20 words
+            let first20Words = splitContent.slice(0, Math.min(splitContent.length, 20)).join(' ')
+            result = {
+              ...threadInput,
+              title: first20Words
+            }
+          } else {
+            // take first 20 words of the first message
+            let first20Words = messages[0].content.split(' ').slice(0, Math.min(messages[0].content.split(' ').length, 20)).join(' ')
+            result = {
+              ...threadInput,
+              title: first20Words
+            }
+          }
+        }
+      }
+      
     }
   }
   return result;

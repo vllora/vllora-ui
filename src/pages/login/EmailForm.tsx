@@ -3,17 +3,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AlertCircle, LogIn, Mail } from 'lucide-react';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
+import { AuthConsumer } from '@/contexts/AuthContext';
 
-interface EmailFormProps {
-  onSuccess: (email: string, session: string) => void;
-}
-
-export function EmailForm({ onSuccess }: EmailFormProps) {
+export function EmailForm() {
+  const navigate = useNavigate();
+  const { setUserEmail } = AuthConsumer();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const apiUrl = import.meta.env.VITE_LANGDB_API_URL;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,22 +19,12 @@ export function EmailForm({ onSuccess }: EmailFormProps) {
     setLoading(true);
 
     try {
-      // Call backend to create user (if needed) and send OTP
-      const response = await fetch(`${apiUrl}/session/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email }),
-      });
+      // Store email in localStorage
+      setUserEmail(email);
 
-      if (!response.ok) {
-        throw new Error('Failed to send OTP. Please try again.');
-      }
-
-      const data = await response.json();
-      toast.success('OTP sent to your email');
-      onSuccess(email, data.session);
+      toast.success('Login successful!');
+      // Redirect to home page
+      navigate('/');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred';
       setError(errorMessage);

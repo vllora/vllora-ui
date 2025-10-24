@@ -9,11 +9,13 @@ const LIMIT_LOADING_RUNS = 20;
 interface UseRunsPaginationParams {
   projectId: string;
   threadId?: string; // Optional - for filtering by thread
+  onRunsLoaded?: (runs: RunDTO[]) => void;
 }
 
 export function useRunsPagination({
   projectId,
   threadId,
+  onRunsLoaded,
 }: UseRunsPaginationParams) {
   // Pagination state for runs
   const [runsOffset, setRunsOffset] = useState<number>(0);
@@ -48,20 +50,16 @@ export function useRunsPagination({
       // Update pagination state
       const runs = response?.data || [];
 
-      runs &&
-        runs.length > 0 &&
-        runs[0].run_id &&
-        setOpenTraces((prev) => {
-          if (prev && prev.length == 0) {
-            return [
-              {
-                run_id: runs[0].run_id!,
-                tab: "trace",
-              },
-            ];
-          }
-          return prev || [];
-        });
+     
+      if(runs && runs.length > 0 && runs[0].run_id){
+         setOpenTraces([
+          {
+            run_id: runs[0].run_id!,
+            tab: "trace",
+          },
+        ]);
+      }
+      onRunsLoaded?.(runs);
       const pagination = response?.pagination || {
         offset: 0,
         limit: 0,

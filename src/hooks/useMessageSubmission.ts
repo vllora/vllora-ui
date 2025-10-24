@@ -6,7 +6,6 @@ import { getChatCompletionsUrl } from '@/config/api';
 import { McpServerConfig } from '@/services/mcp-api';
 
 interface MessageSubmissionProps {
-  apiUrl: string;
   apiKey?: string;
   projectId?: string;
   modelName?: string;

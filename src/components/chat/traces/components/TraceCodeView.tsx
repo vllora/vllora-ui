@@ -3,37 +3,14 @@ import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 import { tryParseJson } from '@/utils/modelUtils';
 import { getBackendUrl } from '@/config/api';
 import { CodeBlock } from './CodeBlock';
-
-interface CodeViewProps {
-  runId: string;
-}
-
-export const TraceCodeView: React.FC<CodeViewProps> = ({ runId }) => {
-  const { runMap } = ChatWindowConsumer();
-  const spans = runMap[runId] || [];
-  const cloudSpan = spans && spans.length > 0 ? spans[0] : undefined 
-  const apiInvokeSpans = spans.filter(s => s.operation_name === 'api_invoke')
-  const apiInvokeSpan = apiInvokeSpans[apiInvokeSpans.length - 1]
-  const cloudAttribute = cloudSpan?.attribute as {
-    [key: string]: any;
-  };
-  const apiInvokeAttribute = apiInvokeSpan?.attribute as {
-    [key: string]: any;
-  };
-  // header 
-  const headerStr = cloudAttribute && cloudAttribute['http.request.header'];
-  const method: string = cloudAttribute && cloudAttribute['http.request.method'] || 'POST';
-  const apiCloudBody:string = cloudAttribute && cloudAttribute['http.request.body'] || '';
-  const url: string = cloudAttribute && cloudAttribute['http.request.path'] || '/v1/chat/completions';
-
-  const fullUrl = `${getBackendUrl()}${url}`
-
-  const requestStr: string = apiInvokeAttribute && apiInvokeAttribute['request'] || '';
-  const headerObj: any = headerStr && tryParseJson(headerStr)
-  const requestObj: any = (apiCloudBody || requestStr) && tryParseJson(apiCloudBody || requestStr) || undefined
-
-  // Generate curl command
-  const generateCurlCommand = () => {
+// Generate curl command
+  export const generateCurlCommand = (props: {
+    requestObj: any;
+    headerObj: any;
+    method: string;
+    fullUrl: string;
+  }) => {
+    const { requestObj, headerObj, method, fullUrl } = props;
     if (!requestObj && !headerObj) {
       return '# No request data available';
     }
@@ -67,8 +44,42 @@ export const TraceCodeView: React.FC<CodeViewProps> = ({ runId }) => {
 
     return lines.join('\n');
   };
+interface CodeViewProps {
+  runId: string;
+}
 
-  const curlCommand = generateCurlCommand();
+export const TraceCodeView: React.FC<CodeViewProps> = ({ runId }) => {
+  const { runMap } = ChatWindowConsumer();
+  const spans = runMap[runId] || [];
+  const cloudSpan = spans && spans.length > 0 ? spans[0] : undefined 
+  const apiInvokeSpans = spans.filter(s => s.operation_name === 'api_invoke')
+  const apiInvokeSpan = apiInvokeSpans[apiInvokeSpans.length - 1]
+  const cloudAttribute = cloudSpan?.attribute as {
+    [key: string]: any;
+  };
+  const apiInvokeAttribute = apiInvokeSpan?.attribute as {
+    [key: string]: any;
+  };
+  // header 
+  const headerStr = cloudAttribute && cloudAttribute['http.request.header'];
+  const method: string = cloudAttribute && cloudAttribute['http.request.method'] || 'POST';
+  const apiCloudBody:string = cloudAttribute && cloudAttribute['http.request.body'] || '';
+  const url: string = cloudAttribute && cloudAttribute['http.request.path'] || '/v1/chat/completions';
+
+  const fullUrl = `${getBackendUrl()}${url}`
+
+  const requestStr: string = apiInvokeAttribute && apiInvokeAttribute['request'] || '';
+  const headerObj: any = headerStr && tryParseJson(headerStr)
+  const requestObj: any = (apiCloudBody || requestStr) && tryParseJson(apiCloudBody || requestStr) || undefined
+
+  
+
+  const curlCommand = generateCurlCommand({
+    requestObj,
+    headerObj,
+    method,
+    fullUrl,
+  });
 
   return (
     <div className="p-4">

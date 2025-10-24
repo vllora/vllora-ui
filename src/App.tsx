@@ -14,14 +14,11 @@ import { useEffect, lazy, Suspense } from "react"
 import { applyTheme, getThemeFromStorage } from "./themes/themes"
 import { ProviderKeysProvider } from "./contexts/ProviderKeysContext"
 import { AuthProvider } from "./contexts/AuthContext"
-import { configureAmplify } from "./config/amplify"
+import { ProtectedRoute } from "./components/ProtectedRoute"
 import { LocalModelsSkeletonLoader } from "./components/models/local/LocalModelsSkeletonLoader"
 
 // Lazy load the models page
 const ModelsPage = lazy(() => import("./pages/models").then(module => ({ default: module.ModelsPage })))
-
-// Configure Amplify before rendering
-configureAmplify()
 
 function App() {
   useEffect(() => {
@@ -39,7 +36,8 @@ function App() {
               {/* Public routes */}
               <Route path="/login" element={<LoginPage />} />
 
-              <Route path="/" element={<ProjectProvider><Layout /></ProjectProvider>}>
+              {/* Protected routes */}
+              <Route path="/" element={<ProtectedRoute><ProjectProvider><Layout /></ProjectProvider></ProtectedRoute>}>
                 {/* Project-scoped routes (now using query string ?project_id=...) */}
                 <Route index element={<ProviderKeysProvider><HomePage /></ProviderKeysProvider>} />
                 <Route path="chat" element={<ThreadsAndTracesPage />} />

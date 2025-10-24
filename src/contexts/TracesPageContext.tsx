@@ -43,7 +43,11 @@ export function useTracesPageContext(props: { projectId: string }) {
     runMap,
     collapsedSpans,
     setCollapsedSpans,
-  } = useWrapperHook({ projectId });
+  } = useWrapperHook({ projectId, onRunsLoaded: (runs) => {
+       if(runs && runs.length > 0 && runs[0].run_id){
+         fetchSpansByRunId(runs[0].run_id)
+       }
+  } });
 
   const updateRunMetrics = useCallback((run_id: string, updatedSpans: Span[]) => {
       setRuns(prevRuns => {
@@ -78,6 +82,12 @@ export function useTracesPageContext(props: { projectId: string }) {
         event.run_id && setSelectedRunId(event.run_id);
         event.run_id && setOpenTraces([{ run_id: event.run_id, tab: 'trace' }]);
       }, 0)
+
+      if((event.type === 'RunFinished' || event.type === 'RunError') && event.run_id) {
+        setTimeout(() => {
+          event.run_id && fetchSpansByRunId(event.run_id);
+        }, 100)
+      }
 
     }
   }, [flattenSpans]);
