@@ -369,22 +369,6 @@ export const ProviderCredentialForm = ({
                     {/* Login Button and Manual API Key Entry */}
                     <div className="space-y-4">
                         {/* Login Button - shown when not waiting */}
-                        {sessionStatus !== 'waiting' && sessionStatus !== 'success' && (
-                            <div className="p-4 bg-muted/50 rounded-md border border-border">
-                                <p className="text-sm text-muted-foreground mb-3">
-                                    Connect your LangDB account to access hosted models and features.
-                                </p>
-                                <Button
-                                    type="button"
-                                    onClick={startSessionLogin}
-                                    className="w-full"
-                                    variant="secondary"
-                                >
-                                    <LogIn className="h-4 w-4 mr-2" />
-                                    Login with LangDB
-                                </Button>
-                            </div>
-                        )}
 
                         {/* Manual API Key Entry - always shown */}
                         <div className="space-y-2">
