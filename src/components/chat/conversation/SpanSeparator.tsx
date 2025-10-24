@@ -146,9 +146,21 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
           </span>
           <Tooltip>
             <TooltipTrigger asChild>
-              <button
-                onClick={handleCopy}
-                className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground/60 bg-muted px-1.5 py-0.5 rounded hover:bg-muted/80 hover:text-muted-foreground transition-colors"
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCopy();
+                }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleCopy();
+                  }
+                }}
+                className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground/60 bg-muted px-1.5 py-0.5 rounded hover:bg-muted/80 hover:text-muted-foreground transition-colors cursor-pointer"
               >
                 <span>{displayId}</span>
                 {copied ? (
@@ -156,7 +168,7 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
                 ) : (
                   <Copy className="w-2.5 h-2.5" />
                 )}
-              </button>
+              </div>
             </TooltipTrigger>
             <TooltipContent>
               <p>{copied ? 'Copied!' : `Copy full ${isRun ? 'run_id' : 'span_id'}`}</p>
