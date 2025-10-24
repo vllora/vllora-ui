@@ -39,6 +39,9 @@ export const compareMessageStructure = (
       return false;
     }
   }
+  console.log('===== prevStructure ', prevStructure)
+  console.log('===== nextStructure ', nextStructure)
+  console.log('==== compareMessageStructure not changed')
 
   return true;
 };

@@ -1,4 +1,4 @@
-import { getBackendUrl } from '@/config/api';
+import { api, handleApiResponse } from '@/lib/api-client';
 
 export interface Project {
   id: string;
@@ -44,79 +44,26 @@ export interface UpdateProjectResponse {
  * List all projects
  */
 export async function listProjects(): Promise<Project[]> {
-  const url = `${getBackendUrl()}/projects`;
-
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to list projects: ${response.status} ${response.statusText}`);
-    }
-
-    const data: Project[] = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Error listing projects:', error);
-    throw error;
-  }
+  const response = await api.get('/projects');
+  return handleApiResponse<Project[]>(response);
 }
 
 /**
  * Get a specific project by ID
  */
 export async function getProject(projectId: string): Promise<Project> {
-  const url = `${getBackendUrl()}/projects/${projectId}`;
-
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to get project: ${response.status} ${response.statusText}`);
-    }
-
-    const data: GetProjectResponse = await response.json();
-    return data.project;
-  } catch (error) {
-    console.error(`Error getting project ${projectId}:`, error);
-    throw error;
-  }
+  const response = await api.get(`/projects/${projectId}`);
+  const data = await handleApiResponse<GetProjectResponse>(response);
+  return data.project;
 }
 
 /**
  * Create a new project
  */
 export async function createProject(request: CreateProjectRequest): Promise<Project> {
-  const url = `${getBackendUrl()}/projects`;
-
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(request),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to create project: ${response.status} ${response.statusText}`);
-    }
-
-    const data: CreateProjectResponse = await response.json();
-    return data.project;
-  } catch (error) {
-    console.error('Error creating project:', error);
-    throw error;
-  }
+  const response = await api.post('/projects', request);
+  const data = await handleApiResponse<CreateProjectResponse>(response);
+  return data.project;
 }
 
 /**
@@ -126,48 +73,15 @@ export async function updateProject(
   projectId: string,
   request: UpdateProjectRequest
 ): Promise<Project> {
-  const url = `${getBackendUrl()}/projects/${projectId}`;
-
-  try {
-    const response = await fetch(url, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(request),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to update project: ${response.status} ${response.statusText}`);
-    }
-
-    const data: UpdateProjectResponse = await response.json();
-    return data.project;
-  } catch (error) {
-    console.error(`Error updating project ${projectId}:`, error);
-    throw error;
-  }
+  const response = await api.put(`/projects/${projectId}`, request);
+  const data = await handleApiResponse<UpdateProjectResponse>(response);
+  return data.project;
 }
 
 /**
  * Delete a project
  */
 export async function deleteProject(projectId: string): Promise<void> {
-  const url = `${getBackendUrl()}/projects/${projectId}`;
-
-  try {
-    const response = await fetch(url, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to delete project: ${response.status} ${response.statusText}`);
-    }
-  } catch (error) {
-    console.error(`Error deleting project ${projectId}:`, error);
-    throw error;
-  }
+  const response = await api.delete(`/projects/${projectId}`);
+  await handleApiResponse<void>(response);
 }

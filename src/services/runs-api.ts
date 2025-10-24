@@ -1,5 +1,6 @@
-import { API_CONFIG, getRunsUrl } from '@/config/api';
+import { getRunsUrl } from '@/config/api';
 import { Pagination, RunDTO, Span, ModelCall, ToolCall, RouterCall, Attributes } from '@/types/common-type';
+import { apiClient, handleApiResponse } from '@/lib/api-client';
 
 // Re-export types for convenience
 export type { Pagination, RunDTO, Span, ModelCall, ToolCall, RouterCall, Attributes };
@@ -79,25 +80,16 @@ export const listRuns = async (props: {
     }
   });
 
-  const url = `${getRunsUrl()}?${queryParams.toString()}`;
+  const endpoint = `/runs?${queryParams.toString()}`;
 
-  const response = await fetch(url, {
+  const response = await apiClient(endpoint, {
     method: 'GET',
     headers: {
-      'Content-Type': 'application/json',
       'x-project-id': projectId,
-      authorization: `Bearer ${API_CONFIG.apiKey}`,
     },
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      errorData.message || errorData.error || `Failed to fetch runs: ${response.statusText}`
-    );
-  }
-
-  return await response.json();
+  return handleApiResponse<PaginatedRunsResponse>(response);
 };
 
 export const fetchRunSpans = async (props: {
@@ -114,27 +106,14 @@ export const fetchRunSpans = async (props: {
     limit: String(limit),
   });
 
-  const url = `${getRunsUrl()}/${runId}?${queryParams.toString()}`;
+  const endpoint = `/runs/${runId}?${queryParams.toString()}`;
 
-  const response = await fetch(url, {
+  const response = await apiClient(endpoint, {
     method: 'GET',
     headers: {
-      'Content-Type': 'application/json',
       'x-project-id': projectId,
-      authorization: `Bearer ${API_CONFIG.apiKey}`,
     },
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      errorData.message || errorData.error || `Failed to fetch run spans: ${response.statusText}`
-    );
-  }
-
-  const responseData = await response.json();
-  return {
-    data: responseData.data as Span[],
-    pagination: responseData.pagination as Pagination,
-  };
+  return handleApiResponse<{ data: Span[]; pagination: Pagination }>(response);
 };

@@ -1,5 +1,6 @@
 import { useRequest } from 'ahooks';
 import { getBackendUrl } from '@/config/api';
+import { api, handleApiResponse } from '@/lib/api-client';
 
 export interface MCPServer {
   [serverName: string]: {
@@ -43,52 +44,18 @@ export interface MCPConfigsResponse {
 }
 
 export async function listMCPConfigs(): Promise<MCPConfigsResponse> {
-  const url = `${getBackendUrl()}/mcp-configs`;
-
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch MCP configs: ${response.statusText}`);
-    }
-
-    return response.json();
-  } catch (error) {
-    console.error('Error fetching MCP configs:', error);
-    throw error;
-  }
+  const response = await api.get('/mcp-configs');
+  return handleApiResponse<MCPConfigsResponse>(response);
 }
 
 export async function fetchMCPTools(configId: string): Promise<Record<string, MCPTool[]>> {
-  const url = `${getBackendUrl()}/mcp-configs/${configId}/tools`;
+  const response = await api.get(`/mcp-configs/${configId}/tools`);
+  const data = await handleApiResponse<Record<string, MCPTool[]>>(response);
+  console.log('Raw tools API response:', data);
 
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch MCP tools: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    console.log('Raw tools API response:', data);
-    
-    // The response structure is { "serverName": [tool1, tool2, ...] }
-    // Return as-is, grouped by server
-    return data;
-  } catch (error) {
-    console.error('Error fetching MCP tools:', error);
-    throw error;
-  }
+  // The response structure is { "serverName": [tool1, tool2, ...] }
+  // Return as-is, grouped by server
+  return data;
 }
 
 export function useMCPConfigs() {
