@@ -6,14 +6,16 @@ import { toast } from "sonner";
 import { Span } from "@/types/common-type";
 import { listSpans } from "@/services/spans-api";
 import { useRequest } from "ahooks";
+import { RunDTO } from "@/types/common-type";
 
 export const useWrapperHook = (props: {
   threadId?: string;
   projectId: string;
+  onRunsLoaded?: (runs: RunDTO[]) => void;
 }) => {
-  const { threadId, projectId } = props;
+  const { threadId, projectId, onRunsLoaded } = props;
   // Use the runs pagination hook
-  let runsPaginationState = useRunsPagination({ projectId, threadId });
+  let runsPaginationState = useRunsPagination({ projectId, threadId, onRunsLoaded });
   // Use the span details hook
   let spanDetailState = useSpanDetails({ projectId });
 
