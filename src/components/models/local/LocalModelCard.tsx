@@ -140,7 +140,6 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model, providerS
                 <CapabilitiesIcons 
                   capabilities={model.capabilities}
                   inputFormats={model.input_formats}
-                  outputFormats={model.output_formats}
                   parameters={(model as any).parameters}
                   maxDisplay={10}
                 />

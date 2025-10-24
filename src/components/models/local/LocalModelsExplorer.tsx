@@ -225,6 +225,7 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
     showConfiguredOnly,
     selectedInputFormats,
     selectedOutputFormats,
+    selectedCapabilities,
     minContextSize,
     maxContextSize,
     minInputCost,
@@ -510,7 +511,7 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
 
       return true;
     });
-  }, [groupedModels, searchTerm, selectedProviders, selectedOwners, selectedType, selectedInputFormats, selectedOutputFormats, minContextSize, maxContextSize, minInputCost, maxInputCost, minOutputCost, maxOutputCost, cachingEnabled, showConfiguredOnly, getModelType, providerStatusMap, providersData]);
+  }, [groupedModels, searchTerm, selectedProviders, selectedOwners, selectedType, selectedInputFormats, selectedOutputFormats, selectedCapabilities, minContextSize, maxContextSize, minInputCost, maxInputCost, minOutputCost, maxOutputCost, cachingEnabled, showConfiguredOnly, getModelType, providerStatusMap, providersData]);
 
   // Copy model name function
   const copyModelName = useCallback(async (modelName: string) => {

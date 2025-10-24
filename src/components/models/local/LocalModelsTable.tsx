@@ -235,7 +235,6 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                         <CapabilitiesIcons 
                           capabilities={model.capabilities}
                           inputFormats={model.input_formats}
-                          outputFormats={model.output_formats}
                           parameters={(model as any).parameters}
                           maxDisplay={10}
                         />

@@ -201,7 +201,6 @@ export const ModelCard: React.FC<ModelCardProps> = ({
               <CapabilitiesIcons
                 capabilities={model.capabilities}
                 inputFormats={model.input_formats}
-                outputFormats={model.output_formats}
                 maxDisplay={3}
               />
             </div>

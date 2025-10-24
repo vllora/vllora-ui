@@ -6,7 +6,6 @@ import { cn } from '@/lib/utils';
 interface CapabilitiesIconsProps {
   capabilities?: string[];
   inputFormats?: string[];
-  outputFormats?: string[];
   parameters?: any;
   maxDisplay?: number;
   className?: string;
@@ -15,12 +14,11 @@ interface CapabilitiesIconsProps {
 export const CapabilitiesIcons: React.FC<CapabilitiesIconsProps> = ({
   capabilities,
   inputFormats,
-  outputFormats,
   parameters,
   maxDisplay = 3,
   className = ""
 }) => {
-  const detectedCapabilities = getModelCapabilities(capabilities, inputFormats, outputFormats, parameters);
+  const detectedCapabilities = getModelCapabilities(capabilities, inputFormats, parameters);
   const visibleCapabilities = detectedCapabilities.slice(0, maxDisplay);
   const remainingCount = Math.max(0, detectedCapabilities.length - maxDisplay);
 
