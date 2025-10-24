@@ -14,10 +14,7 @@ import { useEffect } from "react"
 import { applyTheme, getThemeFromStorage } from "./themes/themes"
 import { ProviderKeysProvider } from "./contexts/ProviderKeysContext"
 import { AuthProvider } from "./contexts/AuthContext"
-import { configureAmplify } from "./config/amplify"
-
-// Configure Amplify before rendering
-configureAmplify()
+import { ProtectedRoute } from "./components/ProtectedRoute"
 
 function App() {
   useEffect(() => {
@@ -35,7 +32,8 @@ function App() {
               {/* Public routes */}
               <Route path="/login" element={<LoginPage />} />
 
-              <Route path="/" element={<ProjectProvider><Layout /></ProjectProvider>}>
+              {/* Protected routes */}
+              <Route path="/" element={<ProtectedRoute><ProjectProvider><Layout /></ProjectProvider></ProtectedRoute>}>
                 {/* Project-scoped routes (now using query string ?project_id=...) */}
                 <Route index element={<HomePage />} />
                 <Route path="chat" element={<ThreadsAndTracesPage />} />

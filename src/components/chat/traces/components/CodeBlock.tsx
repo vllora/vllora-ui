@@ -7,9 +7,10 @@ interface CodeBlockProps {
   title: string;
   code: string;
   language?: string;
+  hideTitle?: boolean;
 }
 
-export const CodeBlock: React.FC<CodeBlockProps> = ({ title, code, language = 'bash' }) => {
+export const CodeBlock: React.FC<CodeBlockProps> = ({ title, code, language = 'bash', hideTitle = false }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -19,9 +20,41 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ title, code, language = 'b
     });
   };
 
+  if(hideTitle){
+    return <div style={{
+          fontSize: '0.75rem',
+          lineHeight: '1.5',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          overflowWrap: 'anywhere',
+        }}>
+          <SyntaxHighlighter
+            language={language}
+            style={vscDarkPlus}
+            customStyle={{
+              margin: 0,
+              padding: 0,
+              background: 'transparent',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              overflowWrap: 'anywhere',
+            }}
+            codeTagProps={{
+              style: {
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                overflowWrap: 'anywhere',
+              }
+            }}
+            showLineNumbers={false}
+          >
+            {code}
+          </SyntaxHighlighter>
+        </div>
+  }
   return (
     <div>
-      <div className="flex items-center justify-between mb-3 pb-2 border-b border-border/50">
+      {!hideTitle && <div className="flex items-center justify-between mb-3 pb-2 border-b border-border/50">
         <div className="text-sm font-semibold text-foreground">{title}</div>
         <button
           onClick={handleCopy}
@@ -38,7 +71,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ title, code, language = 'b
             </>
           )}
         </button>
-      </div>
+      </div>}
       <div className="rounded-lg bg-black/40">
         <div style={{
           padding: '1rem',
