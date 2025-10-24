@@ -13,7 +13,7 @@ import { ProjectsConsumer } from "@/contexts/ProjectContext";
 export const DetailedRunView: React.FC<{run: RunDTO}> = ({
     run
 }) => {
-    const {runMap, loadingSpansById, selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, hoverSpanId, collapsedSpans, setCollapsedSpans} = ChatWindowConsumer()
+    const {runMap, isLoadingSpans, loadingSpansById, selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, hoverSpanId, collapsedSpans, setCollapsedSpans} = ChatWindowConsumer()
     const {currentProjectId} = ProjectsConsumer()
     const spansByRunId: Span[] = run.run_id ? runMap[run.run_id] || [] : []
     const detailViewRef = useRef<HTMLDivElement>(null);
@@ -59,8 +59,7 @@ export const DetailedRunView: React.FC<{run: RunDTO}> = ({
     // Check if we have resolvedSpans but no initialSpans (empty run)
     const isEmptyRun = spansByRunId.length === 0;
     const isLoading = run.run_id && loadingSpansById.has(run.run_id);
-
-    if (isEmptyRun && !isLoading) {
+    if (isEmptyRun && (!isLoading && !loadingSpansById.has(run.run_id || '') && !isLoadingSpans)) {
         return (
             <div className="flex flex-col items-center justify-center py-8 px-4 bg-[#0a0a0a] border border-[#262626] rounded-lg mx-4 my-2">
                 <div className="flex items-center justify-center w-12 h-12 bg-[#1a1a1a] rounded-full mb-4">
