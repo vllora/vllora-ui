@@ -30,34 +30,36 @@ export const CostDisplay: React.FC<CostDisplayProps> = ({
   className = "",
   showTooltip = true
 }) => {
-  const inputCost = useMemo(() => {
+  const inputCostRange = useMemo(() => {
     if (modelsGroup && modelsGroup.length > 1) {
-      const modelWithTotalCost = modelsGroup
-        .filter(m => m.price?.per_input_token !== undefined && m.price?.per_output_token !== undefined)
-        .map(m => {
-          let inputcost = m.price?.per_input_token || 0;
-          let outputcost = m.price?.per_output_token || 0;
-          return { total: inputcost + outputcost, model: m }
-        })
-        .sort((a, b) => a.total - b.total);
-      return modelWithTotalCost.length > 0 ? modelWithTotalCost[0].model.price?.per_input_token : undefined;
+      const inputCosts = modelsGroup
+        .filter(m => m.price?.per_input_token !== undefined)
+        .map(m => m.price?.per_input_token || 0)
+        .sort((a, b) => a - b);
+      
+      if (inputCosts.length === 0) return undefined;
+      if (inputCosts.length === 1) return { min: inputCosts[0], max: inputCosts[0] };
+      
+      return { min: inputCosts[0], max: inputCosts[inputCosts.length - 1] };
     }
-    return model.price?.per_input_token;
+    const cost = model.price?.per_input_token;
+    return cost !== undefined ? { min: cost, max: cost } : undefined;
   }, [modelsGroup, model]);
 
-  const outputCost = useMemo(() => {
+  const outputCostRange = useMemo(() => {
     if (modelsGroup && modelsGroup.length > 1) {
-      const modelWithTotalCost = modelsGroup
-        .filter(m => m.price?.per_input_token !== undefined && m.price?.per_output_token !== undefined)
-        .map(m => {
-          let inputcost = m.price?.per_input_token || 0;
-          let outputcost = m.price?.per_output_token || 0;
-          return { total: inputcost + outputcost, model: m }
-        })
-        .sort((a, b) => a.total - b.total);
-      return modelWithTotalCost.length > 0 ? modelWithTotalCost[0].model.price?.per_output_token : undefined;
+      const outputCosts = modelsGroup
+        .filter(m => m.price?.per_output_token !== undefined)
+        .map(m => m.price?.per_output_token || 0)
+        .sort((a, b) => a - b);
+      
+      if (outputCosts.length === 0) return undefined;
+      if (outputCosts.length === 1) return { min: outputCosts[0], max: outputCosts[0] };
+      
+      return { min: outputCosts[0], max: outputCosts[outputCosts.length - 1] };
     }
-    return model.price?.per_output_token;
+    const cost = model.price?.per_output_token;
+    return cost !== undefined ? { min: cost, max: cost } : undefined;
   }, [modelsGroup, model]);
 
   const cachingEnabled = useMemo(() => {
@@ -67,21 +69,32 @@ export const CostDisplay: React.FC<CostDisplayProps> = ({
     return model.price?.per_cached_input_token || model.price?.per_cached_input_write_token;
   }, [modelsGroup, model]);
 
+  const formatCostRange = (range: { min: number; max: number } | undefined) => {
+    if (!range) return '';
+    if (range.min === 0 && range.max === 0) return 'Free';
+    if (range.min === range.max) {
+      return formatTokenPrice(range.min, model.type).replace(' / 1M tokens', '');
+    }
+    const minStr = formatTokenPrice(range.min, model.type).replace(' / 1M tokens', '');
+    const maxStr = formatTokenPrice(range.max, model.type).replace(' / 1M tokens', '');
+    return `${minStr} - ${maxStr}`;
+  };
+
   const content = (
     <div className={`flex items-center gap-2 ${showTooltip ? 'cursor-help' : ''} ${className}`}>
-      {inputCost !== undefined && (
+      {inputCostRange !== undefined && (
         <div className="flex items-center gap-1">
           <Upload className="w-3 h-3 text-zinc-400" />
           <span className="text-xs text-zinc-300">
-            {inputCost === 0 ? 'Free' : formatTokenPrice(inputCost, model.type).replace(' / 1M tokens', '')}
+            {formatCostRange(inputCostRange)}
           </span>
         </div>
       )}
-      {outputCost !== undefined && (
+      {outputCostRange !== undefined && (
         <div className="flex items-center gap-1">
           <Download className="w-3 h-3 text-zinc-400" />
           <span className="text-xs text-zinc-300">
-            {outputCost === 0 ? 'Free' : formatTokenPrice(outputCost, model.type).replace(' / 1M tokens', '')}
+            {formatCostRange(outputCostRange)}
           </span>
         </div>
       )}
@@ -155,16 +168,16 @@ export const CostDisplay: React.FC<CostDisplayProps> = ({
               </div>
             ) : (
               <div className="space-y-1">
-                {inputCost !== undefined && (
+                {inputCostRange !== undefined && (
                   <div className="flex justify-between gap-4 text-xs">
                     <span className="text-zinc-400">Input:</span>
-                    <span className="text-zinc-200">{inputCost === 0 ? 'Free' : formatTokenPrice(inputCost, model.type).replace(' / 1M tokens', '')}</span>
+                    <span className="text-zinc-200">{formatCostRange(inputCostRange)}</span>
                   </div>
                 )}
-                {outputCost !== undefined && (
+                {outputCostRange !== undefined && (
                   <div className="flex justify-between gap-4 text-xs">
                     <span className="text-zinc-400">Output:</span>
-                    <span className="text-zinc-200">{outputCost === 0 ? 'Free' : formatTokenPrice(outputCost, model.type).replace(' / 1M tokens', '')}</span>
+                    <span className="text-zinc-200">{formatCostRange(outputCostRange)}</span>
                   </div>
                 )}
                 {model.price?.per_cached_input_token && (
