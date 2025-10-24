@@ -1,5 +1,6 @@
 import { API_CONFIG, getSpansUrl } from '@/config/api';
 import { Pagination, Span } from '@/types/common-type';
+import { apiClient, handleApiResponse } from '@/lib/api-client';
 
 // Re-export types for convenience
 export type { Pagination, Span };
@@ -102,25 +103,16 @@ export const listSpans = async (props: {
     }
   });
 
-  const url = `${getSpansUrl()}?${queryParams.toString()}`;
+  const endpoint = `/spans?${queryParams.toString()}`;
 
-  const response = await fetch(url, {
+  const response = await apiClient(endpoint, {
     method: 'GET',
     headers: {
-      'Content-Type': 'application/json',
       'x-project-id': projectId,
-      authorization: `Bearer ${API_CONFIG.apiKey}`,
     },
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      errorData.message || errorData.error || `Failed to fetch spans: ${response.statusText}`
-    );
-  }
-
-  return await response.json();
+  return handleApiResponse<PaginatedSpansResponse>(response);
 };
 
 /**

@@ -1,5 +1,5 @@
-import { getMessagesUrl, getThreadsUrl } from "@/config/api";
 import { Message } from "@/types/chat";
+import { apiClient, handleApiResponse } from '@/lib/api-client';
 
 export interface QueryMessagesRequest {
   order_by?: [string, 'asc' | 'desc'][];
@@ -22,30 +22,16 @@ export async function getMessageById(props: {
   projectId: string;
   threadId: string;
 }) {
-  const url = `${getThreadsUrl()}/${props.threadId}/messages/${props.messageId}`;
+  const endpoint = `/threads/${props.threadId}/messages/${props.messageId}`;
 
-  const response = await fetch(url, {
+  const response = await apiClient(endpoint, {
     method: 'GET',
     headers: {
-      'Content-Type': 'application/json',
       'x-project-id': props.projectId
     }
   });
 
-  if (!response.ok) {
-    let errorMessage = `Failed to fetch message: ${response.statusText}`;
-    try {
-      const errorData = await response.json();
-      if (errorData.message || errorData.error || errorData.detail) {
-        errorMessage = errorData.message || errorData.error || errorData.detail;
-      }
-    } catch (e) {
-      // If parsing error response fails, use default message
-    }
-    throw new Error(errorMessage);
-  }
-
-  return await response.json();
+  return handleApiResponse<Message>(response);
 }
 
 export async function queryMessages(
@@ -54,28 +40,14 @@ export async function queryMessages(
   _request: QueryMessagesRequest = {}
 ): Promise<Message[]> {
 
-  const url = getMessagesUrl(threadId);
-  
-  const response = await fetch(url, {
+  const endpoint = `/threads/${threadId}/messages`;
+
+  const response = await apiClient(endpoint, {
     method: 'GET',
     headers: {
-      'Content-Type': 'application/json',
       'x-project-id': projectId
     }
   });
 
-  if (!response.ok) {
-    let errorMessage = `Failed to fetch messages: ${response.statusText}`;
-    try {
-      const errorData = await response.json();
-      if (errorData.message || errorData.error || errorData.detail) {
-        errorMessage = errorData.message || errorData.error || errorData.detail;
-      }
-    } catch (e) {
-      // If parsing error response fails, use default message
-    }
-    throw new Error(errorMessage);
-  }
-
-  return await response.json();
+  return handleApiResponse<Message[]>(response);
 }

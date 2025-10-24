@@ -23,6 +23,7 @@ export const useWrapperHook = (props: {
   
   const [hoveredRunId, setHoveredRunId] = useState<string | null>(null);
   const [hoverSpanId, setHoverSpanId] = useState<string | undefined>(undefined);
+  const [collapsedSpans, setCollapsedSpans] = useState<string[]>([]);
 
   const updateBySpansOfAThread = useCallback((spans: Span[]) => {
     setFlattenSpans(spans);
@@ -44,14 +45,11 @@ export const useWrapperHook = (props: {
   }, [selectedRunId, runMap]);
 
   const detailSpan = useMemo(() => {
-   console.log('===== detailSpanId', detailSpanId)
-   console.log('===== flattenSpans', flattenSpans)
    let result = detailSpanId
       ? flattenSpans.find(
           (span) => span.span_id === detailSpanId
         )
       : null;
-      console.log('===== result', result)
     return result;
   }, [detailSpanId, flattenSpans]);
   // Use ahooks useRequest for fetching conversation spans
@@ -164,5 +162,7 @@ export const useWrapperHook = (props: {
     detailSpan,
     hoverSpanId,
     setHoverSpanId,
+    collapsedSpans,
+    setCollapsedSpans,
   };
 };

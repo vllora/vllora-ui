@@ -1,7 +1,7 @@
 import { createContext, useContext, ReactNode, useCallback } from "react";
 import { useDebugControl } from "@/hooks/events/useDebugControl";
 import { ProjectEventUnion } from "./project-events/dto";
-import { createNewRun, processEvent, updatedRunWithSpans } from "@/hooks/events/utilities";
+import { processEvent, updatedRunWithSpans } from "@/hooks/events/utilities";
 import { useWrapperHook } from "@/hooks/useWrapperHook";
 import { Span } from "@/types/common-type";
 
@@ -40,7 +40,9 @@ export function useTracesPageContext(props: { projectId: string }) {
     hoveredRunId,
     setHoveredRunId,
     setRuns,
-    runMap
+    runMap,
+    collapsedSpans,
+    setCollapsedSpans,
   } = useWrapperHook({ projectId });
 
   const updateRunMetrics = useCallback((run_id: string, updatedSpans: Span[]) => {
@@ -109,7 +111,9 @@ export function useTracesPageContext(props: { projectId: string }) {
     detailSpanId,
     setDetailSpanId,
     detailSpan,
-    spansOfSelectedRun
+    spansOfSelectedRun,
+    collapsedSpans,
+    setCollapsedSpans,
   }
 }
 

@@ -10,7 +10,7 @@ import { TimelineContent } from "@/components/chat/traces/components/TimelineCon
 
 // DetailedRunView component that uses TracesPageContext instead of ChatWindowContext
 export const DetailedRunViewWrapper: React.FC<{ run: RunDTO }> = ({ run }) => {
-  const { runMap, loadingSpansById, selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, projectId } = TracesPageConsumer();
+  const { runMap, loadingSpansById, selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, projectId, collapsedSpans, setCollapsedSpans } = TracesPageConsumer();
   const spansByRunId: Span[] = run.run_id ? runMap[run.run_id] || [] : [];
   const detailViewRef = useRef<HTMLDivElement>(null);
 
@@ -29,8 +29,14 @@ export const DetailedRunViewWrapper: React.FC<{ run: RunDTO }> = ({ run }) => {
                   setSelectedSpanId={setSelectedSpanId}
                   setSelectedRunId={setSelectedRunId}
                   setDetailSpanId={setDetailSpanId}
-                  isInSidebar={false}
-                />
+                  onToggle={(spanId) => {
+                    if (collapsedSpans.includes(spanId)) {
+                      setCollapsedSpans(collapsedSpans.filter(id => id !== spanId));
+                    } else {
+                      setCollapsedSpans([...collapsedSpans, spanId]);
+                    }
+                  }}
+                  isInSidebar={false} collapsedSpans={collapsedSpans} />
               </ErrorBoundary>
             </div>
           </div>

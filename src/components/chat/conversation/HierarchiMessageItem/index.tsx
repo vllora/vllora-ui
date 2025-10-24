@@ -39,7 +39,6 @@ export const compareMessageStructure = (
       return false;
     }
   }
-
   return true;
 };
 export const propsHierarchicalAreEqual = (prevProps: Readonly<HierarchicalSpanItemProps>, nextProps: Readonly<HierarchicalSpanItemProps>) => {

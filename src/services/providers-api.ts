@@ -1,4 +1,5 @@
 import { getBackendUrl } from '@/config/api';
+import { api, handleApiResponse } from '@/lib/api-client';
 
 // Credentials types based on the Rust backend
 export interface ApiKeyCredentials {
@@ -80,54 +81,17 @@ export interface UpdateProviderRequest {
  * List all providers with their credential status
  */
 export async function listProviders(): Promise<ProviderInfo[]> {
-  const url = `${getBackendUrl()}/providers`;
-
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to list providers: ${response.status} ${response.statusText}`);
-    }
-
-    const data:  ProviderInfo[] = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Error listing providers:', error);
-    throw error;
-  }
+  const response = await api.get('/providers');
+  return handleApiResponse<ProviderInfo[]>(response);
 }
 
 /**
  * Create a new provider
  */
 export async function createProvider(request: CreateProviderRequest): Promise<ProviderInfo> {
-  const url = `${getBackendUrl()}/providers`;
-
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(request),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `Failed to create provider: ${response.status} ${response.statusText}`);
-    }
-
-    const data: ProviderResponse = await response.json();
-    return data.provider;
-  } catch (error) {
-    console.error('Error creating provider:', error);
-    throw error;
-  }
+  const response = await api.post('/providers', request);
+  const data = await handleApiResponse<ProviderResponse>(response);
+  return data.provider;
 }
 
 /**
@@ -137,50 +101,15 @@ export async function updateProvider(
   providerName: string,
   request: UpdateProviderRequest
 ): Promise<ProviderInfo> {
-  const url = `${getBackendUrl()}/providers/${providerName}`;
-
-  try {
-    const response = await fetch(url, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(request),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `Failed to update provider: ${response.status} ${response.statusText}`);
-    }
-
-    const data: ProviderResponse = await response.json();
-    return data.provider;
-  } catch (error) {
-    console.error(`Error updating provider ${providerName}:`, error);
-    throw error;
-  }
+  const response = await api.put(`/providers/${providerName}`, request);
+  const data = await handleApiResponse<ProviderResponse>(response);
+  return data.provider;
 }
 
 /**
  * Delete provider credentials
  */
 export async function deleteProvider(providerName: string): Promise<void> {
-  const url = `${getBackendUrl()}/providers/${providerName}`;
-
-  try {
-    const response = await fetch(url, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `Failed to delete provider: ${response.status} ${response.statusText}`);
-    }
-  } catch (error) {
-    console.error(`Error deleting provider ${providerName}:`, error);
-    throw error;
-  }
+  const response = await api.delete(`/providers/${providerName}`);
+  await handleApiResponse<void>(response);
 }

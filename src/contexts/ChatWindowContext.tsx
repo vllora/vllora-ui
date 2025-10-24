@@ -51,12 +51,13 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     refreshSpans,
     hoverSpanId,
     setHoverSpanId,
+    collapsedSpans,
+    setCollapsedSpans,
   } = useWrapperHook({ projectId, threadId });
 
 
 
   const [isChatProcessing, setIsChatProcessing] = useState<boolean>(false);
-  const [collapsedSpans, setCollapsedSpans] = useState<string[]>([]);
 
   const [runHighlighted, setRunHighlighted] = useState<string | null>(null);
 
@@ -160,6 +161,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     setRunHighlighted(null);
     setHoverSpanId(undefined);
     setHoveredRunId(null);
+    setError(undefined);
   }, []);
 
   // Calculate sum of all message metrics from displayMessages
