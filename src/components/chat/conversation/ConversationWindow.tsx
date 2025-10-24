@@ -17,7 +17,6 @@ interface ChatWindowProps {
   threadId?: string;
   threadTitle?: string;
   modelName?: string;
-  apiUrl: string;
   apiKey?: string;
   projectId?: string;
   widgetId?: string;
@@ -29,7 +28,6 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
   threadId,
   threadTitle,
   modelName,
-  apiUrl,
   apiKey,
   projectId,
   widgetId,
@@ -54,7 +52,6 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     flattenSpans,
     clearAll,
   } = ChatWindowConsumer();
-
   useEffect(() => {
     clearAll();
     if (threadId && !isDraft) {
@@ -73,7 +70,6 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     terminateChat,
     scrollToBottom,
   } = useMessageSubmission({
-    apiUrl,
     apiKey,
     projectId,
     modelName,

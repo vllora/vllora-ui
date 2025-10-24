@@ -8,7 +8,6 @@ import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { ThreadsConsumer } from '@/contexts/ThreadsContext';
 import { ChatWindowProvider } from '@/contexts/ChatWindowContext';
 import { Thread } from '@/types/chat';
-import { API_CONFIG } from '@/config/api';
 
 export function ThreadsPageContent() {
   const { currentProjectId, isDefaultProject } = ProjectsConsumer();
@@ -140,7 +139,6 @@ export function ThreadsPageContent() {
               threadId={selectedThreadId}
               threadTitle={threads.find((t) => t.thread_id === selectedThreadId)?.title}
               modelName={selectedModel}
-              apiUrl={API_CONFIG.url}
               projectId={currentProjectId}
               widgetId={`chat-${selectedThreadId}`}
               onModelChange={handleModelChange}
