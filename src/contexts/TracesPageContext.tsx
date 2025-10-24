@@ -83,6 +83,12 @@ export function useTracesPageContext(props: { projectId: string }) {
         event.run_id && setOpenTraces([{ run_id: event.run_id, tab: 'trace' }]);
       }, 0)
 
+      if((event.type === 'RunFinished' || event.type === 'RunError') && event.run_id) {
+        setTimeout(() => {
+          event.run_id && fetchSpansByRunId(event.run_id);
+        }, 100)
+      }
+
     }
   }, [flattenSpans]);
   useDebugControl({ handleEvent, channel_name: 'debug-traces-timeline-events' });
