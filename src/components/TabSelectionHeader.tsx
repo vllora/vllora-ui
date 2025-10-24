@@ -24,47 +24,47 @@ export function TabSelectionHeader({ currentTab, onTabChange, onProjectChange }:
   };
 
   return (
-    <div className="flex justify-between items-center px-6 py-2.5 border-b border-border bg-[#0a0a0a]/80 backdrop-blur-sm relative">
-     <div className="flex items-center gap-2">
-      {/* Left side - Project Dropdown (absolute positioned) */}
-      <div className="flex items-center">
-        <div className="scale-90 origin-left">
+    <div className="flex justify-between items-center px-6 py-3 border-b border-border/50 bg-gradient-to-b from-[#0a0a0a] to-[#0a0a0a]/95 backdrop-blur-sm relative">
+      <div className="flex items-center gap-4">
+        {/* Left side - Project Dropdown */}
+        <div className="flex items-center">
           <ProjectDropdown onProjectChange={onProjectChange} />
+        </div>
+
+
+        {/* Tab Toggle */}
+        <div className="inline-flex items-center gap-1 bg-[#151515] rounded-lg p-1 border border-border/30 shadow-sm">
+          <button
+            onClick={() => handleTabChange("threads")}
+            className={`
+              relative flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium transition-all duration-200
+              ${currentTab === "threads"
+                ? 'bg-[rgb(var(--theme-500))] text-white shadow-md shadow-[rgb(var(--theme-500))]/20'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/20'
+              }
+            `}
+          >
+            <span>Threads</span>
+          </button>
+          <button
+            onClick={() => handleTabChange("traces")}
+            className={`
+              relative flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium transition-all duration-200
+              ${currentTab === "traces"
+                ? 'bg-[rgb(var(--theme-500))] text-white shadow-md shadow-[rgb(var(--theme-500))]/20'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/20'
+              }
+            `}
+          >
+            <span>Traces</span>
+          </button>
         </div>
       </div>
 
-      {/* Tab Toggle */}
-      <div className="inline-flex items-center gap-0.5 bg-[#1a1a1a] rounded-lg p-0.5 border border-border/40 shadow-sm">
-        <button
-          onClick={() => handleTabChange("threads")}
-          className={`
-            flex items-center gap-1.5 px-5 py-1.5 rounded-md text-sm font-medium transition-all
-            ${currentTab === "threads"
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
-            }
-          `}
-        >
-          <span>Threads</span>
-        </button>
-        <button
-          onClick={() => handleTabChange("traces")}
-          className={`
-            flex items-center gap-1.5 px-5 py-1.5 rounded-md text-sm font-medium transition-all
-            ${currentTab === "traces"
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
-            }
-          `}
-        >
-          <span>Traces</span>
-        </button>
+      <div className="flex items-center gap-3">
+        {/* Debug control: Pause/Resume */}
+        <DebugControl />
       </div>
-     </div>
-     <div className="flex items-center gap-2">
-      {/* Debug control: Pause/Resume */}
-      <DebugControl />
-     </div>
     </div>
   );
 }
