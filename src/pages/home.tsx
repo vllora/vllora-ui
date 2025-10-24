@@ -4,7 +4,7 @@ import { LocalModelsExplorer } from '@/components/models/local/LocalModelsExplor
 import { LocalModelsSkeletonLoader } from '@/components/models/local/LocalModelsSkeletonLoader';
 import { LocalModelsConsumer } from '@/contexts/LocalModelsContext';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { getBackendUrl } from '@/config/api';
 import { ProviderKeysConsumer } from '@/contexts/ProviderKeysContext';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
@@ -203,17 +203,13 @@ function ProviderSetupSection() {
 
   if (providersLoading) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Configure your first provider</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="animate-pulse space-y-4">
-            <div className="h-20 bg-muted/50 rounded-lg" />
-            <div className="h-16 bg-muted/50 rounded-lg" />
-          </div>
-        </CardContent>
-      </Card>
+      <div>
+        <h2 className="text-2xl font-bold mb-6">Configure your first provider</h2>
+        <div className="animate-pulse space-y-4">
+          <div className="h-20 bg-muted/50 rounded-lg" />
+          <div className="h-16 bg-muted/50 rounded-lg" />
+        </div>
+      </div>
     );
   }
 
@@ -281,9 +277,9 @@ function ProviderSetupSection() {
         onRefresh={refetchProviders}
       />
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <CardTitle>Configure your first provider</CardTitle>
+      <div>
+        <div className="flex flex-row items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold">Configure your first provider</h2>
           <Button 
             variant="ghost" 
             size="sm" 
@@ -293,33 +289,31 @@ function ProviderSetupSection() {
             View all
             <ChevronRight className="w-3 h-3 ml-1" />
           </Button>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {orderedProviders.map((provider) => (
-              <div
-                key={provider.name}
-                className="border border-border rounded-lg p-3 hover:bg-accent/50 transition-colors cursor-pointer group"
-                onClick={() => handleStartEditing(provider)}
-              >
-                <div className="flex items-center gap-3">
-                  <ProviderIcon provider_name={provider.name} className="w-5 h-5" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm capitalize truncate">{provider.name}</p>
-                    <span className={`text-xs ${
-                      provider.has_credentials 
-                        ? 'text-green-600 dark:text-green-400' 
-                        : 'text-yellow-600 dark:text-yellow-400'
-                    }`}>
-                      {provider.has_credentials ? 'Configured' : 'Not configured'}
-                    </span>
-                  </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          {orderedProviders.map((provider) => (
+            <div
+              key={provider.name}
+              className="border border-border rounded-lg p-3 hover:bg-accent/50 transition-colors cursor-pointer group"
+              onClick={() => handleStartEditing(provider)}
+            >
+              <div className="flex items-center gap-3">
+                <ProviderIcon provider_name={provider.name} className="w-5 h-5" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm capitalize truncate">{provider.name}</p>
+                  <span className={`text-xs ${
+                    provider.has_credentials 
+                      ? 'text-green-600 dark:text-green-400' 
+                      : 'text-yellow-600 dark:text-yellow-400'
+                  }`}>
+                    {provider.has_credentials ? 'Configured' : 'Not configured'}
+                  </span>
                 </div>
               </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+            </div>
+          ))}
+        </div>
+      </div>
     </>
   );
 }
