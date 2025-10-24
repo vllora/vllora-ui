@@ -150,7 +150,7 @@ export function HomePage() {
               </div>
               <div>
                 <h3 className="font-semibold text-lg">Documentation</h3>
-                <p className="text-muted-foreground text-sm">Learn how to use Ellora UI</p>
+                <p className="text-muted-foreground text-sm">Learn how to use vLLora</p>
               </div>
               <ExternalLink className="w-5 h-5 text-muted-foreground ml-auto" />
             </CardContent>
