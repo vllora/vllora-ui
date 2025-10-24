@@ -108,12 +108,10 @@ export function ProjectDropdown({ onProjectChange }: ProjectDropdownProps) {
             </DropdownMenuItem>
           </Link>
 
-          <Link to="/projects?action=create">
-            <DropdownMenuItem className="flex items-center gap-3 cursor-pointer rounded-lg mx-1 px-3 py-2 text-[rgb(var(--theme-600))] dark:text-[rgb(var(--theme-400))] hover:bg-[rgba(var(--theme-500),0.1)] transition-all duration-200">
+            <DropdownMenuItem disabled={true} className="flex items-center gap-3 cursor-pointer rounded-lg mx-1 px-3 py-2 text-[rgb(var(--theme-600))] dark:text-[rgb(var(--theme-400))] hover:bg-[rgba(var(--theme-500),0.1)] transition-all duration-200">
               <Plus className="h-4 w-4 flex-shrink-0" />
               <span className="font-medium">New Project</span>
             </DropdownMenuItem>
-          </Link>
         </div>
       </DropdownMenuContent>
     </DropdownMenu>
