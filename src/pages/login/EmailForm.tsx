@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { AlertCircle, LogIn, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -49,23 +48,18 @@ export function EmailForm({ onSuccess }: EmailFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="space-y-3">
-        <Label htmlFor="email" className="text-sm font-medium text-foreground/90">
-          Email Address
-        </Label>
-        <div className="relative">
-          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground/60" />
-          <Input
-            id="email"
-            type="email"
-            placeholder="your@email.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            disabled={loading}
-            className="pl-11 h-12 bg-background/50 border-border/60 focus:border-[rgb(var(--theme-500))] transition-colors"
-          />
-        </div>
+      <div className="relative">
+        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground/60" />
+        <Input
+          id="email"
+          type="email"
+          placeholder="your@email.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          disabled={loading}
+          className="pl-11 h-12 bg-background/50 border-border/60 focus:border-[rgb(var(--theme-500))] transition-colors"
+        />
       </div>
 
       {error && (
