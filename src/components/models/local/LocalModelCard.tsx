@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Check, Copy, ArrowUpRight } from 'lucide-react';
+import { Check, Copy } from 'lucide-react';
 import { LocalModel } from '@/types/models';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -10,9 +10,10 @@ import { CostDisplay } from '@/components/shared/CostDisplay';
 
 export interface LocalModelCardProps {
   model: LocalModel;
+  providerStatusMap?: Map<string, boolean>;
 }
 
-export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model }) => {
+export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model, providerStatusMap }) => {
   const [copiedModelName, setCopiedModelName] = useState(false);
 
   // Get model group if available, otherwise treat as single model
@@ -88,7 +89,6 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model }) => {
                       <Copy className="w-3.5 h-3.5 text-zinc-400 hover:text-white" />
                     )}
                   </button>
-                  <ArrowUpRight className="w-3.5 h-3.5 text-zinc-500 opacity-0 group-hover:opacity-100 transition-all duration-200" />
                 </div>
               </div>
             </div>
@@ -117,6 +117,7 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model }) => {
                 <ProvidersIcons 
                   providers={providers as string[]}
                   maxDisplay={2}
+                  providerStatusMap={providerStatusMap}
                 />
               </div>
             </div>

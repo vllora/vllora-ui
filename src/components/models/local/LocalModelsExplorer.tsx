@@ -44,9 +44,8 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
   const [groupByName, setGroupByName] = useState(() => {
     return searchParams.get('groupByName') === 'true';
   });
-  const [configuredFilter, setConfiguredFilter] = useState<'all' | 'available' | 'needs-config'>(() => {
-    const filter = searchParams.get('configured');
-    return (filter === 'available' || filter === 'needs-config') ? filter : 'all';
+  const [showConfiguredOnly, setShowConfiguredOnly] = useState(() => {
+    return searchParams.get('configured') === 'true';
   });
   const [copiedModel, setCopiedModel] = useState<string | null>(null);
 
@@ -131,10 +130,10 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
       params.set('groupByName', 'true');
     }
 
-    if (configuredFilter === 'all') {
-      params.delete('configured');
+    if (showConfiguredOnly) {
+      params.set('configured', 'true');
     } else {
-      params.set('configured', configuredFilter);
+      params.delete('configured');
     }
 
     // New filter params
@@ -212,7 +211,7 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
     selectedProviders,
     selectedOwners,
     groupByName,
-    configuredFilter,
+    showConfiguredOnly,
     selectedInputFormats,
     selectedOutputFormats,
     minContextSize,
@@ -456,29 +455,22 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
         }
       }
 
-      // Configuration status filter
-      if (configuredFilter !== 'all') {
-        const hasMatchingConfig = modelGroup.some((m: LocalModel) => {
+      // Configuration status filter - show only configured models
+      if (showConfiguredOnly) {
+        const hasConfiguredProvider = modelGroup.some((m: LocalModel) => {
           const provider = m.inference_provider.provider.toLowerCase();
-          // Check if provider exists in our providers data
           const providerExists = providersData.some(p => p.name.toLowerCase() === provider);
           const hasCredentials = providerStatusMap.get(provider) || false;
-          
-          if (configuredFilter === 'available') {
-            return providerExists && hasCredentials;
-          } else if (configuredFilter === 'needs-config') {
-            return providerExists && !hasCredentials;
-          }
-          return false;
+          return providerExists && hasCredentials;
         });
-        if (!hasMatchingConfig) {
+        if (!hasConfiguredProvider) {
           return false;
         }
       }
 
       return true;
     });
-  }, [groupedModels, searchTerm, selectedProviders, selectedOwners, selectedType, selectedInputFormats, selectedOutputFormats, minContextSize, maxContextSize, minInputCost, maxInputCost, minOutputCost, maxOutputCost, cachingEnabled, configuredFilter, getModelType, providerStatusMap, providersData]);
+  }, [groupedModels, searchTerm, selectedProviders, selectedOwners, selectedType, selectedInputFormats, selectedOutputFormats, minContextSize, maxContextSize, minInputCost, maxInputCost, minOutputCost, maxOutputCost, cachingEnabled, showConfiguredOnly, getModelType, providerStatusMap, providersData]);
 
   // Copy model name function
   const copyModelName = useCallback(async (modelName: string) => {
@@ -491,120 +483,82 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
 
   return (
     <div className="flex flex-col space-y-6">
-      {/* Configuration Status Filter */}
-      <div className="flex items-center justify-end gap-4">
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            id="configured-filter"
-            checked={configuredFilter !== 'all'}
-            onChange={(e) => {
-              if (e.target.checked) {
-                setConfiguredFilter('available');
-              } else {
-                setConfiguredFilter('all');
-              }
-            }}
-            className="rounded border-border"
-          />
-          <label htmlFor="configured-filter" className="text-sm text-muted-foreground cursor-pointer">
-            Available | Need to be configured
-          </label>
-          {configuredFilter !== 'all' && (
-            <div className="flex gap-1 ml-2">
+      {/* Sticky container for Filters and View Mode Toggle */}
+      <div className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm pt-8 pb-4 -mt-8 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 space-y-4 border-b border-border/50">
+        <LocalModelSearchFilters
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          selectedProviders={selectedProviders}
+          onProvidersChange={setSelectedProviders}
+          selectedOwners={selectedOwners}
+          onOwnersChange={setSelectedOwners}
+          providers={uniqueProviders}
+          owners={owners}
+          resultsCount={filteredModels.length}
+          totalCount={models.length}
+          groupByName={groupByName}
+          onGroupByNameChange={setGroupByName}
+          showConfiguredOnly={showConfiguredOnly}
+          onShowConfiguredOnlyChange={setShowConfiguredOnly}
+          // New comprehensive filter props
+          selectedInputFormats={selectedInputFormats}
+          onInputFormatsChange={setSelectedInputFormats}
+          selectedOutputFormats={selectedOutputFormats}
+          onOutputFormatsChange={setSelectedOutputFormats}
+          selectedCapabilities={selectedCapabilities}
+          onCapabilitiesChange={setSelectedCapabilities}
+          minContextSize={minContextSize}
+          onMinContextSizeChange={setMinContextSize}
+          maxContextSize={maxContextSize}
+          onMaxContextSizeChange={setMaxContextSize}
+          minInputCost={minInputCost}
+          onMinInputCostChange={setMinInputCost}
+          maxInputCost={maxInputCost}
+          onMaxInputCostChange={setMaxInputCost}
+          minOutputCost={minOutputCost}
+          onMinOutputCostChange={setMinOutputCost}
+          maxOutputCost={maxOutputCost}
+          onMaxOutputCostChange={setMaxOutputCost}
+          cachingEnabled={cachingEnabled}
+          onCachingEnabledChange={setCachingEnabled}
+          selectedType={selectedType}
+          onTypeChange={setSelectedType}
+          inputFormats={inputFormats}
+          outputFormats={outputFormats}
+          capabilities={capabilities}
+          types={types}
+          contextSizeRange={contextSizeRange}
+          inputCostRange={inputCostRange}
+          outputCostRange={outputCostRange}
+        />
+
+        {/* View Mode Toggle */}
+        {showViewModeToggle && (
+          <div className="flex justify-between items-center">
+            <p className="text-sm text-muted-foreground">
+              Showing {filteredModels.length} of {groupedModels.length} {groupByName ? 'models' : 'models'}
+            </p>
+            <div className="flex gap-2">
               <Button
-                variant={configuredFilter === 'available' ? 'secondary' : 'ghost'}
+                variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
                 size="sm"
-                onClick={() => setConfiguredFilter('available')}
-                className="text-xs h-6 px-2"
+                onClick={() => setViewMode('grid')}
               >
-                Available
+                <LayoutGrid className="w-4 h-4 mr-2" />
+                Grid
               </Button>
               <Button
-                variant={configuredFilter === 'needs-config' ? 'secondary' : 'ghost'}
+                variant={viewMode === 'table' ? 'secondary' : 'ghost'}
                 size="sm"
-                onClick={() => setConfiguredFilter('needs-config')}
-                className="text-xs h-6 px-2"
+                onClick={() => setViewMode('table')}
               >
-                Need to be configured
+                <List className="w-4 h-4 mr-2" />
+                Table
               </Button>
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Existing Filters */}
-      <LocalModelSearchFilters
-        searchTerm={searchTerm}
-        onSearchChange={setSearchTerm}
-        selectedProviders={selectedProviders}
-        onProvidersChange={setSelectedProviders}
-        selectedOwners={selectedOwners}
-        onOwnersChange={setSelectedOwners}
-        providers={uniqueProviders}
-        owners={owners}
-        resultsCount={filteredModels.length}
-        totalCount={models.length}
-        groupByName={groupByName}
-        onGroupByNameChange={setGroupByName}
-        // New comprehensive filter props
-        selectedInputFormats={selectedInputFormats}
-        onInputFormatsChange={setSelectedInputFormats}
-        selectedOutputFormats={selectedOutputFormats}
-        onOutputFormatsChange={setSelectedOutputFormats}
-        selectedCapabilities={selectedCapabilities}
-        onCapabilitiesChange={setSelectedCapabilities}
-        minContextSize={minContextSize}
-        onMinContextSizeChange={setMinContextSize}
-        maxContextSize={maxContextSize}
-        onMaxContextSizeChange={setMaxContextSize}
-        minInputCost={minInputCost}
-        onMinInputCostChange={setMinInputCost}
-        maxInputCost={maxInputCost}
-        onMaxInputCostChange={setMaxInputCost}
-        minOutputCost={minOutputCost}
-        onMinOutputCostChange={setMinOutputCost}
-        maxOutputCost={maxOutputCost}
-        onMaxOutputCostChange={setMaxOutputCost}
-        cachingEnabled={cachingEnabled}
-        onCachingEnabledChange={setCachingEnabled}
-        selectedType={selectedType}
-        onTypeChange={setSelectedType}
-        inputFormats={inputFormats}
-        outputFormats={outputFormats}
-        capabilities={capabilities}
-        types={types}
-        contextSizeRange={contextSizeRange}
-        inputCostRange={inputCostRange}
-        outputCostRange={outputCostRange}
-      />
-
-      {/* View Mode Toggle */}
-      {showViewModeToggle && (
-        <div className="flex justify-between items-center">
-          <p className="text-sm text-muted-foreground">
-            Showing {filteredModels.length} of {groupedModels.length} {groupByName ? 'models' : 'models'}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => setViewMode('grid')}
-            >
-              <LayoutGrid className="w-4 h-4 mr-2" />
-              Grid
-            </Button>
-            <Button
-              variant={viewMode === 'table' ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => setViewMode('table')}
-            >
-              <List className="w-4 h-4 mr-2" />
-              Table
-            </Button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Models Display */}
       {viewMode === 'grid' ? (
@@ -613,6 +567,7 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
             <LocalModelCard
               key={`${model.inference_provider.provider}/${model.model}-${index}`}
               model={model}
+              providerStatusMap={providerStatusMap}
             />
           ))}
         </div>

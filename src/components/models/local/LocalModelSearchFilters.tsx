@@ -22,6 +22,8 @@ interface LocalModelSearchFiltersProps {
   totalCount?: number;
   groupByName?: boolean;
   onGroupByNameChange?: (value: boolean) => void;
+  showConfiguredOnly?: boolean;
+  onShowConfiguredOnlyChange?: (value: boolean) => void;
   // New optional filter props
   selectedInputFormats?: string[];
   onInputFormatsChange?: (formats: string[]) => void;
@@ -65,6 +67,8 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
   owners,
   groupByName = false,
   onGroupByNameChange,
+  showConfiguredOnly = false,
+  onShowConfiguredOnlyChange,
   // New optional props with defaults
   selectedInputFormats = [],
   onInputFormatsChange = () => {},
@@ -291,14 +295,17 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
           </label>
         )}
 
-        {/* Clear Filters */}
-        {hasActiveFilters && (
-          <button
-            onClick={clearAllFilters}
-            className="ml-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Clear all
-          </button>
+        {/* Configured Filter */}
+        {onShowConfiguredOnlyChange && (
+          <label className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
+            <input
+              type="checkbox"
+              checked={showConfiguredOnly}
+              onChange={(e) => onShowConfiguredOnlyChange(e.target.checked)}
+              className="w-4 h-4 rounded border-border bg-background text-[rgb(var(--theme-500))] focus:ring-ring focus:ring-2 cursor-pointer"
+            />
+            <span>Configured</span>
+          </label>
         )}
       </div>
 

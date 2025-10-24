@@ -88,11 +88,11 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
       </div>
 
       {/* Desktop Table View */}
-      <div className="hidden sm:block bg-card border border-border rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <div className="w-full">
-            {/* Table Header */}
-            <div className="bg-secondary border-b border-border px-4 py-3">
+      <div className="hidden sm:block">
+        {/* Table Header - Sticky positioned below the filter container */}
+        <div className="sticky top-32 z-[5] bg-secondary border border-border rounded-t-lg px-4 py-3 shadow-sm">
+          <div className="overflow-x-auto">
+            <div className="w-full">
               <div className="flex items-center text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 <button
                   onClick={() => handleSort('id')}
@@ -146,9 +146,14 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                 </button>
               </div>
             </div>
+          </div>
+        </div>
 
-            {/* Table Body */}
-            <div className="divide-y divide-border">
+        {/* Table Body */}
+        <div className="bg-card border border-t-0 border-border rounded-b-lg overflow-hidden">
+          <div className="overflow-x-auto">
+            <div className="w-full">
+              <div className="divide-y divide-border">
               {sortedModels.map((model, index) => {
                 // Get model group if available, otherwise treat as single model
                 const modelGroup = (model as any)._modelGroup || [model];
@@ -270,6 +275,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                   </TooltipProvider>
                 );
               })}
+              </div>
             </div>
           </div>
         </div>
