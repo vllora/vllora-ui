@@ -10,11 +10,15 @@ import { ThemeProvider } from "./components/theme-provider"
 import { ProjectProvider } from "./contexts/ProjectContext"
 import { LocalModelsProvider } from "./contexts/LocalModelsContext"
 import { Toaster } from "sonner"
-import { useEffect } from "react"
+import { useEffect, lazy, Suspense } from "react"
 import { applyTheme, getThemeFromStorage } from "./themes/themes"
 import { ProviderKeysProvider } from "./contexts/ProviderKeysContext"
 import { AuthProvider } from "./contexts/AuthContext"
 import { ProtectedRoute } from "./components/ProtectedRoute"
+import { LocalModelsSkeletonLoader } from "./components/models/local/LocalModelsSkeletonLoader"
+
+// Lazy load the models page
+const ModelsPage = lazy(() => import("./pages/models").then(module => ({ default: module.ModelsPage })))
 
 function App() {
   useEffect(() => {
@@ -35,9 +39,23 @@ function App() {
               {/* Protected routes */}
               <Route path="/" element={<ProtectedRoute><ProjectProvider><Layout /></ProjectProvider></ProtectedRoute>}>
                 {/* Project-scoped routes (now using query string ?project_id=...) */}
-                <Route index element={<HomePage />} />
+                <Route index element={<ProviderKeysProvider><HomePage /></ProviderKeysProvider>} />
                 <Route path="chat" element={<ThreadsAndTracesPage />} />
                 <Route path="analytics" element={<AnalyticsPage />} />
+                <Route 
+                  path="models" 
+                  element={
+                    <Suspense fallback={
+                      <section className="flex-1 flex flex-col overflow-auto bg-background text-foreground w-full">
+                        <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-12">
+                          <LocalModelsSkeletonLoader viewMode="table" count={12} />
+                        </div>
+                      </section>
+                    }>
+                      <ProviderKeysProvider><ModelsPage /></ProviderKeysProvider>
+                    </Suspense>
+                  } 
+                />
 
                 {/* Global routes */}
                 <Route path="projects" element={<ProjectsPage />} />

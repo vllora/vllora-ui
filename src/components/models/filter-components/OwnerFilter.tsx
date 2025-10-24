@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { ChevronDown, Check, Search, User } from 'lucide-react';
+import { ChevronDown, Check, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 
 interface OwnerFilterProps {
   owners: string[];
@@ -47,14 +48,14 @@ export const OwnerFilter: React.FC<OwnerFilterProps> = ({
           transition-all duration-200 cursor-pointer font-medium`}
       >
         {selectedOwners.length === 1 && (
-          <User className="w-3.5 h-3.5" />
+          <ProviderIcon provider_name={selectedOwners[0]} className="w-3.5 h-3.5" />
         )}
         <span>
           {selectedOwners.length === 0
-            ? 'Owners'
+            ? 'Publisher'
             : selectedOwners.length === 1
             ? selectedOwners[0]
-            : `${selectedOwners.length} Owners`
+            : `${selectedOwners.length} Publishers`
           }
         </span>
         {selectedOwners.length > 0 && (
@@ -82,7 +83,7 @@ export const OwnerFilter: React.FC<OwnerFilterProps> = ({
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search owners..."
+                  placeholder="Search publishers..."
                   className="w-full pl-8 pr-3 py-1.5 bg-zinc-800/50 text-white text-sm rounded
                     border border-zinc-700/50 focus:border-[rgba(var(--theme-500),0.5)] focus:outline-none focus:ring-2 focus:ring-theme-500/20
                     placeholder-zinc-500"
@@ -91,7 +92,7 @@ export const OwnerFilter: React.FC<OwnerFilterProps> = ({
               </div>
             </div>
 
-            {/* All Owners Option */}
+            {/* All Publishers Option */}
             <button
               onClick={() => {
                 setSelectedOwners([]);
@@ -99,11 +100,11 @@ export const OwnerFilter: React.FC<OwnerFilterProps> = ({
               }}
               className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-800/50 transition-colors flex items-center justify-between"
             >
-              <span className="text-zinc-300">All Owners</span>
+              <span className="text-zinc-300">All Publishers</span>
               {selectedOwners.length === 0 && <Check className="w-4 h-4 text-[rgb(var(--theme-400))]" />}
             </button>
 
-            {/* Owner List */}
+            {/* Publisher List */}
             <div className="border-t border-zinc-700/50 max-h-48 overflow-y-auto">
               {filteredOwners.length > 0 ? (
                 filteredOwners.map(owner => (
@@ -119,9 +120,7 @@ export const OwnerFilter: React.FC<OwnerFilterProps> = ({
                     className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-800/50 transition-colors flex items-center justify-between group"
                   >
                     <div className="flex items-center gap-2">
-                      <div className="p-1 rounded bg-zinc-800/30 group-hover:bg-zinc-700/50 transition-colors">
-                        <User className="w-4 h-4 text-zinc-400" />
-                      </div>
+                      <ProviderIcon provider_name={owner} className="w-5 h-5" />
                       <span className="text-zinc-300">{owner}</span>
                     </div>
                     {selectedOwners.includes(owner) && <Check className="w-4 h-4 text-[rgb(var(--theme-400))]" />}
@@ -129,7 +128,7 @@ export const OwnerFilter: React.FC<OwnerFilterProps> = ({
                 ))
               ) : (
                 <div className="px-3 py-4 text-center text-sm text-zinc-500">
-                  No owners found
+                  No publishers found
                 </div>
               )}
             </div>
