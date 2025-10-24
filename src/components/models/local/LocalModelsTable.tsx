@@ -171,7 +171,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                         <div className="flex items-center gap-2">
                           <ProviderIcon
                             provider_name={model.model_provider}
-                            className="w-5 h-5 flex-shrink-0"
+                            className="w-4 h-4 flex-shrink-0"
                           />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
@@ -236,7 +236,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                           capabilities={model.capabilities}
                           inputFormats={model.input_formats}
                           outputFormats={model.output_formats}
-                          parameters={model.parameters}
+                          parameters={(model as any).parameters}
                           maxDisplay={10}
                         />
                       </div>
@@ -251,7 +251,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                                   <div className="flex items-center gap-1">
                                     <ProviderIcon
                                       provider_name={provider}
-                                      className="w-6 h-6"
+                                      className="w-5 h-5"
                                     />
                                     {providers.length === 1 && (
                                       <span className="text-xs text-foreground/80 truncate" title={provider}>

@@ -43,7 +43,7 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model, providerS
   return (
     <TooltipProvider>
       <div className="relative group overflow-hidden rounded-xl bg-zinc-900/50 border border-zinc-800/50 hover:border-zinc-700 transition-all duration-300">
-        <div className="p-5">
+        <div className="p-4">
           {/* Header Section */}
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
@@ -53,7 +53,7 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model, providerS
                   <div className="p-1 bg-zinc-800/30 rounded-lg group-hover:bg-zinc-800/50 transition-colors relative z-10">
                     <ProviderIcon
                       provider_name={modelGroup[0].model_provider}
-                      className="w-6 h-6"
+                      className="w-5 h-5"
                     />
                   </div>
                 </TooltipTrigger>
@@ -69,7 +69,7 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model, providerS
                     <TooltipTrigger asChild>
                       <h3
                         onClick={copyModelId}
-                        className="text-base font-semibold text-white hover:text-zinc-300 transition-colors cursor-pointer truncate"
+                        className="text-sm font-semibold text-white hover:text-zinc-300 transition-colors cursor-pointer truncate"
                       >
                         {modelName}
                       </h3>
@@ -84,9 +84,9 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model, providerS
                     title={copiedModelName ? "Copied!" : "Copy model ID"}
                   >
                     {copiedModelName ? (
-                      <Check className="w-3.5 h-3.5 text-green-400" />
+                      <Check className="w-3 h-3 text-green-400" />
                     ) : (
-                      <Copy className="w-3.5 h-3.5 text-zinc-400 hover:text-white" />
+                      <Copy className="w-3 h-3 text-zinc-400 hover:text-white" />
                     )}
                   </button>
                 </div>
@@ -95,10 +95,10 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model, providerS
           </div>
 
           {/* Description Section */}
-          <div className="mt-3 mb-4">
+          <div className="mt-2 mb-3">
             <Tooltip>
               <TooltipTrigger asChild>
-                <p className="text-sm text-zinc-400 leading-relaxed line-clamp-2 cursor-help">
+                <p className="text-xs text-zinc-400 leading-relaxed line-clamp-2 cursor-help">
                   {model.description}
                 </p>
               </TooltipTrigger>
@@ -109,7 +109,7 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model, providerS
           </div>
 
           {/* Main Info Section - 3 Columns */}
-          <div className="grid grid-cols-3 gap-4 pt-3 border-t border-zinc-800/50">
+          <div className="grid grid-cols-3 gap-3 pt-2.5 border-t border-zinc-800/50">
             {/* Providers Column - Left Aligned */}
             <div className="space-y-1">
               <p className="text-xs text-zinc-500">Providers</p>
@@ -141,7 +141,7 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model, providerS
                   capabilities={model.capabilities}
                   inputFormats={model.input_formats}
                   outputFormats={model.output_formats}
-                  parameters={model.parameters}
+                  parameters={(model as any).parameters}
                   maxDisplay={10}
                 />
               </div>
@@ -149,7 +149,7 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model, providerS
           </div>
 
           {/* Bottom Info Section */}
-          <div className="space-y-2 mt-4 pt-3 border-t border-zinc-800/50">
+          <div className="space-y-1.5 mt-3 pt-2.5 border-t border-zinc-800/50">
             <div className="flex items-center justify-between text-xs">
               <span className="text-zinc-500">Context</span>
               <span className="text-zinc-300 font-medium">

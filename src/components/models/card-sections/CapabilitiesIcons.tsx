@@ -32,17 +32,17 @@ export const CapabilitiesIcons: React.FC<CapabilitiesIconsProps> = ({
   }
 
   return (
-    <div className={`flex items-center gap-1.5 ${className}`}>
+    <div className={`flex items-center gap-0.5 ${className}`}>
       {visibleCapabilities.map((capability, index) => {
         const IconComponent = capability.icon;
         
         return (
           <Tooltip key={capability.label}>
             <TooltipTrigger asChild>
-              <div className="flex items-center justify-center w-6 h-6">
+              <div className="flex items-center justify-center w-5 h-5">
                 <IconComponent 
                   className={cn(
-                    "w-5 h-5 transition-colors",
+                    "w-4 h-4 transition-colors",
                     capability.className || "text-zinc-400"
                   )} 
                 />
@@ -61,7 +61,7 @@ export const CapabilitiesIcons: React.FC<CapabilitiesIconsProps> = ({
       {remainingCount > 0 && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="flex items-center justify-center w-6 h-6">
+            <div className="flex items-center justify-center w-5 h-5">
               <span className="text-xs text-zinc-500 font-medium">
                 +{remainingCount}
               </span>

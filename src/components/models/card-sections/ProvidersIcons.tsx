@@ -29,17 +29,17 @@ export const ProvidersIcons: React.FC<ProvidersIconsProps> = ({
   const remainingCount = Math.max(0, providers.length - maxDisplay);
 
   return (
-    <div className={`flex items-center gap-1.5 ${className}`}>
+    <div className={`flex items-center gap-1 ${className}`}>
       {visibleProviders.map((provider) => {
         const isConfigured = providerStatusMap?.get(provider.toLowerCase()) ?? false;
         
         return (
           <Tooltip key={provider}>
             <TooltipTrigger asChild>
-              <div className="flex items-center justify-center w-6 h-6">
+              <div className="flex items-center justify-center w-5 h-5">
                 <ProviderIcon 
                   provider_name={provider}
-                  className="w-6 h-6"
+                  className="w-5 h-5"
                 />
               </div>
             </TooltipTrigger>
@@ -77,7 +77,7 @@ export const ProvidersIcons: React.FC<ProvidersIconsProps> = ({
       {remainingCount > 0 && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="flex items-center justify-center w-6 h-6">
+            <div className="flex items-center justify-center w-5 h-5">
               <span className="text-xs text-zinc-500 font-medium">
                 +{remainingCount}
               </span>

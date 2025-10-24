@@ -1,6 +1,6 @@
-import { AlertCircle, RefreshCw, Server, MessageSquare, BookOpen, ExternalLink, ChevronRight } from 'lucide-react';
+import { AlertCircle, RefreshCw, Server, MessageSquare, BookOpen, ExternalLink, ChevronRight, ArrowRight } from 'lucide-react';
 import { useMemo } from 'react';
-import { LocalModelsExplorer } from '@/components/models/local/LocalModelsExplorer';
+import { LocalModelCard } from '@/components/models/local/LocalModelCard';
 import { LocalModelsSkeletonLoader } from '@/components/models/local/LocalModelsSkeletonLoader';
 import { LocalModelsConsumer } from '@/contexts/LocalModelsContext';
 import { Button } from '@/components/ui/button';
@@ -11,46 +11,61 @@ import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { ProviderCredentialModal } from '@/pages/settings/ProviderCredentialModal';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { useNavigate } from 'react-router-dom';
+import { LocalModel } from '@/types/models';
 
-// Helper function to determine model type based on provider info
-function getModelType(providerName: string, providersData: any[]): 'remote' | 'opensource' | 'local' | 'unknown' {
-  const provider = providersData.find(p => p.name.toLowerCase() === providerName.toLowerCase());
-  
-  if (!provider) {
-    return 'unknown';
-  }
-  
-  // Use provider_type if available
-  if (provider.provider_type) {
-    const type = provider.provider_type.toLowerCase();
-    if (type.includes('api_key') || type.includes('aws') || type.includes('vertex')) {
-      return 'remote';
-    } else if (type.includes('local') || type.includes('ollama') || type.includes('self-hosted')) {
-      return 'local';
-    } else if (type.includes('opensource') || type.includes('open-source')) {
-      return 'opensource';
+// Helper function to get top models based on benchmark ranking
+function getTopModelsByBenchmark(models: LocalModel[], limit: number = 12): LocalModel[] {
+  // First, sort all models by release date (newest first)
+  const sortedByDate = [...models].sort((a, b) => {
+    const dateA = new Date(a.release_date || a.langdb_release_date || 0).getTime();
+    const dateB = new Date(b.release_date || b.langdb_release_date || 0).getTime();
+    return dateB - dateA; // Newest first
+  });
+
+  // Filter models that have benchmark info with ranks
+  const modelsWithRank = sortedByDate.filter(m => 
+    m.benchmark_info?.rank && Object.keys(m.benchmark_info.rank).length > 0
+  );
+
+  // Get all unique benchmark categories
+  const allCategories = new Set<string>();
+  modelsWithRank.forEach(m => {
+    if (m.benchmark_info?.rank) {
+      Object.keys(m.benchmark_info.rank).forEach(cat => allCategories.add(cat));
     }
+  });
+
+  // For each category, get top 5 models (by rank, lower is better)
+  const selectedModelNames = new Set<string>();
+  
+  allCategories.forEach(category => {
+    const modelsInCategory = modelsWithRank
+      .filter(m => m.benchmark_info?.rank?.[category] !== undefined)
+      .sort((a, b) => {
+        const rankA = a.benchmark_info?.rank?.[category] || Infinity;
+        const rankB = b.benchmark_info?.rank?.[category] || Infinity;
+        return rankA - rankB;
+      })
+      .slice(0, 5);
+
+    // Collect model names (will be deduplicated by Set)
+    modelsInCategory.forEach(model => {
+      selectedModelNames.add(model.model);
+    });
+  });
+
+  // Now get ALL providers for each selected model name from the full sorted list
+  const uniqueTopModels = sortedByDate.filter(m => selectedModelNames.has(m.model));
+
+  // If we don't have enough model instances, add more from sorted by date
+  if (uniqueTopModels.length < limit) {
+    const additionalModels = sortedByDate
+      .filter(m => !selectedModelNames.has(m.model))
+      .slice(0, limit - uniqueTopModels.length);
+    return [...uniqueTopModels, ...additionalModels];
   }
-  
-  // Fallback to known remote providers (temporary until backend provides better metadata)
-  const knownRemoteProviders = [
-    'openai', 'anthropic', 'google', 'gemini', 'bedrock', 'azure', 'vertexai', 
-    'cohere', 'mistral', 'groq', 'deepseek', 'xai', 'zai', 'fireworksai', 
-    'deepinfra', 'together-ai', 'togetherai', 'openrouter', 'parasail', 
-    'perplexity', 'lambda', 'huggingface', 'replicate', 'banana', 'modal',
-    'runpod', 'vast', 'beam', 'beam.cloud', 'octoai', 'octo', 'baseten',
-    'cerebrium', 'infermatic', 'infermaticai', 'nousresearch', 'pygmalionai',
-    'upstage', 'minimax', 'moonshot', 'stepfun', 'qwen', 'bytedance', 'baidu',
-    'tencent', 'liquid', 'mancer', 'switchpoint', 'agentica', 'aionlabs',
-    'arcee', 'arli', 'inflection', 'amazon', 'microsoft', 'nvidia', 'meta'
-  ];
-  
-  if (knownRemoteProviders.includes(providerName.toLowerCase())) {
-    return 'remote';
-  }
-  
-  // Default to unknown for now
-  return 'unknown';
+
+  return uniqueTopModels;
 }
 
 export function HomePage() {
@@ -67,6 +82,33 @@ export function HomePage() {
     });
     return map;
   }, [providers]);
+
+  // Get top models by benchmark ranking (4 columns × 3 rows = 12 cards)
+  const topModels = useMemo(() => {
+    const targetCardCount = 12;
+    const selectedModels = getTopModelsByBenchmark(localModels, targetCardCount * 3); // Get more to ensure we have enough after grouping
+    
+    // Group by model name (like LocalModelsExplorer does)
+    const groups = new Map<string, LocalModel[]>();
+    selectedModels.forEach(model => {
+      const modelName = model.model;
+      if (!groups.has(modelName)) {
+        groups.set(modelName, []);
+      }
+      groups.get(modelName)!.push(model);
+    });
+
+    // Convert to array with _modelGroup property for the card component
+    const groupedModels = Array.from(groups.entries()).map(([modelName, modelGroup]) => {
+      const firstModel = { ...modelGroup[0] };
+      (firstModel as any)._modelGroup = modelGroup;
+      (firstModel as any)._modelName = modelName;
+      return firstModel;
+    });
+
+    // Return exactly 12 cards (4 × 3 grid)
+    return groupedModels.slice(0, targetCardCount);
+  }, [localModels]);
 
   return (
     <section className="flex-1 flex flex-col overflow-auto bg-background text-foreground w-full">
@@ -121,11 +163,13 @@ export function HomePage() {
         {/* Models Section */}
         <div className="mt-6">
           <div className="mb-6">
-            <h2 className="text-2xl font-bold mb-2">Available Models</h2>
             <div className="flex items-center justify-between">
-              <p className="text-muted-foreground">
-                Browse and manage your AI models
-              </p>
+              <div>
+                <h2 className="text-2xl font-bold mb-2">Top Models</h2>
+                <p className="text-muted-foreground">
+                  Discover high-performing AI models
+                </p>
+              </div>
               <div className="flex items-center gap-2">
                 <Server className="w-4 h-4 text-[rgb(var(--theme-500))]" />
                 <span className="text-sm text-muted-foreground">
@@ -138,7 +182,7 @@ export function HomePage() {
           {/* Loading State */}
           {localLoading && (
             <div className="flex flex-col space-y-6">
-              <LocalModelsSkeletonLoader viewMode="grid" count={9} />
+              <LocalModelsSkeletonLoader viewMode="grid" count={12} />
             </div>
           )}
 
@@ -161,18 +205,30 @@ export function HomePage() {
             </div>
           )}
 
-          {/* Local Models Explorer */}
+          {/* Top Models Grid */}
           {!localLoading && !localError && (
-            <div className="relative">
-              <LocalModelsExplorer
-                models={localModels}
-                showViewModeToggle={true}
-                showStats={true}
-                statsTitle="Models"
-                providers={providers}
-                providerStatusMap={providerStatusMap}
-                getModelType={getModelType}
-              />
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {topModels.map((model, index) => (
+                  <LocalModelCard
+                    key={`${model.inference_provider.provider}/${model.model}-${index}`}
+                    model={model}
+                    providerStatusMap={providerStatusMap}
+                  />
+                ))}
+              </div>
+
+              {/* View All Models Button */}
+              <div className="flex justify-end pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => navigate('/models')}
+                  className="flex items-center gap-2"
+                >
+                  View All Models
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           )}
         </div>

@@ -20,32 +20,32 @@ const ModalityBadge: React.FC<{ kind: string; type: 'input' | 'output' }> = ({ k
     switch (kind.toLowerCase()) {
       case 'text':
         return (
-          <span className="inline-flex items-center justify-center w-6 h-6">
-            <Type className="w-5 h-5 text-zinc-300" />
+          <span className="inline-flex items-center justify-center w-5 h-5">
+            <Type className="w-4 h-4 text-zinc-300" />
           </span>
         );
       case 'image':
         return (
-          <span className="inline-flex items-center justify-center w-6 h-6">
-            <ImageIcon className="w-5 h-5 text-zinc-300" />
+          <span className="inline-flex items-center justify-center w-5 h-5">
+            <ImageIcon className="w-4 h-4 text-zinc-300" />
           </span>
         );
       case 'audio':
         return (
-          <span className="inline-flex items-center justify-center w-6 h-6">
-            <AudioLines className="w-5 h-5 text-zinc-300" />
+          <span className="inline-flex items-center justify-center w-5 h-5">
+            <AudioLines className="w-4 h-4 text-zinc-300" />
           </span>
         );
       case 'video':
         return (
-          <span className="inline-flex items-center justify-center w-6 h-6">
-            <Video className="w-5 h-5 text-zinc-300" />
+          <span className="inline-flex items-center justify-center w-5 h-5">
+            <Video className="w-4 h-4 text-zinc-300" />
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center justify-center w-6 h-6">
-            <Type className="w-5 h-5 text-zinc-300" />
+          <span className="inline-flex items-center justify-center w-5 h-5">
+            <Type className="w-4 h-4 text-zinc-300" />
           </span>
         );
     }
@@ -72,15 +72,15 @@ const Modalities: React.FC<{ input: string[]; output: string[] }> = ({ input, ou
   const uniqueOutput = output.filter((format, index, array) => array.indexOf(format) === index);
 
   return (
-    <div className="inline-flex items-center gap-1.5">
+    <div className="inline-flex items-center gap-0.5">
       {/* Left side - input modalities */}
       {uniqueInput.map((format, i) => (
         <ModalityBadge key={`in-${format}-${i}`} kind={format} type="input" />
       ))}
       
       {/* Center arrow - fixed position */}
-      <div className="flex items-center justify-center w-6 h-6">
-        <ArrowRight className="w-5 h-5 text-zinc-500 opacity-70" />
+      <div className="flex items-center justify-center w-4 h-5 -mx-0.5">
+        <ArrowRight className="w-3.5 h-3.5 text-zinc-500 opacity-70" />
       </div>
       
       {/* Right side - output modalities */}

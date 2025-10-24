@@ -16,6 +16,7 @@ interface LocalModelsExplorerProps {
   providers?: ProviderInfo[];
   providerStatusMap?: Map<string, boolean>;
   getModelType?: (providerName: string, providersData: any[]) => 'remote' | 'opensource' | 'local' | 'unknown';
+  defaultView?: 'grid' | 'table';
 }
 
 export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
@@ -24,13 +25,17 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
   providers: providersData = [],
   providerStatusMap = new Map(),
   getModelType = () => 'unknown',
+  defaultView = 'grid',
 }) => {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Initialize state from URL params
+  // Initialize state from URL params, with fallback to defaultView
   const [viewMode, setViewMode] = useState<'grid' | 'table'>(() => {
     const view = searchParams.get('view');
-    return view === 'table' ? 'table' : 'grid';
+    if (view === 'table' || view === 'grid') {
+      return view;
+    }
+    return defaultView;
   });
   const [searchTerm, setSearchTerm] = useState(() => searchParams.get('search') || '');
   const [selectedProviders, setSelectedProviders] = useState<string[]>(() => {
@@ -100,11 +105,16 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
     // Start with existing search params to preserve things like project_id
     const params = new URLSearchParams(searchParams);
 
-    // Remove filter params that are not set
-    if (viewMode === 'grid') {
-      params.delete('view');
+    // Only sync view mode to URL if toggle is shown
+    if (showViewModeToggle) {
+      if (viewMode === 'grid') {
+        params.delete('view');
+      } else {
+        params.set('view', viewMode);
+      }
     } else {
-      params.set('view', viewMode);
+      // If toggle is hidden, remove view param from URL
+      params.delete('view');
     }
 
     if (!searchTerm) {
@@ -223,6 +233,7 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
     maxOutputCost,
     cachingEnabled,
     selectedType,
+    showViewModeToggle,
     // Note: searchParams and setSearchParams are intentionally not in deps to avoid infinite loops
   ]);
 
