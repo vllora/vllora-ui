@@ -28,7 +28,7 @@ export function ThreadsPageContent() {
   }, [threads, selectedThreadId]);
   // Read selectedModel from URL query string, fallback to default
   const selectedModel = useMemo(() => {
-    return searchParams.get('model')  || (currentThread?.input_models && currentThread.input_models.length > 0 ? currentThread.input_models[currentThread.input_models.length - 1] : undefined) || 'openai/o1-mini';
+    return searchParams.get('model') || (currentThread?.input_models && currentThread.input_models.length > 0 ? currentThread.input_models[currentThread.input_models.length - 1] : undefined) || 'openai/o1-mini';
   }, [searchParams, currentThread]);
 
   useEffect(() => {
@@ -88,7 +88,7 @@ export function ThreadsPageContent() {
       if (thread) {
         const updatedModels = thread.input_models.includes(modelId)
           ? thread.input_models
-          : [...thread.input_models, modelId];
+          : thread.is_from_local ? [modelId] : [...thread.input_models, modelId];
         updateThread(selectedThreadId, {
           input_models: updatedModels,
         });
@@ -108,12 +108,12 @@ export function ThreadsPageContent() {
     }
   }, [selectedThreadId, threads, handleSelectThread]);
 
-  
 
-  const isCurrentThreadDraft = useMemo(()=> {
-    if(threads && threads.length > 0) {
+
+  const isCurrentThreadDraft = useMemo(() => {
+    if (threads && threads.length > 0) {
       const thread = threads.find((t) => t.thread_id === selectedThreadId);
-      if(thread) {
+      if (thread) {
         return thread.is_from_local
       }
       return true;
