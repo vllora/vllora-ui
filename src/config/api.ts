@@ -45,9 +45,6 @@ export async function initApiConfig(): Promise<void> {
 }
 
 export const API_CONFIG = {
-  url: import.meta.env.VITE_LANGDB_API_URL || getBackendUrl(),
-  apiKey: import.meta.env.VITE_LANGDB_API_KEY,
-  projectId: import.meta.env.VITE_LANGDB_PROJECT_ID,
   connectLocal: import.meta.env.VITE_CONNECT_LOCAL === 'true',
 } as const;
 

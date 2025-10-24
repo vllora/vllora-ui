@@ -44,14 +44,11 @@ export const useWrapperHook = (props: {
   }, [selectedRunId, runMap]);
 
   const detailSpan = useMemo(() => {
-   console.log('===== detailSpanId', detailSpanId)
-   console.log('===== flattenSpans', flattenSpans)
    let result = detailSpanId
       ? flattenSpans.find(
           (span) => span.span_id === detailSpanId
         )
       : null;
-      console.log('===== result', result)
     return result;
   }, [detailSpanId, flattenSpans]);
   // Use ahooks useRequest for fetching conversation spans
