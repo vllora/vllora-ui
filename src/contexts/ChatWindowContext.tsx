@@ -160,6 +160,7 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     setRunHighlighted(null);
     setHoverSpanId(undefined);
     setHoveredRunId(null);
+    setError(undefined);
   }, []);
 
   // Calculate sum of all message metrics from displayMessages
