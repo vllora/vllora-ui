@@ -215,6 +215,7 @@ export interface ProviderIconProps extends SVGProps<SVGSVGElement> {
 }
 export const ProviderIcon = (props: ProviderIconProps) => {
   const { provider_name, className, fallbackProviderName, invert } = props;
+  
   const icon = provider_name ? getProviderIconByName(provider_name, fallbackProviderName) : providerIcons.default;
   let providerName = provider_name;
 

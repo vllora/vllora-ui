@@ -16,9 +16,6 @@ export function formatCost(cost: number): string {
   return `$${cost.toFixed(2)}`;
 }
 
-export function getModelFullName(model: ModelPricing): string {
-  return `${model.model_provider}/${model.model}`;
-}
 
 export function getPublisherFromModel(model: string): string {
   const parts = model.split('/');

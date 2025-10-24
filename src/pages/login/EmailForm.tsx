@@ -5,6 +5,7 @@ import { AlertCircle, LogIn, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { AuthConsumer } from '@/contexts/AuthContext';
+import { getBackendUrl } from '@/config/api';
 
 export function EmailForm() {
   const navigate = useNavigate();
@@ -12,13 +13,25 @@ export function EmailForm() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
     try {
+      // Track user session
+      const response = await fetch(`${getBackendUrl()}/session/track`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to track session. Please try again.');
+      }
+
       // Store email in localStorage
       setUserEmail(email);
 

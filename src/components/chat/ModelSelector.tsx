@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { LocalModelsConsumer } from '@/contexts/LocalModelsContext';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
@@ -8,6 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { getModelFullName } from '@/utils/model-fullname';
 
 interface ModelSelectorProps {
   selectedModel: string;
@@ -23,22 +24,23 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const getProviderFromModelId = (modelId: string) => {
-    return modelId.split('/')[0];
-  };
-
-
-
-  const getModelNameFromId = (modelId: string) => {
-    const parts = modelId.split('/');
-    return parts.length > 1 ? parts.slice(1).join('/') : modelId;
-  };
+  const getIconForModel = useCallback((modelId: string) => {
+    if(modelId.includes('/')){
+      return modelId.split('/')[0];
+    }
+    // find model that have same model_name 
+    const model = models.find((model) => model.model === modelId);
+    if(model){
+      return model.inference_provider.provider;
+    }
+    return '';
+  }, [models]);
 
   // Group models by model name (without provider prefix)
   const modelNameGroups = useMemo(() => {
     const groups: Record<string, typeof models> = {};
     models.forEach((model) => {
-      const modelName = getModelNameFromId(model.id);
+      const modelName = model.model;
       if (!groups[modelName]) {
         groups[modelName] = [];
       }
@@ -61,7 +63,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     const modelProviders = modelNameGroups[selectedProvider] || [];
     if (!searchTerm) return modelProviders;
     return modelProviders.filter((model) =>
-      getProviderFromModelId(model.id).toLowerCase().includes(searchTerm.toLowerCase())
+      model.inference_provider.provider.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [selectedProvider, modelNameGroups, searchTerm]);
 
@@ -77,10 +79,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 
     // If only one provider offers this model, select it directly
     if (availableModels.length === 1) {
-      handleModelSelect(availableModels[0].id);
+      handleModelSelect(modelName);
       return;
     }
-
+     onModelChange?.(modelName);
     // Otherwise, show provider selection
     setSelectedProvider(modelName);
     setSearchTerm('');
@@ -104,10 +106,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       <DropdownMenuTrigger asChild>
         <div className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer w-[200px] truncate">
           <ProviderIcon
-            provider_name={getProviderFromModelId(selectedModel)}
+            provider_name={getIconForModel(selectedModel)}
             className="w-4 h-4 flex-shrink-0"
           />
-          <span className="truncate flex-1">{getModelNameFromId(selectedModel)}</span>
+          <span className="truncate flex-1">{selectedModel.includes('/') ? selectedModel.split('/')[1] : selectedModel}</span>
           <ChevronDown className={`w-4 h-4 transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`} />
         </div>
       </DropdownMenuTrigger>
@@ -170,14 +172,18 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           ) : (
             // Provider Selection View (Step 2)
             filteredProviders.length > 0 ? (
-              filteredProviders.map((model) => {
-                const provider = getProviderFromModelId(model.id);
+              filteredProviders.map((model, idx) => {
+                const provider = model.inference_provider.provider;
                 return (
                   <DropdownMenuItem
-                    key={model.id}
-                    onSelect={() => handleModelSelect(model.id)}
+                    key={`${model.model_provider}-${idx}`}
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      let modelFullName = getModelFullName(model)   
+                      handleModelSelect(modelFullName)
+                    }}
                     className={`flex items-center gap-3 px-4 py-3 cursor-pointer ${
-                      model.id === selectedModel ? 'bg-accent/50' : ''
+                      getModelFullName(model) === selectedModel ? 'bg-accent/50' : ''
                     }`}
                   >
                     <ProviderIcon
@@ -186,7 +192,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                     />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-popover-foreground">{provider}</p>
-                      <p className="text-xs text-muted-foreground truncate">{model.owned_by}</p>
+                      <p className="text-xs text-muted-foreground truncate">{model.model_provider}</p>
                     </div>
                   </DropdownMenuItem>
                 );
