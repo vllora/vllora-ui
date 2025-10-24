@@ -83,15 +83,15 @@ export const TimelineRow = (props: TimelineRowProps) => {
         let isSelected = selectedSpanId && span.span_id === selectedSpanId
         let isHovered = hoverSpanId && span.span_id === hoverSpanId
         if(isSelected && isHovered) {
-            return ' border border-amber-500 !border-l-2 !border-l-[rgb(var(--theme-500))]'
+            return "bg-amber-500/5 border border-amber-500/40 !border-l-4 !border-l-amber-500 shadow-md shadow-amber-500/10";
         }
         if(isSelected){
-            return "border-l-2 !border-l-[rgb(var(--theme-500))]";
+            return "border border-transparent !border-l-4 !border-l-[rgb(var(--theme-500))]";
         }
         if(isHovered){
-            return "border-l-1 border border-amber-500";
+            return "bg-amber-500/5 border border-amber-500/40 !border-l-4 !border-l-amber-500 shadow-md shadow-amber-500/10";
         }
-        return "hover:bg-[#151515] border-l-2 !border-l-transparent";
+        return "hover:bg-[#151515] border border-transparent !border-l-4 !border-l-transparent";
     }, [span.span_id, selectedSpanId, hoverSpanId]);
     
     return (
@@ -99,7 +99,7 @@ export const TimelineRow = (props: TimelineRowProps) => {
             key={`span-timeline-row-${span.span_id}`}
             data-span-id={span.span_id}
             className={cn(
-                "w-full group transition-colors hover:cursor-pointer",
+                "w-full group hover:cursor-pointer transition-all duration-300 ease-out",
                 classNameOfCurrentSpan
             )}
             onClick={(e) => {
