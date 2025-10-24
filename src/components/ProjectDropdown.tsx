@@ -44,7 +44,7 @@ export function ProjectDropdown({ onProjectChange }: ProjectDropdownProps) {
       <DropdownMenuTrigger asChild>
         <Button
           variant="outline"
-          className="flex items-center gap-3 min-w-[240px] justify-between backdrop-blur-xl bg-card/50 border-border/50 hover:bg-card/80 hover:border-[rgba(var(--theme-500),0.3)] transition-all duration-200 shadow-sm"
+          className="flex items-center gap-3 min-w-[240px] justify-between backdrop-blur-xl bg-card/50 border-border hover:bg-card/80 hover:border-[rgba(var(--theme-500),0.3)] transition-all duration-200 shadow-sm"
         >
           <div className="flex items-center gap-2 truncate">
             <FolderOpen className="h-4 w-4 flex-shrink-0 text-[rgb(var(--theme-500))]" />
