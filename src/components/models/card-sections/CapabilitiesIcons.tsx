@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { getModelCapabilities, Capability } from '@/utils/capabilityUtils';
+import { getModelCapabilities } from '@/utils/capabilityUtils';
 import { cn } from '@/lib/utils';
 
 interface CapabilitiesIconsProps {
@@ -33,7 +33,7 @@ export const CapabilitiesIcons: React.FC<CapabilitiesIconsProps> = ({
 
   return (
     <div className={`flex items-center gap-0.5 ${className}`}>
-      {visibleCapabilities.map((capability, index) => {
+      {visibleCapabilities.map((capability) => {
         const IconComponent = capability.icon;
         
         return (

@@ -6,7 +6,7 @@ import {
   ClockIcon,
   CurrencyDollarIcon,
 } from "@heroicons/react/24/outline";
-import { ChevronDown, ChevronRight, Download, Upload, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Upload} from "lucide-react";
 import {
   Tooltip,
   TooltipProvider,

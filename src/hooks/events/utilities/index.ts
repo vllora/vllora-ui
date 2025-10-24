@@ -23,7 +23,6 @@ import { handleToolCallArgsEvent } from "./tool-call-args";
 import { handleToolCallEndEvent } from "./tool-call-end";
 import { handleToolCallResultEvent } from "./tool-call-result";
 import { handleStateSnapshotEvent } from "./state-snapshot";
-import { handleStateDeltaEvent } from "./state-delta";
 import { handleMessagesSnapshotEvent } from "./messages-snapshot";
 import { handleRawEvent } from "./raw-event";
 import { handleCustomSpanStartEvent } from "./custom-span-start";
@@ -190,10 +189,6 @@ export const processEvent = (
   // === State Management Events ===
   if (event.type === "StateSnapshot") {
     return handleStateSnapshotEvent(currentSpans, event);
-  }
-
-  if (event.type === "StateDelta") {
-    return handleStateDeltaEvent(currentSpans, event, timestamp);
   }
 
   if (event.type === "MessagesSnapshot") {

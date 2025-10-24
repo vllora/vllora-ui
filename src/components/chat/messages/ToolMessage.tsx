@@ -11,7 +11,6 @@ import React, { useCallback, useMemo } from 'react';
 import { MessageDisplay } from '../MessageDisplay';
 import { ContentArrayDisplay } from './ContentArrayDisplay';
 import { formatMessageTimestamp } from '@/utils/dateUtils';
-import { MessageMetrics } from './MessageMetrics';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 import { ThreadsConsumer } from '@/contexts/ThreadsContext';

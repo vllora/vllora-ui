@@ -1,4 +1,3 @@
-import { getBackendUrl } from '@/config/api';
 import { api, handleApiResponse } from '@/lib/api-client';
 
 // Credentials types based on the Rust backend

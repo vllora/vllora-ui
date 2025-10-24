@@ -1,4 +1,3 @@
-import { getThreadsUrl } from '@/config/api';
 import { Thread } from '@/types/chat';
 import { apiClient, handleApiResponse } from '@/lib/api-client';
 
@@ -8,15 +7,6 @@ export interface QueryThreadsRequest {
   offset?: number;
 }
 
-// API response type (matches backend ThreadSpan structure)
-interface ThreadSpan {
-  thread_id: string;
-  start_time_us: number;
-  finish_time_us: number;
-  run_ids: string[];
-  input_models: string[];
-  cost: number;
-}
 
 interface ApiThreadsResponse {
   data: Thread[];
@@ -33,20 +23,6 @@ export interface QueryThreadsResponse {
     total: number;
     offset: number;
     limit: number;
-  };
-}
-
-/**
- * Transform API ThreadSpan to frontend Thread type
- */
-function transformThreadSpan(span: ThreadSpan): Thread {
-  return {
-    thread_id: span.thread_id,
-    start_time_us: span.start_time_us,
-    finish_time_us: span.finish_time_us,
-    run_ids: span.run_ids,
-    input_models: span.input_models,
-    cost: span.cost
   };
 }
 

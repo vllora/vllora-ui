@@ -1,4 +1,3 @@
-import { getRunsUrl } from '@/config/api';
 import { Pagination, RunDTO, Span, ModelCall, ToolCall, RouterCall, Attributes } from '@/types/common-type';
 import { apiClient, handleApiResponse } from '@/lib/api-client';
 

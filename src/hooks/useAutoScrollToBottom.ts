@@ -7,7 +7,7 @@ interface UseAutoScrollToBottomOptions {
 }
 
 interface UseAutoScrollToBottomResult<T extends HTMLElement> {
-  containerRef: RefObject<T>;
+  containerRef: RefObject<T | null>;
   isAtBottom: boolean;
   isScrollable: boolean;
   scrollToBottom: () => void;
@@ -21,7 +21,7 @@ export function useAutoScrollToBottom<T extends HTMLElement>(
     dependencies = [],
     threshold = 10,
   } = options;
-  const containerRef = useRef<T>(null);
+  const containerRef = useRef<T | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [isScrollable, setIsScrollable] = useState(false);
 

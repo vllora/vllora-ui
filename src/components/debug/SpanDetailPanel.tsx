@@ -1,9 +1,6 @@
 import React from 'react';
-import { X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Span } from '@/types/common-type';
 import {
-  getSpanTitle,
   getOperationIcon,
   getOperationIconColor,
   getOperationTitle,

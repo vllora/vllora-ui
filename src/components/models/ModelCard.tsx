@@ -6,7 +6,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { RankingsBadge } from '@/components/shared/RankingsBadge';
 import { CostDisplay } from '@/components/shared/CostDisplay';
 import { NewBadge } from '@/components/shared/NewBadge';
-import { ProvidersSection } from '@/components/home-page/TrendingModelsSection/ProvidersSection';
 import { ModalitiesDisplay } from '@/components/models/card-sections/ModalitiesDisplay';
 import { CapabilitiesIcons } from '@/components/models/card-sections/CapabilitiesIcons';
 import { ProvidersIcons } from '@/components/models/card-sections/ProvidersIcons';
@@ -22,7 +21,6 @@ export interface ModelCardProps {
 export const ModelCard: React.FC<ModelCardProps> = ({
   model,
   modelsGroup,
-  showPublisherProvider = false,
   showRanking = false
 }) => {
   const [copied, setCopied] = useState(false);
@@ -182,7 +180,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
             {/* Providers Column */}
             <div className="space-y-1">
               <p className="text-xs text-zinc-500">Providers</p>
-              <ProvidersIcons 
+              <ProvidersIcons
                 providers={uniqueProviders}
                 maxDisplay={2}
               />
@@ -191,7 +189,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
             {/* Modalities Column */}
             <div className="space-y-1">
               <p className="text-xs text-zinc-500">Modalities</p>
-              <ModalitiesDisplay 
+              <ModalitiesDisplay
                 inputFormats={model.input_formats}
                 outputFormats={model.output_formats}
               />
@@ -200,7 +198,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
             {/* Capabilities Column */}
             <div className="space-y-1">
               <p className="text-xs text-zinc-500">Capabilities</p>
-              <CapabilitiesIcons 
+              <CapabilitiesIcons
                 capabilities={model.capabilities}
                 inputFormats={model.input_formats}
                 outputFormats={model.output_formats}

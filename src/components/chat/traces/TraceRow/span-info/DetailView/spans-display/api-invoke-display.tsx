@@ -1,8 +1,6 @@
 import { BaseSpanUIDetailsDisplay, getParentCloudApiInvoke } from ".."
-import { getStatus } from "../index";
 import { ErrorViewer } from "../error-viewer";
 import { UsageViewer } from "../usage-viewer";
-import { BasicSpanInfo } from "../basic-span-info-section";
 import { useState } from "react";
 import { ResponseViewer } from "../response-viewer";
 import { InputViewer } from "../input_viewer";
@@ -29,7 +27,6 @@ export const ApiInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ApiInvoke
     const raw_response_json = raw_response_string ? tryParseJson(raw_response_string) : null;
     const raw_request_json = raw_request_string ? tryParseJson(raw_request_string) : null;
 
-    const status = getStatus(relatedSpans, span.span_id);
     const apiCloudInvokeSpan = getParentCloudApiInvoke(relatedSpans, span.span_id);
     const apiInvokeSpan = span
     const modelCallSpan = span

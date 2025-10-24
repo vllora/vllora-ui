@@ -206,7 +206,7 @@ export const ModelSearchFilters: React.FC<ModelSearchFiltersProps> = ({
 
           {/* Type Filter */}
           <TypeFilter
-            modelTypes={types}
+            types={types}
             selectedType={selectedType}
             setSelectedType={onTypeChange}
           />

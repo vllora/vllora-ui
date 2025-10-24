@@ -1,4 +1,3 @@
-import { API_CONFIG, getSpansUrl } from '@/config/api';
 import { Pagination, Span } from '@/types/common-type';
 import { apiClient, handleApiResponse } from '@/lib/api-client';
 

@@ -7,45 +7,6 @@ export interface MessageStructure {
   children: MessageStructure[];
 }
 
-/**
- * Deep equality check for MessageStructure arrays
- * Returns true if the structure is the same (span_ids and types match)
- */
-function areMessageStructuresEqual(
-  prev: MessageStructure[],
-  next: MessageStructure[]
-): boolean {
-  if (prev.length !== next.length) return false;
-
-  for (let i = 0; i < prev.length; i++) {
-    if (!areMessageStructureItemsEqual(prev[i], next[i])) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-function areMessageStructureItemsEqual(
-  prev: MessageStructure,
-  next: MessageStructure
-): boolean {
-  if (prev.span_id !== next.span_id || prev.type !== next.type) {
-    return false;
-  }
-
-  if (prev.children.length !== next.children.length) {
-    return false;
-  }
-
-  for (let i = 0; i < prev.children.length; i++) {
-    if (!areMessageStructureItemsEqual(prev.children[i], next.children[i])) {
-      return false;
-    }
-  }
-
-  return true;
-}
 
 const skipSpanNotRelatedToMessage = (span: Span) => {
   if(span.operation_name === 'tool') return false;

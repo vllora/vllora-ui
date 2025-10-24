@@ -17,7 +17,7 @@ export const useWrapperHook = (props: {
   // Use the runs pagination hook
   let runsPaginationState = useRunsPagination({ projectId, threadId, onRunsLoaded });
   // Use the span details hook
-  let spanDetailState = useSpanDetails({ projectId });
+  let spanDetailState = useSpanDetails();
 
   const { setLoadingSpansById, selectedRunId, detailSpanId } = spanDetailState;
 

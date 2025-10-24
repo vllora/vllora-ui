@@ -12,9 +12,7 @@ export const convertToTime = (dateString: string): Date => {
 
 export const sortThreads = (threads: Thread[]): Thread[] => {
   return [...threads].sort((a, b) => {
-    const dateA = convertToTime(a.updated_at);
-    const dateB = convertToTime(b.updated_at);
-    return dateB.getTime() - dateA.getTime();
+    return a.finish_time_us - b.finish_time_us;
   });
 };
 

@@ -2,14 +2,7 @@
  * Utility functions for detecting and mapping model capabilities to icons
  */
 
-import { 
-  FunctionSquare, 
-  Braces, 
-  Brain, 
-  Eye,
-  Zap,
-  DollarSign
-} from 'lucide-react';
+import { FunctionSquare, Braces, Brain, Eye } from "lucide-react";
 
 export interface Capability {
   icon: React.ComponentType<any>;
@@ -23,8 +16,8 @@ export interface Capability {
  */
 export const detectFunctionCalling = (capabilities?: string[]): boolean => {
   if (!capabilities) return false;
-  
-  return capabilities.includes('tools');
+
+  return capabilities.includes("tools");
 };
 
 /**
@@ -32,7 +25,7 @@ export const detectFunctionCalling = (capabilities?: string[]): boolean => {
  */
 export const detectStructuredOutput = (parameters?: any): boolean => {
   if (!parameters) return false;
-  
+
   // Check if structured_outputs parameter exists (it's an object in the API)
   return parameters?.structured_outputs !== undefined;
 };
@@ -42,26 +35,29 @@ export const detectStructuredOutput = (parameters?: any): boolean => {
  */
 export const detectReasoning = (capabilities?: string[]): boolean => {
   if (!capabilities) return false;
-  
-  return capabilities.includes('reasoning');
+
+  return capabilities.includes("reasoning");
 };
 
 /**
  * Detect if model supports vision
  */
-export const detectVision = (capabilities?: string[], inputFormats?: string[]): boolean => {
+export const detectVision = (
+  capabilities?: string[],
+  inputFormats?: string[]
+): boolean => {
   if (!capabilities) return false;
-  
+
   // Direct check for vision capability
-  if (capabilities.includes('vision')) {
+  if (capabilities.includes("vision")) {
     return true;
   }
-  
+
   // Also check if image formats are in input (vision implies image input capability)
-  const hasImageInput = inputFormats?.some(format => 
-    format.toLowerCase().includes('image')
+  const hasImageInput = inputFormats?.some((format) =>
+    format.toLowerCase().includes("image")
   );
-  
+
   return hasImageInput || false;
 };
 
@@ -71,7 +67,6 @@ export const detectVision = (capabilities?: string[], inputFormats?: string[]): 
 export const getModelCapabilities = (
   capabilities?: string[],
   inputFormats?: string[],
-  outputFormats?: string[],
   parameters?: any
 ): Capability[] => {
   const detectedCapabilities: Capability[] = [];
@@ -79,36 +74,36 @@ export const getModelCapabilities = (
   if (detectFunctionCalling(capabilities)) {
     detectedCapabilities.push({
       icon: FunctionSquare,
-      label: 'Function Calling',
-      description: 'Supports function calling and tool usage',
-      className: 'text-blue-400'
+      label: "Function Calling",
+      description: "Supports function calling and tool usage",
+      className: "text-blue-400",
     });
   }
 
   if (detectStructuredOutput(parameters)) {
     detectedCapabilities.push({
       icon: Braces,
-      label: 'Structured Output',
-      description: 'Supports JSON mode and structured outputs',
-      className: 'text-green-400'
+      label: "Structured Output",
+      description: "Supports JSON mode and structured outputs",
+      className: "text-green-400",
     });
   }
 
   if (detectReasoning(capabilities)) {
     detectedCapabilities.push({
       icon: Brain,
-      label: 'Reasoning',
-      description: 'Advanced reasoning and analysis capabilities',
-      className: 'text-yellow-400'
+      label: "Reasoning",
+      description: "Advanced reasoning and analysis capabilities",
+      className: "text-yellow-400",
     });
   }
 
   if (detectVision(capabilities, inputFormats)) {
     detectedCapabilities.push({
       icon: Eye,
-      label: 'Vision',
-      description: 'Image understanding and multimodal capabilities',
-      className: 'text-purple-400'
+      label: "Vision",
+      description: "Image understanding and multimodal capabilities",
+      className: "text-purple-400",
     });
   }
 
@@ -118,35 +113,35 @@ export const getModelCapabilities = (
 /**
  * Get capability icon and info by name
  */
-export const getCapabilityInfo = (capabilityName: string): Capability | null => {
+export const getCapabilityInfo = (
+  capabilityName: string
+): Capability | null => {
   const capabilities: Record<string, Capability> = {
-    'function_calling': {
+    function_calling: {
       icon: FunctionSquare,
-      label: 'Function Calling',
-      description: 'Supports function calling and tool usage',
-      className: 'text-blue-400'
+      label: "Function Calling",
+      description: "Supports function calling and tool usage",
+      className: "text-blue-400",
     },
-    'structured_output': {
+    structured_output: {
       icon: Braces,
-      label: 'Structured Output',
-      description: 'Supports JSON mode and structured outputs',
-      className: 'text-green-400'
+      label: "Structured Output",
+      description: "Supports JSON mode and structured outputs",
+      className: "text-green-400",
     },
-    'reasoning': {
+    reasoning: {
       icon: Brain,
-      label: 'Reasoning',
-      description: 'Advanced reasoning and analysis capabilities',
-      className: 'text-yellow-400'
+      label: "Reasoning",
+      description: "Advanced reasoning and analysis capabilities",
+      className: "text-yellow-400",
     },
-    'vision': {
+    vision: {
       icon: Eye,
-      label: 'Vision',
-      description: 'Image understanding and multimodal capabilities',
-      className: 'text-purple-400'
-    }
+      label: "Vision",
+      description: "Image understanding and multimodal capabilities",
+      className: "text-purple-400",
+    },
   };
 
   return capabilities[capabilityName.toLowerCase()] || null;
 };
-
-

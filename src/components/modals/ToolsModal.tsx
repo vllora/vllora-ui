@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Plug, Search, FileText, Database, Globe, Server, Loader2, AlertCircle } from 'lucide-react';
-import { useMCPConfigs, MCPConfig, MCPTool, fetchMCPTools, McpServerConfig } from '@/services/mcp-api';
+import { useMCPConfigs, MCPTool, fetchMCPTools, McpServerConfig } from '@/services/mcp-api';
 import { useState, useEffect } from 'react';
 
 interface ToolsModalProps {
@@ -24,23 +24,17 @@ export const ToolsModal: React.FC<ToolsModalProps> = ({
   toolsUsage,
   setToolsUsage
 }) => {
-  const { data: mcpData, loading, error, run: refetchMCPData } = useMCPConfigs({
-    onError: (err) => {
-      console.error('Failed to load MCP configs:', err);
-    },
-  });
+  const { data: mcpData, loading, error } = useMCPConfigs();
 
   const [toolsByServer, setToolsByServer] = useState<Record<string, MCPTool[]>>({});
   const [toolsLoading, setToolsLoading] = useState(false);
   const [toolsError, setToolsError] = useState<string | null>(null);
 
   const fetchTools = async (configId: string) => {
-    console.log('fetchTools called with configId:', configId);
     setToolsLoading(true);
     setToolsError(null);
     try {
       const fetchedToolsByServer = await fetchMCPTools(configId);
-      console.log('Fetched tools by server:', fetchedToolsByServer);
       setToolsByServer(fetchedToolsByServer);
       
       // Auto-select all tools by default
@@ -134,7 +128,6 @@ export const ToolsModal: React.FC<ToolsModalProps> = ({
     }
     
     setToolsUsage(newToolsUsage);
-    console.log('All tools unselected:', newToolsUsage);
   };
 
   const handleToggleTool = (toolName: string, serverName: string) => {
@@ -152,7 +145,7 @@ export const ToolsModal: React.FC<ToolsModalProps> = ({
       newToolsUsage.set(serverName, {
         ...currentConfig,
         selectedTools: isSelected
-          ? currentTools.filter(t => t !== toolName)  // Remove tool
+          ? currentTools.filter((t: string) => t !== toolName)  // Remove tool
           : [...currentTools, toolName],               // Add tool
       });
     } else if (serverConfig) {
@@ -170,7 +163,6 @@ export const ToolsModal: React.FC<ToolsModalProps> = ({
     }
     
     setToolsUsage(newToolsUsage);
-    console.log('Tool toggled:', toolName, 'in server:', serverName, 'New usage:', newToolsUsage);
   };
 
   const isToolSelected = (toolName: string, serverName: string): boolean => {
@@ -190,21 +182,21 @@ export const ToolsModal: React.FC<ToolsModalProps> = ({
   };
 
   // Helper function to update selectedTools for a server
-  const updateToolSelectedTools = (serverName: string, newSelectedTools: string[]) => {
-    if (!setToolsUsage || !toolsUsage) return;
+  // const updateToolSelectedTools = (serverName: string, newSelectedTools: string[]) => {
+  //   if (!setToolsUsage || !toolsUsage) return;
     
-    const newToolsUsage = new Map(toolsUsage);
-    const serverConfig = newToolsUsage.get(serverName);
+  //   const newToolsUsage = new Map(toolsUsage);
+  //   const serverConfig = newToolsUsage.get(serverName);
     
-    if (serverConfig) {
-      newToolsUsage.set(serverName, {
-        ...serverConfig,
-        selectedTools: newSelectedTools,
-      });
-      setToolsUsage(newToolsUsage);
-      console.log(`Updated selectedTools for ${serverName}:`, newSelectedTools);
-    }
-  };
+  //   if (serverConfig) {
+  //     newToolsUsage.set(serverName, {
+  //       ...serverConfig,
+  //       selectedTools: newSelectedTools,
+  //     });
+  //     setToolsUsage(newToolsUsage);
+  //     console.log(`Updated selectedTools for ${serverName}:`, newSelectedTools);
+  //   }
+  // };
 
   // Fetch tools when config data is loaded
   useEffect(() => {

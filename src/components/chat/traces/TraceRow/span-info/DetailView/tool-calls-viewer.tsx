@@ -1,4 +1,3 @@
-import { FingerPrintIcon } from "@heroicons/react/24/outline";
 import { JsonViewer } from "../JsonViewer";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { tryParseJson } from "@/utils/modelUtils";

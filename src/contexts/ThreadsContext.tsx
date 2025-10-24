@@ -105,8 +105,6 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
     deleteDraftThread: operations.deleteDraftThread,
     addThread: operations.addThread,
     updateThread: operations.updateThread,
-    addThreadByEvent: operations.addThreadByEvent,
-    updateThreadCost: operations.updateThreadCost,
 
     // Thread changes
     threadsHaveChanges: threadChangesState.threadsHaveChanges,

@@ -1,15 +1,12 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { Span } from '@/types/common-type';
 
 export interface RunMap {
   [key: string]: Span[];
 }
 
-interface UseSpanDetailsProps {
-  projectId: string;
-}
 
-export function useSpanDetails({ projectId }: UseSpanDetailsProps) {
+export function useSpanDetails() {
   const [loadingSpansById, setLoadingSpansById] = useState<Set<string>>(new Set());
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 

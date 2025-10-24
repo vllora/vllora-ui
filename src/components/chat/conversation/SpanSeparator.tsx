@@ -80,8 +80,7 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
     return spanTitle;
   }, [span, spanId]);
 
-  const handleCopy = async (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(idToCopy);
       setCopied(true);

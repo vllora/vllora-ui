@@ -26,7 +26,7 @@ export const GuardUIDetailsDisplay = ({ span }: { span: Span }) => {
     const isSuccess = jsonResult && (jsonResult.passed ?? jsonResult.Ok?.passed);
     const start_time_us = currentSpan.start_time_us;
     const finish_time_us = currentSpan.finish_time_us;
-    const duration = finish_time_us - start_time_us;
+    const duration = finish_time_us ? finish_time_us - start_time_us : 0;
     const confidence = jsonResult?.Ok?.confidence ?? jsonResult?.confidence;
     const result_metadata_str = attribute.result_metadata;
     const result_metadata = tryParseJson(result_metadata_str) as { [key: string]: any };

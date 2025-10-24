@@ -1,9 +1,9 @@
-import { MessagesSnapshot } from "@/contexts/project-events/dto";
+import { MessagesSnapshotEvent } from "@/contexts/project-events/dto";
 import { Span } from "@/types/common-type";
 
 export const handleMessagesSnapshotEvent = (
   currentSpans: Span[],
-  event: MessagesSnapshot,
+  event: MessagesSnapshotEvent,
   timestamp: number
 ): Span[] => {
   if (!event.span_id) return currentSpans;

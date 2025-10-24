@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { LocalModel } from '@/types/models';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
-import { Copy, Check, ChevronUp, ChevronDown, ChevronsUpDown, Upload, Download } from 'lucide-react';
+import { Copy, Check, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { LocalModelCard } from './LocalModelCard';
 import { CostDisplay } from '@/components/shared/CostDisplay';

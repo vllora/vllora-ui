@@ -10,11 +10,7 @@ import { SpanHeader } from "./SpanHeader";
 
 export const SpanDetailsDisplay = () => {
   const [currentTab, setCurrentTab] = useState<string>("details");
-  const { runMap, detailSpanId, selectedRunId, spansOfSelectedRun, setDetailSpanId, detailSpan } = ChatWindowConsumer();
-    console.log('===== SpanDetailsDisplay', detailSpan)
-
-    const spanId = detailSpanId;
-    const spanOrRunId = selectedRunId || detailSpanId || '';
+  const { runMap, spansOfSelectedRun, setDetailSpanId, detailSpan } = ChatWindowConsumer();
 
   const onClose = useCallback(() => {
     setDetailSpanId(null);

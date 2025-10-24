@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { CurrencyDollarIcon, ClockIcon, DocumentTextIcon, ArrowsRightLeftIcon } from "@heroicons/react/24/outline";
+import { DocumentTextIcon, ArrowsRightLeftIcon } from "@heroicons/react/24/outline";
 import { getCachedTokens } from "./spans-display/prompt-caching-tooltip";
 
 const formatNumber = (num: number) => {
@@ -11,24 +10,7 @@ export const UsageViewer = (props: {
     ttft: string | undefined,
     usage: any | undefined,
 }) => {
-    const { cost, ttft, usage } = props;
-    // try to parse ttf as a number
-    const [ttfNumber, setTtfNumber] = useState<number | undefined>(undefined);
-
-    useEffect(() => {
-        if (ttft) {
-            try {
-                const ttfNumber = parseFloat(ttft);
-                if (!isNaN(ttfNumber)) {
-                    setTtfNumber(ttfNumber / 1000);
-                }
-            } catch (error) {
-                console.error("Error parsing TTF:", error);
-                setTtfNumber(undefined);
-            }
-        }
-    }, [ttft]);
-
+    const { cost, usage } = props;
     // Support both input_tokens and prompt_tokens formats
     const inputTokens = usage?.input_tokens ?? usage?.prompt_tokens;
     const outputTokens = usage?.output_tokens ?? usage?.completion_tokens;
@@ -116,7 +98,7 @@ export const UsageViewer = (props: {
                             </div>
                         )}
 
-                        {(cost !== undefined || typeOfCost !== 'undefined') &&<div className="flex items-center justify-between pt-2 border-t border-border/40">
+                        {(cost !== undefined || typeOfCost !== 'undefined') && <div className="flex items-center justify-between pt-2 border-t border-border/40">
                             <div className="flex items-center gap-2">
                                 <ArrowsRightLeftIcon className="h-3 w-3 text-zinc-400" />
                                 <span className="text-xs text-zinc-500">Total Cost:</span>

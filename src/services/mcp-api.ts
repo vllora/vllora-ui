@@ -1,5 +1,4 @@
 import { useRequest } from 'ahooks';
-import { getBackendUrl } from '@/config/api';
 import { api, handleApiResponse } from '@/lib/api-client';
 
 export interface MCPServer {
