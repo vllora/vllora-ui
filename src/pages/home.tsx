@@ -84,30 +84,13 @@ export function HomePage() {
   }, [providers]);
 
   // Get top models by benchmark ranking (4 columns × 3 rows = 12 cards)
+  // Models are already grouped by the API, no need for client-side grouping
   const topModels = useMemo(() => {
     const targetCardCount = 12;
-    const selectedModels = getTopModelsByBenchmark(localModels, targetCardCount * 3); // Get more to ensure we have enough after grouping
+    const selectedModels = getTopModelsByBenchmark(localModels, targetCardCount);
     
-    // Group by model name (like LocalModelsExplorer does)
-    const groups = new Map<string, LocalModel[]>();
-    selectedModels.forEach(model => {
-      const modelName = model.model;
-      if (!groups.has(modelName)) {
-        groups.set(modelName, []);
-      }
-      groups.get(modelName)!.push(model);
-    });
-
-    // Convert to array with _modelGroup property for the card component
-    const groupedModels = Array.from(groups.entries()).map(([modelName, modelGroup]) => {
-      const firstModel = { ...modelGroup[0] };
-      (firstModel as any)._modelGroup = modelGroup;
-      (firstModel as any)._modelName = modelName;
-      return firstModel;
-    });
-
     // Return exactly 12 cards (4 × 3 grid)
-    return groupedModels.slice(0, targetCardCount);
+    return selectedModels.slice(0, targetCardCount);
   }, [localModels]);
 
   return (

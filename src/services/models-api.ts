@@ -15,6 +15,9 @@ export async function fetchLocalModels(): Promise<LocalModel[]> {
     throw new Error(`Failed to fetch local models: ${response.status} ${response.statusText}`);
   }
 
-  const data = await response.json();
+  const data: LocalModel[] = await response.json();
+  
+  // Return models as-is - let the UI components handle filtering by available flag
+  // The "configured" filter in the UI will filter by available when needed
   return data;
 }

@@ -20,8 +20,6 @@ interface LocalModelSearchFiltersProps {
   owners: string[];
   resultsCount: number;
   totalCount?: number;
-  groupByName?: boolean;
-  onGroupByNameChange?: (value: boolean) => void;
   showConfiguredOnly?: boolean;
   onShowConfiguredOnlyChange?: (value: boolean) => void;
   // New optional filter props
@@ -65,8 +63,6 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
   onOwnersChange,
   providers,
   owners,
-  groupByName = false,
-  onGroupByNameChange,
   showConfiguredOnly = false,
   onShowConfiguredOnlyChange,
   // New optional props with defaults
@@ -281,19 +277,6 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
           cachingEnabled={cachingEnabled}
           setCachingEnabled={onCachingEnabledChange}
         />
-
-        {/* Group By Model Name Checkbox */}
-        {onGroupByNameChange && providers.length > 1 && (
-          <label className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
-            <input
-              type="checkbox"
-              checked={groupByName}
-              onChange={(e) => onGroupByNameChange(e.target.checked)}
-              className="w-4 h-4 rounded border-border bg-background text-[rgb(var(--theme-500))] focus:ring-ring focus:ring-2 cursor-pointer"
-            />
-            <span>Group by name</span>
-          </label>
-        )}
 
         {/* Configured Filter */}
         {onShowConfiguredOnlyChange && (

@@ -42,6 +42,20 @@ export interface ModelPricing {
     },
     mp_price?: number | null
   };
+  endpoints?: Array<{
+    provider: {
+      provider: string;
+      model_name: string;
+      endpoint: string | null;
+    };
+    available: boolean;
+    pricing: {
+      per_input_token: number;
+      per_output_token: number;
+      per_cached_input_token?: number;
+      per_cached_input_write_token?: number;
+    };
+  }>;
 }
 
 export interface ModelAnalytics {
@@ -99,6 +113,20 @@ export interface LocalModel {
     },
     mp_price?: number | null
   };
+  endpoints?: Array<{
+    provider: {
+      provider: string;
+      model_name: string;
+      endpoint: string | null;
+    };
+    available: boolean;
+    pricing: {
+      per_input_token: number;
+      per_output_token: number;
+      per_cached_input_token?: number;
+      per_cached_input_write_token?: number;
+    };
+  }>;
 }
 
 export interface LocalModelsResponse {

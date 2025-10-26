@@ -16,28 +16,32 @@ export interface LocalModelCardProps {
 export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model, providerStatusMap }) => {
   const [copiedModelName, setCopiedModelName] = useState(false);
 
-  // Get model group if available, otherwise treat as single model
-  const modelGroup = (model as any)._modelGroup || [model];
-  const modelName = (model as any)._modelName || model.model;
-
-  // Get unique providers from the group
-  const providers = Array.from(new Set(modelGroup.map((m: LocalModel) => m.inference_provider.provider)));
+  // Get ALL endpoints (show both configured and unconfigured providers)
+  const allEndpoints = model.endpoints || [];
+  
+  // Extract all providers - fall back to inference_provider if no endpoints
+  const providers = allEndpoints.length > 0
+    ? Array.from(new Set(allEndpoints.map(endpoint => endpoint.provider.provider)))
+    : [model.inference_provider.provider];
+  
+  // Use the model name directly (API returns grouped models)
+  const modelName = model.model;
 
   const copyModelId = useCallback(async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
     try {
-      // If multiple providers (grouped), copy just the model name
+      // If multiple providers, copy just the model name
       // Otherwise, copy the full model ID with provider prefix
-      const textToCopy = providers.length > 1 ? modelName : `${modelGroup[0].inference_provider.provider}/${modelGroup[0].model}`;
+      const textToCopy = providers.length > 1 ? modelName : `${model.inference_provider.provider}/${model.model}`;
       await navigator.clipboard.writeText(textToCopy);
       setCopiedModelName(true);
       setTimeout(() => setCopiedModelName(false), 2000);
     } catch (err) {
       console.error('Failed to copy model ID:', err);
     }
-  }, [modelGroup, modelName, providers.length]);
+  }, [model, modelName, providers.length]);
 
 
   return (
@@ -52,13 +56,13 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model, providerS
                 <TooltipTrigger>
                   <div className="p-1 bg-zinc-800/30 rounded-lg group-hover:bg-zinc-800/50 transition-colors relative z-10">
                     <ProviderIcon
-                      provider_name={modelGroup[0].model_provider}
+                      provider_name={model.model_provider}
                       className="w-5 h-5"
                     />
                   </div>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="bg-zinc-800 border-zinc-700 text-white">
-                  <p className="text-xs font-medium">{modelGroup[0].model_provider}</p>
+                  <p className="text-xs font-medium">{model.model_provider}</p>
                 </TooltipContent>
               </Tooltip>
 
@@ -161,7 +165,7 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model, providerS
             {(model.price?.per_input_token !== undefined || model.price?.per_output_token !== undefined || model.type === 'image_generation') && (
               <div className="flex items-center justify-between text-xs">
                 <span className="text-zinc-500">Cost</span>
-                <CostDisplay model={model} modelsGroup={modelGroup} />
+                <CostDisplay model={model} />
               </div>
             )}
           </div>

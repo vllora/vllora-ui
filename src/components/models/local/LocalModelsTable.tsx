@@ -8,11 +8,13 @@ import { CostDisplay } from '@/components/shared/CostDisplay';
 import { formatContextSize } from '@/utils/format';
 import { ModalitiesDisplay } from '@/components/models/card-sections/ModalitiesDisplay';
 import { CapabilitiesIcons } from '@/components/models/card-sections/CapabilitiesIcons';
+import { ProvidersIcons } from '@/components/models/card-sections/ProvidersIcons';
 
 interface LocalModelsTableProps {
   models: LocalModel[];
   copiedModel: string | null;
   copyModelName: (modelName: string) => Promise<void>;
+  providerStatusMap?: Map<string, boolean>;
 }
 
 type SortField = 'id' | 'provider' | 'context' | 'inputCost' | 'outputCost' | 'none';
@@ -22,6 +24,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
   models,
   copiedModel,
   copyModelName,
+  providerStatusMap,
 }) => {
   const [sortField, setSortField] = useState<SortField>('none');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -43,18 +46,10 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
     return [...models].sort((a, b) => {
       let compareResult = 0;
 
-      // Check if models are grouped
-      const aModelName = (a as any)._modelName || a.model;
-      const bModelName = (b as any)._modelName || b.model;
-
       switch (sortField) {
         case 'id':
-          // If grouped, sort by model name; otherwise by full id
-          if ((a as any)._modelName && (b as any)._modelName) {
-            compareResult = aModelName.localeCompare(bModelName);
-          } else {
-            compareResult = `${a.inference_provider.provider}/${a.model}`.localeCompare(`${b.inference_provider.provider}/${b.model}`);
-          }
+          // Sort by model name directly (API returns grouped models)
+          compareResult = a.model.localeCompare(b.model);
           break;
         case 'provider':
           const aProvider = a.inference_provider.provider;
@@ -155,12 +150,15 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
             <div className="w-full">
               <div className="divide-y divide-border">
               {sortedModels.map((model, index) => {
-                // Get model group if available, otherwise treat as single model
-                const modelGroup = (model as any)._modelGroup || [model];
-                const modelName = (model as any)._modelName || model.model;
+                // Get ALL endpoints (show both configured and unconfigured providers)
+                const allEndpoints = model.endpoints || [];
                 
-                // Get unique providers from the group (same logic as card view)
-                const providers = Array.from(new Set(modelGroup.map((m: LocalModel) => m.inference_provider.provider)));
+                // Extract all providers - fall back to inference_provider if no endpoints
+                const providers = allEndpoints.length > 0
+                  ? Array.from(new Set(allEndpoints.map(endpoint => endpoint.provider.provider)))
+                  : [model.inference_provider.provider];
+                
+                const modelName = model.model;
 
                 return (
                   <TooltipProvider key={`${model.inference_provider.provider}/${model.model}-${index}`}>
@@ -185,12 +183,12 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           e.preventDefault();
-                                          copyModelName(`${modelGroup[0].inference_provider.provider}/${modelGroup[0].model}`);
+                                          copyModelName(model.model);
                                         }}
                                         className="opacity-0 group-hover:opacity-100 p-1 hover:bg-accent rounded transition-all flex-shrink-0"
-                                        title="Copy model ID"
+                                        title="Copy model name"
                                       >
-                                        {copiedModel === `${modelGroup[0].inference_provider.provider}/${modelGroup[0].model}` ? (
+                                        {copiedModel === model.model ? (
                                           <Check className="w-3 h-3 text-[rgb(var(--theme-500))]" />
                                         ) : (
                                           <Copy className="w-3 h-3 text-muted-foreground" />
@@ -202,9 +200,6 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                                     <span className="text-xs font-mono">{modelName}</span>
                                   </TooltipContent>
                                 </Tooltip>
-                            </div>
-                            <div className="text-xs text-muted-foreground mt-0.5">
-                              {model.inference_provider.provider}/{model.model}
                             </div>
                           </div>
                         </div>
@@ -219,7 +214,7 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
 
                       {/* Price per 1M Tokens */}
                       <div className="w-[20%] flex justify-center">
-                        <CostDisplay model={model} modelsGroup={modelGroup} className="justify-start" />
+                        <CostDisplay model={model} className="justify-start" />
                       </div>
 
                       {/* Modalities */}
@@ -242,32 +237,11 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
 
                       {/* Provider */}
                       <div className="w-[12%] flex justify-end">
-                        <div className="flex flex-wrap gap-1">
-                          {(providers as string[]).map((provider: string) => (
-                            <TooltipProvider key={provider}>
-                              <Tooltip>
-                                <TooltipTrigger>
-                                  <div className="flex items-center gap-1">
-                                    <ProviderIcon
-                                      provider_name={provider}
-                                      className="w-5 h-5"
-                                    />
-                                    {providers.length === 1 && (
-                                      <span className="text-xs text-foreground/80 truncate" title={provider}>
-                                        {provider}
-                                      </span>
-                                    )}
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent side="bottom" className="bg-popover border-border">
-                                  <p className="text-xs font-medium">
-                                    {provider}
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          ))}
-                        </div>
+                        <ProvidersIcons
+                          providers={providers as string[]}
+                          maxDisplay={3}
+                          providerStatusMap={providerStatusMap}
+                        />
                       </div>
                     </div>
                   </div>

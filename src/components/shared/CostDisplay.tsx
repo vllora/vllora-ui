@@ -5,7 +5,6 @@ import { ModelPricing } from '@/types/models';
 
 interface CostDisplayProps {
   model: ModelPricing;
-  modelsGroup?: ModelPricing[];
   className?: string;
   showTooltip?: boolean;
 }
@@ -26,48 +25,66 @@ const formatTokenPrice = (price?: number, type?: string, moneyOnly?: boolean) =>
 
 export const CostDisplay: React.FC<CostDisplayProps> = ({
   model,
-  modelsGroup,
   className = "",
   showTooltip = true
 }) => {
+  // Get ALL endpoints (show pricing for both configured and unconfigured providers)
+  const allEndpoints = model.endpoints || [];
+  
   const inputCostRange = useMemo(() => {
-    if (modelsGroup && modelsGroup.length > 1) {
-      const inputCosts = modelsGroup
-        .filter(m => m.price?.per_input_token !== undefined)
-        .map(m => m.price?.per_input_token || 0)
-        .sort((a, b) => a - b);
+    // If model has endpoints, calculate range from all endpoints
+    if (allEndpoints.length > 0) {
+      const inputCosts = allEndpoints
+        .filter((endpoint: any) => endpoint.pricing?.per_input_token !== undefined)
+        .map((endpoint: any) => endpoint.pricing?.per_input_token || 0)
+        .sort((a: number, b: number) => a - b);
       
-      if (inputCosts.length === 0) return undefined;
+      if (inputCosts.length === 0) {
+        // Fall back to model price if endpoints don't have pricing
+        const cost = model.price?.per_input_token;
+        return cost !== undefined ? { min: cost, max: cost } : undefined;
+      }
       if (inputCosts.length === 1) return { min: inputCosts[0], max: inputCosts[0] };
       
       return { min: inputCosts[0], max: inputCosts[inputCosts.length - 1] };
     }
+    // Fallback to model's direct price when no endpoints
     const cost = model.price?.per_input_token;
     return cost !== undefined ? { min: cost, max: cost } : undefined;
-  }, [modelsGroup, model]);
+  }, [allEndpoints, model]);
 
   const outputCostRange = useMemo(() => {
-    if (modelsGroup && modelsGroup.length > 1) {
-      const outputCosts = modelsGroup
-        .filter(m => m.price?.per_output_token !== undefined)
-        .map(m => m.price?.per_output_token || 0)
-        .sort((a, b) => a - b);
+    // If model has endpoints, calculate range from all endpoints
+    if (allEndpoints.length > 0) {
+      const outputCosts = allEndpoints
+        .filter((endpoint: any) => endpoint.pricing?.per_output_token !== undefined)
+        .map((endpoint: any) => endpoint.pricing?.per_output_token || 0)
+        .sort((a: number, b: number) => a - b);
       
-      if (outputCosts.length === 0) return undefined;
+      if (outputCosts.length === 0) {
+        // Fall back to model price if endpoints don't have pricing
+        const cost = model.price?.per_output_token;
+        return cost !== undefined ? { min: cost, max: cost } : undefined;
+      }
       if (outputCosts.length === 1) return { min: outputCosts[0], max: outputCosts[0] };
       
       return { min: outputCosts[0], max: outputCosts[outputCosts.length - 1] };
     }
+    // Fallback to model's direct price when no endpoints
     const cost = model.price?.per_output_token;
     return cost !== undefined ? { min: cost, max: cost } : undefined;
-  }, [modelsGroup, model]);
+  }, [allEndpoints, model]);
 
   const cachingEnabled = useMemo(() => {
-    if (modelsGroup && modelsGroup.length > 1) {
-      return modelsGroup.some(m => m.price?.per_cached_input_token || m.price?.per_cached_input_write_token);
+    // Check if any endpoint supports caching
+    if (allEndpoints.length > 0) {
+      return allEndpoints.some((endpoint: any) => 
+        endpoint.pricing?.per_cached_input_token || endpoint.pricing?.per_cached_input_write_token
+      );
     }
+    // Fallback to model's direct price for backward compatibility
     return model.price?.per_cached_input_token || model.price?.per_cached_input_write_token;
-  }, [modelsGroup, model]);
+  }, [allEndpoints, model]);
 
   const formatCostRange = (range: { min: number; max: number } | undefined) => {
     if (!range) return '';
@@ -115,7 +132,7 @@ export const CostDisplay: React.FC<CostDisplayProps> = ({
         <TooltipContent side="top" className="bg-zinc-800 border-zinc-700 text-white max-w-md">
           <div className="space-y-2">
             <p className="text-xs font-medium border-b border-zinc-700 pb-1">Pricing per 1M tokens</p>
-            {modelsGroup && modelsGroup.length > 1 ? (
+            {allEndpoints.length > 1 ? (
               <div className="min-w-[300px]">
                 <table className="w-full text-xs">
                   <thead>
@@ -123,10 +140,10 @@ export const CostDisplay: React.FC<CostDisplayProps> = ({
                       <th className="text-left text-zinc-400 font-medium pb-1 pr-3">Provider</th>
                       <th className="text-right text-zinc-400 font-medium pb-1 px-2">Input</th>
                       <th className="text-right text-zinc-400 font-medium pb-1 px-2">Output</th>
-                      {modelsGroup.some(m => m.price?.per_cached_input_token || m.price?.per_cached_input_write_token) && (
+                      {allEndpoints.some((e: any) => e.pricing?.per_cached_input_token || e.pricing?.per_cached_input_write_token) && (
                         <>
                           <th className="text-right text-zinc-400 font-medium pb-1 px-2">Cached</th>
-                          {modelsGroup.some(m => m.price?.per_cached_input_write_token) && (
+                          {allEndpoints.some((e: any) => e.pricing?.per_cached_input_write_token) && (
                             <th className="text-right text-zinc-400 font-medium pb-1 pl-2">Write</th>
                           )}
                         </>
@@ -134,29 +151,29 @@ export const CostDisplay: React.FC<CostDisplayProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-700/50">
-                    {modelsGroup
-                      .filter(m => m.price?.per_input_token !== undefined || m.price?.per_output_token !== undefined)
-                      .map((m, idx) => (
+                    {allEndpoints
+                      .filter((e: any) => e.pricing?.per_input_token !== undefined || e.pricing?.per_output_token !== undefined)
+                      .map((endpoint: any, idx: number) => (  
                         <tr key={idx}>
-                          <td className="py-1 text-zinc-300 pr-3">{m.inference_provider.provider}</td>
+                          <td className="py-1 text-zinc-300 pr-3">{endpoint.provider.provider}</td>
                           <td className="py-1 text-right text-zinc-200 px-2">
-                            {m.price?.per_input_token === 0 ? 'Free' :
-                             m.price?.per_input_token !== undefined ? formatTokenPrice(m.price.per_input_token, m.type).replace(' / 1M tokens', '') : '-'}
+                            {endpoint.pricing?.per_input_token === 0 ? 'Free' :
+                             endpoint.pricing?.per_input_token !== undefined ? formatTokenPrice(endpoint.pricing.per_input_token, model.type).replace(' / 1M tokens', '') : '-'}
                           </td>
                           <td className="py-1 text-right text-zinc-200 px-2">
-                            {m.price?.per_output_token === 0 ? 'Free' :
-                             m.price?.per_output_token !== undefined ? formatTokenPrice(m.price.per_output_token, m.type).replace(' / 1M tokens', '') : '-'}
+                            {endpoint.pricing?.per_output_token === 0 ? 'Free' :
+                             endpoint.pricing?.per_output_token !== undefined ? formatTokenPrice(endpoint.pricing.per_output_token, model.type).replace(' / 1M tokens', '') : '-'}
                           </td>
-                          {modelsGroup.some(model => model.price?.per_cached_input_token || model.price?.per_cached_input_write_token) && (
+                          {allEndpoints.some((e: any) => e.pricing?.per_cached_input_token || e.pricing?.per_cached_input_write_token) && (
                             <>
                               <td className="py-1 text-right text-zinc-200 px-2">
-                                {m.price?.per_cached_input_token === 0 ? 'Free' :
-                                 m.price?.per_cached_input_token !== undefined ? formatTokenPrice(m.price.per_cached_input_token, m.type).replace(' / 1M tokens', '') : '-'}
+                                {endpoint.pricing?.per_cached_input_token === 0 ? 'Free' :
+                                 endpoint.pricing?.per_cached_input_token !== undefined ? formatTokenPrice(endpoint.pricing.per_cached_input_token, model.type).replace(' / 1M tokens', '') : '-'}
                               </td>
-                              {modelsGroup.some(model => model.price?.per_cached_input_write_token) && (
+                              {allEndpoints.some((e: any) => e.pricing?.per_cached_input_write_token) && (
                                 <td className="py-1 text-right text-zinc-200 pl-2">
-                                  {m.price?.per_cached_input_write_token === 0 ? 'Free' :
-                                   m.price?.per_cached_input_write_token !== undefined ? formatTokenPrice(m.price.per_cached_input_write_token, m.type).replace(' / 1M tokens', '') : '-'}
+                                  {endpoint.pricing?.per_cached_input_write_token === 0 ? 'Free' :
+                                   endpoint.pricing?.per_cached_input_write_token !== undefined ? formatTokenPrice(endpoint.pricing.per_cached_input_write_token, model.type).replace(' / 1M tokens', '') : '-'}
                                 </td>
                               )}
                             </>

@@ -22,9 +22,8 @@ interface LocalModelsExplorerProps {
 export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
   models,
   showViewModeToggle = true,
-  providers: providersData = [],
+  providers: _providersData = [],
   providerStatusMap = new Map(),
-  getModelType = () => 'unknown',
   defaultView = 'grid',
 }) => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -45,9 +44,6 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
   const [selectedOwners, setSelectedOwners] = useState<string[]>(() => {
     const owners = searchParams.get('owners');
     return owners ? owners.split(',') : [];
-  });
-  const [groupByName, setGroupByName] = useState(() => {
-    return searchParams.get('groupByName') === 'true';
   });
   const [showConfiguredOnly, setShowConfiguredOnly] = useState(() => {
     return searchParams.get('configured') === 'true';
@@ -135,12 +131,6 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
       params.set('owners', selectedOwners.join(','));
     }
 
-    if (!groupByName) {
-      params.delete('groupByName');
-    } else {
-      params.set('groupByName', 'true');
-    }
-
     if (showConfiguredOnly) {
       params.set('configured', 'true');
     } else {
@@ -221,7 +211,6 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
     searchTerm,
     selectedProviders,
     selectedOwners,
-    groupByName,
     showConfiguredOnly,
     selectedInputFormats,
     selectedOutputFormats,
@@ -266,41 +255,24 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
     }
   };
 
-  // Group models by model name (without provider prefix) - only if grouping by name is enabled
-  const groupedModels = useMemo(() => {
-    if (!groupByName) {
-      // Return models as-is when NOT grouping by name
-      return models;
-    }
+  // Models are already grouped by the API, no need for client-side grouping
+  // Just use the models directly
+  const groupedModels = models;
 
-    // Otherwise, group by model name
-    const groups = new Map<string, LocalModel[]>();
-
-    models.forEach(model => {
-      const modelName = model.model;
-
-      if (!groups.has(modelName)) {
-        groups.set(modelName, []);
-      }
-      groups.get(modelName)!.push(model);
-    });
-
-    // Convert to array with _modelGroup property
-    return Array.from(groups.entries()).map(([modelName, modelGroup]) => {
-      const firstModel = { ...modelGroup[0] };
-      (firstModel as any)._modelGroup = modelGroup;
-      (firstModel as any)._modelName = modelName;
-      return firstModel;
-    });
-  }, [models, groupByName]);
-
-  // Extract unique providers and owners
+  // Extract unique providers from ALL endpoints (show both configured and unconfigured)
   const uniqueProviders = useMemo(() => {
     const uniqueProviderSet = new Set<string>();
     models.forEach(m => {
-      const provider = m.inference_provider.provider;
-      if (provider) {
-        uniqueProviderSet.add(provider);
+      // Get ALL providers from endpoints
+      if (m.endpoints && m.endpoints.length > 0) {
+        m.endpoints.forEach(endpoint => {
+          if (endpoint.provider.provider) {
+            uniqueProviderSet.add(endpoint.provider.provider);
+          }
+        });
+      } else if (m.inference_provider.provider) {
+        // Fallback for backward compatibility
+        uniqueProviderSet.add(m.inference_provider.provider);
       }
     });
     return Array.from(uniqueProviderSet).sort();
@@ -381,43 +353,44 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
     };
   }, [models]);
 
-  // Filter grouped models
+  // Filter models (no longer need grouping logic since API returns grouped models)
   const filteredModels = useMemo(() => {
-    return groupedModels.filter((model: any) => {
-      const modelGroup = model._modelGroup || [model];
-      const modelName = model._modelName || model.model;
+    return groupedModels
+      .filter((model: LocalModel) => {
+        // Get ALL endpoints (show both configured and unconfigured providers)
+        const allEndpoints = model.endpoints || [];
+        // Also get only available endpoints for configured filter
+        const availableEndpoints = allEndpoints.filter(endpoint => endpoint.available);
+        
+        const modelName = model.model;
 
       // Search term filter
       if (searchTerm) {
         const search = searchTerm.toLowerCase();
         const nameMatch = modelName.toLowerCase().includes(search);
-        const providerMatch = modelGroup.some((m: LocalModel) =>
-          m.inference_provider.provider.toLowerCase().includes(search)
-        );
-        const ownerMatch = modelGroup.some((m: LocalModel) =>
-          m.model_provider.toLowerCase().includes(search)
-        );
+        const providerMatch = allEndpoints.length > 0
+          ? allEndpoints.some(endpoint => endpoint.provider.provider.toLowerCase().includes(search))
+          : model.inference_provider.provider.toLowerCase().includes(search);
+        const ownerMatch = model.model_provider.toLowerCase().includes(search);
 
         if (!nameMatch && !providerMatch && !ownerMatch) {
           return false;
         }
       }
 
-      // Provider filter - check if ANY model in the group has a matching provider
+      // Provider filter - check if ANY endpoint has a matching provider (all providers, not just configured)
       if (selectedProviders.length > 0) {
-        const hasMatchingProvider = modelGroup.some((m: LocalModel) =>
-          selectedProviders.includes(m.inference_provider.provider)
-        );
+        const hasMatchingProvider = allEndpoints.length > 0
+          ? allEndpoints.some(endpoint => selectedProviders.includes(endpoint.provider.provider))
+          : selectedProviders.includes(model.inference_provider.provider);
         if (!hasMatchingProvider) {
           return false;
         }
       }
 
-      // Owner filter - check if ANY model in the group has a matching owner
+      // Owner filter
       if (selectedOwners.length > 0) {
-        const hasMatchingOwner = modelGroup.some((m: LocalModel) =>
-          selectedOwners.includes(m.model_provider)
-        );
+        const hasMatchingOwner = selectedOwners.includes(model.model_provider);
         if (!hasMatchingOwner) {
           return false;
         }
@@ -496,22 +469,36 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
         }
       }
 
-      // Configuration status filter - show only configured models
-      if (showConfiguredOnly) {
-        const hasConfiguredProvider = modelGroup.some((m: LocalModel) => {
-          const provider = m.inference_provider.provider.toLowerCase();
-          const providerExists = providersData.some(p => p.name.toLowerCase() === provider);
-          const hasCredentials = providerStatusMap.get(provider) || false;
-          return providerExists && hasCredentials;
-        });
-        if (!hasConfiguredProvider) {
-          return false;
+        // Configuration status filter - when enabled, show only models with at least one configured provider
+        // Since we already filter to availableEndpoints, we just need to check if there are any
+        if (showConfiguredOnly) {
+          // If no available endpoints, hide this model
+          if (availableEndpoints.length === 0) {
+            // Check if inference_provider is configured as fallback
+            const provider = model.inference_provider.provider.toLowerCase();
+            const isConfigured = providerStatusMap.get(provider) || false;
+            if (!isConfigured) {
+              return false;
+            }
+          }
         }
-      }
 
-      return true;
-    });
-  }, [groupedModels, searchTerm, selectedProviders, selectedOwners, selectedType, selectedInputFormats, selectedOutputFormats, selectedCapabilities, minContextSize, maxContextSize, minInputCost, maxInputCost, minOutputCost, maxOutputCost, cachingEnabled, showConfiguredOnly, getModelType, providerStatusMap, providersData]);
+        return true;
+      })
+      .map((model: LocalModel) => {
+        // When "Configured" is ON, filter the model's endpoints to show only available ones
+        if (showConfiguredOnly && model.endpoints && model.endpoints.length > 0) {
+          const availableEndpoints = model.endpoints.filter(endpoint => endpoint.available);
+          // Return a modified model with only available endpoints
+          return {
+            ...model,
+            endpoints: availableEndpoints
+          };
+        }
+        // When "Configured" is OFF, return model as-is (with all endpoints)
+        return model;
+      });
+  }, [groupedModels, searchTerm, selectedProviders, selectedOwners, selectedType, selectedInputFormats, selectedOutputFormats, selectedCapabilities, minContextSize, maxContextSize, minInputCost, maxInputCost, minOutputCost, maxOutputCost, cachingEnabled, showConfiguredOnly, providerStatusMap]);
 
   // Copy model name function
   const copyModelName = useCallback(async (modelName: string) => {
@@ -537,8 +524,6 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
           owners={owners}
           resultsCount={filteredModels.length}
           totalCount={models.length}
-          groupByName={groupByName}
-          onGroupByNameChange={setGroupByName}
           showConfiguredOnly={showConfiguredOnly}
           onShowConfiguredOnlyChange={setShowConfiguredOnly}
           // New comprehensive filter props
@@ -577,7 +562,7 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
         {showViewModeToggle && (
           <div className="flex justify-between items-center">
             <p className="text-sm text-muted-foreground">
-              Showing {filteredModels.length} of {groupedModels.length} {groupByName ? 'models' : 'models'}
+              Showing {filteredModels.length} of {groupedModels.length} models
             </p>
             <div className="flex gap-2">
               <Button
@@ -617,6 +602,7 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
           models={filteredModels}
           copiedModel={copiedModel}
           copyModelName={copyModelName}
+          providerStatusMap={providerStatusMap}
         />
       )}
 
