@@ -1,11 +1,10 @@
-import { AlertCircle, RefreshCw, Server, MessageSquare, BookOpen, ExternalLink, ChevronRight, ArrowRight } from 'lucide-react';
+import { AlertCircle, RefreshCw, MessageSquare, BookOpen, ExternalLink, ChevronRight, ArrowRight } from 'lucide-react';
 import { useMemo } from 'react';
 import { LocalModelCard } from '@/components/models/local/LocalModelCard';
 import { LocalModelsSkeletonLoader } from '@/components/models/local/LocalModelsSkeletonLoader';
 import { LocalModelsConsumer } from '@/contexts/LocalModelsContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { getBackendUrl } from '@/config/api';
 import { ProviderKeysConsumer } from '@/contexts/ProviderKeysContext';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { ProviderCredentialModal } from '@/pages/settings/ProviderCredentialModal';
@@ -153,12 +152,14 @@ export function HomePage() {
                   Discover high-performing AI models
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                <Server className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-                <span className="text-sm text-muted-foreground">
-                  Running on <span className="text-[rgb(var(--theme-500))] font-medium">{getBackendUrl()}</span>
-                </span>
-              </div>
+              <Button
+                variant="outline"
+                onClick={() => navigate('/models')}
+                className="flex items-center gap-2"
+              >
+                View All Models
+                <ArrowRight className="w-4 h-4" />
+              </Button>
             </div>
           </div>
 
@@ -190,28 +191,14 @@ export function HomePage() {
 
           {/* Top Models Grid */}
           {!localLoading && !localError && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {topModels.map((model, index) => (
-                  <LocalModelCard
-                    key={`${model.inference_provider.provider}/${model.model}-${index}`}
-                    model={model}
-                    providerStatusMap={providerStatusMap}
-                  />
-                ))}
-              </div>
-
-              {/* View All Models Button */}
-              <div className="flex justify-end pt-2">
-                <Button
-                  variant="outline"
-                  onClick={() => navigate('/models')}
-                  className="flex items-center gap-2"
-                >
-                  View All Models
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {topModels.map((model, index) => (
+                <LocalModelCard
+                  key={`${model.inference_provider.provider}/${model.model}-${index}`}
+                  model={model}
+                  providerStatusMap={providerStatusMap}
+                />
+              ))}
             </div>
           )}
         </div>
