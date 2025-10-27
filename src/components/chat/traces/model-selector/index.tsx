@@ -99,7 +99,6 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   }, [selectedModelInfo]);
 
   const handleModelSelect = (modelId: string) => {
-    console.log('==== handleModelSelect', modelId)
     onModelChange?.(modelId);
     setOpen(false);
     setCurrentStep('model');
@@ -210,6 +209,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
               selectedModel={selectedModel}
               onProviderSelect={(modelFullName)=>{
                 handleModelSelect(modelFullName);
+              }}
+              onConfigureProvider={(providerName) => {
+                setSelectedProviderForConfig(providerName);
+                setConfigDialogOpen(true);
               }}
             />
           )}

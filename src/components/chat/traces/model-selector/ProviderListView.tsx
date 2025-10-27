@@ -4,14 +4,13 @@ import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { LocalModel, LocalModelProviderInfo } from '@/types/models';
 import { getModelFullName } from '@/utils/model-fullname';
-import { ProviderConfigDialog } from './ProviderConfigDialog';
-import { ProviderKeysConsumer } from '@/contexts/ProviderKeysContext';
 
 interface ProviderListViewProps {
   providers: LocalModelProviderInfo[];
   selectedModelInfo: LocalModel | undefined;
   selectedModel: string;
   onProviderSelect: (modelFullName: string) => void;
+  onConfigureProvider?: (providerName: string) => void;
 }
 
 export const ProviderListView: React.FC<ProviderListViewProps> = ({
@@ -19,10 +18,9 @@ export const ProviderListView: React.FC<ProviderListViewProps> = ({
   selectedModelInfo,
   selectedModel,
   onProviderSelect,
+  onConfigureProvider,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const { modalOpen, setModalOpen, cancelEditing } = ProviderKeysConsumer();
-  const [selectedProviderName, setSelectedProviderName] = useState<string | null>(null);
   const filteredProviders = useMemo(() => {
     if (!searchTerm) return providers;
     return providers.filter((ep) =>
@@ -64,10 +62,10 @@ export const ProviderListView: React.FC<ProviderListViewProps> = ({
                     return;
                   }
 
-                  // If not configured, open config dialog
+                  // If not configured, notify parent to open config dialog
                   if (!isConfigured) {
-                    setSelectedProviderName(provider.provider);
-                    setModalOpen(true);
+                    onProviderSelect(modelFullName);
+                    onConfigureProvider?.(provider.provider);
                     return;
                   }
                   // Otherwise, select the provider
@@ -101,21 +99,6 @@ export const ProviderListView: React.FC<ProviderListViewProps> = ({
           </div>
         )}
       </div>
-
-      {/* Config Dialog */}
-      {selectedProviderName && <ProviderConfigDialog
-        open={modalOpen}
-        providerName={selectedProviderName}
-        onOpenChange={()=>{
-          setModalOpen(false);
-          cancelEditing();
-        }}
-        onSaveSuccess={()=>{
-          setModalOpen(false);
-          onProviderSelect(`${selectedProviderName}/${selectedModelInfo?.model}`);
-        }}
-       
-      />}
     </>
   );
 };
