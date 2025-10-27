@@ -13,6 +13,12 @@ export function EmailForm() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Email validation function
+  const isValidEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -53,11 +59,10 @@ export function EmailForm() {
         <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground/60" />
         <Input
           id="email"
-          type="email"
+          type="text"
           placeholder="your@email.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          required
           disabled={loading}
           className="pl-11 h-12 bg-background/50 border-border/60 focus:border-[rgb(var(--theme-500))] transition-colors"
         />
@@ -74,7 +79,7 @@ export function EmailForm() {
         type="submit"
         variant="default"
         className="w-full h-12 bg-gradient-to-r from-[rgb(var(--theme-500))] to-[rgb(var(--theme-600))] hover:from-[rgb(var(--theme-600))] hover:to-[rgb(var(--theme-700))] text-white font-medium transition-all duration-200 shadow-lg shadow-[rgb(var(--theme-500))]/20"
-        disabled={loading || !email}
+        disabled={loading || !isValidEmail(email)}
       >
         <LogIn className="w-4 h-4 mr-2" />
         {loading ? 'Sending...' : 'Login'}
