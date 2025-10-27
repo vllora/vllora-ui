@@ -115,23 +115,7 @@ export const ThreadList: React.FC<ThreadListProps> = ({
               </div>
             )}
 
-            {/* All loaded indicator - absolutely positioned at bottom */}
-            {!hasMore && (
-              <div
-                className="h-16 w-full flex items-center justify-center"
-                style={{
-                  position: 'absolute',
-                  top: `${rowVirtualizer.getTotalSize() + 8}px`,
-                  left: 0,
-                  right: 0,
-                }}
-              >
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 size={16} className="text-[rgb(var(--theme-500))]" />
-                  <span className="text-sm font-medium text-muted-foreground">All threads loaded</span>
-                </div>
-              </div>
-            )}
+           
           </div>
         </div>
       )}
