@@ -72,9 +72,7 @@ export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSideb
           "border-b border-border/40 backdrop-blur-sm"
         )}>
           {!isCollapsed && (
-            <h2 className="text-lg font-bold tracking-tight">
-              vLLora
-            </h2>
+            <img src="/logo-dark.svg" alt="vLLora" className="h-8" />
           )}
           <Button
             variant="ghost"

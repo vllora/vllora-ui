@@ -82,7 +82,7 @@ export function EmailForm() {
         disabled={loading || !isValidEmail(email)}
       >
         <LogIn className="w-4 h-4 mr-2" />
-        {loading ? 'Sending...' : 'Login'}
+        {loading ? 'Sending...' : 'Continue'}
       </Button>
     </form>
   );
