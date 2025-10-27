@@ -124,7 +124,7 @@ export function HomePage() {
 
           <Card 
             className="cursor-pointer hover:bg-accent/50 transition-colors"
-            onClick={() => window.open('https://docs.ellora.ai', '_blank')}
+            onClick={() => window.open('https://vllora.dev/docs', '_blank')}
           >
             <CardContent className="flex items-center gap-4 p-6">
               <div className="p-3 rounded-lg bg-[rgb(var(--theme-500))]/10">
