@@ -1,9 +1,8 @@
-import { AlertCircle, RefreshCw, Server, ArrowLeft } from 'lucide-react';
+import { AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
 import { LocalModelsExplorer } from '@/components/models/local/LocalModelsExplorer';
 import { LocalModelsSkeletonLoader } from '@/components/models/local/LocalModelsSkeletonLoader';
 import { LocalModelsConsumer } from '@/contexts/LocalModelsContext';
 import { Button } from '@/components/ui/button';
-import { getBackendUrl } from '@/config/api';
 import { ProviderKeysConsumer } from '@/contexts/ProviderKeysContext';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -80,17 +79,9 @@ export function ModelsPage() {
             </Button>
             <h1 className="text-3xl font-bold">Browse Models</h1>
           </div>
-          <div className="flex items-center justify-between">
-            <p className="text-muted-foreground">
-              Explore and filter all available AI models
-            </p>
-            <div className="flex items-center gap-2">
-              <Server className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-              <span className="text-sm text-muted-foreground">
-                Running on <span className="text-[rgb(var(--theme-500))] font-medium">{getBackendUrl()}</span>
-              </span>
-            </div>
-          </div>
+          <p className="text-muted-foreground">
+            Explore and filter all available AI models
+          </p>
         </div>
 
         {/* Loading State */}
