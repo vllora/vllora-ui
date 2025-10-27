@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { ChevronDown, ChevronLeft } from 'lucide-react';
+import { ChevronDown, ChevronLeft, AlertTriangle } from 'lucide-react';
 import { LocalModelsConsumer } from '@/contexts/LocalModelsContext';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import {
@@ -7,9 +7,17 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { LocalModel, LocalModelProviderInfo } from '@/types/models';
 import { ModelListView } from './ModelListView';
 import { ProviderListView } from './ProviderListView';
+import { ProviderConfigDialog } from './ProviderConfigDialog';
+import { MultiProviderConfigDialog } from './MultiProviderConfigDialog';
 
 interface ModelSelectorProps {
   selectedModel: string;
@@ -23,6 +31,9 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   const { models } = LocalModelsConsumer();
   const [open, setOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState<'model' | 'provider'>('model');
+  const [configDialogOpen, setConfigDialogOpen] = useState(false);
+  const [selectedProviderForConfig, setSelectedProviderForConfig] = useState<string | null>(null);
+  const [providerListDialogOpen, setProviderListDialogOpen] = useState(false);
 
   const selectedModelInfo: LocalModel | undefined = useMemo(()=> {
     let isFullName = selectedModel.includes('/');
@@ -119,62 +130,133 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     setOpen(isOpen);
   };
 
-  // const isNoProviderConfigured = useMemo(() => {
-  //   if(!selectedModelInfo || selectedModelInfo.endpoints?.length === 0) {
-  //     return true;
-  //   }
-  //   return selectedModelInfo.endpoints?.filter((endpoint) => !endpoint.available).length === selectedModelInfo.endpoints?.length;
-  // }, [selectedModelInfo]);
-  
+  const handleWarningClick = () => {
+    if (!selectedModelInfo) return;
+
+    const unconfiguredProviders = selectedModelInfo.endpoints?.filter(ep => !ep.available) || [];
+
+    // If only one unconfigured provider, open config dialog directly
+    if (unconfiguredProviders.length === 1) {
+      setSelectedProviderForConfig(unconfiguredProviders[0].provider.provider);
+      setConfigDialogOpen(true);
+    } else if (unconfiguredProviders.length > 1) {
+      // If multiple unconfigured providers, show provider list dialog
+      setProviderListDialogOpen(true);
+    }
+  };
+
+  const isNoProviderConfigured = useMemo(() => {
+    if(!selectedModelInfo || selectedModelInfo.endpoints?.length === 0) {
+      return true;
+    }
+    return selectedModelInfo.endpoints?.filter((endpoint) => !endpoint.available).length === selectedModelInfo.endpoints?.length;
+  }, [selectedModelInfo]);
+
+  // Check if the currently selected provider is configured
+  const isSelectedProviderConfigured = useMemo(() => {
+    // If no provider is selected (simple format), check if any provider is configured
+    if (!selectedModel.includes('/')) {
+      return !isNoProviderConfigured;
+    }
+
+    // If provider is selected (full format), check if that specific provider is configured
+    if (selectedProvider) {
+      return selectedProvider.available;
+    }
+
+    return true;
+  }, [selectedModel, selectedProvider, isNoProviderConfigured]);
 
   return (
-    <DropdownMenu open={open} onOpenChange={handleOpenChange}>
-      <DropdownMenuTrigger asChild>
-        <div className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer w-[200px] truncate">
-          {selectedModel && selectedModel.includes('/') && <ProviderIcon
-            provider_name={getIconForModel(selectedModel)}
-            className="w-4 h-4 flex-shrink-0"
-          />}
-          <span className="truncate flex-1">{selectedModel.includes('/') ? selectedModel.split('/')[1] : selectedModel}</span>
-
-          <ChevronDown className={`w-4 h-4 transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`} />
-        </div>
-      </DropdownMenuTrigger>
-
-      <DropdownMenuContent className="w-96 p-0" align="start">
-        {/* Header with Back Button (when model name is selected) */}
-        {currentStep === 'provider' && (
-          <div className="p-3 border-b border-border flex items-center gap-2">
-            <button
-              onClick={handleBack}
-              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ChevronLeft className="w-4 h-4" />
-              <span>Back</span>
-            </button>
-            {selectedProvider && <span className="text-sm font-medium text-foreground ml-2">{selectedProvider.provider.provider}</span>}
+    <div className="inline-flex items-center gap-2">
+      <DropdownMenu open={open} onOpenChange={handleOpenChange}>
+        <DropdownMenuTrigger asChild>
+          <div className="inline-flex border border-border rounded-md px-3 py-2 items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer w-[200px] truncate">
+            {selectedModel && selectedModel.includes('/') && <ProviderIcon
+              provider_name={getIconForModel(selectedModel)}
+              className="w-4 h-4 flex-shrink-0"
+            />}
+            <span className="truncate flex-1">{selectedModel.includes('/') ? selectedModel.split('/')[1] : selectedModel}</span>
+            <ChevronDown className={`w-4 h-4 transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`} />
           </div>
-        )}
+        </DropdownMenuTrigger>
 
-        {/* Content Area */}
-        {currentStep === 'model' ? (
-          <ModelListView
-            modelNames={modelNames}
-            onModelNameSelect={handleModelNameSelect}
-            getProviderCount={getProviderCount}
-          />
-        ) : (
-          <ProviderListView
-            providers={providers}
-            selectedModelInfo={selectedModelInfo}
-            selectedModel={selectedModel}
-            onProviderSelect={(modelFullName)=>{
-              console.log('===== onProviderSelect', modelFullName)
-              handleModelSelect(modelFullName);
-            }}
-          />
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+        <DropdownMenuContent className="w-96 p-0" align="start">
+          {/* Header with Back Button (when model name is selected) */}
+          {currentStep === 'provider' && (
+            <div className="p-3 border-b border-border flex items-center gap-2">
+              <button
+                onClick={handleBack}
+                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Back</span>
+              </button>
+              {selectedProvider && <span className="text-sm font-medium text-foreground ml-2">{selectedProvider.provider.provider}</span>}
+            </div>
+          )}
+
+          {/* Content Area */}
+          {currentStep === 'model' ? (
+            <ModelListView
+              modelNames={modelNames}
+              onModelNameSelect={handleModelNameSelect}
+              getProviderCount={getProviderCount}
+            />
+          ) : (
+            <ProviderListView
+              providers={providers}
+              selectedModelInfo={selectedModelInfo}
+              selectedModel={selectedModel}
+              onProviderSelect={(modelFullName)=>{
+                handleModelSelect(modelFullName);
+              }}
+            />
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {!isSelectedProviderConfigured && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={handleWarningClick}
+                className="flex items-center"
+              >
+                <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 cursor-pointer hover:text-amber-600 transition-colors" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              <p className="text-sm">Provider credentials for this model not configured</p>
+              <p className="text-xs text-muted-foreground mt-1">Click to configure</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
+      {/* Single Provider Config Dialog */}
+      {selectedProviderForConfig && (
+        <ProviderConfigDialog
+          open={configDialogOpen}
+          providerName={selectedProviderForConfig}
+          onOpenChange={setConfigDialogOpen}
+          onSaveSuccess={() => {
+            
+          }}
+        />
+      )}
+
+      {/* Multiple Providers List Dialog */}
+      <MultiProviderConfigDialog
+        open={providerListDialogOpen}
+        providers={selectedModelInfo?.endpoints?.filter(ep => !ep.available) || []}
+        onOpenChange={setProviderListDialogOpen}
+        onProviderSelect={(providerName) => {
+          setProviderListDialogOpen(false);
+          setSelectedProviderForConfig(providerName);
+          setConfigDialogOpen(true);
+        }}
+      />
+    </div>
   );
 };

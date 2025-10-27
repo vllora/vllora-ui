@@ -9,6 +9,7 @@ interface ProviderConfigDialogProps {
 }
 
 export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
+  open,
   providerName,
   onOpenChange,
   onSaveSuccess,
@@ -20,8 +21,6 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
         saving,
         saveProvider,
         refetchProviders,
-        modalOpen,
-        setModalOpen,
         updateCredentialValues,
         credentialValues
     } = ProviderKeysConsumer();
@@ -34,9 +33,9 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
 
   const handleSave = useCallback(async () => {
   saveProvider(providerName)
-  setModalOpen(false);
+  onOpenChange(false);
   onSaveSuccess?.();
-  }, [providerName, saveProvider]);
+  }, [providerName, saveProvider, onOpenChange, onSaveSuccess]);
 
   const handleToggleShow = (field: string) => {
     setShowKeys(prev => ({
@@ -57,7 +56,7 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
 
   return (
     <ProviderCredentialModal
-      open={modalOpen}
+      open={open}
       provider={provider}
       values={credentialValues[providerName || ''] || {}}
       showKeys={showKeys}

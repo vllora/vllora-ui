@@ -12,11 +12,11 @@ interface ModelSelectorHeaderProps {
 export function ConversationHeader({ modelName, onModelChange, onRefresh, isLoading }: ModelSelectorHeaderProps) {
   return (
     <div className="h-16 px-4 border-b border-border flex items-center justify-between bg-card/95 backdrop-blur-xl">
-      <div className="max-w-md border border-border rounded-md px-3 py-2">
-        <ModelSelector
-          selectedModel={modelName || 'Select a model'}
-          onModelChange={onModelChange}
-        />
+      <div className="flex items-center gap-2">
+          <ModelSelector
+            selectedModel={modelName || 'Select a model'}
+            onModelChange={onModelChange}
+          />
       </div>
       {onRefresh && (
         <TooltipProvider>
