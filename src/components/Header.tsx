@@ -1,3 +1,4 @@
+import { GitHubLink } from './GitHubLink';
 import { ProjectDropdown } from './ProjectDropdown';
 import { useLocation } from 'react-router-dom';
 
@@ -22,6 +23,7 @@ export function Header({ onProjectChange }: HeaderProps) {
         <div className="flex items-center gap-3">
           <ProjectDropdown onProjectChange={onProjectChange} />
         </div>
+        <GitHubLink />
       </div>
     </header>
   );

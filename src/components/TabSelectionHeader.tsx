@@ -1,6 +1,7 @@
 import { ProjectDropdown } from './ProjectDropdown';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { DebugControl } from './DebugControl';
+import { GitHubLink } from './GitHubLink';
 
 interface TabSelectionHeaderProps {
   currentTab: string;
@@ -62,6 +63,9 @@ export function TabSelectionHeader({ currentTab, onTabChange, onProjectChange }:
       </div>
 
       <div className="flex items-center gap-3">
+        {/* GitHub link */}
+        <GitHubLink />
+
         {/* Debug control: Pause/Resume */}
         <DebugControl />
       </div>

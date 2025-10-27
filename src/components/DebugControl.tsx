@@ -86,7 +86,7 @@ export function DebugControl() {
           <TooltipTrigger asChild>
             <div
               onClick={() => !isConnecting && !showRetryButton && setIsPaused(!isPaused)}
-              className={`flex items-center gap-1.5 px-2 py-1 rounded-md border transition-colors ${
+              className={`flex items-center gap-1.5 px-2 py-1 rounded-md border transition-colors h-[30px] ${
                 isConnecting || showRetryButton ? 'cursor-default' : 'cursor-pointer'
               } ${colorClasses[state.color as keyof typeof colorClasses]}`}
             >
