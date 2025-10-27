@@ -1,7 +1,7 @@
 import React from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowUpRight, Check } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface ProvidersIconsProps {
@@ -36,11 +36,16 @@ export const ProvidersIcons: React.FC<ProvidersIconsProps> = ({
         return (
           <Tooltip key={provider}>
             <TooltipTrigger asChild>
-              <div className="flex items-center justify-center w-5 h-5">
+              <div className="relative flex items-center justify-center w-5 h-5">
                 <ProviderIcon 
                   provider_name={provider}
                   className="w-5 h-5"
                 />
+                {isConfigured && (
+                  <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full flex items-center justify-center border border-zinc-900">
+                    <Check className="w-2 h-2 text-white" strokeWidth={3} />
+                  </div>
+                )}
               </div>
             </TooltipTrigger>
             <TooltipContent side="top" className="bg-zinc-800 border-zinc-700 text-white">
@@ -92,10 +97,17 @@ export const ProvidersIcons: React.FC<ProvidersIconsProps> = ({
                 return (
                   <div key={provider} className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-1.5">
-                      <ProviderIcon 
-                        provider_name={provider}
-                        className="w-4 h-4"
-                      />
+                      <div className="relative flex items-center justify-center">
+                        <ProviderIcon 
+                          provider_name={provider}
+                          className="w-4 h-4"
+                        />
+                        {isConfigured && (
+                          <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 rounded-full flex items-center justify-center border border-zinc-900">
+                            <Check className="w-1.5 h-1.5 text-white" strokeWidth={3} />
+                          </div>
+                        )}
+                      </div>
                       <span className="text-xs text-zinc-300">{provider}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
