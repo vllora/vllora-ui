@@ -14,12 +14,12 @@ export interface ModelPricing {
     valid_from?: any;
     type_prices?: {
       hd?: {
-        [key: string]: number
-      },
+        [key: string]: number;
+      };
       standard?: {
-        [key: string]: number
-      }
-    }
+        [key: string]: number;
+      };
+    };
   };
   input_formats: string[];
   output_formats: string[];
@@ -37,10 +37,10 @@ export interface ModelPricing {
   image_price?: {
     by_type?: {
       [key: string]: {
-        [key: string]: number
-      }
-    },
-    mp_price?: number | null
+        [key: string]: number;
+      };
+    };
+    mp_price?: number | null;
   };
   endpoints?: Array<{
     provider: {
@@ -85,12 +85,12 @@ export interface LocalModel {
     valid_from?: any;
     type_prices?: {
       hd?: {
-        [key: string]: number
-      },
+        [key: string]: number;
+      };
       standard?: {
-        [key: string]: number
-      }
-    }
+        [key: string]: number;
+      };
+    };
   };
   input_formats: string[];
   output_formats: string[];
@@ -108,25 +108,27 @@ export interface LocalModel {
   image_price?: {
     by_type?: {
       [key: string]: {
-        [key: string]: number
-      }
-    },
-    mp_price?: number | null
+        [key: string]: number;
+      };
+    };
+    mp_price?: number | null;
   };
-  endpoints?: Array<{
-    provider: {
-      provider: string;
-      model_name: string;
-      endpoint: string | null;
-    };
-    available: boolean;
-    pricing: {
-      per_input_token: number;
-      per_output_token: number;
-      per_cached_input_token?: number;
-      per_cached_input_write_token?: number;
-    };
-  }>;
+  endpoints?: Array<LocalModelProviderInfo>;
+}
+
+export interface LocalModelProviderInfo {
+  provider: {
+    provider: string;
+    model_name: string;
+    endpoint: string | null;
+  };
+  available: boolean;
+  pricing: {
+    per_input_token: number;
+    per_output_token: number;
+    per_cached_input_token?: number;
+    per_cached_input_write_token?: number;
+  };
 }
 
 export interface LocalModelsResponse {

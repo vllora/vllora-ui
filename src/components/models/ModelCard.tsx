@@ -220,7 +220,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
             {(model.price?.per_input_token !== undefined || model.price?.per_output_token !== undefined || model.type === 'image_generation') && (
               <div className="flex items-center justify-between text-xs">
                 <span className="text-zinc-500">Cost</span>
-                <CostDisplay model={model} modelsGroup={modelsGroup} />
+                <CostDisplay model={model}/>
               </div>
             )}
           </div>

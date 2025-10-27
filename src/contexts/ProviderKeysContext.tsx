@@ -9,6 +9,7 @@ import {
   type Credentials,
 } from '@/services/providers-api';
 import type { CredentialFormValues } from '@/pages/settings/ProviderCredentialForm';
+import { LocalModelsConsumer } from './LocalModelsContext';
 
 export type ProviderKeysContextType = ReturnType<typeof useProviderKeys>;
 
@@ -20,6 +21,8 @@ export const shouldUseModal = (): boolean => {
 };
 
 export function useProviderKeys() {
+
+  const {refetchModels} = LocalModelsConsumer()
   const { data: providers = [], loading, error, run: refetchProviders } = useRequest(listProviders, {
     onError: (err) => {
       toast.error('Failed to load providers', {
@@ -143,6 +146,7 @@ export function useProviderKeys() {
       setEditingProvider(null);
       setCredentialValues({ ...credentialValues, [providerName]: {} });
       await refetchProviders();
+      refetchModels();
     } catch (err) {
       toast.error('Failed to save provider', {
         description: err instanceof Error ? err.message : 'An error occurred while saving provider',
@@ -173,6 +177,7 @@ export function useProviderKeys() {
       setDeleteDialogOpen(false);
       setProviderToDelete(null);
       await refetchProviders();
+      refetchModels();
     } catch (err) {
       toast.error('Failed to delete provider', {
         description: err instanceof Error ? err.message : 'An error occurred while deleting provider',

@@ -37,9 +37,9 @@ function App() {
               <Route path="/login" element={<LoginPage />} />
 
               {/* Protected routes */}
-              <Route path="/" element={<ProtectedRoute><ProjectProvider><Layout /></ProjectProvider></ProtectedRoute>}>
+              <Route path="/" element={<ProtectedRoute><ProviderKeysProvider><ProjectProvider><Layout /></ProjectProvider></ProviderKeysProvider></ProtectedRoute>}>
                 {/* Project-scoped routes (now using query string ?project_id=...) */}
-                <Route index element={<ProviderKeysProvider><HomePage /></ProviderKeysProvider>} />
+                <Route index element={<HomePage />} />
                 <Route path="chat" element={<ThreadsAndTracesPage />} />
                 <Route path="analytics" element={<AnalyticsPage />} />
                 <Route 
@@ -52,14 +52,14 @@ function App() {
                         </div>
                       </section>
                     }>
-                      <ProviderKeysProvider><ModelsPage /></ProviderKeysProvider>
+                     <ModelsPage />
                     </Suspense>
                   } 
                 />
 
                 {/* Global routes */}
                 <Route path="projects" element={<ProjectsPage />} />
-                <Route path="settings" element={<ProviderKeysProvider><SettingsPage /></ProviderKeysProvider>} />
+                <Route path="settings" element={<SettingsPage />} />
               </Route>
             </Routes>
             <Toaster position="top-right" richColors />

@@ -350,7 +350,7 @@ export const NewModelsTable: React.FC<NewModelsTableProps> = ({
 
                       {/* Cost Column */}
                       <div className="w-[17%]">
-                        <CostDisplay model={model} modelsGroup={modelsGroup} className="justify-start" />
+                        <CostDisplay model={model} className="justify-start" />
                       </div>
 
                       {/* Input/Output Formats */}

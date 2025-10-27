@@ -1,5 +1,5 @@
 import { RefreshCcwIcon } from "lucide-react";
-import { ModelSelector } from "../ModelSelector";
+import { ModelSelector } from "../traces/model-selector";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ModelSelectorHeaderProps {
