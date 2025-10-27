@@ -40,8 +40,6 @@ export function EmailForm() {
 
       // Store email in localStorage
       setUserEmail(email);
-
-      toast.success('Login successful!');
       // Redirect to home page
       navigate('/');
     } catch (err) {
