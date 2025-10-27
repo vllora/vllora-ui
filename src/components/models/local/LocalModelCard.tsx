@@ -98,22 +98,10 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model, providerS
             </div>
           </div>
 
-          {/* Description Section */}
-          <div className="mt-2 mb-3">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <p className="text-xs text-zinc-400 leading-relaxed line-clamp-2 cursor-help">
-                  {model.description}
-                </p>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="bg-zinc-800 border-zinc-700 text-white max-w-xs">
-                <p className="text-xs">{model.description}</p>
-              </TooltipContent>
-            </Tooltip>
-          </div>
+         
 
           {/* Main Info Section - 3 Columns */}
-          <div className="grid grid-cols-3 gap-3 pt-2.5 border-t border-zinc-800/50">
+          <div className="grid grid-cols-3 gap-3 pt-2.5">
             {/* Providers Column - Left Aligned */}
             <div className="space-y-1">
               <p className="text-xs text-zinc-500">Providers</p>
