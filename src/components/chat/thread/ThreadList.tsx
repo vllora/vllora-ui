@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { InfoIcon, CheckCircle2, Loader2 } from 'lucide-react';
+import { InfoIcon, Loader2 } from 'lucide-react';
 import { Thread } from '@/types/chat';
 import { ThreadsConsumer } from '@/contexts/ThreadsContext';
 import { ThreadRow } from './ThreadRow';
