@@ -18,6 +18,8 @@ export function ThreadsPageContent() {
     addThread,
     updateThread,
     refreshThreads,
+    loading,
+    loadingThreadsError,
     isRightSidebarCollapsed,
     setIsRightSidebarCollapsed
   } = ThreadsConsumer();
@@ -107,6 +109,13 @@ export function ThreadsPageContent() {
       handleSelectThread(threads[0].thread_id);
     }
   }, [selectedThreadId, threads, handleSelectThread]);
+
+  // Auto-create a new thread when threads list is empty after loading
+  useEffect(() => {
+    if (!loading && !loadingThreadsError && threads.length === 0) {
+      handleNewThread();
+    }
+  }, [loading, loadingThreadsError, threads.length, handleNewThread]);
 
 
 
