@@ -10,6 +10,8 @@ export const useProjectEvents = (props: ProjectEventsHookProps) => {
   const [state, setState] = useState<ProjectEventsState>({
     isConnected: false,
     isConnecting: false,
+    isRetrying: false,
+    retryAttempt: 0,
     error: null
   });
 
@@ -18,6 +20,10 @@ export const useProjectEvents = (props: ProjectEventsHookProps) => {
   const shouldConnectRef = useRef(false);
   const isConnectingRef = useRef(false);
   const projectIdRef = useRef(projectId);
+  const retryCountRef = useRef(0);
+  const connectionIdRef = useRef(0); // Track connection attempts to prevent race conditions
+  const maxRetries = 5;
+  const baseRetryDelay = 1000; // 1 second (was incorrectly 5000)
 
   // Observable pattern - store subscribers instead of events
   const subscribersRef = useRef<Map<string, (event: ProjectEventUnion) => void>>(new Map());
@@ -82,6 +88,7 @@ export const useProjectEvents = (props: ProjectEventsHookProps) => {
   const disconnect = useCallback(() => {
     shouldConnectRef.current = false;
     isConnectingRef.current = false;
+    retryCountRef.current = 0; // Reset retry counter on disconnect
 
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
@@ -97,6 +104,8 @@ export const useProjectEvents = (props: ProjectEventsHookProps) => {
       ...prev,
       isConnected: false,
       isConnecting: false,
+      isRetrying: false,
+      retryAttempt: 0,
       error: null
     }));
   }, []);
@@ -109,6 +118,10 @@ export const useProjectEvents = (props: ProjectEventsHookProps) => {
 
     // Mark as connecting atomically
     isConnectingRef.current = true;
+
+    // Increment connection ID to track this specific connection attempt
+    connectionIdRef.current += 1;
+    const currentConnectionId = connectionIdRef.current;
 
     // Disconnect any existing connection first
     if (abortControllerRef.current) {
@@ -131,11 +144,20 @@ export const useProjectEvents = (props: ProjectEventsHookProps) => {
         },
         signal: abortControllerRef.current.signal,
         onopen: async (response) => {
+          // Ignore callbacks from stale connections
+          if (currentConnectionId !== connectionIdRef.current) {
+            console.log('Ignoring onopen from stale connection');
+            return;
+          }
+
           if (response.ok) {
+            retryCountRef.current = 0; // Reset retry counter on successful connection
             setState(prev => ({
               ...prev,
               isConnected: true,
               isConnecting: false,
+              isRetrying: false,
+              retryAttempt: 0,
               error: null
             }));
             isConnectingRef.current = false;
@@ -146,6 +168,11 @@ export const useProjectEvents = (props: ProjectEventsHookProps) => {
           }
         },
         onmessage: (event) => {
+          // Ignore messages from stale connections
+          if (currentConnectionId !== connectionIdRef.current) {
+            return;
+          }
+
           try {
             const parsedData = JSON.parse(event.data);
             // The backend sends events with proper structure, use directly
@@ -163,6 +190,12 @@ export const useProjectEvents = (props: ProjectEventsHookProps) => {
           }
         },
         onerror: (error) => {
+          // Ignore errors from stale connections
+          if (currentConnectionId !== connectionIdRef.current) {
+            console.log('Ignoring onerror from stale connection');
+            throw error; // Still throw to stop the stale connection
+          }
+
           isConnectingRef.current = false;
           setState(prev => ({
             ...prev,
@@ -175,6 +208,12 @@ export const useProjectEvents = (props: ProjectEventsHookProps) => {
           throw error;
         },
         onclose: () => {
+          // Ignore close events from stale connections
+          if (currentConnectionId !== connectionIdRef.current) {
+            console.log('Ignoring onclose from stale connection');
+            throw new Error('Connection closed (stale)');
+          }
+
           isConnectingRef.current = false;
           setState(prev => ({
             ...prev,
@@ -188,21 +227,72 @@ export const useProjectEvents = (props: ProjectEventsHookProps) => {
         openWhenHidden: true,
       });
     } catch (error: any) {
+      // Ignore errors from stale connections
+      if (currentConnectionId !== connectionIdRef.current) {
+        console.log('Ignoring error from stale connection during retry logic');
+        return;
+      }
+
       console.warn('Failed to connect to project events:', error);
       isConnectingRef.current = false;
-      setState(prev => ({
-        ...prev,
-        isConnected: false,
-        isConnecting: false,
-        error: error.message || 'Connection failed'
-      }));
+
+      // Retry logic with exponential backoff if shouldConnect is still true
+      if (shouldConnectRef.current && retryCountRef.current < maxRetries) {
+        retryCountRef.current += 1;
+        const delay = baseRetryDelay * Math.pow(2, retryCountRef.current - 1);
+        console.log(`Retrying connection in ${delay}ms (attempt ${retryCountRef.current}/${maxRetries})`);
+
+        setState(prev => ({
+          ...prev,
+          isConnected: false,
+          isConnecting: false,
+          isRetrying: true,
+          retryAttempt: retryCountRef.current,
+          error: error.message || 'Connection failed'
+        }));
+
+        reconnectTimeoutRef.current = setTimeout(() => {
+          // Only retry if this is still the current connection attempt
+          if (shouldConnectRef.current && currentConnectionId === connectionIdRef.current) {
+            connect();
+          }
+        }, delay);
+      } else {
+        // No more retries, set final error state
+        setState(prev => ({
+          ...prev,
+          isConnected: false,
+          isConnecting: false,
+          isRetrying: false,
+          retryAttempt: retryCountRef.current,
+          error: error.message || 'Connection failed'
+        }));
+      }
     }
   }, []);
 
   const startSubscription = useCallback(() => {
+    // Prevent multiple simultaneous connection attempts
+    if (isConnectingRef.current) {
+      console.log('Connection already in progress, ignoring duplicate startSubscription call');
+      return;
+    }
+
+    // Disconnect any existing connection first to ensure singleton
+    if (abortControllerRef.current) {
+      disconnect();
+    }
+
+    // Clear any pending retry timers
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
     shouldConnectRef.current = true;
+    retryCountRef.current = 0; // Reset retry counter when starting subscription
     connect();
-  }, [connect]);
+  }, [connect, disconnect]);
 
   const stopSubscription = useCallback(() => {
     disconnect();

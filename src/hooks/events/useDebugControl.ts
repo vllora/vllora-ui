@@ -10,7 +10,7 @@ export function useDebugControl(props: {
   channel_name: string;
 }) {
   const { handleEvent, channel_name } = props;
-  const { subscribe } = ProjectEventsConsumer();
+  const { subscribe, stopSubscription, startSubscription } = ProjectEventsConsumer();
 
   const [isPaused, setIsPaused] = useLocalStorageState(DEBUG_CONTROL_KEY, {
     defaultValue: false,
@@ -30,6 +30,15 @@ export function useDebugControl(props: {
       pausedEventsRef.current = [];
     }
   }, [handleEvent, setIsPaused]);
+
+  // Handle disconnect/reconnect when isPaused changes
+  useEffect(() => {
+    if (isPaused) {
+      stopSubscription();
+    } else {
+      startSubscription();
+    }
+  }, [isPaused, stopSubscription, startSubscription]);
 
   useEffect(() => {
     const unsubscribe = subscribe(channel_name, (event: ProjectEventUnion) => {

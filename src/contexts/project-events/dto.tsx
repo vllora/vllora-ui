@@ -268,5 +268,7 @@ export interface ProjectEventsHookProps {
 export interface ProjectEventsState {
   isConnected: boolean;
   isConnecting: boolean;
+  isRetrying: boolean;
+  retryAttempt: number;
   error: string | null;
 }
