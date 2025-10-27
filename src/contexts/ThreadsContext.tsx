@@ -19,7 +19,7 @@ interface ThreadsProviderProps {
 }
 
 export function useThreads({ projectId }: ThreadsProviderProps) {
-  const { currentProjectId, isDefaultProject } = ProjectsConsumer();
+  const {  isDefaultProject } = ProjectsConsumer();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   // Base state management
@@ -34,12 +34,12 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
   // CRUD operations
   const operations = useThreadOperations(projectId, threadState, paginationState.refreshThreads);
   const handleThreadClick = useCallback((inputThreadId: string, inputModels: string[]) => {
-    if (!currentProjectId) return;
+    if (!projectId) return;
     if (selectedThreadId === inputThreadId) return;
     const params = new URLSearchParams(searchParams);
     params.set('threadId', inputThreadId);
-    if (!isDefaultProject(currentProjectId)) {
-      params.set('project_id', currentProjectId);
+    if (!isDefaultProject(projectId)) {
+      params.set('project_id', projectId);
     } else {
       params.delete('project_id');
     }
@@ -49,7 +49,7 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
       params.set('model', lastModel);
     }
     navigate(`/chat?${params.toString()}`);
-  }, [currentProjectId, navigate, searchParams, isDefaultProject, selectedThreadId]);
+  }, [projectId, navigate, searchParams, isDefaultProject, selectedThreadId]);
 
   
   
@@ -84,10 +84,7 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
 
   return {
     // Thread state
-    threads: threadState.threads,
-    selectedThreadId: threadState.selectedThreadId,
-    isRightSidebarCollapsed: threadState.isRightSidebarCollapsed,
-    setIsRightSidebarCollapsed: threadState.setIsRightSidebarCollapsed,
+    ...threadState,
 
     // Pagination state
     loading: paginationState.loading,
@@ -109,7 +106,8 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
     // Thread changes
     threadsHaveChanges: threadChangesState.threadsHaveChanges,
 
-    handleThreadClick
+    handleThreadClick,
+    projectId,
   };
 }
 

@@ -1,4 +1,3 @@
-import { Thread } from '@/types/chat';
 
 export interface ThreadChanges {
   [threadId: string]: {
@@ -10,13 +9,7 @@ export interface ThreadChanges {
   };
 }
 
-export interface ThreadState {
-  threads: Thread[];
-  setThreads: React.Dispatch<React.SetStateAction<Thread[]>>;
-  selectedThreadId: string | null;
-  isRightSidebarCollapsed: boolean;
-  setIsRightSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
-}
+
 
 export interface ThreadPaginationState {
   offset: number;

@@ -65,7 +65,6 @@ export const useUserProviderOfSelectedModelConfig = (props: {
   
   const handleWarningClick = useCallback(() => {
     if (!selectedModelInfo) return;
-
     const unconfiguredProviders = selectedModelInfo.endpoints?.filter(ep => !ep.available) || [];
 
     // If only one unconfigured provider, open config dialog directly

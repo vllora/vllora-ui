@@ -1,9 +1,8 @@
 import { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Thread } from '@/types/chat';
-import { ThreadState } from './types';
 
-export function useThreadState(): ThreadState {
+export function useThreadState() {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [searchParams] = useSearchParams();
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false);
@@ -13,11 +12,17 @@ export function useThreadState(): ThreadState {
     return searchParams.get('threadId');
   }, [searchParams]);
 
+  const selectedThread = useMemo(() => {
+    return threads.find((thread) => thread.thread_id === selectedThreadId);
+  }, [threads, selectedThreadId]);
+
   return {
     threads,
     setThreads,
     selectedThreadId,
     isRightSidebarCollapsed,
     setIsRightSidebarCollapsed,
+    selectedThread,
   };
 }
+export type ThreadState = ReturnType<typeof useThreadState>;

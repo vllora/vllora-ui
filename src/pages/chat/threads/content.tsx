@@ -2,12 +2,11 @@ import { useCallback, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { ThreadsSidebar } from '@/components/chat/ThreadsSidebar';
-import { ConversationWindow } from '@/components/chat/conversation/ConversationWindow';
-import { TracesRightSidebar } from '@/components/chat/TracesRightSidebar';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { ThreadsConsumer } from '@/contexts/ThreadsContext';
 import { ChatWindowProvider } from '@/contexts/ChatWindowContext';
 import { Thread } from '@/types/chat';
+import { ConversationAndTraces } from './conversation-and-traces';
 
 export function ThreadsPageContent() {
   const { currentProjectId, isDefaultProject } = ProjectsConsumer();
@@ -16,22 +15,14 @@ export function ThreadsPageContent() {
     threads,
     selectedThreadId,
     addThread,
-    updateThread,
     refreshThreads,
-    loading,
-    loadingThreadsError,
-    isRightSidebarCollapsed,
-    setIsRightSidebarCollapsed
+    selectedThread,
   } = ThreadsConsumer();
   const navigate = useNavigate();
-
-  const currentThread = useMemo(() => {
-    return threads.find((t) => t.thread_id === selectedThreadId);
-  }, [threads, selectedThreadId]);
   // Read selectedModel from URL query string, fallback to default
   const selectedModel = useMemo(() => {
-    return searchParams.get('model') || (currentThread?.input_models && currentThread.input_models.length > 0 ? currentThread.input_models[currentThread.input_models.length - 1] : undefined) || 'openai/o1-mini';
-  }, [searchParams, currentThread]);
+    return searchParams.get('model') || (selectedThread?.input_models && selectedThread.input_models.length > 0 ? selectedThread.input_models[selectedThread.input_models.length - 1] : undefined) || 'openai/o1-mini';
+  }, [searchParams, selectedThread]);
 
   useEffect(() => {
     refreshThreads();
@@ -79,30 +70,6 @@ export function ThreadsPageContent() {
     navigate(`/chat?${params.toString()}`);
   }, [selectedModel, currentProjectId, addThread, navigate, searchParams, isDefaultProject]);
 
-  const handleModelChange = useCallback((modelId: string) => {
-    // Update URL with new model
-    const params = new URLSearchParams(searchParams);
-    params.set('model', modelId);
-    if (selectedThreadId) {
-      params.set('threadId', selectedThreadId);
-      // Update the thread's input_models
-      const thread = threads.find((t) => t.thread_id === selectedThreadId);
-      if (thread) {
-        const updatedModels = thread.input_models.includes(modelId)
-          ? thread.input_models
-          : thread.is_from_local ? [modelId] : [...thread.input_models, modelId];
-        updateThread(selectedThreadId, {
-          input_models: updatedModels,
-        });
-      }
-    }
-    if (currentProjectId && !isDefaultProject(currentProjectId)) {
-      params.set('project_id', currentProjectId);
-    } else {
-      params.delete('project_id');
-    }
-    navigate(`/chat?${params.toString()}`);
-  }, [selectedThreadId, threads, searchParams, currentProjectId, updateThread, navigate, isDefaultProject]);
 
   useEffect(() => {
     if (!selectedThreadId && threads.length > 0) {
@@ -110,25 +77,6 @@ export function ThreadsPageContent() {
     }
   }, [selectedThreadId, threads, handleSelectThread]);
 
-  // Auto-create a new thread when threads list is empty after loading
-  useEffect(() => {
-    if (!loading && !loadingThreadsError && threads.length === 0) {
-      handleNewThread();
-    }
-  }, [loading, loadingThreadsError, threads.length, handleNewThread]);
-
-
-
-  const isCurrentThreadDraft = useMemo(() => {
-    if (threads && threads.length > 0) {
-      const thread = threads.find((t) => t.thread_id === selectedThreadId);
-      if (thread) {
-        return thread.is_from_local
-      }
-      return true;
-    }
-    return true;
-  }, [threads, selectedThreadId])
 
   return (
     <section className="flex-1 flex bg-background text-foreground overflow-hidden" aria-label="Chat Interface">
@@ -143,23 +91,7 @@ export function ThreadsPageContent() {
       {/* Main Chat Area and Right Sidebar */}
       {selectedThreadId && currentProjectId ? (
         <ChatWindowProvider threadId={selectedThreadId} projectId={currentProjectId} selectedModel={selectedModel}>
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <ConversationWindow
-              threadId={selectedThreadId}
-              threadTitle={threads.find((t) => t.thread_id === selectedThreadId)?.title}
-              projectId={currentProjectId}
-              widgetId={`chat-${selectedThreadId}`}
-              onModelChange={handleModelChange}
-              isDraft={isCurrentThreadDraft}
-            />
-          </div>
-
-          {/* Right Sidebar - Traces */}
-          <TracesRightSidebar
-            threadId={selectedThreadId}
-            isCollapsed={isRightSidebarCollapsed}
-            onToggle={() => setIsRightSidebarCollapsed(!isRightSidebarCollapsed)}
-          />
+          <ConversationAndTraces />
         </ChatWindowProvider>
       ) : (
         <div className="flex-1 flex items-center justify-center">

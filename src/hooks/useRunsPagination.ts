@@ -77,7 +77,7 @@ export function useRunsPagination({
       return response;
     },
     {
-      refreshDeps: [threadId, projectId],
+      manual: true,
       onError: (err) => {
         toast.error("Failed to load runs", {
           description: err.message || "An error occurred while loading runs",
@@ -140,7 +140,7 @@ export function useRunsPagination({
     setHasMoreRuns(false);
     setRawRuns([]);
     triggerRefreshRuns();
-  }, []);
+  }, [triggerRefreshRuns]);
 
   return {
     runs: rawRuns,

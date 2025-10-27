@@ -8,6 +8,7 @@ import { useDebugControl } from '@/hooks/events/useDebugControl';
 import { processEvent, updatedRunWithSpans } from '@/hooks/events/utilities';
 import { useWrapperHook } from '@/hooks/useWrapperHook';
 import { useUserProviderOfSelectedModelConfig } from '@/hooks/userProviderOfSelectedModelConfig';
+import { ThreadsConsumer } from './ThreadsContext';
 
 export type ChatWindowContextType = ReturnType<typeof useChatWindow>;
 
@@ -56,6 +57,9 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     collapsedSpans,
     setCollapsedSpans,
   } = useWrapperHook({ projectId, threadId });
+
+
+  const {selectedThread} = ThreadsConsumer()
  
 
 
@@ -139,8 +143,13 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     setSelectedSpanId(null);
     setSelectedRunId(null);
     setOpenTraces([]);
-    refreshRuns();
-  }, [refreshRuns]);
+    if(selectedThread ) {
+        refreshRuns();
+      } else {
+        clearAll()
+      }
+    }
+  }, [refreshRuns, selectedThread?.thread_id, selectedThread?.is_from_local, setFlattenSpans, setSelectedSpanId, setSelectedRunId, setOpenTraces, setRuns]);
 
   // Map API messages to local Message type
   const runs = rawRuns;
@@ -148,11 +157,6 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
   const appendUsage = useCallback((usage: any) => {
     setUsageInfo((prev) => [...prev, usage]);
   }, []);
-
-
-
-
-  
 
   const selectedRun = useMemo(() => {
     return selectedRunId ? runs.find(r => r.run_id === selectedRunId) : undefined;
@@ -267,7 +271,8 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     setHoverSpanId,
     collapsedSpans,
     setCollapsedSpans,
-    ...providerOfSelectedModel
+    ...providerOfSelectedModel,
+    threadId,
   };
 }
 export function ChatWindowProvider({ children, threadId, projectId, selectedModel }: { children: ReactNode, threadId: string, projectId: string, selectedModel: string }) {

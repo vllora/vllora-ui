@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { ThreadChanges, ThreadState } from "./types";
+import { ThreadChanges } from "./types";
+import { ThreadState } from "./useThreadState";
 
 export function useThreadChanges(threadState: ThreadState) {
   const { selectedThreadId } = threadState;
