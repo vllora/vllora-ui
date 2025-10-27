@@ -92,7 +92,11 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
       {/* Mobile Card View */}
       <div className="sm:hidden space-y-2">
         {sortedModels.map((model, index) => (
-          <LocalModelCard key={`${model.inference_provider.provider}/${model.model}-${index}`} model={model} />
+          <LocalModelCard 
+            key={`${model.inference_provider.provider}/${model.model}-${index}`} 
+            model={model}
+            providerStatusMap={providerStatusMap}
+          />
         ))}
       </div>
 

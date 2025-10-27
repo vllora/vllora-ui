@@ -11,9 +11,10 @@ import { CostDisplay } from '@/components/shared/CostDisplay';
 export interface LocalModelCardProps {
   model: LocalModel;
   providerStatusMap?: Map<string, boolean>;
+  showDescription?: boolean;
 }
 
-export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model, providerStatusMap }) => {
+export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model, providerStatusMap, showDescription = true }) => {
   const [copiedModelName, setCopiedModelName] = useState(false);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
 
@@ -99,7 +100,7 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model, providerS
             </div>
             
             {/* Description section */}
-            {model.description && (
+            {showDescription && model.description && (
               <div className="mt-2">
                 <div 
                   onClick={(e) => {

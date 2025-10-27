@@ -197,6 +197,7 @@ export function HomePage() {
                   key={`${model.inference_provider.provider}/${model.model}-${index}`}
                   model={model}
                   providerStatusMap={providerStatusMap}
+                  showDescription={false}
                 />
               ))}
             </div>
