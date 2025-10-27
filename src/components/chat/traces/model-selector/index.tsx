@@ -16,60 +16,68 @@ import {
 import { LocalModel, LocalModelProviderInfo } from '@/types/models';
 import { ModelListView } from './ModelListView';
 import { ProviderListView } from './ProviderListView';
-import { ProviderConfigDialog } from './ProviderConfigDialog';
-import { MultiProviderConfigDialog } from './MultiProviderConfigDialog';
+import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 
 interface ModelSelectorProps {
   selectedModel: string;
   onModelChange?: (modelId: string) => void;
 }
 
+
+
 export const ModelSelector: React.FC<ModelSelectorProps> = ({
   selectedModel,
   onModelChange,
 }) => {
   const { models } = LocalModelsConsumer();
+  const { selectedModelInfo, selectedProvider, isSelectedProviderConfigured, setSelectedProviderForConfig, setConfigDialogOpen, handleWarningClick } = ChatWindowConsumer();
+
+  return <ModelSelectorComponent
+    selectedModel={selectedModel}
+    onModelChange={onModelChange} models={models}
+    selectedModelInfo={selectedModelInfo}
+    selectedProvider={selectedProvider}
+    isSelectedProviderConfigured={isSelectedProviderConfigured}
+    setSelectedProviderForConfig={setSelectedProviderForConfig}
+    setConfigDialogOpen={setConfigDialogOpen}
+    handleWarningClick={handleWarningClick} />
+}
+interface ModelSelectorComponentProps {
+  selectedModel: string;
+  onModelChange?: (modelId: string) => void;
+  models: LocalModel[];
+  selectedModelInfo?: LocalModel;
+  selectedProvider?: LocalModelProviderInfo;
+  isSelectedProviderConfigured?: boolean;
+  setSelectedProviderForConfig?: (providerName: string) => void;
+  setConfigDialogOpen?: (open: boolean) => void;
+  handleWarningClick?: () => void;
+}
+const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
+  selectedModel,
+  onModelChange,
+  models,
+  selectedModelInfo,
+  selectedProvider,
+  isSelectedProviderConfigured,
+  setSelectedProviderForConfig,
+  setConfigDialogOpen,
+  handleWarningClick
+}) => {
   const [open, setOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState<'model' | 'provider'>('model');
-  const [configDialogOpen, setConfigDialogOpen] = useState(false);
-  const [selectedProviderForConfig, setSelectedProviderForConfig] = useState<string | null>(null);
-  const [providerListDialogOpen, setProviderListDialogOpen] = useState(false);
 
-  const selectedModelInfo: LocalModel | undefined = useMemo(()=> {
-    let isFullName = selectedModel.includes('/');
-    if(isFullName){
-      let splited = selectedModel.split('/');
-      let modelName = splited[1];
-      let modelInfo = models.find((model) => model.model === modelName);
-      return modelInfo
 
-    } else {
-      let modelInfo = models.find((model) => model.model === selectedModel);
-      return modelInfo
-    }
-  }, [models, selectedModel])
 
-  const selectedProvider:LocalModelProviderInfo | undefined = useMemo(() => {
-      let isFullName = selectedModel.includes('/');
-      if(!isFullName){
-        return undefined
-      }
 
-    if(selectedModelInfo){
-      let providerName = selectedModel.split('/')[0];
-
-      return selectedModelInfo.endpoints?.find((endpoint) => endpoint.provider.provider === providerName);
-    }
-    return undefined;
-  }, [selectedModelInfo, selectedModel]);
 
   const getIconForModel = useCallback((modelId: string) => {
-    if(modelId.includes('/')){
+    if (modelId.includes('/')) {
       return modelId.split('/')[0];
     }
     // find model that have same model_name
     const model = models.find((model) => model.model === modelId);
-    if(model){
+    if (model) {
       return model.model_provider
     }
     return '';
@@ -92,7 +100,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 
   // Get all providers for selected model
   const providers: LocalModelProviderInfo[] = useMemo(() => {
-    if(!selectedModelInfo){
+    if (!selectedModelInfo) {
       return [];
     }
     return selectedModelInfo.endpoints || [];
@@ -129,42 +137,9 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     setOpen(isOpen);
   };
 
-  const handleWarningClick = () => {
-    if (!selectedModelInfo) return;
-
-    const unconfiguredProviders = selectedModelInfo.endpoints?.filter(ep => !ep.available) || [];
-
-    // If only one unconfigured provider, open config dialog directly
-    if (unconfiguredProviders.length === 1) {
-      setSelectedProviderForConfig(unconfiguredProviders[0].provider.provider);
-      setConfigDialogOpen(true);
-    } else if (unconfiguredProviders.length > 1) {
-      // If multiple unconfigured providers, show provider list dialog
-      setProviderListDialogOpen(true);
-    }
-  };
-
-  const isNoProviderConfigured = useMemo(() => {
-    if(!selectedModelInfo || selectedModelInfo.endpoints?.length === 0) {
-      return true;
-    }
-    return selectedModelInfo.endpoints?.filter((endpoint) => !endpoint.available).length === selectedModelInfo.endpoints?.length;
-  }, [selectedModelInfo]);
-
+  
   // Check if the currently selected provider is configured
-  const isSelectedProviderConfigured = useMemo(() => {
-    // If no provider is selected (simple format), check if any provider is configured
-    if (!selectedModel.includes('/')) {
-      return !isNoProviderConfigured;
-    }
 
-    // If provider is selected (full format), check if that specific provider is configured
-    if (selectedProvider) {
-      return selectedProvider.available;
-    }
-
-    return true;
-  }, [selectedModel, selectedProvider, isNoProviderConfigured]);
 
   return (
     <div className="inline-flex items-center gap-2">
@@ -207,12 +182,12 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
               providers={providers}
               selectedModelInfo={selectedModelInfo}
               selectedModel={selectedModel}
-              onProviderSelect={(modelFullName)=>{
+              onProviderSelect={(modelFullName) => {
                 handleModelSelect(modelFullName);
               }}
               onConfigureProvider={(providerName) => {
-                setSelectedProviderForConfig(providerName);
-                setConfigDialogOpen(true);
+                setSelectedProviderForConfig?.(providerName);
+                setConfigDialogOpen?.(true);
               }}
             />
           )}
@@ -224,7 +199,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           <Tooltip>
             <TooltipTrigger asChild>
               <button
-                onClick={handleWarningClick}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleWarningClick?.();
+                }}
                 className="flex items-center"
               >
                 <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 cursor-pointer hover:text-amber-600 transition-colors" />
@@ -237,29 +215,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           </Tooltip>
         </TooltipProvider>
       )}
-      {/* Single Provider Config Dialog */}
-      {selectedProviderForConfig && (
-        <ProviderConfigDialog
-          open={configDialogOpen}
-          providerName={selectedProviderForConfig}
-          onOpenChange={setConfigDialogOpen}
-          onSaveSuccess={() => {
-            
-          }}
-        />
-      )}
 
-      {/* Multiple Providers List Dialog */}
-      <MultiProviderConfigDialog
-        open={providerListDialogOpen}
-        providers={selectedModelInfo?.endpoints?.filter(ep => !ep.available) || []}
-        onOpenChange={setProviderListDialogOpen}
-        onProviderSelect={(providerName) => {
-          setProviderListDialogOpen(false);
-          setSelectedProviderForConfig(providerName);
-          setConfigDialogOpen(true);
-        }}
-      />
     </div>
   );
 };

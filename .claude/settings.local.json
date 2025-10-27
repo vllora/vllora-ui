@@ -27,7 +27,8 @@
       "Bash(pip install:*)",
       "Bash(source:*)",
       "Bash(cargo add:*)",
-      "Bash(node --version)"
+      "Bash(node --version)",
+      "Bash(node -e:*)"
     ],
     "deny": [],
     "ask": []

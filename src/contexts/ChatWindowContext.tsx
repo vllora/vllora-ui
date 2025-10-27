@@ -7,6 +7,7 @@ import { useStableMessageHierarchies } from '@/hooks/useStableMessageHierarchies
 import { useDebugControl } from '@/hooks/events/useDebugControl';
 import { processEvent, updatedRunWithSpans } from '@/hooks/events/utilities';
 import { useWrapperHook } from '@/hooks/useWrapperHook';
+import { useUserProviderOfSelectedModelConfig } from '@/hooks/userProviderOfSelectedModelConfig';
 
 export type ChatWindowContextType = ReturnType<typeof useChatWindow>;
 
@@ -15,9 +16,10 @@ const ChatWindowContext = createContext<ChatWindowContextType | undefined>(undef
 interface ChatWindowProviderProps {
   threadId: string;
   projectId: string;
+  selectedModel: string;
 }
 
-export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) {
+export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindowProviderProps) {
   // Use the runs pagination hook
   const {
     runs: rawRuns,
@@ -54,11 +56,10 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     collapsedSpans,
     setCollapsedSpans,
   } = useWrapperHook({ projectId, threadId });
-
+ 
 
 
   const [isChatProcessing, setIsChatProcessing] = useState<boolean>(false);
-
   const [runHighlighted, setRunHighlighted] = useState<string | null>(null);
 
   const updateRunMetrics = useCallback((run_id: string, updatedSpans: Span[]) => {
@@ -130,6 +131,8 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
   const [traceId, setTraceId] = useState<string | undefined>();
   const [usageInfo, setUsageInfo] = useState<any[]>([]);
 
+  const providerOfSelectedModel = useUserProviderOfSelectedModelConfig({ selectedModel });
+
   // Wrap refreshRuns to also reset UI state
   const handleRefreshRuns = useCallback(() => {
     setFlattenSpans([]);
@@ -149,9 +152,13 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
 
 
 
+  
+
   const selectedRun = useMemo(() => {
     return selectedRunId ? runs.find(r => r.run_id === selectedRunId) : undefined;
   }, [selectedRunId, runs]);
+
+  
 
   const selectedSpan = useMemo(() => {
     return selectedSpanId ? spansOfSelectedRun.find((s: Span) => s.span_id === selectedSpanId) : undefined;
@@ -260,10 +267,11 @@ export function useChatWindow({ threadId, projectId }: ChatWindowProviderProps) 
     setHoverSpanId,
     collapsedSpans,
     setCollapsedSpans,
+    ...providerOfSelectedModel
   };
 }
-export function ChatWindowProvider({ children, threadId, projectId }: { children: ReactNode, threadId: string, projectId: string }) {
-  const value = useChatWindow({ threadId, projectId });
+export function ChatWindowProvider({ children, threadId, projectId, selectedModel }: { children: ReactNode, threadId: string, projectId: string, selectedModel: string }) {
+  const value = useChatWindow({ threadId, projectId, selectedModel });
   return <ChatWindowContext.Provider value={value}>{children}</ChatWindowContext.Provider>;
 }
 export function ChatWindowConsumer() {

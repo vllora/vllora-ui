@@ -133,12 +133,11 @@ export function ThreadsPageContent() {
 
       {/* Main Chat Area and Right Sidebar */}
       {selectedThreadId && currentProjectId ? (
-        <ChatWindowProvider threadId={selectedThreadId} projectId={currentProjectId}>
+        <ChatWindowProvider threadId={selectedThreadId} projectId={currentProjectId} selectedModel={selectedModel}>
           <div className="flex-1 flex flex-col overflow-hidden">
             <ConversationWindow
               threadId={selectedThreadId}
               threadTitle={threads.find((t) => t.thread_id === selectedThreadId)?.title}
-              modelName={selectedModel}
               projectId={currentProjectId}
               widgetId={`chat-${selectedThreadId}`}
               onModelChange={handleModelChange}

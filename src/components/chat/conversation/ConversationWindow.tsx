@@ -12,11 +12,12 @@ import { useConversationEvents } from '@/hooks/events/useConversationEvents';
 import { Message } from '@/types/chat';
 import { extractMessageFromApiInvokeSpan } from '@/utils/span-to-message';
 import { McpServerConfig } from '@/services/mcp-api';
+import { ProviderConfigDialog } from '../traces/model-selector/ProviderConfigDialog';
+import { MultiProviderConfigDialog } from '../traces/model-selector/MultiProviderConfigDialog';
 
 interface ChatWindowProps {
   threadId?: string;
   threadTitle?: string;
-  modelName?: string;
   apiKey?: string;
   projectId?: string;
   widgetId?: string;
@@ -27,7 +28,6 @@ interface ChatWindowProps {
 export const ConversationWindow: React.FC<ChatWindowProps> = ({
   threadId,
   threadTitle,
-  modelName,
   apiKey,
   projectId,
   widgetId,
@@ -51,6 +51,16 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     appendUsage,
     flattenSpans,
     clearAll,
+    selectedModel,
+    selectedModelInfo,
+    setSelectedProviderForConfig,
+    selectedProviderForConfig,
+    configDialogOpen,
+    setConfigDialogOpen,
+    providerListDialogOpen,
+    setProviderListDialogOpen,
+    isSelectedProviderConfigured,
+    handleWarningClick
   } = ChatWindowConsumer();
   useEffect(() => {
     clearAll();
@@ -72,7 +82,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
   } = useMessageSubmission({
     apiKey,
     projectId,
-    modelName,
+    modelName: selectedModel,
     widgetId,
     threadId,
     threadTitle,
@@ -186,7 +196,13 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     threadTitle?: string;
     toolsUsage?: Map<string, McpServerConfig>;
   }) => {
-    setCurrentInput(inputText);
+    if (!isSelectedProviderConfigured) {
+      if (!selectedModelInfo) return;
+      handleWarningClick?.();
+      return
+    }
+    setCurrentInput('');
+
     // construct initial messages based on last api_invoke span
     const lastApiInvokeSpan = flattenSpans.filter(span => span.operation_name === 'api_invoke').pop();
     let continousMessage: Message[] = []
@@ -195,7 +211,9 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     }
 
     onSubmitWrapper({ inputText, files, searchToolEnabled, otherTools, threadId, threadTitle, initialMessages: continousMessage, toolsUsage });
-  }, [onSubmitWrapper, setCurrentInput, threadId, flattenSpans]);
+  }, [onSubmitWrapper, setCurrentInput, threadId, flattenSpans, isSelectedProviderConfigured]);
+
+
   useEffect(() => {
     emitter.on('langdb_input_chatSubmit', handleExternalSubmit);
 
@@ -217,7 +235,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       <div className="bg-card flex-shrink-0">
         {/* Model Selector - Top row aligned with Project Dropdown */}
         <ConversationHeader
-          modelName={modelName}
+          modelName={selectedModel}
           onModelChange={onModelChange}
           onRefresh={refreshSpans}
           isLoading={isLoadingSpans}
@@ -264,7 +282,6 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
           <ChatInput
             onSubmit={(props) => {
               emitter.emit('langdb_input_chatSubmit', props);
-              setCurrentInput('');
               return Promise.resolve();
             }}
             currentInput={currentInput}
@@ -275,6 +292,33 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
           <ModalManager />
         </ModalProvider>
       </div>
+
+      {selectedProviderForConfig && (
+        <ProviderConfigDialog
+          open={configDialogOpen}
+          providerName={selectedProviderForConfig}
+          onOpenChange={(inputOpen) => {
+            setConfigDialogOpen?.(inputOpen);
+          }}
+          onSaveSuccess={() => {
+
+          }}
+        />
+      )}
+
+      {/* Multiple Providers List Dialog */}
+      <MultiProviderConfigDialog
+        open={providerListDialogOpen}
+        providers={selectedModelInfo?.endpoints?.filter(ep => !ep.available) || []}
+        onOpenChange={(inputOpen) => {
+          setProviderListDialogOpen?.(inputOpen);
+        }}
+        onProviderSelect={(providerName) => {
+          setProviderListDialogOpen?.(false);
+          setSelectedProviderForConfig?.(providerName);
+          setConfigDialogOpen?.(true);
+        }}
+      />
     </>
   );
 };

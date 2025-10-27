@@ -52,7 +52,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const { toolsUsage } = useModal();
 
   // Check if any MCP tools are configured
-  const hasToolsConfigured = toolsUsage && toolsUsage.size > 0 && 
+  const hasToolsConfigured = toolsUsage && toolsUsage.size > 0 &&
     Array.from(toolsUsage.values()).some(config => config.selectedTools.length > 0);
 
   useEffect(() => {
@@ -187,7 +187,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         threadTitle,
         toolsUsage,
       });
-      setCurrentInput('');
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
@@ -303,18 +302,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   e.preventDefault();
                   openModal('tools');
                 }}
-                className={`flex items-center justify-center h-8 w-8 rounded-md transition-colors disabled:opacity-50 ${
-                  hasToolsConfigured 
-                    ? 'bg-[rgb(var(--theme-500))]/10 hover:bg-[rgb(var(--theme-500))]/20' 
+                className={`flex items-center justify-center h-8 w-8 rounded-md transition-colors disabled:opacity-50 ${hasToolsConfigured
+                    ? 'bg-[rgb(var(--theme-500))]/10 hover:bg-[rgb(var(--theme-500))]/20'
                     : 'hover:bg-accent'
-                }`}
+                  }`}
                 title={hasToolsConfigured ? "MCP Tools Active" : "MCP Choices Menu"}
               >
-                <Plug className={`h-4 w-4 ${
-                  hasToolsConfigured 
-                    ? 'text-[rgb(var(--theme-600))]' 
+                <Plug className={`h-4 w-4 ${hasToolsConfigured
+                    ? 'text-[rgb(var(--theme-600))]'
                     : 'text-muted-foreground'
-                }`} />
+                  }`} />
               </button>
             </div>
             <Button
