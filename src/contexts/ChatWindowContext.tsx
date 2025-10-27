@@ -144,6 +144,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     setSelectedRunId(null);
     setOpenTraces([]);
     if(selectedThread ) {
+      if(!selectedThread.is_from_local) {
         refreshRuns();
       } else {
         clearAll()
