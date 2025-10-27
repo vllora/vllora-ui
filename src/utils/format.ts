@@ -24,14 +24,23 @@ export const formatContextSize = (contextSize: number, hideTokenAffix?: boolean)
     return ``;
   }
 
-  if (contextSize % 1000000 === 0) {
-    contextSize = contextSize / 1000000;
-    return `${contextSize}${hideTokenAffix ? "M" : "M tokens"}`;
+  // Round to nearest million if close to a million value (within 5%)
+  const millions = contextSize / 1000000;
+  if (millions >= 0.95 && millions <= 10) {
+    const roundedMillions = Math.round(millions);
+    return `${roundedMillions}${hideTokenAffix ? "M" : "M tokens"}`;
   }
 
-  if (contextSize % 1000 === 0) {
-    contextSize = contextSize / 1000;
-    return `${contextSize}${hideTokenAffix ? "K" : "K tokens"}`;
+  // Use exact millions if it's a clean multiple
+  if (contextSize % 1000000 === 0) {
+    const exactMillions = contextSize / 1000000;
+    return `${exactMillions}${hideTokenAffix ? "M" : "M tokens"}`;
+  }
+
+  // Use K for thousands
+  if (contextSize >= 1000) {
+    const thousands = contextSize / 1000;
+    return `${Math.round(thousands)}${hideTokenAffix ? "K" : "K tokens"}`;
   }
 
   return `${contextSize}${hideTokenAffix ? "" : " tokens"}`;

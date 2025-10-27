@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { LocalModel } from '@/types/models';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
-import { Copy, Check, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
+import { Copy, Check, ChevronUp, ChevronDown, ChevronsUpDown, ChevronRight } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { LocalModelCard } from './LocalModelCard';
 import { CostDisplay } from '@/components/shared/CostDisplay';
@@ -28,6 +28,20 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
 }) => {
   const [sortField, setSortField] = useState<SortField>('none');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set());
+
+  const toggleDescription = (modelKey: string) => {
+    setExpandedDescriptions(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(modelKey)) {
+        newSet.delete(modelKey);
+      } else {
+        newSet.add(modelKey);
+      }
+      return newSet;
+    });
+  };
+
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -159,6 +173,8 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                   : [model.inference_provider.provider];
                 
                 const modelName = model.model;
+                const modelKey = `${model.inference_provider.provider}/${model.model}`;
+                const isDescriptionExpanded = expandedDescriptions.has(modelKey);
 
                 return (
                   <TooltipProvider key={`${model.inference_provider.provider}/${model.model}-${index}`}>
@@ -201,6 +217,29 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                                   </TooltipContent>
                                 </Tooltip>
                             </div>
+                            {model.description && (
+                              <div className="mt-1">
+                                <div 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (model.description.length > 80) {
+                                      toggleDescription(modelKey);
+                                    }
+                                  }}
+                                  className={`flex items-start gap-1 group/desc ${model.description.length > 80 ? 'cursor-pointer hover:bg-accent/30 rounded px-1 -mx-1 py-0.5' : ''}`}
+                                  title={model.description.length > 80 ? (isDescriptionExpanded ? 'Click to show less' : 'Click to show more') : undefined}
+                                >
+                                  <p className={`text-xs text-muted-foreground leading-relaxed flex-1 ${!isDescriptionExpanded ? 'line-clamp-1' : ''}`}>
+                                    {model.description}
+                                  </p>
+                                  {model.description.length > 80 && (
+                                    <ChevronRight 
+                                      className={`w-3 h-3 flex-shrink-0 text-muted-foreground transition-transform ${isDescriptionExpanded ? 'rotate-90' : ''}`}
+                                    />
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>

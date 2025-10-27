@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, ChevronRight } from 'lucide-react';
 import { LocalModel } from '@/types/models';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -15,6 +15,7 @@ export interface LocalModelCardProps {
 
 export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model, providerStatusMap }) => {
   const [copiedModelName, setCopiedModelName] = useState(false);
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
 
   // Get ALL endpoints (show both configured and unconfigured providers)
   const allEndpoints = model.endpoints || [];
@@ -96,9 +97,32 @@ export const LocalModelCard: React.FC<LocalModelCardProps> = ({ model, providerS
                 </div>
               </div>
             </div>
+            
+            {/* Description section */}
+            {model.description && (
+              <div className="mt-2">
+                <div 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (model.description.length > 80) {
+                      setIsDescriptionExpanded(!isDescriptionExpanded);
+                    }
+                  }}
+                  className={`flex items-start gap-1 ${model.description.length > 80 ? 'cursor-pointer hover:bg-zinc-800/50 rounded px-1 -mx-1 py-0.5' : ''}`}
+                  title={model.description.length > 80 ? (isDescriptionExpanded ? 'Click to show less' : 'Click to show more') : undefined}
+                >
+                  <p className={`text-xs text-zinc-300 leading-relaxed flex-1 ${!isDescriptionExpanded ? 'line-clamp-1' : ''}`}>
+                    {model.description}
+                  </p>
+                  {model.description.length > 80 && (
+                    <ChevronRight 
+                      className={`w-3 h-3 flex-shrink-0 text-zinc-400 transition-transform ${isDescriptionExpanded ? 'rotate-90' : ''}`}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
           </div>
-
-         
 
           {/* Main Info Section - 3 Columns */}
           <div className="grid grid-cols-3 gap-3 pt-2.5">
