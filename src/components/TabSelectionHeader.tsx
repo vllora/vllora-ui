@@ -2,14 +2,29 @@ import { ProjectDropdown } from './ProjectDropdown';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { DebugControl } from './DebugControl';
 import { GitHubLink } from './GitHubLink';
+import { GroupingSelector } from './traces/GroupingSelector';
+import { GroupByMode, BucketSize } from '@/contexts/TracesPageContext';
 
 interface TabSelectionHeaderProps {
   currentTab: string;
   onTabChange: (tab: string) => void;
   onProjectChange?: (projectId: string) => void;
+  // Grouping props (only used when currentTab === 'traces')
+  groupByMode?: GroupByMode;
+  onGroupByModeChange?: (mode: GroupByMode) => void;
+  bucketSize?: BucketSize;
+  onBucketSizeChange?: (size: BucketSize) => void;
 }
 
-export function TabSelectionHeader({ currentTab, onTabChange, onProjectChange }: TabSelectionHeaderProps) {
+export function TabSelectionHeader({
+  currentTab,
+  onTabChange,
+  onProjectChange,
+  groupByMode,
+  onGroupByModeChange,
+  bucketSize,
+  onBucketSizeChange,
+}: TabSelectionHeaderProps) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const location = useLocation();
@@ -60,6 +75,16 @@ export function TabSelectionHeader({ currentTab, onTabChange, onProjectChange }:
             <span>Traces</span>
           </button>
         </div>
+
+        {/* Grouping Controls - Only show on Traces tab */}
+        {currentTab === 'traces' && groupByMode && onGroupByModeChange && bucketSize && onBucketSizeChange && (
+          <GroupingSelector
+            groupByMode={groupByMode}
+            onGroupByModeChange={onGroupByModeChange}
+            bucketSize={bucketSize}
+            onBucketSizeChange={onBucketSizeChange}
+          />
+        )}
       </div>
 
       <div className="flex items-center gap-3">

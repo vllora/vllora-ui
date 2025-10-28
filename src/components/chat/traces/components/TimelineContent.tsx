@@ -31,8 +31,17 @@ export const TimelineContent: React.FC<TimelineContentProps> = ({
   onToggle
 }) => {
 
-  // Get run ID from first span (all spans should belong to same run)
-  const runId = spansByRunId && spansByRunId.length > 0 ? spansByRunId[0]?.run_id : '';
+  // For grouped views (like time buckets), spans can belong to multiple runs
+  // Extract unique run IDs and use a composite identifier for multi-run scenarios
+  const uniqueRunIds = spansByRunId && spansByRunId.length > 0
+    ? [...new Set(spansByRunId.map(s => s.run_id).filter(Boolean))]
+    : [];
+
+  // Use a composite runId for multi-run scenarios (e.g., time bucket grouping)
+  const runId = uniqueRunIds.length === 1
+    ? uniqueRunIds[0] || 'unknown'
+    : `multi-run-${uniqueRunIds.length}`;
+
   return (
     <RunDetailProvider runId={runId} projectId={projectId} spansByRunId={spansByRunId}>
       <div className={cn("flex flex-col h-full overflow-hidden")}>

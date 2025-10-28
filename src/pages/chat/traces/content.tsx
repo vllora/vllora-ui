@@ -5,10 +5,24 @@ import { TracesPageConsumer } from "@/contexts/TracesPageContext";
 import { useEffect } from "react";
 
 export function TracesPageContent() {
-  const { detailSpan, spansOfSelectedRun, setDetailSpanId, refreshRuns } = TracesPageConsumer();
+  const {
+    detailSpan,
+    spansOfSelectedRun,
+    setDetailSpanId,
+    refreshRuns,
+    refreshGroups,
+    groupByMode,
+    bucketSize,
+  } = TracesPageConsumer();
+
   useEffect(() => {
-    refreshRuns();
-  }, []);
+    if (groupByMode === 'run') {
+      refreshRuns();
+    } else {
+      refreshGroups();
+    }
+  }, [groupByMode, bucketSize]);
+
   return <div className="flex flex-row flex-1 h-full overflow-hidden">
     <div className={`flex flex-col transition-all duration-300 ${detailSpan ? 'flex-1/2' : 'flex-1'} h-full`}>
       <RunTable />
