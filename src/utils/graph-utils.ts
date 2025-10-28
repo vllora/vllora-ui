@@ -7,7 +7,7 @@ export function getClientSDKName(span: Span): string | null {
   if (!span.attribute) return null;
 
   let attributes = span.attribute as any;
-  return attributes ? (attributes['langdb.client_name'] || attributes['client_name']) : null;
+  return attributes ? (attributes['vllora.client_name'] || attributes['client_name']) : null;
 }
 export const getClientSDKDisplayName = (span: Span) => {
   let name = getClientSDKName(span);

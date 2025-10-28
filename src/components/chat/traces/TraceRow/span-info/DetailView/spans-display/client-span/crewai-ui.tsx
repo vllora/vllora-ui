@@ -8,7 +8,7 @@ export const CrewAIInfoUIDisplay = ({ span }: { span: Span }) => {
     let attribute = span.attribute as any;
     let span_kind = attribute?.['openinference.span.kind'];
     const triggerClassName = "px-3 py-3 hover:bg-[#1a1a1a] transition-colors";
-    let filterOutAttributes = ['langdb_client_name', 'langdb.client_name'];
+    let filterOutAttributes = ['langdb_client_name', 'vllora.client_name'];
     let filteredAttributes = Object.keys(attribute).filter(key => !filterOutAttributes.includes(key));
     let filteredAttribute = filteredAttributes.reduce((acc, key) => {
         acc[key] = attribute[key];

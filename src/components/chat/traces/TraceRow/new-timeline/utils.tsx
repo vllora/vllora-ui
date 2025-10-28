@@ -411,7 +411,7 @@ export const getOperationTitle = (props: {
                 return 'Agent';
             }
             let attributes = span.attribute as any;
-            let title = attributes?.langdb_client_name || attributes['langdb.client_name'];
+            let title = attributes?.langdb_client_name || attributes['vllora.client_name'];
             // uppercase first letter
             title = title.charAt(0).toUpperCase() + title.slice(1);
             return `${title} Action`;

@@ -18,7 +18,7 @@ export const AgnoInfoUIDisplay = ({ span }: { span: Span }) => {
     let input_value_json = input_value ? tryParseJson(input_value) : null;
     let output_value_json = output_value ? tryParseJson(output_value) : null;
     const triggerClassName = "px-3 py-3 hover:bg-[#1a1a1a] transition-colors";
-    let filterOutAttributes = ['openinference.span.kind', 'tool.description', 'langdb_client_name', 'langdb.client_name', 'model_name', 'input.mime_type', 'output.mime_type', 'input.value', 'output.value'];
+    let filterOutAttributes = ['openinference.span.kind', 'tool.description', 'langdb_client_name', 'vllora.client_name', 'model_name', 'input.mime_type', 'output.mime_type', 'input.value', 'output.value'];
     let filteredAttributes = Object.keys(attribute).filter(key => !filterOutAttributes.includes(key));
     let filteredAttribute = filteredAttributes.reduce((acc, key) => {
         acc[key] = attribute[key];

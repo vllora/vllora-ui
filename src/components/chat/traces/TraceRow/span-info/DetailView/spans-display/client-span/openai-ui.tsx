@@ -18,7 +18,7 @@ export const OpenAIInfoUIDisplay = ({ span }: { span: Span }) => {
     let input_value_json = input_value ? tryParseJson(input_value) : null;
     let output_value_json = output_value ? tryParseJson(output_value) : null;
     const triggerClassName = "px-3 py-3 hover:bg-[#1a1a1a] transition-colors";
-    let filterOutAttributes = ['openinference.span.kind', 'tool.description', 'langdb_client_name', 'langdb.client_name', 'llm.model_name', 'llm.input_mime_type', 'llm.output_mime_type', 'llm.input.value', 'llm.output.value'];
+    let filterOutAttributes = ['openinference.span.kind', 'tool.description', 'langdb_client_name', 'vllora.client_name', 'llm.model_name', 'llm.input_mime_type', 'llm.output_mime_type', 'llm.input.value', 'llm.output.value'];
     let filteredAttributes = Object.keys(attribute).filter(key => !filterOutAttributes.includes(key));
     let filteredAttribute = filteredAttributes.reduce((acc, key) => {
         acc[key] = attribute[key];
