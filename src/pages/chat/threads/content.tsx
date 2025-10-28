@@ -21,7 +21,7 @@ export function ThreadsPageContent() {
   const navigate = useNavigate();
   // Read selectedModel from URL query string, fallback to default
   const selectedModel = useMemo(() => {
-    return searchParams.get('model') || (selectedThread?.input_models && selectedThread.input_models.length > 0 ? selectedThread.input_models[selectedThread.input_models.length - 1] : undefined) || 'openai/o1-mini';
+    return searchParams.get('model') || (selectedThread?.input_models && selectedThread.input_models.length > 0 ? selectedThread.input_models[selectedThread.input_models.length - 1] : undefined) || 'openai/gpt-4.1-nano';
   }, [searchParams, selectedThread]);
 
   useEffect(() => {

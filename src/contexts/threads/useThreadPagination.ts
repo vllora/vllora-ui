@@ -48,7 +48,7 @@ export function useThreadPagination(
             start_time_us: now,
             finish_time_us: now,
             run_ids: [],
-            input_models: ["openai/o1-mini"],
+            input_models: ["openai/gpt-4.1-nano"],
             cost: 0,
             is_from_local: true,
           };
@@ -56,7 +56,7 @@ export function useThreadPagination(
           // Navigate to the new thread with model in URL and project_id (only if not default)
           const params = new URLSearchParams();
           params.set("threadId", newThread.thread_id);
-          params.set("model", "openai/o1-mini");
+          params.set("model", "openai/gpt-4.1-nano");
           navigate(`/chat?${params.toString()}`);
         }, 10);
       }
