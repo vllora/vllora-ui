@@ -1,7 +1,6 @@
 import { BaseSpanUIDetailsDisplay, getParentCloudApiInvoke } from ".."
 import { ErrorViewer } from "../error-viewer";
 import { UsageViewer } from "../usage-viewer";
-import { useState } from "react";
 import { ResponseViewer } from "../response-viewer";
 import { InputViewer } from "../input_viewer";
 import { tryParseJson } from "@/utils/modelUtils";
@@ -37,7 +36,6 @@ export const ApiInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ApiInvoke
     const headers = headersStr ? tryParseJson(headersStr) : undefined;
     const error = modelCallAttribute?.error || apiInvokeAttribute?.error || currentAttribute?.error;
 
-    const [openAccordionItems, setOpenAccordionItems] = useState<string[]>(error ? ['error'] : []);
     const cost_str = apiInvokeAttribute?.cost;
     const ttf_str = modelCallAttribute?.ttft;
     const usage_str = currentAttribute?.usage;
