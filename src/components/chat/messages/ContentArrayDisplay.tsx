@@ -9,8 +9,8 @@ export const ContentArrayDisplay: React.FC<ContentArrayDisplayProps> = ({ conten
   return (
     <div className="flex flex-col gap-3">
       {contentArray.map((item, index) => {
-        const [type, content] = item;
-
+        let type = item.type;
+        let content = item.content || item.text;
         if (type === 'Text' && content) {
           // Check if it's a base64 image
           if (typeof content === 'string' && content.startsWith('data:image/')) {
