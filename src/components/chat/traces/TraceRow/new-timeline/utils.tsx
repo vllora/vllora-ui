@@ -17,7 +17,7 @@ export const getRouterTitle = (props: { span: Span }) => {
 export const getTaskTitle = (props: { span: Span }) => {
     const { span } = props;
     let attributes = span.attribute as any;
-    let task_name = attributes['langdb.task_name'] || attributes['task_name'];
+    let task_name = attributes['vllora.task_name'] || attributes['task_name'];
     return task_name || 'task';
 }
 
@@ -118,7 +118,7 @@ export const getAgentTitle = (props: { span: Span }) => {
         return 'Unknown Agent';
     }
     let attributeOfAgent = span.attribute as any;
-    let agent_name_from_attribute = attributeOfAgent ? (attributeOfAgent['langdb.agent_name'] || attributeOfAgent['agent_name'] || attributeOfAgent['langdb_agent_name']) : '';
+    let agent_name_from_attribute = attributeOfAgent ? (attributeOfAgent['vllora.agent_name'] || attributeOfAgent['agent_name'] || attributeOfAgent['langdb_agent_name']) : '';
     if (agent_name_from_attribute) {
         return agent_name_from_attribute;
     }
@@ -127,7 +127,7 @@ export const getAgentTitle = (props: { span: Span }) => {
         switch (sdkName.toLowerCase()) {
             case 'adk': {
                 let attributes = span.attribute as any;
-                let agent_name = attributes ? (attributes['langdb.agent_name'] || attributes['agent_name'] || attributes['langdb_agent_name']) : '';
+                let agent_name = attributes ? (attributes['vllora.agent_name'] || attributes['agent_name'] || attributes['langdb_agent_name']) : '';
                 if (agent_name) {
                     return agent_name;
                 }
@@ -161,7 +161,7 @@ export const getAgentTitle = (props: { span: Span }) => {
         }
     }
     let attributes = span.attribute as any;
-    let agent_name = attributes ? (attributes['langdb.agent_name'] || attributes['agent_name'] || attributes['langdb_agent_name']) : '';
+    let agent_name = attributes ? (attributes['vllora.agent_name'] || attributes['agent_name'] || attributes['langdb_agent_name']) : '';
     return agent_name || 'Unknown Agent';
 }
 export const getToolDisplayName = (props: { span: Span }) => {
@@ -292,8 +292,8 @@ export const getSpanTitle = (props: { span: Span, relatedSpans: Span[] }) => {
         if (operation_name.startsWith('execute_tool ')) {
             return operation_name.replace('execute_tool ', '').replace('[', '').replace(']', '');
         }
-        if(operation_name=== 'tool' && span.attribute && (span.attribute as any)['langdb.tool_name']){
-            return (span.attribute as any)['langdb.tool_name'];
+        if(operation_name=== 'tool' && span.attribute && (span.attribute as any)['vllora.tool_name']){
+            return (span.attribute as any)['vllora.tool_name'];
         }
         return operation_name;
     }

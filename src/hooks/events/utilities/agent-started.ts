@@ -11,7 +11,7 @@ export const convertAgentStartedToSpan = (event: AgentStartedEvent): Span => {
     trace_id: "",
     start_time_us: event.timestamp * 1000,
     finish_time_us: undefined,
-    attribute: event.name ? { "langdb.agent_name": event.name } : {},
+    attribute: event.name ? { "vllora.agent_name": event.name } : {},
     isInProgress: true,
   };
 };

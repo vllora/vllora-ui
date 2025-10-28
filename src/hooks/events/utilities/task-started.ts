@@ -11,7 +11,7 @@ export const convertTaskStartedToSpan = (event: TaskStartedEvent): Span => {
     trace_id: "",
     start_time_us: event.timestamp * 1000,
     finish_time_us: undefined,
-    attribute: event.name ? { "langdb.task_name": event.name } : {},
+    attribute: event.name ? { "vllora.task_name": event.name } : {},
     isInProgress: true,
   };
 };
