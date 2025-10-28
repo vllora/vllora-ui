@@ -9,7 +9,7 @@ import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { formatCost } from "@/utils/formatCost";
 import { formatMessageTime } from "@/utils/dateUtils";
 import { useRelativeTime } from "@/hooks/useRelativeTime";
-import { RUN_TABLE_GRID_COLUMNS } from './table-layout';
+import { GROUP_TABLE_GRID_COLUMNS } from './table-layout';
 import { ProviderCell } from './cells/ProviderCell';
 import { CustomErrorFallback } from "@/components/chat/traces/components/custom-error-fallback";
 import { TimelineContent } from "@/components/chat/traces/components/TimelineContent";
@@ -142,7 +142,7 @@ export const GroupTableRow: React.FC<GroupTableRowProps> = ({ group, index = 0 }
       <div
         onClick={toggleAccordion}
         className="grid divide-x divide-border gap-0 cursor-pointer items-center text-sm"
-        style={{ gridTemplateColumns: RUN_TABLE_GRID_COLUMNS }}
+        style={{ gridTemplateColumns: GROUP_TABLE_GRID_COLUMNS }}
       >
         {/* Expand/Collapse Button */}
         <div className="flex items-center justify-center py-3 px-2 ">
@@ -154,12 +154,9 @@ export const GroupTableRow: React.FC<GroupTableRowProps> = ({ group, index = 0 }
         </div>
 
         {/* Group ID (Time Bucket) */}
-        <div className="flex flex-col gap-1 py-3 px-3 overflow-hidden">
+        <div className="flex items-center py-3 px-3 overflow-hidden">
           <span className="text-xs font-medium truncate text-primary" title={bucketTimeDisplay}>
             {bucketTimeDisplay}
-          </span>
-          <span className="text-[10px] text-muted-foreground">
-            {group.count} {group.count === 1 ? 'trace' : 'traces'}
           </span>
         </div>
 

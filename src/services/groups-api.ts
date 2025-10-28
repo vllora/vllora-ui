@@ -6,14 +6,19 @@ export type { Pagination, Span };
 
 export interface GroupDTO {
   time_bucket: number; // Start timestamp of the bucket in microseconds
-  count: number; // Number of spans in this bucket
+  thread_ids: string[]; // All thread IDs in this bucket
+  trace_ids: string[]; // All trace IDs in this bucket
+  run_ids: string[]; // All run IDs in this bucket
+  root_span_ids: string[]; // All root span IDs in this bucket
+  request_models: string[]; // Models requested (from api_invoke)
+  used_models: string[]; // Models actually used (from model_call)
+  llm_calls: number; // Number of LLM calls in this bucket
+  cost: number; // Total cost
+  input_tokens: number | null; // Total input tokens
+  output_tokens: number | null; // Total output tokens
   start_time_us: number; // First span's start time in the bucket
   finish_time_us: number; // Last span's finish time in the bucket
-  used_models: string[];
-  cost: number;
-  input_tokens: number;
-  output_tokens: number;
-  errors: string[];
+  errors: string[]; // All errors in this bucket
 }
 
 export interface PaginatedGroupsResponse {
