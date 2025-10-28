@@ -18,6 +18,7 @@ export function useDebugControl(props: {
   });
 
   const pausedEventsRef = useRef<ProjectEventUnion[]>([]);
+  const lastStopTimeRef = useRef<number | null>(null);
 
   const handlePause = () => {
     setIsPaused(true);
@@ -34,6 +35,7 @@ export function useDebugControl(props: {
   // Handle disconnect/reconnect when isPaused changes
   useEffect(() => {
     if (isPaused) {
+      lastStopTimeRef.current = Date.now();
       stopSubscription();
     } else {
       startSubscription();
@@ -55,5 +57,6 @@ export function useDebugControl(props: {
     isPaused,
     handlePause,
     resume,
+    lastStopTime: lastStopTimeRef.current,
   };
 }

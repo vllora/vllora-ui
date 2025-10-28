@@ -10,12 +10,14 @@ interface UseRunsPaginationParams {
   projectId: string;
   threadId?: string; // Optional - for filtering by thread
   onRunsLoaded?: (runs: RunDTO[]) => void;
+  groupingMode?: string;
 }
 
 export function useRunsPagination({
   projectId,
   threadId,
   onRunsLoaded,
+  groupingMode,
 }: UseRunsPaginationParams) {
   // Pagination state for runs
   const [runsOffset, setRunsOffset] = useState<number>(0);

@@ -1,4 +1,4 @@
-import { createContext, useContext, ReactNode, useCallback } from "react";
+import { createContext, useContext, ReactNode, useCallback, useState } from "react";
 import { useDebugControl } from "@/hooks/events/useDebugControl";
 import { ProjectEventUnion } from "./project-events/dto";
 import { processEvent, updatedRunWithSpans } from "@/hooks/events/utilities";
@@ -12,6 +12,8 @@ const TracesPageContext = createContext<TracesPageContextType | undefined>(undef
 
 export function useTracesPageContext(props: { projectId: string }) {
   const { projectId } = props;
+
+  const [groupingMode, setGroupingMode] = useState<'run_id' | '1hour_bucket'>('1hour_bucket');
 
   // Use the runs pagination hook (no threadId filter for traces page)
   const {
@@ -43,30 +45,35 @@ export function useTracesPageContext(props: { projectId: string }) {
     runMap,
     collapsedSpans,
     setCollapsedSpans,
-  } = useWrapperHook({ projectId, onRunsLoaded: (runs) => {
-       if(runs && runs.length > 0 && runs[0].run_id){
-         fetchSpansByRunId(runs[0].run_id)
-       }
-  } });
+  } = useWrapperHook({
+    projectId,
+    onRunsLoaded: (runs) => {
+      if (runs && runs.length > 0 && runs[0].run_id) {
+        fetchSpansByRunId(runs[0].run_id)
+      }
+    },
+    groupingMode
+  });
 
   const updateRunMetrics = useCallback((run_id: string, updatedSpans: Span[]) => {
-      setRuns(prevRuns => {
-        let runById = prevRuns.find(r => r.run_id === run_id)
-        if(!runById) {
-          let newRun = updatedRunWithSpans({
-            spans: updatedSpans.filter(s => s.run_id === run_id),
-            run_id
-          })
-          return [newRun, ...prevRuns];
-        };
-        let updatedRun = updatedRunWithSpans({
+   groupingMode === 'run_id' && setRuns(prevRuns => {
+      let runById = prevRuns.find(r => r.run_id === run_id)
+      if (!runById) {
+        let newRun = updatedRunWithSpans({
           spans: updatedSpans.filter(s => s.run_id === run_id),
-          run_id,
-          prevRun: runById
+          run_id
         })
-        return prevRuns.map(r => r.run_id === run_id ? updatedRun : r)
+        return [newRun, ...prevRuns];
+      };
+      let updatedRun = updatedRunWithSpans({
+        spans: updatedSpans.filter(s => s.run_id === run_id),
+        run_id,
+        prevRun: runById
       })
-    }, []);
+      return prevRuns.map(r => r.run_id === run_id ? updatedRun : r)
+    })
+  }, [groupingMode]);
+  
   const handleEvent = useCallback((event: ProjectEventUnion) => {
     if (event.run_id) {
       setTimeout(() => {
@@ -79,21 +86,20 @@ export function useTracesPageContext(props: { projectId: string }) {
           return newFlattenSpans
         });
 
-        event.run_id && setSelectedRunId(event.run_id);
-        event.run_id && setOpenTraces([{ run_id: event.run_id, tab: 'trace' }]);
+        groupingMode === 'run_id' && event.run_id && setSelectedRunId(event.run_id);
+        groupingMode === 'run_id' && event.run_id && setOpenTraces([{ run_id: event.run_id, tab: 'trace' }]);
       }, 0)
 
-      if((event.type === 'RunFinished' || event.type === 'RunError') && event.run_id) {
+      if ((event.type === 'RunFinished' || event.type === 'RunError') && event.run_id) {
         setTimeout(() => {
           event.run_id && fetchSpansByRunId(event.run_id);
         }, 100)
       }
 
     }
-  }, [flattenSpans]);
-  useDebugControl({ handleEvent, channel_name: 'debug-traces-timeline-events' });
-  // Trace expansion state
-
+  }, [flattenSpans, groupingMode]);
+  
+  const { lastStopTime } = useDebugControl({ handleEvent, channel_name: 'debug-traces-timeline-events' });
 
   return {
     projectId,

@@ -7,15 +7,17 @@ import { Span } from "@/types/common-type";
 import { listSpans } from "@/services/spans-api";
 import { useRequest } from "ahooks";
 import { RunDTO } from "@/types/common-type";
+import { groupSpansByTimeBucket } from "./grouping-utils";
 
 export const useWrapperHook = (props: {
   threadId?: string;
   projectId: string;
   onRunsLoaded?: (runs: RunDTO[]) => void;
+  groupingMode?: string;
 }) => {
-  const { threadId, projectId, onRunsLoaded } = props;
+  const { threadId, projectId, onRunsLoaded, groupingMode } = props;
   // Use the runs pagination hook
-  let runsPaginationState = useRunsPagination({ projectId, threadId, onRunsLoaded });
+  let runsPaginationState = useRunsPagination({ projectId, threadId, onRunsLoaded, groupingMode });
   // Use the span details hook
   let spanDetailState = useSpanDetails();
 
@@ -33,6 +35,13 @@ export const useWrapperHook = (props: {
   }, []);
 
   let runMap = useMemo(() => {
+
+    if(groupingMode === '1hour_bucket'){
+      // Group by 1 hour bucket based on span.start_time_us
+      return groupSpansByTimeBucket(flattenSpans, { unit: 'hour', size: 1 });
+    }
+
+
     return flattenSpans.reduce((acc, span) => {
       if (!acc[span.run_id]) {
         acc[span.run_id] = [];
@@ -40,7 +49,7 @@ export const useWrapperHook = (props: {
       acc[span.run_id].push(span);
       return acc;
     }, {} as RunMap);
-  }, [flattenSpans]);
+  }, [flattenSpans, groupingMode]);
 
   const spansOfSelectedRun = useMemo(() => {
     return selectedRunId ? runMap[selectedRunId] : [];
@@ -110,7 +119,7 @@ export const useWrapperHook = (props: {
    *
    * @param runId - The run ID to fetch spans for
    */
-  const fetchSpansByRunId = useCallback(
+  const fetchSpansByVlloraRunId = useCallback(
     async (runId: string) => {
       // Check if already loading this runId to prevent concurrent duplicate requests
       let shouldFetch = true;
@@ -146,11 +155,22 @@ export const useWrapperHook = (props: {
     [projectId]
   );
 
+
+  
+
+  const fetchSpanByGroupingMode = useCallback((runId: string) => {
+    if(groupingMode === 'run_id'){
+      fetchSpansByVlloraRunId(runId);
+    } else{
+      //fetchSpansByRunId(runId);
+    }
+  }, [groupingMode]);
+
   return {
     ...spanDetailState,
     ...runsPaginationState,
     runMap,
-    fetchSpansByRunId,
+    fetchSpansByRunId: fetchSpanByGroupingMode,
     flattenSpans,
     setFlattenSpans,
     hoveredRunId,
