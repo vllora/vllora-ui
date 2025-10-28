@@ -45,8 +45,6 @@ export const ApiInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ApiInvoke
     const usageInfo = usage_str ? tryParseJson(usage_str) : null;
     return (
         <BaseSpanUIDetailsDisplay
-            value={openAccordionItems}
-            onValueChange={setOpenAccordionItems}
         >
             <div className="flex flex-col gap-4 mt-4">
               
