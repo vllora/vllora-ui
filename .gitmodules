@@ -1,4 +1,0 @@
-[submodule "ai-gateway"]
-	path = ai-gateway
-	url = https://github.com/langdb/ai-gateway.git
-	branch = feat/oss-refactor
