@@ -446,6 +446,7 @@ export const getOperationTitle = (props: {
     if (operation_name === 'cache') {
         return 'Cache Model Response';
     }
+    
 
     return 'Model';
 }
@@ -567,9 +568,11 @@ export const getOperationIcon = (props: {
             if (parentSpan.operation_name == 'model_call') {
                 let attributes = parentSpan.attribute;
                 let provider_name = attributes['provider_name'] as string;
-                return <ProviderIcon provider_name={provider_name} className="w-4 h-4" />;
+                return <ProviderIcon provider_name={provider_name || span.operation_name} className="w-4 h-4" />;
             }
         }
     }
-    return <ProviderIcon provider_name={operationName} className="w-4 h-4" />;
+
+   
+    return <ProviderIcon provider_name={'openai'} className="w-4 h-4" />;
 }
