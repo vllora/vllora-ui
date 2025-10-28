@@ -3,13 +3,53 @@ import { OutputViewer } from "./output-viewer";
 import { UsageViewer } from "./usage-viewer";
 import { ExclamationTriangleIcon } from "@heroicons/react/24/solid";
 import { ErrorViewer } from "./error-viewer";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Component, ErrorInfo, ReactNode } from "react";
 import { MessageViewer } from "./message-viewer";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { Span, ToolCall } from "@/types/common-type";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
 import { BaseSpanUIDisplay } from "./BaseSpanUIDisplay";
+
+// Error Boundary Component
+interface ErrorBoundaryProps {
+  children: ReactNode;
+  fallback?: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error?: Error;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('BaseSpanUIDetailsDisplay Error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback || (
+        <div className="flex flex-col items-center justify-center p-4 text-red-500 border border-red-500 rounded-md">
+          <ExclamationTriangleIcon className="w-6 h-6 mb-2" />
+          <p className="text-sm font-semibold">Failed to render span details</p>
+          <p className="text-xs text-gray-400 mt-1">{this.state.error?.message}</p>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 const findParentApiInvoke = (spans: Span[], parent_span_id: string) => {
   let span = spans.find(span => span.span_id === parent_span_id);
@@ -122,16 +162,19 @@ export const SpanUIDetailsDisplay = ({ span }: { span: Span }) => {
 
 
 export const BaseSpanUIDetailsDisplay = ({children, defaultOpen, value, onValueChange }: { children: React.ReactNode, defaultOpen?: string[], value?: string[], onValueChange?: (value: string[]) => void }) => {
-  if (value !== undefined && onValueChange) {
+  const content = value !== undefined && onValueChange ? (
     // Controlled mode
-    return <Accordion type="multiple" value={value} onValueChange={onValueChange}>
+    <Accordion type="multiple" value={value} onValueChange={onValueChange}>
       {children}
     </Accordion>
-  }
-  // Uncontrolled mode (existing behavior)
-  return <Accordion type="multiple" className="mt-4 flex-1 flex flex-col" defaultValue={defaultOpen ? defaultOpen : []}>
-    {children}
-  </Accordion>
+  ) : (
+    // Uncontrolled mode (existing behavior)
+    <Accordion type="multiple" className="mt-4 flex-1 flex flex-col" defaultValue={defaultOpen ? defaultOpen : []}>
+      {children}
+    </Accordion>
+  );
+
+  return <ErrorBoundary>{content}</ErrorBoundary>;
 }
 
 export const SpanModelDetailsDisplay = ({ obj }: { obj: any }) => {
