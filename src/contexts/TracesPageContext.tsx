@@ -206,22 +206,38 @@ export function useTracesPageContext(props: { projectId: string }) {
       }
       // Handle bucket mode
       else if (groupByMode === 'bucket') {
-        // Process the event to get the span
-        const currentSpans = flattenSpans;
-        const updatedSpans = processEvent(currentSpans, event);
-        const newSpan = updatedSpans.find(s => !currentSpans.find(cs => cs.span_id === s.span_id));
+        // Capture values for use after state updates
+        let capturedNewSpan: any = null;
+        let capturedTimeBucket: number | null = null;
 
-        if (newSpan && newSpan.start_time_us) {
-          // Calculate which bucket this span belongs to
-          const bucket_size_us = bucketSize * 1_000_000;
-          const timeBucket = Math.floor(newSpan.start_time_us / bucket_size_us) * bucket_size_us;
+        // 1. Update flattenSpans and capture computed values
+        setFlattenSpans(prevSpans => {
+          const updatedSpans = processEvent(prevSpans, event);
+          const newSpan = updatedSpans.find(s => !prevSpans.find(cs => cs.span_id === s.span_id));
 
-          // Check if this bucket exists in the groups list
-          const bucketExists = groups.some(g => g.time_bucket === timeBucket);
+          if (newSpan && newSpan.start_time_us) {
+            const bucket_size_us = bucketSize * 1_000_000;
+            const timeBucket = Math.floor(newSpan.start_time_us / bucket_size_us) * bucket_size_us;
 
-          // If bucket doesn't exist, create an optimistic/fake bucket
-          // We can't refresh yet because span isn't in DB yet
-          if (!bucketExists) {
+            // Capture for use outside
+            capturedNewSpan = newSpan;
+            capturedTimeBucket = timeBucket;
+          }
+
+          return updatedSpans;
+        });
+
+        // 2. Create optimistic bucket if needed (sequential, not nested)
+        if (capturedNewSpan && capturedTimeBucket !== null) {
+          const timeBucket = capturedTimeBucket; // Narrow type for closure
+          const newSpan = capturedNewSpan;
+
+          setGroups(prev => {
+            const bucketExists = prev.some(g => g.time_bucket === timeBucket);
+            if (bucketExists) {
+              return prev;
+            }
+
             const optimisticBucket: GroupDTO = {
               time_bucket: timeBucket,
               thread_ids: newSpan.thread_id ? [newSpan.thread_id] : [],
@@ -238,44 +254,32 @@ export function useTracesPageContext(props: { projectId: string }) {
               finish_time_us: newSpan.finish_time_us || newSpan.start_time_us,
               errors: [],
             };
-            // Add optimistic bucket to the groups list (sorted by time_bucket desc)
-            setGroups(prev => {
-              const updated = [...prev, optimisticBucket];
-              return updated.sort((a, b) => b.time_bucket - a.time_bucket);
-            });
 
-            // Auto-open the new bucket so user can see the real-time span immediately
-            setOpenGroups(prev => {
-              // Check if already open
-              if (prev.some(g => g.time_bucket === timeBucket)) {
-                return prev;
-              }
-              // Add to opened groups
-              return [{ time_bucket: timeBucket, tab: 'trace' }];
-            });
+            const updated = [...prev, optimisticBucket];
+            return updated.sort((a, b) => b.time_bucket - a.time_bucket);
+          });
 
-            console.log('Auto-opened optimistic bucket:', timeBucket);
-          }
-
-          // Update flattenSpans - groupSpansMap will auto-compute from this
-          setFlattenSpans(updatedSpans);
-          console.log('Real-time span added, flattenSpans updated');
+          // 3. Auto-open the bucket (sequential, not nested)
+          setOpenGroups(prev => {
+            if (prev.some(g => g.time_bucket === timeBucket)) {
+              return prev;
+            }
+            return [...prev, { time_bucket: timeBucket, tab: 'trace' }];
+          });
         }
 
-        // Refresh bucket stats from backend when run finishes
+        // 4. Refresh bucket stats from backend when run finishes
         if (event.type === 'RunFinished' || event.type === 'RunError') {
           setTimeout(() => {
-            if (newSpan && newSpan.start_time_us) {
-              const bucket_size_us = bucketSize * 1_000_000;
-              const timeBucket = Math.floor(newSpan.start_time_us / bucket_size_us) * bucket_size_us;
-              refreshSingleBucketStat(timeBucket);
-              loadSpansByBucketGroup(timeBucket);
+            if (capturedTimeBucket !== null) {
+              refreshSingleBucketStat(capturedTimeBucket);
+              loadSpansByBucketGroup(capturedTimeBucket);
             }
           }, 100);
         }
       }
     }
-  }, [groupByMode, flattenSpans, bucketSize, openGroups, groups, setGroups, setOpenGroups, updateRunMetrics, fetchSpansByRunId, setFlattenSpans, setSelectedRunId, setOpenTraces, groupSpansMap, projectId, refreshSingleBucketStat]);
+  }, [groupByMode, bucketSize, setGroups, setOpenGroups, updateRunMetrics, fetchSpansByRunId, setFlattenSpans, setSelectedRunId, setOpenTraces, refreshSingleBucketStat]);
   
   
   
