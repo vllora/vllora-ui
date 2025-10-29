@@ -1,11 +1,16 @@
+import { useState } from 'react';
 
 export const HeaderViewer = (props: { headers: any }) => {
     const { headers } = props;
+    const [showAll, setShowAll] = useState(false);
 
     const headersValid = ['x-thread-id', 'x-thread-title', 'x-label', 'x-run-id', 'x-tags']
-    const headersFilteredKeys = headers ? Object.keys(headers).filter((key) => headersValid.includes(key)) : [];
+    const allHeadersKeys = headers ? Object.keys(headers) : [];
+    const headersFilteredKeys = headers ? allHeadersKeys.filter((key) => headersValid.includes(key)) : [];
 
-    if (!headers || headersFilteredKeys.length === 0) {
+    const displayKeys = showAll ? allHeadersKeys : headersFilteredKeys;
+
+    if (!headers || allHeadersKeys.length === 0) {
         return null;
     }
 
@@ -17,12 +22,12 @@ export const HeaderViewer = (props: { headers: any }) => {
                     Headers
                 </div>
                 <span className="text-[10px] font-medium text-zinc-500">
-                    ({headersFilteredKeys.length})
+                    ({displayKeys.length})
                 </span>
                 <div className="h-px flex-1 bg-border" />
             </div>
             <div className="space-y-1">
-                {headersFilteredKeys.map((key: string) => (
+                {displayKeys.map((key: string) => (
                     <div key={key} className="rounded-lg">
                         <div className="flex items-start justify-between gap-3">
                             <span className="text-xs font-medium text-zinc-100 break-all">
@@ -35,6 +40,16 @@ export const HeaderViewer = (props: { headers: any }) => {
                     </div>
                 ))}
             </div>
+            {allHeadersKeys.length > headersFilteredKeys.length && (
+                <div className="flex justify-end pt-1">
+                    <button
+                        onClick={() => setShowAll(!showAll)}
+                        className="text-[10px] font-medium text-zinc-400 hover:text-[rgb(var(--theme-600))] transition-colors"
+                    >
+                        {showAll ? 'Show Less' : `Show All (${allHeadersKeys.length})`}
+                    </button>
+                </div>
+            )}
         </div>
     );
 }
