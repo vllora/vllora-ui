@@ -20,7 +20,7 @@ export function useTracesPageContext(props: { projectId: string }) {
 
   // Grouping mode state
   const [groupByMode, setGroupByMode] = useState<GroupByMode>('run');
-  const [bucketSize, setBucketSize] = useState<BucketSize>(3600); // Default to 1 hour
+  const [bucketSize, setBucketSize] = useState<BucketSize>(300); // Default to 5 minutes
 
   // Loading state for groups
   const [loadingGroupsByTimeBucket, setLoadingGroupsByTimeBucket] = useState<Set<number>>(new Set());
