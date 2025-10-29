@@ -4,11 +4,12 @@ import { CodeBlock } from './CodeBlock';
 import { getBackendUrl } from '@/config/api';
 
 interface TraceEmptyStateProps {
+  projectId?: string;
 }
 
-export const TraceEmptyState: React.FC<TraceEmptyStateProps> = () => {
+export const TraceEmptyState: React.FC<TraceEmptyStateProps> = ({ projectId }) => {
   const searchParam = new URLSearchParams(window.location.search);
-  const projectIdFromUrl = searchParam.get('project_id');
+  const projectIdFromUrl = searchParam.get('project_id') ?? projectId;
   const threadIdFromUrl = searchParam.get('threadId');
   const model = searchParam.get('model') || 'openai/gpt-4o-mini';
 

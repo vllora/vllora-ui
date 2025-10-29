@@ -1,6 +1,6 @@
-import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { Tabs } from "@/components/ui/tabs";
 // import { RenderArray } from "./utils";
-import { JsonViewer } from "./JsonViewer";
+// import { JsonViewer } from "./JsonViewer";
 import { useState, useEffect, useCallback } from "react";
 import { getModelCallSpans, getStatus, SpanUIDetailsDisplay } from "./DetailView";
 import { getOperationIcon, getOperationIconColor, getSpanTitle } from "../new-timeline/utils";
