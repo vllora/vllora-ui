@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { ThreadsSidebar } from '@/components/chat/ThreadsSidebar';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
@@ -7,9 +7,10 @@ import { ThreadsConsumer } from '@/contexts/ThreadsContext';
 import { ChatWindowProvider } from '@/contexts/ChatWindowContext';
 import { Thread } from '@/types/chat';
 import { ConversationAndTraces } from './conversation-and-traces';
+import { ChatEmptyState } from '@/components/chat/ChatEmptyState';
 
 export function ThreadsPageContent() {
-  const { currentProjectId, isDefaultProject } = ProjectsConsumer();
+  const { currentProjectId } = ProjectsConsumer();
   const [searchParams] = useSearchParams();
   const {
     threads,
@@ -17,8 +18,8 @@ export function ThreadsPageContent() {
     addThread,
     refreshThreads,
     selectedThread,
+    handleThreadClick,
   } = ThreadsConsumer();
-  const navigate = useNavigate();
   // Read selectedModel from URL query string, fallback to default
   const selectedModel = useMemo(() => {
     return searchParams.get('model') || (selectedThread?.input_models && selectedThread.input_models.length > 0 ? selectedThread.input_models[selectedThread.input_models.length - 1] : undefined) || 'openai/gpt-4.1-nano';
@@ -30,18 +31,9 @@ export function ThreadsPageContent() {
 
   const handleSelectThread = useCallback((threadId: string) => {
     const thread = threads.find((t) => t.thread_id === threadId);
-    // Navigate to update the threadId and model in URL
-    const modelParam = thread?.input_models && thread.input_models.length > 0 ? thread.input_models[thread.input_models.length - 1] : selectedModel;
-    const params = new URLSearchParams(searchParams);
-    params.set('threadId', threadId);
-    params.set('model', modelParam);
-    if (currentProjectId && !isDefaultProject(currentProjectId)) {
-      params.set('project_id', currentProjectId);
-    } else {
-      params.delete('project_id');
-    }
-    navigate(`/chat?${params.toString()}`);
-  }, [threads, selectedModel, navigate, searchParams, currentProjectId, isDefaultProject]);
+    const inputModels = thread?.input_models || [];
+    handleThreadClick(threadId, inputModels);
+  }, [threads, handleThreadClick]);
 
 
   const handleNewThread = useCallback(() => {
@@ -58,17 +50,9 @@ export function ThreadsPageContent() {
       is_from_local: true,
     };
     addThread(newThread);
-    // Navigate to the new thread with model in URL and project_id (only if not default)
-    const params = new URLSearchParams(searchParams);
-    params.set('threadId', newThread.thread_id);
-    params.set('model', selectedModel);
-    if (currentProjectId && !isDefaultProject(currentProjectId)) {
-      params.set('project_id', currentProjectId);
-    } else {
-      params.delete('project_id');
-    }
-    navigate(`/chat?${params.toString()}`);
-  }, [selectedModel, currentProjectId, addThread, navigate, searchParams, isDefaultProject]);
+    // Navigate to the new thread using handleThreadClick
+    handleThreadClick(newThreadId, newThread.input_models);
+  }, [selectedModel, addThread, handleThreadClick]);
 
 
   useEffect(() => {
@@ -77,6 +61,10 @@ export function ThreadsPageContent() {
     }
   }, [selectedThreadId, threads, handleSelectThread]);
 
+  // Show ChatEmptyState when no threads exist
+  if (threads.length === 0) {
+    return <ChatEmptyState onNewChat={handleNewThread} />;
+  }
 
   return (
     <section className="flex-1 flex bg-background text-foreground overflow-hidden" aria-label="Chat Interface">
@@ -100,7 +88,7 @@ export function ThreadsPageContent() {
               Select a conversation
             </h2>
             <p className="text-muted-foreground/70">
-              Choose a thread from the sidebar or start a new chat
+              Choose a thread from the sidebar to start chatting
             </p>
           </div>
         </div>

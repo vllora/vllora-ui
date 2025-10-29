@@ -3,3 +3,6 @@
 !/dist/.gitkeep
 .env
 /target
+/.vite
+/dist
+/dist

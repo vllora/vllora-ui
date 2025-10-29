@@ -1,4 +1,4 @@
-import { createContext, useContext, ReactNode, useCallback } from 'react';
+import { createContext, useContext, ReactNode, useCallback, useEffect } from 'react';
 import { useThreadState } from './threads/useThreadState';
 import { useThreadChanges } from './threads/useThreadChanges';
 import { useThreadPagination } from './threads/useThreadPagination';
@@ -14,6 +14,9 @@ export type ThreadsContextType = ReturnType<typeof useThreads>;
 
 const ThreadsContext = createContext<ThreadsContextType | undefined>(undefined);
 
+// Allowed query params for threads/chat page
+const ALLOWED_QUERY_PARAMS = ['tab', 'threadId', 'project_id', 'model'] as const;
+
 interface ThreadsProviderProps {
   projectId: string;
 }
@@ -21,7 +24,7 @@ interface ThreadsProviderProps {
 export function useThreads({ projectId }: ThreadsProviderProps) {
   const {  isDefaultProject } = ProjectsConsumer();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   // Base state management
   const threadState = useThreadState();
   const { setThreads, selectedThreadId } = threadState;
@@ -33,21 +36,60 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
 
   // CRUD operations
   const operations = useThreadOperations(projectId, threadState, paginationState.refreshThreads);
+
+  // Clean up URL - remove unsupported query params
+  useEffect(() => {
+    const newParams = new URLSearchParams();
+    let hasUnsupportedParams = false;
+
+    // Only keep allowed params
+    ALLOWED_QUERY_PARAMS.forEach(param => {
+      const value = searchParams.get(param);
+      if (value) {
+        newParams.set(param, value);
+      }
+    });
+
+    // Check if we need to clean up
+    searchParams.forEach((_, key) => {
+      if (!ALLOWED_QUERY_PARAMS.includes(key as any)) {
+        hasUnsupportedParams = true;
+      }
+    });
+
+    // Only update if there are unsupported params to remove
+    if (hasUnsupportedParams) {
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]); // Run when URL changes
   const handleThreadClick = useCallback((inputThreadId: string, inputModels: string[]) => {
     if (!projectId) return;
     if (selectedThreadId === inputThreadId) return;
-    const params = new URLSearchParams(searchParams);
+
+    // Create clean params with only allowed query params
+    const params = new URLSearchParams();
+
+    // Preserve only allowed params from current URL (except threadId, project_id, model which we'll set)
+    ALLOWED_QUERY_PARAMS.forEach(param => {
+      const value = searchParams.get(param);
+      if (value && param !== 'threadId' && param !== 'project_id' && param !== 'model') {
+        params.set(param, value);
+      }
+    });
+
+    // Set our managed params
     params.set('threadId', inputThreadId);
+
     if (!isDefaultProject(projectId)) {
       params.set('project_id', projectId);
-    } else {
-      params.delete('project_id');
     }
+
     // Set model parameter from input_models if available
     if (inputModels && inputModels.length > 0) {
       const lastModel = inputModels[inputModels.length - 1];
       params.set('model', lastModel);
     }
+
     navigate(`/chat?${params.toString()}`);
   }, [projectId, navigate, searchParams, isDefaultProject, selectedThreadId]);
 

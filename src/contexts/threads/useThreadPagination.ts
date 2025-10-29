@@ -2,9 +2,6 @@ import { useState, useCallback } from "react";
 import { toast } from "sonner";
 import { queryThreads } from "@/services/threads-api";
 import {  ThreadChangesState } from "./types";
-import { Thread } from "@/types/chat";
-import { useNavigate } from "react-router-dom";
-import { v4 as uuidv4 } from "uuid";
 import { ThreadState } from "./useThreadState";
 
 export function useThreadPagination(
@@ -23,8 +20,6 @@ export function useThreadPagination(
   const [loadingThreadsError, setLoadingThreadsError] = useState<string | null>(
     null
   );
-  const navigate = useNavigate();
-
   const refreshThreads = useCallback(async () => {
     setLoading(true);
     setOffset(0);
@@ -38,28 +33,6 @@ export function useThreadPagination(
       const pagination = response.pagination;
       const newThreads = response.data;
       setThreads(newThreads);
-      if (newThreads.length === 0) {
-        setTimeout(() => {
-          const now = Date.now() * 1000; // Convert to microseconds
-          const newThreadId = uuidv4();
-
-          const newThread: Thread = {
-            thread_id: newThreadId,
-            start_time_us: now,
-            finish_time_us: now,
-            run_ids: [],
-            input_models: ["openai/gpt-4.1-nano"],
-            cost: 0,
-            is_from_local: true,
-          };
-          setThreads([newThread]);
-          // Navigate to the new thread with model in URL and project_id (only if not default)
-          const params = new URLSearchParams();
-          params.set("threadId", newThread.thread_id);
-          params.set("model", "openai/gpt-4.1-nano");
-          navigate(`/chat?${params.toString()}`);
-        }, 10);
-      }
       setThreadsHaveChanges({});
       setTotal(pagination.total);
       setOffset(pagination.offset + newThreads.length);

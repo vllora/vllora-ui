@@ -1,4 +1,4 @@
-import { AlertCircle, RefreshCw, MessageSquare, BookOpen, ExternalLink, ChevronRight, ArrowRight } from 'lucide-react';
+import { AlertCircle, RefreshCw, MessageSquare, BookOpen, ExternalLink, ChevronRight, ArrowRight, Activity } from 'lucide-react';
 import { useMemo } from 'react';
 import { LocalModelCard } from '@/components/models/local/LocalModelCard';
 import { LocalModelsSkeletonLoader } from '@/components/models/local/LocalModelsSkeletonLoader';
@@ -97,8 +97,8 @@ export function HomePage() {
       <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-12">
         
         {/* Quick Links Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <Card 
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <Card
             className="cursor-pointer hover:bg-accent/50 transition-colors"
             onClick={() => {
               // Navigate to chat while preserving project context
@@ -122,7 +122,32 @@ export function HomePage() {
             </CardContent>
           </Card>
 
-          <Card 
+          <Card
+            className="cursor-pointer hover:bg-accent/50 transition-colors"
+            onClick={() => {
+              // Navigate to traces while preserving project context
+              const params = new URLSearchParams();
+              params.set('tab', 'traces');
+              if (currentProjectId && !isDefaultProject(currentProjectId)) {
+                params.set('project_id', currentProjectId);
+              }
+              const queryString = params.toString();
+              navigate(`/chat?${queryString}`);
+            }}
+          >
+            <CardContent className="flex items-center gap-4 p-6">
+              <div className="p-3 rounded-lg bg-[rgb(var(--theme-500))]/10">
+                <Activity className="w-6 h-6 text-[rgb(var(--theme-500))]" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-lg">Debug</h3>
+                <p className="text-muted-foreground text-sm">Monitor and debug API traces</p>
+              </div>
+              <ChevronRight className="w-5 h-5 text-muted-foreground ml-auto" />
+            </CardContent>
+          </Card>
+
+          <Card
             className="cursor-pointer hover:bg-accent/50 transition-colors"
             onClick={() => window.open('https://vllora.dev/docs', '_blank')}
           >

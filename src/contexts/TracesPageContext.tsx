@@ -1,4 +1,5 @@
 import { createContext, useContext, ReactNode, useCallback, useState, useRef, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useDebugControl } from "@/hooks/events/useDebugControl";
 import { ProjectEventUnion } from "./project-events/dto";
 import { processEvent, updatedRunWithSpans } from "@/hooks/events/utilities";
@@ -15,12 +16,82 @@ const TracesPageContext = createContext<TracesPageContextType | undefined>(undef
 export type GroupByMode = 'run' | 'bucket';
 export type BucketSize = 300 | 600 | 1200 | 1800 | 3600 | 7200 | 10800 | 21600 | 43200 | 86400; // 5m, 10m, 20m, 30m, 1h, 2h, 3h, 6h, 12h, 24h
 
+// Allowed query params for traces page
+const ALLOWED_QUERY_PARAMS = ['tab', 'groupBy', 'bucketSize'] as const;
+
 export function useTracesPageContext(props: { projectId: string }) {
   const { projectId } = props;
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  // Grouping mode state
-  const [groupByMode, setGroupByMode] = useState<GroupByMode>('run');
-  const [bucketSize, setBucketSize] = useState<BucketSize>(300); // Default to 5 minutes
+  // Initialize from URL first, then localStorage, then default
+  const [groupByMode, setGroupByMode] = useState<GroupByMode>(() => {
+    // 1. Check URL query param (highest priority - for sharing links)
+    const urlMode = searchParams.get('groupBy') as GroupByMode | null;
+    if (urlMode === 'run' || urlMode === 'bucket') {
+      return urlMode;
+    }
+
+    // 2. Check localStorage (for returning users)
+    const stored = localStorage.getItem('vllora-traces-groupByMode');
+    if (stored === 'run' || stored === 'bucket') {
+      return stored;
+    }
+
+    // 3. Default value
+    return 'bucket';
+  });
+
+  const [bucketSize, setBucketSize] = useState<BucketSize>(() => {
+    // 1. Check URL query param
+    const urlSize = searchParams.get('bucketSize');
+    if (urlSize) {
+      const parsed = parseInt(urlSize, 10);
+      if ([300, 600, 1200, 1800, 3600, 7200, 10800, 21600, 43200, 86400].includes(parsed)) {
+        return parsed as BucketSize;
+      }
+    }
+
+    // 2. Check localStorage
+    const stored = localStorage.getItem('vllora-traces-bucketSize');
+    if (stored) {
+      const parsed = parseInt(stored, 10);
+      if ([300, 600, 1200, 1800, 3600, 7200, 10800, 21600, 43200, 86400].includes(parsed)) {
+        return parsed as BucketSize;
+      }
+    }
+
+    // 3. Default value
+    return 300;
+  });
+
+  // Sync to both URL and localStorage when state changes
+  useEffect(() => {
+    // Create clean params with only allowed query params
+    const newParams = new URLSearchParams();
+
+    // Preserve only allowed params from current URL
+    ALLOWED_QUERY_PARAMS.forEach(param => {
+      const value = searchParams.get(param);
+      if (value && param !== 'groupBy' && param !== 'bucketSize') {
+        newParams.set(param, value);
+      }
+    });
+
+    // Set our managed params
+    newParams.set('groupBy', groupByMode);
+    newParams.set('tab', 'traces');
+
+    // Only include bucketSize in URL when in bucket mode
+    if (groupByMode === 'bucket') {
+      newParams.set('bucketSize', String(bucketSize));
+    }
+
+    setSearchParams(newParams, { replace: true });
+
+    // Update localStorage for persistence (always store bucketSize)
+    localStorage.setItem('vllora-traces-groupByMode', groupByMode);
+    localStorage.setItem('vllora-traces-bucketSize', String(bucketSize));
+  }, [groupByMode, bucketSize, searchParams, setSearchParams]);
 
   // Loading state for groups
   const [loadingGroupsByTimeBucket, setLoadingGroupsByTimeBucket] = useState<Set<number>>(new Set());

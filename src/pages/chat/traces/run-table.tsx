@@ -3,9 +3,11 @@ import { Loader2 } from 'lucide-react';
 import { TracesPageConsumer } from '@/contexts/TracesPageContext';
 import { RunTableView } from './run-table-view';
 import { GroupCardGrid } from './group-card-grid';
+import { TraceEmptyState } from '@/components/chat/traces/components/TraceEmptyState';
 
 export function RunTable() {
   const {
+    projectId,
     groupByMode,
     runs,
     runsLoading,
@@ -69,20 +71,7 @@ export function RunTable() {
 
   // Empty state
   if (!isLoading && items.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-full w-full">
-        <div className="flex flex-col items-center gap-3">
-          <p className="text-sm text-muted-foreground">
-            {groupByMode === 'run' ? 'No traces found' : 'No groups found'}
-          </p>
-          <p className="text-xs text-muted-foreground/70">
-            {groupByMode === 'run'
-              ? 'Traces will appear here as your application runs'
-              : 'Groups will appear here as traces are created'}
-          </p>
-        </div>
-      </div>
-    );
+    return <TraceEmptyState projectId={projectId} />;
   }
 
   // Runs/Groups list

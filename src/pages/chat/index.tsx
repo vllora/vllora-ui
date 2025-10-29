@@ -6,9 +6,6 @@ import { TracesPageProvider } from '@/contexts/TracesPageContext';
 import { TracesPageContent } from './traces/content';
 import { ThreadPage } from './threads';
 
-
-
-
 export function ThreadsAndTracesPage() {
   const { currentProjectId, isDefaultProject } = ProjectsConsumer();
   const [searchParams] = useSearchParams();
@@ -42,13 +39,12 @@ export function ThreadsAndTracesPage() {
   }, [location.pathname, navigate, searchParams, isDefaultProject]);
 
   return (
-    <TracesPageProvider projectId={currentProjectId}>
-      <PageContent
-        currentTab={currentTab}
-        setCurrentTab={setCurrentTab}
-        handleProjectChange={handleProjectChange}
-      />
-    </TracesPageProvider>
+    <PageContent
+      currentTab={currentTab}
+      setCurrentTab={setCurrentTab}
+      handleProjectChange={handleProjectChange}
+      projectId={currentProjectId}
+    />
   );
 }
 
@@ -56,10 +52,12 @@ function PageContent({
   currentTab,
   setCurrentTab,
   handleProjectChange,
+  projectId,
 }: {
   currentTab: string;
   setCurrentTab: (tab: string) => void;
   handleProjectChange: (projectId: string) => void;
+  projectId: string;
 }) {
   return (
     <div className="flex flex-col h-full flex-1">
@@ -70,7 +68,13 @@ function PageContent({
       />
 
       {/* Content Area */}
-      {currentTab === "threads" ? <ThreadPage /> : <TracesPageContent />}
+      {currentTab === "threads" ? (
+        <ThreadPage />
+      ) : (
+        <TracesPageProvider projectId={projectId}>
+          <TracesPageContent />
+        </TracesPageProvider>
+      )}
     </div>
   );
 }
