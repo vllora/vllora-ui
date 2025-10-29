@@ -20,9 +20,7 @@ export const useWrapperHook = (props: {
   let spanDetailState = useSpanDetails();
 
   const { setLoadingSpansById, selectedRunId, detailSpanId } = spanDetailState;
-
   const [flattenSpans, setFlattenSpans] = useState<Span[]>([]);
-  
   const [hoveredRunId, setHoveredRunId] = useState<string | null>(null);
   const [hoverSpanId, setHoverSpanId] = useState<string | undefined>(undefined);
   const [collapsedSpans, setCollapsedSpans] = useState<string[]>([]);
@@ -88,7 +86,7 @@ export const useWrapperHook = (props: {
     }
   );
 
-  const updateBySpansOfARun = useCallback((spans: Span[]) => {
+  const updateBySpansArray = useCallback((spans: Span[]) => {
     setFlattenSpans((prev) => {
       let newFlattenSpans = [...prev];
       for (let span of spans) {
@@ -128,7 +126,7 @@ export const useWrapperHook = (props: {
 
       try {
         const relatedSpans = await fetchAllSpansByRunId(runId, projectId);
-        updateBySpansOfARun(relatedSpans);
+        updateBySpansArray(relatedSpans);
       } catch (e: any) {
         toast.error("Failed to fetch span details", {
           description:
@@ -159,7 +157,7 @@ export const useWrapperHook = (props: {
     loadSpansError,
     refreshSpans,
     updateBySpansOfAThread,
-    updateBySpansOfARun,
+    updateBySpansArray,
     spansOfSelectedRun,
     detailSpan,
     hoverSpanId,

@@ -2,7 +2,8 @@ import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { useCallback, useState, useEffect } from 'react';
 import { TabSelectionHeader } from '@/components/TabSelectionHeader';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
-import { TracesPage } from './traces';
+import { TracesPageProvider } from '@/contexts/TracesPageContext';
+import { TracesPageContent } from './traces/content';
 import { ThreadPage } from './threads';
 
 
@@ -40,10 +41,36 @@ export function ThreadsAndTracesPage() {
     navigate(`${location.pathname}${queryString ? '?' + queryString : ''}`);
   }, [location.pathname, navigate, searchParams, isDefaultProject]);
 
-  return <div className="flex flex-col h-full flex-1">
-    <TabSelectionHeader onProjectChange={handleProjectChange} currentTab={currentTab} onTabChange={setCurrentTab} />
+  return (
+    <TracesPageProvider projectId={currentProjectId}>
+      <PageContent
+        currentTab={currentTab}
+        setCurrentTab={setCurrentTab}
+        handleProjectChange={handleProjectChange}
+      />
+    </TracesPageProvider>
+  );
+}
 
-    {/* Content Area */}
-    {currentTab === "threads" ? <ThreadPage /> : <TracesPage />}
-  </div>
+function PageContent({
+  currentTab,
+  setCurrentTab,
+  handleProjectChange,
+}: {
+  currentTab: string;
+  setCurrentTab: (tab: string) => void;
+  handleProjectChange: (projectId: string) => void;
+}) {
+  return (
+    <div className="flex flex-col h-full flex-1">
+      <TabSelectionHeader
+        onProjectChange={handleProjectChange}
+        currentTab={currentTab}
+        onTabChange={setCurrentTab}
+      />
+
+      {/* Content Area */}
+      {currentTab === "threads" ? <ThreadPage /> : <TracesPageContent />}
+    </div>
+  );
 }

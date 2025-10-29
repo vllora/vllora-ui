@@ -92,3 +92,15 @@ export interface Pagination {
   limit: number;
   total: number;
 }
+
+export interface GroupDTO {
+  time_bucket: number; // Start timestamp of the bucket in microseconds
+  count: number; // Number of spans in this bucket
+  start_time_us: number; // First span's start time in the bucket
+  finish_time_us: number; // Last span's finish time in the bucket
+  used_models: string[];
+  cost: number;
+  input_tokens: number;
+  output_tokens: number;
+  errors: string[];
+}

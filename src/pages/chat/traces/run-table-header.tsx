@@ -1,16 +1,22 @@
 import { Clock, DollarSign, Download, Upload, AlertTriangle } from 'lucide-react';
-import { RUN_TABLE_GRID_COLUMNS } from './table-layout';
+import { RUN_TABLE_GRID_COLUMNS, GROUP_TABLE_GRID_COLUMNS } from './table-layout';
 
-export function RunTableHeader() {
+interface RunTableHeaderProps {
+  mode?: 'run' | 'bucket';
+}
+
+export function RunTableHeader({ mode = 'run' }: RunTableHeaderProps) {
+  const gridColumns = mode === 'run' ? RUN_TABLE_GRID_COLUMNS : GROUP_TABLE_GRID_COLUMNS;
+
   return (
     <div
-      className="grid gap-0 bg-[#0a0a0a] text-xs font-semibold text-muted-foreground uppercase tracking-wider overflow-hidden divide-x divide-border"
-      style={{ gridTemplateColumns: RUN_TABLE_GRID_COLUMNS }}
+      className="grid gap-0 bg-[#0a0a0a] text-xs font-semibold text-muted-foreground uppercase tracking-wider overflow-hidden divide-x divide-border border-b border-border"
+      style={{ gridTemplateColumns: gridColumns }}
     >
       <div className="flex items-center justify-center py-3 px-2 w-full">
         {/* Empty column for expand/collapse button */}
       </div>
-      <div className="py-3 px-3 w-full">Run ID</div>
+      <div className="py-3 px-3 w-full">{mode === 'run' ? 'Run ID' : 'Time Bucket'}</div>
       <div className="py-3 px-3 w-full">Provider</div>
       <div className="flex items-center gap-1 py-3 px-2 justify-center w-full">
         <DollarSign className="w-3.5 h-3.5" />
