@@ -1,12 +1,13 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { CheckCircleIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
-import { ArrowLeft, DatabaseIcon, Timer, X } from "lucide-react";
+import { ArrowLeft, ClockFadingIcon, DatabaseIcon, Timer, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Span } from "@/types/common-type";
 import { BasicSpanInfo } from "./DetailView/basic-span-info-section";
 import { ClientSdkIcon } from "@/components/client-sdk-icon";
+import { tryParseInt } from "@/utils/modelUtils";
 
 const getDuration = (startTime?: number, endTime?: number): string | null => {
   if (!startTime || !endTime) return null;
@@ -47,6 +48,7 @@ interface SpanHeaderProps {
   endTime?: number;
   span?: Span;
   closePosition?: 'left' | 'right';
+  ttf_str?: string;
 }
 
 export const SpanHeader: React.FC<SpanHeaderProps> = ({
@@ -62,11 +64,14 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
   startTime,
   endTime,
   span,
-  closePosition = 'left'
+  closePosition = 'left',
+  ttf_str,
 }) => {
   const isSuccessStatus = status && ['200', 200].includes(status);
   const duration = getDuration(startTime, endTime);
-
+const ttftMicroseconds = ttf_str ? tryParseInt(ttf_str) : undefined;
+    const ttftMilliseconds = ttftMicroseconds ? ttftMicroseconds / 1000 : undefined;
+    const ttftSeconds = ttftMilliseconds ? (ttftMilliseconds / 1000).toFixed(2) : undefined;
   return (
     <div className="flex flex-row items-center gap-1 justify-between w-full">
       <div className="flex items-center gap-1">
@@ -153,6 +158,30 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
                     <div className="flex items-center justify-between gap-2 pt-1 border-t border-border">
                       <span className="text-xs font-medium">Duration:</span>
                       <span className="text-xs font-mono">{duration}s ({((endTime - startTime) / 1000).toFixed(0)} ms)</span>
+                    </div>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          {ttftSeconds && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#1a1a1a] text-white cursor-help">
+                    <ClockFadingIcon className="h-3 w-3" />
+                    <span className="text-xs font-mono">{ttftSeconds}s</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="flex flex-col gap-2 p-3 max-w-xs bg-background border border-border rounded-md shadow-md">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Timer className="h-4 w-4 text-purple-500" />
+                    <span>TTFT Information</span>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-muted-foreground">TTFT:</span>
+                      <span className="text-xs font-mono">{ttftSeconds}s</span>
                     </div>
                   </div>
                 </TooltipContent>

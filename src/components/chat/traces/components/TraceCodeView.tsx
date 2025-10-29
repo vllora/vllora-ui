@@ -9,8 +9,9 @@ import { CodeBlock } from './CodeBlock';
     headerObj: any;
     method: string;
     fullUrl: string;
+    showAllHeaders?: boolean;
   }) => {
-    const { requestObj, headerObj, method, fullUrl } = props;
+    const { requestObj, headerObj, method, fullUrl, showAllHeaders = false } = props;
     if (!requestObj && !headerObj) {
       return '# No request data available';
     }
@@ -20,13 +21,16 @@ import { CodeBlock } from './CodeBlock';
 
     // Add headers
     if (headerObj) {
-      const filteredHeaders = Object.entries(headerObj).filter(h => {
-        const validHeaders = ["x-project-id", 'x-thread-id', 'x-tag', 'x-thread-title', 'content-type', 'authorization', 'Authorization']
-        return validHeaders.includes(h[0].toLowerCase())
-      });
+      const allHeaders = Object.entries(headerObj);
+      const validHeaders = ["x-project-id", 'x-thread-id', 'x-tag', 'x-thread-title', 'content-type', 'authorization', 'Authorization'];
 
-      filteredHeaders.forEach(([key, value], idx) => {
-        const isLast = idx === filteredHeaders.length - 1 && (!requestObj || method === 'GET');
+      // Filter headers only if showAllHeaders is false
+      const headersToInclude = showAllHeaders
+        ? allHeaders
+        : allHeaders.filter(h => validHeaders.includes(h[0].toLowerCase()));
+
+      headersToInclude.forEach(([key, value], idx) => {
+        const isLast = idx === headersToInclude.length - 1 && (!requestObj || method === 'GET');
         lines.push(`  -H '${key}: ${value}'${isLast ? '' : ' \\'}`);
       });
     }

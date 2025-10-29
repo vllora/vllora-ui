@@ -41,7 +41,6 @@ export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelIn
 
     const headersStr = apiCloudInvokeAttribute?.['http.request.header'];
     const headers = headersStr ? tryParseJson(headersStr) : undefined;
-
     return (
         <BaseSpanUIDetailsDisplay>
             <div className="flex flex-col gap-6 pb-4">

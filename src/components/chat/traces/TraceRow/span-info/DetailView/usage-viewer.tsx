@@ -1,5 +1,7 @@
 import { DocumentTextIcon, ArrowsRightLeftIcon } from "@heroicons/react/24/outline";
 import { getCachedTokens } from "./spans-display/prompt-caching-tooltip";
+import { tryParseInt } from "@/utils/modelUtils";
+import { ClockFadingIcon } from "lucide-react";
 
 const formatNumber = (num: number) => {
     return new Intl.NumberFormat().format(num);
@@ -10,7 +12,7 @@ export const UsageViewer = (props: {
     ttft: string | undefined,
     usage: any | undefined,
 }) => {
-    const { cost, usage } = props;
+    const { cost, usage, ttft } = props;
     // Support both input_tokens and prompt_tokens formats
     const inputTokens = usage?.input_tokens ?? usage?.prompt_tokens;
     const outputTokens = usage?.output_tokens ?? usage?.completion_tokens;
@@ -18,6 +20,9 @@ export const UsageViewer = (props: {
     const cacheTokenInfo = getCachedTokens(usage);
     const isPromptCachingActive = cacheTokenInfo.read > 0 || cacheTokenInfo.write > 0;
     const typeOfCost = typeof cost;
+    const ttftMicroseconds = ttft ? tryParseInt(ttft) : undefined;
+    const ttftMilliseconds = ttftMicroseconds ? ttftMicroseconds / 1000 : undefined;
+    const ttftSeconds = ttftMilliseconds ? (ttftMilliseconds / 1000).toFixed(2) : undefined;
     return (
         <div className="flex flex-col gap-6 overflow-y-auto text-xs">
 
@@ -105,6 +110,15 @@ export const UsageViewer = (props: {
                             </div>
                             <div className="flex items-center gap-1">
                                 <span className="text-xs font-medium text-white">{typeOfCost === 'number' && cost ? `$${cost.toFixed(6)}` : (typeOfCost === 'string' ? cost : typeOfCost === 'undefined' ? 'N/A' : typeOfCost === 'object' && cost?.cost && typeof cost?.cost === 'number' ? `$${cost?.cost.toFixed(6)}` : 'N/A')}</span>
+                            </div>
+                        </div>}
+                        {ttftSeconds && <div className="flex items-center justify-between pt-2 border-t border-border/40">
+                            <div className="flex items-center gap-2">
+                                <ClockFadingIcon className="h-3 w-3 text-zinc-400" />
+                                <span className="text-xs text-zinc-500">TTFT:</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <span className="text-xs font-medium text-white">{ttftSeconds ? `${ttftSeconds} s` : 'N/A'}</span>
                             </div>
                         </div>}
                     </div>

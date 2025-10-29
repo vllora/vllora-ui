@@ -2,7 +2,7 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 // import { RenderArray } from "./utils";
 import { JsonViewer } from "./JsonViewer";
 import { useState, useEffect, useCallback } from "react";
-import { getStatus, SpanUIDetailsDisplay } from "./DetailView";
+import { getModelCallSpans, getStatus, SpanUIDetailsDisplay } from "./DetailView";
 import { getOperationIcon, getOperationIconColor, getSpanTitle } from "../new-timeline/utils";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { getClientSDKName, isPromptCachingApplied } from "@/utils/graph-utils";
@@ -44,7 +44,9 @@ export const SpanDetailsDisplay = () => {
   const sdkName = currentSpan && getClientSDKName(currentSpan);
   const isPromptCached = currentSpan && isPromptCachingApplied(currentSpan);
   const status = currentSpan && getStatus(spansOfSelectedRun, currentSpan.span_id);
-
+ const modelCallSpan = getModelCallSpans(relatedSpans, currentSpan.span_id);
+ const modelCallAttribute = modelCallSpan?.attribute as any;
+ const ttf_str = modelCallAttribute?.ttft;
   return (
     <div className="w-full flex flex-col h-full">
       <Tabs value={currentTab} onValueChange={(v) => setCurrentTab(v)} className="flex flex-col h-full">
@@ -63,6 +65,7 @@ export const SpanDetailsDisplay = () => {
             startTime={currentSpan.start_time_us}
             endTime={currentSpan.finish_time_us}
             span={currentSpan}
+            ttf_str={ttf_str}
           />
         </div>
 

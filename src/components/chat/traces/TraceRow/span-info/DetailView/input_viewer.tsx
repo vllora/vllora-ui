@@ -4,48 +4,12 @@ import { HeaderViewer } from "./header-viewer";
 import { MessageViewer } from "./message-viewer";
 import { ToolDefinitionsViewer } from "./tool-definitions-viewer";
 import { useState } from "react";
+import { useLocalStorageState } from "ahooks";
 import { Copy, Check } from "lucide-react";
 import { getBackendUrl } from "@/config/api";
 import { CodeBlock } from "../../../components/CodeBlock";
 import { generateCurlCommand } from "../../../components/TraceCodeView";
 
-
-// Helper function to generate curl command
-// const generateCurlCommand = (jsonRequest: any, headers?: any): string => {
-//     const endpoint = `${getBackendUrl()}/v1/chat/completions`
-
-//     let curlCommand = `curl ${endpoint} \\\n`;
-//     curlCommand += `  -H "Content-Type: application/json" \\\n`;
-
-//     // Add headers if provided
-//     if (headers) {
-
-//         const filteredHeaders = Object.entries(headers).filter(h => {
-//         const validHeaders = ["x-project-id", 'x-thread-id', 'x-tag', 'x-thread-title', 'content-type', 'authorization', 'Authorization']
-//         return validHeaders.includes(h[0].toLowerCase())
-//       });
-//         filteredHeaders.forEach(([key, value]) => {
-//             if (key !== 'x-endpoint' && key.toLowerCase() !== 'content-type') {
-//                 curlCommand += `  -H "${key}: ${value}" \\\n`;
-//             }
-//         });
-//     }
-
-//     // Build request body
-//     const requestBody: any = { ...jsonRequest };
-
-//     // Convert to JSON string and escape for shell
-//     // Using single quotes for the shell, so we need to escape single quotes in the JSON
-//     // by ending the quote, adding an escaped single quote, and starting a new quote
-//     const jsonString = JSON.stringify(requestBody, null, 2).replace(/'/g, "'\\''");
-//     const escapedJson = jsonString
-
-//     curlCommand += `  -d '${escapedJson}'`;
-
-//     return curlCommand;
-// };
-
-// Main RequestViewer Component
 export const InputViewer = (props: {
     jsonRequest: any,
     headers?: any,
@@ -55,6 +19,9 @@ export const InputViewer = (props: {
     const { jsonRequest, headers } = props;
     const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview');
     const [copied, setCopied] = useState(false);
+    const [showAllHeaders, setShowAllHeaders] = useLocalStorageState<boolean>('vllora-traces-show-all-headers', {
+        defaultValue: false,
+    });
     let messages = jsonRequest?.messages;
     if (!messages && jsonRequest?.contents) {
         messages = jsonRequest?.contents;
@@ -83,6 +50,7 @@ export const InputViewer = (props: {
             headerObj: headers,
             method:'POST',
             fullUrl: `${getBackendUrl()}/v1/chat/completions`,
+            showAllHeaders,
         });
         await navigator.clipboard.writeText(curlCommand);
         setCopied(true);
@@ -124,7 +92,11 @@ export const InputViewer = (props: {
             {activeTab === 'preview' ? (
                 <>
                     {headers && (
-                        <HeaderViewer headers={headers} />
+                        <HeaderViewer
+                            headers={headers}
+                            showAll={showAllHeaders}
+                            onShowAllChange={setShowAllHeaders}
+                        />
                     )}
                     {messages && (
                         <div className="flex flex-col gap-2">
@@ -210,6 +182,7 @@ export const InputViewer = (props: {
                                 headerObj: headers,
                                 method: 'POST',
                                 fullUrl: `${getBackendUrl()}/v1/chat/completions`,
+                                showAllHeaders,
                             })} language="bash" hideTitle={true} />
                             {/* <code>{generateCurlCommand(jsonRequest, headers)}</code> */}
                     </div>

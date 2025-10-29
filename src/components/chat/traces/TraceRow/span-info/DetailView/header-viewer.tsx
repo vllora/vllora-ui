@@ -1,8 +1,9 @@
-import { useState } from 'react';
-
-export const HeaderViewer = (props: { headers: any }) => {
-    const { headers } = props;
-    const [showAll, setShowAll] = useState(false);
+export const HeaderViewer = (props: {
+    headers: any;
+    showAll?: boolean;
+    onShowAllChange?: (showAll: boolean) => void;
+}) => {
+    const { headers, showAll = false, onShowAllChange } = props;
 
     const headersValid = ['x-thread-id', 'x-thread-title', 'x-label', 'x-run-id', 'x-tags']
     const allHeadersKeys = headers ? Object.keys(headers) : [];
@@ -43,8 +44,8 @@ export const HeaderViewer = (props: { headers: any }) => {
             {allHeadersKeys.length > headersFilteredKeys.length && (
                 <div className="flex justify-end pt-1">
                     <button
-                        onClick={() => setShowAll(!showAll)}
-                        className="text-[10px] font-medium text-zinc-400 hover:text-[rgb(var(--theme-600))] transition-colors"
+                        onClick={() => onShowAllChange?.(!showAll)}
+                        className="text-[10px] font-medium text-zinc-400 hover:text-[rgb(var(--theme-500))] transition-colors"
                     >
                         {showAll ? 'Show Less' : `Show All (${allHeadersKeys.length})`}
                     </button>
