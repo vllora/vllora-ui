@@ -10,7 +10,7 @@ export function RunTableHeader({ mode = 'run' }: RunTableHeaderProps) {
 
   return (
     <div
-      className="grid gap-0 bg-[#0a0a0a] text-xs font-semibold text-muted-foreground uppercase tracking-wider overflow-hidden divide-x divide-border"
+      className="grid gap-0 bg-[#0a0a0a] text-xs font-semibold text-muted-foreground uppercase tracking-wider overflow-hidden divide-x divide-border border-b border-border"
       style={{ gridTemplateColumns: gridColumns }}
     >
       <div className="flex items-center justify-center py-3 px-2 w-full">
