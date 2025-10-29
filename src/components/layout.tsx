@@ -1,4 +1,3 @@
-import { useState } from "react"
 import { Outlet } from "react-router-dom"
 import { AppSidebar } from "./app-sidebar"
 import { Header } from "./Header"
@@ -6,7 +5,6 @@ import { ProjectsConsumer } from "@/contexts/ProjectContext"
 import { ProjectEventsProvider } from "@/contexts/project-events"
 
 export function Layout() {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true)
   const { currentProjectId } = ProjectsConsumer()
 
   const handleProjectChange = (newProjectId: string) => {
@@ -18,8 +16,7 @@ export function Layout() {
   return (
     <div className="flex h-screen overflow-hidden">
       <AppSidebar
-        isCollapsed={isSidebarCollapsed}
-        onToggle={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        isCollapsed={true}
         currentProjectId={currentProjectId}
       />
       <div className="flex-1 flex flex-col overflow-hidden">

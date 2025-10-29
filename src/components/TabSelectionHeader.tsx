@@ -29,7 +29,7 @@ export function TabSelectionHeader({
   };
 
   return (
-    <div className="flex justify-between items-center px-6 py-3 border-b border-border backdrop-blur-sm relative">
+    <div className="flex h-16 justify-between items-center px-6 py-3 border-b border-border backdrop-blur-sm relative">
       <div className="flex items-center gap-4">
         {/* Left side - Project Dropdown */}
         <div className="flex items-center">

@@ -1,11 +1,10 @@
 import { useState, useMemo } from "react"
-import { Link, useLocation } from "react-router-dom"
+import { Link, useLocation, useNavigate } from "react-router-dom"
 import {
   Home,
   MessageSquare,
   Settings,
   Menu,
-  PanelLeftIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -28,11 +27,10 @@ const bottomMenuItems = [
 
 interface AppSidebarProps {
   isCollapsed: boolean
-  onToggle: () => void
   currentProjectId?: string
 }
 
-export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSidebarProps) {
+export function AppSidebar({ isCollapsed, currentProjectId }: AppSidebarProps) {
   const location = useLocation()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const { projects, isDefaultProject } = ProjectsConsumer()
@@ -46,6 +44,7 @@ export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSideb
     if (!projectIdToUse || isDefaultProject(projectIdToUse)) return ''
     return `?project_id=${projectIdToUse}`
   }, [currentProjectId, defaultProject?.id, isDefaultProject])
+  const navigate = useNavigate()
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -67,28 +66,16 @@ export function AppSidebar({ isCollapsed, onToggle, currentProjectId }: AppSideb
           isMobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
       >
-        <div className={cn(
-          "flex h-16 items-center justify-between px-4",
-          "border-b border-border/40 backdrop-blur-sm"
+        <div
+        onClick={() => {
+          // TODO: add redirect to home
+          navigate("/")
+        }}
+         className={cn(
+          "flex h-16 items-center justify-center px-4 cursor-pointer",
+          "border-b border-border/50 backdrop-blur-sm"
         )}>
-          {!isCollapsed && (
-            <img src="/logo-dark.svg" alt="vLLora" className="h-8" />
-          )}
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "hidden md:flex hover:bg-accent transition-all duration-200",
-              isCollapsed && "mx-auto"
-            )}
-            onClick={onToggle}
-          >
-            {isCollapsed ? (
-              <PanelLeftIcon className="h-4 w-4" />
-            ) : (
-              <PanelLeftIcon className="h-4 w-4" />
-            )}
-          </Button>
+            <img src="/logo-icon-white.svg" alt="vLLora" className="h-8" />
         </div>
 
         <nav className="flex-1 overflow-y-auto p-4">
