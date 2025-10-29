@@ -256,7 +256,7 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
                   <span className="ml-2 text-sm text-muted-foreground">Loading spans...</span>
                 </div>
               ) : allSpans.length > 0 ? (
-                <div className="flex flex-col gap-3 py-2 px-4">
+                <div className="flex flex-col gap-3 py-2">
                   <ErrorBoundary FallbackComponent={CustomErrorFallback}>
                     <TimelineContent
                       spansByRunId={allSpans}
