@@ -82,7 +82,7 @@ export const listGroups = async (props: {
   return handleApiResponse<PaginatedGroupsResponse>(response);
 };
 
-export const fetchGroupSpans = async (props: {
+export const fetchSpansByBucketGroup = async (props: {
   timeBucket: number;
   projectId: string;
   bucketSize?: number; // In seconds
@@ -108,4 +108,33 @@ export const fetchGroupSpans = async (props: {
   });
 
   return handleApiResponse<{ data: Span[]; pagination: Pagination }>(response);
+};
+
+/**
+ * Fetch metadata for a single bucket by filtering to its time range
+ */
+export const fetchSingleBucket = async (props: {
+  timeBucket: number;
+  projectId: string;
+  bucketSize: number; // In seconds
+}): Promise<GroupDTO | null> => {
+  const { timeBucket, projectId, bucketSize } = props;
+
+  // Calculate the time range for this bucket
+  const bucket_size_us = bucketSize * 1_000_000;
+  const start_time_min = timeBucket;
+  const start_time_max = timeBucket + bucket_size_us - 1;
+
+  const result = await listGroups({
+    projectId,
+    params: {
+      bucketSize,
+      start_time_min,
+      start_time_max,
+      limit: 1,
+      offset: 0,
+    },
+  });
+
+  return result.data.length > 0 ? result.data[0] : null;
 };
