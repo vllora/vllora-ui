@@ -29,7 +29,7 @@ export function TabSelectionHeader({
   };
 
   return (
-    <div className="flex justify-between items-center px-6 py-3 border-b border-border/50 bg-gradient-to-b from-[#0a0a0a] to-[#0a0a0a]/95 backdrop-blur-sm relative">
+    <div className="flex justify-between items-center px-6 py-3 border-b border-border backdrop-blur-sm relative">
       <div className="flex items-center gap-4">
         {/* Left side - Project Dropdown */}
         <div className="flex items-center">
@@ -41,7 +41,7 @@ export function TabSelectionHeader({
           <button
             onClick={() => handleTabChange("threads")}
             className={`
-              relative flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium transition-all duration-200
+              relative flex items-center gap-2 h-10 px-4 py-1.5 rounded-md text-xs font-medium transition-all duration-200
               ${currentTab === "threads"
                 ? 'bg-[rgb(var(--theme-500))] text-white shadow-md shadow-[rgb(var(--theme-500))]/20'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/20'
@@ -53,7 +53,7 @@ export function TabSelectionHeader({
           <button
             onClick={() => handleTabChange("traces")}
             className={`
-              relative flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium transition-all duration-200
+              relative flex items-center gap-2 h-10 px-4 py-1.5 rounded-md text-xs font-medium transition-all duration-200
               ${currentTab === "traces"
                 ? 'bg-[rgb(var(--theme-500))] text-white shadow-md shadow-[rgb(var(--theme-500))]/20'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/20'
