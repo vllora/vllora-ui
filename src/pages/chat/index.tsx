@@ -2,7 +2,7 @@ import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { useCallback, useState, useEffect } from 'react';
 import { TabSelectionHeader } from '@/components/TabSelectionHeader';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
-import { TracesPageProvider, TracesPageConsumer } from '@/contexts/TracesPageContext';
+import { TracesPageProvider } from '@/contexts/TracesPageContext';
 import { TracesPageContent } from './traces/content';
 import { ThreadPage } from './threads';
 
@@ -61,18 +61,12 @@ function PageContent({
   setCurrentTab: (tab: string) => void;
   handleProjectChange: (projectId: string) => void;
 }) {
-  const { groupByMode, setGroupByMode, bucketSize, setBucketSize } = TracesPageConsumer();
-
   return (
     <div className="flex flex-col h-full flex-1">
       <TabSelectionHeader
         onProjectChange={handleProjectChange}
         currentTab={currentTab}
         onTabChange={setCurrentTab}
-        groupByMode={groupByMode}
-        onGroupByModeChange={setGroupByMode}
-        bucketSize={bucketSize}
-        onBucketSizeChange={setBucketSize}
       />
 
       {/* Content Area */}
