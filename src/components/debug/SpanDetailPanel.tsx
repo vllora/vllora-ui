@@ -41,13 +41,8 @@ const modelCallAttribute = modelCallSpan?.attribute as any;
           ttf_str={ttf_str}
         />
       </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-y-scroll flex">
-        {/* Span-specific UI details */}
         <StandaloneSpanUIDetailsDisplay span={span} relatedSpans={relatedSpans} />
 
-      </div>
     </div>
   );
 };

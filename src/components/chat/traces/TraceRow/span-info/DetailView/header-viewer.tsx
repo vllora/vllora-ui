@@ -11,10 +11,6 @@ export const HeaderViewer = (props: {
 
     const displayKeys = showAll ? allHeadersKeys : headersFilteredKeys;
 
-    if (!headers || allHeadersKeys.length === 0) {
-        return null;
-    }
-
     return (
         <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
@@ -28,18 +24,29 @@ export const HeaderViewer = (props: {
                 <div className="h-px flex-1 bg-border" />
             </div>
             <div className="space-y-1">
-                {displayKeys.map((key: string) => (
-                    <div key={key} className="rounded-lg">
-                        <div className="flex items-start justify-between gap-3">
-                            <span className="text-xs font-medium text-zinc-100 break-all">
-                                {key}
-                            </span>
-                            <span className="text-xs text-zinc-400 break-all font-mono text-right">
-                                {typeof headers[key] === 'string' ? headers[key] : JSON.stringify(headers[key])}
-                            </span>
+                {displayKeys.length > 0 ? (
+                    displayKeys.map((key: string) => (
+                        <div key={key} className="rounded-lg">
+                            <div className="flex items-start justify-between gap-3">
+                                <span className="text-xs font-medium text-zinc-100 break-all">
+                                    {key}
+                                </span>
+                                <span className="text-xs text-zinc-400 break-all font-mono text-right">
+                                    {typeof headers[key] === 'string' ? headers[key] : JSON.stringify(headers[key])}
+                                </span>
+                            </div>
                         </div>
+                    ))
+                ) : (
+                    <div className="flex items-center justify-center py-4 px-4 rounded-lg bg-zinc-900/50 border border-dashed border-zinc-800">
+                        <p className="text-xs text-zinc-500 text-center">
+                            {allHeadersKeys.length > 0
+                                ? `No standard headers found. Click "Show All (${allHeadersKeys.length})" to view custom headers.`
+                                : 'No headers available'
+                            }
+                        </p>
                     </div>
-                ))}
+                )}
             </div>
             {allHeadersKeys.length > headersFilteredKeys.length && (
                 <div className="flex justify-end pt-1">

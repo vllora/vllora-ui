@@ -156,7 +156,7 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
 
             {showStructuredBlock && (
                 <div className="rounded-lg px-3 py-2">
-                    <div className="pb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                    <div className="pb-1 text-[10px] text-wrap font-semibold uppercase tracking-wide text-zinc-500">
                         Structured Content
                     </div>
                     <ObjectMessageContent objectContent={structuredContent} />

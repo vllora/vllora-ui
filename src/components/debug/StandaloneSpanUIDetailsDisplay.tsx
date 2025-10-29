@@ -14,5 +14,5 @@ interface StandaloneSpanUIDetailsDisplayProps {
  * Uses the shared BaseSpanUIDisplay component for routing logic.
  */
 export const StandaloneSpanUIDetailsDisplay = ({ span, relatedSpans = [] }: StandaloneSpanUIDetailsDisplayProps) => {
-  return <div className="p-2 flex flex-1"><BaseSpanUIDisplay span={span} relatedSpans={relatedSpans} /></div>;
+  return <div className="p-2 flex flex-col flex-1 overflow-y-auto"><BaseSpanUIDisplay span={span} relatedSpans={relatedSpans} /></div>;
 };
