@@ -43,7 +43,7 @@ export function TracesPageContent() {
         <RunTable />
       </div>
       {detailSpan && (
-        <div className="w-[40vw] h-full animate-in slide-in-from-right duration-300 border-l border-border overflow-auto">
+        <div className="flex-1 max-w-[40vw] h-full animate-in slide-in-from-right duration-300 border-l border-border overflow-hidden">
           <SpanDetailPanel
             span={detailSpan}
             relatedSpans={spansOfSelectedRun}
