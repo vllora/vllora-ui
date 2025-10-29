@@ -1,6 +1,6 @@
 import { getSpanTitle, getOperationIcon, getOperationIconColor, getTimelineBgColor } from "./utils";
 import { TimelineRow } from "./timeline-row";
-import { skipThisSpan, isClientSDK } from "@/utils/graph-utils";
+import { skipThisSpan, isClientSDK, isVlloraRunSpan } from "@/utils/graph-utils";
 import { Span } from "@/types/common-type";
 import { TIMELINE_DYNAMIC_TITLE_WIDTH_IN_SIDEBAR } from "@/utils/constant";
 
@@ -27,7 +27,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
     let root = hierarchy;
     let childrenSpan = hierarchy.spans || [];
     let isClientSDKTrace = isClientSDK(root);
-    let skipCondition = skipThisSpan(root, isClientSDKTrace)
+    let skipCondition = skipThisSpan(root, isClientSDKTrace) || isVlloraRunSpan(root);
     let isSingleTrace = level == 0 && childrenSpan.length === 0;
     // Skip certain operation types and render their children directly
     if (skipCondition && !isSingleTrace) {

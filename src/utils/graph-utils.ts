@@ -157,3 +157,8 @@ export function skipThisSpan(span: Span, isClientSDKTrace?: boolean): boolean {
 
   return ["cloud_api_invoke", "api_invoke", "model_call"].includes(operation_name);
 }
+
+export const isVlloraRunSpan = (span: Span) => {
+  let clientSDKName = getClientSDKName(span);
+    return span.operation_name === 'run' && !clientSDKName;
+}
