@@ -1,9 +1,8 @@
 import { useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { TracesPageConsumer } from '@/contexts/TracesPageContext';
-import { RunTableRow } from './run-table-row';
-import { RunTableHeader } from './run-table-header';
-import { GroupTableRow } from './group-table-row';
+import { RunTableView } from './run-table-view';
+import { GroupCardGrid } from './group-card-grid';
 
 export function RunTable() {
   const {
@@ -89,44 +88,23 @@ export function RunTable() {
   // Runs/Groups list
   return (
     <div className="flex-1 w-full h-full overflow-auto">
-      <div className="px-2">
-        {/* Table Header - Sticky */}
-        <div className="sticky top-0 z-10">
-          <RunTableHeader mode={groupByMode} />
-        </div>
-
-        {/* Table Rows */}
-        <div className="divide-y divide-border">
-          {groupByMode === 'run'
-            ? runs.map((run, index) => (
-                <RunTableRow key={run.run_id} run={run} index={index} />
-              ))
-            : groups.map((group, index) => (
-                <GroupTableRow key={group.time_bucket} group={group} index={index} />
-              ))}
-
-          {/* Load More Button */}
-          {hasMore && (
-            <button
-              onClick={loadMore}
-              disabled={loadingMore}
-              className="w-full p-4 text-sm text-muted-foreground hover:text-foreground border border-border rounded-lg hover:bg-accent/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loadingMore ? (
-                <span className="flex items-center justify-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  {groupByMode === 'run' ? 'Loading more traces...' : 'Loading more groups...'}
-                </span>
-              ) : (
-                `Load More (${items.length} loaded)`
-              )}
-            </button>
-          )}
-
-          {/* Observer target for infinite scroll (optional future enhancement) */}
-          <div ref={observerTarget} className="h-4" />
-        </div>
-      </div>
+      {groupByMode === 'run' ? (
+        <RunTableView
+          runs={runs}
+          hasMore={hasMore}
+          loadingMore={loadingMore}
+          onLoadMore={loadMore}
+          observerRef={observerTarget}
+        />
+      ) : (
+        <GroupCardGrid
+          groups={groups}
+          hasMore={hasMore}
+          loadingMore={loadingMore}
+          onLoadMore={loadMore}
+          observerRef={observerTarget}
+        />
+      )}
     </div>
   );
 }
