@@ -7,11 +7,11 @@ import { TracesPageConsumer } from "@/contexts/TracesPageContext";
 import { ExclamationTriangleIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
 import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { formatCost } from "@/utils/formatCost";
-import { formatMessageTime } from "@/utils/dateUtils";
 import { useRelativeTime } from "@/hooks/useRelativeTime";
 import { ProviderCell } from './cells/ProviderCell';
 import { CustomErrorFallback } from "@/components/chat/traces/components/custom-error-fallback";
 import { TimelineContent } from "@/components/chat/traces/components/TimelineContent";
+import { ListProviders } from "@/components/chat/thread/ListProviders";
 
 interface GroupCardProps {
   group: GroupDTO;
@@ -50,9 +50,9 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
     setOpenGroups(prev => {
       const isCurrentlyOpen = prev.some(g => g.time_bucket === timeBucket);
       if (isCurrentlyOpen) {
-        return [];
+        return prev.filter(g => g.time_bucket !== timeBucket);
       } else {
-        return [{ time_bucket: timeBucket, tab: 'trace' }];
+        return [...prev, { time_bucket: timeBucket, tab: 'trace' }];
       }
     });
   }, [timeBucket, setOpenGroups]);
@@ -73,7 +73,27 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
     return parts.length > 1 ? parts[0] : 'default';
   };
 
-  const providers = Array.from(new Set(modelNamesInvoked.map(getProviderName)));
+  // const providers = Array.from(new Set(modelNamesInvoked.map(getProviderName)));
+
+  // Extract provider info from input_models
+  const providersInfo = useMemo(() => {
+    const inputModels = modelNamesInvoked || [];
+    const providersMap: { provider: string, models: string[] }[] = [];
+
+    inputModels.forEach(modelFullName => {
+      if (modelFullName && modelFullName.includes('/')) {
+        const [provider, model] = modelFullName.split('/');
+        const existingProviderIndex = providersMap.findIndex(p => p.provider === provider);
+        if (existingProviderIndex !== -1) {
+          providersMap[existingProviderIndex].models.push(model);
+        } else {
+          providersMap.push({ provider: provider, models: [model] });
+        }
+      }
+    });
+
+    return providersMap;
+  }, [modelNamesInvoked]);
 
   const tokensInfo = {
     inputTokens: group.input_tokens || 0,
@@ -102,20 +122,6 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
 
   const messageRef = React.useRef<HTMLDivElement>(null);
   useRelativeTime(messageRef, startTimeInIsoFormat);
-
-  const getTimeDisplay = useCallback(() => {
-    if (!startTime) return "";
-    return formatMessageTime(startTimeInIsoFormat);
-  }, [startTimeInIsoFormat, startTime]);
-
-  const timeAgo = getTimeDisplay();
-
-  const convertTimeMiliSecondsToLocalDateTime = (ms: number, includeSeconds: boolean = false) => {
-    const date = new Date(ms);
-    return includeSeconds
-      ? date.toLocaleString()
-      : date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
 
   const bucketTimeDisplay = useMemo(() => {
     const date = new Date(timeBucket / 1000);
@@ -151,15 +157,19 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
               <h3 className="text-sm font-semibold text-primary truncate" title={bucketTimeDisplay}>
                 {bucketTimeDisplay}
               </h3>
-              
+
             </div>
           </div>
 
           {/* Right: Stats and Errors */}
-          <div className="flex items-center gap-6 flex-shrink-0">
+          <div className="grid items-center gap-4" style={{ gridTemplateColumns: '80px 100px 100px 100px 100px 80px' }}>
             {/* Provider */}
-            <div className="flex items-center gap-2">
-              <ProviderCell providers={providers} />
+            <div className="flex flex-col items-end gap-1">
+              <div className="flex gap-1 items-center">
+                {providersInfo.length > 0 && (
+                  <ListProviders providersInfo={providersInfo} />
+                )}
+              </div>
             </div>
 
             {/* Cost */}
