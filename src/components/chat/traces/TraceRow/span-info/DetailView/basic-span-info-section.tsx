@@ -153,9 +153,13 @@ export const BasicSpanInfo = ({ span }: { span: Span, relatedSpan?: Span[] }) =>
                     </DialogTitle>
                 </DialogHeader>
                 <div className="flex flex-col divide-y divide-[#1a1a1a]">
-                    {span.trace_id && <IdDisplay id={span.trace_id} type="trace" />}
-                    {span.run_id && <IdDisplay id={span.run_id} type="run" />}
+                    
+                    
+                    
                     {span.thread_id && <IdDisplay id={span.thread_id} type="thread" />}
+                    {span.run_id && <IdDisplay id={span.run_id} type="run" />}
+                    {span.trace_id && <IdDisplay id={span.trace_id} type="trace" />}
+                    {span.span_id && <IdDisplay id={span.span_id} type="span" />}
                     {ttfNumber && <TTFTInfoDisplay ttfNumber={ttfNumber} />}
                 </div>
             </DialogContent>
