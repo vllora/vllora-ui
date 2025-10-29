@@ -8,10 +8,12 @@ import { ExclamationTriangleIcon, CheckCircleIcon } from "@heroicons/react/24/ou
 import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { formatCost } from "@/utils/formatCost";
 import { useRelativeTime } from "@/hooks/useRelativeTime";
-import { ProviderCell } from './cells/ProviderCell';
 import { CustomErrorFallback } from "@/components/chat/traces/components/custom-error-fallback";
 import { TimelineContent } from "@/components/chat/traces/components/TimelineContent";
 import { ListProviders } from "@/components/chat/thread/ListProviders";
+
+// Grid layout for card stats - matches across all cards for alignment
+const CARD_STATS_GRID = 'auto 100px 90px 90px 90px 80px';
 
 interface GroupCardProps {
   group: GroupDTO;
@@ -68,10 +70,6 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
 
   const modelNamesInvoked = uniqueModels.filter(name => name && typeof name === 'string' && name.trim() !== '');
 
-  const getProviderName = (modelName: string) => {
-    const parts = modelName.split('/');
-    return parts.length > 1 ? parts[0] : 'default';
-  };
 
   // const providers = Array.from(new Set(modelNamesInvoked.map(getProviderName)));
 
@@ -125,7 +123,35 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
 
   const bucketTimeDisplay = useMemo(() => {
     const date = new Date(timeBucket / 1000);
-    return date.toLocaleString();
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const bucketDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+    const timeStr = date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+
+    // Today: just show time
+    if (bucketDate.getTime() === today.getTime()) {
+      return timeStr;
+    }
+
+    // Yesterday: show "Yesterday" with time
+    if (bucketDate.getTime() === yesterday.getTime()) {
+      return `Yesterday, ${timeStr}`;
+    }
+
+    // Older: show full date with time
+    const dateStr = date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: now.getFullYear() === date.getFullYear() ? undefined : 'numeric'
+    });
+    return `${dateStr}, ${timeStr}`;
   }, [timeBucket]);
 
   return (
@@ -142,7 +168,7 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
     >
       <div
         onClick={toggleAccordion}
-        className="cursor-pointer p-4 bg-[#171717]"
+        className="cursor-pointer p-3 bg-[#171717]"
       >
         {/* Single Row with Time on left, Stats and Errors on right */}
         <div className="flex items-center  justify-between gap-6">
@@ -162,44 +188,45 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
           </div>
 
           {/* Right: Stats and Errors */}
-          <div className="grid items-center gap-4" style={{ gridTemplateColumns: '80px 100px 100px 100px 100px 80px' }}>
+          <div className="grid items-center gap-4" style={{ gridTemplateColumns: CARD_STATS_GRID }}>
             {/* Provider */}
-            <div className="flex flex-col items-end gap-1">
-              <div className="flex gap-1 items-center">
-                {providersInfo.length > 0 && (
-                  <ListProviders providersInfo={providersInfo} />
-                )}
-              </div>
+            <div className="flex flex-col items-end gap-0.5">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Provider</span>
+              {providersInfo.length > 0 ? (
+                <ListProviders providersInfo={providersInfo} />
+              ) : (
+                <span className="text-xs text-muted-foreground">-</span>
+              )}
             </div>
 
             {/* Cost */}
-            <div className="flex flex-col items-end gap-1">
-              <span className="text-xs text-muted-foreground">Cost</span>
+            <div className="flex flex-col items-end gap-0.5">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Cost</span>
               <span className="text-sm font-semibold tabular-nums">{formatCost(totalCost)}</span>
             </div>
 
             {/* Input Tokens */}
-            <div className="flex flex-col items-end gap-1">
-              <span className="text-xs text-muted-foreground">Input</span>
+            <div className="flex flex-col items-end gap-0.5">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Input</span>
               <span className="text-sm font-semibold tabular-nums">{tokensInfo.inputTokens.toLocaleString()}</span>
             </div>
 
             {/* Output Tokens */}
-            <div className="flex flex-col items-end gap-1">
-              <span className="text-xs text-muted-foreground">Output</span>
+            <div className="flex flex-col items-end gap-0.5">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Output</span>
               <span className="text-sm font-semibold tabular-nums">{tokensInfo.outputTokens.toLocaleString()}</span>
             </div>
 
             {/* Duration */}
-            <div className="flex flex-col items-end gap-1">
-              <span className="text-xs text-muted-foreground">Duration</span>
+            <div className="flex flex-col items-end gap-0.5">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Duration</span>
               <span className="text-sm font-semibold tabular-nums">{duration}s</span>
             </div>
 
             {/* Status Badge */}
-            <div className="flex flex-col items-center gap-1">
-              <span className="text-xs text-muted-foreground">Status</span>
-              <span className="flex items-center gap-1">{errors && errors.length > 0 ? (
+            <div className="flex flex-col items-center gap-0.5">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Status</span>
+              {errors && errors.length > 0 ? (
                 <div className="flex items-center gap-1">
                   <ExclamationTriangleIcon className="w-4 h-4 text-red-500" />
                   <span className="text-xs text-red-500 font-medium">{errors.length}</span>
@@ -207,7 +234,6 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
               ) : (
                 <CheckCircleIcon className="w-4 h-4 text-green-500" />
               )}
-              </span>
             </div>
           </div>
         </div>

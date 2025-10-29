@@ -2,6 +2,9 @@ import { Loader2 } from 'lucide-react';
 import { GroupDTO } from '@/services/groups-api';
 import { GroupCard } from './group-card';
 
+// Grid layout for card stats - matches across all cards for alignment
+const CARD_STATS_GRID = 'auto 100px 100px 100px 100px 80px';
+
 interface GroupCardGridProps {
   groups: GroupDTO[];
   hasMore: boolean;
