@@ -18,9 +18,9 @@ export const HeaderViewer = (props: {
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
                     Headers
                 </div>
-                <span className="text-[10px] font-medium text-zinc-500">
+                {displayKeys.length > 0 && <span className="text-[10px] font-medium text-zinc-500">
                     ({displayKeys.length})
-                </span>
+                </span>}
                 <div className="h-px flex-1 bg-border" />
             </div>
             <div className="space-y-1">
@@ -41,7 +41,7 @@ export const HeaderViewer = (props: {
                     <div className="flex items-center justify-center py-4 px-4 rounded-lg bg-zinc-900/50 border border-dashed border-zinc-800">
                         <p className="text-xs text-zinc-500 text-center">
                             {allHeadersKeys.length > 0
-                                ? `No standard headers found. Click "Show All (${allHeadersKeys.length})" to view custom headers.`
+                                ? `No standard headers found. Click "Show All" to view others headers.`
                                 : 'No headers available'
                             }
                         </p>
