@@ -11,7 +11,7 @@ export const ContentArrayDisplay: React.FC<ContentArrayDisplayProps> = ({ conten
       {contentArray.map((item, index) => {
         let type = item.type;
         let content = item.content || item.text;
-        if (type === 'Text' && content) {
+        if (type && type.toLowerCase() === 'text' && content) {
           // Check if it's a base64 image
           if (typeof content === 'string' && content.startsWith('data:image/')) {
             return (
