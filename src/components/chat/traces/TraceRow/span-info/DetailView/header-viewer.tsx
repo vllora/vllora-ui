@@ -41,7 +41,7 @@ export const HeaderViewer = (props: {
                     <div className="flex items-center justify-center py-4 px-4 rounded-lg bg-zinc-900/50 border border-dashed border-zinc-800">
                         <p className="text-xs text-zinc-500 text-center">
                             {allHeadersKeys.length > 0
-                                ? `No standard headers found. Click "Show All" to view others headers.`
+                                ? `No standard headers found. Click "Show All" to view other headers.`
                                 : 'No headers available'
                             }
                         </p>
