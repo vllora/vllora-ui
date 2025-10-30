@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Loader2, Copy, Check } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2, Copy, Check, AlertTriangleIcon } from 'lucide-react';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 import { useSpanById } from '@/hooks/useSpanById';
 import { getOperationIcon, getSpanTitle, getTimelineBgColor } from '@/components/chat/traces/TraceRow/new-timeline/utils';
@@ -13,7 +13,8 @@ interface SpanSeparatorProps {
   onToggle?: () => void;
   level?: number;
   icon?: React.ReactNode;
-  onHover?: (input: {spanId: string, runId: string, isHovering: boolean}) => void;
+  errors?: string[];
+  onHover?: (input: { spanId: string, runId: string, isHovering: boolean }) => void;
 }
 
 /**
@@ -28,6 +29,7 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
   onToggle,
   level = 0,
   onHover,
+  errors
 }) => {
   // Get span data from context - component will re-render on context changes
   const { flattenSpans } = ChatWindowConsumer();
@@ -45,13 +47,13 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
 
   const handleMouseEnter = useCallback(() => {
     if (onHover) {
-      onHover({spanId, runId: span?.run_id || '', isHovering: true});
+      onHover({ spanId, runId: span?.run_id || '', isHovering: true });
     }
   }, [spanId, span?.run_id, onHover]);
 
   const handleMouseLeave = useCallback(() => {
     if (onHover) {
-      onHover({spanId, runId: span?.run_id || '', isHovering: false});
+      onHover({ spanId, runId: span?.run_id || '', isHovering: false });
     }
   }, [spanId, span?.run_id, onHover]);
 
@@ -71,7 +73,7 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
     if (!span) {
       return spanId.slice(0, 8);
     }
-    if(span.operation_name === 'run') {
+    if (span.operation_name === 'run') {
       return `Run`;
     }
 
@@ -143,6 +145,7 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
           <span className="text-[12px] font-medium text-muted-foreground/90 group-hover:text-foreground transition-colors">
             {title}
           </span>
+
           <Tooltip>
             <TooltipTrigger asChild>
               <div
@@ -174,6 +177,26 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
             </TooltipContent>
           </Tooltip>
           {StatusIcon}
+
+          {errors && errors?.length > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <AlertTriangleIcon className="w-3 h-3 text-amber-500" />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <div className="max-w-xs">
+                  <p className="font-semibold mb-1">Errors:</p>
+                  <ul className="list-disc list-inside space-y-1">
+                    {errors.map((error, index) => (
+                      <li key={index} className="text-xs">{error}</li>
+                    ))}
+                  </ul>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          )}
         </button>
       </div>
     </TooltipProvider>
@@ -190,6 +213,7 @@ export const SpanSeparator = React.memo(
     if (prevProps.spanId !== nextProps.spanId) return false;
     if (prevProps.isCollapsed !== nextProps.isCollapsed) return false;
     if (prevProps.level !== nextProps.level) return false;
+    if (prevProps.errors !== nextProps.errors) return false;
     return true; // Don't re-render
   }
 );

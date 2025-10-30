@@ -5,6 +5,7 @@ import { memo, useMemo, useCallback } from "react";
 import { CONTENT_PADDING_LEFT } from "./constants";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { useSpanById } from "@/hooks/useSpanById";
+import { errorFromApiInvokeSpansInSameRun } from "@/hooks/useSpanById";
 
 const RunSpanMessageComponent = (props: {
     span_id: string;
@@ -15,6 +16,7 @@ const RunSpanMessageComponent = (props: {
 
     const { openTraces, setOpenTraces, flattenSpans, runHighlighted, setRunHighlighted, setHoverSpanId, collapsedSpans } = ChatWindowConsumer();
     const span = useSpanById(flattenSpans, span_id);
+    const errors = errorFromApiInvokeSpansInSameRun({ flattenSpans, runId: span?.run_id || '' });
 
     // Memoize the toggle callback to prevent child re-renders
     const toggleCollapse = useCallback(() => {
@@ -35,7 +37,7 @@ const RunSpanMessageComponent = (props: {
         return collapsedSpans.includes(span?.span_id || '') || !isOpen;
     }, [openTraces, span, collapsedSpans]);
 
-   
+
 
     // Memoize the className for connector line - subtle vertical line on the left
     const contentClassName = useMemo(() =>
@@ -62,11 +64,12 @@ const RunSpanMessageComponent = (props: {
                 isCollapsed={isCollapsed}
                 onToggle={toggleCollapse}
                 level={level}
+                errors={errors}
                 onHover={({
                     runId,
                     isHovering
                 }) => {
-                    if(isHovering) {
+                    if (isHovering) {
                         setRunHighlighted(runId);
                         setHoverSpanId(span_id);
                     } else {
@@ -77,7 +80,14 @@ const RunSpanMessageComponent = (props: {
             />
             {!isCollapsed && (
                 <div className={contentClassName} style={contentStyle}>
-                    {messages.map((message) => (
+                    {errors && <> <div className="flex flex-col gap-1 mt-1">{errors?.length > 0 && errors.map((error, index) => (
+                        <div key={index} className="rounded-md p-3 border border-red-500/30 bg-red-500/5">
+                            <pre className="text-xs text-red-300 font-mono whitespace-pre-wrap break-all">{error}</pre>
+                        </div>
+                    ))}</div>
+                    </>
+                    }
+                    {messages.length > 0 && messages.map((message) => (
                         <HierarchicalMessageSpanItem
                             key={message.span_id}
                             messageStructure={message}

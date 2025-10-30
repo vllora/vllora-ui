@@ -1,7 +1,7 @@
-import { useMemo } from 'react';
-import { Span } from '@/types/common-type';
-import { extractMessagesFromSpan } from '@/utils/span-to-message';
-import { Message } from '@/types/chat';
+import { useMemo } from "react";
+import { Span } from "@/types/common-type";
+import { extractMessagesFromSpan } from "@/utils/span-to-message";
+import { Message } from "@/types/chat";
 
 /**
  * Hook that returns a specific span by span_id from the flattenSpans array.
@@ -27,7 +27,7 @@ export function useSpanById(
 ): Span | undefined {
   // Find the span and memoize based on its actual data, not the array reference
   const span = useMemo(() => {
-    return flattenSpans.find(s => s.span_id === spanId);
+    return flattenSpans.find((s) => s.span_id === spanId);
   }, [flattenSpans, spanId]);
 
   // Return a memoized span that only changes when the span's data actually changes
@@ -49,13 +49,45 @@ export function useSpanById(
   ]);
 }
 
-export const useMessageExtractSpanById = (flattenSpans: Span[],
-  spanId: string): Message[] => {
-    const span = useSpanById(flattenSpans, spanId);
-    return useMemo(() => {
-        if (!span) return [];
-        let messages = extractMessagesFromSpan(span);
-        return messages;
-    }, [span]);
-}
+export const useSpansInSameRun = (
+  flattenSpans: Span[],
+  runId: string
+): Span[] => {
+  return useMemo(() => {
+    return flattenSpans.filter((s) => s.run_id === runId);
+  }, [flattenSpans, runId]);
+};
 
+export const useApiInvokeSpanInSameRun = (props: {
+  flattenSpans: Span[];
+  runId: string;
+}) => {
+  const { flattenSpans, runId } = props;
+  const spans = useSpansInSameRun(flattenSpans, runId);
+  return useMemo(() => {
+    return spans.filter((s) => s.operation_name === "api_invoke");
+  }, [spans]);
+};
+
+export const errorFromApiInvokeSpansInSameRun = (props: {
+  flattenSpans: Span[];
+  runId: string;
+}): string[] => {
+  const { flattenSpans, runId } = props;
+  const apiInvokeSpans = useApiInvokeSpanInSameRun({ flattenSpans, runId });
+  return useMemo(() => {
+    return apiInvokeSpans.map((s) => s.attribute?.error).filter((e) => e) as string[];
+  }, [apiInvokeSpans]);
+};
+
+export const useMessageExtractSpanById = (
+  flattenSpans: Span[],
+  spanId: string
+): Message[] => {
+  const span = useSpanById(flattenSpans, spanId);
+  return useMemo(() => {
+    if (!span) return [];
+    let messages = extractMessagesFromSpan(span);
+    return messages;
+  }, [span]);
+};
