@@ -80,6 +80,7 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
 
     // Set our managed params
     params.set('threadId', inputThreadId);
+    params.set('tab', 'threads');
 
     if (!isDefaultProject(projectId)) {
       params.set('project_id', projectId);
