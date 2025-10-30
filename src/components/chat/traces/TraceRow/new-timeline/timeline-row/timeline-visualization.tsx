@@ -20,7 +20,7 @@ export const TimelineVisualization = (props: TimelineVisualizationProps) => {
                 <div className="absolute inset-0 flex items-center">
                     <div
                         className={cn(
-                            "h-[16px] w-full rounded-sm relative overflow-hidden transition-colors duration-300",
+                            "h-[10px] w-full rounded-sm relative overflow-hidden transition-colors duration-300",
                         )}
                         style={{
                             backgroundColor: span.isInProgress ? 'rgba(16, 185, 129, 0.1)' : `${timelineBgColor}0D`,

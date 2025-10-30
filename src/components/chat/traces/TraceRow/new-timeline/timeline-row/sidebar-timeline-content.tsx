@@ -33,7 +33,7 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
     return (
         <div
             style={{ width: titleWidth }}
-            className="flex-shrink-0 pl-0 pr-1 py-1.5"
+            className="flex-shrink-0 pl-0 pr-1 py-1"
         >
             <div className="flex items-center w-full">
                 {/* Fake indentation by adding left padding - smaller in sidebar */}
