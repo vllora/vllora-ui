@@ -178,7 +178,7 @@ export const ObjectMessageContent = ({ objectContent }: { objectContent: any }) 
     // check if objectContent is array
     let isArray = Array.isArray(objectContent);
     if (isArray) {
-        return <div className="flex flex-col gap-1 divide-y divide-border">{objectContent.map((item: any, index: number) => {
+        return <div className="flex flex-col gap-1 divide-y divide-border text-zinc-400">{objectContent.map((item: any, index: number) => {
             if (item.type === 'text' && item.text) {
                 return <TextMessageContent key={`${index}_text`} text={item.text} cache_control={item.cache_control} />
             }
