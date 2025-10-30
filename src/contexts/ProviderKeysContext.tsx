@@ -54,18 +54,14 @@ export function useProviderKeys() {
       case 'bedrock':
         if (values.auth_method === 'api_key') {
           return {
-            ApiKey: {
-              api_key: values.api_key,
-              region: values.region || undefined,
-            },
+            api_key: values.api_key,
+            region: values.region || undefined,
           };
         } else {
           return {
-            IAM: {
-              access_key: values.access_key,
-              access_secret: values.access_secret,
-              region: values.region || undefined,
-            },
+            access_key: values.access_key,
+            access_secret: values.access_secret,
+            region: values.region || undefined,
           };
         }
 

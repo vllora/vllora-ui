@@ -16,10 +16,6 @@ export interface AwsApiKeyCredentials {
   region?: string;
 }
 
-export type BedrockCredentials =
-  | { IAM: AwsIAMCredentials }
-  | { ApiKey: AwsApiKeyCredentials };
-
 export interface VertexCredentialsFile {
   type: string;
   project_id: string;
@@ -42,7 +38,8 @@ export interface VertexCredentials {
 export type Credentials =
   | ApiKeyCredentials
   | { api_key: string; endpoint: string }
-  | BedrockCredentials
+  | AwsIAMCredentials
+  | AwsApiKeyCredentials
   | VertexCredentials
   | 'LangDb';
 
