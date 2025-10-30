@@ -10,8 +10,8 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
-    "start:backend": "cd ai-gateway && cargo run serve --port 8080",
-    "start:backend:release": "cd ai-gateway && cargo run --release serve --port 8080"
+    "start:backend": "cd vllora && cargo run serve --port 8080",
+    "start:backend:release": "cd vllora && cargo run --release serve --port 8080"
   },
   "repository": {
     "type": "git",

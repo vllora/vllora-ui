@@ -6,7 +6,7 @@ Ellora UI is a modern web interface (frontend) for interacting with AI models th
 
 **Repository Structure**:
 - **Frontend**: `ellora-ui` (this repository) - React + TypeScript web application
-- **Backend**: `ai-gateway` - Rust-based AI Gateway server
+- **Backend**: `vllora` - Rust-based AI Gateway server
 
 The frontend connects to the backend API running locally at `http://0.0.0.0:8080`.
 
@@ -238,7 +238,7 @@ The Home page serves as the Model Browser, displaying all available AI models fr
 
 **Quick Reference**:
 - **Endpoint**: `GET http://0.0.0.0:8080/v1/models`
-- **Backend Handler**: `list_gateway_models` in `ai-gateway/core/src/handler/models.rs`
+- **Backend Handler**: `list_gateway_models` in `vllora/core/src/handler/models.rs`
 - **Custom Hook**: `useLocalModels` for data fetching
 - **Response Format**: OpenAI-compatible model list with `id`, `object`, `created`, `owned_by`
 
@@ -600,7 +600,7 @@ VITE_CONNECT_LOCAL=true
 ## Integration with AI Gateway Backend
 
 ### Backend Repository
-**Location**: `/Users/anhthuduong/Documents/GitHub/ai-gateway`
+**Location**: `/Users/anhthuduong/Documents/GitHub/vllora`
 
 The AI Gateway is a Rust-based proxy server that provides:
 - OpenAI-compatible API endpoints
@@ -613,7 +613,7 @@ The AI Gateway is a Rust-based proxy server that provides:
 ### Local Setup
 1. **Start AI Gateway backend**:
    ```bash
-   cd /Users/anhthuduong/Documents/GitHub/ai-gateway
+   cd /Users/anhthuduong/Documents/GitHub/vllora
    cargo run  # or docker compose up
    ```
    Gateway runs on `http://0.0.0.0:8080`
@@ -630,14 +630,14 @@ The AI Gateway is a Rust-based proxy server that provides:
 ### Backend API Endpoints
 
 #### Gateway Routes (`/v1/`)
-Defined in `ai-gateway/gateway/src/http.rs`:
+Defined in `vllora/gateway/src/http.rs`:
 - `POST /v1/chat/completions` - Chat completions with streaming (OpenAI-compatible)
 - `GET /v1/models` - List available models across all providers
 - `POST /v1/embeddings` - Generate embeddings
 - `POST /v1/images/generations` - Image generation
 
 #### Projects Routes (`/projects`)
-Defined in `ai-gateway/gateway/src/handlers/projects.rs`:
+Defined in `vllora/gateway/src/handlers/projects.rs`:
 - `GET /projects` - List all projects (handler: `list_projects`)
 - `POST /projects` - Create new project (handler: `create_project`)
 - `GET /projects/{id}` - Get project by ID (handler: `get_project`)
@@ -652,7 +652,7 @@ Defined in `ai-gateway/gateway/src/handlers/projects.rs`:
 
 ### Backend Architecture
 ```
-ai-gateway/
+vllora/
 ├── gateway/
 │   ├── src/
 │   │   ├── http.rs              # HTTP server setup, route configuration

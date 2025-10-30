@@ -22,7 +22,7 @@ GET http://0.0.0.0:8080/v1/models
 ```
 
 ### Backend Handler
-**Location**: `ai-gateway/core/src/handler/models.rs`
+**Location**: `vllora/core/src/handler/models.rs`
 
 **Handler Function**: `list_gateway_models`
 
@@ -48,7 +48,7 @@ No request body or parameters required.
 
 ### Backend Implementation Details
 
-From `ai-gateway/core/src/handler/models.rs`:
+From `vllora/core/src/handler/models.rs`:
 
 ```rust
 pub async fn list_gateway_models(

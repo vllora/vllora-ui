@@ -107,7 +107,7 @@ ellora-ui/
 │   ├── contexts/          # React contexts
 │   ├── services/          # API services
 │   └── config/            # Configuration
-├── ai-gateway/            # Backend Rust project
+├── vllora/            # Backend Rust project
 │   ├── gateway/           # Main gateway server
 │   └── core/             # Core library
 └── public/               # Static assets
@@ -128,6 +128,6 @@ This project is licensed under the ISC License.
 ## Links
 
 - 📚 [Documentation](https://docs.langdb.ai)
-- ⭐ [GitHub](https://github.com/langdb/ai-gateway)
+- ⭐ [GitHub](https://github.com/langdb/vllora)
 - 💬 [Slack Community](https://join.slack.com/t/langdbcommunity/shared_invite/zt-2haf5kj6a-d7NX6TFJUPX45w~Ag4dzlg)
 - 🐦 [Twitter](https://x.com/LangdbAi)

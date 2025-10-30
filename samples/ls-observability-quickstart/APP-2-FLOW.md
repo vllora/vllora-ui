@@ -334,7 +334,7 @@ export TAVILY_API_KEY="your-tavily-key"
 
 **3. "Connection refused to localhost:8080"**
 - Set `USE_GATEWAY = False` to bypass gateway
-- Or start the AI gateway: `./target/debug/ai-gateway serve`
+- Or start the AI gateway: `./target/debug/vllora serve`
 
 **4. "Module not found"**
 ```bash
