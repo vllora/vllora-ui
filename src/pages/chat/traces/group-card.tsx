@@ -204,7 +204,7 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
           {/* Right: Stats and Errors */}
           <div className="grid items-center gap-4" style={{ gridTemplateColumns: CARD_STATS_GRID }}>
             {/* Provider */}
-            <div className="flex flex-col items-end gap-0">
+            <div className="flex flex-col items-center gap-0">
               <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Provider</span>
               {providersInfo.length > 0 ? (
                 <ListProviders providersInfo={providersInfo} avatarClass="w-6 h-6" iconClass="w-3 h-3 text-primary" />
