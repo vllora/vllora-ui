@@ -279,14 +279,14 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.15 }}
           >
-            <div className="overflow-auto custom-scrollbar">
+            <div className="overflow-auto custom-scrollbar border-l border-r border-border/50">
               {isLoadingSpans ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                   <span className="ml-2 text-sm text-muted-foreground">Loading spans...</span>
                 </div>
               ) : allSpans.length > 0 ? (
-                <div className="flex flex-col gap-3 py-2">
+                <div className="flex flex-col gap-3 py-1">
                   <ErrorBoundary FallbackComponent={CustomErrorFallback}>
                     <TimelineContent
                       spansByRunId={allSpans}
