@@ -24,8 +24,11 @@ export function useGroupsPagination({
   const [hasMoreGroups, setHasMoreGroups] = useState<boolean>(false);
   const [loadingMoreGroups, setLoadingMoreGroups] = useState<boolean>(false);
   const [rawGroups, setRawGroups] = useState<GroupDTO[]>([]);
-  const [openGroups, setOpenGroups] = useState<
-    { time_bucket: number; tab: "trace" | "code" }[]
+  // const [openGroups, setOpenGroups] = useState<
+  //   { time_bucket: number; tab: "trace" | "code" }[]
+  // >([]);
+  const [hideGroups, setHideGroups] = useState<
+     { time_bucket: number; tab: "trace" | "code" }[]
   >([]);
   const projectIdRef = useLatest(projectId);
   const threadIdRef = useLatest(threadId);
@@ -53,14 +56,14 @@ export function useGroupsPagination({
       // Update pagination state
       const groups = response?.data || [];
 
-      if (groups && groups.length > 0 && groups[0].time_bucket) {
-        setOpenGroups([
-          {
-            time_bucket: groups[0].time_bucket,
-            tab: "trace",
-          },
-        ]);
-      }
+      // if (groups && groups.length > 0 && groups[0].time_bucket) {
+      //   setOpenGroups([
+      //     {
+      //       time_bucket: groups[0].time_bucket,
+      //       tab: "trace",
+      //     },
+      //   ]);
+      // }
       onGroupsLoaded?.(groups);
       const pagination = response?.pagination || {
         offset: 0,
@@ -156,7 +159,9 @@ export function useGroupsPagination({
     hasMoreGroups,
     groupsTotal,
     loadingMoreGroups,
-    openGroups,
-    setOpenGroups,
+    hideGroups,
+    setHideGroups,
+    // openGroups,
+    // setOpenGroups,
   };
 }

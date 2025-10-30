@@ -23,8 +23,10 @@ interface GroupCardProps {
 
 export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
   const {
-    openGroups,
-    setOpenGroups,
+    // openGroups,
+    // setOpenGroups,
+    hideGroups,
+    setHideGroups,
     loadGroupSpans,
     groupSpansMap,
     loadingGroupsByTimeBucket,
@@ -38,27 +40,38 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
   } = TracesPageConsumer();
 
   const timeBucket = group.time_bucket;
-  const isOpen = openGroups.some(g => g.time_bucket === timeBucket);
+  const isOpen =  useMemo(() => {
+    return !hideGroups.find(g => g.time_bucket === timeBucket);
+  }, [hideGroups, group.time_bucket]);
 
   const allSpans = groupSpansMap[timeBucket] || [];
   const isLoadingSpans = loadingGroupsByTimeBucket.has(timeBucket);
 
   useEffect(() => {
-    if (isOpen && allSpans.length === 0 && !isLoadingSpans) {
+    if (isOpen) {
       loadGroupSpans(timeBucket);
     }
-  }, [isOpen, timeBucket, loadGroupSpans, allSpans.length, isLoadingSpans]);
+  }, [isOpen, loadGroupSpans, timeBucket]);
 
   const toggleAccordion = useCallback(() => {
-    setOpenGroups(prev => {
-      const isCurrentlyOpen = prev.some(g => g.time_bucket === timeBucket);
-      if (isCurrentlyOpen) {
+    setHideGroups(prev => {
+      const isCurrentlyClosed = prev.some(g => g.time_bucket === timeBucket);
+      if (isCurrentlyClosed) {
+        
         return prev.filter(g => g.time_bucket !== timeBucket);
       } else {
         return [...prev, { time_bucket: timeBucket, tab: 'trace' }];
       }
     });
-  }, [timeBucket, setOpenGroups]);
+    // setOpenGroups(prev => {
+    //   const isCurrentlyOpen = prev.some(g => g.time_bucket === timeBucket);
+    //   if (isCurrentlyOpen) {
+    //     return prev.filter(g => g.time_bucket !== timeBucket);
+    //   } else {
+    //     return [...prev, { time_bucket: timeBucket, tab: 'trace' }];
+    //   }
+    // });
+  }, [timeBucket, setHideGroups]);
 
   const usedModels = group.used_models || [];
   const uniqueModels = Array.from(new Set(usedModels));
@@ -191,10 +204,10 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
           {/* Right: Stats and Errors */}
           <div className="grid items-center gap-4" style={{ gridTemplateColumns: CARD_STATS_GRID }}>
             {/* Provider */}
-            <div className="flex flex-col items-end gap-0.5">
+            <div className="flex flex-col items-end gap-0">
               <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Provider</span>
               {providersInfo.length > 0 ? (
-                <ListProviders providersInfo={providersInfo} />
+                <ListProviders providersInfo={providersInfo} avatarClass="w-6 h-6" iconClass="w-3 h-3 text-primary" />
               ) : (
                 <span className="text-xs text-muted-foreground">-</span>
               )}
@@ -203,25 +216,25 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
             {/* Cost */}
             <div className="flex flex-col items-end gap-0.5">
               <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Cost</span>
-              <span className="text-sm font-semibold tabular-nums">{formatCost(totalCost)}</span>
+              <span className="text-xs font-semibold tabular-nums">{formatCost(totalCost)}</span>
             </div>
 
             {/* Input Tokens */}
             <div className="flex flex-col items-end gap-0.5">
               <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Input</span>
-              <span className="text-sm font-semibold tabular-nums">{tokensInfo.inputTokens.toLocaleString()}</span>
+              <span className="text-xs font-semibold tabular-nums">{tokensInfo.inputTokens.toLocaleString()}</span>
             </div>
 
             {/* Output Tokens */}
             <div className="flex flex-col items-end gap-0.5">
               <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Output</span>
-              <span className="text-sm font-semibold tabular-nums">{tokensInfo.outputTokens.toLocaleString()}</span>
+              <span className="text-xs font-semibold tabular-nums">{tokensInfo.outputTokens.toLocaleString()}</span>
             </div>
 
             {/* Duration */}
             <div className="flex flex-col items-end gap-0.5">
               <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Duration</span>
-              <span className="text-sm font-semibold tabular-nums">{duration}s</span>
+              <span className="text-xs font-semibold tabular-nums">{duration}s</span>
             </div>
 
             {/* Status Badge */}

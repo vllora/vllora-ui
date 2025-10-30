@@ -18,8 +18,10 @@ interface ProviderInfo {
 
 export const ListProviders = ({ providersInfo,
   maxVisibleProviders = 3,
-  textDisplay
-}: { providersInfo: ProviderInfo[]; maxVisibleProviders?: number, textDisplay?: () => React.ReactNode }): React.ReactElement => {
+  textDisplay,
+  iconClass,
+  avatarClass
+}: { providersInfo: ProviderInfo[]; maxVisibleProviders?: number, textDisplay?: () => React.ReactNode, iconClass?: string, avatarClass?: string }): React.ReactElement => {
   // Sort providers to prioritize router when there are exactly 2 providers
   const sortedProviders = providersInfo.length === 2 && providersInfo.some(p => p.provider === 'router')
     ? [...providersInfo].sort((a, b) => {
@@ -50,7 +52,7 @@ export const ListProviders = ({ providersInfo,
                   <div className="h-7 w-7 rounded-full bg-zinc-800 flex items-center justify-center">
                     {provider.provider === 'router' ?
                       <ArrowsPointingOutIcon className="w-4 h-4 text-[#8b5cf6]" /> :
-                      <ProviderIcon className="w-4 h-4 text-primary" provider_name={provider.provider || ''} />}
+                      <ProviderIcon className={iconClass || "w-4 h-4 text-primary"} provider_name={provider.provider || ''} />}
                   </div>
                   <p className="font-medium capitalize">{provider.provider}</p>
                 </div>
@@ -90,21 +92,23 @@ export const ListProviders = ({ providersInfo,
               <Avatar
                 key={`provider-${index}`}
                 className={cn(
-                  "h-7 w-7 bg-background justify-center items-center rounded-full",
+                  avatarClass ||"h-7 w-7 ",
+                  "bg-background justify-center items-center rounded-full",
                   index !== 0 ? '-ml-2' : '',
                   'border border-[#41403ad2]'
                 )}
               >
                 {provider.provider === 'router' ?
                   <ArrowsPointingOutIcon className="w-4 h-4 text-[#8b5cf6]" /> :
-                  <ProviderIcon className="w-4 h-4" provider_name={provider.provider || ''} />}
+                  <ProviderIcon className={iconClass || "w-4 h-4"} provider_name={provider.provider || ''} />}
               </Avatar>
             ))}
 
             {remainingCount > 0 && (
               <Avatar
                 className={cn(
-                  "h-7 w-7 bg-background justify-center items-center rounded-full text-xs font-medium",
+                   avatarClass || "h-7 w-7 ",
+                  "bg-background justify-center items-center rounded-full text-xs font-medium",
                   '-ml-2',
                   'border border-[#41403ad2]'
                 )}

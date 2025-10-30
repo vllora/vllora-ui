@@ -152,8 +152,10 @@ export function useTracesPageContext(props: { projectId: string }) {
     hasMoreGroups,
     groupsTotal,
     loadingMoreGroups,
-    openGroups,
-    setOpenGroups,
+    hideGroups,
+    setHideGroups,
+    // openGroups,
+    // setOpenGroups,
   } = useGroupsPagination({
     projectId,
     bucketSize,
@@ -230,7 +232,7 @@ export function useTracesPageContext(props: { projectId: string }) {
         return newSet;
       });
     }
-  }, [projectId, bucketSize, flattenSpans]);
+  }, [projectId, bucketSize]);
 
   const updateRunMetrics = useCallback((run_id: string, updatedSpans: Span[]) => {
     setRuns(prevRuns => {
@@ -331,12 +333,12 @@ export function useTracesPageContext(props: { projectId: string }) {
           });
 
           // 3. Auto-open the bucket (sequential, not nested)
-          setOpenGroups(prev => {
-            if (prev.some(g => g.time_bucket === timeBucket)) {
-              return prev;
-            }
-            return [...prev, { time_bucket: timeBucket, tab: 'trace' }];
-          });
+          // setOpenGroups(prev => {
+          //   if (prev.some(g => g.time_bucket === timeBucket)) {
+          //     return prev;
+          //   }
+          //   return [...prev, { time_bucket: timeBucket, tab: 'trace' }];
+          // });
         }
 
         // 4. Refresh bucket stats from backend when run finishes
@@ -350,7 +352,7 @@ export function useTracesPageContext(props: { projectId: string }) {
         }
       }
     }
-  }, [groupByMode, bucketSize, setGroups, setOpenGroups, updateRunMetrics, fetchSpansByRunId, setFlattenSpans, setSelectedRunId, setOpenTraces, refreshSingleBucketStat]);
+  }, [groupByMode, bucketSize, setGroups, updateRunMetrics, fetchSpansByRunId, setFlattenSpans, setSelectedRunId, setOpenTraces, refreshSingleBucketStat]);
   
   
   
@@ -383,8 +385,10 @@ export function useTracesPageContext(props: { projectId: string }) {
     hasMoreGroups,
     groupsTotal,
     loadingMoreGroups,
-    openGroups,
-    setOpenGroups,
+    hideGroups,
+    setHideGroups,
+    // openGroups,
+    // setOpenGroups,
     // Group spans loading
     loadGroupSpans: loadSpansByBucketGroup,
     groupSpansMap,
@@ -408,6 +412,7 @@ export function useTracesPageContext(props: { projectId: string }) {
     spansOfSelectedRun,
     collapsedSpans,
     setCollapsedSpans,
+
   }
 }
 
