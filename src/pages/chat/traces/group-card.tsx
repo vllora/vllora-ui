@@ -204,10 +204,19 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
             </div>
 
             {/* Cost */}
-            <div className="flex flex-col h-full justify-between items-end gap-0.5">
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Cost</span>
-              <span className="text-xs font-semibold tabular-nums">{formatCost(totalCost)}</span>
-            </div>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex flex-col h-full justify-between items-end gap-0.5 cursor-pointer">
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Cost</span>
+                    <span className="text-xs font-semibold tabular-nums">{formatCost(totalCost)}</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs">{formatCost(totalCost, 10)}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
 
             {/* Input Tokens */}
             <div className="flex flex-col h-full justify-between items-end gap-0.5">
