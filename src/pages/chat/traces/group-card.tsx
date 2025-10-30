@@ -115,17 +115,7 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
 
   const totalCost = group.cost || 0;
   const errors = group.errors || [];
-  const startTime = group.start_time_us;
-  const finishTime = group.finish_time_us;
-  const startTimeMs = startTime / 1000;
-  const finishTimeMs = finishTime / 1000;
-
-  const getDurations = (startMs: number, finishMs: number) => {
-    return ((finishMs - startMs) / 1000).toFixed(2);
-  };
-
-  const duration = finishTime && startTime ? getDurations(startTimeMs, finishTimeMs) : "0.00";
-
+  const startTime = group.start_time_us;  
   const startTimeInIsoFormat = useMemo(() => {
     if (!startTime) return "";
     const traceDate = new Date(startTime / 1000);
