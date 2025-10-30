@@ -49,6 +49,7 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
         newParams.set(param, value);
       }
     });
+    newParams.set('tab', 'threads');
 
     // Check if we need to clean up
     searchParams.forEach((_, key) => {
