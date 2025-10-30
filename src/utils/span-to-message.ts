@@ -151,6 +151,7 @@ export function extractMessagesFromSpan(
   const messages: Message[] = [];
   // Parse the request JSON to get messages
   const requestStr = attribute?.request || attribute?.input;
+
   const requestJson = requestStr ? tryParseJson(requestStr) : null;
   if (!requestJson) {
     return messages;

@@ -1,5 +1,5 @@
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
-import { useMessageExtraceSpanById } from "@/hooks/useSpanById";
+import { useMessageExtractSpanById } from "@/hooks/useSpanById";
 import { MessageStructure } from "@/utils/message-structure-from-span";
 import React, { useMemo } from "react";
 import { MessageItem } from "../../MessageItem";
@@ -57,7 +57,7 @@ const InnerRawSpanMessage = React.memo(({ spanId, flattenSpans }: {
     spanId: string;
     flattenSpans: any[];
 }) => {
-    const messages = useMessageExtraceSpanById(flattenSpans, spanId);
+    const messages = useMessageExtractSpanById(flattenSpans, spanId);
 
     if (messages.length === 0) return null;
 

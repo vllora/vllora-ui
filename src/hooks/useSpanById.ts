@@ -49,7 +49,7 @@ export function useSpanById(
   ]);
 }
 
-export const useMessageExtraceSpanById = (flattenSpans: Span[],
+export const useMessageExtractSpanById = (flattenSpans: Span[],
   spanId: string): Message[] => {
     const span = useSpanById(flattenSpans, spanId);
     return useMemo(() => {
