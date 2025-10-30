@@ -14,7 +14,7 @@ import { ListProviders } from "@/components/chat/thread/ListProviders";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 // Grid layout for card stats - matches across all cards for alignment
-const CARD_STATS_GRID = 'auto 100px 90px 90px 90px 80px';
+const CARD_STATS_GRID = 'auto 100px 90px 90px 80px';
 
 interface GroupCardProps {
   group: GroupDTO;
@@ -231,11 +231,7 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
               <span className="text-xs font-semibold tabular-nums">{tokensInfo.outputTokens.toLocaleString()}</span>
             </div>
 
-            {/* Duration */}
-            <div className="flex flex-col items-end gap-0.5">
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Duration</span>
-              <span className="text-xs font-semibold tabular-nums">{duration}s</span>
-            </div>
+           
 
             {/* Status Badge */}
             <div className="flex flex-col items-center gap-0.5">

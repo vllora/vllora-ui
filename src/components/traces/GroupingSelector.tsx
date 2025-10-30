@@ -56,7 +56,7 @@ export function GroupingSelector({
             aria-label="Group by time bucket"
             className="px-3 py-0.5 text-xs h-6 font-medium rounded-md data-[state=on]:bg-[rgb(var(--theme-500))] data-[state=on]:text-white data-[state=on]:shadow-md data-[state=on]:shadow-[rgb(var(--theme-500))]/20 data-[state=off]:text-muted-foreground data-[state=off]:hover:text-foreground data-[state=off]:hover:bg-muted/20"
           >
-            Bucket
+            Time
           </ToggleGroupItem>
         </ToggleGroup>
       </div>
@@ -64,7 +64,7 @@ export function GroupingSelector({
       {/* Bucket Size Section - Only show when bucket mode is selected */}
       {groupByMode === 'bucket' && (
         <div className="inline-flex items-center gap-3">
-          <span className="text-sm font-medium text-muted-foreground">Bucket size:</span>
+          <span className="text-sm font-medium text-muted-foreground">Duration:</span>
           <ToggleGroup
             type="single"
             value={String(bucketSize)}
