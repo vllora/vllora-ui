@@ -24,7 +24,7 @@ export const getTaskTitle = (props: { span: Span }) => {
 
 export const getToolExecuteMessageResult = (props: { span: Span, relatedSpans: Span[] }) => {
     const { span } = props;
-     let executeMessagesResult = getExecuteMessagesResult(
+    let executeMessagesResult = getExecuteMessagesResult(
         getToolCallIds(props),
         props.relatedSpans,
         span.span_id
@@ -97,7 +97,7 @@ export const getExecuteMessagesResult = (
                     if (inputJson && Array.isArray(inputJson)) {
                         // Find the tool message with matching tool_call_id
                         const toolMessage = inputJson.find(
-                            (item: { role: string; [key: string]: any }) =>
+                            (item: { role: string;[key: string]: any }) =>
                                 item.role === 'tool' && item.tool_call_id === id
                         );
                         return toolMessage;
@@ -292,7 +292,7 @@ export const getSpanTitle = (props: { span: Span, relatedSpans: Span[] }) => {
         if (operation_name.startsWith('execute_tool ')) {
             return operation_name.replace('execute_tool ', '').replace('[', '').replace(']', '');
         }
-        if(operation_name=== 'tool' && span.attribute && (span.attribute as any)['vllora.tool_name']){
+        if (operation_name === 'tool' && span.attribute && (span.attribute as any)['vllora.tool_name']) {
             return (span.attribute as any)['vllora.tool_name'];
         }
         return operation_name;
@@ -318,14 +318,17 @@ export const getSpanTitle = (props: { span: Span, relatedSpans: Span[] }) => {
         return span.operation_name;
     }
     if (span.operation_name == 'api_invoke') {
+        if (!span.attribute) {
+            return span.operation_name;
+        }
         let attributes = span.attribute as any;
         let requestAttributes = attributes['request'] as any;
-        let requestJson = tryParseJson(requestAttributes);
-        let modelRequest = requestJson['model'];
-        if(modelRequest){
-            return  `${modelRequest}`;
+        let requestJson = requestAttributes && tryParseJson(requestAttributes);
+        let modelRequest = requestJson && requestJson['model'];
+        if (modelRequest) {
+            return `${modelRequest}`;
         }
-        
+
         return 'api_invoke';
     }
     if (span.operation_name == 'request_routing') {
@@ -454,7 +457,7 @@ export const getOperationTitle = (props: {
     if (operation_name === 'cache') {
         return 'Cache Model Response';
     }
-    
+
 
     return 'Model';
 }
@@ -581,6 +584,6 @@ export const getOperationIcon = (props: {
         }
     }
 
-   
+
     return <ProviderIcon provider_name={'openai'} className="w-4 h-4" />;
 }
