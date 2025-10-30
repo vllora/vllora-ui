@@ -14,7 +14,7 @@ import { ListProviders } from "@/components/chat/thread/ListProviders";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 // Grid layout for card stats - matches across all cards for alignment
-const CARD_STATS_GRID = 'auto 100px 90px 90px 80px';
+const CARD_STATS_GRID = 'auto 80px 80px 80px 80px';
 
 interface GroupCardProps {
   group: GroupDTO;
@@ -172,7 +172,7 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
     >
       <div
         onClick={toggleAccordion}
-        className="cursor-pointer p-3 bg-[#171717]"
+        className="cursor-pointer py-2 pl-3 bg-[#171717]"
       >
         {/* Single Row with Time on left, Stats and Errors on right */}
         <div className="flex items-center  justify-between gap-6">
@@ -194,7 +194,7 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
           {/* Right: Stats and Errors */}
           <div className="grid items-center gap-4" style={{ gridTemplateColumns: CARD_STATS_GRID }}>
             {/* Provider */}
-            <div className="flex flex-col items-center gap-0">
+            <div className="flex flex-col h-full justify-between items-center gap-0.5">
               <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Provider</span>
               {providersInfo.length > 0 ? (
                 <ListProviders providersInfo={providersInfo} avatarClass="w-6 h-6" iconClass="w-3 h-3 text-primary" />
@@ -204,19 +204,19 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
             </div>
 
             {/* Cost */}
-            <div className="flex flex-col items-end gap-0.5">
+            <div className="flex flex-col h-full justify-between items-end gap-0.5">
               <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Cost</span>
               <span className="text-xs font-semibold tabular-nums">{formatCost(totalCost)}</span>
             </div>
 
             {/* Input Tokens */}
-            <div className="flex flex-col items-end gap-0.5">
+            <div className="flex flex-col h-full justify-between items-end gap-0.5">
               <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Input</span>
               <span className="text-xs font-semibold tabular-nums">{tokensInfo.inputTokens.toLocaleString()}</span>
             </div>
 
             {/* Output Tokens */}
-            <div className="flex flex-col items-end gap-0.5">
+            <div className="flex flex-col h-full justify-between items-end gap-0.5">
               <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Output</span>
               <span className="text-xs font-semibold tabular-nums">{tokensInfo.outputTokens.toLocaleString()}</span>
             </div>
@@ -224,7 +224,7 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
            
 
             {/* Status Badge */}
-            <div className="flex flex-col items-center gap-0.5">
+            <div className="flex flex-col h-full justify-between items-center gap-0.5">
               <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Status</span>
               {errors && errors.length > 0 ? (
                 <TooltipProvider>
