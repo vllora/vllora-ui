@@ -42,10 +42,10 @@ export const TimelineVisualization = (props: TimelineVisualizationProps) => {
                 
                 {/* Grid lines - match the header grid */}
                 <div className="absolute inset-0 flex pointer-events-none">
-                    <div className="w-1/4 h-full border-r border-border"></div>
-                    <div className="w-1/4 h-full border-r border-border"></div>
-                    <div className="w-1/4 h-full border-r border-border"></div>
-                    <div className="w-1/4 h-full"></div>
+                    <div className="w-1/4 h-full border-r border-border/50"></div>
+                    <div className="w-1/4 h-full border-r border-border/50"></div>
+                    <div className="w-1/4 h-full border-r border-border/50"></div>
+                    <div className="w-1/4 h-full "></div>
                 </div>
                 
                 {/* Timeline bar */}

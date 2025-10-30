@@ -110,7 +110,7 @@ export const TimelineRow = (props: TimelineRowProps) => {
                 }
             }}
         >
-            <div className={classNames("flex w-full divide-x divide-border px-1")}>
+            <div className={classNames("flex w-full divide-x divide-border/50 px-1")}>
                 {/* Render either fullscreen or sidebar content based on mode */}
                 <SidebarTimelineContent {...contentProps} isInSidebar={isInSidebar} />
 

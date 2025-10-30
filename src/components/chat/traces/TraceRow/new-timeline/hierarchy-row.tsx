@@ -33,7 +33,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
     if (skipCondition && !isSingleTrace) {
         if (childrenSpan && childrenSpan.length > 0) {
             return (
-                <div key={`span-timeline-hierarchy-${root.span_id}`} className="flex flex-col divide-y divide-border">
+                <div key={`span-timeline-hierarchy-${root.span_id}`} className="flex flex-col divide-y divide-border/50">
                     {childrenSpan.map(child => (
                         <HierarchyRow
                             level={level}
@@ -107,7 +107,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
     }
 
     return (
-        <div className="flex flex-col divide-y divide-border/70 ">
+        <div className="flex flex-col divide-y divide-border/50 ">
             <TimelineRow
                 span={root}
                 level={level}
@@ -128,7 +128,7 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                 hoverSpanId={hoverSpanId}
             />
             {!(collapsedSpans?.includes(root.span_id)) && (
-                <div className="flex flex-col divide-y divide-border/70">
+                <div className="flex flex-col divide-y divide-border/50">
                     {childrenSpan.map(child => (
                         <HierarchyRow
                             level={level + 1}

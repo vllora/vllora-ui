@@ -84,7 +84,8 @@ const TimelineContentInner = (props: {
       No spans available for this run
     </div>
   }
-  return <>
+
+  return <div className="flex flex-col gap-0 divide-y divide-border/50 border-b border-border/50">
     {hierarchies.map((hierarchy, index) => (
       <SingleRunTimelineView
         key={`${runId}-${hierarchy.span_id}`}
@@ -105,5 +106,5 @@ const TimelineContentInner = (props: {
         }}
       />
     ))}
-  </>
+  </div>
 }

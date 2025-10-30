@@ -25,7 +25,7 @@ export const SingleRunTimelineView = (props: SingleRunTimelineViewProps) => {
     // Calculate total duration and start time for width calculations
 
     return (
-        <div className="flex flex-col space-y-1 mt-2 first:mt-0">
+        <div className="flex flex-col space-y-1 divide-y divide-border/50 first:mt-0">
             {/* Timeline header with ticks */}
             {index === 0 && (
                 <div className="flex flex-col">
@@ -54,7 +54,7 @@ export const SingleRunTimelineView = (props: SingleRunTimelineViewProps) => {
             )}
 
             {/* Hierarchy tree with timeline bars */}
-            <div className="rounded-md border border-border overflow-hidden">
+            <div className="overflow-hidden">
                 <HierarchyRow
                     level={level}
                     key={`span-timeline-hierarchy-${currentSpanHierarchy.span_id}`}
