@@ -228,8 +228,8 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
               <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Status</span>
               {errors && errors.length > 0 ? (
                 <div className="flex items-center gap-1">
-                  <ExclamationTriangleIcon className="w-4 h-4 text-red-500" />
-                  <span className="text-xs text-red-500 font-medium">{errors.length}</span>
+                  <ExclamationTriangleIcon className="w-4 h-4 text-amber-500" />
+                  <span className="text-xs text-amber-500 font-medium">{errors.length}</span>
                 </div>
               ) : (
                 <CheckCircleIcon className="w-4 h-4 text-green-500" />
