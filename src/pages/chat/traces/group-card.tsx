@@ -11,6 +11,7 @@ import { useRelativeTime } from "@/hooks/useRelativeTime";
 import { CustomErrorFallback } from "@/components/chat/traces/components/custom-error-fallback";
 import { TimelineContent } from "@/components/chat/traces/components/TimelineContent";
 import { ListProviders } from "@/components/chat/thread/ListProviders";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 // Grid layout for card stats - matches across all cards for alignment
 const CARD_STATS_GRID = 'auto 100px 90px 90px 90px 80px';
@@ -227,10 +228,26 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
             <div className="flex flex-col items-center gap-0.5">
               <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Status</span>
               {errors && errors.length > 0 ? (
-                <div className="flex items-center gap-1">
-                  <ExclamationTriangleIcon className="w-4 h-4 text-amber-500" />
-                  <span className="text-xs text-amber-500 font-medium">{errors.length}</span>
-                </div>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center gap-1 cursor-pointer">
+                        <ExclamationTriangleIcon className="w-4 h-4 text-amber-500" />
+                        <span className="text-xs text-amber-500 font-medium">{errors.length}</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="max-w-xs">
+                        <p className="font-semibold mb-1">Errors:</p>
+                        <ul className="list-disc list-inside space-y-1">
+                          {errors.map((error, index) => (
+                            <li key={index} className="text-xs">{error}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               ) : (
                 <CheckCircleIcon className="w-4 h-4 text-green-500" />
               )}

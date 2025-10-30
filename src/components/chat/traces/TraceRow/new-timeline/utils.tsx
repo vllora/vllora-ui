@@ -318,7 +318,15 @@ export const getSpanTitle = (props: { span: Span, relatedSpans: Span[] }) => {
         return span.operation_name;
     }
     if (span.operation_name == 'api_invoke') {
-        return span.operation_name;
+        let attributes = span.attribute as any;
+        let requestAttributes = attributes['request'] as any;
+        let requestJson = tryParseJson(requestAttributes);
+        let modelRequest = requestJson['model'];
+        if(modelRequest){
+            return  `${modelRequest}`;
+        }
+        
+        return 'api_invoke';
     }
     if (span.operation_name == 'request_routing') {
         let attributes = span.attribute as any;
