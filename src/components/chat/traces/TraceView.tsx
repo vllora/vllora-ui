@@ -91,7 +91,7 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
         {/* Main content area */}
         <TraceMainContent
           loadingSpans={runsLoading}
-          runs={runs}
+          runs={runs.sort((a, b) => a.start_time_us - b.start_time_us)}
           hasMore={hasMoreRuns}
           loadMoreRuns={loadMoreRuns}
           loadingMore={loadingMoreRuns}

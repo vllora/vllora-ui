@@ -47,7 +47,7 @@ const ChatConversationComponent: React.FC<ChatConversationProps> = ({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-6 relative">
+    <div className="flex-1 overflow-y-auto p-4 space-y-3 relative">
       {messages.map((message) => (
         <HierarchicalMessageSpanItem key={`message-${message.span_id}`} messageStructure={message} />
       ))}
