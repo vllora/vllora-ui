@@ -2,6 +2,7 @@ import { ProjectDropdown } from './ProjectDropdown';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { DebugControl } from './DebugControl';
 import { GitHubLink } from './GitHubLink';
+import { BackendUrlInfo } from './BackendUrlInfo';
 
 interface TabSelectionHeaderProps {
   currentTab: string;
@@ -66,6 +67,9 @@ export function TabSelectionHeader({
       </div>
 
       <div className="flex items-center gap-3">
+        {/* Backend URL info */}
+        <BackendUrlInfo />
+
         {/* GitHub link */}
         <GitHubLink />
 
