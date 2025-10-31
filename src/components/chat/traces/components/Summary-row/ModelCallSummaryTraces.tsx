@@ -130,20 +130,7 @@ const SidebarModelCallSummaryTracesImpl = ({
             <ChevronRight className="w-5 h-5 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0" />
           )}
 
-          {/* Provider Icon */}
-          <div className="flex items-center flex-shrink-0">
-            {providers.length > 0 && (
-              <ProviderIcon
-                provider_name={providers[0]}
-                className="h-5 w-5 rounded-full"
-              />
-            )}
-            {providers.length > 1 && (
-              <span className="ml-1 text-xs text-muted-foreground">
-                +{providers.length - 1}
-              </span>
-            )}
-          </div>
+          
 
           {/* Time Display with Status */}
           <div className="flex items-center gap-2 min-w-0">
@@ -231,6 +218,20 @@ const SidebarModelCallSummaryTracesImpl = ({
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+            )}
+          </div>
+          {/* Provider Icon */}
+          <div className="flex items-center flex-shrink-0">
+            {providers.length > 0 && (
+              <ProviderIcon
+                provider_name={providers[0]}
+                className="h-5 w-5 rounded-full"
+              />
+            )}
+            {providers.length > 1 && (
+              <span className="ml-1 text-xs text-muted-foreground">
+                +{providers.length - 1}
+              </span>
             )}
           </div>
         </div>
