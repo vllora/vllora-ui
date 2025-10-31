@@ -230,9 +230,9 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
   }, [typing, scrollToBottom]);
 
   return (
-    <>
+    <div className='flex flex-col flex-1 items-center overflow-hidden'>
       {/* Chat Header */}
-      <div className="bg-card flex-shrink-0">
+      <div className="bg-card w-full flex-shrink-0">
         {/* Model Selector - Top row aligned with Project Dropdown */}
         <ConversationHeader
           modelName={selectedModel}
@@ -252,14 +252,17 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
         />} */}
       </div>
 
-      {/* Chat Conversation */}
-      <ChatConversation
-        messages={messageHierarchies}
-        isLoading={typing}
-        messagesEndRef={messagesEndRef as React.RefObject<HTMLDivElement>}
-        scrollToBottom={scrollToBottom}
-      />
 
+      <div className="flex-1 overflow-y-scroll w-full overflow-x-hidden">
+        {/* Chat Conversation */}
+        <ChatConversation
+          messages={messageHierarchies}
+          isLoading={typing}
+          messagesEndRef={messagesEndRef as React.RefObject<HTMLDivElement>}
+          scrollToBottom={scrollToBottom}
+        />
+
+      </div>
       {/* Error Display */}
       {error && (
         <div className="mx-4 mb-2 bg-red-900/20 border border-red-500/30 flex p-3 rounded-lg items-center justify-between shadow-md">
@@ -277,7 +280,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       )}
 
       {/* Chat Input */}
-      <div className="flex-shrink-0">
+      <div className="flex-shrink-0 w-full">
         <ModalProvider>
           <ChatInput
             onSubmit={(props) => {
@@ -319,6 +322,6 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
           setConfigDialogOpen?.(true);
         }}
       />
-    </>
+    </div>
   );
 };

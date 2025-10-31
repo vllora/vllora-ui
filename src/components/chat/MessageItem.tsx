@@ -19,7 +19,7 @@ const MessageItemComponent: React.FC<MessageItemProps> = ({ message, isTyping })
   return (
     <article
       className={`
-        flex mb-4 group
+        flex mb-4 group overflow-hidden flex-col
         ${isHumanMessage ? 'justify-end' : 'justify-start'}
         transition-all duration-200 ease-in-out
       `}

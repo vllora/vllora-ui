@@ -56,8 +56,8 @@ export const ConversationAndTraces = () => {
   if (!selectedThreadId || !projectId) {
     return null;
   }
-  return <>
-    <div className="flex-1 flex flex-col overflow-hidden">
+  return <div className="flex flex-1 flex-row">
+    <div className="flex-1 flex flex-col overflow-hidden w-[20vw]">
       <ConversationWindow
         threadId={selectedThreadId}
         threadTitle={threads.find((t) => t.thread_id === selectedThreadId)?.title}
@@ -74,5 +74,5 @@ export const ConversationAndTraces = () => {
       isCollapsed={isRightSidebarCollapsed}
       onToggle={() => setIsRightSidebarCollapsed(!isRightSidebarCollapsed)}
     />
-  </>
+  </div>
 }

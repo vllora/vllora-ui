@@ -17,7 +17,7 @@ export const HumanMessage: React.FC<HumanMessageProps> = ({ message }) => {
   useRelativeTime(messageRef, message.created_at);
 
   return (
-    <div className="flex flex-col gap-3 group" ref={messageRef}>
+    <div className="flex flex-col gap-3 group overflow-hidden" ref={messageRef}>
       {/* Header with Metadata */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2 flex-1">
@@ -34,7 +34,7 @@ export const HumanMessage: React.FC<HumanMessageProps> = ({ message }) => {
       </div>
 
       {/* Content */}
-      <div className="w-full flex flex-1">
+      <div className=" overflow-hidden flex flex-1">
         {message.files && message.files.length > 0 && (
           <div className="mb-3 flex flex-wrap gap-2 justify-end">
             {message.files.map((file, index) => (
@@ -52,7 +52,7 @@ export const HumanMessage: React.FC<HumanMessageProps> = ({ message }) => {
         )}
 
         {message.content_array && message.content_array.length > 0 ? (
-          <div className="flex justify-end">
+          <div className="flex flex-col  justify-end overflow-hidden">
             <div className="max-w-[80%]">
               <ContentArrayDisplay contentArray={message.content_array} />
             </div>

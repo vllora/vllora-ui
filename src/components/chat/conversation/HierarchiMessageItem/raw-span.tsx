@@ -20,10 +20,10 @@ export const RawSpanMessage = React.memo((props: {
         [level]
     );
 
-    return <div style={indentStyle} className="">
+    return <div style={indentStyle} className="flex flex-col">
         <InnerRawSpanMessage spanId={messageStructure.span_id} flattenSpans={flattenSpans} />
         {messageStructure.children && messageStructure.children.length > 0 && (
-            <div className="space-y-4">
+            <div className="flex flex-col space-y-4">
                 {messageStructure.children.map((child) => (
                     <HierarchicalMessageSpanItem key={child.span_id} messageStructure={child} level={level + 1} />
                 ))}
@@ -62,7 +62,7 @@ const InnerRawSpanMessage = React.memo(({ spanId, flattenSpans }: {
     if (messages.length === 0) return null;
 
     return (
-        <div className="space-y-4">
+        <div className="flex flex-col space-y-4">
             {messages.map((message) => (
                 <MessageItem key={message.id} message={message} />
             ))}
