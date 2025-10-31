@@ -22,11 +22,12 @@ export const extractMessageFromApiInvokeSpan = (span: Span): Message[] => {
   ) {
     let rawRequestMessages = requestJson.messages;
     rawRequestMessages.forEach((msg: any, index: number) => {
+      let msgContent = extractMessageContent(msg);
       const message: Message = {
         id: `${span.span_id}_msg_${index}`,
         type: msg.role || "system",
         role: msg.role as "user" | "assistant" | "system",
-        content: extractMessageContent(msg),
+        content: msgContent,
         content_array:
           msg.parts || (Array.isArray(msg.content) ? msg.content : undefined),
         span_id: span.span_id,
@@ -151,7 +152,6 @@ export function extractMessagesFromSpan(
   const messages: Message[] = [];
   // Parse the request JSON to get messages
   const requestStr = attribute?.request || attribute?.input;
-
   const requestJson = requestStr ? tryParseJson(requestStr) : null;
   if (!requestJson) {
     return messages;
@@ -161,7 +161,6 @@ export function extractMessagesFromSpan(
   let requestMessages = Array.isArray(requestJson)
     ? requestJson
     : requestJson?.messages || requestJson?.contents;
-
   if (!requestMessages || !Array.isArray(requestMessages)) {
     return messages;
   }
@@ -172,17 +171,25 @@ export function extractMessagesFromSpan(
   const responseContent = extractResponseContent(outputJson, attribute);
   // Calculate metrics for this span
   const spanMetrics = calculateSpanMetrics(span);
-    let model_name = span.operation_name
-      ? `${span.operation_name}/${requestJson?.model}`
-      : requestJson?.model;
+  let requestModel = requestJson?.model;
+  if(!requestModel){
+    if(outputJson && outputJson.modelVersion){
+      requestModel = outputJson.modelVersion
+    }
+  }
+
+  let model_name = span.operation_name
+      ?  `${span.operation_name}${requestModel  ? '/' + requestModel : ''}`
+      : requestModel;
   // Convert each message in the request
   requestMessages.forEach((msg: any, index: number) => {
+    let msgContent = extractMessageContent(msg);
     const message: Message = {
       id: `${span.span_id}_msg_${index}`,
       type: msg.role || "system",
       role: msg.role as "user" | "assistant" | "system",
       model_name: msg.role !== "user" ? model_name : undefined,
-      content: extractMessageContent(msg),
+      content: msgContent,
       content_array:
         msg.parts || (Array.isArray(msg.content) ? msg.content : undefined),
       timestamp: span.start_time_us / 1000, // Convert to milliseconds
@@ -195,7 +202,6 @@ export function extractMessagesFromSpan(
       metrics: index === requestMessages.length - 1 ? [spanMetrics] : undefined, // Attach metrics to last message
       level,
     };
-
     messages.push(message);
   });
 
