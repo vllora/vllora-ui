@@ -55,7 +55,7 @@ const RunSpanMessageComponent = (props: {
 
     return (
         <div
-            id={`run-span-conversation-${span_id}`}
+            id={`run-span-conversation-${span?.run_id}`}
             className={`run-wrapper transition-colors ${isHighlighted ? 'bg-muted/30' : ''}`}
         >
             {/* SpanSeparator now handles getting span data and displaying status */}

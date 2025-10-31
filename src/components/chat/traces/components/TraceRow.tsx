@@ -45,7 +45,7 @@ const TraceRowImpl = ({ run, index = 0, isInSidebar = false }: TraceRowProps) =>
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.15, delay: Math.min(index * 0.02, 0.1) }}
     data-testid={`trace-row-${traceOrRunId}`}
-    data-run-id={traceOrRunId}
+    data-run-or-trace-id={traceOrRunId}
   >
     <SummaryTraces
       run={run}

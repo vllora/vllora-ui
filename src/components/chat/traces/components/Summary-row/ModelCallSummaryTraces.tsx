@@ -15,6 +15,7 @@ import { formatCost } from "@/utils/formatCost";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { formatMessageTime } from "@/utils/dateUtils";
 import { useRelativeTime } from "@/hooks/useRelativeTime";
+import { ListProviders } from "@/components/chat/thread/ListProviders";
 
 interface ModelCallSummaryTracesProps {
   run: RunDTO;
@@ -93,6 +94,26 @@ const SidebarModelCallSummaryTracesImpl = ({
 
   useRelativeTime(messageRef, startTimeInIsoFormat);
 
+  // Extract provider info from input_models
+  const providersInfo = useMemo(() => {
+    const inputModels = modelNamesInvoked || [];
+    const providersMap: { provider: string, models: string[] }[] = [];
+
+    inputModels.forEach(modelFullName => {
+      if (modelFullName && modelFullName.includes('/')) {
+        const [provider, model] = modelFullName.split('/');
+        const existingProviderIndex = providersMap.findIndex(p => p.provider === provider);
+        if (existingProviderIndex !== -1) {
+          providersMap[existingProviderIndex].models.push(model);
+        } else {
+          providersMap.push({ provider: provider, models: [model] });
+        }
+      }
+    });
+
+    return providersMap;
+  }, [modelNamesInvoked]);
+
 
   // Improved time display with better granularity for older traces
   const getTimeDisplay = useCallback(() => {
@@ -130,7 +151,7 @@ const SidebarModelCallSummaryTracesImpl = ({
             <ChevronRight className="w-5 h-5 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0" />
           )}
 
-          
+
 
           {/* Time Display with Status */}
           <div className="flex items-center gap-2 min-w-0">
@@ -220,24 +241,17 @@ const SidebarModelCallSummaryTracesImpl = ({
               </TooltipProvider>
             )}
           </div>
-          {/* Provider Icon */}
-          <div className="flex items-center flex-shrink-0">
-            {providers.length > 0 && (
-              <ProviderIcon
-                provider_name={providers[0]}
-                className="h-5 w-5 rounded-full"
-              />
-            )}
-            {providers.length > 1 && (
-              <span className="ml-1 text-xs text-muted-foreground">
-                +{providers.length - 1}
-              </span>
-            )}
-          </div>
         </div>
 
         {/* Right: Stats Grid */}
-        <div className="grid items-center gap-4" style={{ gridTemplateColumns: '70px 100px 50px' }}>
+        <div className="grid items-center gap-4" style={{ gridTemplateColumns: providersInfo && providersInfo.length > 0 ? '50px 70px 100px 50px' : '70px 100px 50px' }}>
+          {/* Provider */}
+          {providersInfo && providersInfo.length > 0 && (
+            <div className="flex flex-col h-full justify-center items-center gap-0.5">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Provider</span>
+              <ListProviders providersInfo={providersInfo} avatarClass="w-5 h-5" iconClass="w-3 h-3 text-primary" />
+            </div>
+          )}
           {/* Cost */}
           <TooltipProvider>
             <Tooltip>

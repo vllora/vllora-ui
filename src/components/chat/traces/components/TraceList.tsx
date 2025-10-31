@@ -18,7 +18,7 @@ export const TraceList: React.FC<TraceListProps> = ({
   loadMoreRuns,
   loadingMore,
 }) => {
-  const { hoverSpanId } = ChatWindowConsumer();
+  const { hoverSpanId, runHighlighted } = ChatWindowConsumer();
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -47,10 +47,36 @@ export const TraceList: React.FC<TraceListProps> = ({
     }
   }, [hoverSpanId]);
 
+  useEffect(() => {
+    if (!runHighlighted) return;
+
+    // Find the element with the highlighted run ID
+    const runElement = document.querySelector(`[data-run-or-trace-id="${runHighlighted}"]`);
+    if (!runElement) return;
+
+    // Check if element is in viewport
+    const rect = runElement.getBoundingClientRect();
+    const isInViewport = (
+      rect.top >= 0 &&
+      rect.left >= 0 &&
+      rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+      rect.right <= (window.innerWidth || document.documentElement.clientWidth)
+    );
+
+    // If not in viewport, scroll to it
+    if (!isInViewport) {
+      runElement.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+        inline: 'nearest'
+      });
+    }
+  }, [runHighlighted]);
+
   return (
     <div ref={containerRef} className="space-y-2">
       {runs.map((run) => (
-        <TraceRow key={run.run_id} run={run} isInSidebar={true} />
+        <TraceRow key={`run-${run.run_id}`} run={run} isInSidebar={true} />
       ))}
 
       {/* Load More Button */}
