@@ -6,6 +6,8 @@ import { CONTENT_PADDING_LEFT } from "./constants";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { useSpanById } from "@/hooks/useSpanById";
 import { errorFromApiInvokeSpansInSameRun } from "@/hooks/useSpanById";
+import { ErrorBoundary } from "react-error-boundary";
+import { CustomErrorFallback } from "@/components/chat/traces/components/custom-error-fallback";
 
 const RunSpanMessageComponent = (props: {
     span_id: string;
@@ -51,52 +53,54 @@ const RunSpanMessageComponent = (props: {
         [level]
     );
 
-    const isHighlighted = runHighlighted === span_id;
+    const isHighlighted = runHighlighted === span?.run_id;
 
     return (
-        <div
-            id={`run-span-conversation-${span?.run_id}`}
-            className={`run-wrapper transition-colors ${isHighlighted ? 'bg-muted/30' : ''}`}
-        >
-            {/* SpanSeparator now handles getting span data and displaying status */}
-            <SpanSeparator
-                spanId={span_id}
-                isCollapsed={isCollapsed}
-                onToggle={toggleCollapse}
-                level={level}
-                errors={errors}
-                onHover={({
-                    runId,
-                    isHovering
-                }) => {
-                    if (isHovering) {
-                        setRunHighlighted(runId);
-                        setHoverSpanId(span_id);
-                    } else {
-                        setRunHighlighted(prev => prev === runId ? '' : prev);
-                        setHoverSpanId(prev => prev === span_id ? '' : prev);
-                    }
-                }}
-            />
-            {!isCollapsed && (
-                <div className={contentClassName} style={contentStyle}>
-                    {errors && <> <div className="flex flex-col gap-1">{errors?.length > 0 && errors.map((error, index) => (
-                        <div key={index} className="rounded-md p-3 border border-red-500/30 bg-red-500/5">
-                            <pre className="text-xs text-red-300 font-mono whitespace-pre-wrap break-all">{error}</pre>
-                        </div>
-                    ))}</div>
-                    </>
-                    }
-                    {messages.length > 0 && messages.map((message) => (
-                        <HierarchicalMessageSpanItem
-                            key={message.span_id}
-                            messageStructure={message}
-                            level={level + 1}
-                        />
-                    ))}
-                </div>
-            )}
-        </div>
+        <ErrorBoundary FallbackComponent={CustomErrorFallback}>
+            <div
+                id={`run-span-conversation-${span?.run_id}`}
+                className={`run-wrapper transition-colors ${isHighlighted ? 'bg-muted/30' : ''}`}
+            >
+                {/* SpanSeparator now handles getting span data and displaying status */}
+                <SpanSeparator
+                    spanId={span_id}
+                    isCollapsed={isCollapsed}
+                    onToggle={toggleCollapse}
+                    level={level}
+                    errors={errors}
+                    onHover={({
+                        runId,
+                        isHovering
+                    }) => {
+                        if (isHovering) {
+                            setRunHighlighted(runId);
+                            setHoverSpanId(span_id);
+                        } else {
+                            setRunHighlighted(prev => prev === runId ? '' : prev);
+                            setHoverSpanId(prev => prev === span_id ? '' : prev);
+                        }
+                    }}
+                />
+                {!isCollapsed && (
+                    <div className={contentClassName} style={contentStyle}>
+                        {errors && <> <div className="flex flex-col gap-1">{errors?.length > 0 && errors.map((error, index) => (
+                            <div key={index} className="rounded-md p-3 border border-red-500/30 bg-red-500/5">
+                                <pre className="text-xs text-red-300 font-mono whitespace-pre-wrap break-all">{error}</pre>
+                            </div>
+                        ))}</div>
+                        </>
+                        }
+                        {messages.length > 0 && messages.map((message) => (
+                            <HierarchicalMessageSpanItem
+                                key={message.span_id}
+                                messageStructure={message}
+                                level={level + 1}
+                            />
+                        ))}
+                    </div>
+                )}
+            </div>
+        </ErrorBoundary>
     );
 };
 
