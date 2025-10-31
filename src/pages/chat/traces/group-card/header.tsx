@@ -1,12 +1,12 @@
 import React from "react";
 import { ExclamationTriangleIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
-import { ChevronDown, ChevronRight, CircleDollarSignIcon, CurrencyIcon, DollarSignIcon, Download, Upload } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { formatCost } from "@/utils/formatCost";
 import { ListProviders } from "@/components/chat/thread/ListProviders";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 // Grid layout for card stats - matches across all cards for alignment
-const CARD_STATS_GRID = '80px 150px';
+const CARD_STATS_GRID = '70px 140px';
 
 interface GroupCardHeaderProps {
   isOpen: boolean;
@@ -75,44 +75,68 @@ export const GroupCardHeader: React.FC<GroupCardHeaderProps> = ({
       <div className="grid items-center gap-4" style={{ gridTemplateColumns: CARD_STATS_GRID }}>
        
         {/* Cost */}
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex flex-row h-full justify-center items-center gap-2 cursor-pointer">
-                <CircleDollarSignIcon className="w-3.5 h-3.5" />
-                <span className="text-xs font-semibold tabular-nums">{formatCost(totalCost)}</span>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent
-              side="bottom"
-              align="center"
-              className="border border-zinc-800 bg-zinc-900 shadow-xl rounded-lg p-3 animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
-            >
-              <div className="flex flex-col gap-1">
-                <p className="text-[10px] text-zinc-400 uppercase tracking-wider">Total Cost</p>
-                <p className="text-sm font-semibold tabular-nums">{formatCost(totalCost, 20)}</p>
-              </div>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-
-        {/* Tokens */}
-        <div className="flex flex-col h-full justify-center items-center gap-0.5">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Upload className="w-3.5 h-3.5" />
-              <span className="text-xs font-semibold tabular-nums">
-                {tokensInfo.inputTokens.toLocaleString()}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Download className="w-3.5 h-3.5" />
-              <span className="text-xs font-semibold tabular-nums">
-                {tokensInfo.outputTokens.toLocaleString()}
-              </span>
-            </div>
-          </div>
-        </div>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex flex-col h-full justify-center items-end gap-0.5 cursor-pointer">
+                          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Cost</span>
+                          <span className="text-xs font-semibold tabular-nums">{formatCost(totalCost)}</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="bottom"
+                        align="center"
+                        className="border border-zinc-800 bg-zinc-900 shadow-xl rounded-lg p-3 animate-in fade-in-0 zoom-in-95"
+                      >
+                        <div className="flex flex-col gap-1">
+                          <p className="text-[10px] text-zinc-400 uppercase tracking-wider">Total Cost</p>
+                          <p className="text-sm font-semibold tabular-nums">{formatCost(totalCost, 10)}</p>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+        
+                  {/* Tokens */}
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex flex-col h-full justify-center items-end gap-0.5 cursor-pointer">
+                          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Tokens</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold tabular-nums">
+                              {tokensInfo.inputTokens.toLocaleString()}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">/</span>
+                            <span className="text-xs font-semibold tabular-nums">
+                              {tokensInfo.outputTokens.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="bottom"
+                        align="center"
+                        className="border border-zinc-800 bg-zinc-900 shadow-xl rounded-lg p-3 animate-in fade-in-0 zoom-in-95"
+                      >
+                        <div className="flex flex-col gap-2">
+                          <div className="flex flex-col gap-1">
+                            <p className="text-[10px] text-zinc-400 uppercase tracking-wider">Input Tokens</p>
+                            <p className="text-sm font-semibold tabular-nums">{tokensInfo.inputTokens.toLocaleString()}</p>
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <p className="text-[10px] text-zinc-400 uppercase tracking-wider">Output Tokens</p>
+                            <p className="text-sm font-semibold tabular-nums">{tokensInfo.outputTokens.toLocaleString()}</p>
+                          </div>
+                          <div className="pt-1 border-t border-zinc-800">
+                            <div className="flex flex-col gap-1">
+                              <p className="text-[10px] text-zinc-400 uppercase tracking-wider">Total Tokens</p>
+                              <p className="text-sm font-semibold tabular-nums">{((tokensInfo.inputTokens + tokensInfo.outputTokens)).toLocaleString()}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
 
 
       </div>
