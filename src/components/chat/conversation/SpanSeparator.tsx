@@ -2,9 +2,10 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Loader2, Copy, Check, AlertTriangleIcon } from 'lucide-react';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 import { useSpanById } from '@/hooks/useSpanById';
-import { getOperationIcon, getSpanTitle, getTimelineBgColor } from '@/components/chat/traces/TraceRow/new-timeline/utils';
+import { getLabelOfSpan, getOperationIcon, getSpanTitle, getTimelineBgColor } from '@/components/chat/traces/TraceRow/new-timeline/utils';
 import { classNames } from '@/utils/modelUtils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { LabelTag } from '../traces/TraceRow/new-timeline/timeline-row/label-tag';
 
 interface SpanSeparatorProps {
   spanId: string;
@@ -34,6 +35,7 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
   const { flattenSpans } = ChatWindowConsumer();
   // But useSpanById returns same reference if THIS span's data didn't change
   const span = useSpanById(flattenSpans, spanId);
+  const labelOfSpan = span && getLabelOfSpan({ span });
   const [copied, setCopied] = useState(false);
 
   const handleClick = () => {
@@ -195,6 +197,9 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
                 </div>
               </TooltipContent>
             </Tooltip>
+          )}
+          {labelOfSpan && (
+            <LabelTag label={labelOfSpan} />
           )}
         </button>
       </div>

@@ -8,6 +8,7 @@ import { useSpanById } from "@/hooks/useSpanById";
 import { errorFromApiInvokeSpansInSameRun } from "@/hooks/useSpanById";
 import { ErrorBoundary } from "react-error-boundary";
 import { CustomErrorFallback } from "@/components/chat/traces/components/custom-error-fallback";
+import { getLabelOfSpan } from "../../traces/TraceRow/new-timeline/utils";
 
 const RunSpanMessageComponent = (props: {
     span_id: string;
