@@ -172,26 +172,39 @@ export function extractMessagesFromSpan(
   // Calculate metrics for this span
   const spanMetrics = calculateSpanMetrics(span);
   let requestModel = requestJson?.model;
-  if(!requestModel){
-    if(outputJson && outputJson.modelVersion){
-      requestModel = outputJson.modelVersion
+  if (!requestModel) {
+    if (outputJson && outputJson.modelVersion) {
+      requestModel = outputJson.modelVersion;
     }
   }
 
   let model_name = span.operation_name
-      ?  `${span.operation_name}${requestModel  ? '/' + requestModel : ''}`
-      : requestModel;
+    ? `${span.operation_name}${requestModel ? "/" + requestModel : ""}`
+    : requestModel;
   // Convert each message in the request
   requestMessages.forEach((msg: any, index: number) => {
     let msgContent = extractMessageContent(msg);
+    let contentArray =
+      msg.parts || (Array.isArray(msg.content) ? msg.content : undefined);
+    if (span.operation_name === "gemini") {
+      if (contentArray && contentArray.length === 1) {
+        let firstContent = contentArray[0];
+        if (
+          firstContent.text &&
+          firstContent.text &&
+          msgContent === firstContent.text
+        ) {
+          contentArray = [];
+        }
+      }
+    }
     const message: Message = {
       id: `${span.span_id}_msg_${index}`,
       type: msg.role || "system",
       role: msg.role as "user" | "assistant" | "system",
       model_name: msg.role !== "user" ? model_name : undefined,
       content: msgContent,
-      content_array:
-        msg.parts || (Array.isArray(msg.content) ? msg.content : undefined),
+      content_array: contentArray,
       timestamp: span.start_time_us / 1000, // Convert to milliseconds
       thread_id: span.thread_id,
       trace_id: span.trace_id,
@@ -207,7 +220,6 @@ export function extractMessagesFromSpan(
 
   // Add the assistant response message if available
   if (responseContent) {
-    
     const assistantMessage: Message = {
       id: `${span.span_id}_response`,
       type: "assistant",
@@ -317,9 +329,23 @@ function extractResponseContent(
   }
 
   if (outputJson.candidates?.[0]?.content) {
-    return typeof outputJson.candidates[0].content === "string"
-      ? outputJson.candidates[0].content
-      : JSON.stringify(outputJson.candidates[0].content);
+    let contentType = typeof outputJson.candidates[0].content;
+    if (contentType === "string") {
+      return outputJson.candidates[0].content;
+    }
+    if (contentType === "object") {
+      let parts = outputJson.candidates[0].content?.parts;
+      if (parts && Array.isArray(parts)) {
+        return parts
+          .map((part: any) => {
+            if (typeof part === "string") return part;
+            if (part.text) return part.text;
+            return JSON.stringify(part);
+          })
+          .join("\n");
+      }
+    }
+    return JSON.stringify(outputJson.candidates[0].content);
   }
 
   // Fallback to response attribute
