@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import rehypeRaw from 'rehype-raw'
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import behead from 'remark-behead';
 import rehypeExternalLinks from 'rehype-external-links'
 import remarkFlexibleParagraphs from "remark-flexible-paragraphs";
@@ -11,6 +12,44 @@ import { CheckIcon, ClipboardDocumentIcon } from "@heroicons/react/24/outline";
 import { useCallback, useState } from "react";
 import { JsonViewer } from '../JsonViewer';
 import { tryParseJson } from '@/utils/modelUtils';
+
+// We need to extend the default schema because:
+// 1. defaultSchema blocks unknown tags like <task>, <think>, etc. (GOOD!)
+// 2. BUT it also blocks SVG elements like <svg>, <path>, <circle> (BAD - we need these!)
+// 3. So we add SVG elements to the allowed list
+const sanitizeSchema = {
+  ...defaultSchema,
+  tagNames: [
+    ...(defaultSchema.tagNames || []),
+    'svg', 'path', 'circle', 'rect', 'line', 'polygon', 'polyline', 'ellipse',
+    'g', 'defs', 'clipPath', 'mask', 'pattern', 'linearGradient', 'radialGradient',
+    'stop', 'text', 'tspan', 'use', 'symbol', 'marker'
+  ],
+  attributes: {
+    ...defaultSchema.attributes,
+    svg: ['xmlns', 'viewBox', 'width', 'height', 'fill', 'stroke', 'strokeWidth', 'className', 'class'],
+    path: ['d', 'fill', 'stroke', 'strokeWidth', 'strokeLinecap', 'strokeLinejoin', 'className', 'class'],
+    circle: ['cx', 'cy', 'r', 'fill', 'stroke', 'strokeWidth', 'className', 'class'],
+    rect: ['x', 'y', 'width', 'height', 'rx', 'ry', 'fill', 'stroke', 'strokeWidth', 'className', 'class'],
+    line: ['x1', 'y1', 'x2', 'y2', 'stroke', 'strokeWidth', 'className', 'class'],
+    polygon: ['points', 'fill', 'stroke', 'strokeWidth', 'className', 'class'],
+    polyline: ['points', 'fill', 'stroke', 'strokeWidth', 'className', 'class'],
+    ellipse: ['cx', 'cy', 'rx', 'ry', 'fill', 'stroke', 'strokeWidth', 'className', 'class'],
+    g: ['fill', 'stroke', 'strokeWidth', 'transform', 'className', 'class'],
+    text: ['x', 'y', 'fill', 'fontSize', 'fontFamily', 'textAnchor', 'className', 'class'],
+    tspan: ['x', 'y', 'dx', 'dy', 'className', 'class'],
+    use: ['href', 'xlinkHref', 'x', 'y', 'width', 'height', 'className', 'class'],
+    defs: ['className', 'class'],
+    clipPath: ['id', 'className', 'class'],
+    mask: ['id', 'className', 'class'],
+    pattern: ['id', 'x', 'y', 'width', 'height', 'patternUnits', 'className', 'class'],
+    linearGradient: ['id', 'x1', 'y1', 'x2', 'y2', 'gradientUnits', 'className', 'class'],
+    radialGradient: ['id', 'cx', 'cy', 'r', 'fx', 'fy', 'gradientUnits', 'className', 'class'],
+    stop: ['offset', 'stopColor', 'stopOpacity', 'className', 'class'],
+    symbol: ['id', 'viewBox', 'className', 'class'],
+    marker: ['id', 'viewBox', 'markerWidth', 'markerHeight', 'refX', 'refY', 'orient', 'className', 'class']
+  }
+};
 
 export const CopyToClipboard: React.FC<{ content: string } & React.HTMLAttributes<HTMLDivElement>> = ({ content, className, ...restProps }) => {
   const [copied, setCopied] = useState(false);
@@ -33,15 +72,14 @@ export const CopyToClipboard: React.FC<{ content: string } & React.HTMLAttribute
   );
 };
 export const MarkdownViewer: React.FC<{ message: string }> = ({ message }) => {
-  // Escape <think> and </think> tags to prevent React from trying to render them as components
-  const escapedMessage = message
-    .replace(/<think>/g, '&lt;think&gt;')
-    .replace(/<\/think>/g, '&lt;/think&gt;');
-  
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm, behead, remarkFlexibleParagraphs]}
-      rehypePlugins={[rehypeRaw, [rehypeExternalLinks, { target: '_blank' }]]}
+      rehypePlugins={[
+        rehypeRaw,
+        [rehypeSanitize, sanitizeSchema], // Sanitize after rehypeRaw to remove unknown tags
+        [rehypeExternalLinks, { target: '_blank' }]
+      ]}
       components={{
         code({ node, className, children, ...props }) {
           const match = /language-(\w+)/.exec(className || '');
@@ -154,7 +192,7 @@ export const MarkdownViewer: React.FC<{ message: string }> = ({ message }) => {
 
       }}
     >
-      {escapedMessage}
+      {message}
     </ReactMarkdown>
   );
 };
