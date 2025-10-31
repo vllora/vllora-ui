@@ -67,7 +67,7 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                             <TooltipProvider>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                        <div className={`mr-1 flex-shrink-0 ${labelOfSpan ? 'pb-3' : ''}`}>
+                                        <div className={`mr-1 flex-shrink-0`}>
                                             {/* Icon display with potential cache indicator */}
                                             <div className="relative">
                                                 <div className={classNames("p-1 rounded-full ", operationIconColor)}>
@@ -103,14 +103,14 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <div
-                                        className="inline-flex items-center min-w-0 h-full justify-center gap-1"
+                                        className="relative inline-flex items-center min-w-0 h-full justify-center gap-1"
                                         style={{ maxWidth: `${Math.max(getTimelineTitleWidth({ level, isInSidebar }), 20)}px` }}
                                     >
                                         <span className={`text-xs text-gray-300 truncate leading-normal ${labelOfSpan ? 'pb-3' : ''}`}>
                                             {title}
                                         </span>
                                         {labelOfSpan && (
-                                            <div className="relative top-2 -left-9">
+                                            <div className="absolute top-3 -right-5">
                                                 <LabelTag label={labelOfSpan} />
                                             </div>
                                         )}
