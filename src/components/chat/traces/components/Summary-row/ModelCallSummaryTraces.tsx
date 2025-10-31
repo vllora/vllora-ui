@@ -10,7 +10,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { ProviderIcon } from "@/components/Icons/ProviderIcons";
 import { formatCost } from "@/utils/formatCost";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { formatMessageTime } from "@/utils/dateUtils";
@@ -47,14 +46,6 @@ const SidebarModelCallSummaryTracesImpl = ({
   });
 
   const modelNamesInvoked = uniqueModels.filter(name => name && typeof name === 'string' && name.trim() !== '');
-
-  // Extract provider names from models (e.g., "openai/gpt-4" -> "openai")
-  const getProviderName = (modelName: string) => {
-    const parts = modelName.split('/');
-    return parts.length > 1 ? parts[0] : 'default';
-  };
-
-  const providers = Array.from(new Set(modelNamesInvoked.map(getProviderName)));
 
   const tokensInfo = {
     inputTokens: run.input_tokens || 0,
