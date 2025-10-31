@@ -8,6 +8,8 @@ import { Span } from "@/types/common-type";
 import { BasicSpanInfo } from "./DetailView/basic-span-info-section";
 import { ClientSdkIcon } from "@/components/client-sdk-icon";
 import { tryParseInt } from "@/utils/modelUtils";
+import { getLabelOfSpan } from "../new-timeline/utils";
+import { LabelTag } from "../new-timeline/timeline-row/label-tag";
 
 const getDuration = (startTime?: number, endTime?: number): string | null => {
   if (!startTime || !endTime) return null;
@@ -69,9 +71,10 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
 }) => {
   const isSuccessStatus = status && ['200', 200].includes(status);
   const duration = getDuration(startTime, endTime);
-const ttftMicroseconds = ttf_str ? tryParseInt(ttf_str) : undefined;
-    const ttftMilliseconds = ttftMicroseconds ? ttftMicroseconds / 1000 : undefined;
-    const ttftSeconds = ttftMilliseconds ? (ttftMilliseconds / 1000).toFixed(2) : undefined;
+  const ttftMicroseconds = ttf_str ? tryParseInt(ttf_str) : undefined;
+  const ttftMilliseconds = ttftMicroseconds ? ttftMicroseconds / 1000 : undefined;
+  const ttftSeconds = ttftMilliseconds ? (ttftMilliseconds / 1000).toFixed(2) : undefined;
+  const labelOfSpan = span && getLabelOfSpan({ span });
   return (
     <div className="flex flex-row items-center gap-1 justify-between w-full">
       <div className="flex items-center gap-1">
@@ -191,6 +194,9 @@ const ttftMicroseconds = ttf_str ? tryParseInt(ttf_str) : undefined;
         </div>
       </div>
       <div className="flex items-center gap-1">
+        {labelOfSpan && (
+          <LabelTag label={labelOfSpan} />
+        )}
         {status && (
           <div className={`flex items-center py-1 rounded-md text-xs ${isSuccessStatus ? ' text-green-500' : 'text-red-500'}`}>
             {isSuccessStatus ? (

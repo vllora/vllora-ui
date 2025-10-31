@@ -512,6 +512,17 @@ export const getTimelineBgColor = (props: {
     }
     return getColorByType('SpanToolNode');
 }
+
+export const getLabelOfSpan = (props: {
+    span: Span
+}) => {
+    const { span } = props;
+    if(!attribute) return '';
+    if(!attribute['label']) return '';
+    let labelAttribute = attribute['label'] as string;
+    return labelAttribute;
+   
+}
 export const getOperationIcon = (props: {
     span: Span,
     relatedSpans: Span[]
