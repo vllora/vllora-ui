@@ -80,7 +80,7 @@ const RunSpanMessageComponent = (props: {
             />
             {!isCollapsed && (
                 <div className={contentClassName} style={contentStyle}>
-                    {errors && <> <div className="flex flex-col gap-1 mt-1">{errors?.length > 0 && errors.map((error, index) => (
+                    {errors && <> <div className="flex flex-col gap-1">{errors?.length > 0 && errors.map((error, index) => (
                         <div key={index} className="rounded-md p-3 border border-red-500/30 bg-red-500/5">
                             <pre className="text-xs text-red-300 font-mono whitespace-pre-wrap break-all">{error}</pre>
                         </div>
