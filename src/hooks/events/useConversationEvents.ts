@@ -21,13 +21,13 @@ export function useConversationEvents(props: {
         }
         if(event.type === "TextMessageContent") {
           setTyping(true);
-        }
-        if(event.type === "TextMessageEnd") {
+        } else if(event.type === "TextMessageEnd") {
           setTyping(false);
+        } else {
+          setTimeout(() => {
+            setFlattenSpans((currentSpans) => processEvent(currentSpans, event));
+          }, 0);
         }
-        setTimeout(() => {
-          setFlattenSpans((currentSpans) => processEvent(currentSpans, event));
-        }, 0);
       }
     );
     return unsubscribe;
