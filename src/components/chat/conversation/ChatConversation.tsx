@@ -19,7 +19,10 @@ const ChatConversationComponent: React.FC<ChatConversationProps> = ({
 }) => {
   const internalMessagesEndRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = externalMessagesEndRef || internalMessagesEndRef;
-  const [inViewport] = useInViewport(messagesEndRef);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [inViewport] = useInViewport(messagesEndRef, {
+    root: scrollContainerRef,
+  });
 
   // const validMessages = extractValidDisplayMessages(messages);
   const scrollToBottom = useCallback(() => {
@@ -47,7 +50,7 @@ const ChatConversationComponent: React.FC<ChatConversationProps> = ({
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto p-4 space-y-3 relative">
+    <div ref={scrollContainerRef} className="flex-1 flex flex-col overflow-y-auto p-4 space-y-3 relative">
       {messages.map((message) => (
         <HierarchicalMessageSpanItem key={`message-${message.span_id}`} messageStructure={message} />
       ))}

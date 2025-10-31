@@ -253,7 +253,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       </div>
 
 
-      <div className="flex-1 overflow-y-scroll w-full overflow-x-hidden">
+      <div className="flex-1 w-full overflow-x-hidden flex flex-col">
         {/* Chat Conversation */}
         <ChatConversation
           messages={messageHierarchies}
