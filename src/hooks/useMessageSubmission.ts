@@ -199,6 +199,8 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
           console.log('requestBody.mcp_servers', requestBody.mcp_servers);
         }
 
+        const sanitizedThreadTitle = threadTitle?.replace(/[^\w\s-]/g, '');
+
         const response = await fetch(chatUrl, {
           method: 'POST',
           headers: {
@@ -206,7 +208,7 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
             ...(props.apiKey && { Authorization: `Bearer ${props.apiKey}` }),
             ...(props.projectId && { 'X-Project-Id': props.projectId }),
             ...(threadId && { 'X-Thread-Id': threadId }),
-            ...(threadTitle && { 'X-Thread-Title': threadTitle }),
+            ...(sanitizedThreadTitle && { 'X-Thread-Title': sanitizedThreadTitle }),
           },
           body: JSON.stringify(requestBody),
           signal: abortControllerRef.current?.signal,
