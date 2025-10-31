@@ -34,7 +34,7 @@ export const HumanMessage: React.FC<HumanMessageProps> = ({ message }) => {
       </div>
 
       {/* Content */}
-      <div className=" overflow-hidden flex flex-1">
+      <div className=" overflow-hidden flex flex-1 justify-end">
         {message.files && message.files.length > 0 && (
           <div className="mb-3 flex flex-wrap gap-2 justify-end">
             {message.files.map((file, index) => (
@@ -52,13 +52,11 @@ export const HumanMessage: React.FC<HumanMessageProps> = ({ message }) => {
         )}
 
         {message.content_array && message.content_array.length > 0 ? (
-          <div className="flex flex-col  justify-end overflow-hidden">
-            <div className="max-w-[80%]">
+          <div className="flex flex-col  justify-end overflow-hidden max-w-[80%] text-neutral-200 leading-relaxed whitespace-normal break-words text-sm bg-neutral-900/30 border border-neutral-800/50 rounded-lg px-4 py-3">
               <ContentArrayDisplay contentArray={message.content_array} />
-            </div>
           </div>
         ) : (
-          <div className="flex justify-end flex-1">
+          <div className="flex flex-col  justify-end overflow-hidden max-w-[80%]">
             <div className="text-neutral-200 flex-1 leading-relaxed whitespace-normal break-words text-sm bg-neutral-900/30 border border-neutral-800/50 rounded-lg px-4 py-3">
               <MessageDisplay message={message.content} />
             </div>
