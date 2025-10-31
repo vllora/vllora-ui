@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { TracesPageConsumer } from '@/contexts/TracesPageContext';
 import { RunTableView } from './run-table-view';
-import { GroupCardGrid } from './group-card-grid';
+import { GroupCardGrid } from './group-card/grid';
 import { TraceEmptyState } from '@/components/chat/traces/components/TraceEmptyState';
 
 export function RunTable() {
