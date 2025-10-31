@@ -517,6 +517,7 @@ export const getLabelOfSpan = (props: {
     span: Span
 }) => {
     const { span } = props;
+    let attribute = span.attribute as any;
     if(!attribute) return '';
     if(!attribute['label']) return '';
     let labelAttribute = attribute['label'] as string;
