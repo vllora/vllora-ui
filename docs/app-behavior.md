@@ -688,7 +688,6 @@ vllora/
 
 ### Database Integration
 - **PostgreSQL**: Stores projects, usage data, metadata
-- **ClickHouse** (optional): Stores traces and telemetry
 - Connection pool managed via `DbPool`
 - Migrations handled by backend
 
