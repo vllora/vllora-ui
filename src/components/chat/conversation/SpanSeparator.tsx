@@ -27,7 +27,6 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
   onClick,
   isCollapsed = false,
   onToggle,
-  level = 0,
   onHover,
   errors
 }) => {
@@ -124,7 +123,7 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
   // Level is only used for vertical spacing adjustment
   return (
     <TooltipProvider>
-      <div className={`flex items-center gap-2  ${level === 0 ? 'mt-4' : ''}`}>
+      <div className={`flex items-center gap-2`}>
         {/* Separator badge with colored left border - compact design */}
         <button
           onClick={handleClick}
