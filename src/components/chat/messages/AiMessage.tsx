@@ -40,7 +40,7 @@ export const AiMessage: React.FC<{
   const getProviderName = (modelName?: string) => {
     if (!modelName) return 'default';
     const parts = modelName.split('/');
-    return parts.length > 1 ? parts[0] : 'default';
+    return parts.length > 1 ? parts[0] : modelName;
   };
 
   const providerName = getProviderName(msg?.model_name);
