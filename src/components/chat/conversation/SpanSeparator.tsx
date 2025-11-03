@@ -49,16 +49,14 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
   }, [onToggle, onClick, spanId, runId]);
 
   const handleMouseEnter = useCallback(() => {
-    if (!spanId) return;
     if (onHover) {
-      onHover({ spanId, runId, isHovering: true });
+      onHover({ spanId: spanId || '', runId, isHovering: true });
     }
   }, [spanId, runId, onHover]);
 
   const handleMouseLeave = useCallback(() => {
-    if (!spanId) return;
     if (onHover) {
-      onHover({ spanId, runId, isHovering: false });
+      onHover({ spanId: spanId || '', runId, isHovering: false });
     }
   }, [spanId, runId, onHover]);
 
