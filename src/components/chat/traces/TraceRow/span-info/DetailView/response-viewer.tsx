@@ -1,6 +1,7 @@
 import { JsonViewer } from "../JsonViewer";
 import { MessageViewer } from "./message-viewer";
 import { ToolDefinitionsViewer } from "./tool-definitions-viewer";
+import { ViewerCollapsibleSection } from "./ViewerCollapsibleSection";
 import {
     WrenchScrewdriverIcon,
     CheckCircleIcon,
@@ -12,6 +13,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { AlertTriangle } from "lucide-react";
 import { SingleMessage } from "./single-message";
+import { useLocalStorageState } from "ahooks";
 
 // Helper function to get finish reason styling and information
 const getFinishReasonInfo = (finishReason: string) => {
@@ -65,6 +67,19 @@ const getFinishReasonInfo = (finishReason: string) => {
 
 // UI View Component
 const ResponseUIView = ({ response, otherLevelMessages }: { response: any, otherLevelMessages?: string[] }) => {
+    const [finishReasonCollapsed, setFinishReasonCollapsed] = useLocalStorageState<boolean>('vllora-traces-output-finish-reason-collapsed', {
+        defaultValue: false,
+    });
+    const [messagesCollapsed, setMessagesCollapsed] = useLocalStorageState<boolean>('vllora-traces-output-messages-collapsed', {
+        defaultValue: false,
+    });
+    const [toolCallsCollapsed, setToolCallsCollapsed] = useLocalStorageState<boolean>('vllora-traces-output-tool-calls-collapsed', {
+        defaultValue: false,
+    });
+    const [extraFieldsCollapsed, setExtraFieldsCollapsed] = useLocalStorageState<boolean>('vllora-traces-output-extra-fields-collapsed', {
+        defaultValue: false,
+    });
+
     // Extract common parameters for UI view
     const { tool_calls: responseToolCalls } = response || {};
     const keys = response && Object.keys(response);
@@ -114,79 +129,52 @@ const ResponseUIView = ({ response, otherLevelMessages }: { response: any, other
             {finish_reason && (() => {
                 const finishInfo = getFinishReasonInfo(finish_reason);
                 return (
-                    <div className="flex flex-col gap-3">
-                        <div className="flex items-center gap-2">
-                            <div className="h-px flex-1 bg-border/40" />
-                            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                                Finish Reason
+                    <ViewerCollapsibleSection
+                        title="Finish Reason"
+                        icon={<FlagIcon className="h-3.5 w-3.5 text-zinc-400" />}
+                        collapsed={finishReasonCollapsed}
+                        onCollapsedChange={setFinishReasonCollapsed}
+                    >
+                        <div className="flex flex-col gap-3">
+                            <div className="flex items-center gap-2 text-xs text-zinc-200">
+                                <div className="flex items-center gap-1">
+                                    <span className="font-medium">{finishInfo.label}</span>
+                                </div>
                             </div>
-                            <div className="h-px flex-1 bg-border/40" />
+                            <p className="text-[11px] leading-relaxed text-zinc-500">
+                                {finishInfo.description}
+                            </p>
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-zinc-200">
-                            <FlagIcon className="h-3.5 w-3.5 text-zinc-400" />
-                            <div className="flex items-center gap-1">
-                                <span className="font-medium">{finishInfo.label}</span>
-                            </div>
-                        </div>
-                        <p className="text-[11px] leading-relaxed text-zinc-500">
-                            {finishInfo.description}
-                        </p>
-                    </div>
+                    </ViewerCollapsibleSection>
                 );
             })()}
             {/* Messages Section */}
             {messages && messages.length > 0 && (
-                <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2">
-                        <div className="h-px flex-1 bg-border/40" />
-                        <div className="flex items-center gap-2">
-                            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                                Messages
-                            </div>
-                            <span className="text-[10px] font-medium text-zinc-500">
-                                ({messages.length})
-                            </span>
-                        </div>
-                        <div className="h-px flex-1 bg-border/40" />
-                    </div>
-                    <MessageViewer messages={messages as any[]} />
-                </div>
+                <MessageViewer
+                    messages={messages as any[]}
+                    collapsed={messagesCollapsed}
+                    onCollapsedChange={setMessagesCollapsed}
+                />
             )}
             {/* Tool calls */}
             {tool_calls && responseToolCalls && responseToolCalls.length > 0 && (
-                <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2">
-                        <div className="h-px flex-1 bg-border/40" />
-                        <div className="flex items-center gap-2">
-                            <WrenchScrewdriverIcon className="h-3.5 w-3.5 text-zinc-400" />
-                            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                                Tool Calls
-                            </div>
-                            <span className="text-[10px] font-medium text-zinc-500">
-                                ({responseToolCalls.length})
-                            </span>
-                        </div>
-                        <div className="h-px flex-1 bg-border/40" />
-                    </div>
-                    <ToolDefinitionsViewer toolCalls={responseToolCalls} />
-                </div>
+                <ToolDefinitionsViewer
+                    toolCalls={responseToolCalls}
+                    collapsed={toolCallsCollapsed}
+                    onCollapsedChange={setToolCallsCollapsed}
+                />
             )}
 
             {/* Additional Parameters Section */}
             {extraDataKeys && extraDataKeys.length > 0 && (
-                <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2">
-                        <div className="h-px flex-1 bg-border/40" />
-                        <div className="flex items-center gap-2">
-                            <CodeBracketIcon className="h-3.5 w-3.5 text-zinc-400" />
-                            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                                Additional Fields
-                            </div>
-                        </div>
-                        <div className="h-px flex-1 bg-border/40" />
-                    </div>
+                <ViewerCollapsibleSection
+                    title="Additional Fields"
+                    icon={<CodeBracketIcon className="h-3.5 w-3.5 text-zinc-400" />}
+                    collapsed={extraFieldsCollapsed}
+                    onCollapsedChange={setExtraFieldsCollapsed}
+                >
                     <JsonViewer data={extraDataDisplay} />
-                </div>
+                </ViewerCollapsibleSection>
             )}
         </>
     );

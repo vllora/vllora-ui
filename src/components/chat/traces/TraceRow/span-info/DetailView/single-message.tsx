@@ -117,7 +117,7 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
     return (
         <div className={`flex flex-col gap-3 py-2`}>
             <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-zinc-400">{roleLabel}</span>
+                <span className="text-xs font-semibold uppercase tracking-wide text-white">{roleLabel}</span>
                 
                 {metaSummary && (
                     <span className="text-[11px] text-zinc-500">{metaSummary}</span>

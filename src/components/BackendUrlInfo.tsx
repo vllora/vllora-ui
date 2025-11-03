@@ -80,10 +80,6 @@ export function BackendUrlInfo() {
               </button>
             </div>
           </div>
-
-          <p className="text-xs text-muted-foreground px-1">
-            Click the URL to select all, or use the copy button
-          </p>
         </div>
       </DialogContent>
     </Dialog>

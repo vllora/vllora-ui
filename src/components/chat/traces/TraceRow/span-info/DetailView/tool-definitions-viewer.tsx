@@ -7,6 +7,7 @@ import {
 
 import { ToolInfoCall } from "./spans-display/tool-display";
 import { tryParseJson } from "@/utils/modelUtils";
+import { ViewerCollapsibleSection } from "./ViewerCollapsibleSection";
 
 interface ParameterProps {
   name: string;
@@ -126,8 +127,16 @@ const getArguments = (rawArguments: any) => {
 
 export const ToolDefinitionsViewer = ({
   toolCalls,
+  tool_choice,
+  collapsed,
+  onCollapsedChange,
+  showSection = true,
 }: {
   toolCalls: ToolInfoCall[];
+  tool_choice?: string;
+  collapsed?: boolean;
+  onCollapsedChange?: (collapsed: boolean) => void;
+  showSection?: boolean;
 }) => {
   const [expandedTools, setExpandedTools] =
     useState<Record<number, boolean>>({});
@@ -143,7 +152,7 @@ export const ToolDefinitionsViewer = ({
     return null;
   }
 
-  return (
+  const content = (
     <div className="flex flex-col gap-4">
       {toolCalls.map((toolCall, index) => {
         const { id } = toolCall;
@@ -251,5 +260,20 @@ export const ToolDefinitionsViewer = ({
         );
       })}
     </div>
+  );
+
+  if (!showSection) {
+    return content;
+  }
+
+  return (
+    <ViewerCollapsibleSection
+      title="Tools"
+      subtitle={tool_choice}
+      collapsed={collapsed}
+      onCollapsedChange={onCollapsedChange}
+    >
+      {content}
+    </ViewerCollapsibleSection>
   );
 };

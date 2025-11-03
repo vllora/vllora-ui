@@ -3,6 +3,7 @@ import { JsonViewer } from "../JsonViewer";
 import { HeaderViewer } from "./header-viewer";
 import { MessageViewer } from "./message-viewer";
 import { ToolDefinitionsViewer } from "./tool-definitions-viewer";
+import { ViewerCollapsibleSection } from "./ViewerCollapsibleSection";
 import { useState } from "react";
 import { useLocalStorageState } from "ahooks";
 import { Copy, Check } from "lucide-react";
@@ -20,6 +21,18 @@ export const InputViewer = (props: {
     const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview');
     const [copied, setCopied] = useState(false);
     const [showAllHeaders, setShowAllHeaders] = useLocalStorageState<boolean>('vllora-traces-show-all-headers', {
+        defaultValue: false,
+    });
+    const [headersCollapsed, setHeadersCollapsed] = useLocalStorageState<boolean>('vllora-traces-input-headers-collapsed', {
+        defaultValue: false,
+    });
+    const [messagesCollapsed, setMessagesCollapsed] = useLocalStorageState<boolean>('vllora-traces-input-messages-collapsed', {
+        defaultValue: false,
+    });
+    const [toolsCollapsed, setToolsCollapsed] = useLocalStorageState<boolean>('vllora-traces-input-tools-collapsed', {
+        defaultValue: false,
+    });
+    const [extraFieldsCollapsed, setExtraFieldsCollapsed] = useLocalStorageState<boolean>('vllora-traces-input-extra-fields-collapsed', {
         defaultValue: false,
     });
     let messages = jsonRequest?.messages;
@@ -96,61 +109,37 @@ export const InputViewer = (props: {
                             headers={headers}
                             showAll={showAllHeaders}
                             onShowAllChange={setShowAllHeaders}
+                            collapsed={headersCollapsed}
+                            onCollapsedChange={setHeadersCollapsed}
                         />
                     )}
                     {messages && (
-                        <div className="flex flex-col gap-2">
-                            <div className="flex items-center gap-2">
-                                <div className="h-px flex-1 bg-border" />
-                                <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                                    Messages
-                                </div>
-                                <span className="text-[10px] font-medium text-zinc-500">
-                                    ({messages.length})
-                                </span>
-                                <div className="h-px flex-1 bg-border" />
-                            </div>
-                            <MessageViewer
-                                messages={messages as any}
-                            />
-                        </div>
+                        <MessageViewer
+                            messages={messages as any}
+                            collapsed={messagesCollapsed}
+                            onCollapsedChange={setMessagesCollapsed}
+                        />
                     )}
 
                     {tools && (
-                        <div className="flex flex-col gap-2">
-                            <div className="flex items-center gap-2">
-                                <div className="h-px flex-1 bg-border" />
-                                <div className="flex items-center gap-3">
-                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                                        Tools
-                                    </div>
-                                    {tool_choice && (
-                                        <div className="text-[10px] font-medium tracking-wide text-zinc-500">
-                                            ({tool_choice})
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="h-px flex-1 bg-border" />
-                            </div>
-                            <ToolDefinitionsViewer toolCalls={tools} />
-                        </div>
+                        <ToolDefinitionsViewer
+                            toolCalls={tools}
+                            tool_choice={tool_choice}
+                            collapsed={toolsCollapsed}
+                            onCollapsedChange={setToolsCollapsed}
+                        />
                     )}
 
                     {/* Additional Parameters Section */}
                     {extraDataKeys && extraDataKeys.length > 0 && (
-                        <div className="flex flex-col gap-2">
-                            <div className="flex items-center gap-2">
-                                <div className="h-px flex-1 bg-border" />
-                                <div className="flex items-center gap-2">
-                                    <CodeBracketIcon className="h-3.5 w-3.5 text-zinc-400" />
-                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                                        Additional Fields
-                                    </div>
-                                </div>
-                                <div className="h-px flex-1 bg-border" />
-                            </div>
+                        <ViewerCollapsibleSection
+                            title="Additional Fields"
+                            icon={<CodeBracketIcon className="h-3.5 w-3.5 text-zinc-400" />}
+                            collapsed={extraFieldsCollapsed}
+                            onCollapsedChange={setExtraFieldsCollapsed}
+                        >
                             <JsonViewer data={extraDataDisplay} />
-                        </div>
+                        </ViewerCollapsibleSection>
                     )}
                 </>
             ) : (

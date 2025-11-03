@@ -231,7 +231,7 @@ export const SpanModelDetailsDisplay = ({ obj }: { obj: any }) => {
         </div>
       </AccordionTrigger>
       <AccordionContent className="overflow-y-auto">
-        <MessageViewer messages={inputInfo.messages} />
+        <MessageViewer messages={inputInfo.messages} showSection={false} />
       </AccordionContent>
     </AccordionItem>}
     {inputInfo && hasExtraParameters && <AccordionItem value="extra-parameters">

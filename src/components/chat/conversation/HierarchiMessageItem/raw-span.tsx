@@ -69,7 +69,7 @@ const InnerRawSpanMessage = React.memo(({ spanId, flattenSpans }: {
 
     return (
         <div className={cn("flex flex-col")}>
-            {labelAttribute && <div className="w-full flex justify-end py-2"><LabelTag label={labelAttribute} /></div>}
+            {labelAttribute && <div className="w-full flex justify-end py-4"><LabelTag label={labelAttribute} /></div>}
             <div className={`flex flex-col space-y-2`} style={ labelAttribute ?
              { borderLeftColor: colorLabel?.background, borderLeftWidth: '1px',
                  paddingLeft: '5px' } : {}}>
