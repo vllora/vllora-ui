@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { ChevronDown, ChevronLeft, AlertTriangle } from 'lucide-react';
+import { ChevronDown, AlertTriangle } from 'lucide-react';
 import { LocalModelsConsumer } from '@/contexts/LocalModelsContext';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import {
@@ -14,8 +14,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { LocalModel, LocalModelProviderInfo } from '@/types/models';
-import { ModelListView } from './ModelListView';
-import { ProviderListView } from './ProviderListView';
+import { ModelSelectorContent } from './ModelSelectorContent';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 
 interface ModelSelectorProps {
@@ -66,11 +65,6 @@ const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState<'model' | 'provider'>('model');
-
-
-
-
-
   const getIconForModel = useCallback((modelId: string) => {
     if (modelId.includes('/')) {
       return modelId.split('/')[0];
@@ -156,41 +150,20 @@ const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
         </DropdownMenuTrigger>
 
         <DropdownMenuContent className="w-96 p-0" align="start">
-          {/* Header with Back Button (when model name is selected) */}
-          {currentStep === 'provider' && (
-            <div className="p-3 border-b border-border flex items-center gap-2">
-              <button
-                onClick={handleBack}
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                <span>Back</span>
-              </button>
-              {selectedProvider && <span className="text-sm font-medium text-foreground ml-2">{selectedProvider.provider.provider}</span>}
-            </div>
-          )}
-
-          {/* Content Area */}
-          {currentStep === 'model' ? (
-            <ModelListView
-              modelNames={modelNames}
-              onModelNameSelect={handleModelNameSelect}
-              getProviderCount={getProviderCount}
-            />
-          ) : (
-            <ProviderListView
-              providers={providers}
-              selectedModelInfo={selectedModelInfo}
-              selectedModel={selectedModel}
-              onProviderSelect={(modelFullName) => {
-                handleModelSelect(modelFullName);
-              }}
-              onConfigureProvider={(providerName) => {
-                setSelectedProviderForConfig?.(providerName);
-                setConfigDialogOpen?.(true);
-              }}
-            />
-          )}
+          <ModelSelectorContent
+            currentStep={currentStep}
+            handleBack={handleBack}
+            selectedProvider={selectedProvider}
+            modelNames={modelNames}
+            handleModelNameSelect={handleModelNameSelect}
+            getProviderCount={getProviderCount}
+            providers={providers}
+            selectedModelInfo={selectedModelInfo}
+            selectedModel={selectedModel}
+            handleModelSelect={handleModelSelect}
+            setSelectedProviderForConfig={setSelectedProviderForConfig}
+            setConfigDialogOpen={setConfigDialogOpen}
+          />
         </DropdownMenuContent>
       </DropdownMenu>
 

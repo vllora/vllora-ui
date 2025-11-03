@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 
@@ -14,23 +14,47 @@ export const ModelListView: React.FC<ModelListViewProps> = ({
   getProviderCount,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [searchTerm]);
 
   const filteredModelNames = useMemo(() => {
-    if (!searchTerm) return modelNames;
+    if (!debouncedSearchTerm) return modelNames;
     return modelNames.filter((modelName) =>
-      modelName.toLowerCase().includes(searchTerm.toLowerCase())
+      modelName.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
     );
-  }, [modelNames, searchTerm]);
+  }, [modelNames, debouncedSearchTerm]);
 
   return (
     <>
       {/* Search Input */}
       <div className="p-3 border-b border-border">
         <input
+          ref={inputRef}
           type="text"
           placeholder="Search models..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
+          onMouseDown={(e) => {
+            // Prevent dropdown from closing when clicking input
+            e.stopPropagation();
+          }}
+          onKeyDown={(e) => {
+            // Prevent dropdown from closing on certain keys
+            if (e.key !== 'Escape') {
+              e.stopPropagation();
+            }
+          }}
           className="w-full bg-background text-foreground placeholder-muted-foreground px-3 py-2 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring border border-input"
           autoFocus
         />
