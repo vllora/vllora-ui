@@ -238,8 +238,7 @@ const SidebarModelCallSummaryTracesImpl = ({
         <div className="grid items-center gap-4" style={{ gridTemplateColumns: providersInfo && providersInfo.length > 0 ? '50px 70px 100px 50px' : '70px 100px 50px' }}>
           {/* Provider */}
           {providersInfo && providersInfo.length > 0 && (
-            <div className="flex flex-col h-full justify-center items-center gap-0.5">
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Provider</span>
+            <div className="flex flex-col h-full justify-end items-end gap-0.5">
               <ListProviders providersInfo={providersInfo} avatarClass="w-5 h-5" iconClass="w-3 h-3 text-primary" />
             </div>
           )}
@@ -247,9 +246,9 @@ const SidebarModelCallSummaryTracesImpl = ({
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="flex flex-col h-full justify-center items-end gap-0.5 cursor-pointer">
+                <div className="flex flex-col h-full justify-center items-start gap-0.5 cursor-pointer">
                   <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Cost</span>
-                  <span className="text-xs font-semibold tabular-nums">{formatCost(totalCost)}</span>
+                  <span className="text-xs tabular-nums">{formatCost(totalCost)}</span>
                 </div>
               </TooltipTrigger>
               <TooltipContent
@@ -259,7 +258,7 @@ const SidebarModelCallSummaryTracesImpl = ({
               >
                 <div className="flex flex-col gap-1">
                   <p className="text-[10px] text-zinc-400 uppercase tracking-wider">Total Cost</p>
-                  <p className="text-sm font-semibold tabular-nums">{formatCost(totalCost, 10)}</p>
+                  <p className="text-sm tabular-nums">{formatCost(totalCost, 10)}</p>
                 </div>
               </TooltipContent>
             </Tooltip>
@@ -269,14 +268,14 @@ const SidebarModelCallSummaryTracesImpl = ({
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="flex flex-col h-full justify-center items-end gap-0.5 cursor-pointer">
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Tokens</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold tabular-nums">
+                <div className="flex flex-col h-full justify-center items-start gap-0.5 cursor-pointer">
+                  <span className="text-[9px] text-muted-foreground uppercase tracking-wider">Tokens</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs tabular-nums">
                       {tokensInfo.inputTokens.toLocaleString()}
                     </span>
                     <span className="text-[10px] text-muted-foreground">/</span>
-                    <span className="text-xs font-semibold tabular-nums">
+                    <span className="text-xs tabular-nums">
                       {tokensInfo.outputTokens.toLocaleString()}
                     </span>
                   </div>
@@ -308,9 +307,9 @@ const SidebarModelCallSummaryTracesImpl = ({
           </TooltipProvider>
 
           {/* Duration */}
-          <div className="flex flex-col h-full justify-center items-end gap-0.5">
+          <div className="flex flex-col h-full justify-center items-start gap-0.5">
             <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Time</span>
-            <span className="text-xs font-semibold tabular-nums">{duration}s</span>
+            <span className="text-xs tabular-nums">{duration}s</span>
           </div>
         </div>
       </div>

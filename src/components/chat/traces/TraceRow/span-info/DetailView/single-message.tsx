@@ -11,6 +11,25 @@ import {
 import { tryParseJson } from "@/utils/modelUtils";
 import { ToolCallList } from "@/components/chat/messages/ToolCallList";
 
+const ExpandCollapseButton = ({ isExpanded, onClick }: { isExpanded: boolean; onClick: () => void }) => (
+    <button
+        onClick={onClick}
+        className="mt-2 inline-flex items-center gap-1 text-[10px] text-zinc-400 transition-colors hover:text-white"
+    >
+        {isExpanded ? (
+            <>
+                <ChevronUp className="h-3 w-3" />
+                <span className="text-[10px]"> Show less</span>
+            </>
+        ) : (
+            <>
+                <ChevronDown className="h-3 w-3" />
+                <span className="text-[10px]"> Show more</span>
+            </>
+        )}
+    </button>
+);
+
 export const SingleMessage = (props: { role: string, content?: string, objectContent?: any, toolCalls?: any[], isFirst?: boolean, isLast?: boolean, parts?: any, tool_call_id?: string }) => {
     const { role, content, objectContent, toolCalls, parts, tool_call_id } = props;
 
@@ -181,7 +200,7 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
             </div>
              
             {hasTextContent && (
-                <div className="relative">
+                <div className="flex flex-col gap-2">
                     <div
                         ref={contentRef}
                         className={`whitespace-pre-wrap text-xs text-zinc-400 ${!isExpanded && showExpandButton ? 'line-clamp-3 overflow-hidden' : ''}`}
@@ -189,22 +208,12 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
                         <MarkdownViewer message={displayText} />
                     </div>
                     {showExpandButton && (
-                        <button
-                            onClick={() => setIsExpanded(!isExpanded)}
-                            className="mt-2 inline-flex items-center gap-1 text-xs text-zinc-400 transition-colors hover:text-white"
-                        >
-                            {isExpanded ? (
-                                <>
-                                    <ChevronUp className="h-3 w-3" />
-                                    Show less
-                                </>
-                            ) : (
-                                <>
-                                    <ChevronDown className="h-3 w-3" />
-                                    Show more
-                                </>
-                            )}
-                        </button>
+                        <div className="ml-auto">
+                            <ExpandCollapseButton
+                                isExpanded={isExpanded}
+                                onClick={() => setIsExpanded(!isExpanded)}
+                            />
+                        </div>
                     )}
                 </div>
             )}
@@ -282,22 +291,12 @@ const TextMessageContent = ({ text, cache_control }: { text: string, cache_contr
             </div>
         </div>
         {showExpandButton && (
-            <button
+            <div className="ml-auto">
+            <ExpandCollapseButton
+                isExpanded={isExpanded}
                 onClick={() => setIsExpanded(!isExpanded)}
-                className="mt-2 inline-flex items-center gap-1 text-xs text-zinc-300 transition-colors hover:text-white"
-            >
-                {isExpanded ? (
-                    <>
-                        <ChevronUp className="w-3 h-3" />
-                        Show less
-                    </>
-                ) : (
-                    <>
-                        <ChevronDown className="w-3 h-3" />
-                        Show more
-                    </>
-                )}
-            </button>
+            />
+            </div>
         )}
     </div>
 };
