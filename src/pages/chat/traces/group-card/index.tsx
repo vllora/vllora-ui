@@ -175,6 +175,7 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
           totalCost={totalCost}
           tokensInfo={tokensInfo}
           errors={errors}
+          llm_calls={group.llm_calls}
         />
       </div>
 
