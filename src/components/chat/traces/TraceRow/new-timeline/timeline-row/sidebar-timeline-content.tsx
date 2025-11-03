@@ -2,12 +2,13 @@
 import { TimelineContentBaseProps } from ".";
 import { classNames } from "@/utils/modelUtils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { getOperationTitle, getLabelOfSpan } from "../utils";
+import { getOperationTitle, getLabelOfSpan, getModelName, getTotalUsage } from "../utils";
 import { DatabaseIcon, ChevronRight, ChevronDown } from "lucide-react";
 import { getClientSDKName, isAgentSpan, isPromptCachingApplied } from "@/utils/graph-utils";
 import { ClientSdkIcon } from "@/components/client-sdk-icon";
 import { getTimelineTitleWidth, TIMELINE_INDENTATION } from "@/utils/constant";
 import { LabelTag } from "./label-tag";
+import { ModelContextViewer } from "../../span-info/DetailView/spans-display/model-context-viewer";
 
 // Props for the SidebarTimelineContent component
 interface SidebarTimelineContentProps extends TimelineContentBaseProps { }
@@ -32,6 +33,8 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
     const agentSpan = span && isAgentSpan(span);
     const isPromptCached = span && isPromptCachingApplied(span);
     const labelOfSpan = span && getLabelOfSpan({ span });
+    const modelName = span && getModelName({ span });
+    const totalUsage = span && getTotalUsage({ span });
     return (
         <div
             style={{ width: titleWidth }}
@@ -115,11 +118,18 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                                             </div>
                                         )}
 
+
                                     </div>
                                 </TooltipTrigger>
-                                <TooltipContent side="bottom" className="text-xs">
-                                    {getOperationTitle({ operation_name, span })}: {title}
-                                    {labelOfSpan && <span className="ml-1 opacity-70">({labelOfSpan})</span>}
+                                <TooltipContent side="bottom" className="text-xs flex flex-col gap-2">
+
+                                    <div className="flex items-center gap-1">
+                                        {(!modelName || !totalUsage) && <span>{getOperationTitle({ operation_name, span })}: {title}</span>}
+                                        {labelOfSpan && <span className="ml-1 opacity-70">({labelOfSpan})</span>}
+                                    </div>
+                                    {modelName && totalUsage && (
+                                        <ModelContextViewer model_name={modelName} usage_tokens={totalUsage} expandMode={true} />
+                                    )}
                                 </TooltipContent>
                             </Tooltip>
                         </TooltipProvider>

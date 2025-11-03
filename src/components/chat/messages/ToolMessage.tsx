@@ -52,7 +52,14 @@ export const ToolMessage: React.FC<{
         if (!runId) return;
 
         // Open the trace and fetch spans
-        setOpenTraces([{ run_id: runId, tab: 'trace' }]);
+        setOpenTraces((prev)=> {
+            let isOpen = prev.find(t => t.run_id === runId);
+            if (isOpen) {
+                return prev.filter(t => t.run_id !== runId);
+            } else {
+                return [...prev, { run_id: runId, tab: 'trace' }];
+            }
+        });
         fetchSpansByRunId(runId);
         // Auto-expand the right sidebar
         setIsRightSidebarCollapsed(false);

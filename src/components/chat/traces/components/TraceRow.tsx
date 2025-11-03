@@ -18,24 +18,19 @@ const TraceRowImpl = ({ run, index = 0, isInSidebar = false }: TraceRowProps) =>
   const traceOrRunId = run.run_id || '';
   const isOpen = openTraces.some(t => t.run_id === traceOrRunId);
   const toggleAccordion = useCallback(() => {
-    const isCurrentlyOpen = openTraces.some(t => t.run_id === traceOrRunId);
-
-    if (isCurrentlyOpen) {
-      // Close immediately - no transition needed
-      setOpenTraces([]);
-      setSelectedSpanId(null);
-    } else {
-      // Use startTransition to keep UI responsive during heavy operations
-      startTransition(() => {
-        // Open the trace first
-        setOpenTraces([{ run_id: traceOrRunId, tab: 'trace' }]);
-        setSelectedSpanId(null);
-
-        // Fetch spans in the background
-        fetchSpansByRunId(traceOrRunId);
-      });
-    }
-  }, [traceOrRunId, openTraces, setOpenTraces, fetchSpansByRunId, setSelectedSpanId]);
+    setOpenTraces((prev) => {
+      let isOpen = prev.find(t => t.run_id === traceOrRunId);
+      if (isOpen) {
+        return prev.filter(t => t.run_id !== traceOrRunId);
+      } else {
+        setTimeout(() => {
+          fetchSpansByRunId(traceOrRunId);
+        }, 0);
+        return [...prev, { run_id: traceOrRunId, tab: 'trace' }];
+      }
+    });
+    setSelectedSpanId(null)
+  }, [traceOrRunId, setOpenTraces, fetchSpansByRunId, setSelectedSpanId]);
   return (<motion.div
     className={cn(
       "shadow-sm transition-all border-border border-b-none",
