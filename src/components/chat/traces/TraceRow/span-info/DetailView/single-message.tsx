@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MarkdownViewer } from "./markdown-viewer";
 import { JsonViewer } from "../JsonViewer";
-import { DatabaseIcon, ChevronDown, ChevronUp } from "lucide-react";
+import { DatabaseIcon, ChevronDown, ChevronUp, User, Bot, Settings, Wrench, Brain, Cpu } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -39,7 +39,58 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
         }
     };
 
+    const getRoleStyle = () => {
+        const normalizedRole = role?.toLowerCase?.() || '';
+        switch (normalizedRole) {
+            case 'user':
+                return {
+                    icon: User,
+                    bgColor: 'bg-blue-500/10',
+                    textColor: 'text-blue-400',
+                    borderColor: 'border-blue-500/20'
+                };
+            case 'assistant':
+            case 'ai':
+                return {
+                    icon: Bot,
+                    bgColor: 'bg-purple-500/10',
+                    textColor: 'text-purple-400',
+                    borderColor: 'border-purple-500/20'
+                };
+            case 'system':
+                return {
+                    icon: Settings,
+                    bgColor: 'bg-amber-500/10',
+                    textColor: 'text-amber-400',
+                    borderColor: 'border-amber-500/20'
+                };
+            case 'tool':
+                return {
+                    icon: Wrench,
+                    bgColor: 'bg-green-500/10',
+                    textColor: 'text-green-400',
+                    borderColor: 'border-green-500/20'
+                };
+            case 'model':
+                return {
+                    icon: Brain,
+                    bgColor: 'bg-pink-500/10',
+                    textColor: 'text-pink-400',
+                    borderColor: 'border-pink-500/20'
+                };
+            default:
+                return {
+                    icon: Cpu,
+                    bgColor: 'bg-zinc-500/10',
+                    textColor: 'text-zinc-400',
+                    borderColor: 'border-zinc-500/20'
+                };
+        }
+    };
+
     const roleLabel = getRoleLabel();
+    const roleStyle = getRoleStyle();
+    const RoleIcon = roleStyle.icon;
 
     const parsedContent = typeof content === 'string' ? tryParseJson(content) : undefined;
 
@@ -117,8 +168,13 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
     return (
         <div className={`flex flex-col gap-3 py-2`}>
             <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-white">{roleLabel}</span>
-                
+                <div className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 ${roleStyle.bgColor} ${roleStyle.borderColor}`}>
+                    <RoleIcon className={`h-3.5 w-3.5 ${roleStyle.textColor}`} />
+                    <span className={`text-xs font-semibold uppercase tracking-wide ${roleStyle.textColor}`}>
+                        {roleLabel}
+                    </span>
+                </div>
+
                 {metaSummary && (
                     <span className="text-[11px] text-zinc-500">{metaSummary}</span>
                 )}
