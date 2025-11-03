@@ -77,7 +77,7 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
   const ttftSeconds = ttftMilliseconds ? (ttftMilliseconds / 1000).toFixed(2) : undefined;
   const labelOfSpan = span && getLabelOfSpan({ span });
   const modelName = span && getModelName({ span });
-  const totalUsage = span && getTotalUsage({ span });
+  const totalUsage = span && getTotalUsage({ span }) || 0;
   return (
     <div className="flex flex-row items-center gap-1 justify-between w-full">
       <div className="flex items-center gap-1">
@@ -194,7 +194,7 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
               </Tooltip>
             </TooltipProvider>
           )}
-          {totalUsage && modelName && <ModelContextViewer usage_tokens={totalUsage} model_name={modelName} />}
+          {modelName && totalUsage > 0 && <ModelContextViewer usage_tokens={totalUsage} model_name={modelName} />}
         </div>
       </div>
       <div className="flex items-center gap-1">

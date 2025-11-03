@@ -34,7 +34,7 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
     const isPromptCached = span && isPromptCachingApplied(span);
     const labelOfSpan = span && getLabelOfSpan({ span });
     const modelName = span && getModelName({ span });
-    const totalUsage = span && getTotalUsage({ span });
+    const totalUsage = span && getTotalUsage({ span }) || 0;
     const error = span && span.attribute?.error;
     return (
         <div
@@ -134,7 +134,7 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                                         {(!modelName || !totalUsage) && <span>{getOperationTitle({ operation_name, span })}: {title}</span>}
                                         {labelOfSpan && <span className="opacity-70">{labelOfSpan}</span>}
                                     </div>
-                                    {modelName && totalUsage && totalUsage > 0 &&(
+                                    {modelName && totalUsage > 0 && (
                                         <ModelContextViewer model_name={modelName} usage_tokens={totalUsage} expandMode={true} />
                                     )}
                                 </TooltipContent>

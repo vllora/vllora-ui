@@ -526,14 +526,14 @@ export const getLabelOfSpan = (props: {
 }
 export const getTotalUsage = (props: {
     span: Span,
-}) => {
+}): number => {
     const { span } = props;
     let attribute = span.attribute as any;
     if (!attribute) return 0;
     if (!attribute['usage']) return 0;
     let totalUsageAttributeString = attribute['usage'] as string;
     let totalUsageJson = tryParseJson(totalUsageAttributeString);
-    return totalUsageJson?.total_tokens;
+    return totalUsageJson?.total_tokens || 0;
 }
 export const getModelName = (props: {
     span: Span,
