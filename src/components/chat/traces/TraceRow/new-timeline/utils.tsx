@@ -524,6 +524,28 @@ export const getLabelOfSpan = (props: {
     return labelAttribute;
    
 }
+export const getTotalUsage = (props: {
+    span: Span,
+}) => {
+    const { span } = props;
+    let attribute = span.attribute as any;
+    if(!attribute) return 0;
+    if(!attribute['usage']) return 0;
+    let totalUsageAttributeString = attribute['usage'] as string;
+    let totalUsageJson = tryParseJson(totalUsageAttributeString);
+    return totalUsageJson?.total_tokens;
+}
+export const getModelName = (props: {
+    span: Span,
+}) => {
+    const { span } = props;
+    let attribute = span.attribute as any;
+    if(!attribute) return '';
+    if(!attribute['request']) return '';
+    let requestAttributeString = attribute['request'] as string;
+    let requestJson = requestAttributeString ? tryParseJson(requestAttributeString) : null;
+    return requestJson?.model;
+}
 export const getOperationIcon = (props: {
     span: Span,
     relatedSpans: Span[]

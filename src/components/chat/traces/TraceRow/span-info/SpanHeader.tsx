@@ -8,8 +8,9 @@ import { Span } from "@/types/common-type";
 import { BasicSpanInfo } from "./DetailView/basic-span-info-section";
 import { ClientSdkIcon } from "@/components/client-sdk-icon";
 import { tryParseInt } from "@/utils/modelUtils";
-import { getLabelOfSpan } from "../new-timeline/utils";
+import { getLabelOfSpan, getModelName, getTotalUsage } from "../new-timeline/utils";
 import { LabelTag } from "../new-timeline/timeline-row/label-tag";
+import { ModelContextViewer } from "./DetailView/spans-display/model-context-viewer";
 
 const getDuration = (startTime?: number, endTime?: number): string | null => {
   if (!startTime || !endTime) return null;
@@ -75,6 +76,8 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
   const ttftMilliseconds = ttftMicroseconds ? ttftMicroseconds / 1000 : undefined;
   const ttftSeconds = ttftMilliseconds ? (ttftMilliseconds / 1000).toFixed(2) : undefined;
   const labelOfSpan = span && getLabelOfSpan({ span });
+  const modelName = span && getModelName({ span });
+  const totalUsage = span && getTotalUsage({ span });
   return (
     <div className="flex flex-row items-center gap-1 justify-between w-full">
       <div className="flex items-center gap-1">
@@ -191,6 +194,7 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
               </Tooltip>
             </TooltipProvider>
           )}
+          {totalUsage && modelName && <ModelContextViewer usage_tokens={totalUsage} model_name={modelName} />}
         </div>
       </div>
       <div className="flex items-center gap-1">

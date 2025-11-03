@@ -40,7 +40,6 @@ export const updateThreadFromEvent = (
           if (userMsg) {
             let userMessageContent = userMsg.content;
             let typeOfMessage = typeof userMessageContent;
-            console.log("==== typeOfMessage", typeOfMessage);
             if (typeOfMessage === "string") {
               let splitContent =
                 userMessageContent && userMessageContent.split(" ");

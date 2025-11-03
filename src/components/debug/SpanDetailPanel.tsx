@@ -21,9 +21,9 @@ export const SpanDetailPanel: React.FC<SpanDetailPanelProps> = ({ span, relatedS
   const spanTitle = getSpanTitle({ span, relatedSpans });
   const sdkName = span && getClientSDKName(span);
   const status = span && getStatus(relatedSpans, span.span_id);
-const modelCallSpan = getModelCallSpans(relatedSpans, span.span_id);
-const modelCallAttribute = modelCallSpan?.attribute as any;
- const ttf_str = modelCallAttribute?.ttft;
+  const modelCallSpan = getModelCallSpans(relatedSpans, span.span_id);
+  const modelCallAttribute = modelCallSpan?.attribute as any;
+  const ttf_str = modelCallAttribute?.ttft;
   return (
     <div className="h-full flex flex-col bg-background border-l border-border">
       <div className="sticky top-0 z-10 h-16 flex flex-row items-center p-1 px-1 justify-between w-full bg-[#161616] border-b border-border">
@@ -41,7 +41,7 @@ const modelCallAttribute = modelCallSpan?.attribute as any;
           ttf_str={ttf_str}
         />
       </div>
-        <StandaloneSpanUIDetailsDisplay span={span} relatedSpans={relatedSpans} />
+      <StandaloneSpanUIDetailsDisplay span={span} relatedSpans={relatedSpans} />
 
     </div>
   );
