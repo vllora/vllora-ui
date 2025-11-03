@@ -4,35 +4,37 @@ import { SpanSeparator } from "../SpanSeparator";
 import { memo, useMemo, useCallback } from "react";
 import { CONTENT_PADDING_LEFT } from "./constants";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
+import { useSpanById } from "@/hooks/useSpanById";
 import { errorFromApiInvokeSpansInSameRun } from "@/hooks/useSpanById";
 import { ErrorBoundary } from "react-error-boundary";
 import { CustomErrorFallback } from "@/components/chat/traces/components/custom-error-fallback";
 
-const RunWrapperMessageComponent = (props: {
+const InvocationSpanMessageComponent = (props: {
+    span_id: string;
     run_id: string;
     messages: MessageStructure[];
     level?: number;
 }) => {
-    const { run_id, messages, level = 0 } = props;
+    const { span_id, run_id, messages, level = 0 } = props;
 
-    const { setOpenTraces, flattenSpans, runHighlighted, setRunHighlighted, openTraces } = ChatWindowConsumer();
-    const errors = errorFromApiInvokeSpansInSameRun({ flattenSpans, runId: run_id });
+    const { setCollapsedSpans, flattenSpans, runHighlighted, setRunHighlighted, setHoverSpanId, collapsedSpans } = ChatWindowConsumer();
+    const span = useSpanById(flattenSpans, span_id);
+    const errors = errorFromApiInvokeSpansInSameRun({ flattenSpans, runId: span?.run_id || '' });
 
     // Memoize the toggle callback to prevent child re-renders
     const toggleCollapse = useCallback(() => {
-        setOpenTraces(prev => {
-            let isOpenTraces = prev.some(v => v.run_id === run_id);
-            if (isOpenTraces) {
-                return [...prev.filter(v => v.run_id !== run_id)];
+        setCollapsedSpans(prev => {
+            if (prev.includes(span_id)) {
+                return prev.filter(id => id !== span_id);
             } else {
-                return [...prev, { run_id, tab: 'trace' }];
+                return [...prev, span_id];
             }
         });
-    }, [run_id, setOpenTraces]);
+    }, []);
 
     const isCollapsed = useMemo(() => {
-        return !openTraces.find(v => v.run_id === run_id);
-    }, [openTraces, run_id]);
+        return collapsedSpans.includes(span?.span_id || '');
+    }, [collapsedSpans, span]);
 
 
 
@@ -48,16 +50,17 @@ const RunWrapperMessageComponent = (props: {
         [level]
     );
 
-    const isHighlighted = runHighlighted === run_id;
+    const isHighlighted = runHighlighted === span?.run_id;
 
     return (
         <ErrorBoundary FallbackComponent={CustomErrorFallback}>
             <div
-                id={`run-span-conversation-${run_id}`}
+                id={`run-span-conversation-${span?.run_id}`}
                 className={`run-wrapper transition-colors ${isHighlighted ? 'bg-muted/30' : ''}`}
             >
                 {/* SpanSeparator now handles getting span data and displaying status */}
                 <SpanSeparator
+                    spanId={span_id}
                     runId={run_id}
                     isCollapsed={isCollapsed}
                     onToggle={toggleCollapse}
@@ -69,8 +72,10 @@ const RunWrapperMessageComponent = (props: {
                     }) => {
                         if (isHovering) {
                             setRunHighlighted(runId);
+                            setHoverSpanId(span_id);
                         } else {
                             setRunHighlighted(prev => prev === runId ? '' : prev);
+                            setHoverSpanId(prev => prev === span_id ? '' : prev);
                         }
                     }}
                 />
@@ -98,16 +103,17 @@ const RunWrapperMessageComponent = (props: {
 };
 
 // Memoize with custom comparison to optimize re-renders
-export const RunWrapperMessage = memo(
-    RunWrapperMessageComponent,
+export const InvocationSpanMessage = memo(
+    InvocationSpanMessageComponent,
     (prev, next) => {
         // Fast path: if messages array reference is the same, check other props only
         if (prev.messages === next.messages) {
-            return prev.level === next.level && prev.run_id === next.run_id;
+            return prev.level === next.level && prev.span_id === next.span_id && prev.run_id === next.run_id;
         }
 
         // Quick checks first (cheapest comparisons)
         if (prev.level !== next.level) return false;
+        if (prev.span_id !== next.span_id) return false;
         if (prev.run_id !== next.run_id) return false;
 
         const prevMessages = prev.messages;

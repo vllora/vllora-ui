@@ -1,9 +1,10 @@
 import { Span } from "@/types/common-type";
-import { skipThisSpan } from "./graph-utils";
+import { isClientSDK, skipThisSpan } from "./graph-utils";
 
 export interface MessageStructure {
   span_id: string;
-  type: string; // run, task
+  type: string; // run, task,
+  run_id: string;
   children: MessageStructure[];
 }
 
@@ -11,6 +12,7 @@ export interface MessageStructure {
 const skipSpanNotRelatedToMessage = (span: Span) => {
   if(span.operation_name === 'tool') return false;
   if (skipThisSpan(span)) return true;
+  if(span.operation_name === 'run' && !isClientSDK(span)) return true;
   if(span.operation_name === 'api_invoke' && span.attribute && span.attribute['error']) return true;
   // if(span.operation_name === 'run') return true;
   return false;
@@ -56,6 +58,7 @@ export function buildMessageHierarchyFromSpan(
     const message: MessageStructure = {
       span_id: span.span_id,
       type: span.operation_name,
+      run_id: span.run_id,
       children: [],
     };
     messageMap.set(span.span_id, message);
@@ -84,6 +87,32 @@ export function buildMessageHierarchyFromSpan(
       }
     }
   });
+  if(result.length > 0){
+    if(result.length === 1 && result[0].type === 'run' ){
+      let runById = spanMap.get(result[0].span_id);
+      if(runById && isClientSDK(runById)) return result;
+    }
+     // mean there are multiple root spans
+     let runIds: string[] = []
+     result.forEach((message) => {
+       if(!runIds.includes(message.run_id)){
+         runIds.push(message.run_id)
+       }
+     })
+     if(runIds.length > 0){
+      let newResult: MessageStructure[] = [];
+      runIds.forEach((runId) => {
+        let runMessage: MessageStructure = {
+          span_id: runId,
+          type: 'run_wrapper',
+          run_id: runId,
+          children: result.filter((message) => message.run_id === runId),
+        };
+        newResult.push(runMessage);
+      })
+      return newResult;
+     }
+  }
 
   return result;
 }

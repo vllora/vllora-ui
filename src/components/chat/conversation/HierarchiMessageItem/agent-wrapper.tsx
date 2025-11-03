@@ -8,10 +8,11 @@ import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 
 export const AgentSpanMessage = memo((props: {
     span_id: string;
+    run_id: string;
     messages: MessageStructure[];
     level?: number;
 }) => {
-    const { span_id, messages, level = 0 } = props;
+    const { span_id, run_id, messages, level = 0 } = props;
     // const [isCollapsed, setIsCollapsed] = useState(false);
     const { setHoverSpanId, setRunHighlighted, setCollapsedSpans, collapsedSpans } = ChatWindowConsumer();
 
@@ -42,6 +43,7 @@ export const AgentSpanMessage = memo((props: {
         <div id={`agent-span-conversation-${span_id}`} className="agent-wrapper">
             <SpanSeparator
                 spanId={span_id}
+                runId={run_id}
                 isCollapsed={isCollapsed}
                 onToggle={toggleCollapse}
                 level={level}

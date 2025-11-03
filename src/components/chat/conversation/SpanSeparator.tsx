@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Loader2, Copy, Check, AlertTriangleIcon } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2, Copy, Check, AlertTriangleIcon, PlayIcon } from 'lucide-react';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 import { useSpanById } from '@/hooks/useSpanById';
 import { getLabelOfSpan, getOperationIcon, getSpanTitle, getTimelineBgColor } from '@/components/chat/traces/TraceRow/new-timeline/utils';
@@ -8,7 +8,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { LabelTag } from '../traces/TraceRow/new-timeline/timeline-row/label-tag';
 
 interface SpanSeparatorProps {
-  spanId: string;
+  spanId?: string;
+  runId: string;
   onClick?: (spanId: string) => void;
   isCollapsed?: boolean;
   onToggle?: () => void;
@@ -25,6 +26,7 @@ interface SpanSeparatorProps {
  */
 const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
   spanId,
+  runId,
   onClick,
   isCollapsed = false,
   onToggle,
@@ -34,48 +36,45 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
   // Get span data from context - component will re-render on context changes
   const { flattenSpans } = ChatWindowConsumer();
   // But useSpanById returns same reference if THIS span's data didn't change
-  const span = useSpanById(flattenSpans, spanId);
+  const span = spanId ? useSpanById(flattenSpans, spanId) : null;
   const labelOfSpan = span && getLabelOfSpan({ span });
   const [copied, setCopied] = useState(false);
 
-  const handleClick = () => {
+  const handleClick = useCallback(() => {
     if (onToggle) {
       onToggle();
     } else if (onClick) {
-      onClick(spanId);
+      spanId && onClick(spanId);
     }
-  };
+  }, [onToggle, onClick, spanId, runId]);
 
   const handleMouseEnter = useCallback(() => {
+    if (!spanId) return;
     if (onHover) {
-      onHover({ spanId, runId: span?.run_id || '', isHovering: true });
+      onHover({ spanId, runId, isHovering: true });
     }
-  }, [spanId, span?.run_id, onHover]);
+  }, [spanId, runId, onHover]);
 
   const handleMouseLeave = useCallback(() => {
+    if (!spanId) return;
     if (onHover) {
-      onHover({ spanId, runId: span?.run_id || '', isHovering: false });
+      onHover({ spanId, runId, isHovering: false });
     }
-  }, [spanId, span?.run_id, onHover]);
+  }, [spanId, runId, onHover]);
 
   // Determine if this is a run and what ID to copy
-  const { isRun, idToCopy, displayId } = useMemo(() => {
-    const isRunSpan = span?.operation_name === 'run';
-    const id = isRunSpan && span?.run_id ? span.run_id : spanId;
+  const { idToCopy, displayId } = useMemo(() => {
+    const idToCopy = spanId || runId;
     return {
-      isRun: isRunSpan,
-      idToCopy: id,
-      displayId: `${id.slice(0, 8)}...`
+      idToCopy,
+      displayId: `${idToCopy.slice(0, 8)}...`
     };
-  }, [span, spanId]);
+  }, [runId, spanId]);
 
   // Generate title from span data - only recalculates if span changes
   const title = useMemo(() => {
     if (!span) {
-      return spanId.slice(0, 8);
-    }
-    if (span.operation_name === 'run') {
-      return `Run`;
+      return 'Run';
     }
 
     // Use getSpanTitle to get the proper title based on span attributes
@@ -102,13 +101,16 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
   }, [span]);
 
   const iconComponent = useMemo(() => {
+    if (!span && runId) {
+      return <PlayIcon className="w-3 h-3" />;
+    }
     if (!span) return null;
     const icon = getOperationIcon({
       span,
       relatedSpans: []
     });
     return icon;
-  }, [span]);
+  }, [span, runId]);
 
   // Status icon - animated loader for in-progress, check for completed
   const StatusIcon = useMemo(() => {
@@ -174,7 +176,7 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
               </div>
             </TooltipTrigger>
             <TooltipContent>
-              <p>{copied ? 'Copied!' : `Copy full ${isRun ? 'run_id' : 'span_id'}`}</p>
+              <p>{copied ? 'Copied!' : `Copy full ${!spanId ? 'run_id' : 'span_id'}`}</p>
             </TooltipContent>
           </Tooltip>
           {StatusIcon}
@@ -215,6 +217,7 @@ export const SpanSeparator = React.memo(
   SpanSeparatorComponent,
   (prevProps, nextProps) => {
     if (prevProps.spanId !== nextProps.spanId) return false;
+    if (prevProps.runId !== nextProps.runId) return false;
     if (prevProps.isCollapsed !== nextProps.isCollapsed) return false;
     if (prevProps.level !== nextProps.level) return false;
     if (prevProps.errors !== nextProps.errors) return false;

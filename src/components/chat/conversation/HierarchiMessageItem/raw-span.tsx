@@ -1,10 +1,12 @@
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
-import { useMessageExtractSpanById } from "@/hooks/useSpanById";
+import { useMessageExtractSpanById, useSpanById } from "@/hooks/useSpanById";
 import { MessageStructure } from "@/utils/message-structure-from-span";
 import React, { useMemo } from "react";
 import { MessageItem } from "../../MessageItem";
 import { compareMessageStructure, HierarchicalMessageSpanItem } from "./index";
 import { INDENT_PER_LEVEL } from "./constants";
+import { getColorFromLabel, LabelTag } from "../../traces/TraceRow/new-timeline/timeline-row/label-tag";
+import { cn } from "@/lib/utils";
 
 
 export const RawSpanMessage = React.memo((props: {
@@ -57,15 +59,24 @@ const InnerRawSpanMessage = React.memo(({ spanId, flattenSpans }: {
     spanId: string;
     flattenSpans: any[];
 }) => {
+    const span = useSpanById(flattenSpans, spanId);
+    const attributes = span?.attribute;
+    const labelAttribute = attributes?.['label'];
+    const colorLabel = labelAttribute && getColorFromLabel(labelAttribute);
     const messages = useMessageExtractSpanById(flattenSpans, spanId);
 
-    if (messages.length === 0) return null;
+    if (messages.length === 0) return <></>;
 
     return (
-        <div className="flex flex-col space-y-4">
-            {messages.map((message) => (
-                <MessageItem key={message.id} message={message} />
-            ))}
+        <div className={cn("flex flex-col")}>
+            {labelAttribute && <div className="w-full flex justify-end py-2"><LabelTag label={labelAttribute} /></div>}
+            <div className={`flex flex-col space-y-2`} style={ labelAttribute ?
+             { borderLeftColor: colorLabel?.background, borderLeftWidth: '1px',
+                 paddingLeft: '5px' } : {}}>
+                {messages.map((message) => (
+                    <MessageItem key={message.id} message={message} />
+                ))}
+            </div>
         </div>
     );
 });

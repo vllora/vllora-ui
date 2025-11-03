@@ -1,10 +1,11 @@
 import React from 'react';
 import { MessageStructure } from '@/utils/message-structure-from-span';
-import { RunSpanMessage } from './run-wrapper';
+import { RunWrapperMessage } from './run-wrapper';
 import { TaskSpanMessage } from './task-wrapper';
 import { RawSpanMessage } from './raw-span';
 import { AgentSpanMessage } from './agent-wrapper';
 import { EloraToolSpanMessage } from './tool-wrapper';
+import { InvocationSpanMessage } from './invocation-wrapper';
 
 interface HierarchicalSpanItemProps {
   messageStructure: MessageStructure;
@@ -23,7 +24,8 @@ export const compareMessageStructure = (
   // Compare basic properties
   if (
     prevStructure.span_id !== nextStructure.span_id ||
-    prevStructure.type !== nextStructure.type
+    prevStructure.type !== nextStructure.type ||
+    prevStructure.run_id !== nextStructure.run_id
   ) {
     return false;
   }
@@ -57,17 +59,20 @@ const HierarchicalMessageSpanItemComponent: React.FC<HierarchicalSpanItemProps> 
   messageStructure,
   level = 0,
 }) => {
-  const { type, span_id, children } = messageStructure;
+  const { type, span_id, run_id, children } = messageStructure;
 
   if(type === 'agent') {
-    return <AgentSpanMessage span_id={span_id} messages={children} level={level} />
+    return <AgentSpanMessage span_id={span_id} run_id={run_id} messages={children} level={level} />
+  }
+  if(type === 'run_wrapper') {
+    return <RunWrapperMessage run_id={run_id} messages={children} level={level} />
   }
   if(type === 'run') {
-    return <RunSpanMessage span_id={span_id} messages={children} level={level} />
+    return <InvocationSpanMessage run_id={run_id} span_id={span_id} messages={children} level={level} />
   }
 
   if(type === 'task') {
-    return <TaskSpanMessage span_id={span_id} messages={children} level={level} />
+    return <TaskSpanMessage run_id={run_id} span_id={span_id} messages={children} level={level} />
   }
   if(type === 'tools') {
     return <EloraToolSpanMessage span_id={span_id} />

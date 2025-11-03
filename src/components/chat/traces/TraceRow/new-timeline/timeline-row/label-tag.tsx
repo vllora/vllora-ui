@@ -50,7 +50,7 @@ const COLOR_PALETTE = [
 ];
 
 // Generate consistent color from string hash
-const getColorFromLabel = (label: string) => {
+export const getColorFromLabel = (label: string) => {
     let hash = 0;
     for (let i = 0; i < label.length; i++) {
         hash = label.charCodeAt(i) + ((hash << 5) - hash);

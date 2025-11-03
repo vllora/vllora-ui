@@ -8,10 +8,11 @@ import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 
 export const TaskSpanMessage = memo((props: {
     span_id: string;
+    run_id: string;
     messages: MessageStructure[];
     level?: number;
 }) => {
-    const { span_id, messages, level = 0 } = props;
+    const { span_id, run_id, messages, level = 0 } = props;
     const { setHoverSpanId, setRunHighlighted, setCollapsedSpans, collapsedSpans } = ChatWindowConsumer();
     const isCollapsed = useMemo(() => collapsedSpans.includes(span_id), [collapsedSpans, span_id]);
     // Memoize the toggle callback to prevent child re-renders
@@ -39,20 +40,21 @@ export const TaskSpanMessage = memo((props: {
         <div id={`task-span-conversation-${span_id}`} className="task-wrapper flex flex-col gap-2 group">
             <SpanSeparator
                 spanId={span_id}
+                runId={run_id}
                 isCollapsed={isCollapsed}
                 onToggle={toggleCollapse}
                 level={level}
                 onHover={({
-                    runId,
+                    runId: run_id,
                     isHovering,
                     spanId
                 }) => {
                     if(isHovering) {
                         setHoverSpanId(spanId);
-                        setRunHighlighted(runId);
+                        setRunHighlighted(run_id);
                     } else {
                         setHoverSpanId(prev => prev === spanId ? '' : prev);
-                        setRunHighlighted(prev => prev === runId ? '' : prev);
+                        setRunHighlighted(prev => prev === run_id ? '' : prev);
                     }
                 }}
             />
@@ -72,12 +74,13 @@ export const TaskSpanMessage = memo((props: {
 }, (prev, next) => {
     // Fast path: if messages array reference is the same, check other props only
     if (prev.messages === next.messages) {
-        return prev.level === next.level && prev.span_id === next.span_id;
+        return prev.level === next.level && prev.span_id === next.span_id && prev.run_id === next.run_id;
     }
 
     // Quick checks first (cheapest comparisons)
     if (prev.level !== next.level) return false;
     if (prev.span_id !== next.span_id) return false;
+    if (prev.run_id !== next.run_id) return false;
 
     const prevMessages = prev.messages;
     const nextMessages = next.messages;
