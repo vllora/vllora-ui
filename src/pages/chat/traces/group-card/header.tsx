@@ -52,7 +52,6 @@ export const GroupCardHeader: React.FC<GroupCardHeaderProps> = ({
                 <TooltipTrigger asChild>
                   <div className="flex items-center gap-1 cursor-pointer">
                     <ExclamationTriangleIcon className="w-4 h-4 text-amber-500" />
-                    <span className="text-xs text-amber-500 font-medium">{errors.length}</span>
                   </div>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -68,7 +67,7 @@ export const GroupCardHeader: React.FC<GroupCardHeaderProps> = ({
               </Tooltip>
             </TooltipProvider>
           ) : (
-            <CheckCircleIcon className="w-4 h-4 text-green-500" />
+            <></>
           )}
         </div>
       </div>
@@ -76,9 +75,9 @@ export const GroupCardHeader: React.FC<GroupCardHeaderProps> = ({
       {/* Right: Stats and Errors */}
       <div className="grid items-center gap-4" style={{ gridTemplateColumns: CARD_STATS_GRID }}>
         <div className="flex flex-1 flex-col h-full justify-center items-end gap-0.5 cursor-pointer">
-                <span className="text-[10px] text-muted-foreground uppercase ">Model Calls</span>
-                <span className="text-xs font-semibold tabular-nums">{llm_calls}</span>
-              </div>
+          <span className="text-[10px] text-muted-foreground uppercase ">Model Calls</span>
+          <span className="text-xs font-semibold tabular-nums">{llm_calls}</span>
+        </div>
 
         {/* Cost */}
         <TooltipProvider>
