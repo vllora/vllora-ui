@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MarkdownViewer } from "./markdown-viewer";
 import { JsonViewer } from "../JsonViewer";
-import { DatabaseIcon, ChevronDown, ChevronUp, User, Bot, Settings, Wrench, Brain, Cpu } from "lucide-react";
+import { DatabaseIcon, ChevronDown, ChevronUp, User, Bot, Settings, Wrench, Brain, Cpu, Copy, Check } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -36,6 +36,7 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
     const [isExpanded, setIsExpanded] = useState(false);
     const contentRef = useRef<HTMLDivElement>(null);
     const [showExpandButton, setShowExpandButton] = useState(false);
+    const [copied, setCopied] = useState(false);
 
     const getRoleLabel = () => {
         const normalizedRole = role?.toLowerCase?.() || '';
@@ -184,6 +185,18 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
 
     const metaSummary = metaChips.map((chip) => chip.label).join(' • ');
 
+    const handleCopy = async () => {
+        let textToCopy = displayText;
+        if (!textToCopy && structuredContent) {
+            textToCopy = JSON.stringify(structuredContent, null, 2);
+        }
+        if (textToCopy) {
+            await navigator.clipboard.writeText(textToCopy);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        }
+    };
+
     return (
         <div className={`flex flex-col gap-3 py-2`}>
             <div className="flex items-center justify-between gap-2">
@@ -193,10 +206,21 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
                         {roleLabel}
                     </span>
                 </div>
-
+                <div className="flex items-center gap-2">
                 {metaSummary && (
                     <span className="text-[11px] text-zinc-500">{metaSummary}</span>
                 )}
+                <button
+                    onClick={handleCopy}
+                    className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 hover:text-zinc-300  hover:bg-zinc-700 rounded transition-colors"
+                >
+                    {copied ? (
+                        <Check className="w-3 h-3 text-green-500" />
+                    ) : (
+                        <Copy className="w-3 h-3" />
+                    )}
+                </button>
+                </div>
             </div>
              
             {hasTextContent && (
