@@ -308,11 +308,11 @@ export const getSpanTitle = (props: { span: Span, relatedSpans: Span[] }) => {
     if (span.operation_name == 'tools') {
         let attributes = span.attribute as any;
         let label = attributes['label'] as string;
-        let tool_name =attributes['tool.name'] || attributes['tool_name'];
+        let tool_name = attributes['tool.name'] || attributes['tool_name'];
         if (tool_name?.includes('---')) {
             return tool_name.split('---')[1];
         }
-        return  tool_name || label;
+        return tool_name || label;
     }
     if (span.operation_name == 'cloud_api_invoke') {
         return span.operation_name;
@@ -518,19 +518,19 @@ export const getLabelOfSpan = (props: {
 }) => {
     const { span } = props;
     let attribute = span.attribute as any;
-    if(!attribute) return '';
-    if(!attribute['label']) return '';
+    if (!attribute) return '';
+    if (!attribute['label']) return '';
     let labelAttribute = attribute['label'] as string;
     return labelAttribute;
-   
+
 }
 export const getTotalUsage = (props: {
     span: Span,
 }) => {
     const { span } = props;
     let attribute = span.attribute as any;
-    if(!attribute) return 0;
-    if(!attribute['usage']) return 0;
+    if (!attribute) return 0;
+    if (!attribute['usage']) return 0;
     let totalUsageAttributeString = attribute['usage'] as string;
     let totalUsageJson = tryParseJson(totalUsageAttributeString);
     return totalUsageJson?.total_tokens;
@@ -540,8 +540,8 @@ export const getModelName = (props: {
 }) => {
     const { span } = props;
     let attribute = span.attribute as any;
-    if(!attribute) return '';
-    if(!attribute['request']) return '';
+    if (!attribute) return '';
+    if (!attribute['request']) return '';
     let requestAttributeString = attribute['request'] as string;
     let requestJson = requestAttributeString ? tryParseJson(requestAttributeString) : null;
     return requestJson?.model;
