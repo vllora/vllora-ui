@@ -308,11 +308,11 @@ export const getSpanTitle = (props: { span: Span, relatedSpans: Span[] }) => {
     if (span.operation_name == 'tools') {
         let attributes = span.attribute as any;
         let label = attributes['label'] as string;
-        let tool_name = attributes['tool_name'];
+        let tool_name =attributes['tool.name'] || attributes['tool_name'];
         if (tool_name?.includes('---')) {
             return tool_name.split('---')[1];
         }
-        return label || tool_name;
+        return  tool_name || label;
     }
     if (span.operation_name == 'cloud_api_invoke') {
         return span.operation_name;
