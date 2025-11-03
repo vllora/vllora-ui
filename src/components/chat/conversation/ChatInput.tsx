@@ -68,21 +68,21 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     const handleFileAdded = ({ files: newFiles }: { files: FileWithPreview[] }) => {
       setFiles((prevFiles) => [...prevFiles, ...newFiles]);
     };
-    emitter.on('langdb_input_fileAdded', handleFileAdded);
-    emitter.on('langdb_input_speechRecognitionStart', () => {
+    emitter.on('vllora_input_fileAdded', handleFileAdded);
+    emitter.on('vllora_input_speechRecognitionStart', () => {
       setIsListening(true);
       setError('');
     });
-    emitter.on('langdb_input_speechRecognitionEnd', () => {
+    emitter.on('vllora_input_speechRecognitionEnd', () => {
       setIsListening(false);
     });
     return () => {
-      emitter.off('langdb_input_fileAdded', handleFileAdded);
-      emitter.off('langdb_input_speechRecognitionStart', () => {
+      emitter.off('vllora_input_fileAdded', handleFileAdded);
+      emitter.off('vllora_input_speechRecognitionStart', () => {
         setIsListening(true);
         setError('');
       });
-      emitter.off('langdb_input_speechRecognitionEnd', () => {
+      emitter.off('vllora_input_speechRecognitionEnd', () => {
         setIsListening(false);
       });
     };
@@ -118,7 +118,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       } as FileWithPreview;
     });
     const updatedFiles = await Promise.all(updatedFilesPromises);
-    emitter.emit('langdb_input_fileAdded', { files: updatedFiles });
+    emitter.emit('vllora_input_fileAdded', { files: updatedFiles });
   }, []);
 
   const { getRootProps, isDragActive, open, getInputProps } = useDropzone({
@@ -149,7 +149,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     recognition.continuous = false;
 
     recognition.onstart = () => {
-      emitter.emit('langdb_input_speechRecognitionStart', {});
+      emitter.emit('vllora_input_speechRecognitionStart', {});
     };
 
     recognition.onresult = (event: any) => {
@@ -169,7 +169,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     };
 
     recognition.onend = () => {
-      emitter.emit('langdb_input_speechRecognitionEnd', {});
+      emitter.emit('vllora_input_speechRecognitionEnd', {});
     };
 
     recognition.start();

@@ -121,9 +121,9 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
         setError('Chat terminated by user');
       }
     };
-    emitter.on('langdb_chatTerminate', handleTerminate);
+    emitter.on('vllora_chatTerminate', handleTerminate);
     return () => {
-      emitter.off('langdb_chatTerminate', handleTerminate);
+      emitter.off('vllora_chatTerminate', handleTerminate);
     };
   }, [terminateChat, setError, threadId, widgetId]);
 
@@ -139,9 +139,9 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
         }
       }
     };
-    emitter.on('langdb_chatWindow', handlerChatWindowEvent);
+    emitter.on('vllora_chatWindow', handlerChatWindowEvent);
     return () => {
-      emitter.off('langdb_chatWindow', handlerChatWindowEvent);
+      emitter.off('vllora_chatWindow', handlerChatWindowEvent);
     }
   }, [threadId, widgetId]);
 
@@ -154,9 +154,9 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
         terminateChat();
       }
     };
-    emitter.on('langdb_clearChat', handleClearChat);
+    emitter.on('vllora_clearChat', handleClearChat);
     return () => {
-      emitter.off('langdb_clearChat', handleClearChat);
+      emitter.off('vllora_clearChat', handleClearChat);
     };
   }, [terminateChat, threadId, widgetId]);
 
@@ -174,9 +174,9 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
         scrollToBottom();
       }
     };
-    emitter.on('langdb_chat_scrollToBottom', handleScrollToBottom);
+    emitter.on('vllora_chat_scrollToBottom', handleScrollToBottom);
     return () => {
-      emitter.off('langdb_chat_scrollToBottom', handleScrollToBottom);
+      emitter.off('vllora_chat_scrollToBottom', handleScrollToBottom);
     };
   }, [messageHierarchies, threadId, scrollToBottom, widgetId]);
 
@@ -215,10 +215,10 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
 
 
   useEffect(() => {
-    emitter.on('langdb_input_chatSubmit', handleExternalSubmit);
+    emitter.on('vllora_input_chatSubmit', handleExternalSubmit);
 
     return () => {
-      emitter.off('langdb_input_chatSubmit', handleExternalSubmit);
+      emitter.off('vllora_input_chatSubmit', handleExternalSubmit);
     };
   }, [handleExternalSubmit]);
 
@@ -284,7 +284,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
         <ModalProvider>
           <ChatInput
             onSubmit={(props) => {
-              emitter.emit('langdb_input_chatSubmit', props);
+              emitter.emit('vllora_input_chatSubmit', props);
               return Promise.resolve();
             }}
             currentInput={currentInput}

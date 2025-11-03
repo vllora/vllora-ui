@@ -55,7 +55,7 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
         } else {
           const event = jsonMsg as ChatCompletionChunk;
           if (event.usage) {
-            emitter.emit('langdb_usageStats', {
+            emitter.emit('vllora_usageStats', {
               usage: event.usage,
               threadId: currentThreadId,
               widgetId: props.widgetId,
@@ -113,7 +113,7 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
 
       try {
         widgetId &&
-          emitter.emit('langdb_chatWindow', {
+          emitter.emit('vllora_chatWindow', {
             widgetId,
             state: 'SubmitStart',
             threadId: currentThreadId,
@@ -230,7 +230,7 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
         // setTraceId(currentTraceId);
 
         widgetId &&
-          emitter.emit('langdb_chatWindow', {
+          emitter.emit('vllora_chatWindow', {
             widgetId,
             state: 'Processing',
             threadId: currentThreadId,
@@ -253,7 +253,7 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
               if (line.startsWith('data: ')) {
                 const data = line.slice(6);
                 widgetId &&
-                  emitter.emit('langdb_chatWindow', {
+                  emitter.emit('vllora_chatWindow', {
                     widgetId,
                     state: 'Processing',
                     threadId: currentThreadId,
@@ -278,7 +278,7 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
         }
 
         widgetId &&
-          emitter.emit('langdb_chatWindow', {
+          emitter.emit('vllora_chatWindow', {
             widgetId,
             state: 'SubmitEnd',
             threadId: currentThreadId,
@@ -289,7 +289,7 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
         setTyping(false);
       } catch (error) {
         widgetId &&
-          emitter.emit('langdb_chatWindow', {
+          emitter.emit('vllora_chatWindow', {
             widgetId,
             state: 'SubmitError',
             error: error instanceof Error ? error.message : String(error),
@@ -307,7 +307,7 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
       } finally {
         abortControllerRef.current = null;
         widgetId &&
-          emitter.emit('langdb_chatWindow', {
+          emitter.emit('vllora_chatWindow', {
             widgetId,
             state: 'SubmitEnd',
             threadId: currentThreadId,
