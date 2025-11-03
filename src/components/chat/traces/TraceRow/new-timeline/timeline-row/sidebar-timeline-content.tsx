@@ -96,7 +96,7 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                                                 )}
                                                 {/* Error indicator as subscript icon */}
                                                 {error && (
-                                                    <div className="absolute -bottom-0 -right-1 bg-gray-800 rounded-full p-0.5">
+                                                    <div className="absolute -bottom-0 -right-1 p-0.5">
                                                         <TriangleAlertIcon className="w-2.5 h-2.5 text-amber-400" />
                                                     </div>
                                                 )}
