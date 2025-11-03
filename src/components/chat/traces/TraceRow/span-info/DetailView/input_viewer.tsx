@@ -19,7 +19,9 @@ export const InputViewer = (props: {
 
     const { jsonRequest, headers } = props;
     const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview');
+    const [codeViewMode, setCodeViewMode] = useState<'curl' | 'json'>('curl');
     const [copied, setCopied] = useState(false);
+    const [copiedJson, setCopiedJson] = useState(false);
     const [showAllHeaders, setShowAllHeaders] = useLocalStorageState<boolean>('vllora-traces-show-all-headers', {
         defaultValue: false,
     });
@@ -68,6 +70,12 @@ export const InputViewer = (props: {
         await navigator.clipboard.writeText(curlCommand);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
+    };
+
+    const handleCopyJson = async () => {
+        await navigator.clipboard.writeText(JSON.stringify(jsonRequest, null, 2));
+        setCopiedJson(true);
+        setTimeout(() => setCopiedJson(false), 2000);
     };
 
     return (<div className="relative flex flex-col gap-4 rounded-lg border border-border  p-4 pt-6 bg-black">
@@ -145,14 +153,35 @@ export const InputViewer = (props: {
             ) : (
                 <div className="flex flex-col gap-2 divide-y divide-zinc-800">
                     <div className="flex items-center justify-between">
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                            cURL Command
+                        <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-0.5 bg-zinc-800 rounded p-0.5">
+                                <button
+                                    onClick={() => setCodeViewMode('curl')}
+                                    className={`px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider transition-colors rounded ${
+                                        codeViewMode === 'curl'
+                                            ? 'bg-zinc-600 text-white'
+                                            : 'text-zinc-400 hover:text-zinc-300'
+                                    }`}
+                                >
+                                    cURL
+                                </button>
+                                <button
+                                    onClick={() => setCodeViewMode('json')}
+                                    className={`px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider transition-colors rounded ${
+                                        codeViewMode === 'json'
+                                            ? 'bg-zinc-600 text-white'
+                                            : 'text-zinc-400 hover:text-zinc-300'
+                                    }`}
+                                >
+                                    JSON
+                                </button>
+                            </div>
                         </div>
                         <button
-                            onClick={handleCopyCurl}
+                            onClick={codeViewMode === 'curl' ? handleCopyCurl : handleCopyJson}
                             className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-medium text-zinc-400 hover:text-zinc-300 bg-zinc-800 hover:bg-zinc-700 rounded transition-colors"
                         >
-                            {copied ? (
+                            {(codeViewMode === 'curl' ? copied : copiedJson) ? (
                                 <>
                                     <Check className="w-3 h-3 text-green-500" />
                                     <span>Copied!</span>
@@ -166,14 +195,22 @@ export const InputViewer = (props: {
                         </button>
                     </div>
                     <div className="pt-2">
-                            <CodeBlock title="cURL" code={generateCurlCommand({
-                                requestObj: jsonRequest,
-                                headerObj: headers,
-                                method: 'POST',
-                                fullUrl: `${getBackendUrl()}/v1/chat/completions`,
-                                showAllHeaders,
-                            })} language="bash" hideTitle={true} />
-                            {/* <code>{generateCurlCommand(jsonRequest, headers)}</code> */}
+                        {codeViewMode === 'curl' ? (
+                            <CodeBlock
+                                title="cURL"
+                                code={generateCurlCommand({
+                                    requestObj: jsonRequest,
+                                    headerObj: headers,
+                                    method: 'POST',
+                                    fullUrl: `${getBackendUrl()}/v1/chat/completions`,
+                                    showAllHeaders,
+                                })}
+                                language="bash"
+                                hideTitle={true}
+                            />
+                        ) : (
+                            <JsonViewer data={jsonRequest} />
+                        )}
                     </div>
                 </div>
             )}
