@@ -103,15 +103,15 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <div
-                                        className="relative inline-flex items-center min-w-0 h-full justify-center gap-1"
+                                        className="flex flex-col items-left min-w-0 h-full justify-between"
                                         style={{ maxWidth: `${Math.max(getTimelineTitleWidth({ level, isInSidebar }), 20)}px` }}
                                     >
-                                        <span className={`text-xs text-gray-300 truncate leading-normal ${labelOfSpan ? 'pb-3' : ''}`}>
+                                        <span className={`text-xs text-gray-300 truncate leading-normal`}>
                                             {title}
                                         </span>
                                         {labelOfSpan && (
-                                            <div className="absolute top-3 -right-5">
-                                                <LabelTag label={labelOfSpan} />
+                                            <div className="">
+                                                <LabelTag label={labelOfSpan} maxWidth={Math.max(getTimelineTitleWidth({ level, isInSidebar }), 20)} />
                                             </div>
                                         )}
 
