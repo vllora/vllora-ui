@@ -102,7 +102,7 @@ const SpanSeparatorComponent: React.FC<SpanSeparatorProps> = ({
 
   const iconComponent = useMemo(() => {
     if (!span && runId) {
-      return <PlayIcon className="w-3 h-3" />;
+      return <PlayIcon className="w-3 h-3 text-[#3b82f6]" />;
     }
     if (!span) return null;
     const icon = getOperationIcon({
