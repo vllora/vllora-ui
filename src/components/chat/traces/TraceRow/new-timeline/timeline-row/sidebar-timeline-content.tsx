@@ -3,7 +3,7 @@ import { TimelineContentBaseProps } from ".";
 import { classNames } from "@/utils/modelUtils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getOperationTitle, getLabelOfSpan, getModelName, getTotalUsage } from "../utils";
-import { DatabaseIcon, ChevronRight, ChevronDown } from "lucide-react";
+import { DatabaseIcon, ChevronRight, ChevronDown, TriangleAlertIcon } from "lucide-react";
 import { getClientSDKName, isAgentSpan, isPromptCachingApplied } from "@/utils/graph-utils";
 import { ClientSdkIcon } from "@/components/client-sdk-icon";
 import { getTimelineTitleWidth, TIMELINE_INDENTATION } from "@/utils/constant";
@@ -35,6 +35,7 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
     const labelOfSpan = span && getLabelOfSpan({ span });
     const modelName = span && getModelName({ span });
     const totalUsage = span && getTotalUsage({ span });
+    const error = span && span.attribute?.error;
     return (
         <div
             style={{ width: titleWidth }}
@@ -77,20 +78,26 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                                                     {operationIcon}
                                                 </div>
                                                 {sdkName && !agentSpan && (
-                                                    <div className="absolute -bottom-1 -right-1  bg-gray-800 rounded-full p-0.5 border border-gray-700 shadow-sm">
+                                                    <div className="absolute -bottom-0 -right-1  bg-gray-800 rounded-full p-0.5 border border-gray-700 shadow-sm">
                                                         <ClientSdkIcon client_name={sdkName} className="w-2.5 h-2.5" />
                                                     </div>
                                                 )}
                                                 {/* Cache indicator as subscript icon */}
                                                 {operation_name === 'cache' && (
-                                                    <div className="absolute -bottom-1 -right-1 bg-gray-800 rounded-full p-0.5 border border-gray-700 shadow-sm">
+                                                    <div className="absolute -bottom-0 -right-1 bg-gray-800 rounded-full p-0.5 border border-gray-700 shadow-sm">
                                                         <DatabaseIcon className="w-2.5 h-2.5 text-blue-400" />
                                                     </div>
                                                 )}
                                                 {/* Prompt caching indicator as subscript icon */}
                                                 {isPromptCached && (
-                                                    <div className="absolute -bottom-1 -right-1 bg-gray-800 rounded-full p-0.5 border border-gray-700 shadow-sm">
+                                                    <div className="absolute -bottom-0 -right-1 bg-gray-800 rounded-full p-0.5 border border-gray-700 shadow-sm">
                                                         <DatabaseIcon className="w-2.5 h-2.5 text-amber-400" />
+                                                    </div>
+                                                )}
+                                                {/* Error indicator as subscript icon */}
+                                                {error && (
+                                                    <div className="absolute -bottom-0 -right-1 bg-gray-800 rounded-full p-0.5">
+                                                        <TriangleAlertIcon className="w-2.5 h-2.5 text-amber-400" />
                                                     </div>
                                                 )}
                                             </div>
@@ -127,7 +134,7 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                                         {(!modelName || !totalUsage) && <span>{getOperationTitle({ operation_name, span })}: {title}</span>}
                                         {labelOfSpan && <span className="opacity-70">{labelOfSpan}</span>}
                                     </div>
-                                    {modelName && totalUsage && (
+                                    {modelName && totalUsage && totalUsage > 0 &&(
                                         <ModelContextViewer model_name={modelName} usage_tokens={totalUsage} expandMode={true} />
                                     )}
                                 </TooltipContent>

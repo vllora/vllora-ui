@@ -23,7 +23,7 @@ export const ModelContextViewer = ({ model_name, usage_tokens, expandMode }: Mod
     const model = models.find((model) => model.model === model_name_only);
     const max_context_size = model?.limits?.max_context_size;
     const used_percent = (max_context_size && usage_tokens > 0) ? usage_tokens / max_context_size : 0;
-    if (!model || !max_context_size || max_context_size < 0) {
+    if (!model || !usage_tokens || !max_context_size || max_context_size <= 0 || usage_tokens <= 0) {
         return (<></>)
     }
 
