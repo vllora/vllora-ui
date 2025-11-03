@@ -47,8 +47,15 @@ export const UsageViewer = (props: {
                                     <span className="text-xs text-zinc-500">Input:</span>
                                     <div className="flex items-center gap-1">
                                         <span className="text-xs font-medium text-white">{formatNumber(inputTokens)}</span>
-                                        <span className="text-xs text-zinc-500">tokens</span>
+                                       <span className="text-xs text-zinc-500">tokens</span>
                                     </div>
+                                    {isPromptCachingActive && cacheTokenInfo.read > 0 && (
+                                        <div className="flex items-center gap-1">
+                                            <span className="text-xs text-zinc-500">{'('}</span>
+                                            <span className="text-xs font-medium text-white">{formatNumber(cacheTokenInfo.read)} <span className="text-xs text-zinc-500">from cache</span></span>
+                                            <span className="text-xs text-zinc-500">{')'}</span>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
@@ -59,36 +66,19 @@ export const UsageViewer = (props: {
                                         <span className="text-xs font-medium text-white">{formatNumber(outputTokens)}</span>
                                         <span className="text-xs text-zinc-500">tokens</span>
                                     </div>
+                                    {isPromptCachingActive && cacheTokenInfo.write > 0 && (
+                                        <div className="flex items-center gap-1">
+                                            <span className="text-xs text-zinc-500">{'('}</span>
+                                            <span className="text-xs font-medium text-white">{formatNumber(cacheTokenInfo.write)} <span className="text-xs text-zinc-500">from cache</span></span>
+                                            <span className="text-xs text-zinc-500">{')'}</span>
+                                        </div>
+                                    )}
                                 </div>
+                                
                             )}
                         </div>
 
-                        {/* Cache tokens section */}
-                        {isPromptCachingActive && (
-                            <div className="flex flex-col gap-1.5 mt-1 pl-2">
-                                {cacheTokenInfo.read > 0 && (
-                                    <div className="flex items-center gap-1.5">
-                                        <div className="w-1 h-1 bg-zinc-500 rounded-full" />
-                                        <span className="text-xs font-medium text-zinc-300">{formatNumber(cacheTokenInfo.read)}</span>
-                                        <span className="text-xs text-zinc-500">tokens read from cache</span>
-                                    </div>
-                                )}
-                                {cacheTokenInfo.write > 0 && (
-                                    <div className="flex items-center gap-1.5">
-                                        <div className="w-1 h-1 bg-zinc-500 rounded-full" />
-                                        <span className="text-xs font-medium text-zinc-300">{formatNumber(cacheTokenInfo.write)}</span>
-                                        <span className="text-xs text-zinc-500">tokens write to cache</span>
-                                    </div>
-                                )}
-                                {cacheTokenInfo.standard > 0 && (
-                                    <div className="flex items-center gap-1.5">
-                                        <div className="w-1 h-1 bg-zinc-500 rounded-full" />
-                                        <span className="text-xs font-medium text-zinc-300">{formatNumber(cacheTokenInfo.standard)}</span>
-                                        <span className="text-xs text-zinc-500">tokens standard</span>
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                       
 
                         {totalTokens !== undefined && (
                             <div className="flex items-center justify-between pt-2 border-t border-border/40">
