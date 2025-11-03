@@ -125,7 +125,7 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
 
                                     <div className="flex items-center gap-1">
                                         {(!modelName || !totalUsage) && <span>{getOperationTitle({ operation_name, span })}: {title}</span>}
-                                        {labelOfSpan && <span className="ml-1 opacity-70">({labelOfSpan})</span>}
+                                        {labelOfSpan && <span className="opacity-70">{labelOfSpan}</span>}
                                     </div>
                                     {modelName && totalUsage && (
                                         <ModelContextViewer model_name={modelName} usage_tokens={totalUsage} expandMode={true} />
