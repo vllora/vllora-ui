@@ -187,9 +187,9 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
     return (
         <div className={`flex flex-col gap-3 py-2`}>
             <div className="flex items-center justify-between gap-2">
-                <div className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 ${roleStyle.bgColor} ${roleStyle.borderColor}`}>
-                    <RoleIcon className={`h-3.5 w-3.5 ${roleStyle.textColor}`} />
-                    <span className={`text-xs font-semibold uppercase tracking-wide ${roleStyle.textColor}`}>
+                <div className={`inline-flex justify-center items-center gap-1 rounded-md border px-2 py-1 ${roleStyle.bgColor} ${roleStyle.borderColor}`}>
+                    <RoleIcon className={`h-2.5 w-2.5 ${roleStyle.textColor}`} />
+                    <span className={`text-[9px] font-semibold uppercase tracking-wide ${roleStyle.textColor}`}>
                         {roleLabel}
                     </span>
                 </div>
