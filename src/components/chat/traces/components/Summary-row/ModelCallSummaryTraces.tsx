@@ -146,32 +146,37 @@ const SidebarModelCallSummaryTracesImpl = ({
 
           {/* Time Display with Status */}
           <div className="flex items-center gap-2 min-w-0">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div ref={messageRef} className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-help truncate">
-                    {timeAgoInSidebar}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="bottom"
-                  align="center"
-                  className="border border-zinc-800 bg-zinc-900 shadow-xl rounded-lg p-3 animate-in fade-in-0 zoom-in-95"
-                >
-                  <div className="flex flex-col gap-1.5">
-                    <div className="text-xs">
-                      Started: {startTime ? convertTimeMiliSecondsToLocalDateTime(startTimeMs, true) : "-"}
+            <div className="flex flex-col items-left justify-start gap-1">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div ref={messageRef} className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-help truncate">
+                      {timeAgoInSidebar}
                     </div>
-                    {finishTime && (
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="bottom"
+                    align="center"
+                    className="border border-zinc-800 bg-zinc-900 shadow-xl rounded-lg p-3 animate-in fade-in-0 zoom-in-95"
+                  >
+                    <div className="flex flex-col gap-1.5">
                       <div className="text-xs">
-                        Finished: {convertTimeMiliSecondsToLocalDateTime(finishTimeMs, true)}
+                        Started: {startTime ? convertTimeMiliSecondsToLocalDateTime(startTimeMs, true) : "-"}
                       </div>
-                    )}
-                    <div className="text-xs font-semibold">Duration: {duration}s</div>
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+                      {finishTime && (
+                        <div className="text-xs">
+                          Finished: {convertTimeMiliSecondsToLocalDateTime(finishTimeMs, true)}
+                        </div>
+                      )}
+                      <div className="text-xs font-semibold">Duration: {duration}s</div>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            {providersInfo && providersInfo.length > 0 && (
+              <ListProviders providersInfo={providersInfo} avatarClass="w-5 h-5" iconClass="w-3 h-3 text-primary" />
+            )}
 
             {/* Error indicator */}
             {errors && errors.length > 0 && (
@@ -235,13 +240,13 @@ const SidebarModelCallSummaryTracesImpl = ({
         </div>
 
         {/* Right: Stats Grid */}
-        <div className="grid items-center gap-4" style={{ gridTemplateColumns: providersInfo && providersInfo.length > 0 ? '50px 70px 100px 50px' : '70px 100px 50px' }}>
+        <div className="flex justify-between items-center flex-1" style={{ gridTemplateColumns: '90px 90px 50px' }}>
           {/* Provider */}
-          {providersInfo && providersInfo.length > 0 && (
+          {/* {providersInfo && providersInfo.length > 0 && (
             <div className="flex flex-col h-full justify-end items-end gap-0.5">
               <ListProviders providersInfo={providersInfo} avatarClass="w-5 h-5" iconClass="w-3 h-3 text-primary" />
             </div>
-          )}
+          )} */}
           {/* Cost */}
           <TooltipProvider>
             <Tooltip>
