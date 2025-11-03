@@ -13,7 +13,7 @@ const skipSpanNotRelatedToMessage = (span: Span) => {
   if(span.operation_name === 'tool') return false;
   if (skipThisSpan(span)) return true;
   if(span.operation_name === 'run' && !isClientSDK(span)) return true;
-  if(span.operation_name === 'api_invoke' && span.attribute && span.attribute['error']) return true;
+  if(span.operation_name === 'api_invoke' && span.attribute && span.attribute['error']) return false;
   // if(span.operation_name === 'run') return true;
   return false;
 }

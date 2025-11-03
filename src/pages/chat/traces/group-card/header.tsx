@@ -1,5 +1,5 @@
 import React from "react";
-import { ExclamationTriangleIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
+import { ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { formatCost } from "@/utils/formatCost";
 import { ListProviders } from "@/components/chat/thread/ListProviders";
