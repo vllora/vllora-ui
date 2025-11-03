@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useDeferredValue } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { cn } from "@/lib/utils";
 import { TimelineContent } from "../../components/TimelineContent";
@@ -16,23 +16,34 @@ export const DetailedRunView: React.FC<{run: RunDTO}> = ({
     const {runMap, isLoadingSpans, loadingSpansById, selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, hoverSpanId, collapsedSpans, setCollapsedSpans} = ChatWindowConsumer()
     const {currentProjectId} = ProjectsConsumer()
     const spansByRunId: Span[] = run.run_id ? runMap[run.run_id] || [] : []
+
+    // Defer the rendering of heavy timeline content to keep UI responsive
+    const deferredSpans = useDeferredValue(spansByRunId);
+
     const detailViewRef = useRef<HTMLDivElement>(null);
+
+    // Show loading state while deferred value is catching up
+    const isDeferred = deferredSpans !== spansByRunId;
+
     if (spansByRunId?.length > 0) {
-        
+
         return (
             <div
                 ref={detailViewRef}
                 className={cn("flex flex-col gap-3 py-2")}
             >
-               
+
 
                 {/* Execution Timeline Section - Full Width */}
-                {spansByRunId.length > 0 && (
+                {deferredSpans.length > 0 ? (
                     <div className="overflow-hidden">
-                        <div className="overflow-hidden relative">
+                        <div className={cn(
+                            "overflow-hidden relative transition-opacity duration-150",
+                            isDeferred && "opacity-50"
+                        )}>
                             <ErrorBoundary FallbackComponent={CustomErrorFallback}>
                                 <TimelineContent
-                                    spansByRunId={spansByRunId}
+                                    spansByRunId={deferredSpans}
                                     projectId={currentProjectId || ''}
                                     selectedSpanId={selectedSpanId}
                                     hoverSpanId={hoverSpanId}
@@ -51,6 +62,8 @@ export const DetailedRunView: React.FC<{run: RunDTO}> = ({
                             </ErrorBoundary>
                         </div>
                     </div>
+                ) : (
+                    <LoadingState />
                 )}
             </div>
         );

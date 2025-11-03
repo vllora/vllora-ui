@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo } from "react";
 import { SingleRunTimelineView } from "../TraceRow/new-timeline/single-run-timeline";
 import { cn } from "@/lib/utils";
 import { Span } from "@/types/common-type";
@@ -14,11 +14,11 @@ interface TimelineContentProps {
   isInSidebar?: boolean;
   hoverSpanId?: string;
   collapsedSpans: string[];
-  
+
   onToggle?: (spanId: string) => void;
 }
 
-export const TimelineContent: React.FC<TimelineContentProps> = ({
+export const TimelineContent: React.FC<TimelineContentProps> = memo(({
   spansByRunId,
   projectId,
   selectedSpanId,
@@ -65,8 +65,11 @@ export const TimelineContent: React.FC<TimelineContentProps> = ({
       </div>
     </RunDetailProvider>
   );
-};
-const TimelineContentInner = (props: {
+});
+
+TimelineContent.displayName = 'TimelineContent';
+
+const TimelineContentInner = memo((props: {
   selectedSpanId: string | null;
   setSelectedSpanId: (spanId: string | null) => void;
   setSelectedRunId: (runId: string | null) => void;
@@ -107,4 +110,6 @@ const TimelineContentInner = (props: {
       />
     ))}
   </div>
-}
+});
+
+TimelineContentInner.displayName = 'TimelineContentInner';

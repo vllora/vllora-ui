@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, startTransition } from "react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { RunDTO } from "@/services/runs-api";
@@ -18,22 +18,24 @@ const TraceRowImpl = ({ run, index = 0, isInSidebar = false }: TraceRowProps) =>
   const traceOrRunId = run.run_id || '';
   const isOpen = openTraces.some(t => t.run_id === traceOrRunId);
   const toggleAccordion = useCallback(() => {
-    setOpenTraces(prev => {
-      const isCurrentlyOpen = prev.some(t => t.run_id === traceOrRunId);
-      if (isCurrentlyOpen) {
-        // Close the trace
-        return [];
-      } else {
-        // Open the trace and fetch spans as a side effect (outside state setter)
-        // We'll use setTimeout to ensure state update happens first
-        setTimeout(() => {
-          fetchSpansByRunId(traceOrRunId);
-        }, 0);
-        return [{ run_id: traceOrRunId, tab: 'trace' }];
-      }
-    });
-    setSelectedSpanId(null);
-  }, [traceOrRunId, setOpenTraces, fetchSpansByRunId]);
+    const isCurrentlyOpen = openTraces.some(t => t.run_id === traceOrRunId);
+
+    if (isCurrentlyOpen) {
+      // Close immediately - no transition needed
+      setOpenTraces([]);
+      setSelectedSpanId(null);
+    } else {
+      // Use startTransition to keep UI responsive during heavy operations
+      startTransition(() => {
+        // Open the trace first
+        setOpenTraces([{ run_id: traceOrRunId, tab: 'trace' }]);
+        setSelectedSpanId(null);
+
+        // Fetch spans in the background
+        fetchSpansByRunId(traceOrRunId);
+      });
+    }
+  }, [traceOrRunId, openTraces, setOpenTraces, fetchSpansByRunId, setSelectedSpanId]);
   return (<motion.div
     className={cn(
       "shadow-sm transition-all border-border border-b-none",
