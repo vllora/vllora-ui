@@ -88,10 +88,7 @@ export const ModelContextViewer = ({ model_name, usage_tokens, expandMode }: Mod
                 )}
             </div>
             <div className="space-y-1.5">
-                <div className="flex justify-between gap-4">
-                    <span className="text-muted-foreground">Model:</span>
-                    <span className="font-medium">{model_name_only}</span>
-                </div>
+                
                 <div className="flex justify-between gap-4">
                     <span className="text-muted-foreground">Used tokens:</span>
                     <span className="font-mono font-medium">{formatNumber(usage_tokens)}</span>
@@ -100,12 +97,7 @@ export const ModelContextViewer = ({ model_name, usage_tokens, expandMode }: Mod
                     <span className="text-muted-foreground">Max context:</span>
                     <span className="font-mono font-medium">{formatNumber(max_context_size)}</span>
                 </div>
-                <div className="flex justify-between gap-4">
-                    <span className="text-muted-foreground">Remaining:</span>
-                    <span className="font-mono font-medium" style={{ color }}>
-                        {formatNumber(remainingTokens)}
-                    </span>
-                </div>
+                
                 <div className="border-t border-border pt-1.5 flex justify-between gap-4">
                     <span className="text-muted-foreground">Usage:</span>
                     <span className="font-bold" style={{ color }}>
