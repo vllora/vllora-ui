@@ -14,6 +14,7 @@ export function RunTable() {
     loadMoreGroups,
     hasMoreGroups,
     loadingMoreGroups,
+    groupsTotal,
   } = TracesPageConsumer();
 
   const observerTarget = useRef<HTMLDivElement>(null);
@@ -58,6 +59,7 @@ export function RunTable() {
     <div className="flex-1 w-full h-full overflow-auto">
       <GroupCardGrid
         groups={groups}
+        totalGroups={groupsTotal}
         hasMore={hasMoreGroups}
         loadingMore={loadingMoreGroups}
         onLoadMore={loadMoreGroups}
