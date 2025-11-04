@@ -45,7 +45,6 @@ export const ModelContextViewer = ({ model_name, usage_tokens, expandMode }: Mod
     };
 
     const color = getColor(percentage);
-    const remainingTokens = max_context_size - usage_tokens;
 
     const circleIcon = (
         <svg width={size} height={size} className="transform -rotate-90">
