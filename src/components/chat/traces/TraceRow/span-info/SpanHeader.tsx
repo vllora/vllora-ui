@@ -127,6 +127,7 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
                 <h3 className="text-xs font-medium text-white hover:cursor-help max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap">
                   {spanTitle}
                 </h3>
+                
               </TooltipTrigger>
               <TooltipContent
                 side="bottom"
@@ -148,10 +149,7 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
                   </div>
                 </TooltipTrigger>
                 <TooltipContent className="flex flex-col gap-2 p-3 max-w-xs bg-background border border-border rounded-md shadow-md">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <Timer className="h-4 w-4 text-purple-500" />
-                    <span>Duration Information</span>
-                  </div>
+                 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs text-muted-foreground">Start time:</span>
@@ -180,10 +178,7 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
                   </div>
                 </TooltipTrigger>
                 <TooltipContent className="flex flex-col gap-2 p-3 max-w-xs bg-background border border-border rounded-md shadow-md">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <Timer className="h-4 w-4 text-purple-500" />
-                    <span>TTFT Information</span>
-                  </div>
+                 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs text-muted-foreground">TTFT:</span>
