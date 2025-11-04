@@ -2,6 +2,7 @@ import { GitHubLink } from './GitHubLink';
 import { ProjectDropdown } from './ProjectDropdown';
 import { useLocation } from 'react-router-dom';
 import { BackendUrlInfo } from './BackendUrlInfo';
+import { SlackLink } from './SlackLink';
 
 interface HeaderProps {
   onProjectChange?: (projectId: string) => void;
@@ -27,6 +28,7 @@ export function Header({ onProjectChange }: HeaderProps) {
         <div className="flex items-center gap-3">
           <BackendUrlInfo />
           <GitHubLink />
+          <SlackLink />
         </div>
       </div>
     </header>

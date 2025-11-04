@@ -13,7 +13,11 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/t
 
 export function BackendUrlInfo() {
   const [copied, setCopied] = useState(false);
+  const [copiedMcp, setCopiedMcp] = useState(false);
+  const [copiedGrpcTracing, setCopiedGrpcTracing] = useState(false);
   const backendUrl = `${getBackendUrl()}/v1`;
+  const mcpBackendUrl = `${getBackendUrl()}/mcp`;
+  const grpcTracingUrl = 'http://localhost:4317';
 
   const handleCopy = async () => {
     try {
@@ -22,6 +26,26 @@ export function BackendUrlInfo() {
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
+    }
+  };
+
+  const handleCopyMcp = async () => {
+    try {
+      await navigator.clipboard.writeText(mcpBackendUrl);
+      setCopiedMcp(true);
+      setTimeout(() => setCopiedMcp(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy MCP URL:', err);
+    }
+  };
+
+  const handleCopyGrpcTracing = async () => {
+    try {
+      await navigator.clipboard.writeText(grpcTracingUrl);
+      setCopiedGrpcTracing(true);
+      setTimeout(() => setCopiedGrpcTracing(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy gRPC tracing URL:', err);
     }
   };
 
@@ -70,6 +94,62 @@ export function BackendUrlInfo() {
                 aria-label={copied ? 'Copied' : 'Copy to clipboard'}
               >
                 {copied ? (
+                  <div className="flex items-center gap-1.5 text-green-500 animate-in fade-in zoom-in duration-200">
+                    <Check className="w-4 h-4" />
+                    <span className="text-xs font-medium">Copied!</span>
+                  </div>
+                ) : (
+                  <Copy className="w-4 h-4 text-muted-foreground hover:text-foreground transition-colors" />
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <DialogDescription className="text-base">
+          Use this URL to connect your MCP server
+        </DialogDescription>
+
+        <div className="space-y-3 mt-4">
+          <div className="group relative">
+            <div className="flex items-center gap-2 bg-muted/30 hover:bg-muted/40 px-4 py-3 rounded-lg transition-colors border border-transparent hover:border-border/50">
+              <code className="flex-1 text-sm font-mono text-foreground break-all select-all">
+                {mcpBackendUrl}
+              </code>
+              <button
+                onClick={handleCopyMcp}
+                className="flex items-center justify-center min-w-[32px] h-8 rounded-md hover:bg-background/80 transition-all duration-200 active:scale-95"
+                aria-label={copied ? 'Copied' : 'Copy to clipboard'}
+              >
+                {copiedMcp ? (
+                  <div className="flex items-center gap-1.5 text-green-500 animate-in fade-in zoom-in duration-200">
+                    <Check className="w-4 h-4" />
+                    <span className="text-xs font-medium">Copied!</span>
+                  </div>
+                ) : (
+                  <Copy className="w-4 h-4 text-muted-foreground hover:text-foreground transition-colors" />
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <DialogDescription className="text-base">
+          Use this URL to connect your OTEL gRPC exporter
+        </DialogDescription>
+
+        <div className="space-y-3 mt-4">
+          <div className="group relative">
+            <div className="flex items-center gap-2 bg-muted/30 hover:bg-muted/40 px-4 py-3 rounded-lg transition-colors border border-transparent hover:border-border/50">
+              <code className="flex-1 text-sm font-mono text-foreground break-all select-all">
+                {grpcTracingUrl}
+              </code>
+              <button
+                onClick={handleCopyGrpcTracing}
+                className="flex items-center justify-center min-w-[32px] h-8 rounded-md hover:bg-background/80 transition-all duration-200 active:scale-95"
+                aria-label={copied ? 'Copied' : 'Copy to clipboard'}
+              >
+                {copiedGrpcTracing ? (
                   <div className="flex items-center gap-1.5 text-green-500 animate-in fade-in zoom-in duration-200">
                     <Check className="w-4 h-4" />
                     <span className="text-xs font-medium">Copied!</span>
