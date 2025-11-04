@@ -107,7 +107,7 @@ export function BackendUrlInfo() {
         </div>
 
         <DialogDescription className="text-base">
-          Use this URL to connect your MCP server
+          Use this URL to connect your MCP client
         </DialogDescription>
 
         <div className="space-y-3 mt-4">
