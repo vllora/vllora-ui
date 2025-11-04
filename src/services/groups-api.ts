@@ -6,10 +6,11 @@ export type { Pagination, Span };
 
 // Generic Group DTO with discriminated union for different grouping types
 export interface GenericGroupDTO {
-  group_by: 'time' | 'thread'; // Discriminator field
+  group_by: 'time' | 'thread' | 'run'; // Discriminator field
   group_key: {
     time_bucket?: number; // Present when group_by='time'
     thread_id?: string;   // Present when group_by='thread'
+    run_id?: string;      // Present when group_by='run'
   };
   thread_ids: string[]; // All thread IDs in this group
   trace_ids: string[]; // All trace IDs in this group
@@ -41,32 +42,21 @@ export function isThreadGroup(group: GenericGroupDTO): group is GenericGroupDTO 
   return group.group_by === 'thread' && group.group_key.thread_id !== undefined;
 }
 
-// Legacy GroupDTO for backward compatibility (deprecated)
-export interface GroupDTO {
-  time_bucket: number; // Start timestamp of the bucket in microseconds
-  thread_ids: string[]; // All thread IDs in this bucket
-  trace_ids: string[]; // All trace IDs in this bucket
-  run_ids: string[]; // All run IDs in this bucket
-  root_span_ids: string[]; // All root span IDs in this bucket
-  request_models: string[]; // Models requested (from api_invoke)
-  used_models: string[]; // Models actually used (from model_call)
-  llm_calls: number; // Number of LLM calls in this bucket
-  cost: number; // Total cost
-  input_tokens: number | null; // Total input tokens
-  output_tokens: number | null; // Total output tokens
-  start_time_us: number; // First span's start time in the bucket
-  finish_time_us: number; // Last span's finish time in the bucket
-  errors: string[]; // All errors in this bucket
+export function isRunGroup(group: GenericGroupDTO): group is GenericGroupDTO & {
+  group_by: 'run';
+  group_key: { run_id: string };
+} {
+  return group.group_by === 'run' && group.group_key.run_id !== undefined;
 }
 
 export interface PaginatedGroupsResponse {
-  data: GroupDTO[];
+  data: GenericGroupDTO[];
   pagination: Pagination;
 }
 
 export interface ListGroupsQuery {
   // Grouping
-  groupBy?: 'time' | 'thread'; // Grouping mode (default: 'time')
+  groupBy?: 'time' | 'thread' | 'run'; // Grouping mode (default: 'time')
 
   // Filters
   threadIds?: string; // Comma-separated
@@ -123,23 +113,50 @@ export const listGroups = async (props: {
   return handleApiResponse<PaginatedGroupsResponse>(response);
 };
 
-export const fetchSpansByBucketGroup = async (props: {
-  timeBucket: number;
+/**
+ * Unified API to fetch spans for any group type
+ */
+export const fetchGroupSpans = async (props: {
   projectId: string;
-  bucketSize?: number; // In seconds
+  groupBy: 'time' | 'thread' | 'run';
+  timeBucket?: number; // Required for groupBy='time'
+  threadId?: string; // Required for groupBy='thread'
+  runId?: string; // Required for groupBy='run'
+  bucketSize?: number; // Only for groupBy='time', in seconds
   offset?: number;
   limit?: number;
 }): Promise<{ data: Span[]; pagination: Pagination }> => {
-  const { timeBucket, projectId, bucketSize = 3600, offset = 0, limit = 100 } = props;
+  const { projectId, groupBy, timeBucket, threadId, runId, bucketSize, offset = 0, limit = 100 } = props;
 
   // Build query string
   const queryParams = new URLSearchParams({
-    bucketSize: String(bucketSize),
+    groupBy,
     offset: String(offset),
     limit: String(limit),
   });
 
-  const endpoint = `/group/${timeBucket}?${queryParams.toString()}`;
+  // Add group-specific parameters
+  if (groupBy === 'time') {
+    if (timeBucket === undefined) {
+      throw new Error('timeBucket is required for groupBy=time');
+    }
+    queryParams.set('timeBucket', String(timeBucket));
+    if (bucketSize) {
+      queryParams.set('bucketSize', String(bucketSize));
+    }
+  } else if (groupBy === 'thread') {
+    if (!threadId) {
+      throw new Error('threadId is required for groupBy=thread');
+    }
+    queryParams.set('threadId', threadId);
+  } else if (groupBy === 'run') {
+    if (!runId) {
+      throw new Error('runId is required for groupBy=run');
+    }
+    queryParams.set('runId', runId);
+  }
+
+  const endpoint = `/group/spans?${queryParams.toString()}`;
 
   const response = await apiClient(endpoint, {
     method: 'GET',
@@ -152,7 +169,23 @@ export const fetchSpansByBucketGroup = async (props: {
 };
 
 /**
- * Fetch spans by thread ID
+ * @deprecated Use fetchGroupSpans with groupBy='time' instead
+ */
+export const fetchSpansByBucketGroup = async (props: {
+  timeBucket: number;
+  projectId: string;
+  bucketSize?: number;
+  offset?: number;
+  limit?: number;
+}): Promise<{ data: Span[]; pagination: Pagination }> => {
+  return fetchGroupSpans({
+    ...props,
+    groupBy: 'time',
+  });
+};
+
+/**
+ * @deprecated Use fetchGroupSpans with groupBy='thread' instead
  */
 export const fetchSpansByThread = async (props: {
   threadId: string;
@@ -160,24 +193,10 @@ export const fetchSpansByThread = async (props: {
   offset?: number;
   limit?: number;
 }): Promise<{ data: Span[]; pagination: Pagination }> => {
-  const { threadId, projectId, offset = 0, limit = 100 } = props;
-
-  // Build query string
-  const queryParams = new URLSearchParams({
-    offset: String(offset),
-    limit: String(limit),
+  return fetchGroupSpans({
+    ...props,
+    groupBy: 'thread',
   });
-
-  const endpoint = `/group/thread/${threadId}?${queryParams.toString()}`;
-
-  const response = await apiClient(endpoint, {
-    method: 'GET',
-    headers: {
-      'x-project-id': projectId,
-    },
-  });
-
-  return handleApiResponse<{ data: Span[]; pagination: Pagination }>(response);
 };
 
 /**
@@ -187,7 +206,7 @@ export const fetchSingleBucket = async (props: {
   timeBucket: number;
   projectId: string;
   bucketSize: number; // In seconds
-}): Promise<GroupDTO | null> => {
+}): Promise<GenericGroupDTO | null> => {
   const { timeBucket, projectId, bucketSize } = props;
 
   // Calculate the time range for this bucket

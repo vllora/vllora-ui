@@ -10,7 +10,6 @@ export function TracesPageContent() {
     detailSpan,
     spansOfSelectedRun,
     setDetailSpanId,
-    refreshRuns,
     refreshGroups,
     groupByMode,
     setGroupByMode,
@@ -19,11 +18,7 @@ export function TracesPageContent() {
   } = TracesPageConsumer();
 
   useEffect(() => {
-    if (groupByMode === 'run') {
-      refreshRuns();
-    } else {
-      refreshGroups();
-    }
+    refreshGroups();
   }, [groupByMode, bucketSize]);
 
   return <div className="flex flex-col flex-1 h-full overflow-hidden">

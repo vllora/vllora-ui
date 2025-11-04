@@ -1,16 +1,22 @@
 import { useState, useCallback } from "react";
 import { useRequest, useLatest } from "ahooks";
 import { toast } from "sonner";
-import { listGroups, GroupDTO } from "@/services/groups-api";
+import { listGroups, GenericGroupDTO } from "@/services/groups-api";
 
 const LIMIT_LOADING_GROUPS = 20;
+
+// Hide/collapse state for groups - supports all group types
+export type HideGroupKey =
+  | { type: 'time'; time_bucket: number }
+  | { type: 'thread'; thread_id: string }
+  | { type: 'run'; run_id: string };
 
 interface UseGroupsPaginationParams {
   projectId: string;
   bucketSize: number; // In seconds (e.g., 3600 for 1 hour)
-  groupBy?: 'time' | 'thread'; // Grouping mode (default: 'time')
+  groupBy?: 'time' | 'thread' | 'run'; // Grouping mode (default: 'time')
   threadId?: string; // Optional - for filtering by thread
-  onGroupsLoaded?: (groups: GroupDTO[]) => void;
+  onGroupsLoaded?: (groups: GenericGroupDTO[]) => void;
 }
 
 export function useGroupsPagination({
@@ -25,13 +31,8 @@ export function useGroupsPagination({
   const [groupsTotal, setGroupsTotal] = useState<number>(0);
   const [hasMoreGroups, setHasMoreGroups] = useState<boolean>(false);
   const [loadingMoreGroups, setLoadingMoreGroups] = useState<boolean>(false);
-  const [rawGroups, setRawGroups] = useState<GroupDTO[]>([]);
-  // const [openGroups, setOpenGroups] = useState<
-  //   { time_bucket: number; tab: "trace" | "code" }[]
-  // >([]);
-  const [hideGroups, setHideGroups] = useState<
-     { time_bucket: number; tab: "trace" | "code" }[]
-  >([]);
+  const [rawGroups, setRawGroups] = useState<GenericGroupDTO[]>([]);
+  const [hideGroups, setHideGroups] = useState<HideGroupKey[]>([]);
   const projectIdRef = useLatest(projectId);
   const threadIdRef = useLatest(threadId);
   const bucketSizeRef = useLatest(bucketSize);
@@ -52,7 +53,7 @@ export function useGroupsPagination({
         params: {
           groupBy,
           ...(threadId ? { threadIds: threadId } : {}),
-          bucketSize,
+          ...(groupBy === 'time' ? { bucketSize } : {}),
           limit: LIMIT_LOADING_GROUPS,
           offset: 0,
         },
@@ -107,7 +108,7 @@ export function useGroupsPagination({
         params: {
           groupBy: groupByRef.current,
           ...(threadIdRef.current ? { threadIds: threadIdRef.current } : {}),
-          bucketSize: bucketSizeRef.current,
+          ...(groupByRef.current === 'time' ? { bucketSize: bucketSizeRef.current } : {}),
           limit: LIMIT_LOADING_GROUPS,
           offset: groupsOffset,
         },

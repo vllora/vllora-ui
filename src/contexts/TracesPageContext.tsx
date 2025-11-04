@@ -6,7 +6,7 @@ import { processEvent, updatedRunWithSpans } from "@/hooks/events/utilities";
 import { useWrapperHook } from "@/hooks/useWrapperHook";
 import { Span } from "@/types/common-type";
 import { useGroupsPagination } from "@/hooks/useGroupsPagination";
-import { fetchSpansByBucketGroup, fetchSingleBucket, GroupDTO } from "@/services/groups-api";
+import { fetchGroupSpans, fetchSingleBucket, GenericGroupDTO, isTimeGroup, isThreadGroup, isRunGroup } from "@/services/groups-api";
 import { toast } from "sonner";
 
 export type TracesPageContextType = ReturnType<typeof useTracesPageContext>;
@@ -93,14 +93,14 @@ export function useTracesPageContext(props: { projectId: string }) {
     localStorage.setItem('vllora-traces-bucketSize', String(bucketSize));
   }, [groupByMode, bucketSize, searchParams, setSearchParams]);
 
-  // Loading state for groups
-  const [loadingGroupsByTimeBucket, setLoadingGroupsByTimeBucket] = useState<Set<number>>(new Set());
-  const loadingGroupsByTimeBucketRef = useRef(loadingGroupsByTimeBucket);
+  // Loading state for groups - supports all group types
+  const [loadingGroups, setLoadingGroups] = useState<Set<string>>(new Set());
+  const loadingGroupsRef = useRef(loadingGroups);
 
   // Sync ref with state
   useEffect(() => {
-    loadingGroupsByTimeBucketRef.current = loadingGroupsByTimeBucket;
-  }, [loadingGroupsByTimeBucket]);
+    loadingGroupsRef.current = loadingGroups;
+  }, [loadingGroups]);
 
   // Use the runs pagination hook (no threadId filter for traces page)
   const {
@@ -159,10 +159,11 @@ export function useTracesPageContext(props: { projectId: string }) {
   } = useGroupsPagination({
     projectId,
     bucketSize,
-    groupBy: groupByMode === 'bucket' ? 'time' : groupByMode === 'thread' ? 'thread' : 'time',
+    groupBy: groupByMode === 'bucket' ? 'time' : groupByMode === 'thread' ? 'thread' : groupByMode === 'run' ? 'run' : 'time',
     onGroupsLoaded: (groups) => {
-      if(groups && groups.length > 0 && groups[0].time_bucket) {
-         loadSpansByBucketGroup(groups[0].time_bucket);
+      // Auto-load first group's spans
+      if(groups && groups.length > 0) {
+        loadGroupSpans(groups[0]);
       }
     },
   });
@@ -183,6 +184,32 @@ export function useTracesPageContext(props: { projectId: string }) {
     }, {} as Record<number, Span[]>);
   }, [flattenSpans, bucketSize]);
 
+  // Compute threadSpansMap from flattenSpans
+  const threadSpansMap = useMemo(() => {
+    return flattenSpans.reduce((acc, span) => {
+      if (span.thread_id) {
+        if (!acc[span.thread_id]) {
+          acc[span.thread_id] = [];
+        }
+        acc[span.thread_id].push(span);
+      }
+      return acc;
+    }, {} as Record<string, Span[]>);
+  }, [flattenSpans]);
+
+  // Compute runSpansMap from flattenSpans
+  const runSpansMap = useMemo(() => {
+    return flattenSpans.reduce((acc, span) => {
+      if (span.run_id) {
+        if (!acc[span.run_id]) {
+          acc[span.run_id] = [];
+        }
+        acc[span.run_id].push(span);
+      }
+      return acc;
+    }, {} as Record<string, Span[]>);
+  }, [flattenSpans]);
+
   // Refresh a single bucket's stats from backend
   const refreshSingleBucketStat = useCallback(async (timeBucket: number) => {
     try {
@@ -194,7 +221,7 @@ export function useTracesPageContext(props: { projectId: string }) {
 
       if (updatedBucket) {
         setGroups(prev => prev.map(g =>
-          g.time_bucket === timeBucket ? updatedBucket : g
+          isTimeGroup(g) && g.group_key.time_bucket === timeBucket ? updatedBucket : g
         ));
         console.log('Refreshed bucket stats for:', timeBucket);
       }
@@ -203,37 +230,74 @@ export function useTracesPageContext(props: { projectId: string }) {
     }
   }, [projectId, bucketSize, setGroups]);
 
-  // Load spans for a specific time bucket
-  const loadSpansByBucketGroup = useCallback(async (timeBucket: number) => {
+  // Load spans for any group type using unified API
+  const loadGroupSpans = useCallback(async (group: GenericGroupDTO) => {
+    // Create a unique key for this group
+    let groupKey: string;
+    if (isTimeGroup(group)) {
+      groupKey = `time-${group.group_key.time_bucket}`;
+    } else if (isThreadGroup(group)) {
+      groupKey = `thread-${group.group_key.thread_id}`;
+    } else if (isRunGroup(group)) {
+      groupKey = `run-${group.group_key.run_id}`;
+    } else {
+      return; // Unknown group type
+    }
+
     // Check if already loading (use ref to get latest value)
-    if (loadingGroupsByTimeBucketRef.current.has(timeBucket)) {
+    if (loadingGroupsRef.current.has(groupKey)) {
       return;
     }
 
-    setLoadingGroupsByTimeBucket(prev => new Set(prev).add(timeBucket));
+    setLoadingGroups(prev => new Set(prev).add(groupKey));
 
     try {
-      const response = await fetchSpansByBucketGroup({
-        timeBucket,
-        projectId,
-        bucketSize,
-        limit: 100,
-        offset: 0,
-      });
-      // Add fetched spans to flattenSpans - groupSpansMap will auto-update via useMemo
-      updateBySpansArray(response.data);
+      let response;
+
+      if (isTimeGroup(group)) {
+        response = await fetchGroupSpans({
+          projectId,
+          groupBy: 'time',
+          timeBucket: group.group_key.time_bucket,
+          bucketSize,
+          limit: 100,
+          offset: 0,
+        });
+      } else if (isThreadGroup(group)) {
+        response = await fetchGroupSpans({
+          projectId,
+          groupBy: 'thread',
+          threadId: group.group_key.thread_id,
+          limit: 100,
+          offset: 0,
+        });
+      } else if (isRunGroup(group)) {
+        // For run groups, use the unified API
+        response = await fetchGroupSpans({
+          projectId,
+          groupBy: 'run',
+          runId: group.group_key.run_id,
+          limit: 100,
+          offset: 0,
+        });
+      }
+
+      if (response) {
+        // Add fetched spans to flattenSpans - groupSpansMap will auto-update via useMemo
+        updateBySpansArray(response.data);
+      }
     } catch (error: any) {
       toast.error("Failed to load group spans", {
         description: error.message || "An error occurred while loading group spans",
       });
     } finally {
-      setLoadingGroupsByTimeBucket(prev => {
+      setLoadingGroups(prev => {
         const newSet = new Set(prev);
-        newSet.delete(timeBucket);
+        newSet.delete(groupKey);
         return newSet;
       });
     }
-  }, [projectId, bucketSize]);
+  }, [projectId, bucketSize, updateBySpansArray]);
 
   const updateRunMetrics = useCallback((run_id: string, updatedSpans: Span[]) => {
     setRuns(prevRuns => {
@@ -307,13 +371,14 @@ export function useTracesPageContext(props: { projectId: string }) {
           const newSpan = capturedNewSpan;
 
           setGroups(prev => {
-            const bucketExists = prev.some(g => g.time_bucket === timeBucket);
+            const bucketExists = prev.some(g => isTimeGroup(g) && g.group_key.time_bucket === timeBucket);
             if (bucketExists) {
               return prev;
             }
 
-            const optimisticBucket: GroupDTO = {
-              time_bucket: timeBucket,
+            const optimisticBucket: GenericGroupDTO = {
+              group_by: 'time',
+              group_key: { time_bucket: timeBucket },
               thread_ids: newSpan.thread_id ? [newSpan.thread_id] : [],
               trace_ids: [newSpan.trace_id],
               run_ids: newSpan.run_id ? [newSpan.run_id] : [],
@@ -330,7 +395,11 @@ export function useTracesPageContext(props: { projectId: string }) {
             };
 
             const updated = [...prev, optimisticBucket];
-            return updated.sort((a, b) => b.time_bucket - a.time_bucket);
+            return updated.sort((a, b) => {
+              const aTime = isTimeGroup(a) ? a.group_key.time_bucket : a.start_time_us;
+              const bTime = isTimeGroup(b) ? b.group_key.time_bucket : b.start_time_us;
+              return bTime - aTime;
+            });
           });
 
           // 3. Auto-open the bucket (sequential, not nested)
@@ -347,13 +416,20 @@ export function useTracesPageContext(props: { projectId: string }) {
           setTimeout(() => {
             if (capturedTimeBucket !== null) {
               refreshSingleBucketStat(capturedTimeBucket);
-              loadSpansByBucketGroup(capturedTimeBucket);
+              // Find the group and load its spans
+              setGroups(prev => {
+                const group = prev.find(g => isTimeGroup(g) && g.group_key.time_bucket === capturedTimeBucket);
+                if (group) {
+                  loadGroupSpans(group);
+                }
+                return prev;
+              });
             }
           }, 100);
         }
       }
     }
-  }, [groupByMode, bucketSize, setGroups, updateRunMetrics, fetchSpansByRunId, setFlattenSpans, setSelectedRunId, setOpenTraces, refreshSingleBucketStat]);
+  }, [groupByMode, bucketSize, setGroups, updateRunMetrics, fetchSpansByRunId, setFlattenSpans, setSelectedRunId, setOpenTraces, refreshSingleBucketStat, loadGroupSpans]);
   
   
   
@@ -391,9 +467,11 @@ export function useTracesPageContext(props: { projectId: string }) {
     // openGroups,
     // setOpenGroups,
     // Group spans loading
-    loadGroupSpans: loadSpansByBucketGroup,
+    loadGroupSpans,
     groupSpansMap,
-    loadingGroupsByTimeBucket,
+    threadSpansMap,
+    runSpansMap,
+    loadingGroups,
     // Trace expansion state
     selectedSpanId,
     setSelectedSpanId,
