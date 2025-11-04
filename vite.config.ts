@@ -26,8 +26,8 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  build: {
-    outDir: path.resolve(__dirname, "../gateway/dist"),
-    emptyOutDir: true,
-  },
+  // build: { // ONLY USE THIS TO CHECK IN LOCAL
+  //   outDir: path.resolve(__dirname, "../gateway/dist"),
+  //   emptyOutDir: true,
+  // },
 })
