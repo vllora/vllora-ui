@@ -4,6 +4,44 @@ import { apiClient, handleApiResponse } from '@/lib/api-client';
 // Re-export types for convenience
 export type { Pagination, Span };
 
+// Generic Group DTO with discriminated union for different grouping types
+export interface GenericGroupDTO {
+  group_by: 'time' | 'thread'; // Discriminator field
+  group_key: {
+    time_bucket?: number; // Present when group_by='time'
+    thread_id?: string;   // Present when group_by='thread'
+  };
+  thread_ids: string[]; // All thread IDs in this group
+  trace_ids: string[]; // All trace IDs in this group
+  run_ids: string[]; // All run IDs in this group
+  root_span_ids: string[]; // All root span IDs in this group
+  request_models: string[]; // Models requested (from api_invoke)
+  used_models: string[]; // Models actually used (from model_call)
+  llm_calls: number; // Number of LLM calls in this group
+  cost: number; // Total cost
+  input_tokens: number | null; // Total input tokens
+  output_tokens: number | null; // Total output tokens
+  start_time_us: number; // First span's start time in the group
+  finish_time_us: number; // Last span's finish time in the group
+  errors: string[]; // All errors in this group
+}
+
+// Type guards for discriminating between grouping types
+export function isTimeGroup(group: GenericGroupDTO): group is GenericGroupDTO & {
+  group_by: 'time';
+  group_key: { time_bucket: number };
+} {
+  return group.group_by === 'time' && group.group_key.time_bucket !== undefined;
+}
+
+export function isThreadGroup(group: GenericGroupDTO): group is GenericGroupDTO & {
+  group_by: 'thread';
+  group_key: { thread_id: string };
+} {
+  return group.group_by === 'thread' && group.group_key.thread_id !== undefined;
+}
+
+// Legacy GroupDTO for backward compatibility (deprecated)
 export interface GroupDTO {
   time_bucket: number; // Start timestamp of the bucket in microseconds
   thread_ids: string[]; // All thread IDs in this bucket
@@ -27,6 +65,9 @@ export interface PaginatedGroupsResponse {
 }
 
 export interface ListGroupsQuery {
+  // Grouping
+  groupBy?: 'time' | 'thread'; // Grouping mode (default: 'time')
+
   // Filters
   threadIds?: string; // Comma-separated
   traceIds?: string; // Comma-separated
@@ -37,7 +78,7 @@ export interface ListGroupsQuery {
   start_time_min?: number; // In microseconds
   start_time_max?: number; // In microseconds
 
-  // Bucketing
+  // Bucketing (only used when groupBy='time')
   bucketSize?: number; // Time bucket size in seconds (e.g., 3600 for 1 hour)
 
   // Pagination
@@ -99,6 +140,35 @@ export const fetchSpansByBucketGroup = async (props: {
   });
 
   const endpoint = `/group/${timeBucket}?${queryParams.toString()}`;
+
+  const response = await apiClient(endpoint, {
+    method: 'GET',
+    headers: {
+      'x-project-id': projectId,
+    },
+  });
+
+  return handleApiResponse<{ data: Span[]; pagination: Pagination }>(response);
+};
+
+/**
+ * Fetch spans by thread ID
+ */
+export const fetchSpansByThread = async (props: {
+  threadId: string;
+  projectId: string;
+  offset?: number;
+  limit?: number;
+}): Promise<{ data: Span[]; pagination: Pagination }> => {
+  const { threadId, projectId, offset = 0, limit = 100 } = props;
+
+  // Build query string
+  const queryParams = new URLSearchParams({
+    offset: String(offset),
+    limit: String(limit),
+  });
+
+  const endpoint = `/group/thread/${threadId}?${queryParams.toString()}`;
 
   const response = await apiClient(endpoint, {
     method: 'GET',

@@ -8,6 +8,7 @@ const LIMIT_LOADING_GROUPS = 20;
 interface UseGroupsPaginationParams {
   projectId: string;
   bucketSize: number; // In seconds (e.g., 3600 for 1 hour)
+  groupBy?: 'time' | 'thread'; // Grouping mode (default: 'time')
   threadId?: string; // Optional - for filtering by thread
   onGroupsLoaded?: (groups: GroupDTO[]) => void;
 }
@@ -15,6 +16,7 @@ interface UseGroupsPaginationParams {
 export function useGroupsPagination({
   projectId,
   bucketSize,
+  groupBy = 'time',
   threadId,
   onGroupsLoaded,
 }: UseGroupsPaginationParams) {
@@ -33,6 +35,7 @@ export function useGroupsPagination({
   const projectIdRef = useLatest(projectId);
   const threadIdRef = useLatest(threadId);
   const bucketSizeRef = useLatest(bucketSize);
+  const groupByRef = useLatest(groupBy);
 
   // Use ahooks useRequest for fetching groups (initial load)
   const {
@@ -47,6 +50,7 @@ export function useGroupsPagination({
       const response = await listGroups({
         projectId,
         params: {
+          groupBy,
           ...(threadId ? { threadIds: threadId } : {}),
           bucketSize,
           limit: LIMIT_LOADING_GROUPS,
@@ -101,6 +105,7 @@ export function useGroupsPagination({
       const response = await listGroups({
         projectId: projectIdRef.current,
         params: {
+          groupBy: groupByRef.current,
           ...(threadIdRef.current ? { threadIds: threadIdRef.current } : {}),
           bucketSize: bucketSizeRef.current,
           limit: LIMIT_LOADING_GROUPS,
@@ -138,6 +143,7 @@ export function useGroupsPagination({
     threadIdRef,
     projectIdRef,
     bucketSizeRef,
+    groupByRef,
   ]);
 
   // Refresh groups function (reset and reload from beginning)

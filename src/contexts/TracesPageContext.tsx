@@ -13,7 +13,7 @@ export type TracesPageContextType = ReturnType<typeof useTracesPageContext>;
 
 const TracesPageContext = createContext<TracesPageContextType | undefined>(undefined);
 
-export type GroupByMode = 'run' | 'bucket';
+export type GroupByMode = 'run' | 'bucket' | 'thread';
 export type BucketSize = 300 | 600 | 1200 | 1800 | 3600 | 7200 | 10800 | 21600 | 43200 | 86400; // 5m, 10m, 20m, 30m, 1h, 2h, 3h, 6h, 12h, 24h
 
 // Allowed query params for traces page
@@ -27,13 +27,13 @@ export function useTracesPageContext(props: { projectId: string }) {
   const [groupByMode, setGroupByMode] = useState<GroupByMode>(() => {
     // 1. Check URL query param (highest priority - for sharing links)
     const urlMode = searchParams.get('groupBy') as GroupByMode | null;
-    if (urlMode === 'run' || urlMode === 'bucket') {
+    if (urlMode === 'run' || urlMode === 'bucket' || urlMode === 'thread') {
       return urlMode;
     }
 
     // 2. Check localStorage (for returning users)
     const stored = localStorage.getItem('vllora-traces-groupByMode');
-    if (stored === 'run' || stored === 'bucket') {
+    if (stored === 'run' || stored === 'bucket' || stored === 'thread') {
       return stored;
     }
 
@@ -159,6 +159,7 @@ export function useTracesPageContext(props: { projectId: string }) {
   } = useGroupsPagination({
     projectId,
     bucketSize,
+    groupBy: groupByMode === 'bucket' ? 'time' : groupByMode === 'thread' ? 'thread' : 'time',
     onGroupsLoaded: (groups) => {
       if(groups && groups.length > 0 && groups[0].time_bucket) {
          loadSpansByBucketGroup(groups[0].time_bucket);
