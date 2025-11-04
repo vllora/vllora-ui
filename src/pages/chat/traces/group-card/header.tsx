@@ -10,7 +10,7 @@ const CARD_STATS_GRID = '90px 70px 110px';
 
 interface GroupCardHeaderProps {
   isOpen: boolean;
-  bucketTimeDisplay: string;
+  titleDisplay: React.ReactNode;
   providersInfo: { provider: string; models: string[] }[];
   totalCost: number;
   tokensInfo: {
@@ -23,7 +23,7 @@ interface GroupCardHeaderProps {
 
 export const GroupCardHeader: React.FC<GroupCardHeaderProps> = ({
   isOpen,
-  bucketTimeDisplay,
+  titleDisplay,
   providersInfo,
   totalCost,
   tokensInfo,
@@ -40,9 +40,9 @@ export const GroupCardHeader: React.FC<GroupCardHeaderProps> = ({
           <ChevronRight className="w-5 h-5 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0" />
         )}
         <div className="flex items-center gap-3 min-w-0">
-          <h3 className="text-sm font-semibold text-primary truncate" title={bucketTimeDisplay}>
-            {bucketTimeDisplay}
-          </h3>
+          <div className="text-sm font-semibold text-primary truncate">
+            {titleDisplay}
+          </div>
           {providersInfo && providersInfo.length > 0 && (
             <ListProviders providersInfo={providersInfo} avatarClass="w-6 h-6" iconClass="w-3 h-3 text-primary" />
           )}

@@ -10,6 +10,7 @@ import { useRelativeTime } from "@/hooks/useRelativeTime";
 import { CustomErrorFallback } from "@/components/chat/traces/components/custom-error-fallback";
 import { TimelineContent } from "@/components/chat/traces/components/TimelineContent";
 import { GroupCardHeader } from "./header";
+import { IdWithCopy } from "./id-with-copy";
 
 interface GroupCardProps {
   group: GenericGroupDTO;
@@ -181,19 +182,10 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
   const messageRef = React.useRef<HTMLDivElement>(null);
   useRelativeTime(messageRef, startTimeInIsoFormat);
 
-  const bucketTimeDisplay = useMemo(() => {
-    // Handle thread groups
-    if (isThreadGroup(group)) {
-      return `Thread: ${group.group_key.thread_id.substring(0, 8)}...`;
-    }
-
-    // Handle run groups
-    if (isRunGroup(group)) {
-      return `Run: ${group.group_key.run_id.substring(0, 8)}...`;
-    }
-
-    // Handle time groups (default)
-    const date = new Date(timeBucket / 1000);
+  const titleDisplay = useMemo(() => {
+    // Use start_time for thread and run groups, timeBucket for time groups
+    const timeToDisplay = isTimeGroup(group) ? timeBucket : startTime;
+    const date = new Date(timeToDisplay / 1000);
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const yesterday = new Date(today);
@@ -206,24 +198,35 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
       hour12: true
     });
 
+    let baseDisplay: string;
+
     // Today: just show time
     if (bucketDate.getTime() === today.getTime()) {
-      return timeStr;
+      baseDisplay = timeStr;
     }
-
     // Yesterday: show "Yesterday" with time
-    if (bucketDate.getTime() === yesterday.getTime()) {
-      return `Yesterday, ${timeStr}`;
+    else if (bucketDate.getTime() === yesterday.getTime()) {
+      baseDisplay = `Yesterday, ${timeStr}`;
+    }
+    // Older: show full date with time
+    else {
+      const dateStr = date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: now.getFullYear() === date.getFullYear() ? undefined : 'numeric'
+      });
+      baseDisplay = `${dateStr}, ${timeStr}`;
     }
 
-    // Older: show full date with time
-    const dateStr = date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: now.getFullYear() === date.getFullYear() ? undefined : 'numeric'
-    });
-    return `${dateStr}, ${timeStr}`;
-  }, [timeBucket, group]);
+    // Return React component with group-specific styling
+    if (isThreadGroup(group)) {
+      return <IdWithCopy label="Thread" fullId={group.group_key.thread_id} timeDisplay={baseDisplay} />;
+    } else if (isRunGroup(group)) {
+      return <IdWithCopy label="Run" fullId={group.group_key.run_id} timeDisplay={baseDisplay} />;
+    }
+
+    return <span title={baseDisplay}>{baseDisplay}</span>;
+  }, [timeBucket, group, startTime]);
 
   return (
     <motion.div
@@ -243,7 +246,7 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
       >
         <GroupCardHeader
           isOpen={isOpen}
-          bucketTimeDisplay={bucketTimeDisplay}
+          titleDisplay={titleDisplay}
           providersInfo={providersInfo}
           totalCost={totalCost}
           tokensInfo={tokensInfo}
