@@ -17,18 +17,16 @@ export const IdWithCopy: React.FC<IdWithCopyProps> = ({ label, fullId, timeDispl
     setTimeout(() => setIsCopied(false), 2000);
   }, [fullId]);
 
-  const shortId = fullId.substring(0, 8);
-
   return (
-    <span className="flex items-center gap-2">
+    <span className="flex items-center gap-4">
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
             <span
-              className={"flex items-center gap-1 text-xs w-[130px] font-mono  bg-muted px-1.5 py-0.5 rounded hover:bg-muted/80  transition-colors cursor-pointer " + (isCopied ? "text-green-500" : "text-muted-foreground hover:text-muted-foreground")}
+              className={"flex items-center font-normal gap-1 text-xs w-[130px] font-mono bg-muted px-1.5 py-0.5 rounded hover:bg-muted/80 transition-colors cursor-pointer " + (isCopied ? "text-green-500" : "text-zinc-300 hover:text-muted-foreground")}
               onClick={handleCopyId}
             >
-              {isCopied ? "✓ Copied!" : `${label}: ${shortId}...`}
+              <span className="truncate">{isCopied ? "✓ Copied!" : `${label}: ${fullId}`}</span>
             </span>
           </TooltipTrigger>
           <TooltipContent>
@@ -36,7 +34,6 @@ export const IdWithCopy: React.FC<IdWithCopyProps> = ({ label, fullId, timeDispl
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
-      <span className="text-muted-foreground/60">·</span>
       <span>{timeDisplay}</span>
     </span>
   );

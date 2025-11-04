@@ -43,9 +43,7 @@ export const GroupCardHeader: React.FC<GroupCardHeaderProps> = ({
           <div className="text-sm font-semibold text-primary truncate">
             {titleDisplay}
           </div>
-          {providersInfo && providersInfo.length > 0 && (
-            <ListProviders providersInfo={providersInfo} avatarClass="w-6 h-6" iconClass="w-3 h-3 text-primary" />
-          )}
+
           {errors && errors.length > 0 ? (
             <TooltipProvider>
               <Tooltip>
@@ -75,8 +73,11 @@ export const GroupCardHeader: React.FC<GroupCardHeaderProps> = ({
       {/* Right: Stats and Errors */}
       <div className="grid items-center gap-4" style={{ gridTemplateColumns: CARD_STATS_GRID }}>
         <div className="flex flex-1 flex-col h-full justify-center items-end gap-0.5 cursor-pointer">
-          <span className="text-[10px] text-muted-foreground uppercase ">Model Calls</span>
-          <span className="text-xs font-semibold tabular-nums">{llm_calls}</span>
+          <span className="text-[10px] text-end text-muted-foreground uppercase ">Model Calls</span>
+          <div className="flex items-center gap-1.5 justify-end">
+            <ListProviders providersInfo={providersInfo} avatarClass="w-6 h-6" iconClass="w-3 h-3 text-primary" />
+            <span className="text-xs font-semibold tabular-nums">{llm_calls > 0 ? llm_calls : '_'}</span>
+          </div>
         </div>
 
         {/* Cost */}
