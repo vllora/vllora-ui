@@ -3,7 +3,7 @@ export { VlloraRouter } from './VlloraRouter';
 
 // Context providers and consumers
 export { AuthProvider, AuthConsumer } from '../contexts/AuthContext';
-export { ProjectProvider, ProjectConsumer } from '../contexts/ProjectContext';
+export { ProjectProvider, ProjectsConsumer } from '../contexts/ProjectContext';
 export { LocalModelsProvider, LocalModelsConsumer } from '../contexts/LocalModelsContext';
 export { ProviderKeysProvider, ProviderKeysConsumer } from '../contexts/ProviderKeysContext';
 
