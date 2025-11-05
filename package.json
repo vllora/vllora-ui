@@ -1,8 +1,12 @@
 {
-  "name": "ellora-ui",
+  "name": "@vllora/ui",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "./src/lib/index.tsx",
+  "exports": {
+    ".": "./src/lib/index.tsx",
+    "./styles": "./src/index.css"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
