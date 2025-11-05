@@ -293,7 +293,6 @@ export const fetchSingleGroup = async (props: {
     projectId,
     params,
   });
-
   return result.data.length > 0 ? result.data[0] : null;
 };
 

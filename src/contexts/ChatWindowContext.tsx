@@ -127,7 +127,6 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
   // Stabilize messageHierarchies to prevent unnecessary re-renders
   const messageHierarchies = useStableMessageHierarchies(unstableMessageHierarchies);
 
-  //console.log('===== messageHierarchies', messageHierarchies)
   // UI state
   const [currentInput, setCurrentInput] = useState<string>('');
   const [typing, setTyping] = useState(false);

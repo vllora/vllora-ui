@@ -8,6 +8,7 @@ import { Span } from "@/types/common-type";
 import { useGroupsPagination } from "@/hooks/useGroupsPagination";
 import { fetchGroupSpans, fetchSingleGroup, fetchBatchGroupSpans, GenericGroupDTO, isTimeGroup, isThreadGroup, isRunGroup } from "@/services/groups-api";
 import { toast } from "sonner";
+import { tryParseJson } from "@/utils/modelUtils";
 
 export type TracesPageContextType = ReturnType<typeof useTracesPageContext>;
 
@@ -292,13 +293,13 @@ export function useTracesPageContext(props: { projectId: string }) {
         setGroups(prev => prev.map(g => {
           // Match by group key
           if (isTimeGroup(g) && isTimeGroup(updatedGroup) &&
-              g.group_key.time_bucket === updatedGroup.group_key.time_bucket) {
+            g.group_key.time_bucket === updatedGroup.group_key.time_bucket) {
             return updatedGroup;
           } else if (isThreadGroup(g) && isThreadGroup(updatedGroup) &&
-                     g.group_key.thread_id === updatedGroup.group_key.thread_id) {
+            g.group_key.thread_id === updatedGroup.group_key.thread_id) {
             return updatedGroup;
           } else if (isRunGroup(g) && isRunGroup(updatedGroup) &&
-                     g.group_key.run_id === updatedGroup.group_key.run_id) {
+            g.group_key.run_id === updatedGroup.group_key.run_id) {
             return updatedGroup;
           }
           return g;
@@ -495,7 +496,9 @@ export function useTracesPageContext(props: { projectId: string }) {
           );
 
           if (group) {
-            refreshSingleGroupStat(group);
+            setTimeout(() => {
+              refreshSingleGroupStat(group);
+            }, 1000);
             loadGroupSpans(group);
           }
           return prev;
@@ -507,7 +510,7 @@ export function useTracesPageContext(props: { projectId: string }) {
   // Handle events for thread mode
   const handleThreadModeEvent = useCallback((event: ProjectEventUnion) => {
     let capturedNewSpan: any = null;
-    let capturedThreadId: string | null = null;
+    let capturedThreadId = event.thread_id;
 
     // 1. Update flattenSpans and capture thread ID
     setFlattenSpans(prevSpans => {
@@ -516,7 +519,6 @@ export function useTracesPageContext(props: { projectId: string }) {
 
       if (newSpan && newSpan.thread_id) {
         capturedNewSpan = newSpan;
-        capturedThreadId = newSpan.thread_id;
       }
 
       return updatedSpans;
@@ -561,6 +563,38 @@ export function useTracesPageContext(props: { projectId: string }) {
         return updated.sort((a, b) => b.start_time_us - a.start_time_us);
       });
     }
+    
+    if (event.type === 'Custom' && event.event.type === 'span_end' && event.event.operation_name === 'api_invoke') {
+      const eventApiInvoke = event.event
+      let apiInvokAtt = eventApiInvoke.attributes
+      let requestStr = apiInvokAtt?.['request']
+      let requestJson = tryParseJson(requestStr)
+      if (requestJson?.model) {
+        setGroups(prev => {
+          const groupIndex = prev.findIndex(g =>
+            isThreadGroup(g) && g.group_key.thread_id === capturedThreadId
+          );
+          if (groupIndex !== -1) {
+            let requestModelsGroup = prev[groupIndex].request_models
+            let usedModelsGroup = prev[groupIndex].used_models
+            
+            requestModelsGroup.push(requestJson.model)
+            let uniqueRequestModelsGroup = Array.from(new Set(requestModelsGroup))
+            usedModelsGroup.push(requestJson.model)
+            let uniqueUsedModelsGroup = Array.from(new Set(usedModelsGroup))
+            let result = [...prev]
+            result[groupIndex].request_models = uniqueRequestModelsGroup
+            result[groupIndex].used_models = uniqueUsedModelsGroup
+            if(result[groupIndex].llm_calls < uniqueUsedModelsGroup.length){
+              result[groupIndex].llm_calls = uniqueUsedModelsGroup.length
+            }
+            return result
+          }
+          return prev
+        })
+      }
+
+    }
 
     // 3. Refresh group stats when run finishes
     if ((event.type === 'RunFinished' || event.type === 'RunError') && capturedThreadId) {
@@ -572,7 +606,9 @@ export function useTracesPageContext(props: { projectId: string }) {
           );
 
           if (group) {
-            refreshSingleGroupStat(group);
+            setTimeout(() => {
+              refreshSingleGroupStat(group);
+            }, 4000);
             loadGroupSpans(group);
           }
           return prev;
@@ -597,9 +633,9 @@ export function useTracesPageContext(props: { projectId: string }) {
         break;
     }
   }, [groupByMode, handleRunModeEvent, handleTimeModeEvent, handleThreadModeEvent]);
-  
-  
-  
+
+
+
   useDebugControl({ handleEvent, channel_name: 'debug-traces-timeline-events' });
   // Trace expansion state
 
