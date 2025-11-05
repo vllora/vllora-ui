@@ -10,7 +10,7 @@ const CARD_STATS_GRID = '90px 70px 110px';
 
 interface GroupCardHeaderProps {
   isOpen: boolean;
-  bucketTimeDisplay: string;
+  titleDisplay: React.ReactNode;
   providersInfo: { provider: string; models: string[] }[];
   totalCost: number;
   tokensInfo: {
@@ -23,7 +23,7 @@ interface GroupCardHeaderProps {
 
 export const GroupCardHeader: React.FC<GroupCardHeaderProps> = ({
   isOpen,
-  bucketTimeDisplay,
+  titleDisplay,
   providersInfo,
   totalCost,
   tokensInfo,
@@ -40,12 +40,10 @@ export const GroupCardHeader: React.FC<GroupCardHeaderProps> = ({
           <ChevronRight className="w-5 h-5 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0" />
         )}
         <div className="flex items-center gap-3 min-w-0">
-          <h3 className="text-sm font-semibold text-primary truncate" title={bucketTimeDisplay}>
-            {bucketTimeDisplay}
-          </h3>
-          {providersInfo && providersInfo.length > 0 && (
-            <ListProviders providersInfo={providersInfo} avatarClass="w-6 h-6" iconClass="w-3 h-3 text-primary" />
-          )}
+          <div className="text-sm font-semibold text-primary truncate">
+            {titleDisplay}
+          </div>
+
           {errors && errors.length > 0 ? (
             <TooltipProvider>
               <Tooltip>
@@ -75,8 +73,11 @@ export const GroupCardHeader: React.FC<GroupCardHeaderProps> = ({
       {/* Right: Stats and Errors */}
       <div className="grid items-center gap-4" style={{ gridTemplateColumns: CARD_STATS_GRID }}>
         <div className="flex flex-1 flex-col h-full justify-center items-end gap-0.5 cursor-pointer">
-          <span className="text-[10px] text-muted-foreground uppercase ">Model Calls</span>
-          <span className="text-xs font-semibold tabular-nums">{llm_calls}</span>
+          <span className="text-[10px] text-end text-muted-foreground uppercase ">Model Calls</span>
+          <div className="flex items-center gap-1.5 justify-end">
+            <ListProviders providersInfo={providersInfo} avatarClass="w-6 h-6" iconClass="w-3 h-3 text-primary" />
+            <span className="text-xs font-semibold tabular-nums">{llm_calls > 0 ? llm_calls : '_'}</span>
+          </div>
         </div>
 
         {/* Cost */}

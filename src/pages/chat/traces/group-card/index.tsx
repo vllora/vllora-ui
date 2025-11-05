@@ -1,17 +1,19 @@
-import React, { useCallback, useMemo, useEffect } from "react";
+import React, { useCallback, useMemo, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { ErrorBoundary } from "react-error-boundary";
-import { GroupDTO } from "@/services/groups-api";
+import { GenericGroupDTO, isTimeGroup, isThreadGroup, isRunGroup } from "@/services/groups-api";
 import { TracesPageConsumer } from "@/contexts/TracesPageContext";
+import { HideGroupKey } from "@/hooks/useGroupsPagination";
 import { Loader2 } from "lucide-react";
 import { useRelativeTime } from "@/hooks/useRelativeTime";
 import { CustomErrorFallback } from "@/components/chat/traces/components/custom-error-fallback";
 import { TimelineContent } from "@/components/chat/traces/components/TimelineContent";
 import { GroupCardHeader } from "./header";
+import { IdWithCopy } from "./id-with-copy";
 
 interface GroupCardProps {
-  group: GroupDTO;
+  group: GenericGroupDTO;
   index?: number;
 }
 
@@ -23,7 +25,9 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
     setHideGroups,
     loadGroupSpans,
     groupSpansMap,
-    loadingGroupsByTimeBucket,
+    threadSpansMap,
+    runSpansMap,
+    loadingGroups,
     selectedSpanId,
     setSelectedSpanId,
     setSelectedRunId,
@@ -33,50 +37,117 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
     setCollapsedSpans,
   } = TracesPageConsumer();
 
-  const timeBucket = group.time_bucket;
-  const isOpen =  useMemo(() => {
-    return !hideGroups.find(g => g.time_bucket === timeBucket);
-  }, [hideGroups, group.time_bucket]);
+  // Get the appropriate key based on group type
+  const groupKey: HideGroupKey = useMemo(() => {
+    if (isTimeGroup(group)) {
+      return { type: 'time', time_bucket: group.group_key.time_bucket };
+    } else if (isThreadGroup(group)) {
+      return { type: 'thread', thread_id: group.group_key.thread_id };
+    } else if (isRunGroup(group)) {
+      return { type: 'run', run_id: group.group_key.run_id };
+    }
+    // Fallback (shouldn't happen)
+    return { type: 'time', time_bucket: 0 };
+  }, [group]);
 
-  const allSpans = groupSpansMap[timeBucket] || [];
-  const isLoadingSpans = loadingGroupsByTimeBucket.has(timeBucket);
+  const timeBucket = isTimeGroup(group) ? group.group_key.time_bucket : 0;
+
+  // Check if this group is hidden (collapsed)
+  const isOpen = useMemo(() => {
+    return !hideGroups.some(hidden => {
+      if (hidden.type === 'time' && groupKey.type === 'time') {
+        return hidden.time_bucket === groupKey.time_bucket;
+      } else if (hidden.type === 'thread' && groupKey.type === 'thread') {
+        return hidden.thread_id === groupKey.thread_id;
+      } else if (hidden.type === 'run' && groupKey.type === 'run') {
+        return hidden.run_id === groupKey.run_id;
+      }
+      return false;
+    });
+  }, [hideGroups, groupKey]);
+
+  // Get spans based on group type
+  const allSpans = useMemo(() => {
+    if (isTimeGroup(group)) {
+      return groupSpansMap[timeBucket] || [];
+    } else if (isThreadGroup(group)) {
+      return threadSpansMap[group.group_key.thread_id] || [];
+    } else if (isRunGroup(group)) {
+      return runSpansMap[group.group_key.run_id] || [];
+    }
+    return [];
+  }, [group, groupSpansMap, threadSpansMap, runSpansMap, timeBucket]);
+
+  // Check if this specific group is loading
+  const isLoadingSpans = useMemo(() => {
+    if (groupKey.type === 'time') {
+      return loadingGroups.has(`time-${groupKey.time_bucket}`);
+    } else if (groupKey.type === 'thread') {
+      return loadingGroups.has(`thread-${groupKey.thread_id}`);
+    } else if (groupKey.type === 'run') {
+      return loadingGroups.has(`run-${groupKey.run_id}`);
+    }
+    return false;
+  }, [loadingGroups, groupKey]);
+
+  // Track previous isOpen state to detect when user manually toggles
+  const prevIsOpenRef = useRef(isOpen);
 
   useEffect(() => {
-    if (isOpen) {
-      loadGroupSpans(timeBucket);
+    const wasOpen = prevIsOpenRef.current;
+    prevIsOpenRef.current = isOpen;
+
+    // Only load if changed from closed to open (user manually reopened)
+    // Skip if it was already open (initial batch load handles that)
+    if (!wasOpen && isOpen) {
+      loadGroupSpans(group);
     }
-  }, [isOpen, loadGroupSpans, timeBucket]);
+  }, [isOpen, loadGroupSpans, group]);
 
   const toggleAccordion = useCallback(() => {
     setHideGroups(prev => {
-      const isCurrentlyClosed = prev.some(g => g.time_bucket === timeBucket);
+      const isCurrentlyClosed = prev.some(hidden => {
+        if (hidden.type === 'time' && groupKey.type === 'time') {
+          return hidden.time_bucket === groupKey.time_bucket;
+        } else if (hidden.type === 'thread' && groupKey.type === 'thread') {
+          return hidden.thread_id === groupKey.thread_id;
+        } else if (hidden.type === 'run' && groupKey.type === 'run') {
+          return hidden.run_id === groupKey.run_id;
+        }
+        return false;
+      });
+
       if (isCurrentlyClosed) {
-        
-        return prev.filter(g => g.time_bucket !== timeBucket);
+        // Remove from hideGroups (open it)
+        return prev.filter(hidden => {
+          if (hidden.type === 'time' && groupKey.type === 'time') {
+            return hidden.time_bucket !== groupKey.time_bucket;
+          } else if (hidden.type === 'thread' && groupKey.type === 'thread') {
+            return hidden.thread_id !== groupKey.thread_id;
+          } else if (hidden.type === 'run' && groupKey.type === 'run') {
+            return hidden.run_id !== groupKey.run_id;
+          }
+          return true;
+        });
       } else {
-        return [...prev, { time_bucket: timeBucket, tab: 'trace' }];
+        // Add to hideGroups (close it)
+        return [...prev, groupKey];
       }
     });
-    // setOpenGroups(prev => {
-    //   const isCurrentlyOpen = prev.some(g => g.time_bucket === timeBucket);
-    //   if (isCurrentlyOpen) {
-    //     return prev.filter(g => g.time_bucket !== timeBucket);
-    //   } else {
-    //     return [...prev, { time_bucket: timeBucket, tab: 'trace' }];
-    //   }
-    // });
-  }, [timeBucket, setHideGroups]);
+  }, [groupKey, setHideGroups]);
 
   const usedModels = group.used_models || [];
   const uniqueModels = Array.from(new Set(usedModels));
 
-  uniqueModels.sort((a, b) => {
+  uniqueModels.sort((a: string, b: string) => {
     if (a.startsWith("langdb")) return -1;
     if (b.startsWith("langdb")) return 1;
     return 0;
   });
 
-  const modelNamesInvoked = uniqueModels.filter(name => name && typeof name === 'string' && name.trim() !== '');
+  const modelNamesInvoked = uniqueModels.filter((name: unknown): name is string =>
+    typeof name === 'string' && name.trim() !== ''
+  );
 
 
   // const providers = Array.from(new Set(modelNamesInvoked.map(getProviderName)));
@@ -86,7 +157,7 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
     const inputModels = modelNamesInvoked || [];
     const providersMap: { provider: string, models: string[] }[] = [];
 
-    inputModels.forEach(modelFullName => {
+    inputModels.forEach((modelFullName: string) => {
       if (modelFullName && modelFullName.includes('/')) {
         const [provider, model] = modelFullName.split('/');
         const existingProviderIndex = providersMap.findIndex(p => p.provider === provider);
@@ -119,8 +190,10 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
   const messageRef = React.useRef<HTMLDivElement>(null);
   useRelativeTime(messageRef, startTimeInIsoFormat);
 
-  const bucketTimeDisplay = useMemo(() => {
-    const date = new Date(timeBucket / 1000);
+  const titleDisplay = useMemo(() => {
+    // Use start_time for thread and run groups, timeBucket for time groups
+    const timeToDisplay = isTimeGroup(group) ? timeBucket : startTime;
+    const date = new Date(timeToDisplay / 1000);
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const yesterday = new Date(today);
@@ -133,24 +206,35 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
       hour12: true
     });
 
+    let baseDisplay: string;
+
     // Today: just show time
     if (bucketDate.getTime() === today.getTime()) {
-      return timeStr;
+      baseDisplay = timeStr;
     }
-
     // Yesterday: show "Yesterday" with time
-    if (bucketDate.getTime() === yesterday.getTime()) {
-      return `Yesterday, ${timeStr}`;
+    else if (bucketDate.getTime() === yesterday.getTime()) {
+      baseDisplay = `Yesterday, ${timeStr}`;
+    }
+    // Older: show full date with time
+    else {
+      const dateStr = date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: now.getFullYear() === date.getFullYear() ? undefined : 'numeric'
+      });
+      baseDisplay = `${dateStr}, ${timeStr}`;
     }
 
-    // Older: show full date with time
-    const dateStr = date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: now.getFullYear() === date.getFullYear() ? undefined : 'numeric'
-    });
-    return `${dateStr}, ${timeStr}`;
-  }, [timeBucket]);
+    // Return React component with group-specific styling
+    if (isThreadGroup(group)) {
+      return <IdWithCopy label="Thread" fullId={group.group_key.thread_id} timeDisplay={baseDisplay} />;
+    } else if (isRunGroup(group)) {
+      return <IdWithCopy label="Run" fullId={group.group_key.run_id} timeDisplay={baseDisplay} />;
+    }
+
+    return <span title={baseDisplay}>{baseDisplay}</span>;
+  }, [timeBucket, group, startTime]);
 
   return (
     <motion.div
@@ -170,7 +254,7 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
       >
         <GroupCardHeader
           isOpen={isOpen}
-          bucketTimeDisplay={bucketTimeDisplay}
+          titleDisplay={titleDisplay}
           providersInfo={providersInfo}
           totalCost={totalCost}
           tokensInfo={tokensInfo}

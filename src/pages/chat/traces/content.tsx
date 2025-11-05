@@ -10,21 +10,16 @@ export function TracesPageContent() {
     detailSpan,
     spansOfSelectedRun,
     setDetailSpanId,
-    refreshRuns,
     refreshGroups,
     groupByMode,
     setGroupByMode,
-    bucketSize,
-    setBucketSize,
+    duration,
+    setDuration,
   } = TracesPageConsumer();
 
   useEffect(() => {
-    if (groupByMode === 'run') {
-      refreshRuns();
-    } else {
-      refreshGroups();
-    }
-  }, [groupByMode, bucketSize]);
+    refreshGroups();
+  }, [groupByMode, duration]);
 
   return <div className="flex flex-col flex-1 h-full overflow-hidden">
     {/* Grouping Controls */}
@@ -32,8 +27,8 @@ export function TracesPageContent() {
       <GroupingSelector
         groupByMode={groupByMode}
         onGroupByModeChange={setGroupByMode}
-        bucketSize={bucketSize}
-        onBucketSizeChange={setBucketSize}
+        duration={duration}
+        onDurationChange={setDuration}
       />
     </div>
 
