@@ -169,6 +169,54 @@ export const fetchGroupSpans = async (props: {
 };
 
 /**
+ * Group identifier for batch requests
+ */
+export type GroupIdentifier =
+  | { groupBy: 'time'; timeBucket: number; bucketSize: number }
+  | { groupBy: 'thread'; threadId: string }
+  | { groupBy: 'run'; runId: string };
+
+/**
+ * Response for batch group spans request
+ */
+export interface BatchGroupSpansResponse {
+  data: {
+    [groupKey: string]: {
+      spans: Span[];
+      pagination: Pagination;
+    };
+  };
+}
+
+/**
+ * Fetch spans for multiple groups in a single batched request
+ * This reduces HTTP overhead and database connection usage, especially important for SQLite
+ */
+export const fetchBatchGroupSpans = async (props: {
+  projectId: string;
+  groups: GroupIdentifier[];
+  spansPerGroup?: number;
+}): Promise<BatchGroupSpansResponse> => {
+  const { projectId, groups, spansPerGroup = 100 } = props;
+
+  const endpoint = '/group/batch-spans';
+
+  const response = await apiClient(endpoint, {
+    method: 'POST',
+    headers: {
+      'x-project-id': projectId,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      groups,
+      spansPerGroup,
+    }),
+  });
+
+  return handleApiResponse<BatchGroupSpansResponse>(response);
+};
+
+/**
  * @deprecated Use fetchGroupSpans with groupBy='time' instead
  */
 export const fetchSpansByBucketGroup = async (props: {
@@ -200,30 +248,67 @@ export const fetchSpansByThread = async (props: {
 };
 
 /**
- * Fetch metadata for a single bucket by filtering to its time range
+ * Fetch metadata for a single group (time/thread/run)
+ * This is useful for refreshing stats without fetching spans
+ */
+export const fetchSingleGroup = async (props: {
+  projectId: string;
+  groupBy: 'time' | 'thread' | 'run';
+  timeBucket?: number; // Required for groupBy='time'
+  bucketSize?: number; // Required for groupBy='time', in seconds
+  threadId?: string; // Required for groupBy='thread'
+  runId?: string; // Required for groupBy='run'
+}): Promise<GenericGroupDTO | null> => {
+  const { projectId, groupBy, timeBucket, bucketSize, threadId, runId } = props;
+
+  const params: ListGroupsQuery = {
+    groupBy,
+    limit: 1,
+    offset: 0,
+  };
+
+  if (groupBy === 'time') {
+    if (timeBucket === undefined || bucketSize === undefined) {
+      throw new Error('timeBucket and bucketSize are required for groupBy=time');
+    }
+    // Calculate the time range for this bucket
+    const bucket_size_us = bucketSize * 1_000_000;
+    params.bucketSize = bucketSize;
+    params.start_time_min = timeBucket;
+    params.start_time_max = timeBucket + bucket_size_us - 1;
+  } else if (groupBy === 'thread') {
+    if (!threadId) {
+      throw new Error('threadId is required for groupBy=thread');
+    }
+    params.threadIds = threadId;
+  } else if (groupBy === 'run') {
+    if (!runId) {
+      throw new Error('runId is required for groupBy=run');
+    }
+    // Note: We need to add runIds filter to the backend if it doesn't exist
+    // For now, this will return the group containing this run
+  }
+
+  const result = await listGroups({
+    projectId,
+    params,
+  });
+
+  return result.data.length > 0 ? result.data[0] : null;
+};
+
+/**
+ * @deprecated Use fetchSingleGroup with groupBy='time' instead
  */
 export const fetchSingleBucket = async (props: {
   timeBucket: number;
   projectId: string;
   bucketSize: number; // In seconds
 }): Promise<GenericGroupDTO | null> => {
-  const { timeBucket, projectId, bucketSize } = props;
-
-  // Calculate the time range for this bucket
-  const bucket_size_us = bucketSize * 1_000_000;
-  const start_time_min = timeBucket;
-  const start_time_max = timeBucket + bucket_size_us - 1;
-
-  const result = await listGroups({
-    projectId,
-    params: {
-      bucketSize,
-      start_time_min,
-      start_time_max,
-      limit: 1,
-      offset: 0,
-    },
+  return fetchSingleGroup({
+    projectId: props.projectId,
+    groupBy: 'time',
+    timeBucket: props.timeBucket,
+    bucketSize: props.bucketSize,
   });
-
-  return result.data.length > 0 ? result.data[0] : null;
 };

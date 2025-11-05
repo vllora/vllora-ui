@@ -1,11 +1,11 @@
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { GroupByMode, BucketSize } from "@/contexts/TracesPageContext";
+import { GroupByMode, Duration } from "@/contexts/TracesPageContext";
 
 interface GroupingSelectorProps {
   groupByMode: GroupByMode;
   onGroupByModeChange: (mode: GroupByMode) => void;
-  bucketSize: BucketSize;
-  onBucketSizeChange: (size: BucketSize) => void;
+  duration: Duration;
+  onDurationChange: (size: Duration) => void;
 }
 
 const BUCKET_OPTIONS = [
@@ -19,17 +19,17 @@ const BUCKET_OPTIONS = [
 export function GroupingSelector({
   groupByMode,
   onGroupByModeChange,
-  bucketSize,
-  onBucketSizeChange,
+  duration,
+  onDurationChange,
 }: GroupingSelectorProps) {
   const handleModeChange = (value: string) => {
     if (!value) return;
     onGroupByModeChange(value as GroupByMode);
   };
 
-  const handleBucketSizeChange = (value: string) => {
+  const handleDurationChange = (value: string) => {
     if (!value) return;
-    onBucketSizeChange(Number(value) as BucketSize);
+    onDurationChange(Number(value) as Duration);
   };
 
   return (
@@ -52,8 +52,8 @@ export function GroupingSelector({
             Run
           </ToggleGroupItem>
           <ToggleGroupItem
-            value="bucket"
-            aria-label="Group by time bucket"
+            value="time"
+            aria-label="Group by time"
             className="px-3 py-0.5 text-xs h-6 font-medium rounded-md data-[state=on]:bg-[rgb(var(--theme-500))] data-[state=on]:text-white data-[state=on]:shadow-md data-[state=on]:shadow-[rgb(var(--theme-500))]/20 data-[state=off]:text-muted-foreground data-[state=off]:hover:text-foreground data-[state=off]:hover:bg-muted/20"
           >
             Time
@@ -68,14 +68,14 @@ export function GroupingSelector({
         </ToggleGroup>
       </div>
 
-      {/* Bucket Size Section - Only show when bucket mode is selected */}
-      {groupByMode === 'bucket' && (
+      {/* Duration Section - Only show when time mode is selected */}
+      {groupByMode === 'time' && (
         <div className="inline-flex items-center gap-3">
           <span className="text-sm font-medium text-muted-foreground">Duration:</span>
           <ToggleGroup
             type="single"
-            value={String(bucketSize)}
-            onValueChange={handleBucketSizeChange}
+            value={String(duration)}
+            onValueChange={handleDurationChange}
             className="inline-flex items-center gap-1 bg-[#151515] rounded-lg p-1 border border-border/30 shadow-sm"
           >
             {BUCKET_OPTIONS.map((option) => (

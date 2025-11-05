@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useEffect } from "react";
+import React, { useCallback, useMemo, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { ErrorBoundary } from "react-error-boundary";
@@ -90,8 +90,16 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
     return false;
   }, [loadingGroups, groupKey]);
 
+  // Track previous isOpen state to detect when user manually toggles
+  const prevIsOpenRef = useRef(isOpen);
+
   useEffect(() => {
-    if (isOpen) {
+    const wasOpen = prevIsOpenRef.current;
+    prevIsOpenRef.current = isOpen;
+
+    // Only load if changed from closed to open (user manually reopened)
+    // Skip if it was already open (initial batch load handles that)
+    if (!wasOpen && isOpen) {
       loadGroupSpans(group);
     }
   }, [isOpen, loadGroupSpans, group]);
