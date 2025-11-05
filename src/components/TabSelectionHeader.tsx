@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { DebugControl } from './DebugControl';
 import { GitHubLink } from './GitHubLink';
 import { BackendUrlInfo } from './BackendUrlInfo';
+import { SlackLink } from './SlackLink';
 
 interface TabSelectionHeaderProps {
   currentTab: string;
@@ -73,6 +74,9 @@ export function TabSelectionHeader({
         {/* GitHub link */}
         <GitHubLink />
 
+        {/* Slack link */}
+        <SlackLink />
+        
         {/* Debug control: Pause/Resume */}
         <DebugControl />
       </div>

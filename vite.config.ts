@@ -12,7 +12,7 @@ export default defineConfig({
           if (req.url === '/api/env') {
             res.setHeader('Content-Type', 'application/json')
             res.end(JSON.stringify({
-              VITE_BACKEND_PORT: Number(process.env.VITE_BACKEND_PORT) || 8080
+              VITE_BACKEND_PORT: Number(process.env.VITE_BACKEND_PORT) || 9090
             }))
             return
           }
