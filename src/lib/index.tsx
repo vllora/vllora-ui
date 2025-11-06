@@ -3,6 +3,7 @@ export { AuthProvider, AuthConsumer } from '../contexts/AuthContext';
 export { ProjectsProvider, ProjectsConsumer } from '../contexts/ProjectContext';
 export { LocalModelsProvider, LocalModelsConsumer } from '../contexts/LocalModelsContext';
 export { ProviderKeysProvider, ProviderKeysConsumer } from '../contexts/ProviderKeysContext';
+export { ProjectEventsProvider, ProjectEventsConsumer } from '../contexts/project-events';
 
 // Theme provider
 export { ThemeProvider } from '../components/theme-provider';
