@@ -22,7 +22,8 @@ interface ThreadsProviderProps {
 }
 
 export function useThreads({ projectId }: ThreadsProviderProps) {
-  const {  isDefaultProject } = ProjectsConsumer();
+  const { isDefaultProject, project_id_from } = ProjectsConsumer();
+
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   // Base state management
@@ -82,7 +83,7 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
     params.set('threadId', inputThreadId);
     params.set('tab', 'threads');
 
-    if (!isDefaultProject(projectId)) {
+    if (!isDefaultProject(projectId) && project_id_from === 'query_string') {
       params.set('project_id', projectId);
     }
 
@@ -91,12 +92,17 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
       const lastModel = inputModels[inputModels.length - 1];
       params.set('model', lastModel);
     }
+    if (project_id_from === 'query_string') {
+      navigate(`/chat?${params.toString()}`);
+    } else {
+      navigate(`/projects/${projectId}/chat?${params.toString()}`);
+    }
 
-    navigate(`/chat?${params.toString()}`);
-  }, [projectId, navigate, searchParams, isDefaultProject, selectedThreadId]);
 
-  
-  
+  }, [projectId, navigate, searchParams, isDefaultProject, selectedThreadId, project_id_from]);
+
+
+
   const handleEvent = useCallback((event: ProjectEventUnion) => {
     if (event.thread_id) {
       setThreads((prevThreads) => {
