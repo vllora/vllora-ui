@@ -8,9 +8,10 @@ interface CodeBlockProps {
   code: string;
   language?: string;
   hideTitle?: boolean;
+  showLineNumber?: boolean;
 }
 
-export const CodeBlock: React.FC<CodeBlockProps> = ({ title, code, language = 'bash', hideTitle = false }) => {
+export const CodeBlock: React.FC<CodeBlockProps> = ({ title, code, language = 'bash', hideTitle = false, showLineNumber = false }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -46,7 +47,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ title, code, language = 'b
                 overflowWrap: 'anywhere',
               }
             }}
-            showLineNumbers={false}
+            showLineNumbers={showLineNumber}
           >
             {code}
           </SyntaxHighlighter>
