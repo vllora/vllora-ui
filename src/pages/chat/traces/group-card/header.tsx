@@ -40,7 +40,7 @@ export const GroupCardHeader: React.FC<GroupCardHeaderProps> = ({
           <ChevronRight className="w-5 h-5 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0" />
         )}
         <div className="flex items-center gap-3 min-w-0">
-          <div className="text-sm font-semibold text-primary truncate">
+          <div className="text-sm font-semibold text-zinc-300 truncate">
             {titleDisplay}
           </div>
 
