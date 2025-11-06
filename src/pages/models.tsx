@@ -47,7 +47,10 @@ function getModelType(providerName: string, providersData: any[]): 'remote' | 'o
   return 'unknown';
 }
 
-export function ModelsPage() {
+export function ModelsPage(props: {
+  hideBackBtn?: boolean;
+}) {
+  const { hideBackBtn } = props;
   const { models: localModels, loading: localLoading, error: localError, refetchModels: localRefetch } = LocalModelsConsumer();
   const { providers } = ProviderKeysConsumer();
   const navigate = useNavigate();
@@ -68,7 +71,8 @@ export function ModelsPage() {
         {/* Page Header */}
         <div className="mb-6">
           <div className="flex items-center gap-3 mb-2">
-            <Button
+            {!hideBackBtn && (
+              <Button
               variant="ghost"
               size="sm"
               onClick={() => navigate('/')}
@@ -76,7 +80,7 @@ export function ModelsPage() {
             >
               <ArrowLeft className="w-4 h-4" />
               Back
-            </Button>
+            </Button>)}
             <h1 className="text-3xl font-bold">Browse Models</h1>
           </div>
           <p className="text-muted-foreground">

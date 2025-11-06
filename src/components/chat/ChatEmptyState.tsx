@@ -2,6 +2,7 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { CodeBlock } from '@/components/chat/traces/components/CodeBlock';
 import { getBackendUrl } from '@/config/api';
+import { CurrentAppConsumer } from '@/contexts/CurrentAppContext';
 
 interface ChatEmptyStateProps {
   onNewChat: () => void;
@@ -12,6 +13,7 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({ onNewChat, proje
   const searchParam = new URLSearchParams(window.location.search);
   const threadIdFromUrl = searchParam.get('threadId');
   const model = searchParam.get('model') || 'openai/gpt-4o-mini';
+  const { app_mode } = CurrentAppConsumer();
 
   // Only include x-project-id if project_id exists
   const projectIdHeader = projectId
@@ -48,8 +50,8 @@ ${projectIdHeader}${threadIdHeader}  -H 'content-type: application/json' \\
                 Welcome to
               </h1>
               <img
-                src="/logo-dark.svg"
-                alt="Vllora"
+                src={app_mode === 'vllora' ? "/logo-dark.svg" : "/langdb-logo-with-text.jpeg"}
+                alt={app_mode === 'vllora' ? "Vllora" : "Langdb"}
                 className="h-12 w-auto transition-transform hover:scale-105"
               />
             </div>
