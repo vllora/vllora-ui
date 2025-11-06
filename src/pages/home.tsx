@@ -11,6 +11,7 @@ import { ProviderCredentialModal } from '@/pages/settings/ProviderCredentialModa
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { useNavigate } from "react-router";
 import { LocalModel } from '@/types/models';
+import { CurrentAppConsumer } from '@/lib';
 
 // Helper function to get top models based on benchmark ranking
 function getTopModelsByBenchmark(models: LocalModel[], limit: number = 12): LocalModel[] {
@@ -22,7 +23,7 @@ function getTopModelsByBenchmark(models: LocalModel[], limit: number = 12): Loca
   });
 
   // Filter models that have benchmark info with ranks
-  const modelsWithRank = sortedByDate.filter(m => 
+  const modelsWithRank = sortedByDate.filter(m =>
     m.benchmark_info?.rank && Object.keys(m.benchmark_info.rank).length > 0
   );
 
@@ -36,7 +37,7 @@ function getTopModelsByBenchmark(models: LocalModel[], limit: number = 12): Loca
 
   // For each category, get top 5 models (by rank, lower is better)
   const selectedModelNames = new Set<string>();
-  
+
   allCategories.forEach(category => {
     const modelsInCategory = modelsWithRank
       .filter(m => m.benchmark_info?.rank?.[category] !== undefined)
@@ -69,8 +70,9 @@ function getTopModelsByBenchmark(models: LocalModel[], limit: number = 12): Loca
 
 export function HomePage() {
   const { models: localModels, loading: localLoading, error: localError, refetchModels: localRefetch } = LocalModelsConsumer();
-  const { currentProjectId, isDefaultProject } = ProjectsConsumer();
+  const { currentProjectId, isDefaultProject, project_id_from } = ProjectsConsumer();
   const { providers } = ProviderKeysConsumer();
+  const { app_mode } = CurrentAppConsumer()
   const navigate = useNavigate();
 
   // Create provider configuration status mapping
@@ -87,7 +89,7 @@ export function HomePage() {
   const topModels = useMemo(() => {
     const targetCardCount = 12;
     const selectedModels = getTopModelsByBenchmark(localModels, targetCardCount);
-    
+
     // Return exactly 12 cards (4 × 3 grid)
     return selectedModels.slice(0, targetCardCount);
   }, [localModels]);
@@ -95,7 +97,7 @@ export function HomePage() {
   return (
     <section className="flex-1 flex flex-col overflow-auto bg-background text-foreground w-full">
       <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-12">
-        
+
         {/* Quick Links Section */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           <Card
@@ -103,11 +105,12 @@ export function HomePage() {
             onClick={() => {
               // Navigate to chat while preserving project context
               const params = new URLSearchParams();
-              if (currentProjectId && !isDefaultProject(currentProjectId)) {
+              if (currentProjectId && !isDefaultProject(currentProjectId) && project_id_from === 'query_string') {
                 params.set('project_id', currentProjectId);
               }
               const queryString = params.toString();
-              navigate(`/chat${queryString ? '?' + queryString : ''}`);
+              const currentLocation = window.location
+              navigate(`${currentLocation.pathname}/chat${queryString ? '?' + queryString : ''}`);
             }}
           >
             <CardContent className="flex items-center gap-4 p-6">
@@ -128,11 +131,12 @@ export function HomePage() {
               // Navigate to traces while preserving project context
               const params = new URLSearchParams();
               params.set('tab', 'traces');
-              if (currentProjectId && !isDefaultProject(currentProjectId)) {
+              if (currentProjectId && !isDefaultProject(currentProjectId) && project_id_from === 'query_string') {
                 params.set('project_id', currentProjectId);
               }
               const queryString = params.toString();
-              navigate(`/chat?${queryString}`);
+              const currentLocation = window.location
+              navigate(`${currentLocation.pathname}/chat?${queryString}`);
             }}
           >
             <CardContent className="flex items-center gap-4 p-6">
@@ -149,7 +153,7 @@ export function HomePage() {
 
           <Card
             className="cursor-pointer hover:bg-accent/50 transition-colors"
-            onClick={() => window.open('https://vllora.dev/docs', '_blank')}
+            onClick={() => window.open(app_mode === 'vllora' ? 'https://vllora.dev/docs' : 'https://docs.langdb.ai/', '_blank')}
           >
             <CardContent className="flex items-center gap-4 p-6">
               <div className="p-3 rounded-lg bg-[rgb(var(--theme-500))]/10">
@@ -157,7 +161,7 @@ export function HomePage() {
               </div>
               <div>
                 <h3 className="font-semibold text-lg">Documentation</h3>
-                <p className="text-muted-foreground text-sm">Learn how to use vLLora</p>
+                <p className="text-muted-foreground text-sm">Learn how to use {app_mode === 'vllora' ? 'vLLora' : 'LangDB'}</p>
               </div>
               <ExternalLink className="w-5 h-5 text-muted-foreground ml-auto" />
             </CardContent>
@@ -268,7 +272,7 @@ function ProviderSetupSection() {
   // Order providers: OpenAI first, then LangDB, then rest
   const openaiProvider = providers.find(p => p.name.toLowerCase() === 'openai');
   const langdbProvider = providers.find(p => p.name.toLowerCase() === 'langdb');
-  const otherProviders = providers.filter(p => 
+  const otherProviders = providers.filter(p =>
     p.name.toLowerCase() !== 'openai' && p.name.toLowerCase() !== 'langdb'
   );
 
@@ -306,11 +310,11 @@ function ProviderSetupSection() {
         showKeys={
           editingProvider
             ? Object.fromEntries(
-                Object.keys(credentialValues[editingProvider] || {}).map((field) => [
-                  field,
-                  getShowKeyField(editingProvider, field),
-                ])
-              )
+              Object.keys(credentialValues[editingProvider] || {}).map((field) => [
+                field,
+                getShowKeyField(editingProvider, field),
+              ])
+            )
             : {}
         }
         saving={saving[editingProvider || ''] || false}
@@ -324,9 +328,9 @@ function ProviderSetupSection() {
       <div>
         <div className="flex flex-row items-center justify-between mb-6">
           <h2 className="text-2xl font-bold">Configure your provider</h2>
-          <Button 
-            variant="ghost" 
-            size="sm" 
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => navigate('/settings')}
             className="text-xs"
           >
@@ -345,11 +349,10 @@ function ProviderSetupSection() {
                 <ProviderIcon provider_name={provider.name} className="w-5 h-5" />
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm capitalize truncate">{provider.name}</p>
-                  <span className={`text-xs ${
-                    provider.has_credentials 
-                      ? 'text-green-600 dark:text-green-400' 
-                      : 'text-yellow-600 dark:text-yellow-400'
-                  }`}>
+                  <span className={`text-xs ${provider.has_credentials
+                    ? 'text-green-600 dark:text-green-400'
+                    : 'text-yellow-600 dark:text-yellow-400'
+                    }`}>
                     {provider.has_credentials ? 'Configured' : 'Not configured'}
                   </span>
                 </div>
