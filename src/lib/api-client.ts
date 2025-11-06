@@ -21,6 +21,23 @@ export function setTokenProvider(provider: TokenProvider | null) {
 }
 
 /**
+ * Get the current authentication token
+ * Returns null if no token provider is configured or token fetch fails
+ */
+export async function getAuthToken(): Promise<string | null> {
+  if (!globalTokenProvider) {
+    return null;
+  }
+
+  try {
+    return await globalTokenProvider();
+  } catch (error) {
+    console.error('Failed to get authentication token:', error);
+    return null;
+  }
+}
+
+/**
  * Simple API client for making HTTP requests
  * Automatically attaches bearer token if a token provider is configured
  */

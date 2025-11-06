@@ -12,6 +12,7 @@ export { ThemeProvider } from '../components/theme-provider';
 export { ProtectedRoute } from '../components/ProtectedRoute';
 export { Layout } from '../components/layout';
 export { LocalModelsSkeletonLoader } from '../components/models/local/LocalModelsSkeletonLoader';
+export { ProviderIcon } from '../components/Icons/ProviderIcons';
 
 // Page components (for custom routing)
 export { HomePage } from '../pages/home';
@@ -20,6 +21,7 @@ export { ProjectsPage } from '../pages/projects';
 export { AnalyticsPage } from '../pages/analytics';
 export { SettingsPage } from '../pages/settings';
 export { ModelsPage } from '../pages/models';
+export { McpConfigPage } from '../pages/settings/mcp-config';
 export { ProjectDropdown } from '../components/ProjectDropdown';
 
 // Toaster for notifications

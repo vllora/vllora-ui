@@ -79,7 +79,9 @@ export function HomePage() {
   const providerStatusMap = useMemo(() => {
     const map = new Map<string, boolean>();
     providers.forEach(p => {
-      map.set(p.name.toLowerCase(), p.has_credentials);
+      if (p?.name) {
+        map.set(p.name.toLowerCase(), p.has_credentials);
+      }
     });
     return map;
   }, [providers]);
@@ -270,10 +272,10 @@ function ProviderSetupSection() {
   }
 
   // Order providers: OpenAI first, then LangDB, then rest
-  const openaiProvider = providers.find(p => p.name.toLowerCase() === 'openai');
-  const langdbProvider = providers.find(p => p.name.toLowerCase() === 'langdb');
+  const openaiProvider = providers.find(p => p?.name?.toLowerCase() === 'openai');
+  const langdbProvider = providers.find(p => p?.name?.toLowerCase() === 'langdb');
   const otherProviders = providers.filter(p =>
-    p.name.toLowerCase() !== 'openai' && p.name.toLowerCase() !== 'langdb'
+    p?.name && p.name.toLowerCase() !== 'openai' && p.name.toLowerCase() !== 'langdb'
   );
 
   const orderedProviders = [
