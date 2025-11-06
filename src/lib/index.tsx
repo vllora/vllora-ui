@@ -28,3 +28,6 @@ export { Toaster } from 'sonner';
 
 // Theme utilities
 export { applyTheme, getThemeFromStorage } from '../themes/themes';
+
+// API client utilities
+export { setTokenProvider } from './api-client';

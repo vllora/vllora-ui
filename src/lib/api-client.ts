@@ -1,7 +1,28 @@
 import { getBackendUrl } from '@/config/api';
 
 /**
+ * Type for the token provider function
+ * Returns a token string or null if no authentication is needed
+ */
+type TokenProvider = () => Promise<string | null>;
+
+/**
+ * Global token provider - can be set by the parent application (cloud-ui)
+ * Defaults to null for standalone vllora-ui usage
+ */
+let globalTokenProvider: TokenProvider | null = null;
+
+/**
+ * Set the global token provider
+ * This should be called once during app initialization in cloud-ui
+ */
+export function setTokenProvider(provider: TokenProvider | null) {
+  globalTokenProvider = provider;
+}
+
+/**
  * Simple API client for making HTTP requests
+ * Automatically attaches bearer token if a token provider is configured
  */
 export async function apiClient(
   endpoint: string,
@@ -15,6 +36,19 @@ export async function apiClient(
     'Content-Type': 'application/json',
   };
 
+  // Add authentication token if provider is configured
+  if (globalTokenProvider) {
+    try {
+      const token = await globalTokenProvider();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+    } catch (error) {
+      console.error('Failed to get authentication token:', error);
+      // Continue without token - let the backend handle unauthorized requests
+    }
+  }
+
   // Merge with any custom headers from options
   if (options.headers) {
     const customHeaders = options.headers as Record<string, string>;
@@ -26,7 +60,6 @@ export async function apiClient(
     ...options,
     headers,
   });
-
   return response;
 }
 
