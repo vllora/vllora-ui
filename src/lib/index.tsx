@@ -22,7 +22,15 @@ export { SettingsPage } from '../pages/settings';
 export { ModelsPage } from '../pages/models';
 export { ProjectDropdown } from '../components/ProjectDropdown';
 export { ProviderIcon } from '../components/Icons/ProviderIcons'
-
+export { ModelSelector } from '../components/chat/traces/model-selector'
+export type { ModelPricing } from '../types/models';
+export  {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../components/ui/select';
 // Toaster for notifications
 export { Toaster } from 'sonner';
 
