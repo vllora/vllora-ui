@@ -1,4 +1,4 @@
-// Router component
+// Router component (pre-built)
 export { VlloraRouter } from './VlloraRouter';
 
 // Context providers and consumers
@@ -12,6 +12,16 @@ export { ThemeProvider } from '../components/theme-provider';
 
 // Components
 export { ProtectedRoute } from '../components/ProtectedRoute';
+export { Layout } from '../components/layout';
+export { LocalModelsSkeletonLoader } from '../components/models/local/LocalModelsSkeletonLoader';
+
+// Page components (for custom routing)
+export { HomePage } from '../pages/home';
+export { ThreadsAndTracesPage } from '../pages/chat';
+export { ProjectsPage } from '../pages/projects';
+export { AnalyticsPage } from '../pages/analytics';
+export { SettingsPage } from '../pages/settings';
+export { ModelsPage } from '../pages/models';
 
 // Toaster for notifications
 export { Toaster } from 'sonner';

@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, useCallback, ReactNode } from 'react';
 import { useRequest } from 'ahooks';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { listProjects } from '@/services/projects-api';
 
@@ -10,7 +10,12 @@ const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
 export function useProject() {
   const [searchParams] = useSearchParams();
-  const projectIdFromUrl = searchParams.get('project_id');
+  const params = useParams();
+
+  // Extract project_id from URL path params (e.g., /projects/:projectId/chat)
+  // or from query string (e.g., /projects/chat?project_id=123)
+  // Path params take precedence over query params
+  const projectIdFromUrl = params.projectId || searchParams.get('project_id');
 
   const { data: projects = [], loading, error, run: refetchProjects } = useRequest(listProjects, {
     onError: (err) => {
