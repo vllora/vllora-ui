@@ -2,7 +2,7 @@ import { Thread } from "@/types/chat";
 import { ThreadsConsumer } from "@/contexts/ThreadsContext";
 import { CurrencyDollarIcon, PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
 import React, { useCallback, useRef, useState, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { Input } from "../../ui/input";
 import { ThreadCopiableId } from "./ThreadCopiableId";
 import { cn } from "@/lib/utils";

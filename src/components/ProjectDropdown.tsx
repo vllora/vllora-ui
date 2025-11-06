@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from "react-router";
 import { useCallback } from 'react';
 
 interface ProjectDropdownProps {
@@ -17,28 +17,35 @@ interface ProjectDropdownProps {
 }
 
 export function ProjectDropdown({ onProjectChange }: ProjectDropdownProps) {
-  const { projects, loading, currentProject, currentProjectId, isDefaultProject } = ProjectsConsumer();
+  const { projects, loading, currentProject, currentProjectId, isDefaultProject, project_id_from } = ProjectsConsumer();
   const navigate = useNavigate();
   const location = useLocation();
+
+  console.log('==== currentProjectId', currentProjectId)
 
   const handleProjectSelect = useCallback((projectId: string) => {
     // Skip if already selected
     if (projectId === currentProjectId) return;
 
-    // Update URL with new project_id query parameter (omit if default project)
-    const searchParams = new URLSearchParams(location.search);
-    if (isDefaultProject(projectId)) {
-      searchParams.delete('project_id');
-    } else {
-      searchParams.set('project_id', projectId);
+    if (project_id_from == 'query_string') {
+      // Update URL with new project_id query parameter (omit if default project)
+      const searchParams = new URLSearchParams(location.search);
+      if (isDefaultProject(projectId)) {
+        searchParams.delete('project_id');
+      } else {
+        searchParams.set('project_id', projectId);
+      }
+      const queryString = searchParams.toString();
+      navigate(`${location.pathname}${queryString ? '?' + queryString : ''}`);
     }
-    const queryString = searchParams.toString();
-    navigate(`${location.pathname}${queryString ? '?' + queryString : ''}`);
-
+    if (project_id_from === 'path' && currentProjectId  && location.pathname.includes(currentProjectId)) {
+      let newPathName = location.pathname.replace(currentProjectId || '', projectId || '')
+      navigate(newPathName);
+    }
     if (onProjectChange) {
       onProjectChange(projectId);
     }
-  }, [location, navigate, onProjectChange, currentProjectId, isDefaultProject]);
+  }, [location, navigate, onProjectChange, currentProjectId, isDefaultProject, project_id_from]);
 
   return (
     <DropdownMenu>
@@ -73,11 +80,10 @@ export function ProjectDropdown({ onProjectChange }: ProjectDropdownProps) {
               <DropdownMenuItem
                 key={project.id}
                 onClick={() => handleProjectSelect(project.id)}
-                className={`flex items-center gap-3 cursor-pointer rounded-lg mx-1 px-3 py-2.5 transition-all duration-200 ${
-                  isSelected
-                    ? 'bg-accent/50'
-                    : 'hover:bg-accent focus:bg-accent'
-                }`}
+                className={`flex items-center gap-3 cursor-pointer rounded-lg mx-1 px-3 py-2.5 transition-all duration-200 ${isSelected
+                  ? 'bg-accent/50'
+                  : 'hover:bg-accent focus:bg-accent'
+                  }`}
               >
                 <FolderOpen className={`h-4 w-4 flex-shrink-0 ${isSelected ? 'text-[rgb(var(--theme-500))]' : 'text-muted-foreground'}`} />
                 <div className="flex-1 truncate">
@@ -109,10 +115,10 @@ export function ProjectDropdown({ onProjectChange }: ProjectDropdownProps) {
             </DropdownMenuItem>
           </Link>
 
-            <DropdownMenuItem disabled={true} className="flex items-center gap-3 cursor-pointer rounded-lg mx-1 px-3 py-2 text-[rgb(var(--theme-600))] dark:text-[rgb(var(--theme-400))] hover:bg-[rgba(var(--theme-500),0.1)] transition-all duration-200">
-              <Plus className="h-4 w-4 flex-shrink-0" />
-              <span className="font-medium">New Project</span>
-            </DropdownMenuItem>
+          <DropdownMenuItem disabled={true} className="flex items-center gap-3 cursor-pointer rounded-lg mx-1 px-3 py-2 text-[rgb(var(--theme-600))] dark:text-[rgb(var(--theme-400))] hover:bg-[rgba(var(--theme-500),0.1)] transition-all duration-200">
+            <Plus className="h-4 w-4 flex-shrink-0" />
+            <span className="font-medium">New Project</span>
+          </DropdownMenuItem>
         </div>
       </DropdownMenuContent>
     </DropdownMenu>

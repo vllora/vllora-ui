@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react"
-import { Link, useLocation, useNavigate } from "react-router-dom"
+import { Link, useLocation, useNavigate } from "react-router"
 import {
   Home,
   MessageSquare,

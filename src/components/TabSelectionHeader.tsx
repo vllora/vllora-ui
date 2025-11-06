@@ -1,5 +1,5 @@
 import { ProjectDropdown } from './ProjectDropdown';
-import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from "react-router";
 import { DebugControl } from './DebugControl';
 import { GitHubLink } from './GitHubLink';
 import { BackendUrlInfo } from './BackendUrlInfo';

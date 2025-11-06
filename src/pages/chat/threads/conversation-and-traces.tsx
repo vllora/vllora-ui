@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from "react-router";
 import { ConversationWindow } from '@/components/chat/conversation/ConversationWindow';
 import { TracesRightSidebar } from '@/components/chat/TracesRightSidebar';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';

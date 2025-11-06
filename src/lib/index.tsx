@@ -1,9 +1,6 @@
-// Router component (pre-built)
-export { VlloraRouter } from './VlloraRouter';
-
 // Context providers and consumers
 export { AuthProvider, AuthConsumer } from '../contexts/AuthContext';
-export { ProjectsProvider as ProjectProvider, ProjectsConsumer } from '../contexts/ProjectContext';
+export { ProjectsProvider, ProjectsConsumer } from '../contexts/ProjectContext';
 export { LocalModelsProvider, LocalModelsConsumer } from '../contexts/LocalModelsContext';
 export { ProviderKeysProvider, ProviderKeysConsumer } from '../contexts/ProviderKeysContext';
 

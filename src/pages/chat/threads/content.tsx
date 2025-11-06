@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from "react-router";
 import { v4 as uuidv4 } from 'uuid';
 import { ThreadsSidebar } from '@/components/chat/ThreadsSidebar';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';

@@ -2,7 +2,7 @@ import React from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { ArrowUpRight, Check } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link } from "react-router";
 
 interface ProvidersIconsProps {
   providers: string[];

@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, useCallback, ReactNode } from 'react';
 import { useRequest } from 'ahooks';
-import { useSearchParams, useParams } from 'react-router-dom';
+import { useSearchParams, useParams } from "react-router";
 import { toast } from 'sonner';
 import { listProjects } from '@/services/projects-api';
 
@@ -8,14 +8,17 @@ export type ProjectContextType = ReturnType<typeof useProject>;
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
-export function useProject() {
+export function useProject(props: {
+  project_id_from: 'path' | 'query_string'
+}) {
+  const { project_id_from } = props
   const [searchParams] = useSearchParams();
   const params = useParams();
 
   // Extract project_id from URL path params (e.g., /projects/:projectId/chat)
   // or from query string (e.g., /projects/chat?project_id=123)
   // Path params take precedence over query params
-  const projectIdFromUrl = params.projectId || searchParams.get('project_id');
+  const projectIdFromSearchParam =  searchParams.get('project_id');
 
   const { data: projects = [], loading, error, run: refetchProjects } = useRequest(listProjects, {
     onError: (err) => {
@@ -33,9 +36,13 @@ export function useProject() {
 
   // Determine current project ID: use URL param, or fallback to default/first project
   const currentProjectId = useMemo(() => {
-    if (projectIdFromUrl) return projectIdFromUrl;
-    return defaultProject?.id;
-  }, [projectIdFromUrl, defaultProject]);
+    if(project_id_from === 'path') {
+      console.log('==== params', params)
+      return params.projectId
+    }else {
+      return projectIdFromSearchParam || defaultProject?.id
+    }
+  }, [projectIdFromSearchParam, defaultProject, project_id_from, params, searchParams]);
 
   // Derive current project from determined project ID
   const currentProject = useMemo(() => {
@@ -58,11 +65,12 @@ export function useProject() {
     currentProjectId,
     defaultProject,
     isDefaultProject,
+    project_id_from
   };
 }
 
-export function ProjectsProvider({ children }: { children: ReactNode }) {
-  const value = useProject();
+export function ProjectsProvider({ project_id_from, children }: { project_id_from: 'path' | 'query_string', children: ReactNode }) {
+  const value = useProject({ project_id_from });
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
 }
 

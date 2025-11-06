@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate } from "react-router";
 import { toast } from 'sonner';
 import { Thread } from '@/types/chat';
 import { updateThreadTitle, deleteThread as deleteThreadApi } from '@/services/threads-api';

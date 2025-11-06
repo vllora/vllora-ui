@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom"
+import { Routes, Route, BrowserRouter } from "react-router"
 import { Layout } from "./components/layout"
 import { HomePage } from "./pages/home"
 import { ThreadsAndTracesPage } from "./pages/chat"
@@ -37,7 +37,7 @@ function App() {
               <Route path="/login" element={<LoginPage />} />
 
               {/* Protected routes */}
-              <Route path="/" element={<ProtectedRoute><ProviderKeysProvider><ProjectsProvider><Layout /></ProjectsProvider></ProviderKeysProvider></ProtectedRoute>}>
+              <Route path="/" element={<ProtectedRoute><ProviderKeysProvider><ProjectsProvider project_id_from="query_string"><Layout /></ProjectsProvider></ProviderKeysProvider></ProtectedRoute>}>
                 {/* Project-scoped routes (now using query string ?project_id=...) */}
                 <Route index element={<HomePage />} />
                 <Route path="chat" element={<ThreadsAndTracesPage />} />

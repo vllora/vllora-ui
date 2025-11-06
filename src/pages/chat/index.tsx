@@ -1,7 +1,7 @@
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { useCallback, useState, useEffect } from 'react';
 import { TabSelectionHeader } from '@/components/TabSelectionHeader';
-import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from "react-router";
 import { TracesPageProvider } from '@/contexts/TracesPageContext';
 import { TracesPageContent } from './traces/content';
 import { ThreadPage } from './threads';

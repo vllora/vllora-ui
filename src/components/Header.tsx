@@ -1,6 +1,6 @@
 import { GitHubLink } from './GitHubLink';
 import { ProjectDropdown } from './ProjectDropdown';
-import { useLocation } from 'react-router-dom';
+import { useLocation } from "react-router";
 import { BackendUrlInfo } from './BackendUrlInfo';
 import { SlackLink } from './SlackLink';
 

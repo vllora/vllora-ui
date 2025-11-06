@@ -9,7 +9,7 @@ import { ProviderKeysConsumer } from '@/contexts/ProviderKeysContext';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { ProviderCredentialModal } from '@/pages/settings/ProviderCredentialModal';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from "react-router";
 import { LocalModel } from '@/types/models';
 
 // Helper function to get top models based on benchmark ranking

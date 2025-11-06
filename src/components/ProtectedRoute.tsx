@@ -1,4 +1,4 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate } from "react-router";
 import { AuthConsumer } from '@/contexts/AuthContext';
 
 interface ProtectedRouteProps {

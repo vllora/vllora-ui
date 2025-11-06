@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from "react-router";
 import { LocalModel } from '@/types/models';
 import { LocalModelCard } from './LocalModelCard';
 import { LocalModelsTable } from './LocalModelsTable';

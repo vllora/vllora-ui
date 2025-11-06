@@ -5,7 +5,7 @@ import { LocalModelsConsumer } from '@/contexts/LocalModelsContext';
 import { Button } from '@/components/ui/button';
 import { ProviderKeysConsumer } from '@/contexts/ProviderKeysContext';
 import { useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from "react-router";
 
 // Helper function to determine model type based on provider info
 function getModelType(providerName: string, providersData: any[]): 'remote' | 'opensource' | 'local' | 'unknown' {

@@ -1,5 +1,5 @@
 import { createContext, useContext, ReactNode, useCallback, useState, useRef, useEffect, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { useDebugControl } from "@/hooks/events/useDebugControl";
 import { ProjectEventUnion } from "./project-events/dto";
 import { processEvent, updatedRunWithSpans } from "@/hooks/events/utilities";

@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AlertCircle, LogIn, Mail } from 'lucide-react';
 import { toast } from 'sonner';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from "react-router";
 import { AuthConsumer } from '@/contexts/AuthContext';
 import { getBackendUrl } from '@/config/api';
 

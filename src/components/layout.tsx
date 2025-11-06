@@ -1,4 +1,4 @@
-import { Outlet } from "react-router-dom"
+import { Outlet } from "react-router"
 import { AppSidebar } from "./app-sidebar"
 import { Header } from "./Header"
 import { ProjectsConsumer } from "@/contexts/ProjectContext"

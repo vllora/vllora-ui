@@ -4,7 +4,7 @@ import { useThreadChanges } from './threads/useThreadChanges';
 import { useThreadPagination } from './threads/useThreadPagination';
 import { useThreadOperations } from './threads/useThreadOperations';
 import { ProjectsConsumer } from './ProjectContext';
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router";
 import { useDebugControl } from '@/hooks/events/useDebugControl';
 import { ProjectEventUnion } from './project-events/dto';
 import { Thread } from '@/types/chat';
