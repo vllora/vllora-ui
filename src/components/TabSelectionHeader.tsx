@@ -4,6 +4,7 @@ import { DebugControl } from './DebugControl';
 import { GitHubLink } from './GitHubLink';
 import { BackendUrlInfo } from './BackendUrlInfo';
 import { SlackLink } from './SlackLink';
+import { CurrentAppConsumer } from '@/lib';
 
 interface TabSelectionHeaderProps {
   currentTab: string;
@@ -19,6 +20,7 @@ export function TabSelectionHeader({
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const location = useLocation();
+  const { app_mode } = CurrentAppConsumer()
 
   const handleTabChange = (tab: string) => {
     // Update URL with tab query parameter
@@ -70,13 +72,15 @@ export function TabSelectionHeader({
       <div className="flex items-center gap-3">
         {/* Backend URL info */}
         <BackendUrlInfo />
+        {app_mode === 'vllora' && (
+          <>
+            {/* GitHub link */}
+            <GitHubLink />
 
-        {/* GitHub link */}
-        <GitHubLink />
-
-        {/* Slack link */}
-        <SlackLink />
-        
+            {/* Slack link */}
+            <SlackLink />
+          </>
+        )}
         {/* Debug control: Pause/Resume */}
         <DebugControl />
       </div>

@@ -5,17 +5,17 @@ import { getBackendUrl } from '@/config/api';
 
 interface ChatEmptyStateProps {
   onNewChat: () => void;
+  projectId?: string;
 }
 
-export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({ onNewChat }) => {
+export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({ onNewChat, projectId }) => {
   const searchParam = new URLSearchParams(window.location.search);
-  const projectIdFromUrl = searchParam.get('project_id');
   const threadIdFromUrl = searchParam.get('threadId');
   const model = searchParam.get('model') || 'openai/gpt-4o-mini';
 
   // Only include x-project-id if project_id exists
-  const projectIdHeader = projectIdFromUrl
-    ? `  -H 'x-project-id: ${projectIdFromUrl}' \\\n`
+  const projectIdHeader = projectId
+    ? `  -H 'x-project-id: ${projectId}' \\\n`
     : '';
 
   // Only include x-thread-id if threadId exists in URL

@@ -63,7 +63,7 @@ export function ThreadsPageContent() {
 
   // Show ChatEmptyState when no threads exist
   if (threads.length === 0) {
-    return <ChatEmptyState onNewChat={handleNewThread} />;
+    return <ChatEmptyState onNewChat={handleNewThread} projectId={currentProjectId} />;
   }
 
   return (

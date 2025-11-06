@@ -3,6 +3,7 @@ import { ProjectDropdown } from './ProjectDropdown';
 import { useLocation } from "react-router";
 import { BackendUrlInfo } from './BackendUrlInfo';
 import { SlackLink } from './SlackLink';
+import { CurrentAppConsumer } from '@/lib';
 
 interface HeaderProps {
   onProjectChange?: (projectId: string) => void;
@@ -13,6 +14,7 @@ export function Header({ onProjectChange }: HeaderProps) {
   const isProjectsPage = location.pathname === '/projects';
   const isChatPage = location.pathname.includes('/chat');
   const isSettingsPage = location.pathname === '/settings';
+  const { app_mode } = CurrentAppConsumer()
 
   // Hide header on projects page and chat page
   if (isProjectsPage || isChatPage || isSettingsPage) {
@@ -27,8 +29,12 @@ export function Header({ onProjectChange }: HeaderProps) {
         </div>
         <div className="flex items-center gap-3">
           <BackendUrlInfo />
-          <GitHubLink />
-          <SlackLink />
+          {app_mode === 'vllora' && (
+            <>
+              <GitHubLink />
+              <SlackLink />
+            </>
+          )}
         </div>
       </div>
     </header>

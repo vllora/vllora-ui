@@ -4,7 +4,7 @@ export { ProjectsProvider, ProjectsConsumer } from '../contexts/ProjectContext';
 export { LocalModelsProvider, LocalModelsConsumer } from '../contexts/LocalModelsContext';
 export { ProviderKeysProvider, ProviderKeysConsumer } from '../contexts/ProviderKeysContext';
 export { ProjectEventsProvider, ProjectEventsConsumer } from '../contexts/project-events';
-
+export { CurrentAppProvider, CurrentAppConsumer } from '../contexts/CurrentAppContext';
 // Theme provider
 export { ThemeProvider } from '../components/theme-provider';
 
