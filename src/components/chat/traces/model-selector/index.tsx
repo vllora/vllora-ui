@@ -52,7 +52,7 @@ interface ModelSelectorComponentProps {
   setConfigDialogOpen?: (open: boolean) => void;
   handleWarningClick?: () => void;
 }
-const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
+export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
   selectedModel,
   onModelChange,
   models,
