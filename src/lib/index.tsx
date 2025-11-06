@@ -3,7 +3,7 @@ export { VlloraRouter } from './VlloraRouter';
 
 // Context providers and consumers
 export { AuthProvider, AuthConsumer } from '../contexts/AuthContext';
-export { ProjectProvider, ProjectsConsumer } from '../contexts/ProjectContext';
+export { ProjectsProvider as ProjectProvider, ProjectsConsumer } from '../contexts/ProjectContext';
 export { LocalModelsProvider, LocalModelsConsumer } from '../contexts/LocalModelsContext';
 export { ProviderKeysProvider, ProviderKeysConsumer } from '../contexts/ProviderKeysContext';
 
@@ -22,6 +22,7 @@ export { ProjectsPage } from '../pages/projects';
 export { AnalyticsPage } from '../pages/analytics';
 export { SettingsPage } from '../pages/settings';
 export { ModelsPage } from '../pages/models';
+export { ProjectDropdown } from '../components/ProjectDropdown';
 
 // Toaster for notifications
 export { Toaster } from 'sonner';

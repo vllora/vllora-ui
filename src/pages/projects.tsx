@@ -65,7 +65,7 @@ export function ProjectsPage() {
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden flex-1">
       {/* Header - Fixed */}
       <div className="flex-shrink-0 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-6 py-4">

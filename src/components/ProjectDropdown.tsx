@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useCallback } from 'react';
 
 interface ProjectDropdownProps {
   onProjectChange?: (projectId: string) => void;
@@ -20,7 +21,7 @@ export function ProjectDropdown({ onProjectChange }: ProjectDropdownProps) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const handleProjectSelect = (projectId: string) => {
+  const handleProjectSelect = useCallback((projectId: string) => {
     // Skip if already selected
     if (projectId === currentProjectId) return;
 
@@ -37,7 +38,7 @@ export function ProjectDropdown({ onProjectChange }: ProjectDropdownProps) {
     if (onProjectChange) {
       onProjectChange(projectId);
     }
-  };
+  }, [location, navigate, onProjectChange, currentProjectId, isDefaultProject]);
 
   return (
     <DropdownMenu>

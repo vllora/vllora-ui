@@ -61,7 +61,7 @@ export function useProject() {
   };
 }
 
-export function ProjectProvider({ children }: { children: ReactNode }) {
+export function ProjectsProvider({ children }: { children: ReactNode }) {
   const value = useProject();
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
 }
@@ -69,7 +69,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 export function ProjectsConsumer() {
   const context = useContext(ProjectContext);
   if (context === undefined) {
-    throw new Error('ProjectsConsumer must be used within a ProjectProvider');
+    throw new Error('ProjectsConsumer must be used within a ProjectsProvider');
   }
   return context;
 }

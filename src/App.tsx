@@ -7,7 +7,7 @@ import { AnalyticsPage } from "./pages/analytics"
 import { SettingsPage } from "./pages/settings"
 import { LoginPage } from "./pages/login"
 import { ThemeProvider } from "./components/theme-provider"
-import { ProjectProvider } from "./contexts/ProjectContext"
+import { ProjectsProvider } from "./contexts/ProjectContext"
 import { LocalModelsProvider } from "./contexts/LocalModelsContext"
 import { Toaster } from "sonner"
 import { useEffect, lazy, Suspense } from "react"
@@ -37,7 +37,7 @@ function App() {
               <Route path="/login" element={<LoginPage />} />
 
               {/* Protected routes */}
-              <Route path="/" element={<ProtectedRoute><ProviderKeysProvider><ProjectProvider><Layout /></ProjectProvider></ProviderKeysProvider></ProtectedRoute>}>
+              <Route path="/" element={<ProtectedRoute><ProviderKeysProvider><ProjectsProvider><Layout /></ProjectsProvider></ProviderKeysProvider></ProtectedRoute>}>
                 {/* Project-scoped routes (now using query string ?project_id=...) */}
                 <Route index element={<HomePage />} />
                 <Route path="chat" element={<ThreadsAndTracesPage />} />

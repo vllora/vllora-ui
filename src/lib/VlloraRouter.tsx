@@ -5,7 +5,7 @@ import { ThreadsAndTracesPage } from "../pages/chat"
 import { ProjectsPage } from "../pages/projects"
 import { AnalyticsPage } from "../pages/analytics"
 import { SettingsPage } from "../pages/settings"
-import { ProjectProvider } from "../contexts/ProjectContext"
+import { ProjectsProvider } from "../contexts/ProjectContext"
 import { LocalModelsProvider } from "../contexts/LocalModelsContext"
 import { ProviderKeysProvider } from "../contexts/ProviderKeysContext"
 import { ProtectedRoute } from "../components/ProtectedRoute"
@@ -26,7 +26,7 @@ export function VlloraRouter() {
     <LocalModelsProvider>
       <Routes>
         {/* Protected routes */}
-        <Route path="/" element={<ProtectedRoute><ProviderKeysProvider><ProjectProvider><Layout /></ProjectProvider></ProviderKeysProvider></ProtectedRoute>}>
+        <Route path="/" element={<ProtectedRoute><ProviderKeysProvider><ProjectsProvider><Layout /></ProjectsProvider></ProviderKeysProvider></ProtectedRoute>}>
           {/* Project-scoped routes (using query string ?project_id=...) */}
           <Route index element={<HomePage />} />
           <Route path="chat" element={<ThreadsAndTracesPage />} />
