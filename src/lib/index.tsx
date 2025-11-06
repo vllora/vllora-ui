@@ -21,6 +21,7 @@ export { AnalyticsPage } from '../pages/analytics';
 export { SettingsPage } from '../pages/settings';
 export { ModelsPage } from '../pages/models';
 export { ProjectDropdown } from '../components/ProjectDropdown';
+export { ProviderIcon } from '../components/Icons/ProviderIcons'
 
 // Toaster for notifications
 export { Toaster } from 'sonner';
