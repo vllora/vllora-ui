@@ -18,7 +18,7 @@ export function useProject(props: {
   // Extract project_id from URL path params (e.g., /projects/:projectId/chat)
   // or from query string (e.g., /projects/chat?project_id=123)
   // Path params take precedence over query params
-  const projectIdFromSearchParam =  searchParams.get('project_id');
+  const projectIdFromSearchParam = searchParams.get('project_id');
 
   const { data: projects = [], loading, error, run: refetchProjects } = useRequest(listProjects, {
     onError: (err) => {
@@ -36,10 +36,9 @@ export function useProject(props: {
 
   // Determine current project ID: use URL param, or fallback to default/first project
   const currentProjectId = useMemo(() => {
-    if(project_id_from === 'path') {
-      console.log('==== params', params)
+    if (project_id_from === 'path') {
       return params.projectId
-    }else {
+    } else {
       return projectIdFromSearchParam || defaultProject?.id
     }
   }, [projectIdFromSearchParam, defaultProject, project_id_from, params, searchParams]);

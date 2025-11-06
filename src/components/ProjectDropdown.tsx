@@ -21,8 +21,6 @@ export function ProjectDropdown({ onProjectChange }: ProjectDropdownProps) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  console.log('==== currentProjectId', currentProjectId)
-
   const handleProjectSelect = useCallback((projectId: string) => {
     // Skip if already selected
     if (projectId === currentProjectId) return;
