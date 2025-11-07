@@ -97,102 +97,99 @@ const ProviderKeysContent = () => {
                 onConfirm={confirmDeleteProvider}
             />
 
-            <div className="space-y-4">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Provider Keys</CardTitle>
-                        <CardDescription>
-                            Configure API keys for different AI providers. Your keys are stored securely and associated with your current project.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        {/* Error Message */}
-                        {error && (
-                            <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
-                                <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                                <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-                            </div>
-                        )}
+            <div className="space-y-6">
+                <div>
+                    <h2 className="text-2xl font-semibold">Provider Keys</h2>
+                    <p className="text-sm text-muted-foreground mt-1">
+                        Configure API keys for different AI providers. Your keys are stored securely and associated with your current project.
+                    </p>
+                </div>
 
-                        {/* Configured Providers */}
-                        {providers.filter(p => p.has_credentials).length > 0 && (
-                            <div className="space-y-2">
-                                <h3 className="text-sm font-medium text-muted-foreground px-3">
-                                    Configured
-                                </h3>
-                                <div className="border border-border rounded-lg divide-y divide-border">
-                                    {providers
-                                        .filter(p => p.has_credentials)
-                                        .map((provider) => (
-                                            <div
-                                                key={provider.name}
-                                                className="flex items-center justify-between px-4 py-3 hover:bg-accent/50 transition-colors group cursor-pointer"
-                                                onClick={() => handleStartEditing(provider)}
+                {/* Error Message */}
+                {error && (
+                    <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+                        <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+                    </div>
+                )}
+
+                {/* Configured Providers */}
+                {providers.filter(p => p.has_credentials).length > 0 && (
+                    <div className="space-y-2">
+                        <h3 className="text-sm font-medium text-muted-foreground px-3">
+                            Configured
+                        </h3>
+                        <div className="border border-border rounded-lg divide-y divide-border">
+                            {providers
+                                .filter(p => p.has_credentials)
+                                .map((provider) => (
+                                    <div
+                                        key={provider.name}
+                                        className="flex items-center justify-between px-4 py-3 hover:bg-accent/50 transition-colors group cursor-pointer"
+                                        onClick={() => handleStartEditing(provider)}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <ProviderIcon provider_name={provider.name} className="w-6 h-6" />
+                                            <span className="font-medium capitalize">{provider.name}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-muted-foreground">
+                                                Configured
+                                            </span>
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    startDeleteProvider(provider.name);
+                                                }}
+                                                disabled={saving[provider.name]}
+                                                className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-opacity"
                                             >
-                                                <div className="flex items-center gap-3">
-                                                    <ProviderIcon provider_name={provider.name} className="w-6 h-6" />
-                                                    <span className="font-medium capitalize">{provider.name}</span>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs text-muted-foreground">
-                                                        Configured
-                                                    </span>
-                                                    <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            startDeleteProvider(provider.name);
-                                                        }}
-                                                        disabled={saving[provider.name]}
-                                                        className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Available Providers */}
-                        {providers.filter(p => !p.has_credentials).length > 0 && (
-                            <div className="space-y-2">
-                                <h3 className="text-sm font-medium text-muted-foreground px-3">
-                                    Available
-                                </h3>
-                                <div className="border border-border rounded-lg divide-y divide-border">
-                                    {providers
-                                        .filter(p => !p.has_credentials)
-                                        .map((provider) => (
-                                            <div
-                                                key={provider.name}
-                                                className="flex items-center justify-between px-4 py-3 hover:bg-accent/50 transition-colors group cursor-pointer"
-                                                onClick={() => handleStartEditing(provider)}
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <ProviderIcon provider_name={provider.name} className="w-6 h-6" />
-                                                    <span className="font-medium capitalize">{provider.name}</span>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs text-muted-foreground">
-                                                        Not configured
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        ))}
-                                </div>
-                            </div>
-                        )}
-
-                    {providers.length === 0 && (
-                        <div className="text-center py-8 text-muted-foreground">
-                            No providers available
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
                         </div>
-                    )}
-                    </CardContent>
-                </Card>
+                    </div>
+                )}
+
+                {/* Available Providers */}
+                {providers.filter(p => !p.has_credentials).length > 0 && (
+                    <div className="space-y-2">
+                        <h3 className="text-sm font-medium text-muted-foreground px-3">
+                            Available
+                        </h3>
+                        <div className="border border-border rounded-lg divide-y divide-border">
+                            {providers
+                                .filter(p => !p.has_credentials)
+                                .map((provider) => (
+                                    <div
+                                        key={provider.name}
+                                        className="flex items-center justify-between px-4 py-3 hover:bg-accent/50 transition-colors group cursor-pointer"
+                                        onClick={() => handleStartEditing(provider)}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <ProviderIcon provider_name={provider.name} className="w-6 h-6" />
+                                            <span className="font-medium capitalize">{provider.name}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-muted-foreground">
+                                                Not configured
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                        </div>
+                    </div>
+                )}
+
+                {providers.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                        No providers available
+                    </div>
+                )}
             </div>
         </>
     );
