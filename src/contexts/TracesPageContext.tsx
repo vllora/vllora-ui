@@ -155,6 +155,8 @@ export function useTracesPageContext(props: { projectId: string }) {
     loadingMoreGroups,
     hideGroups,
     setHideGroups,
+    goToPage,
+    goToPreviousPage,
     // openGroups,
     // setOpenGroups,
   } = useGroupsPagination({
@@ -667,6 +669,8 @@ export function useTracesPageContext(props: { projectId: string }) {
     loadingMoreGroups,
     hideGroups,
     setHideGroups,
+    goToPage,
+    goToPreviousPage,
     // openGroups,
     // setOpenGroups,
     // Group spans loading

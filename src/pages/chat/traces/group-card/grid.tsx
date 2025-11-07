@@ -11,6 +11,8 @@ interface GroupCardGridProps {
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;
+  onGoToPage: (pageNumber: number) => void;
+  onGoToPreviousPage: () => void;
   observerRef: React.RefObject<HTMLDivElement | null>;
 }
 
@@ -20,6 +22,8 @@ export function GroupCardGrid({
   hasMore,
   loadingMore,
   onLoadMore,
+  onGoToPage,
+  onGoToPreviousPage,
   observerRef,
 }: GroupCardGridProps) {
   const PAGE_SIZE = 20;
@@ -104,7 +108,7 @@ export function GroupCardGrid({
               <div className="flex items-center gap-1">
                 {/* Previous button */}
                 <button
-                  onClick={() => {/* TODO: Implement go to previous page */}}
+                  onClick={onGoToPreviousPage}
                   disabled={!canGoPrevious}
                   className="p-1.5 text-foreground hover:bg-accent/80 border border-border rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                   aria-label="Previous page"
@@ -128,7 +132,7 @@ export function GroupCardGrid({
                   return (
                     <button
                       key={pageNum}
-                      onClick={() => {/* TODO: Implement go to page */}}
+                      onClick={() => onGoToPage(pageNum)}
                       disabled={isActive}
                       className={`min-w-[32px] px-2 py-1.5 text-sm font-medium rounded transition-colors ${
                         isActive

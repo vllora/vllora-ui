@@ -36,7 +36,7 @@ export function GroupingSelector({
     <div className="flex flex-1 justify-between items-center gap-6">
       {/* View Mode Section */}
       <div className="inline-flex items-center gap-3">
-                  <span className="text-sm font-medium text-muted-foreground">View:</span>
+        <span className="text-sm font-medium text-muted-foreground">View:</span>
 
         <ToggleGroup
           type="single"
@@ -44,6 +44,13 @@ export function GroupingSelector({
           onValueChange={handleModeChange}
           className="inline-flex items-center gap-1 bg-[#151515] rounded-lg border border-border p-1 shadow-sm"
         >
+          <ToggleGroupItem
+            value="thread"
+            aria-label="Group by thread"
+            className="px-3 py-0.5 text-xs h-6 font-medium rounded-md data-[state=on]:bg-[rgb(var(--theme-500))] data-[state=on]:text-white data-[state=on]:shadow-md data-[state=on]:shadow-[rgb(var(--theme-500))]/20 data-[state=off]:text-muted-foreground data-[state=off]:hover:text-foreground data-[state=off]:hover:bg-muted/20"
+          >
+            Thread
+          </ToggleGroupItem>
           <ToggleGroupItem
             value="run"
             aria-label="Group by run"
@@ -58,13 +65,7 @@ export function GroupingSelector({
           >
             Time
           </ToggleGroupItem>
-          <ToggleGroupItem
-            value="thread"
-            aria-label="Group by thread"
-            className="px-3 py-0.5 text-xs h-6 font-medium rounded-md data-[state=on]:bg-[rgb(var(--theme-500))] data-[state=on]:text-white data-[state=on]:shadow-md data-[state=on]:shadow-[rgb(var(--theme-500))]/20 data-[state=off]:text-muted-foreground data-[state=off]:hover:text-foreground data-[state=off]:hover:bg-muted/20"
-          >
-            Thread
-          </ToggleGroupItem>
+
         </ToggleGroup>
       </div>
 

@@ -156,6 +156,86 @@ export function useGroupsPagination({
     triggerRefreshGroups();
   }, [triggerRefreshGroups]);
 
+  // Go to a specific page
+  const goToPage = useCallback(async (pageNumber: number) => {
+    if (groupsLoading || loadingMoreGroups || pageNumber < 1) return;
+
+    const targetOffset = (pageNumber - 1) * LIMIT_LOADING_GROUPS;
+
+    // If going to page 1, use refresh
+    if (targetOffset === 0) {
+      refreshGroups();
+      return;
+    }
+
+    setLoadingMoreGroups(true);
+    try {
+      // Load all groups from page 1 to target page
+      const allGroups: GenericGroupDTO[] = [];
+      let pagination = {
+        offset: 0,
+        limit: 0,
+        total: 0,
+      };
+
+      // Fetch all pages up to target page in sequence
+      for (let page = 1; page <= pageNumber; page++) {
+        const offset = (page - 1) * LIMIT_LOADING_GROUPS;
+        const pageResponse = await listGroups({
+          projectId: projectIdRef.current,
+          params: {
+            groupBy: groupByRef.current,
+            ...(threadIdRef.current ? { threadIds: threadIdRef.current } : {}),
+            ...(groupByRef.current === 'time' ? { bucketSize: bucketSizeRef.current } : {}),
+            limit: LIMIT_LOADING_GROUPS,
+            offset,
+          },
+        });
+        allGroups.push(...(pageResponse?.data || []));
+        pagination = pageResponse?.pagination || pagination;
+      }
+
+      // Call onGroupsLoaded only for the newly loaded groups
+      if (allGroups.length > rawGroups.length) {
+        const newGroups = allGroups.slice(rawGroups.length);
+        onGroupsLoaded?.(newGroups);
+      }
+
+      // Update pagination state
+      const newOffset = allGroups.length;
+      const newHasMore = pagination.total > newOffset;
+
+      setGroupsTotal(pagination.total);
+      setGroupsOffset(newOffset);
+      setHasMoreGroups(newHasMore);
+      setRawGroups(allGroups);
+    } catch (err: any) {
+      toast.error("Failed to go to page", {
+        description: err.message || "An error occurred while navigating to page",
+      });
+    } finally {
+      setLoadingMoreGroups(false);
+    }
+  }, [
+    groupsLoading,
+    loadingMoreGroups,
+    projectIdRef,
+    groupByRef,
+    threadIdRef,
+    bucketSizeRef,
+    refreshGroups,
+    rawGroups,
+    onGroupsLoaded,
+  ]);
+
+  // Go to previous page
+  const goToPreviousPage = useCallback(() => {
+    const currentPage = Math.ceil(groupsOffset / LIMIT_LOADING_GROUPS);
+    if (currentPage > 1) {
+      goToPage(currentPage - 1);
+    }
+  }, [groupsOffset, goToPage]);
+
   return {
     groups: rawGroups,
     setGroups: setRawGroups,
@@ -168,6 +248,8 @@ export function useGroupsPagination({
     loadingMoreGroups,
     hideGroups,
     setHideGroups,
+    goToPage,
+    goToPreviousPage,
     // openGroups,
     // setOpenGroups,
   };

@@ -15,6 +15,8 @@ export function RunTable() {
     hasMoreGroups,
     loadingMoreGroups,
     groupsTotal,
+    goToPage,
+    goToPreviousPage,
   } = TracesPageConsumer();
 
   const observerTarget = useRef<HTMLDivElement>(null);
@@ -63,6 +65,8 @@ export function RunTable() {
         hasMore={hasMoreGroups}
         loadingMore={loadingMoreGroups}
         onLoadMore={loadMoreGroups}
+        onGoToPage={goToPage}
+        onGoToPreviousPage={goToPreviousPage}
         observerRef={observerTarget}
       />
     </div>
