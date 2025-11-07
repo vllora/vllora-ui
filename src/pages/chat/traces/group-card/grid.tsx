@@ -8,6 +8,7 @@ import { GroupCard } from '.';
 interface GroupCardGridProps {
   groups: GenericGroupDTO[];
   totalGroups: number;
+  currentPage: number;
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;
@@ -19,6 +20,7 @@ interface GroupCardGridProps {
 export function GroupCardGrid({
   groups,
   totalGroups,
+  currentPage,
   hasMore,
   loadingMore,
   onLoadMore,
@@ -27,10 +29,13 @@ export function GroupCardGrid({
   observerRef,
 }: GroupCardGridProps) {
   const PAGE_SIZE = 20;
-  const currentPage = Math.ceil(groups.length / PAGE_SIZE) || 1;
   const totalPages = Math.ceil(totalGroups / PAGE_SIZE) || 1;
-  const canGoPrevious = groups.length > PAGE_SIZE;
+  const canGoPrevious = currentPage > 1;
   const canGoNext = hasMore;
+
+  // Calculate the range of items being displayed
+  const startItem = (currentPage - 1) * PAGE_SIZE + 1;
+  const endItem = (currentPage - 1) * PAGE_SIZE + groups.length;
 
   // Generate page numbers to display
   const getPageNumbers = () => {
@@ -96,7 +101,7 @@ export function GroupCardGrid({
         <div className="sticky bottom-0 z-10 bg-background/95 backdrop-blur-sm border-t border-border/50 px-6 py-4">
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              {groups.length} of {totalGroups} {totalGroups === 1 ? 'group' : 'groups'}
+              {startItem}-{endItem} of {totalGroups} {totalGroups === 1 ? 'group' : 'groups'}
             </p>
 
             {loadingMore ? (

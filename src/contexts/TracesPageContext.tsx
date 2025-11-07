@@ -18,7 +18,7 @@ export type GroupByMode = 'run' | 'time' | 'thread';
 export type Duration = 300 | 600 | 1200 | 1800 | 3600 | 7200 | 10800 | 21600 | 43200 | 86400; // 5m, 10m, 20m, 30m, 1h, 2h, 3h, 6h, 12h, 24h
 
 // Allowed query params for traces page
-const ALLOWED_QUERY_PARAMS = ['tab', 'groupBy', 'duration'] as const;
+const ALLOWED_QUERY_PARAMS = ['tab', 'groupBy', 'duration', 'page'] as const;
 
 export function useTracesPageContext(props: { projectId: string }) {
   const { projectId } = props;
@@ -65,7 +65,7 @@ export function useTracesPageContext(props: { projectId: string }) {
     return 300;
   });
 
-  // Sync to both URL and localStorage when state changes
+  // Sync to both URL and localStorage when state changes (without page)
   useEffect(() => {
     // Create clean params with only allowed query params
     const newParams = new URLSearchParams();
@@ -142,6 +142,18 @@ export function useTracesPageContext(props: { projectId: string }) {
     }
   });
 
+  // Get initial page from URL
+  const initialPage = (() => {
+    const pageParam = searchParams.get('page');
+    if (pageParam) {
+      const parsed = parseInt(pageParam, 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+    return 1;
+  })();
+
   // Use the groups pagination hook
   const {
     groups,
@@ -155,14 +167,16 @@ export function useTracesPageContext(props: { projectId: string }) {
     loadingMoreGroups,
     hideGroups,
     setHideGroups,
-    goToPage,
-    goToPreviousPage,
+    goToPage: goToPageInternal,
+    goToPreviousPage: goToPreviousPageInternal,
+    currentPage,
     // openGroups,
     // setOpenGroups,
   } = useGroupsPagination({
     projectId,
     bucketSize: duration, // Map duration to bucketSize for API
     groupBy: groupByMode === 'time' ? 'time' : groupByMode === 'thread' ? 'thread' : groupByMode === 'run' ? 'run' : 'time',
+    initialPage,
     onGroupsLoaded: async (groups) => {
       // OPTION 1: Manual batching (fallback for SQLite compatibility)
       // Uncomment this if you need to revert to manual batching
@@ -264,6 +278,36 @@ export function useTracesPageContext(props: { projectId: string }) {
       return acc;
     }, {} as Record<string, Span[]>);
   }, [flattenSpans]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    if (currentPage !== 1) {
+      goToPageInternal(1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupByMode, duration]);
+
+  // Sync current page to URL
+  useEffect(() => {
+    const newParams = new URLSearchParams(searchParams);
+
+    if (currentPage > 1) {
+      newParams.set('page', String(currentPage));
+    } else {
+      newParams.delete('page');
+    }
+
+    setSearchParams(newParams, { replace: true });
+  }, [currentPage, searchParams, setSearchParams]);
+
+  // Wrapper functions that update URL when navigating pages
+  const goToPage = useCallback((pageNumber: number) => {
+    goToPageInternal(pageNumber);
+  }, [goToPageInternal]);
+
+  const goToPreviousPage = useCallback(() => {
+    goToPreviousPageInternal();
+  }, [goToPreviousPageInternal]);
 
   // Refresh a single group's stats from backend (works for time/thread/run)
   const refreshSingleGroupStat = useCallback(async (group: GenericGroupDTO) => {
@@ -671,6 +715,7 @@ export function useTracesPageContext(props: { projectId: string }) {
     setHideGroups,
     goToPage,
     goToPreviousPage,
+    currentPage,
     // openGroups,
     // setOpenGroups,
     // Group spans loading

@@ -17,7 +17,10 @@ export function RunTable() {
     groupsTotal,
     goToPage,
     goToPreviousPage,
+    currentPage,
   } = TracesPageConsumer();
+
+  const currentPageValue = currentPage || 1;
 
   const observerTarget = useRef<HTMLDivElement>(null);
 
@@ -62,6 +65,7 @@ export function RunTable() {
       <GroupCardGrid
         groups={groups}
         totalGroups={groupsTotal}
+        currentPage={currentPageValue}
         hasMore={hasMoreGroups}
         loadingMore={loadingMoreGroups}
         onLoadMore={loadMoreGroups}

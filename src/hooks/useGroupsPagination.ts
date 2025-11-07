@@ -17,6 +17,7 @@ interface UseGroupsPaginationParams {
   groupBy?: 'time' | 'thread' | 'run'; // Grouping mode (default: 'time')
   threadId?: string; // Optional - for filtering by thread
   onGroupsLoaded?: (groups: GenericGroupDTO[]) => void;
+  initialPage?: number; // Optional initial page from URL
 }
 
 export function useGroupsPagination({
@@ -25,6 +26,7 @@ export function useGroupsPagination({
   groupBy = 'time',
   threadId,
   onGroupsLoaded,
+  initialPage = 1,
 }: UseGroupsPaginationParams) {
   // Pagination state for groups
   const [groupsOffset, setGroupsOffset] = useState<number>(0);
@@ -33,6 +35,7 @@ export function useGroupsPagination({
   const [loadingMoreGroups, setLoadingMoreGroups] = useState<boolean>(false);
   const [rawGroups, setRawGroups] = useState<GenericGroupDTO[]>([]);
   const [hideGroups, setHideGroups] = useState<HideGroupKey[]>([]);
+  const [currentPage, setCurrentPage] = useState<number>(initialPage);
   const projectIdRef = useLatest(projectId);
   const threadIdRef = useLatest(threadId);
   const bucketSizeRef = useLatest(bucketSize);
@@ -83,6 +86,7 @@ export function useGroupsPagination({
       setGroupsOffset(newOffset);
       setHasMoreGroups(newHasMore);
       setRawGroups(groups);
+      setCurrentPage(1);
 
       return response;
     },
@@ -156,7 +160,7 @@ export function useGroupsPagination({
     triggerRefreshGroups();
   }, [triggerRefreshGroups]);
 
-  // Go to a specific page
+  // Go to a specific page (loads only that specific page)
   const goToPage = useCallback(async (pageNumber: number) => {
     if (groupsLoading || loadingMoreGroups || pageNumber < 1) return;
 
@@ -170,45 +174,37 @@ export function useGroupsPagination({
 
     setLoadingMoreGroups(true);
     try {
-      // Load all groups from page 1 to target page
-      const allGroups: GenericGroupDTO[] = [];
-      let pagination = {
+      // Fetch only the specific page
+      const response = await listGroups({
+        projectId: projectIdRef.current,
+        params: {
+          groupBy: groupByRef.current,
+          ...(threadIdRef.current ? { threadIds: threadIdRef.current } : {}),
+          ...(groupByRef.current === 'time' ? { bucketSize: bucketSizeRef.current } : {}),
+          limit: LIMIT_LOADING_GROUPS,
+          offset: targetOffset,
+        },
+      });
+
+      const groups = response?.data || [];
+      const pagination = response?.pagination || {
         offset: 0,
         limit: 0,
         total: 0,
       };
 
-      // Fetch all pages up to target page in sequence
-      for (let page = 1; page <= pageNumber; page++) {
-        const offset = (page - 1) * LIMIT_LOADING_GROUPS;
-        const pageResponse = await listGroups({
-          projectId: projectIdRef.current,
-          params: {
-            groupBy: groupByRef.current,
-            ...(threadIdRef.current ? { threadIds: threadIdRef.current } : {}),
-            ...(groupByRef.current === 'time' ? { bucketSize: bucketSizeRef.current } : {}),
-            limit: LIMIT_LOADING_GROUPS,
-            offset,
-          },
-        });
-        allGroups.push(...(pageResponse?.data || []));
-        pagination = pageResponse?.pagination || pagination;
-      }
-
-      // Call onGroupsLoaded only for the newly loaded groups
-      if (allGroups.length > rawGroups.length) {
-        const newGroups = allGroups.slice(rawGroups.length);
-        onGroupsLoaded?.(newGroups);
-      }
+      // Call onGroupsLoaded for the loaded groups
+      onGroupsLoaded?.(groups);
 
       // Update pagination state
-      const newOffset = allGroups.length;
+      const newOffset = targetOffset + groups.length;
       const newHasMore = pagination.total > newOffset;
 
       setGroupsTotal(pagination.total);
       setGroupsOffset(newOffset);
       setHasMoreGroups(newHasMore);
-      setRawGroups(allGroups);
+      setRawGroups(groups);
+      setCurrentPage(pageNumber);
     } catch (err: any) {
       toast.error("Failed to go to page", {
         description: err.message || "An error occurred while navigating to page",
@@ -224,17 +220,15 @@ export function useGroupsPagination({
     threadIdRef,
     bucketSizeRef,
     refreshGroups,
-    rawGroups,
     onGroupsLoaded,
   ]);
 
   // Go to previous page
   const goToPreviousPage = useCallback(() => {
-    const currentPage = Math.ceil(groupsOffset / LIMIT_LOADING_GROUPS);
     if (currentPage > 1) {
       goToPage(currentPage - 1);
     }
-  }, [groupsOffset, goToPage]);
+  }, [currentPage, goToPage]);
 
   return {
     groups: rawGroups,
@@ -250,6 +244,7 @@ export function useGroupsPagination({
     setHideGroups,
     goToPage,
     goToPreviousPage,
+    currentPage,
     // openGroups,
     // setOpenGroups,
   };
