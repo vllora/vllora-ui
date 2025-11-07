@@ -38,7 +38,7 @@ export function ProjectDropdown({ onProjectChange }: ProjectDropdownProps) {
     }
     if (project_id_from === 'path' && currentProjectId  && location.pathname.includes(currentProjectId)) {
       let newPathName = location.pathname.replace(currentProjectId || '', projectId || '')
-      navigate(newPathName);
+      navigate(newPathName + location.search);
     }
     if (onProjectChange) {
       onProjectChange(projectId);
