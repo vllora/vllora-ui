@@ -57,6 +57,7 @@ export function ProjectDropdown({ onProjectChange }: ProjectDropdownProps) {
             <span className="truncate font-medium">
               {loading ? 'Loading...' : currentProject?.name || 'Select Project'}
             </span>
+            {currentProject?.is_default && <span className='text-xs bg-yellow-500/10 text-yellow-600 dark:text-yellow-500 px-2 py-0.5 rounded-full font-medium border border-yellow-500/20'>Default</span>}
           </div>
           <ChevronDown className="h-4 w-4 flex-shrink-0 opacity-50 transition-transform duration-200" />
         </Button>
