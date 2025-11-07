@@ -22,8 +22,14 @@ export { AnalyticsPage } from '../pages/analytics';
 export { SettingsPage } from '../pages/settings';
 export { ModelsPage } from '../pages/models';
 export { McpConfigPage } from '../pages/settings/mcp-config';
+export { ProviderKeysPage } from '../pages/settings/provider-keys';
+// Provider form components (API-agnostic UI)
+export { ProviderCredentialForm } from '../pages/settings/ProviderCredentialForm';
+export { ProviderCredentialModal } from '../pages/settings/ProviderCredentialModal';
+export { DeleteProviderDialog } from '../pages/settings/DeleteProviderDialog';
+export { ProviderKeysLoader } from '../pages/settings/ProviderKeysLoader';
+export type { CredentialFormValues } from '../pages/settings/ProviderCredentialForm';
 export { ProjectDropdown } from '../components/ProjectDropdown';
-export { ProviderIcon } from '../components/Icons/ProviderIcons'
 export { ModelSelector } from '../components/chat/traces/model-selector'
 export type { ModelPricing } from '../types/models';
 export  {
