@@ -4,6 +4,7 @@ import { createContext, ReactNode, useContext } from "react";
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { ProjectEventUnion, ProjectEventsHookProps, ProjectEventsState } from './dto';
 import { getEventsUrl } from "@/config/api";
+import { getAuthToken } from "@/lib/api-client";
 
 export const useProjectEvents = (props: ProjectEventsHookProps) => {
   const { projectId } = props;
@@ -136,12 +137,22 @@ export const useProjectEvents = (props: ProjectEventsHookProps) => {
       abortControllerRef.current = new AbortController();
       const eventsUrl = getEventsUrl();
 
+      // Get authentication token
+      const token = await getAuthToken();
+      
+      // Build headers with authentication if available
+      const headers: Record<string, string> = {
+        'Accept': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'x-project-id': projectIdRef.current
+      };
+
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       await fetchEventSource(eventsUrl, {
-        headers: {
-          'Accept': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          'x-project-id': projectIdRef.current
-        },
+        headers,
         signal: abortControllerRef.current.signal,
         onopen: async (response) => {
           // Ignore callbacks from stale connections
