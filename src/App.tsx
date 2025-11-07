@@ -40,11 +40,11 @@ function App() {
 
                 {/* Protected routes */}
                 <Route path="/" element={<ProtectedRoute>
-                  <ProviderKeysProvider>
-                    <ProjectsProvider project_id_from="query_string">
+                  <ProjectsProvider project_id_from="query_string">
+                    <ProviderKeysProvider>
                       <Layout />
-                    </ProjectsProvider>
-                  </ProviderKeysProvider>
+                    </ProviderKeysProvider>
+                  </ProjectsProvider>
                 </ProtectedRoute>}>
                   {/* Project-scoped routes (now using query string ?project_id=...) */}
                   <Route index element={<HomePage />} />

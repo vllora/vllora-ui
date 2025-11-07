@@ -10,6 +10,7 @@ import {
 } from '@/services/providers-api';
 import type { CredentialFormValues } from '@/pages/settings/ProviderCredentialForm';
 import { LocalModelsConsumer } from './LocalModelsContext';
+import { ProjectsConsumer } from './ProjectContext';
 
 export type ProviderKeysContextType = ReturnType<typeof useProviderKeys>;
 
@@ -23,13 +24,18 @@ export const shouldUseModal = (): boolean => {
 export function useProviderKeys() {
 
   const {refetchModels} = LocalModelsConsumer()
-  const { data: providers = [], loading, error, run: refetchProviders } = useRequest(listProviders, {
-    onError: (err) => {
-      toast.error('Failed to load providers', {
-        description: err.message || 'An error occurred while loading providers',
-      });
-    },
-  });
+  const { currentProjectId } = ProjectsConsumer();
+  const { data: providers = [], loading, error, run: refetchProviders } = useRequest(
+    () => listProviders(currentProjectId),
+    {
+      refreshDeps: [currentProjectId],
+      onError: (err) => {
+        toast.error('Failed to load providers', {
+          description: err.message || 'An error occurred while loading providers',
+        });
+      },
+    }
+  );
 
   const [editingProvider, setEditingProvider] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -134,7 +140,7 @@ export function useProviderKeys() {
       await updateProvider(providerName, {
         credentials,
         provider_type: provider.provider_type,
-      });
+      }, currentProjectId);
 
       toast.success('Provider credentials saved', {
         description: `${providerName} credentials have been saved successfully`,
@@ -164,7 +170,7 @@ export function useProviderKeys() {
       setSaving({ ...saving, [providerToDelete]: true });
       setLocalError(null);
 
-      await deleteProvider(providerToDelete);
+      await deleteProvider(providerToDelete, currentProjectId);
 
       toast.success('Provider credentials deleted', {
         description: `${providerToDelete} credentials have been deleted successfully`,

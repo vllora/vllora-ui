@@ -1,4 +1,4 @@
-import { api, handleApiResponse } from '@/lib/api-client';
+import { apiClient, handleApiResponse } from '@/lib/api-client';
 
 // Credentials types based on the Rust backend
 export interface ApiKeyCredentials {
@@ -76,16 +76,31 @@ export interface UpdateProviderRequest {
 /**
  * List all providers with their credential status
  */
-export async function listProviders(): Promise<ProviderInfo[]> {
-  const response = await api.get('/providers');
+export async function listProviders(projectId?: string): Promise<ProviderInfo[]> {
+  const response = await apiClient('/providers', {
+    method: 'GET',
+    ...(projectId && {
+      headers: {
+        'x-project-id': projectId,
+      },
+    }),
+  });
   return handleApiResponse<ProviderInfo[]>(response);
 }
 
 /**
  * Create a new provider
  */
-export async function createProvider(request: CreateProviderRequest): Promise<ProviderInfo> {
-  const response = await api.post('/providers', request);
+export async function createProvider(request: CreateProviderRequest, projectId?: string): Promise<ProviderInfo> {
+  const response = await apiClient('/providers', {
+    method: 'POST',
+    body: JSON.stringify(request),
+    ...(projectId && {
+      headers: {
+        'x-project-id': projectId,
+      },
+    }),
+  });
   const data = await handleApiResponse<ProviderResponse>(response);
   return data.provider;
 }
@@ -95,9 +110,18 @@ export async function createProvider(request: CreateProviderRequest): Promise<Pr
  */
 export async function updateProvider(
   providerName: string,
-  request: UpdateProviderRequest
+  request: UpdateProviderRequest,
+  projectId?: string
 ): Promise<ProviderInfo> {
-  const response = await api.put(`/providers/${providerName}`, request);
+  const response = await apiClient(`/providers/${providerName}`, {
+    method: 'PUT',
+    body: JSON.stringify(request),
+    ...(projectId && {
+      headers: {
+        'x-project-id': projectId,
+      },
+    }),
+  });
   const data = await handleApiResponse<ProviderResponse>(response);
   return data.provider;
 }
@@ -105,7 +129,14 @@ export async function updateProvider(
 /**
  * Delete provider credentials
  */
-export async function deleteProvider(providerName: string): Promise<void> {
-  const response = await api.delete(`/providers/${providerName}`);
+export async function deleteProvider(providerName: string, projectId?: string): Promise<void> {
+  const response = await apiClient(`/providers/${providerName}`, {
+    method: 'DELETE',
+    ...(projectId && {
+      headers: {
+        'x-project-id': projectId,
+      },
+    }),
+  });
   await handleApiResponse<void>(response);
 }
