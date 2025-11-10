@@ -332,7 +332,7 @@ function ProviderSetupSection() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate(`${window.location.pathname}/settings`)}
+            onClick={() => navigate(`/settings?section=providers`)}
             className="text-xs"
           >
             View all
