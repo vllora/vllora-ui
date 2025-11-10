@@ -55,11 +55,6 @@ export async function apiClient(
 
   // Add authentication token if provider is configured
   if (globalTokenProvider) {
-    // TEMP - remove this change url later 
-    if(['/projects'].includes(endpoint)) {
-      url = `https://api.staging.langdb.ai${endpoint}`;
-    }
-
     try {
       const token = await globalTokenProvider();
       if (token) {
