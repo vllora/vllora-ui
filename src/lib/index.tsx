@@ -1,10 +1,11 @@
 // Context providers and consumers
 export { AuthProvider, AuthConsumer } from '../contexts/AuthContext';
 export { ProjectsProvider, ProjectsConsumer } from '../contexts/ProjectContext';
-export { LocalModelsProvider, LocalModelsConsumer } from '../contexts/LocalModelsContext';
+export { ProjectModelsProvider as LocalModelsProvider, ProjectModelsConsumer as LocalModelsConsumer } from '../contexts/ProjectModelsContext';
 export { ProviderKeysProvider, ProviderKeysConsumer } from '../contexts/ProviderKeysContext';
 export { ProjectEventsProvider, ProjectEventsConsumer } from '../contexts/project-events';
 export { CurrentAppProvider, CurrentAppConsumer } from '../contexts/CurrentAppContext';
+export { ProjectModelsProvider, ProjectModelsConsumer } from '../contexts/ProjectModelsContext'
 // Theme provider
 export { ThemeProvider } from '../components/theme-provider';
 
@@ -32,7 +33,7 @@ export type { CredentialFormValues } from '../pages/settings/ProviderCredentialF
 export { ProjectDropdown } from '../components/ProjectDropdown';
 export { ModelSelector } from '../components/chat/traces/model-selector'
 export type { ModelPricing } from '../types/models';
-export  {
+export {
   Select,
   SelectContent,
   SelectItem,

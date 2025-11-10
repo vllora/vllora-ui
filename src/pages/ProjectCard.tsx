@@ -40,11 +40,12 @@ export function ProjectCard({
       className="hover:border-[rgb(var(--theme-500))] hover:shadow-lg hover:shadow-[rgba(var(--theme-500),0.1)] transition-all duration-200 group cursor-pointer relative overflow-hidden"
       onClick={() => {
         // Navigate to project with path-based routing
-        if (isDefaultProject(project.id)) {
-          navigate('/projects');
-        } else {
-          navigate(`/projects/${project.id}`);
-        }
+        // if (isDefaultProject(project.id)) {
+        //   navigate('/projects');
+        // } else {
+        //   navigate(`/projects/${project.id}`);
+        // }
+         navigate(`/projects/${project.id}`);
       }}
     >
       {/* Gradient overlay on hover */}

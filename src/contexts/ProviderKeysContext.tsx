@@ -1,4 +1,4 @@
-import { createContext, useContext, ReactNode, useState } from 'react';
+import { createContext, useContext, ReactNode, useState, useCallback } from 'react';
 import { useRequest } from 'ahooks';
 import { toast } from 'sonner';
 import {
@@ -9,7 +9,7 @@ import {
   type Credentials,
 } from '@/services/providers-api';
 import type { CredentialFormValues } from '@/pages/settings/ProviderCredentialForm';
-import { LocalModelsConsumer } from './LocalModelsContext';
+import { ProjectModelsConsumer } from './ProjectModelsContext';
 import { ProjectsConsumer } from './ProjectContext';
 
 export type ProviderKeysContextType = ReturnType<typeof useProviderKeys>;
@@ -23,7 +23,7 @@ export const shouldUseModal = (): boolean => {
 
 export function useProviderKeys() {
 
-  const {refetchModels} = LocalModelsConsumer()
+  const {refetchModels} = ProjectModelsConsumer()
   const { currentProjectId } = ProjectsConsumer();
   const { data: providers = [], loading, error, run: refetchProviders } = useRequest(
     () => listProviders(currentProjectId),
@@ -88,7 +88,7 @@ export function useProviderKeys() {
     }
   };
 
-  const saveProvider = async (providerName: string) => {
+  const saveProvider = useCallback( async (providerName: string) => {
     const values = credentialValues[providerName];
     const provider = providers.find(p => p.name === providerName);
 
@@ -148,7 +148,9 @@ export function useProviderKeys() {
       setEditingProvider(null);
       setCredentialValues({ ...credentialValues, [providerName]: {} });
       await refetchProviders();
-      refetchModels();
+      refetchModels({
+        projectId: currentProjectId
+      });
     } catch (err) {
       toast.error('Failed to save provider', {
         description: err instanceof Error ? err.message : 'An error occurred while saving provider',
@@ -156,14 +158,14 @@ export function useProviderKeys() {
     } finally {
       setSaving({ ...saving, [providerName]: false });
     }
-  };
+  }, [currentProjectId]);
 
   const startDeleteProvider = (providerName: string) => {
     setProviderToDelete(providerName);
     setDeleteDialogOpen(true);
   };
 
-  const confirmDeleteProvider = async () => {
+  const confirmDeleteProvider = useCallback( async () => {
     if (!providerToDelete) return;
 
     try {
@@ -179,7 +181,9 @@ export function useProviderKeys() {
       setDeleteDialogOpen(false);
       setProviderToDelete(null);
       await refetchProviders();
-      refetchModels();
+      refetchModels({
+        projectId: currentProjectId
+      });
     } catch (err) {
       toast.error('Failed to delete provider', {
         description: err instanceof Error ? err.message : 'An error occurred while deleting provider',
@@ -187,7 +191,7 @@ export function useProviderKeys() {
     } finally {
       setSaving({ ...saving, [providerToDelete]: false });
     }
-  };
+  }, [currentProjectId]);
 
   const cancelDeleteProvider = () => {
     setDeleteDialogOpen(false);

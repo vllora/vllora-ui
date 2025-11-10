@@ -8,7 +8,7 @@ import { SettingsPage } from "./pages/settings"
 import { LoginPage } from "./pages/login"
 import { ThemeProvider } from "./components/theme-provider"
 import { ProjectsProvider } from "./contexts/ProjectContext"
-import { LocalModelsProvider } from "./contexts/LocalModelsContext"
+import { ProjectModelsProvider } from "./contexts/ProjectModelsContext"
 import { Toaster } from "sonner"
 import { useEffect, lazy, Suspense } from "react"
 import { applyTheme, getThemeFromStorage } from "./themes/themes"
@@ -33,49 +33,50 @@ function App() {
       <CurrentAppProvider app_mode="vllora">
         <AuthProvider>
           <BrowserRouter>
-            <LocalModelsProvider>
-              <Routes>
-                {/* Public routes */}
-                <Route path="/login" element={<LoginPage />} />
 
-                {/* Protected routes */}
-                <Route path="/" element={<ProtectedRoute>
-                  <ProjectsProvider project_id_from="query_string">
+            <Routes>
+              {/* Public routes */}
+              <Route path="/login" element={<LoginPage />} />
+
+              {/* Protected routes */}
+              <Route path="/" element={<ProtectedRoute>
+                <ProjectsProvider project_id_from="query_string">
+                  <ProjectModelsProvider>
                     <ProviderKeysProvider>
                       <Layout />
                     </ProviderKeysProvider>
-                  </ProjectsProvider>
-                </ProtectedRoute>}>
-                  {/* Project-scoped routes (now using query string ?project_id=...) */}
-                  <Route index element={<HomePage />} />
-                  <Route path="chat" element={<ThreadsAndTracesPage />} />
-                  <Route path="analytics" element={<AnalyticsPage />} />
-                  <Route
-                    path="models"
-                    element={
-                      <Suspense fallback={
-                        <section className="flex-1 flex flex-col overflow-auto bg-background text-foreground w-full">
-                          <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-12">
-                            <LocalModelsSkeletonLoader viewMode="table" count={12} />
-                          </div>
-                        </section>
-                      }>
-                        <ModelsPage />
-                      </Suspense>
-                    }
-                  />
+                  </ProjectModelsProvider>
+                </ProjectsProvider>
+              </ProtectedRoute>}>
+                {/* Project-scoped routes (now using query string ?project_id=...) */}
+                <Route index element={<HomePage />} />
+                <Route path="chat" element={<ThreadsAndTracesPage />} />
+                <Route path="analytics" element={<AnalyticsPage />} />
+                <Route
+                  path="models"
+                  element={
+                    <Suspense fallback={
+                      <section className="flex-1 flex flex-col overflow-auto bg-background text-foreground w-full">
+                        <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-12">
+                          <LocalModelsSkeletonLoader viewMode="table" count={12} />
+                        </div>
+                      </section>
+                    }>
+                      <ModelsPage />
+                    </Suspense>
+                  }
+                />
 
-                  {/* Global routes */}
-                  <Route path="projects" element={<ProjectsPage />} />
-                  <Route path="settings" element={<SettingsPage />} />
-                </Route>
-              </Routes>
-              <Toaster position="top-right" richColors />
-            </LocalModelsProvider>
-          </BrowserRouter>
-        </AuthProvider>
-      </CurrentAppProvider>
-    </ThemeProvider>
+                {/* Global routes */}
+                <Route path="projects" element={<ProjectsPage />} />
+                <Route path="settings" element={<SettingsPage />} />
+              </Route>
+            </Routes>
+            <Toaster position="top-right" richColors />
+        </BrowserRouter>
+      </AuthProvider>
+    </CurrentAppProvider>
+    </ThemeProvider >
   )
 }
 

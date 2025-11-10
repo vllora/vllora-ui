@@ -1,23 +1,18 @@
-import { LocalModel } from '@/types/models';
-import { getBackendUrl } from '@/config/api';
+import { LocalModel } from "@/types/models";
+import { api, handleApiResponse } from "@/lib/api-client";
 
-export async function fetchLocalModels(): Promise<LocalModel[]> {
-  const url = `${getBackendUrl()}/v1/pricing?include_parameters=true&include_benchmark=true`;
+export async function fetchProjectModels(props: {
+  projectId?: string;
+}): Promise<LocalModel[]> {
+  const { projectId } = props;
 
-  const response = await fetch(url, {
-    method: 'GET',
+  console.log('==== fetchProjectModels', projectId)
+
+  const response = await api.get(`/v1/pricing?include_parameters=true&include_benchmark=true`, projectId ? {
     headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch local models: ${response.status} ${response.statusText}`);
-  }
-
-  const data: LocalModel[] = await response.json();
-  
-  // Return models as-is - let the UI components handle filtering by available flag
-  // The "configured" filter in the UI will filter by available when needed
+      'x-project-id': projectId
+    }
+  }: undefined);
+  const data = await handleApiResponse<LocalModel[]>(response);
   return data;
 }

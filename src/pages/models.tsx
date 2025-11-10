@@ -1,7 +1,7 @@
 import { AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
 import { LocalModelsExplorer } from '@/components/models/local/LocalModelsExplorer';
 import { LocalModelsSkeletonLoader } from '@/components/models/local/LocalModelsSkeletonLoader';
-import { LocalModelsConsumer } from '@/contexts/LocalModelsContext';
+import { ProjectModelsConsumer } from '@/contexts/ProjectModelsContext';
 import { Button } from '@/components/ui/button';
 import { ProviderKeysConsumer } from '@/contexts/ProviderKeysContext';
 import { useMemo } from 'react';
@@ -51,7 +51,7 @@ export function ModelsPage(props: {
   hideBackBtn?: boolean;
 }) {
   const { hideBackBtn } = props;
-  const { models: localModels, loading: localLoading, error: localError, refetchModels: localRefetch } = LocalModelsConsumer();
+  const { models: localModels, loading: localLoading, error: localError, refetchModels: localRefetch } = ProjectModelsConsumer();
   const { providers } = ProviderKeysConsumer();
   const navigate = useNavigate();
 

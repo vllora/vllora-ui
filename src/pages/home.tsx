@@ -2,7 +2,7 @@ import { AlertCircle, RefreshCw, MessageSquare, BookOpen, ExternalLink, ChevronR
 import { useMemo } from 'react';
 import { LocalModelCard } from '@/components/models/local/LocalModelCard';
 import { LocalModelsSkeletonLoader } from '@/components/models/local/LocalModelsSkeletonLoader';
-import { LocalModelsConsumer } from '@/contexts/LocalModelsContext';
+import { ProjectModelsConsumer } from '@/contexts/ProjectModelsContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ProviderKeysConsumer } from '@/contexts/ProviderKeysContext';
@@ -69,7 +69,7 @@ function getTopModelsByBenchmark(models: LocalModel[], limit: number = 12): Loca
 }
 
 export function HomePage() {
-  const { models: localModels, loading: localLoading, error: localError, refetchModels: localRefetch } = LocalModelsConsumer();
+  const { models: localModels, loading: localLoading, error: localError, refetchModels: localRefetch } = ProjectModelsConsumer();
   const { currentProjectId, isDefaultProject, project_id_from } = ProjectsConsumer();
   const { providers } = ProviderKeysConsumer();
   const { app_mode } = CurrentAppConsumer()

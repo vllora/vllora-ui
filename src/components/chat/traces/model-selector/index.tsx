@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { ChevronDown, AlertTriangle } from 'lucide-react';
-import { LocalModelsConsumer } from '@/contexts/LocalModelsContext';
+import { ProjectModelsConsumer } from '@/contexts/ProjectModelsContext';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import {
   DropdownMenu,
@@ -28,7 +28,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   selectedModel,
   onModelChange,
 }) => {
-  const { models } = LocalModelsConsumer();
+  const { models } = ProjectModelsConsumer();
   const { selectedModelInfo, selectedProvider, isSelectedProviderConfigured, setSelectedProviderForConfig, setConfigDialogOpen, handleWarningClick } = ChatWindowConsumer();
 
   return <ModelSelectorComponent

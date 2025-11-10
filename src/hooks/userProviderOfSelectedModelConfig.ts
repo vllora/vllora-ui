@@ -1,4 +1,4 @@
-import { LocalModelsConsumer } from "@/contexts/LocalModelsContext";
+import { ProjectModelsConsumer } from "@/contexts/ProjectModelsContext";
 import { LocalModel, LocalModelProviderInfo } from "@/types/models";
 import { useCallback, useMemo, useState } from "react";
 
@@ -6,7 +6,7 @@ export const useUserProviderOfSelectedModelConfig = (props: {
   selectedModel: string;
 }) => {
   const { selectedModel } = props;
-  const { models } = LocalModelsConsumer();
+  const { models } = ProjectModelsConsumer();
   const [selectedProviderForConfig, setSelectedProviderForConfig] = useState<
     string | undefined
   >(undefined);
@@ -39,6 +39,7 @@ export const useUserProviderOfSelectedModelConfig = (props: {
     }
     return undefined;
   }, [selectedModelInfo, selectedModel]);
+
   const isNoProviderConfigured = useMemo(() => {
     if (!selectedModelInfo || selectedModelInfo.endpoints?.length === 0) {
       return true;
