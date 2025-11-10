@@ -11,15 +11,18 @@ import {
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { Link, useNavigate, useLocation } from "react-router";
 import { useCallback } from 'react';
+import { CurrentAppConsumer } from '@/lib';
+import { CreateProjectDialog } from '@/pages/CreateProjectDialog';
 
 interface ProjectDropdownProps {
   onProjectChange?: (projectId: string) => void;
 }
 
 export function ProjectDropdown({ onProjectChange }: ProjectDropdownProps) {
-  const { projects, loading, currentProject, currentProjectId, isDefaultProject, project_id_from } = ProjectsConsumer();
+  const { projects, loading, currentProject, currentProjectId, isDefaultProject, project_id_from, setIsCreateDialogOpen, isCreateDialogOpen, refetchProjects } = ProjectsConsumer();
   const navigate = useNavigate();
   const location = useLocation();
+  const { app_mode } = CurrentAppConsumer()
 
   const handleProjectSelect = useCallback((projectId: string) => {
     // Skip if already selected
@@ -36,7 +39,7 @@ export function ProjectDropdown({ onProjectChange }: ProjectDropdownProps) {
       const queryString = searchParams.toString();
       navigate(`${location.pathname}${queryString ? '?' + queryString : ''}`);
     }
-    if (project_id_from === 'path' && currentProjectId  && location.pathname.includes(currentProjectId)) {
+    if (project_id_from === 'path' && currentProjectId && location.pathname.includes(currentProjectId)) {
       let newPathName = location.pathname.replace(currentProjectId || '', projectId || '')
       navigate(newPathName + location.search);
     }
@@ -45,7 +48,7 @@ export function ProjectDropdown({ onProjectChange }: ProjectDropdownProps) {
     }
   }, [location, navigate, onProjectChange, currentProjectId, isDefaultProject, project_id_from]);
 
-  return (
+  return (<>
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
@@ -114,12 +117,25 @@ export function ProjectDropdown({ onProjectChange }: ProjectDropdownProps) {
             </DropdownMenuItem>
           </Link>
 
-          <DropdownMenuItem disabled={true} className="flex items-center gap-3 cursor-pointer rounded-lg mx-1 px-3 py-2 text-[rgb(var(--theme-600))] dark:text-[rgb(var(--theme-400))] hover:bg-[rgba(var(--theme-500),0.1)] transition-all duration-200">
+          <DropdownMenuItem disabled={app_mode === 'vllora'}
+            onClick={(e) => {
+              e.preventDefault()
+              if (app_mode !== 'vllora') {
+                setIsCreateDialogOpen(true)
+              }
+            }}
+            className="flex items-center gap-3 cursor-pointer rounded-lg mx-1 px-3 py-2 text-[rgb(var(--theme-600))] dark:text-[rgb(var(--theme-400))] hover:bg-[rgba(var(--theme-500),0.1)] transition-all duration-200">
             <Plus className="h-4 w-4 flex-shrink-0" />
             <span className="font-medium">New Project</span>
           </DropdownMenuItem>
         </div>
       </DropdownMenuContent>
     </DropdownMenu>
+    <CreateProjectDialog
+      isOpen={isCreateDialogOpen}
+      onOpenChange={setIsCreateDialogOpen}
+      onProjectCreated={refetchProjects}
+    />
+  </>
   );
 }

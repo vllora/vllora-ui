@@ -25,6 +25,8 @@ export function Layout() {
           {currentProjectId ? (
             <ProjectEventsProvider projectId={currentProjectId}>
               <Outlet />
+              {/* Create Project Dialog */}
+              
             </ProjectEventsProvider>
           ) : (
             <Outlet />

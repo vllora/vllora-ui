@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useMemo, useCallback, ReactNode, useState } from 'react';
 import { useRequest } from 'ahooks';
 import { useSearchParams, useParams } from "react-router";
 import { toast } from 'sonner';
@@ -14,6 +14,7 @@ export function useProject(props: {
   const { project_id_from } = props
   const [searchParams] = useSearchParams();
   const params = useParams();
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
   // Extract projectId from URL path params (e.g., /projects/:projectId/chat)
   // or from query string (e.g., /chat?projectId=123)
@@ -64,7 +65,9 @@ export function useProject(props: {
     currentProjectId,
     defaultProject,
     isDefaultProject,
-    project_id_from
+    project_id_from,
+    setIsCreateDialogOpen,
+    isCreateDialogOpen
   };
 }
 

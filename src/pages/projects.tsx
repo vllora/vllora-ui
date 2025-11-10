@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { FolderOpen, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -9,13 +8,11 @@ import {
 } from '@/components/ui/card';
 import { deleteProject } from '@/services/projects-api';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
-import { CreateProjectDialog } from './CreateProjectDialog';
 import { ProjectCard } from './ProjectCard';
 import { CurrentAppConsumer } from '@/lib';
 
 export function ProjectsPage() {
-  const { projects, loading, refetchProjects, isDefaultProject } = ProjectsConsumer();
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const { projects, loading, refetchProjects, isDefaultProject} = ProjectsConsumer();
   const { app_mode } = CurrentAppConsumer();
 
   const handleDeleteProject = async (projectId: string) => {
@@ -139,12 +136,7 @@ export function ProjectsPage() {
         </div>
       </div>
 
-      {/* Create Project Dialog */}
-      <CreateProjectDialog
-        isOpen={isCreateDialogOpen}
-        onOpenChange={setIsCreateDialogOpen}
-        onProjectCreated={refetchProjects}
-      />
+      
     </div>
   );
 }
