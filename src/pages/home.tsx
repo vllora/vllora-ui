@@ -133,11 +133,10 @@ export function HomePage() {
               const params = new URLSearchParams();
               params.set('tab', 'traces');
               if (currentProjectId && !isDefaultProject(currentProjectId) && project_id_from === 'query_string') {
-                params.set('project_id', currentProjectId);
+                params.set('projectId', currentProjectId);
               }
               const queryString = params.toString();
-              const currentLocation = window.location
-              navigate(`${currentLocation.pathname}/chat?${queryString}`);
+              navigate(`/chat?${queryString}`);
             }}
           >
             <CardContent className="flex items-center gap-4 p-6">
