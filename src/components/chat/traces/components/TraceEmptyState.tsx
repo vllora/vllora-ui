@@ -9,11 +9,11 @@ interface TraceEmptyStateProps {
 
 export const TraceEmptyState: React.FC<TraceEmptyStateProps> = ({ projectId }) => {
   const searchParam = new URLSearchParams(window.location.search);
-  const projectIdFromUrl = searchParam.get('project_id') ?? projectId;
+  const projectIdFromUrl = searchParam.get('projectId') ?? projectId;
   const threadIdFromUrl = searchParam.get('threadId');
   const model = searchParam.get('model') || 'openai/gpt-4o-mini';
 
-  // Only include x-project-id if project_id exists
+  // Only include x-project-id if projectId exists
   const projectIdHeader = projectIdFromUrl
     ? `  -H 'x-project-id: ${projectIdFromUrl}' \\\n`
     : '';

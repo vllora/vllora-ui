@@ -27,12 +27,12 @@ export function ThreadsAndTracesPage() {
 
   const handleProjectChange = useCallback((newProjectId: string) => {
     localStorage.setItem('currentProjectId', newProjectId);
-    // Update the project_id query param while keeping current path (omit if default)
+    // Update the projectId query param while keeping current path (omit if default)
     const params = new URLSearchParams(searchParams);
     if (isDefaultProject(newProjectId)) {
-      params.delete('project_id');
+      params.delete('projectId');
     } else {
-      params.set('project_id', newProjectId);
+      params.set('projectId', newProjectId);
     }
     const queryString = params.toString();
     navigate(`${location.pathname}${queryString ? '?' + queryString : ''}`);

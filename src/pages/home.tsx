@@ -108,11 +108,10 @@ export function HomePage() {
               // Navigate to chat while preserving project context
               const params = new URLSearchParams();
               if (currentProjectId && !isDefaultProject(currentProjectId) && project_id_from === 'query_string') {
-                params.set('project_id', currentProjectId);
+                params.set('projectId', currentProjectId);
               }
               const queryString = params.toString();
-              const currentLocation = window.location
-              navigate(`${currentLocation.pathname}/chat${queryString ? '?' + queryString : ''}`);
+              navigate(`/chat${queryString ? '?' + queryString : ''}`);
             }}
           >
             <CardContent className="flex items-center gap-4 p-6">
@@ -210,7 +209,7 @@ export function HomePage() {
                 {localError.message}
               </p>
               <Button
-                onClick={() => localRefetch()}
+                onClick={() => {}}
                 variant="outline"
                 className="flex items-center gap-2"
               >

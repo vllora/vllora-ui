@@ -46,9 +46,9 @@ export const ConversationAndTraces = () => {
       }
     }
     if (projectId && !isDefaultProject(projectId)) {
-      params.set('project_id', projectId);
+      params.set('projectId', projectId);
     } else {
-      params.delete('project_id');
+      params.delete('projectId');
     }
     navigate(`/chat?${params.toString()}`);
   }, [selectedThreadId, threads, searchParams, projectId, updateThread, navigate, isDefaultProject]);

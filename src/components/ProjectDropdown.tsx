@@ -26,12 +26,12 @@ export function ProjectDropdown({ onProjectChange }: ProjectDropdownProps) {
     if (projectId === currentProjectId) return;
 
     if (project_id_from == 'query_string') {
-      // Update URL with new project_id query parameter (omit if default project)
+      // Update URL with new projectId query parameter (omit if default project)
       const searchParams = new URLSearchParams(location.search);
       if (isDefaultProject(projectId)) {
-        searchParams.delete('project_id');
+        searchParams.delete('projectId');
       } else {
-        searchParams.set('project_id', projectId);
+        searchParams.set('projectId', projectId);
       }
       const queryString = searchParams.toString();
       navigate(`${location.pathname}${queryString ? '?' + queryString : ''}`);

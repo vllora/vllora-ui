@@ -197,14 +197,14 @@ export const getLinkFromAttribute = (props: {
     const mcp_server_json = mcp_server_string && tryParseJson(mcp_server_string);
     const mcp_slug = mcp_server_json && mcp_server_json['slug'];
     if (mcp_slug) {
-        return projectId ? `/projects/${projectId}/mcp-servers/${mcp_slug}/details` : (mcp_template_definition_id ? `/mcp-servers/${mcp_template_definition_id}` : ``)
+        return projectId ? `/mcp-servers/${mcp_slug}/details?projectId=${projectId}` : (mcp_template_definition_id ? `/mcp-servers/${mcp_template_definition_id}` : ``)
     }
     const model_id = attributes && attributes['model_id'] as string;
     const virtual_model_string = attributes && attributes['virtual_model'] as string;
     const virtual_model_json = virtual_model_string && tryParseJson(virtual_model_string);
     const virtual_model_slug = virtual_model_json && virtual_model_json['slug'] || model_id;
     if (virtual_model_slug) {
-        return projectId ? `/projects/${projectId}/models/virtual-models/${virtual_model_slug}/edit` : ''
+        return projectId ? `/models/virtual-models/${virtual_model_slug}/edit?projectId=${projectId}` : ''
     }
     let modelDetailName = getModelDetailName(currentSpan, relatedSpans);
     if (modelDetailName) {
