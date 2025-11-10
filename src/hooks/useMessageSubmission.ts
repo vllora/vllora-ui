@@ -216,7 +216,11 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
 
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.error || response.statusText);
+          if(errorData.error && typeof errorData.error === 'object' && errorData.error.message) {
+            throw new Error(errorData.error.message);
+          } else {
+            throw new Error(errorData.error || response.statusText);
+          }
         }
 
         // Extract headers
@@ -301,7 +305,6 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
         if (error instanceof Error && error.name === 'AbortError') {
           return;
         }
-
         setError(error instanceof Error ? error.message : String(error));
         setTyping(false);
       } finally {

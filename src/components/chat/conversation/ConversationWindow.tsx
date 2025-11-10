@@ -257,14 +257,13 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       {error && (
         <div className="mx-4 mb-2 bg-red-900/20 border border-red-500/30 flex p-3 rounded-lg items-center justify-between shadow-md">
           <div className="flex flex-1 items-center gap-2">
-            <XCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
             <span className="text-red-400 text-sm break-words">{error}</span>
           </div>
           <button
             onClick={() => setError(undefined)}
             className="text-muted-foreground hover:text-foreground transition-colors"
           >
-            <XCircle className="w-5 h-5" />
+            <XCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
           </button>
         </div>
       )}
