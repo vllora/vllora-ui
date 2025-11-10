@@ -1,17 +1,17 @@
 import React from 'react';
-import { LocalModel, LocalModelProviderInfo } from '@/types/models';
+import { ModelInfo, ModelProviderInfo } from '@/types/models';
 import { ModelStepContent } from './ModelStepContent';
 import { ProviderStepContent } from './ProviderStepContent';
 
 interface ModelSelectorContentProps {
   currentStep: 'model' | 'provider';
   handleBack: () => void;
-  selectedProvider?: LocalModelProviderInfo;
+  selectedProvider?: ModelProviderInfo;
   modelNames: string[];
   handleModelNameSelect: (modelName: string) => void;
   getProviderCount: (modelName: string) => number;
-  providers: LocalModelProviderInfo[];
-  selectedModelInfo?: LocalModel;
+  providers: ModelProviderInfo[];
+  selectedModelInfo?: ModelInfo;
   selectedModel: string;
   handleModelSelect: (modelId: string) => void;
   setSelectedProviderForConfig?: (providerName: string) => void;

@@ -51,7 +51,7 @@ export function ModelsPage(props: {
   hideBackBtn?: boolean;
 }) {
   const { hideBackBtn } = props;
-  const { models: localModels, loading: localLoading, error: localError, refetchModels: localRefetch } = ProjectModelsConsumer();
+  const { models: localModels, loading: localLoading, error: localError } = ProjectModelsConsumer();
   const { providers } = ProviderKeysConsumer();
   const navigate = useNavigate();
 

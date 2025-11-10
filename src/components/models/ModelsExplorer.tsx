@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { ModelPricing } from '@/types/models';
+import { ModelInfo } from '@/types/models';
 import { ModelCard } from './ModelCard';
 import { ModelSearchFilters } from './ModelSearchFilters';
 import { NewModelsTable } from './NewModelsTable';
@@ -7,7 +7,7 @@ import { LayoutGrid, List } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface ModelsExplorerProps {
-  models: ModelPricing[];
+  models: ModelInfo[];
   showViewModeToggle?: boolean;
   showStats?: boolean;
   statsTitle?: string;
@@ -80,7 +80,7 @@ export const ModelsExplorer: React.FC<ModelsExplorerProps> = ({
 
   // Group models by name for display
   const groupedModels = useMemo(() => {
-    const groups = new Map<string, ModelPricing[]>();
+    const groups = new Map<string, ModelInfo[]>();
 
     models.forEach(model => {
       const modelName = (model.model || '').toLowerCase();
@@ -109,7 +109,7 @@ export const ModelsExplorer: React.FC<ModelsExplorerProps> = ({
         const search = searchTerm.toLowerCase();
         const nameMatch = model.model?.toLowerCase().includes(search);
         const publisherMatch = model.model_provider?.toLowerCase().includes(search);
-        const providerMatch = modelGroup.some((m: ModelPricing) =>
+        const providerMatch = modelGroup.some((m: ModelInfo) =>
           m.inference_provider?.provider?.toLowerCase().includes(search)
         );
 
@@ -120,7 +120,7 @@ export const ModelsExplorer: React.FC<ModelsExplorerProps> = ({
 
       // Provider filter - check if ANY provider in the group matches
       if (selectedProviders.length > 0) {
-        const hasMatchingProvider = modelGroup.some((m: ModelPricing) =>
+        const hasMatchingProvider = modelGroup.some((m: ModelInfo) =>
           selectedProviders.includes(m.inference_provider?.provider || '')
         );
         if (!hasMatchingProvider) {
@@ -189,7 +189,7 @@ export const ModelsExplorer: React.FC<ModelsExplorerProps> = ({
   }, []);
 
   // Check if model is new (within last 7 days)
-  const isNewModel = useCallback((model: ModelPricing) => {
+  const isNewModel = useCallback((model: ModelInfo) => {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     if (model.langdb_release_date) {
       return new Date(model.langdb_release_date) > sevenDaysAgo;

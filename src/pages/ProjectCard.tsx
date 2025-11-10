@@ -28,7 +28,6 @@ interface ProjectCardProps {
 
 export function ProjectCard({
   project,
-  isDefaultProject,
   formatDate,
   onDelete,
 }: ProjectCardProps) {

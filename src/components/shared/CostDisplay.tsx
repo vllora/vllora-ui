@@ -1,10 +1,10 @@
 import React, { useMemo } from 'react';
 import { Upload, Download, Database } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ModelPricing } from '@/types/models';
+import { ModelInfo } from '@/types/models';
 
 interface CostDisplayProps {
-  model: ModelPricing;
+  model: ModelInfo;
   className?: string;
   showTooltip?: boolean;
 }

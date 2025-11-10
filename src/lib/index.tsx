@@ -32,7 +32,7 @@ export { ProviderKeysLoader } from '../pages/settings/ProviderKeysLoader';
 export type { CredentialFormValues } from '../pages/settings/ProviderCredentialForm';
 export { ProjectDropdown } from '../components/ProjectDropdown';
 export { ModelSelector } from '../components/chat/traces/model-selector'
-export type { ModelPricing } from '../types/models';
+export type { ModelInfo } from '../types/models';
 export {
   Select,
   SelectContent,

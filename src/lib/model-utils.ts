@@ -1,4 +1,4 @@
-import { ModelPricing } from "@/types/models";
+import { ModelInfo } from "@/types/models";
 
 export function formatContextSize(size: number): string {
   if (size >= 1000000) {
@@ -35,7 +35,7 @@ export function isNewModel(releaseDate?: string): boolean {
   return date > thirtyDaysAgo;
 }
 
-export function groupModelsByName(models: ModelPricing[]): Record<string, ModelPricing[]> {
+export function groupModelsByName(models: ModelInfo[]): Record<string, ModelInfo[]> {
   return models.reduce((acc, model) => {
     const key = model.model;
     if (!acc[key]) {
@@ -43,10 +43,10 @@ export function groupModelsByName(models: ModelPricing[]): Record<string, ModelP
     }
     acc[key].push(model);
     return acc;
-  }, {} as Record<string, ModelPricing[]>);
+  }, {} as Record<string, ModelInfo[]>);
 }
 
-export function sortModelsByDate(models: ModelPricing[]): ModelPricing[] {
+export function sortModelsByDate(models: ModelInfo[]): ModelInfo[] {
   return [...models].sort((a, b) => {
     const dateA = new Date(a.release_date || a.langdb_release_date || 0);
     const dateB = new Date(b.release_date || b.langdb_release_date || 0);

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useSearchParams } from "react-router";
-import { LocalModel } from '@/types/models';
+import { ModelInfo } from '@/types/models';
 import { LocalModelCard } from './LocalModelCard';
 import { LocalModelsTable } from './LocalModelsTable';
 import { LocalModelSearchFilters } from './LocalModelSearchFilters';
@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { ProviderInfo } from '@/services/providers-api';
 
 interface LocalModelsExplorerProps {
-  models: LocalModel[];
+  models: ModelInfo[];
   showViewModeToggle?: boolean;
   showStats?: boolean;
   statsTitle?: string;
@@ -356,7 +356,7 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
   // Filter models (no longer need grouping logic since API returns grouped models)
   const filteredModels = useMemo(() => {
     return groupedModels
-      .filter((model: LocalModel) => {
+      .filter((model: ModelInfo) => {
         // Get ALL endpoints (show both configured and unconfigured providers)
         const allEndpoints = model.endpoints || [];
         // Also get only available endpoints for configured filter
@@ -485,7 +485,7 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
 
         return true;
       })
-      .map((model: LocalModel) => {
+      .map((model: ModelInfo) => {
         // When "Configured" is ON, filter the model's endpoints to show only available ones
         if (showConfiguredOnly && model.endpoints && model.endpoints.length > 0) {
           const availableEndpoints = model.endpoints.filter(endpoint => endpoint.available);

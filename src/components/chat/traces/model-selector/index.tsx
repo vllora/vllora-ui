@@ -13,7 +13,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { LocalModel, LocalModelProviderInfo } from '@/types/models';
+import { ModelInfo, ModelProviderInfo } from '@/types/models';
 import { ModelSelectorContent } from './ModelSelectorContent';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 
@@ -44,9 +44,9 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 interface ModelSelectorComponentProps {
   selectedModel: string;
   onModelChange?: (modelId: string) => void;
-  models: LocalModel[];
-  selectedModelInfo?: LocalModel;
-  selectedProvider?: LocalModelProviderInfo;
+  models: ModelInfo[];
+  selectedModelInfo?: ModelInfo;
+  selectedProvider?: ModelProviderInfo;
   isSelectedProviderConfigured?: boolean;
   setSelectedProviderForConfig?: (providerName: string) => void;
   setConfigDialogOpen?: (open: boolean) => void;
@@ -78,8 +78,8 @@ export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
   }, [models]);
 
   // Group models by model name (without provider prefix)
-  const modelNameGroups: Record<string, LocalModel> = useMemo(() => {
-    const groups: Record<string, LocalModel> = {};
+  const modelNameGroups: Record<string, ModelInfo> = useMemo(() => {
+    const groups: Record<string, ModelInfo> = {};
     models.map((model) => {
       const modelName = model.model;
       groups[modelName] = model;
@@ -93,7 +93,7 @@ export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
   }, [modelNameGroups]);
 
   // Get all providers for selected model
-  const providers: LocalModelProviderInfo[] = useMemo(() => {
+  const providers: ModelProviderInfo[] = useMemo(() => {
     if (!selectedModelInfo) {
       return [];
     }

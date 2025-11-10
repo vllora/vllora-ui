@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ModelPricing } from '@/types/models';
+import { ModelInfo } from '@/types/models';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { Copy, Check, ExternalLink, ChevronUp, ChevronDown, ChevronsUpDown, Upload, Download } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -10,8 +10,8 @@ import { RankingsBadge } from '@/components/shared/RankingsBadge';
 import { ModelCard } from './ModelCard';
 
 interface NewModelsTableProps {
-  models: (ModelPricing & { _modelGroup?: ModelPricing[] })[];
-  isNewModel: (model: ModelPricing) => boolean;
+  models: (ModelInfo & { _modelGroup?: ModelInfo[] })[];
+  isNewModel: (model: ModelInfo) => boolean;
   copiedModel: string | null;
   copyModelName: (modelName: string) => Promise<void>;
   filterCategories?: string[];
@@ -47,13 +47,13 @@ const formatContextSize = (contextSize: number, hideTokenAffix?: boolean) => {
   return `${contextSize}${hideTokenAffix ? "" : " tokens"}`;
 };
 
-const getModelFullName = (model: ModelPricing) => {
+const getModelFullName = (model: ModelInfo) => {
   return `${model.inference_provider.provider}/${model.model}`;
 };
 
 const getAllRanks = (props: {
-  modelsGroup: ModelPricing[];
-  model: ModelPricing;
+  modelsGroup: ModelInfo[];
+  model: ModelInfo;
   minRank?: number;
 }) => {
   const { modelsGroup, model, minRank } = props;

@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { Check, Copy, ChevronRight } from 'lucide-react';
-import { LocalModel } from '@/types/models';
+import { ModelInfo } from '@/types/models';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ModalitiesDisplay } from '@/components/models/card-sections/ModalitiesDisplay';
@@ -9,7 +9,7 @@ import { ProvidersIcons } from '@/components/models/card-sections/ProvidersIcons
 import { CostDisplay } from '@/components/shared/CostDisplay';
 
 export interface LocalModelCardProps {
-  model: LocalModel;
+  model: ModelInfo;
   providerStatusMap?: Map<string, boolean>;
   showDescription?: boolean;
 }

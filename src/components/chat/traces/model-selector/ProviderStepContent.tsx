@@ -1,13 +1,13 @@
 import React from 'react';
 import { ChevronLeft } from 'lucide-react';
-import { LocalModel, LocalModelProviderInfo } from '@/types/models';
+import { ModelInfo, ModelProviderInfo } from '@/types/models';
 import { ProviderListView } from './ProviderListView';
 
 interface ProviderStepContentProps {
   handleBack: () => void;
-  selectedProvider?: LocalModelProviderInfo;
-  providers: LocalModelProviderInfo[];
-  selectedModelInfo?: LocalModel;
+  selectedProvider?: ModelProviderInfo;
+  providers: ModelProviderInfo[];
+  selectedModelInfo?: ModelInfo;
   selectedModel: string;
   handleModelSelect: (modelId: string) => void;
   setSelectedProviderForConfig?: (providerName: string) => void;

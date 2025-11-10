@@ -10,11 +10,11 @@ import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { ProviderCredentialModal } from '@/pages/settings/ProviderCredentialModal';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { useNavigate } from "react-router";
-import { LocalModel } from '@/types/models';
+import { ModelInfo } from '@/types/models';
 import { CurrentAppConsumer } from '@/lib';
 
 // Helper function to get top models based on benchmark ranking
-function getTopModelsByBenchmark(models: LocalModel[], limit: number = 12): LocalModel[] {
+function getTopModelsByBenchmark(models: ModelInfo[], limit: number = 12): ModelInfo[] {
   // First, sort all models by release date (newest first)
   const sortedByDate = [...models].sort((a, b) => {
     const dateA = new Date(a.release_date || a.langdb_release_date || 0).getTime();
@@ -69,7 +69,7 @@ function getTopModelsByBenchmark(models: LocalModel[], limit: number = 12): Loca
 }
 
 export function HomePage() {
-  const { models: localModels, loading: localLoading, error: localError, refetchModels: localRefetch } = ProjectModelsConsumer();
+  const { models: localModels, loading: localLoading, error: localError } = ProjectModelsConsumer();
   const { currentProjectId, isDefaultProject, project_id_from } = ProjectsConsumer();
   const { providers } = ProviderKeysConsumer();
   const { app_mode } = CurrentAppConsumer()

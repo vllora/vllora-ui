@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { LocalModel } from '@/types/models';
+import { ModelInfo } from '@/types/models';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { Copy, Check, ChevronUp, ChevronDown, ChevronsUpDown, ChevronRight } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -11,7 +11,7 @@ import { CapabilitiesIcons } from '@/components/models/card-sections/Capabilitie
 import { ProvidersIcons } from '@/components/models/card-sections/ProvidersIcons';
 
 interface LocalModelsTableProps {
-  models: LocalModel[];
+  models: ModelInfo[];
   copiedModel: string | null;
   copyModelName: (modelName: string) => Promise<void>;
   providerStatusMap?: Map<string, boolean>;

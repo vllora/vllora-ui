@@ -8,11 +8,11 @@ import {
 } from '@/components/ui/dialog';
 import { Settings } from 'lucide-react';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
-import { LocalModelProviderInfo } from '@/types/models';
+import { ModelProviderInfo } from '@/types/models';
 
 interface MultiProviderConfigDialogProps {
   open: boolean;
-  providers: LocalModelProviderInfo[];
+  providers: ModelProviderInfo[];
   onOpenChange: (open: boolean) => void;
   onProviderSelect: (providerName: string) => void;
 }

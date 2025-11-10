@@ -42,7 +42,7 @@ The component relies on:
 
 - **LocalModelsContext**: Provides the list of available models
 - **LocalModel type**: Defines the structure of model data
-- **LocalModelProviderInfo type**: Defines provider endpoint information
+- **ModelProviderInfo type**: Defines provider endpoint information
 
 ### Model ID Format
 
@@ -80,7 +80,7 @@ const [searchTerm, setSearchTerm] = useState('');          // Search filter text
 - Only applicable when `selectedModel` is in full format (contains `/`)
 - Extracts provider name from the full model ID
 - Searches the model's endpoints array for matching provider
-- Returns `LocalModelProviderInfo` or `undefined`
+- Returns `ModelProviderInfo` or `undefined`
 
 ### 3. Icon Resolution
 
@@ -215,7 +215,7 @@ This optimization improves UX when there's no choice to be made.
 ```typescript
 export const getModelFullName = (
   model: LocalModel,
-  provider: LocalModelProviderInfo
+  provider: ModelProviderInfo
 ) => {
   return `${provider.provider.provider}/${model.model}`;
 };

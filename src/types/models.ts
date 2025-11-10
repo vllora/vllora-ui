@@ -1,62 +1,3 @@
-export interface ModelPricing {
-  model: string;
-  model_provider: string;
-  inference_provider: {
-    provider: string;
-    model_name: string;
-  };
-  description: string;
-  price: {
-    per_input_token: number;
-    per_output_token: number;
-    per_cached_input_token?: number;
-    per_cached_input_write_token?: number;
-    valid_from?: any;
-    type_prices?: {
-      hd?: {
-        [key: string]: number;
-      };
-      standard?: {
-        [key: string]: number;
-      };
-    };
-  };
-  input_formats: string[];
-  output_formats: string[];
-  capabilities?: string[];
-  type: string;
-  limits: {
-    max_context_size: number;
-  };
-  release_date?: string;
-  langdb_release_date?: string;
-  benchmark_info?: {
-    rank?: { [category: string]: number };
-    scores?: { [category: string]: number };
-  };
-  image_price?: {
-    by_type?: {
-      [key: string]: {
-        [key: string]: number;
-      };
-    };
-    mp_price?: number | null;
-  };
-  endpoints?: Array<{
-    provider: {
-      provider: string;
-      model_name: string;
-      endpoint: string | null;
-    };
-    available: boolean;
-    pricing: {
-      per_input_token: number;
-      per_output_token: number;
-      per_cached_input_token?: number;
-      per_cached_input_write_token?: number;
-    };
-  }>;
-}
 
 export interface ModelAnalytics {
   totalModels: number;
@@ -68,7 +9,7 @@ export interface ModelAnalytics {
   avgOutputCost: number;
 }
 
-export interface LocalModel {
+export interface ModelInfo {
   model: string;
   model_provider: string;
   inference_provider: {
@@ -113,10 +54,10 @@ export interface LocalModel {
     };
     mp_price?: number | null;
   };
-  endpoints?: Array<LocalModelProviderInfo>;
+  endpoints?: Array<ModelProviderInfo>;
 }
 
-export interface LocalModelProviderInfo {
+export interface ModelProviderInfo {
   provider: {
     provider: string;
     model_name: string;
@@ -133,5 +74,5 @@ export interface LocalModelProviderInfo {
 
 export interface LocalModelsResponse {
   object: string;
-  data: LocalModel[];
+  data: ModelInfo[];
 }

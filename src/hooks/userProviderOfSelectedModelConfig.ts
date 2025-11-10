@@ -1,5 +1,5 @@
 import { ProjectModelsConsumer } from "@/contexts/ProjectModelsContext";
-import { LocalModel, LocalModelProviderInfo } from "@/types/models";
+import { ModelInfo, ModelProviderInfo } from "@/types/models";
 import { useCallback, useMemo, useState } from "react";
 
 export const useUserProviderOfSelectedModelConfig = (props: {
@@ -12,7 +12,7 @@ export const useUserProviderOfSelectedModelConfig = (props: {
   >(undefined);
   const [providerListDialogOpen, setProviderListDialogOpen] = useState(false);
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
-  const selectedModelInfo: LocalModel | undefined = useMemo(() => {
+  const selectedModelInfo: ModelInfo | undefined = useMemo(() => {
     let isFullName = selectedModel.includes("/");
     if (isFullName) {
       let splited = selectedModel.split("/");
@@ -24,7 +24,7 @@ export const useUserProviderOfSelectedModelConfig = (props: {
       return modelInfo;
     }
   }, [models, selectedModel]);
-  const selectedProvider: LocalModelProviderInfo | undefined = useMemo(() => {
+  const selectedProvider: ModelProviderInfo | undefined = useMemo(() => {
     let isFullName = selectedModel.includes("/");
     if (!isFullName) {
       return undefined;

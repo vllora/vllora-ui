@@ -2,12 +2,12 @@ import React, { useState, useMemo } from 'react';
 import { Settings } from 'lucide-react';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
-import { LocalModel, LocalModelProviderInfo } from '@/types/models';
+import { ModelInfo, ModelProviderInfo } from '@/types/models';
 import { getModelFullName } from '@/utils/model-fullname';
 
 interface ProviderListViewProps {
-  providers: LocalModelProviderInfo[];
-  selectedModelInfo: LocalModel | undefined;
+  providers: ModelProviderInfo[];
+  selectedModelInfo: ModelInfo | undefined;
   selectedModel: string;
   onProviderSelect: (modelFullName: string) => void;
   onConfigureProvider?: (providerName: string) => void;

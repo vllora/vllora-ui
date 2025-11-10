@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { ArrowUpRight, Check, Copy } from 'lucide-react';
-import { ModelPricing } from '@/types/models';
+import { ModelInfo } from '@/types/models';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { RankingsBadge } from '@/components/shared/RankingsBadge';
@@ -11,9 +11,9 @@ import { CapabilitiesIcons } from '@/components/models/card-sections/Capabilitie
 import { ProvidersIcons } from '@/components/models/card-sections/ProvidersIcons';
 
 export interface ModelCardProps {
-  model: ModelPricing;
+  model: ModelInfo;
   variant?: 'trending' | 'new';
-  modelsGroup?: ModelPricing[];
+  modelsGroup?: ModelInfo[];
   showPublisherProvider?: boolean;
   showRanking?: boolean;
 }
