@@ -104,7 +104,7 @@ export function ModelsPage(props: {
               {localError.message}
             </p>
             <Button
-              onClick={() => localRefetch()}
+              onClick={() => {}}
               variant="outline"
               className="flex items-center gap-2"
             >
