@@ -11,10 +11,12 @@ import { deleteProject } from '@/services/projects-api';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { CreateProjectDialog } from './CreateProjectDialog';
 import { ProjectCard } from './ProjectCard';
+import { CurrentAppConsumer } from '@/lib';
 
 export function ProjectsPage() {
   const { projects, loading, refetchProjects, isDefaultProject } = ProjectsConsumer();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const { app_mode } = CurrentAppConsumer();
 
   const handleDeleteProject = async (projectId: string) => {
     if (!confirm('Are you sure you want to delete this project?')) return;
@@ -82,7 +84,7 @@ export function ProjectsPage() {
               </div>
             </div>
             <Button
-              disabled
+              disabled={app_mode === 'vllora'}
               className="bg-gradient-to-r from-[rgb(var(--theme-400))] to-[rgb(var(--theme-600))] hover:from-[rgb(var(--theme-500))] hover:to-[rgb(var(--theme-700))] text-white shadow-lg"
             >
               <Plus className="h-4 w-4 mr-2" />

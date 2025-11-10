@@ -10,6 +10,7 @@ const LocalModelsContext = createContext<ProjectModelsContextType | undefined>(u
 export function useProjectModels() {
   const { data, loading, error, run: refetchModels } = useRequest(fetchProjectModels,
     {
+      manual: true,
       onError: (err) => {
         toast.error('Failed to load local models', {
           description: err.message || 'An error occurred while loading local models',
