@@ -158,7 +158,7 @@ export function useProviderKeys() {
     } finally {
       setSaving({ ...saving, [providerName]: false });
     }
-  }, [currentProjectId]);
+  }, [currentProjectId, providers, credentialValues]);
 
   const startDeleteProvider = (providerName: string) => {
     setProviderToDelete(providerName);
