@@ -66,11 +66,12 @@ export const useUserProviderOfSelectedModelConfig = (props: {
   
   const handleWarningClick = useCallback(() => {
     if (!selectedModelInfo) return;
+    
     const unconfiguredProviders = selectedModelInfo.endpoints?.filter(ep => !ep.available) || [];
 
     // If only one unconfigured provider, open config dialog directly
     if (unconfiguredProviders.length === 1) {
-      (unconfiguredProviders[0].provider.provider);
+      setSelectedProviderForConfig(unconfiguredProviders[0].provider.provider);
       setConfigDialogOpen?.(true);
     } else if (unconfiguredProviders.length > 1) {
       // If multiple unconfigured providers, show provider list dialog

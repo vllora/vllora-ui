@@ -23,7 +23,7 @@ export const shouldUseModal = (): boolean => {
 
 export function useProviderKeys() {
 
-  const {refetchModels} = ProjectModelsConsumer()
+  const { refetchModels } = ProjectModelsConsumer()
   const { currentProjectId } = ProjectsConsumer();
   const { data: providers = [], loading, error, run: refetchProviders } = useRequest(
     () => listProviders(currentProjectId),
@@ -88,7 +88,7 @@ export function useProviderKeys() {
     }
   };
 
-  const saveProvider = useCallback( async (providerName: string) => {
+  const saveProvider = useCallback(async (providerName: string) => {
     const values = credentialValues[providerName];
     const provider = providers.find(p => p.name === providerName);
 
@@ -165,7 +165,7 @@ export function useProviderKeys() {
     setDeleteDialogOpen(true);
   };
 
-  const confirmDeleteProvider = useCallback( async () => {
+  const confirmDeleteProvider = useCallback(async () => {
     if (!providerToDelete) return;
 
     try {

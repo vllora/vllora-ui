@@ -5,9 +5,6 @@ export async function fetchProjectModels(props: {
   projectId?: string;
 }): Promise<LocalModel[]> {
   const { projectId } = props;
-
-  console.log('==== fetchProjectModels', projectId)
-
   const response = await api.get(`/v1/pricing?include_parameters=true&include_benchmark=true`, projectId ? {
     headers: {
       'x-project-id': projectId
