@@ -52,7 +52,7 @@ export function ProjectCard({
               <FolderOpen className="h-5 w-5 text-[rgb(var(--theme-500))] flex-shrink-0" />
               <span className="truncate">{project.name}</span>
               {project.is_default && (
-                <Badge variant="secondary" className="flex-shrink-0 text-xs">
+                <Badge variant="secondary" className="text-xs bg-yellow-500/10 text-yellow-600 dark:text-yellow-500 px-2 py-0.5 rounded-full font-medium border border-yellow-500/20">
                   Default
                 </Badge>
               )}
