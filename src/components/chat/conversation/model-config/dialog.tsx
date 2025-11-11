@@ -8,10 +8,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { ModelInfo } from "@/types/models";
 import { ModelParametersList } from "./parameters";
 import { ResponseCacheConfig } from "./response-cache";
 import { FallbackModelsConfig } from "./fallback-models/fallback-models";
+import { ModelSelector } from "../../traces/model-selector";
 
 interface ModelConfigDialogProps {
   open: boolean;
@@ -19,6 +21,8 @@ interface ModelConfigDialogProps {
   modelInfo: ModelInfo;
   onConfigChange?: (config: Record<string, any>) => void;
   initialConfig?: Record<string, any>;
+  selectedModel?: string;
+  onModelChange?: (model: string) => void;
 }
 
 export function ModelConfigDialog({
@@ -27,6 +31,8 @@ export function ModelConfigDialog({
   modelInfo,
   onConfigChange,
   initialConfig = {},
+  selectedModel,
+  onModelChange,
 }: ModelConfigDialogProps) {
   const [config, setConfig] = useState<Record<string, any>>(initialConfig);
 
@@ -131,9 +137,22 @@ export function ModelConfigDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-3 space-y-8">
+        <div className="flex-1 overflow-y-auto px-6 divide-y divide-border">
+          {/* Base Model Section */}
+          {selectedModel && onModelChange && (
+            <div className="py-6 first:pt-3">
+              <div className="flex items-center gap-2 mb-3">
+                <Label className="text-sm font-semibold">Base Model</Label>
+              </div>
+              <ModelSelector
+                selectedModel={selectedModel}
+                onModelChange={onModelChange}
+              />
+            </div>
+          )}
+
           {/* Response Cache Section */}
-          <div>
+          <div className={selectedModel && onModelChange ? "py-6" : "py-6 first:pt-3"}>
             <ResponseCacheConfig
               config={config}
               onConfigChange={setConfig}
@@ -141,7 +160,7 @@ export function ModelConfigDialog({
           </div>
 
           {/* Fallback Models Section */}
-          <div className="border-t border-border pt-4">
+          <div className="py-6">
             <FallbackModelsConfig
               config={config}
               onConfigChange={setConfig}
@@ -149,12 +168,9 @@ export function ModelConfigDialog({
           </div>
 
           {/* Model Parameters Section - Always last since it varies by model */}
-          <div className="border-t border-border pt-4">
-            <div className="mb-3">
-              <h3 className="text-sm font-semibold">Model Parameters</h3>
-              <p className="text-xs text-muted-foreground mt-1">
-                Configure {modelInfo.model}-specific parameters
-              </p>
+          <div className="py-6 last:pb-3">
+            <div className="mb-4">
+              <h3 className="text-sm font-semibold">Parameters</h3>
             </div>
             <ModelParametersList
               parameters={modelInfo.parameters}

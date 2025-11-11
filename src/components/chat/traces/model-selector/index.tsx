@@ -140,7 +140,7 @@ export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
       <DropdownMenu open={open} onOpenChange={handleOpenChange}>
         <DropdownMenuTrigger asChild>
           <div className="inline-flex border border-border rounded-md px-3 py-2 items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer w-[200px] truncate">
-            {selectedModel && selectedModel.includes('/') && <ProviderIcon
+            {selectedModel && <ProviderIcon
               provider_name={getIconForModel(selectedModel)}
               className="w-4 h-4 flex-shrink-0"
             />}

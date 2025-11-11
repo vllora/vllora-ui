@@ -71,6 +71,8 @@ export function ConversationHeader({
           modelInfo={modelInfo}
           onConfigChange={onModelConfigChange}
           initialConfig={modelConfig}
+          selectedModel={modelName}
+          onModelChange={onModelChange}
         />
       )}
     </>
