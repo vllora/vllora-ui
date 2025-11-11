@@ -60,7 +60,9 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     providerListDialogOpen,
     setProviderListDialogOpen,
     isSelectedProviderConfigured,
-    handleWarningClick
+    handleWarningClick,
+    modelConfig,
+    setModelConfig,
   } = ChatWindowConsumer();
   useEffect(() => {
     clearAll();
@@ -104,6 +106,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       threadId?: string;
       threadTitle?: string;
       toolsUsage?: Map<string, McpServerConfig>;
+      othersParams?: Record<string, any>;
     }) => {
       return handleSubmit(inputProps);
     },
@@ -210,8 +213,26 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       continousMessage = extractMessageFromApiInvokeSpan(lastApiInvokeSpan);
     }
 
-    onSubmitWrapper({ inputText, files, searchToolEnabled, otherTools, threadId, threadTitle, initialMessages: continousMessage, toolsUsage });
-  }, [onSubmitWrapper, setCurrentInput, threadId, flattenSpans, isSelectedProviderConfigured]);
+    // Filter out null/undefined values from modelConfig and merge with other params
+    const filteredModelConfig = Object.entries(modelConfig).reduce((acc, [key, value]) => {
+      if (value !== null && value !== undefined && value !== '') {
+        acc[key] = value;
+      }
+      return acc;
+    }, {} as Record<string, any>);
+
+    onSubmitWrapper({
+      inputText,
+      files,
+      searchToolEnabled,
+      otherTools,
+      threadId,
+      threadTitle,
+      initialMessages: continousMessage,
+      toolsUsage,
+      othersParams: filteredModelConfig,
+    });
+  }, [onSubmitWrapper, setCurrentInput, threadId, flattenSpans, isSelectedProviderConfigured, modelConfig]);
 
 
   useEffect(() => {
@@ -236,9 +257,12 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
         {/* Model Selector - Top row aligned with Project Dropdown */}
         <ConversationHeader
           modelName={selectedModel}
+          modelInfo={selectedModelInfo}
           onModelChange={onModelChange}
           onRefresh={refreshSpans}
           isLoading={isLoadingSpans}
+          onModelConfigChange={setModelConfig}
+          modelConfig={modelConfig}
         />
       </div>
 
@@ -255,7 +279,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       </div>
       {/* Error Display */}
       {error && (
-        <div className="mx-4 mb-2 bg-red-900/20 border border-red-500/30 flex p-3 rounded-lg items-center justify-between shadow-md">
+        <div className="mx-4 mb-2 bg-red-900/20 border border-red-500/30 flex p-3 rounded-lg items-center gap-1 justify-between shadow-md">
           <div className="flex flex-1 items-center gap-2">
             <span className="text-red-400 text-sm break-words">{error}</span>
           </div>

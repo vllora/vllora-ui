@@ -9,6 +9,15 @@ export interface ModelAnalytics {
   avgOutputCost: number;
 }
 
+export interface ModelParameterConfig {
+  max: number | null;
+  min: number | null;
+  type: string;
+  default: any;
+  required: boolean;
+  description: string;
+}
+
 export interface ModelInfo {
   model: string;
   model_provider: string;
@@ -55,6 +64,9 @@ export interface ModelInfo {
     mp_price?: number | null;
   };
   endpoints?: Array<ModelProviderInfo>;
+  parameters?: {
+    [key: string]: ModelParameterConfig;
+  };
 }
 
 export interface ModelProviderInfo {

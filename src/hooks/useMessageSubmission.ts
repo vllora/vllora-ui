@@ -82,13 +82,11 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
       threadTitle?: string;
       initialMessages?: Message[];
       toolsUsage?: Map<string, McpServerConfig>;
+      othersParams?: any;
     }) => {
       abortControllerRef.current = new AbortController();
 
-      const { inputText, files, threadId, threadTitle, initialMessages, toolsUsage } = inputProps;
-
-      console.log('toolsUsage', toolsUsage);
-      
+      const { inputText, files, threadId, threadTitle, initialMessages, toolsUsage, othersParams } = inputProps;      
       if (inputText.trim() === '') return;
 
       // const newMessage: Message = {
@@ -180,6 +178,7 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
           ],
           stream: true,
           ...(threadId && { thread_id: threadId }),
+          ...(othersParams && {...othersParams}),
         };
 
         if (toolsUsage && toolsUsage.size > 0) {
@@ -195,6 +194,7 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
           
           requestBody.mcp_servers = mcpServers;
         }
+        
 
         const sanitizedThreadTitle = threadTitle?.replace(/[^\w\s-]/g, '');
         let bearerToken: string | null = null;

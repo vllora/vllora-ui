@@ -1,6 +1,6 @@
 import { ProjectModelsConsumer } from "@/contexts/ProjectModelsContext";
 import { ModelInfo, ModelProviderInfo } from "@/types/models";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 export const useUserProviderOfSelectedModelConfig = (props: {
   selectedModel: string;
@@ -12,6 +12,7 @@ export const useUserProviderOfSelectedModelConfig = (props: {
   >(undefined);
   const [providerListDialogOpen, setProviderListDialogOpen] = useState(false);
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
+  const [modelConfig, setModelConfig] = useState<Record<string, any>>({});
   const selectedModelInfo: ModelInfo | undefined = useMemo(() => {
     let isFullName = selectedModel.includes("/");
     if (isFullName) {
@@ -24,6 +25,7 @@ export const useUserProviderOfSelectedModelConfig = (props: {
       return modelInfo;
     }
   }, [models, selectedModel]);
+
   const selectedProvider: ModelProviderInfo | undefined = useMemo(() => {
     let isFullName = selectedModel.includes("/");
     if (!isFullName) {
@@ -66,7 +68,7 @@ export const useUserProviderOfSelectedModelConfig = (props: {
   
   const handleWarningClick = useCallback(() => {
     if (!selectedModelInfo) return;
-    
+
     const unconfiguredProviders = selectedModelInfo.endpoints?.filter(ep => !ep.available) || [];
 
     // If only one unconfigured provider, open config dialog directly
@@ -78,6 +80,12 @@ export const useUserProviderOfSelectedModelConfig = (props: {
       setProviderListDialogOpen?.(true);
     }
   }, [selectedModelInfo, setConfigDialogOpen, setProviderListDialogOpen]);
+
+  // Reset model config when selected model changes
+  useEffect(() => {
+    setModelConfig({});
+  }, [selectedModel]);
+
   return {
     selectedModel,
     selectedModelInfo,
@@ -91,5 +99,7 @@ export const useUserProviderOfSelectedModelConfig = (props: {
     configDialogOpen,
     setConfigDialogOpen,
     handleWarningClick,
+    modelConfig,
+    setModelConfig,
   };
 };
