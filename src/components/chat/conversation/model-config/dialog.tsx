@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ModelInfo } from "@/types/models";
 import { ModelParametersList } from "./parameters";
 import { ResponseCacheConfig } from "./response-cache";
-import { FallbackModelsConfig } from "./fallback-models";
+import { FallbackModelsConfig } from "./fallback-models/fallback-models";
 
 interface ModelConfigDialogProps {
   open: boolean;
@@ -49,6 +49,11 @@ export function ModelConfigDialog({
         defaultConfig.extra = initialConfig.extra;
       }
 
+      // Restore fallback
+      if (initialConfig.fallback !== undefined) {
+        defaultConfig.fallback = initialConfig.fallback;
+      }
+
       setConfig(defaultConfig);
     }
   }, [open, modelInfo.parameters, initialConfig]);
@@ -71,6 +76,11 @@ export function ModelConfigDialog({
     // Always include extra field if it exists (contains cache config)
     if (config.extra !== undefined) {
       userConfig.extra = config.extra;
+    }
+
+    // Include fallback if it exists
+    if (config.fallback !== undefined) {
+      userConfig.fallback = config.fallback;
     }
 
     onConfigChange?.(userConfig);
@@ -125,6 +135,14 @@ export function ModelConfigDialog({
           {/* Response Cache Section */}
           <div>
             <ResponseCacheConfig
+              config={config}
+              onConfigChange={setConfig}
+            />
+          </div>
+
+          {/* Fallback Models Section */}
+          <div className="border-t border-border pt-4">
+            <FallbackModelsConfig
               config={config}
               onConfigChange={setConfig}
             />

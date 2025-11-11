@@ -122,10 +122,6 @@ export function ResponseCacheConfig({
               <span className="text-xs text-muted-foreground">seconds</span>
             </div>
           </div>
-
-          <p className="text-xs text-muted-foreground pl-0.5">
-            Default: 1200s (20 min)
-          </p>
         </div>
       )}
     </div>
