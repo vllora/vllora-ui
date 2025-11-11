@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { RefreshCcwIcon, Settings } from "lucide-react";
+import { RefreshCcwIcon } from "lucide-react";
 import { ModelSelector } from "../traces/model-selector";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ModelInfo } from "@/types/models";
-import { ModelConfigDialog } from "./ModelConfigDialog";
+import { ModelConfigDialog, ModelConfigButton } from "./model-config";
 
 interface ModelSelectorHeaderProps {
   modelName?: string;
@@ -25,7 +25,9 @@ export function ConversationHeader({
   modelConfig
 }: ModelSelectorHeaderProps) {
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
-  const hasParameters = modelInfo?.parameters && Object.keys(modelInfo.parameters).length > 0;
+
+  // Check if any configs are applied
+  const hasActiveConfig = !!(modelConfig && Object.keys(modelConfig).length > 0);
 
   return (
     <>
@@ -35,23 +37,11 @@ export function ConversationHeader({
               selectedModel={modelName || 'Select a model'}
               onModelChange={onModelChange}
             />
-            {modelInfo && hasParameters && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={() => setConfigDialogOpen(true)}
-                      className="text-muted-foreground hover:text-foreground transition-colors"
-                      aria-label="Model configuration"
-                    >
-                      <Settings className="w-4 h-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Model configuration</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+            {modelInfo && (
+              <ModelConfigButton
+                hasActiveConfig={hasActiveConfig}
+                onClick={() => setConfigDialogOpen(true)}
+              />
             )}
         </div>
         {onRefresh && (
