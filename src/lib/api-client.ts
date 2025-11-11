@@ -20,6 +20,10 @@ export function setTokenProvider(provider: TokenProvider | null) {
   globalTokenProvider = provider;
 }
 
+export function getTokenProvider() {
+  return globalTokenProvider;
+}
+
 /**
  * Get the current authentication token
  * Returns null if no token provider is configured or token fetch fails

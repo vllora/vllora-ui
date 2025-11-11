@@ -4,6 +4,7 @@ import { useScrollToBottom } from './useScrollToBottom';
 import { emitter } from '@/utils/eventEmitter';
 import { getChatCompletionsUrl } from '@/config/api';
 import { McpServerConfig } from '@/services/mcp-api';
+import { getTokenProvider } from '@/lib/api-client';
 
 interface MessageSubmissionProps {
   apiKey?: string;
@@ -181,14 +182,11 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
           ...(threadId && { thread_id: threadId }),
         };
 
-        console.log('toolsUsageSize', toolsUsage?.size);
         if (toolsUsage && toolsUsage.size > 0) {
-          console.log('toolsUsage', toolsUsage);
           
           // Convert Map to array - each server config becomes one entry
           const mcpServers: any[] = [];
           for (const [serverName, config] of toolsUsage.entries()) {
-            console.log('Processing server:', serverName, 'with config:', config);
             mcpServers.push({
               ...config.definition,
               filter: config.selectedTools.map((tool) => ({ name: tool })),
@@ -196,11 +194,16 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
           }
           
           requestBody.mcp_servers = mcpServers;
-          console.log('requestBody.mcp_servers', requestBody.mcp_servers);
         }
 
         const sanitizedThreadTitle = threadTitle?.replace(/[^\w\s-]/g, '');
-
+        let bearerToken: string | null = null;
+        if (!props.apiKey ) {
+           let getTokenProviderFn = getTokenProvider();
+           if(getTokenProviderFn) {
+            bearerToken = await getTokenProviderFn();
+           }
+        }
         const response = await fetch(chatUrl, {
           method: 'POST',
           headers: {
@@ -209,6 +212,7 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
             ...(props.projectId && { 'X-Project-Id': props.projectId }),
             ...(threadId && { 'X-Thread-Id': threadId }),
             ...(sanitizedThreadTitle && { 'X-Thread-Title': sanitizedThreadTitle }),
+            ...(bearerToken && !props.apiKey && { Authorization: `Bearer ${bearerToken}` }),
           },
           body: JSON.stringify(requestBody),
           signal: abortControllerRef.current?.signal,
