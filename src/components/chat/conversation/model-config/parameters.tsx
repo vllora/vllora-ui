@@ -185,7 +185,7 @@ export function ModelParametersList({
   };
 
   return (
-    <div className="divide-y divide-border">
+    <div className="divide-y divide-border/30">
       {Object.entries(parameters).map(([key, param]) => (
         <div key={key}>
           {renderParameterInput(key, param)}

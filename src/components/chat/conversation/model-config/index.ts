@@ -5,4 +5,5 @@ export { FallbackModelsConfig } from "./fallback-models/fallback-models";
 export { FallbackModelsList } from "./fallback-models/fallback-models-list";
 export { FallbackModelsEmptyState } from "./fallback-models/fallback-models-empty-state";
 export { FallbackModelSelect } from "./fallback-models/fallback-model-select";
+export { MaxRetriesConfig } from "./max-retries";
 export { ModelConfigButton } from "./button";

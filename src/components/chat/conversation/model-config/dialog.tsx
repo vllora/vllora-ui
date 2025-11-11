@@ -13,6 +13,7 @@ import { ModelInfo } from "@/types/models";
 import { ModelParametersList } from "./parameters";
 import { ResponseCacheConfig } from "./response-cache";
 import { FallbackModelsConfig } from "./fallback-models/fallback-models";
+import { MaxRetriesConfig } from "./max-retries";
 import { ModelSelector } from "../../traces/model-selector";
 
 interface ModelConfigDialogProps {
@@ -60,6 +61,11 @@ export function ModelConfigDialog({
         defaultConfig.fallback = initialConfig.fallback;
       }
 
+      // Restore max_retries
+      if (initialConfig.max_retries !== undefined) {
+        defaultConfig.max_retries = initialConfig.max_retries;
+      }
+
       setConfig(defaultConfig);
     }
   }, [open, modelInfo.parameters, initialConfig]);
@@ -87,6 +93,11 @@ export function ModelConfigDialog({
     // Include fallback if it exists
     if (config.fallback !== undefined) {
       userConfig.fallback = config.fallback;
+    }
+
+    // Include max_retries if it exists
+    if (config.max_retries !== undefined) {
+      userConfig.max_retries = config.max_retries;
     }
 
     onConfigChange?.(userConfig);
@@ -137,12 +148,12 @@ export function ModelConfigDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 divide-y divide-border">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Base Model Section */}
           {selectedModel && onModelChange && (
-            <div className="py-6 first:pt-3">
-              <div className="flex items-center gap-2 mb-3">
-                <Label className="text-sm font-semibold">Base Model</Label>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm font-semibold text-foreground">Base Model</Label>
               </div>
               <ModelSelector
                 selectedModel={selectedModel}
@@ -152,7 +163,7 @@ export function ModelConfigDialog({
           )}
 
           {/* Response Cache Section */}
-          <div className={selectedModel && onModelChange ? "py-6" : "py-6 first:pt-3"}>
+          <div className="space-y-3 pt-6 border-t">
             <ResponseCacheConfig
               config={config}
               onConfigChange={setConfig}
@@ -160,17 +171,25 @@ export function ModelConfigDialog({
           </div>
 
           {/* Fallback Models Section */}
-          <div className="py-6">
+          <div className="space-y-3 pt-6 border-t">
             <FallbackModelsConfig
               config={config}
               onConfigChange={setConfig}
             />
           </div>
 
+          {/* Max Retries Section */}
+          <div className="space-y-3 pt-6 border-t">
+            <MaxRetriesConfig
+              config={config}
+              onConfigChange={setConfig}
+            />
+          </div>
+
           {/* Model Parameters Section - Always last since it varies by model */}
-          <div className="py-6 last:pb-3">
-            <div className="mb-4">
-              <h3 className="text-sm font-semibold">Parameters</h3>
+          <div className="space-y-3 pt-6 border-t">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Parameters</h3>
             </div>
             <ModelParametersList
               parameters={modelInfo.parameters}
