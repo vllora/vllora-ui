@@ -79,7 +79,6 @@ export const listRuns = async (props: {
   });
 
   const endpoint = `/runs?${queryParams.toString()}`;
-  console.log('=== listRuns endpoint', endpoint);
   const response = await apiClient(endpoint, {
     method: 'GET',
     headers: {

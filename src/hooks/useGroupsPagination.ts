@@ -54,9 +54,9 @@ export function useGroupsPagination({
       const response = await listGroups({
         projectId,
         params: {
-          groupBy,
-          ...(threadId ? { threadIds: threadId } : {}),
-          ...(groupBy === 'time' ? { bucketSize } : {}),
+          group_by: groupBy,
+          ...(threadId ? { thread_ids: threadId } : {}),
+          ...(groupBy === 'time' ? { bucket_size: bucketSize } : {}),
           limit: LIMIT_LOADING_GROUPS,
           offset: 0,
         },
@@ -110,9 +110,9 @@ export function useGroupsPagination({
       const response = await listGroups({
         projectId: projectIdRef.current,
         params: {
-          groupBy: groupByRef.current,
-          ...(threadIdRef.current ? { threadIds: threadIdRef.current } : {}),
-          ...(groupByRef.current === 'time' ? { bucketSize: bucketSizeRef.current } : {}),
+          group_by: groupByRef.current,
+          ...(threadIdRef.current ? { thread_ids: threadIdRef.current } : {}),
+          ...(groupByRef.current === 'time' ? { bucket_size: bucketSizeRef.current } : {}),
           limit: LIMIT_LOADING_GROUPS,
           offset: groupsOffset,
         },
@@ -178,9 +178,9 @@ export function useGroupsPagination({
       const response = await listGroups({
         projectId: projectIdRef.current,
         params: {
-          groupBy: groupByRef.current,
-          ...(threadIdRef.current ? { threadIds: threadIdRef.current } : {}),
-          ...(groupByRef.current === 'time' ? { bucketSize: bucketSizeRef.current } : {}),
+          group_by: groupByRef.current,
+          ...(threadIdRef.current ? { thread_ids: threadIdRef.current } : {}),
+          ...(groupByRef.current === 'time' ? { bucket_size: bucketSizeRef.current } : {}),
           limit: LIMIT_LOADING_GROUPS,
           offset: targetOffset,
         },

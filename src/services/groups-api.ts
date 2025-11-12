@@ -56,20 +56,20 @@ export interface PaginatedGroupsResponse {
 
 export interface ListGroupsQuery {
   // Grouping
-  groupBy?: 'time' | 'thread' | 'run'; // Grouping mode (default: 'time')
+  group_by?: 'time' | 'thread' | 'run'; // Grouping mode (default: 'time')
 
   // Filters
-  threadIds?: string; // Comma-separated
-  traceIds?: string; // Comma-separated
-  modelName?: string;
-  typeFilter?: 'model' | 'mcp';
+  thread_ids?: string; // Comma-separated
+  trace_ids?: string; // Comma-separated
+  model_name?: string;
+  type_filter?: 'model' | 'mcp';
 
   // Time range
   start_time_min?: number; // In microseconds
   start_time_max?: number; // In microseconds
 
   // Bucketing (only used when groupBy='time')
-  bucketSize?: number; // Time bucket size in seconds (e.g., 3600 for 1 hour)
+  bucket_size?: number; // Time bucket size in seconds (e.g., 3600 for 1 hour)
 
   // Pagination
   offset?: number;
@@ -86,11 +86,11 @@ export const listGroups = async (props: {
   let sendParams = { ...params };
 
   // Remove empty parameters
-  if (!params?.threadIds) {
-    delete sendParams.threadIds;
+  if (!params?.thread_ids) {
+    delete sendParams.thread_ids;
   }
-  if (!params?.traceIds) {
-    delete sendParams.traceIds;
+  if (!params?.trace_ids) {
+    delete sendParams.trace_ids;
   }
 
   // Build query string
@@ -262,7 +262,7 @@ export const fetchSingleGroup = async (props: {
   const { projectId, groupBy, timeBucket, bucketSize, threadId, runId } = props;
 
   const params: ListGroupsQuery = {
-    groupBy,
+    group_by: groupBy,
     limit: 1,
     offset: 0,
   };
@@ -273,14 +273,14 @@ export const fetchSingleGroup = async (props: {
     }
     // Calculate the time range for this bucket
     const bucket_size_us = bucketSize * 1_000_000;
-    params.bucketSize = bucketSize;
+    params.bucket_size = bucketSize;
     params.start_time_min = timeBucket;
     params.start_time_max = timeBucket + bucket_size_us - 1;
   } else if (groupBy === 'thread') {
     if (!threadId) {
       throw new Error('threadId is required for groupBy=thread');
     }
-    params.threadIds = threadId;
+    params.thread_ids = threadId;
   } else if (groupBy === 'run') {
     if (!runId) {
       throw new Error('runId is required for groupBy=run');
