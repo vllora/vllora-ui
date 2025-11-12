@@ -12,11 +12,11 @@ export interface PaginatedRunsResponse {
 
 export interface ListRunsQuery {
   // Backend expects comma-separated strings, not arrays
-  runIds?: string; // Changed from runId to runIds (comma-separated)
-  threadIds?: string; // Changed from string[] to string (comma-separated)
-  traceIds?: string; // Added traceIds (comma-separated)
-  modelName?: string;
-  typeFilter?: string; // This is the display_type parameter
+  run_ids?: string; // Changed from runId to runIds (comma-separated)
+  thread_ids?: string; // Changed from string[] to string (comma-separated)
+  trace_ids?: string; // Added traceIds (comma-separated)
+  model_name?: string;
+  type_filter?: string; // This is the display_type parameter
   include_mcp_templates?: boolean;
   // Pagination
   offset?: number;
@@ -56,23 +56,22 @@ export const listRuns = async (props: {
 
   // Create a clean copy of params to avoid mutation issues
   let sendParams = { ...params };
-
   // Remove empty parameters
-  if (!params?.threadIds) {
-    delete sendParams.threadIds;
+  if (!params?.thread_ids) {
+    delete sendParams.thread_ids;
   }
-  if (!params?.traceIds) {
-    delete sendParams.traceIds;
+  if (!params?.trace_ids) {
+    delete sendParams.trace_ids;
   }
-  if (!params?.runIds) {
-    delete sendParams.runIds;
+  if (!params?.run_ids) {
+    delete sendParams.run_ids;
   }
 
   // Build query string
   const queryParams = new URLSearchParams();
   Object.entries({
     ...(sendParams || {}),
-    include_mcp_templates: params?.typeFilter === 'mcp',
+    include_mcp_templates: params?.type_filter === 'mcp',
   }).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
       queryParams.append(key, String(value));
@@ -80,7 +79,7 @@ export const listRuns = async (props: {
   });
 
   const endpoint = `/runs?${queryParams.toString()}`;
-
+  console.log('=== listRuns endpoint', endpoint);
   const response = await apiClient(endpoint, {
     method: 'GET',
     headers: {

@@ -42,7 +42,7 @@ export function useRunsPagination({
       const response = await listRuns({
         projectId,
         params: {
-          ...(threadId ? { threadIds: threadId } : {}),
+          ...(threadId ? { thread_ids: threadId } : {}),
           limit: LIMIT_LOADING_RUNS,
           offset: 0,
         },
@@ -96,7 +96,7 @@ export function useRunsPagination({
       const response = await listRuns({
         projectId: projectIdRef.current,
         params: {
-          ...(threadIdRef.current ? { threadIds: threadIdRef.current } : {}),
+          ...(threadIdRef.current ? { thread_ids: threadIdRef.current } : {}),
           limit: LIMIT_LOADING_RUNS,
           offset: runsOffset,
         },
