@@ -50,7 +50,7 @@ ${projectIdHeader}${threadIdHeader}  -H 'content-type: application/json' \\
                 Welcome to
               </h1>
               <img
-                src={app_mode === 'vllora' ? "/logo-dark.svg" : "/langdb-logo-with-text.jpeg"}
+                src={app_mode === 'vllora' ? "/logo-dark.svg" : "/langdb-logo-with-text-green.svg"}
                 alt={app_mode === 'vllora' ? "Vllora" : "Langdb"}
                 className="h-12 w-auto transition-transform hover:scale-105"
               />
