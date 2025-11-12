@@ -3,6 +3,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { ArrowUpRight, Check } from 'lucide-react';
 import { Link } from "react-router";
+import { CurrentAppConsumer } from '@/lib';
 
 interface ProvidersIconsProps {
   providers: string[];
@@ -17,6 +18,7 @@ export const ProvidersIcons: React.FC<ProvidersIconsProps> = ({
   className = "",
   providerStatusMap
 }) => {
+  const { app_mode } = CurrentAppConsumer();
   if (!providers || providers.length === 0) {
     return (
       <div className={`text-xs text-zinc-500 ${className}`}>
@@ -54,25 +56,35 @@ export const ProvidersIcons: React.FC<ProvidersIconsProps> = ({
                   <p className="text-xs font-medium">Provider</p>
                   <p className="text-xs text-zinc-300">{provider}</p>
                 </div>
-                <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-700/50">
-                  <p className="text-xs text-zinc-400">
-                    {isConfigured ? (
-                      <span className="text-green-400">✓ Configured</span>
-                    ) : (
-                      <span className="text-yellow-400">⚠ Not configured</span>
+                {app_mode === 'langdb' ? (
+                  // LangDB mode: Only show status if configured, otherwise just provider name
+                  isConfigured && (
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-700/50">
+                      <p className="text-xs text-green-400">✓ Provider key configured</p>
+                    </div>
+                  )
+                ) : (
+                  // vLLora mode: Show configured/not configured with settings link
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-700/50">
+                    <p className="text-xs text-zinc-400">
+                      {isConfigured ? (
+                        <span className="text-green-400">✓ Configured</span>
+                      ) : (
+                        <span className="text-yellow-400">⚠ Not configured</span>
+                      )}
+                    </p>
+                    {!isConfigured && (
+                      <Link 
+                        to="/settings" 
+                        className="flex items-center gap-0.5 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Settings
+                        <ArrowUpRight className="w-3 h-3" />
+                      </Link>
                     )}
-                  </p>
-                  {!isConfigured && (
-                    <Link 
-                      to="/settings" 
-                      className="flex items-center gap-0.5 text-xs text-blue-400 hover:text-blue-300 transition-colors"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      Settings
-                      <ArrowUpRight className="w-3 h-3" />
-                    </Link>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </TooltipContent>
           </Tooltip>
@@ -111,19 +123,25 @@ export const ProvidersIcons: React.FC<ProvidersIconsProps> = ({
                       <span className="text-xs text-zinc-300">{provider}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      {isConfigured ? (
-                        <span className="text-xs text-green-400">✓</span>
+                      {app_mode === 'langdb' ? (
+                        // LangDB mode: Only show checkmark if configured
+                        isConfigured && <span className="text-xs text-green-400">✓</span>
                       ) : (
-                        <>
-                          <span className="text-xs text-yellow-400">⚠</span>
-                          <Link 
-                            to="/settings" 
-                            className="flex items-center gap-0.5 text-xs text-blue-400 hover:text-blue-300 transition-colors"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <ArrowUpRight className="w-3 h-3" />
-                          </Link>
-                        </>
+                        // vLLora mode: Show configured/not configured with settings link
+                        isConfigured ? (
+                          <span className="text-xs text-green-400">✓</span>
+                        ) : (
+                          <>
+                            <span className="text-xs text-yellow-400">⚠</span>
+                            <Link 
+                              to="/settings" 
+                              className="flex items-center gap-0.5 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <ArrowUpRight className="w-3 h-3" />
+                            </Link>
+                          </>
+                        )
                       )}
                     </div>
                   </div>
