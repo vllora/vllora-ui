@@ -33,7 +33,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 
   return <ModelSelectorComponent
     selectedModel={selectedModel}
-    onModelChange={onModelChange} models={models}
+    onModelChange={onModelChange} 
+    models={models.filter((model) => model.type === 'completions')}
     selectedModelInfo={selectedModelInfo}
     selectedProvider={selectedProvider}
     isSelectedProviderConfigured={isSelectedProviderConfigured}
