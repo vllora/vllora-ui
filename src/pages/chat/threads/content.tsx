@@ -59,7 +59,6 @@ export function ThreadsPageContent() {
 
   useEffect(() => {
     if (!selectedThreadId && threads.length > 0) {
-      console.log('==== calling handleThreadClick from useEffect', threads[0])
       handleSelectThread(threads[0].thread_id);
       return;
     }
