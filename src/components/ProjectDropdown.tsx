@@ -27,10 +27,13 @@ export function ProjectDropdown({ onProjectChange }: ProjectDropdownProps) {
   const handleProjectSelect = useCallback((projectId: string) => {
     // Skip if already selected
     if (projectId === currentProjectId) return;
+    if (onProjectChange) {
+      onProjectChange(projectId);
+    }
 
     if (project_id_from == 'query_string') {
       // Update URL with new projectId query parameter (omit if default project)
-      const searchParams = new URLSearchParams(location.search);
+      const searchParams = new URLSearchParams();
       if (isDefaultProject(projectId)) {
         searchParams.delete('projectId');
       } else {
@@ -43,9 +46,7 @@ export function ProjectDropdown({ onProjectChange }: ProjectDropdownProps) {
       let newPathName = location.pathname.replace(currentProjectId || '', projectId || '')
       navigate(newPathName + location.search);
     }
-    if (onProjectChange) {
-      onProjectChange(projectId);
-    }
+
   }, [location, navigate, onProjectChange, currentProjectId, isDefaultProject, project_id_from]);
 
   return (<>

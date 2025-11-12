@@ -32,7 +32,6 @@ export function CreateProjectDialog({
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDescription, setNewProjectDescription] = useState('');
   const [creating, setCreating] = useState(false);
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
@@ -60,10 +59,6 @@ export function CreateProjectDialog({
 
       // Refresh projects list
       onProjectCreated();
-
-      // Clear URL params
-      navigate('/projects', { replace: true });
-
       toast.success('Project created', {
         description: `${newProjectName} has been created successfully`,
       });
@@ -81,7 +76,6 @@ export function CreateProjectDialog({
     onOpenChange(false);
     setNewProjectName('');
     setNewProjectDescription('');
-    navigate('/projects', { replace: true });
   };
 
   return (

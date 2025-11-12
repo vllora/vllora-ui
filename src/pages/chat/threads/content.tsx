@@ -17,6 +17,7 @@ export function ThreadsPageContent() {
     selectedThreadId,
     addThread,
     refreshThreads,
+    setThreads,
     selectedThread,
     handleThreadClick,
   } = ThreadsConsumer();
@@ -26,8 +27,9 @@ export function ThreadsPageContent() {
   }, [searchParams, selectedThread]);
 
   useEffect(() => {
+    setThreads([]);
     refreshThreads();
-  }, [refreshThreads]);
+  }, [currentProjectId]);
 
   const handleSelectThread = useCallback((threadId: string) => {
     const thread = threads.find((t) => t.thread_id === threadId);
@@ -57,9 +59,19 @@ export function ThreadsPageContent() {
 
   useEffect(() => {
     if (!selectedThreadId && threads.length > 0) {
+      console.log('==== calling handleThreadClick from useEffect', threads[0])
       handleSelectThread(threads[0].thread_id);
+      return;
     }
-  }, [selectedThreadId, threads, handleSelectThread]);
+    if((!threads || threads.length === 0) && (searchParams.get('threadId') || searchParams.get('model'))) {
+      // remove param threads from url
+      searchParams.delete('threadId');
+      searchParams.delete('model');
+      // update url
+      window.history.replaceState(null, '', `?${searchParams.toString()}`);
+      return;
+    }
+  }, [selectedThreadId, threads, handleSelectThread, searchParams]);
 
   // Show ChatEmptyState when no threads exist
   if (threads.length === 0) {

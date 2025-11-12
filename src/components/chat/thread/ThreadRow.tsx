@@ -103,6 +103,7 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                 key={thread.thread_id}
                 onClick={(e) => {
                     e.stopPropagation();
+                    e.preventDefault();
                     handleThreadClick(thread.thread_id, thread.input_models);
                 }}
                 className={cn(
