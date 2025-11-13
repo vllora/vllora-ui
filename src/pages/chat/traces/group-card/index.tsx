@@ -5,12 +5,12 @@ import { ErrorBoundary } from "react-error-boundary";
 import { GenericGroupDTO, isTimeGroup, isThreadGroup, isRunGroup } from "@/services/groups-api";
 import { TracesPageConsumer } from "@/contexts/TracesPageContext";
 import { HideGroupKey } from "@/hooks/useGroupsPagination";
-import { Loader2 } from "lucide-react";
 import { useRelativeTime } from "@/hooks/useRelativeTime";
 import { CustomErrorFallback } from "@/components/chat/traces/components/custom-error-fallback";
 import { TimelineContent } from "@/components/chat/traces/components/TimelineContent";
 import { GroupCardHeader } from "./header";
 import { IdWithCopy } from "./id-with-copy";
+import { LoadingState } from "@/components/LoadingState";
 
 interface GroupCardProps {
   group: GenericGroupDTO;
@@ -275,10 +275,7 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
           >
             <div className="overflow-auto custom-scrollbar border-l border-r border-border/50">
               {isLoadingSpans ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  <span className="ml-2 text-sm text-muted-foreground">Loading spans...</span>
-                </div>
+                <LoadingState message="Loading spans" />
               ) : allSpans.length > 0 ? (
                 <div className="flex flex-col gap-3 py-1">
                   <ErrorBoundary FallbackComponent={CustomErrorFallback}>

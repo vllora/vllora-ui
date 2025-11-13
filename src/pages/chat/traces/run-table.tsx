@@ -1,8 +1,8 @@
 import { useRef } from 'react';
-import { Loader2 } from 'lucide-react';
 import { TracesPageConsumer } from '@/contexts/TracesPageContext';
 import { GroupCardGrid } from './group-card/grid';
 import { TraceEmptyState } from '@/components/chat/traces/components/TraceEmptyState';
+import { GroupsSkeletonLoader } from '@/components/GroupsSkeletonLoader';
 
 export function RunTable() {
   const {
@@ -23,17 +23,9 @@ export function RunTable() {
   const currentPageValue = currentPage || 1;
 
   const observerTarget = useRef<HTMLDivElement>(null);
-
   // Loading state
   if (groupsLoading && groups.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-full w-full">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Loading groups...</p>
-        </div>
-      </div>
-    );
+    return <GroupsSkeletonLoader />;
   }
 
   // Error state
