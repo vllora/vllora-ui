@@ -130,7 +130,7 @@ export const fetchGroupSpans = async (props: {
 
   // Build query string
   const queryParams = new URLSearchParams({
-    groupBy,
+    group_by: groupBy,
     offset: String(offset),
     limit: String(limit),
   });
@@ -140,20 +140,20 @@ export const fetchGroupSpans = async (props: {
     if (timeBucket === undefined) {
       throw new Error('timeBucket is required for groupBy=time');
     }
-    queryParams.set('timeBucket', String(timeBucket));
+    queryParams.set('time_bucket', String(timeBucket));
     if (bucketSize) {
-      queryParams.set('bucketSize', String(bucketSize));
+      queryParams.set('bucket_size', String(bucketSize));
     }
   } else if (groupBy === 'thread') {
     if (!threadId) {
       throw new Error('threadId is required for groupBy=thread');
     }
-    queryParams.set('threadId', threadId);
+    queryParams.set('thread_id', threadId);
   } else if (groupBy === 'run') {
     if (!runId) {
       throw new Error('runId is required for groupBy=run');
     }
-    queryParams.set('runId', runId);
+    queryParams.set('run_id', runId);
   }
 
   const endpoint = `/group/spans?${queryParams.toString()}`;
