@@ -9,7 +9,7 @@ interface HeaderProps {
   onProjectChange?: (projectId: string) => void;
 }
 
-export function Header({ onProjectChange }: HeaderProps) {
+export function AppHeader({ onProjectChange }: HeaderProps) {
   const location = useLocation();
   const isProjectsPage = location.pathname === '/projects';
   const isChatPage = location.pathname.includes('/chat');

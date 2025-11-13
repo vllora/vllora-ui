@@ -1,6 +1,6 @@
 import { Outlet } from "react-router"
 import { AppSidebar } from "./app-sidebar"
-import { Header } from "./Header"
+import { AppHeader } from "./Header"
 import { ProjectsConsumer } from "@/contexts/ProjectContext"
 import { ProjectEventsProvider } from "@/contexts/project-events"
 
@@ -20,7 +20,7 @@ export function Layout() {
         currentProjectId={currentProjectId}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header onProjectChange={handleProjectChange} />
+        <AppHeader onProjectChange={handleProjectChange} />
         <main className="flex-1 flex overflow-hidden">
           {currentProjectId ? (
             <ProjectEventsProvider projectId={currentProjectId}>

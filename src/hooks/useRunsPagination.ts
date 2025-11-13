@@ -138,7 +138,6 @@ export function useRunsPagination({
     setRunsOffset(0);
     setRunsTotal(0);
     setHasMoreRuns(false);
-    setRawRuns([]);
     triggerRefreshRuns();
   }, [triggerRefreshRuns]);
 

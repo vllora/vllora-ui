@@ -10,12 +10,14 @@ interface TabSelectionHeaderProps {
   currentTab: string;
   onTabChange: (tab: string) => void;
   onProjectChange?: (projectId: string) => void;
+  accountInfoComponent?: React.ReactNode;
 }
 
 export function TabSelectionHeader({
   currentTab,
   onTabChange,
   onProjectChange,
+  accountInfoComponent,
 }: TabSelectionHeaderProps) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -38,7 +40,7 @@ export function TabSelectionHeader({
   };
 
   return (
-    <div className="flex h-16 justify-between items-center px-6 py-3 border-b border-border backdrop-blur-sm relative">
+    <div className="flex h-16 justify-between items-center px-4 py-3 border-b border-border backdrop-blur-sm relative">
       <div className="flex items-center gap-4">
         {/* Left side - Project Dropdown */}
         <div className="flex items-center">
@@ -75,6 +77,7 @@ export function TabSelectionHeader({
       </div>
 
       <div className="flex items-center gap-3">
+        {accountInfoComponent}
         {/* Backend URL info */}
         <BackendUrlInfo />
         {app_mode === 'vllora' && (
