@@ -7,6 +7,7 @@ import { ModelSelector } from "../../traces/model-selector";
 import { ModelParametersSection } from "./model-parameters-section";
 import { MessagesSection } from "./messages-section";
 import { Message } from "./types";
+import { useCallback } from "react";
 
 interface ModelConfigDialogContentProps {
   selectedModel?: string;
@@ -23,9 +24,9 @@ export function ModelConfigDialogContent({
   onConfigChange,
   modelInfo,
 }: ModelConfigDialogContentProps) {
-  const handleMessagesChange = (messages: Message[]) => {
+  const handleMessagesChange = useCallback((messages: Message[]) => {
     onConfigChange({ ...config, messages });
-  };
+  }, [config, onConfigChange]);
 
   return (
     <div className="flex-1 overflow-y-auto px-6 py-4">

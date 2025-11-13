@@ -104,6 +104,11 @@ export function ModelConfigDialog({
         defaultConfig.max_retries = initialConfig.max_retries;
       }
 
+      // Restore messages
+      if (initialConfig.messages !== undefined) {
+        defaultConfig.messages = initialConfig.messages;
+      }
+
       setConfig(defaultConfig);
     }
   }, [open, modelInfo.parameters, initialConfig]);
