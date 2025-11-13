@@ -359,8 +359,11 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
       .filter((model: ModelInfo) => {
         // Get ALL endpoints (show both configured and unconfigured providers)
         const allEndpoints = model.endpoints || [];
-        // Also get only available endpoints for configured filter
-        const availableEndpoints = allEndpoints.filter(endpoint => endpoint.available);
+        // Get only endpoints with configured providers (has_credentials = true)
+        const availableEndpoints = allEndpoints.filter(endpoint => {
+          const providerName = endpoint.provider.provider.toLowerCase();
+          return providerStatusMap.get(providerName) || false;
+        });
         
         const modelName = model.model;
 
@@ -486,13 +489,16 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
         return true;
       })
       .map((model: ModelInfo) => {
-        // When "Configured" is ON, filter the model's endpoints to show only available ones
+        // When "Configured" is ON, filter the model's endpoints to show only configured ones
         if (showConfiguredOnly && model.endpoints && model.endpoints.length > 0) {
-          const availableEndpoints = model.endpoints.filter(endpoint => endpoint.available);
-          // Return a modified model with only available endpoints
+          const configuredEndpoints = model.endpoints.filter(endpoint => {
+            const providerName = endpoint.provider.provider.toLowerCase();
+            return providerStatusMap.get(providerName) || false;
+          });
+          // Return a modified model with only configured endpoints
           return {
             ...model,
-            endpoints: availableEndpoints
+            endpoints: configuredEndpoints
           };
         }
         // When "Configured" is OFF, return model as-is (with all endpoints)
