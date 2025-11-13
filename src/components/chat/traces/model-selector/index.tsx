@@ -16,6 +16,7 @@ import {
 import { ModelInfo, ModelProviderInfo } from '@/types/models';
 import { ModelSelectorContent } from './ModelSelectorContent';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
+import { CurrentAppConsumer } from '@/contexts/CurrentAppContext';
 
 interface ModelSelectorProps {
   selectedModel: string;
@@ -29,15 +30,16 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   onModelChange,
 }) => {
   const { models } = ProjectModelsConsumer();
+  const { app_mode } = CurrentAppConsumer();
   const { selectedModelInfo, selectedProvider, isSelectedProviderConfigured, setSelectedProviderForConfig, setConfigDialogOpen, handleWarningClick } = ChatWindowConsumer();
 
   return <ModelSelectorComponent
     selectedModel={selectedModel}
-    onModelChange={onModelChange} 
+    onModelChange={onModelChange}
     models={models.filter((model) => model.type === 'completions')}
     selectedModelInfo={selectedModelInfo}
     selectedProvider={selectedProvider}
-    isSelectedProviderConfigured={isSelectedProviderConfigured}
+    isSelectedProviderConfigured={app_mode === 'langdb' || isSelectedProviderConfigured}
     setSelectedProviderForConfig={setSelectedProviderForConfig}
     setConfigDialogOpen={setConfigDialogOpen}
     handleWarningClick={handleWarningClick} />
@@ -132,7 +134,7 @@ export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
     setOpen(isOpen);
   };
 
-  
+
   // Check if the currently selected provider is configured
 
 

@@ -14,6 +14,7 @@ import { extractMessageFromApiInvokeSpan } from '@/utils/span-to-message';
 import { McpServerConfig } from '@/services/mcp-api';
 import { ProviderConfigDialog } from '../traces/model-selector/ProviderConfigDialog';
 import { MultiProviderConfigDialog } from '../traces/model-selector/MultiProviderConfigDialog';
+import { CurrentAppConsumer } from '@/contexts/CurrentAppContext';
 
 interface ChatWindowProps {
   threadId?: string;
@@ -64,6 +65,8 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     modelConfig,
     setModelConfig,
   } = ChatWindowConsumer();
+
+  const { app_mode } = CurrentAppConsumer();
   useEffect(() => {
     clearAll();
     if (threadId && !isDraft) {
@@ -199,7 +202,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     threadTitle?: string;
     toolsUsage?: Map<string, McpServerConfig>;
   }) => {
-    if (!isSelectedProviderConfigured) {
+    if (!isSelectedProviderConfigured && app_mode !== 'langdb') {
       if (!selectedModelInfo) return;
       handleWarningClick?.();
       return
@@ -232,7 +235,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       toolsUsage,
       othersParams: filteredModelConfig,
     });
-  }, [onSubmitWrapper, setCurrentInput, threadId, flattenSpans, isSelectedProviderConfigured, modelConfig]);
+  }, [onSubmitWrapper, setCurrentInput, threadId, flattenSpans, isSelectedProviderConfigured, modelConfig, app_mode]);
 
 
   useEffect(() => {
