@@ -7,7 +7,7 @@ export { ProjectEventsProvider, ProjectEventsConsumer } from '../contexts/projec
 export { CurrentAppProvider, CurrentAppConsumer } from '../contexts/CurrentAppContext';
 export { ProjectModelsProvider, ProjectModelsConsumer } from '../contexts/ProjectModelsContext';
 export { VirtualModelsProvider, VirtualModelsConsumer } from '../contexts/VirtualModelsContext';
-export type { VirtualModel } from '../services/virtual-models-api';
+export type { VirtualModel, VirtualModelVersion, VirtualModelVariable } from '../services/virtual-models-api';
 // Theme provider
 export { ThemeProvider } from '../components/theme-provider';
 
@@ -34,7 +34,7 @@ export { ProviderKeysLoader } from '../pages/settings/ProviderKeysLoader';
 export type { CredentialFormValues } from '../pages/settings/ProviderCredentialForm';
 export { ProjectDropdown } from '../components/ProjectDropdown';
 export { BackendUrlInfo } from '../components/BackendUrlInfo';
-export { ModelSelector } from '../components/chat/traces/model-selector'
+export { ModelSelector, ModelSelectorComponent } from '../components/chat/traces/model-selector'
 export { ModelConfigDialog } from '../components/chat/conversation/model-config';
 export type { ModelInfo } from '../types/models';
 export {

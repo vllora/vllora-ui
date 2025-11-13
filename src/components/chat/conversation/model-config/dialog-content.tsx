@@ -3,7 +3,8 @@ import { ModelInfo } from "@/types/models";
 import { ResponseCacheConfig } from "./response-cache";
 import { FallbackModelsConfig } from "./fallback-models/fallback-models";
 import { MaxRetriesConfig } from "./max-retries";
-import { ModelSelector } from "../../traces/model-selector";
+import { ModelSelectorComponent } from "../../traces/model-selector";
+import { ProjectModelsConsumer } from "@/contexts/ProjectModelsContext";
 import { ModelParametersSection } from "./model-parameters-section";
 import { MessagesSection } from "./messages-section";
 import { Message } from "./types";
@@ -24,6 +25,8 @@ export function ModelConfigDialogContent({
   onConfigChange,
   modelInfo,
 }: ModelConfigDialogContentProps) {
+  const { models } = ProjectModelsConsumer();
+
   const handleMessagesChange = useCallback((messages: Message[]) => {
     onConfigChange({ ...config, messages });
   }, [config, onConfigChange]);
@@ -36,9 +39,12 @@ export function ModelConfigDialogContent({
           <div className="flex items-center gap-2">
             <Label className="text-sm font-semibold text-foreground">Base Model</Label>
           </div>
-          <ModelSelector
+          <ModelSelectorComponent
             selectedModel={selectedModel}
             onModelChange={onModelChange}
+            models={models.filter((model) => model.type === 'completions')}
+            selectedModelInfo={modelInfo}
+            isSelectedProviderConfigured={true}
           />
         </div>
       )}

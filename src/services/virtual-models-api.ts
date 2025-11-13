@@ -1,15 +1,38 @@
 import { api, handleApiResponse } from "@/lib/api-client";
 
-export interface VirtualModel {
-  id: string;
+export interface VirtualModelVariable {
   name: string;
+  type: 'string' | 'number' | 'boolean';
+  default_value?: any;
+  test_value?: any;
+  description?: string;
+}
+
+export interface VirtualModelVersion {
+  id: string;
+  model_id: string;
+  version: number;
   target_configuration: Record<string, any>;
-  is_public: boolean;
-  variables?: any;
-  latest?: boolean;
-  is_published?: boolean;
   created_at: string;
   updated_at: string;
+  variables?: VirtualModelVariable[];
+  published_at?: string;
+  latest: boolean;
+}
+
+export interface VirtualModel {
+  // Flattened from VirtualModel struct
+  id: string;
+  name: string;
+  slug: string;
+  project_id: string;
+  disabled_at?: string;
+  created_at: string;
+  updated_at: string;
+  is_public: boolean;
+  // From VirtualModelWithVersions
+  versions: VirtualModelVersion[];
+  is_supported_in_tier: boolean;
 }
 
 export interface CreateVirtualModelParams {
@@ -73,5 +96,13 @@ export async function deleteVirtualModel(props: {
     },
   });
 
-  await handleApiResponse<void>(response);
+  // 204 No Content - successful deletion with no response body
+  if (response.status === 204) {
+    return;
+  }
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || `Failed to delete virtual model: ${response.status}`);
+  }
 }
