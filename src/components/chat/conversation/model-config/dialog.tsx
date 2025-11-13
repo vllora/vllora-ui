@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -41,13 +41,7 @@ export function ModelConfigDialog({
   const { createVirtualModel, creating } = VirtualModelsConsumer();
 
   // Initialize mode from sessionStorage or default to 'basic'
-  const [mode, setMode] = useState<'basic' | 'advanced'>(() => {
-    if (typeof window !== 'undefined') {
-      const savedMode = sessionStorage.getItem('modelConfigDialogMode');
-      return (savedMode === 'basic' || savedMode === 'advanced') ? savedMode : 'basic';
-    }
-    return 'basic';
-  });
+  const [mode, setMode] = useState<'basic' | 'advanced'>('basic');
   const [config, setConfig] = useState<Record<string, any>>(initialConfig);
   const [jsonContent, setJsonContent] = useState<string>('');
   const [showWarning, setShowWarning] = useState(false);
@@ -61,17 +55,21 @@ export function ModelConfigDialog({
   const isCreateMode = !onConfigChange;
 
   // Helper: Convert config object to formatted JSON string
-  const configToJson = (configObj: Record<string, any>): string => {
+  const configToJson = useCallback((configObj: Record<string, any>): string => {
     try {
-      return JSON.stringify(configObj, null, 2);
+      let fullConfig = {
+        ...configObj,
+        mode: selectedModel
+      }
+      return JSON.stringify(fullConfig, null, 2);
     } catch (error) {
       console.error('Error converting config to JSON:', error);
       return '{}';
     }
-  };
+  }, [selectedModel]);
 
   // Helper: Parse JSON string back to config object
-  const jsonToConfig = (jsonStr: string): { success: boolean; config?: Record<string, any>; error?: string } => {
+  const jsonToConfig = useCallback((jsonStr: string): { success: boolean; config?: Record<string, any>; error?: string } => {
     try {
       const parsed = JSON.parse(jsonStr);
       if (typeof parsed !== 'object' || parsed === null) {
@@ -81,7 +79,7 @@ export function ModelConfigDialog({
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Invalid JSON' };
     }
-  };
+  }, []);
 
   useEffect(() => {
     // Initialize config with defaults when dialog opens
@@ -126,6 +124,44 @@ export function ModelConfigDialog({
     }
   }, [open, modelInfo.parameters, initialConfig]);
 
+  // Helper: Extract only user-modified config (different from defaults)
+  const getUserConfig = () => {
+    const userConfig: Record<string, any> = {};
+
+    // Save parameter configs that differ from defaults
+    if (modelInfo.parameters) {
+      Object.entries(config).forEach(([key, value]) => {
+        const param = modelInfo.parameters![key];
+        // Only include if value is different from default
+        if (param && value !== param.default) {
+          userConfig[key] = value;
+        }
+      });
+    }
+
+    // Always include extra field if it exists (contains cache config)
+    if (config.extra !== undefined) {
+      userConfig.extra = config.extra;
+    }
+
+    // Include fallback if it exists
+    if (config.fallback !== undefined) {
+      userConfig.fallback = config.fallback;
+    }
+
+    // Include max_retries if it exists
+    if (config.max_retries !== undefined) {
+      userConfig.max_retries = config.max_retries;
+    }
+
+    // Include messages if they exist
+    if (config.messages && config.messages.length > 0) {
+      userConfig.messages = config.messages;
+    }
+
+    return userConfig;
+  };
+
   const handleSave = async () => {
     // If in create mode, create virtual model directly
     if (isCreateMode) {
@@ -143,7 +179,7 @@ export function ModelConfigDialog({
         // Get the current configuration
         const configToSave = mode === 'advanced'
           ? jsonToConfig(jsonContent).config || config
-          : config;
+          : getUserConfig();
 
         // Use context method to save virtual model
         await createVirtualModel({
@@ -176,40 +212,7 @@ export function ModelConfigDialog({
       }
     } else {
       // Only save values that differ from defaults in Basic mode
-      const userConfig: Record<string, any> = {};
-
-      // Save parameter configs that differ from defaults
-      if (modelInfo.parameters) {
-        Object.entries(config).forEach(([key, value]) => {
-          const param = modelInfo.parameters![key];
-          // Only include if value is different from default
-          if (param && value !== param.default) {
-            userConfig[key] = value;
-          }
-        });
-      }
-
-      // Always include extra field if it exists (contains cache config)
-      if (config.extra !== undefined) {
-        userConfig.extra = config.extra;
-      }
-
-      // Include fallback if it exists
-      if (config.fallback !== undefined) {
-        userConfig.fallback = config.fallback;
-      }
-
-      // Include max_retries if it exists
-      if (config.max_retries !== undefined) {
-        userConfig.max_retries = config.max_retries;
-      }
-
-      // Include messages if they exist
-      if (config.messages && config.messages.length > 0) {
-        userConfig.messages = config.messages;
-      }
-
-      finalConfig = userConfig;
+      finalConfig = getUserConfig();
     }
 
     onConfigChange?.(finalConfig);
@@ -227,7 +230,6 @@ export function ModelConfigDialog({
         }
       });
     }
-
     // Cache is disabled by default (extra.cache is not included)
     setConfig(defaultConfig);
 
@@ -238,8 +240,9 @@ export function ModelConfigDialog({
   // Handle mode switching
   const handleModeSwitch = (newMode: 'basic' | 'advanced') => {
     if (newMode === 'advanced') {
-      // UI → JSON: Convert current config to JSON with formatting
-      const json = formatJson(configToJson(config));
+      // UI → JSON: Convert current config to JSON, filtering out defaults
+      const userConfig = getUserConfig();
+      const json = formatJson(configToJson(userConfig));
       setJsonContent(json);
       setMode('advanced');
       // Persist mode to sessionStorage
@@ -293,7 +296,7 @@ export function ModelConfigDialog({
       // Get the current configuration
       const configToSave = mode === 'advanced'
         ? jsonToConfig(jsonContent).config || config
-        : config;
+        : getUserConfig();
 
       // Use context method to save virtual model
       await createVirtualModel({
@@ -313,7 +316,6 @@ export function ModelConfigDialog({
       console.error('Error saving virtual model:', error);
     }
   };
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[60vw] h-[80vh] overflow-hidden flex flex-col">

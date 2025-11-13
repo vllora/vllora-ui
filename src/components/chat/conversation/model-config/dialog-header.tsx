@@ -18,7 +18,7 @@ export function ModelConfigDialogHeader({ title, description, mode, onModeChange
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[rgb(var(--theme-500))]/10 border border-border">
           <Settings2 className="h-5 w-5 text-[rgb(var(--theme-500))]" />
         </div>
-        <div className="flex-1 space-y-2">
+        <div className="flex-1 space-y-2 pr-8">
           <div className="flex items-center justify-between gap-2">
             <DialogTitle className="text-xl font-semibold flex items-center gap-2">
               {title}
@@ -31,7 +31,7 @@ export function ModelConfigDialogHeader({ title, description, mode, onModeChange
                 variant="outline"
                 size="sm"
                 onClick={() => onModeChange(mode === 'basic' ? 'advanced' : 'basic')}
-                className="flex items-center gap-1.5 h-8 px-3 text-xs"
+                className="flex items-center gap-1.5 h-8 px-3 text-xs shrink-0"
               >
                 {mode === 'basic' ? (
                   <>
