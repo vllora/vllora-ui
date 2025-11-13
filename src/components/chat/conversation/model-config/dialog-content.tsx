@@ -5,6 +5,8 @@ import { FallbackModelsConfig } from "./fallback-models/fallback-models";
 import { MaxRetriesConfig } from "./max-retries";
 import { ModelSelector } from "../../traces/model-selector";
 import { ModelParametersSection } from "./model-parameters-section";
+import { MessagesSection } from "./messages-section";
+import { Message } from "./types";
 
 interface ModelConfigDialogContentProps {
   selectedModel?: string;
@@ -21,6 +23,10 @@ export function ModelConfigDialogContent({
   onConfigChange,
   modelInfo,
 }: ModelConfigDialogContentProps) {
+  const handleMessagesChange = (messages: Message[]) => {
+    onConfigChange({ ...config, messages });
+  };
+
   return (
     <div className="flex-1 overflow-y-auto px-6 py-4">
       {/* Base Model Section */}
@@ -35,6 +41,14 @@ export function ModelConfigDialogContent({
           />
         </div>
       )}
+
+      {/* Messages Section */}
+      <div className="space-y-2 py-4 border-t">
+        <MessagesSection
+          messages={config.messages || []}
+          onMessagesChange={handleMessagesChange}
+        />
+      </div>
 
       {/* Response Cache Section */}
       <div className="space-y-2 py-4 border-t">

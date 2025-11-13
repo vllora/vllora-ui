@@ -15,6 +15,7 @@ import { McpServerConfig } from '@/services/mcp-api';
 import { ProviderConfigDialog } from '../traces/model-selector/ProviderConfigDialog';
 import { MultiProviderConfigDialog } from '../traces/model-selector/MultiProviderConfigDialog';
 import { CurrentAppConsumer } from '@/contexts/CurrentAppContext';
+import { VirtualModelsProvider } from '@/contexts/VirtualModelsContext';
 
 interface ChatWindowProps {
   threadId?: string;
@@ -258,15 +259,18 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       {/* Chat Header */}
       <div className="bg-card w-full flex-shrink-0">
         {/* Model Selector - Top row aligned with Project Dropdown */}
-        <ConversationHeader
-          modelName={selectedModel}
-          modelInfo={selectedModelInfo}
-          onModelChange={onModelChange}
-          onRefresh={refreshSpans}
-          isLoading={isLoadingSpans}
-          onModelConfigChange={setModelConfig}
-          modelConfig={modelConfig}
-        />
+        <VirtualModelsProvider projectId={projectId}>
+          <ConversationHeader
+            modelName={selectedModel}
+            modelInfo={selectedModelInfo}
+            onModelChange={onModelChange}
+            onRefresh={refreshSpans}
+            isLoading={isLoadingSpans}
+            onModelConfigChange={setModelConfig}
+            modelConfig={modelConfig}
+            projectId={projectId}
+          />
+        </VirtualModelsProvider>
       </div>
 
 

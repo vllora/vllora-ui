@@ -13,6 +13,7 @@ interface ModelSelectorHeaderProps {
   onModelConfigChange?: (config: any) => void;
   isLoading?: boolean;
   modelConfig?: Record<string, any>;
+  projectId?: string;
 }
 
 export function ConversationHeader({
@@ -22,7 +23,8 @@ export function ConversationHeader({
   isLoading,
   modelInfo,
   onModelConfigChange,
-  modelConfig
+  modelConfig,
+  projectId
 }: ModelSelectorHeaderProps) {
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
 
@@ -73,6 +75,7 @@ export function ConversationHeader({
           initialConfig={modelConfig}
           selectedModel={modelName}
           onModelChange={onModelChange}
+          projectId={projectId}
         />
       )}
     </>
