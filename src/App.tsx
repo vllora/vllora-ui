@@ -17,6 +17,7 @@ import { AuthProvider } from "./contexts/AuthContext"
 import { ProtectedRoute } from "./components/ProtectedRoute"
 import { LocalModelsSkeletonLoader } from "./components/models/local/LocalModelsSkeletonLoader"
 import { CurrentAppProvider } from "./lib"
+import { ThreadAndTracesPageProvider } from "./contexts/ThreadAndTracesPageContext"
 
 // Lazy load the models page
 const ModelsPage = lazy(() => import("./pages/models").then(module => ({ default: module.ModelsPage })))
@@ -50,7 +51,7 @@ function App() {
               </ProtectedRoute>}>
                 {/* Project-scoped routes (now using query string ?project_id=...) */}
                 <Route index element={<HomePage />} />
-                <Route path="chat" element={<ThreadsAndTracesPage />} />
+                <Route path="chat" element={<ThreadAndTracesPageProvider><ThreadsAndTracesPage /></ThreadAndTracesPageProvider>} />
                 <Route path="analytics" element={<AnalyticsPage />} />
                 <Route
                   path="models"

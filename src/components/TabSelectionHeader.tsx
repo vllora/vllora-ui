@@ -25,8 +25,13 @@ export function TabSelectionHeader({
   const handleTabChange = (tab: string) => {
     // Update URL with tab query parameter
     const params = new URLSearchParams(searchParams);
-    params.set('tab', tab);
-    navigate(`${location.pathname}?${params.toString()}`);
+    if (tab === 'threads') {
+      params.delete('tab');
+    } else {
+      params.set('tab', tab);
+    }
+    let newParamsStr = params.toString();
+    navigate(newParamsStr ? `${location.pathname}?${newParamsStr}` : location.pathname);
 
     // Call the parent callback
     onTabChange(tab);

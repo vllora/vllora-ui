@@ -88,7 +88,6 @@ const TimelineContentInner = memo((props: {
     </div>
   }
 
-  console.log('===== hierarchies', hierarchies);
   return <div className="flex flex-col gap-0 divide-y divide-border/50 border-b border-border/50">
     {hierarchies.map((hierarchy, index) => (
       <SingleRunTimelineView

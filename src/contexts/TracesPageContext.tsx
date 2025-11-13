@@ -1,5 +1,5 @@
 import { createContext, useContext, ReactNode, useCallback, useState, useRef, useEffect, useMemo } from "react";
-import { useSearchParams } from "react-router";
+import { useSearchParams, useNavigate, useLocation } from "react-router";
 import { useDebugControl } from "@/hooks/events/useDebugControl";
 import { ProjectEventUnion } from "./project-events/dto";
 import { processEvent, updatedRunWithSpans } from "@/hooks/events/utilities";
@@ -24,7 +24,9 @@ const ALLOWED_QUERY_PARAMS = ['tab', 'group_by', 'duration', 'page'] as const;
 
 export function useTracesPageContext(props: { projectId: string }) {
   const { projectId } = props;
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   // Initialize from URL first, then localStorage, then default
   const [groupByMode, setGroupByMode] = useState<GroupByMode>(() => {
@@ -69,12 +71,13 @@ export function useTracesPageContext(props: { projectId: string }) {
 
   // Sync to both URL and localStorage when state changes (without page)
   useEffect(() => {
-    // Create clean params with only allowed query params
+    // Get current URL params directly from window.location to avoid stale reads
+    const currentParams = new URLSearchParams(window.location.search);
     const newParams = new URLSearchParams();
 
     // Preserve only allowed params from current URL
     ALLOWED_QUERY_PARAMS.forEach(param => {
-      const value = searchParams.get(param);
+      const value = currentParams.get(param);
       if (value && param !== 'group_by' && param !== 'duration') {
         newParams.set(param, value);
       }
@@ -82,19 +85,21 @@ export function useTracesPageContext(props: { projectId: string }) {
 
     // Set our managed params
     newParams.set('group_by', groupByMode);
+
+    // Preserve the current tab value from URL, or default to 'threads'
     newParams.set('tab', 'traces');
 
     // Only include duration in URL when in time mode
     if (groupByMode === 'time') {
       newParams.set('duration', String(duration));
     }
-
-    setSearchParams(newParams, { replace: true });
+    navigate(`${location.pathname}?${newParams.toString()}`, { replace: true });
 
     // Update localStorage for persistence (always store duration)
     localStorage.setItem('vllora-traces-groupByMode', groupByMode);
     localStorage.setItem('vllora-traces-duration', String(duration));
-  }, [groupByMode, duration, searchParams, setSearchParams]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupByMode, duration]);
 
   // Loading state for groups - supports all group types
   const [loadingGroups, setLoadingGroups] = useState<Set<string>>(new Set());
@@ -297,7 +302,8 @@ export function useTracesPageContext(props: { projectId: string }) {
 
   // Sync current page to URL
   useEffect(() => {
-    const newParams = new URLSearchParams(searchParams);
+    // Get current URL params directly from window.location to avoid stale reads
+    const newParams = new URLSearchParams(window.location.search);
 
     if (currentPage > 1) {
       newParams.set('page', String(currentPage));
@@ -305,8 +311,9 @@ export function useTracesPageContext(props: { projectId: string }) {
       newParams.delete('page');
     }
 
-    setSearchParams(newParams, { replace: true });
-  }, [currentPage, searchParams, setSearchParams]);
+    navigate(`${location.pathname}?${newParams.toString()}`, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage]);
 
   // Wrapper functions that update URL when navigating pages
   const goToPage = useCallback((pageNumber: number) => {

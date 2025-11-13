@@ -15,7 +15,11 @@ export const useWrapperHook = (props: {
 }) => {
   const { threadId, projectId, onRunsLoaded } = props;
   // Use the runs pagination hook
-  let runsPaginationState = useRunsPagination({ projectId, threadId, onRunsLoaded });
+  let runsPaginationState = useRunsPagination({
+    projectId,
+    threadId,
+    onRunsLoaded,
+  });
   // Use the span details hook
   let spanDetailState = useSpanDetails();
 
@@ -45,10 +49,8 @@ export const useWrapperHook = (props: {
   }, [selectedRunId, runMap]);
 
   const detailSpan = useMemo(() => {
-   let result = detailSpanId
-      ? flattenSpans.find(
-          (span) => span.span_id === detailSpanId
-        )
+    let result = detailSpanId
+      ? flattenSpans.find((span) => span.span_id === detailSpanId)
       : null;
     return result;
   }, [detailSpanId, flattenSpans]);
@@ -126,7 +128,6 @@ export const useWrapperHook = (props: {
 
       try {
         const relatedSpans = await fetchAllSpansByRunId(runId, projectId);
-        console.log('=== fetchAllSpansByRunId relatedSpans', relatedSpans);
         updateBySpansArray(relatedSpans);
       } catch (e: any) {
         toast.error("Failed to fetch span details", {
