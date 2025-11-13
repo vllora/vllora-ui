@@ -21,6 +21,8 @@ interface ModelConfigDialogProps {
   selectedModel?: string;
   onModelChange?: (model: string) => void;
   projectId?: string;
+  title?: string;
+  description?: string;
 }
 
 export function ModelConfigDialog({
@@ -32,6 +34,8 @@ export function ModelConfigDialog({
   selectedModel,
   onModelChange,
   projectId,
+  title = "Model Configuration",
+  description = "Fine-tune parameters, caching, fallbacks, and retries for optimal performance",
 }: ModelConfigDialogProps) {
   // Get virtual models context
   const { createVirtualModel, creating } = VirtualModelsConsumer();
@@ -50,7 +54,11 @@ export function ModelConfigDialog({
   const [complexFeatures, setComplexFeatures] = useState<string[]>([]);
   const [pendingJsonToSwitch, setPendingJsonToSwitch] = useState<string>('');
   const [step, setStep] = useState<'config' | 'save'>('config');
+  const [virtualModelName, setVirtualModelName] = useState('');
   const saveFormRef = useRef<SaveVirtualModelFormRef>(null);
+
+  // Determine if this is a "create mode" (no onConfigChange means it's for creating virtual models only)
+  const isCreateMode = !onConfigChange;
 
   // Helper: Convert config object to formatted JSON string
   const configToJson = (configObj: Record<string, any>): string => {
@@ -111,9 +119,50 @@ export function ModelConfigDialog({
 
       setConfig(defaultConfig);
     }
+
+    // Reset virtual model name when dialog closes
+    if (!open) {
+      setVirtualModelName('');
+    }
   }, [open, modelInfo.parameters, initialConfig]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    // If in create mode, create virtual model directly
+    if (isCreateMode) {
+      if (!virtualModelName.trim()) {
+        toast.error('Please enter a name for the virtual model');
+        return;
+      }
+
+      if (!projectId) {
+        toast.error('Project ID is required to save virtual model');
+        return;
+      }
+
+      try {
+        // Get the current configuration
+        const configToSave = mode === 'advanced'
+          ? jsonToConfig(jsonContent).config || config
+          : config;
+
+        // Use context method to save virtual model
+        await createVirtualModel({
+          name: virtualModelName.trim(),
+          target_configuration: configToSave,
+          is_public: false,
+          latest: true,
+        });
+
+        // Close the dialog
+        onOpenChange(false);
+      } catch (error) {
+        // Error handling is done in the context
+        console.error('Error saving virtual model:', error);
+      }
+      return;
+    }
+
+    // Original behavior for conversation mode
     let finalConfig: Record<string, any> = {};
 
     // If in Advanced mode, parse JSON first
@@ -282,6 +331,12 @@ export function ModelConfigDialog({
             onReset={handleReset}
             onSave={handleSave}
             onSaveAsVirtualModel={() => setStep('save')}
+            title={title}
+            description={description}
+            isCreateMode={isCreateMode}
+            virtualModelName={virtualModelName}
+            onVirtualModelNameChange={setVirtualModelName}
+            isSaving={creating}
           />
         ) : (
           <SaveStep

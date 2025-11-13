@@ -1,5 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ModelInfo } from "@/types/models";
 import { ModelConfigDialogHeader } from "./dialog-header";
 import { ModelConfigDialogContent } from "./dialog-content";
@@ -19,6 +21,12 @@ interface ConfigStepProps {
   onReset: () => void;
   onSave: () => void;
   onSaveAsVirtualModel: () => void;
+  title?: string;
+  description?: string;
+  isCreateMode?: boolean;
+  virtualModelName?: string;
+  onVirtualModelNameChange?: (name: string) => void;
+  isSaving?: boolean;
 }
 
 export function ConfigStep({
@@ -34,15 +42,37 @@ export function ConfigStep({
   onReset,
   onSave,
   onSaveAsVirtualModel,
+  title = "Model Configuration",
+  description = "Fine-tune parameters, caching, fallbacks, and retries for optimal performance",
+  isCreateMode = false,
+  virtualModelName = '',
+  onVirtualModelNameChange,
+  isSaving = false,
 }: ConfigStepProps) {
   return (
     <>
       <ModelConfigDialogHeader
-        title="Model Configuration"
-        description="Fine-tune parameters, caching, fallbacks, and retries for optimal performance"
+        title={title}
+        description={description}
         mode={mode}
         onModeChange={onModeChange}
       />
+
+      {/* Name input when in create mode */}
+      {isCreateMode && (
+        <div className="px-6 pb-2 border-b">
+          <Label htmlFor="virtual-model-name" className="text-sm font-semibold">
+            Virtual Model Name
+          </Label>
+          <Input
+            id="virtual-model-name"
+            placeholder="Enter a name for this virtual model"
+            value={virtualModelName}
+            onChange={(e) => onVirtualModelNameChange?.(e.target.value)}
+            className="mt-2"
+          />
+        </div>
+      )}
 
       {/* Conditional Rendering based on mode */}
       {mode === 'basic' ? (
@@ -63,19 +93,23 @@ export function ConfigStep({
       )}
 
       <DialogFooter className="gap-2 border-t pt-4">
-        <Button
-          variant="outline"
-          onClick={onSaveAsVirtualModel}
-          className="gap-2"
-        >
-          <BookmarkPlus className="h-4 w-4" />
-          Save as Virtual Model
-        </Button>
+        {!isCreateMode && (
+          <Button
+            variant="outline"
+            onClick={onSaveAsVirtualModel}
+            className="gap-2"
+          >
+            <BookmarkPlus className="h-4 w-4" />
+            Save as Virtual Model
+          </Button>
+        )}
         <div className="flex-1" />
         <Button variant="outline" onClick={onReset}>
           Reset to Defaults
         </Button>
-        <Button onClick={onSave}>Done</Button>
+        <Button onClick={onSave} disabled={isSaving}>
+          {isCreateMode ? (isSaving ? 'Creating...' : 'Create Virtual Model') : 'Done'}
+        </Button>
       </DialogFooter>
     </>
   );
