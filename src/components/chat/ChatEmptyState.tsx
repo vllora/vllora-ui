@@ -11,7 +11,7 @@ interface ChatEmptyStateProps {
 
 export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({ onNewChat, projectId }) => {
   const searchParam = new URLSearchParams(window.location.search);
-  const threadIdFromUrl = searchParam.get('threadId');
+  const threadIdFromUrl = searchParam.get('thread_id');
   const model = searchParam.get('model') || 'openai/gpt-4o-mini';
   const { app_mode } = CurrentAppConsumer();
 

@@ -9,7 +9,7 @@ export function useThreadState() {
 
   // Read selectedThreadId from URL query string
   const selectedThreadId = useMemo(() => {
-    return searchParams.get('threadId');
+    return searchParams.get('thread_id');
   }, [searchParams]);
 
   const selectedThread = useMemo(() => {

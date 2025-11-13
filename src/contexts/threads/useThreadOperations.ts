@@ -67,12 +67,12 @@ export function useThreadOperations(
         if (isSelectedThread && newThreads.length > 0) {
           const firstThread = newThreads[0];
           const params = new URLSearchParams(searchParams);
-          params.set('threadId', firstThread.thread_id);
+          params.set('thread_id', firstThread.thread_id);
           navigate(`/chat?${params.toString()}`);
         } else if (isSelectedThread && newThreads.length === 0) {
           // If no threads remain, clear the threadId param
           const params = new URLSearchParams(searchParams);
-          params.delete('threadId');
+          params.delete('thread_id');
           navigate(`/chat?${params.toString()}`);
         }
 

@@ -114,7 +114,7 @@ export function HomePage() {
               // Navigate to chat while preserving project context
               const params = new URLSearchParams();
               if (currentProjectId && !isDefaultProject(currentProjectId) && project_id_from === 'query_string') {
-                params.set('projectId', currentProjectId);
+                params.set('project_id', currentProjectId);
               }
               const queryString = params.toString();
               navigate(`/chat${queryString ? '?' + queryString : ''}`);
@@ -139,7 +139,7 @@ export function HomePage() {
               const params = new URLSearchParams();
               params.set('tab', 'traces');
               if (currentProjectId && !isDefaultProject(currentProjectId) && project_id_from === 'query_string') {
-                params.set('projectId', currentProjectId);
+                params.set('project_id', currentProjectId);
               }
               const queryString = params.toString();
               navigate(`/chat?${queryString}`);

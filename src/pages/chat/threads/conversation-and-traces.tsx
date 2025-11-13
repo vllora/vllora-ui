@@ -33,7 +33,7 @@ export const ConversationAndTraces = () => {
     const params = new URLSearchParams(searchParams);
     params.set('model', modelId);
     if (selectedThreadId) {
-      params.set('threadId', selectedThreadId);
+      params.set('thread_id', selectedThreadId);
       // Update the thread's input_models
       const thread = threads.find((t) => t.thread_id === selectedThreadId);
       if (thread) {
@@ -46,9 +46,9 @@ export const ConversationAndTraces = () => {
       }
     }
     if (projectId && !isDefaultProject(projectId)) {
-      params.set('projectId', projectId);
+      params.set('project_id', projectId);
     } else {
-      params.delete('projectId');
+      params.delete('project_id');
     }
     navigate(`/chat?${params.toString()}`);
   }, [selectedThreadId, threads, searchParams, projectId, updateThread, navigate, isDefaultProject]);

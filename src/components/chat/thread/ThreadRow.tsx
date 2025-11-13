@@ -19,7 +19,7 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [newTitle, setNewTitle] = useState(thread.title);
     const [searchParams] = useSearchParams();
-    const urlThreadId = searchParams?.get('threadId');
+    const urlThreadId = searchParams?.get('thread_id');
 
     const currentThreadChanges = useMemo(() => threadsHaveChanges[thread.thread_id], [thread.thread_id, threadsHaveChanges]);
     // Use URL parameter for immediate feedback, fallback to context only if URL param is null

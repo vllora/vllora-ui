@@ -35,9 +35,9 @@ export function ProjectDropdown({ onProjectChange }: ProjectDropdownProps) {
       // Update URL with new projectId query parameter (omit if default project)
       const searchParams = new URLSearchParams();
       if (isDefaultProject(projectId)) {
-        searchParams.delete('projectId');
+        searchParams.delete('project_id');
       } else {
-        searchParams.set('projectId', projectId);
+        searchParams.set('project_id', projectId);
       }
       const queryString = searchParams.toString();
       navigate(`${location.pathname}${queryString ? '?' + queryString : ''}`);
