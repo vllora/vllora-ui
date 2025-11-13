@@ -86,6 +86,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
   }, []);
   const handleEvent = useCallback((event: ProjectEventUnion) => {
     if (event.run_id && event.thread_id === threadId) {
+      console.log('==== event', event)
       setTimeout(() => {
         setFlattenSpans(prevSpans => {
           let newFlattenSpans = processEvent(prevSpans, event)

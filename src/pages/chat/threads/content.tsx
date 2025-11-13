@@ -8,6 +8,7 @@ import { ChatWindowProvider } from '@/contexts/ChatWindowContext';
 import { Thread } from '@/types/chat';
 import { ConversationAndTraces } from './conversation-and-traces';
 import { ChatEmptyState } from '@/components/chat/ChatEmptyState';
+import { LoadingState } from '@/components/LoadingState';
 
 export function ThreadsPageContent() {
   const { currentProjectId } = ProjectsConsumer();
@@ -20,6 +21,7 @@ export function ThreadsPageContent() {
     setThreads,
     selectedThread,
     handleThreadClick,
+    loading,
   } = ThreadsConsumer();
   // Read selectedModel from URL query string, fallback to default
   const selectedModel = useMemo(() => {
@@ -72,7 +74,12 @@ export function ThreadsPageContent() {
     }
   }, [selectedThreadId, threads, handleSelectThread, searchParams]);
 
-  // Show ChatEmptyState when no threads exist
+  // Show loading state while threads are being fetched
+  if (loading && threads.length === 0) {
+    return <LoadingState message="Loading conversations" />;
+  }
+
+  // Show ChatEmptyState when no threads exist and not loading
   if (threads.length === 0) {
     return <ChatEmptyState onNewChat={handleNewThread} projectId={currentProjectId} />;
   }

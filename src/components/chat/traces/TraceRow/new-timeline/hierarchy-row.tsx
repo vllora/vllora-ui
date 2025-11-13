@@ -23,7 +23,6 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
     const { hierarchy, totalDuration, startTime, level, titleWidth: propTitleWidth = TIMELINE_DYNAMIC_TITLE_WIDTH_IN_SIDEBAR, relatedSpans = [], selectedSpanId, onSpanSelect, isInSidebar = true, hoverSpanId, collapsedSpans, onToggle } = props;
     // In ellora-ui, we're always in sidebar mode (chat sidebar)
     const titleWidth: string | number = `${propTitleWidth}px`.replace('pxpx', 'px');
-
     let root = hierarchy;
     let childrenSpan = hierarchy.spans || [];
     let isClientSDKTrace = isClientSDK(root);

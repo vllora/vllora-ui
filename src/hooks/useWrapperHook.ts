@@ -126,6 +126,7 @@ export const useWrapperHook = (props: {
 
       try {
         const relatedSpans = await fetchAllSpansByRunId(runId, projectId);
+        console.log('=== fetchAllSpansByRunId relatedSpans', relatedSpans);
         updateBySpansArray(relatedSpans);
       } catch (e: any) {
         toast.error("Failed to fetch span details", {
