@@ -12,7 +12,6 @@ export function useProjectModels(projectId?: string) {
   const { data, loading, error, run: refetchModels } = useRequest<ModelInfo[], []>(
     () => fetchProjectModels({ projectId }),
     {
-      ready: !!projectId,
       refreshDeps: [projectId],
       onError: (err) => {
         toast.error('Failed to load local models', {

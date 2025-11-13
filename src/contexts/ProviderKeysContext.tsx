@@ -148,9 +148,7 @@ export function useProviderKeys() {
       setEditingProvider(null);
       setCredentialValues({ ...credentialValues, [providerName]: {} });
       await refetchProviders();
-      refetchModels({
-        projectId: currentProjectId
-      });
+      refetchModels();
     } catch (err) {
       toast.error('Failed to save provider', {
         description: err instanceof Error ? err.message : 'An error occurred while saving provider',
@@ -181,9 +179,7 @@ export function useProviderKeys() {
       setDeleteDialogOpen(false);
       setProviderToDelete(null);
       await refetchProviders();
-      refetchModels({
-        projectId: currentProjectId
-      });
+      refetchModels();
     } catch (err) {
       toast.error('Failed to delete provider', {
         description: err instanceof Error ? err.message : 'An error occurred while deleting provider',
