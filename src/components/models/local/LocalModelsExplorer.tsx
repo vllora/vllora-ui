@@ -615,7 +615,7 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
       {/* Empty State */}
       {filteredModels.length === 0 && (
         <div className="text-center py-12">
-          <p className="text-muted-foreground">No local models found matching your filters.</p>
+          <p className="text-muted-foreground">No models found matching your filters.</p>
         </div>
       )}
 
