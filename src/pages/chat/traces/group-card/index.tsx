@@ -10,7 +10,7 @@ import { CustomErrorFallback } from "@/components/chat/traces/components/custom-
 import { TimelineContent } from "@/components/chat/traces/components/TimelineContent";
 import { GroupCardHeader } from "./header";
 import { IdWithCopy } from "./id-with-copy";
-import { LoadingState } from "@/components/LoadingState";
+import { SpansSkeletonLoader } from "@/components/SpansSkeletonLoader";
 
 interface GroupCardProps {
   group: GenericGroupDTO;
@@ -274,8 +274,8 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
             transition={{ duration: 0.15 }}
           >
             <div className="overflow-auto custom-scrollbar border-l border-r border-border/50">
-              {isLoadingSpans ? (
-                <LoadingState message="Loading spans" />
+              {(isLoadingSpans && (!allSpans || allSpans.length === 0)) ? (
+                <SpansSkeletonLoader />
               ) : allSpans.length > 0 ? (
                 <div className="flex flex-col gap-3 py-1">
                   <ErrorBoundary FallbackComponent={CustomErrorFallback}>
