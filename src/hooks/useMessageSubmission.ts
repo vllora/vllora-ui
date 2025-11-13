@@ -89,20 +89,7 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
       const { inputText, files, threadId, threadTitle, initialMessages, toolsUsage, othersParams } = inputProps;      
       if (inputText.trim() === '') return;
 
-      // const newMessage: Message = {
-      //   id: uuidv4(),
-      //   type: MessageType.HumanMessage,
-      //   content: inputText,
-      //   timestamp: Date.now(),
-      //   content_type: MessageContentType.Text,
-      //   thread_id: threadId,
-      //   files,
-      //   is_from_local: true,
-      // };
-
-      // setMessages((prevMessages) => {
-      //   return [...prevMessages, newMessage];
-      // });
+     
       setCurrentInput('');
       setTyping(true);
       setError(undefined);
@@ -162,6 +149,9 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
           return content;
         };
 
+        let otherParamsWithoutMessages = {...othersParams};
+        delete otherParamsWithoutMessages.messages;
+
         let requestBody: any = {
           model: props.modelName,
           messages: [
@@ -171,6 +161,12 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
                 ? buildMessageContent(msg.content, msg.files)
                 : msg.content,
             })) || []),
+            ...(othersParams && othersParams.messages && othersParams.messages.length > 0 ? othersParams.messages.map((m: any) => {
+              return {
+                role: m.role,
+                content: m.content,
+              }
+            }) : []),
             {
               role: 'user',
               content: buildMessageContent(inputText, files),
@@ -178,7 +174,7 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
           ],
           stream: true,
           ...(threadId && { thread_id: threadId }),
-          ...(othersParams && {...othersParams}),
+          ...(otherParamsWithoutMessages && {...otherParamsWithoutMessages}),
         };
 
         if (toolsUsage && toolsUsage.size > 0) {
