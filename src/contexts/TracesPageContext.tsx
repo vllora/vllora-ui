@@ -9,6 +9,7 @@ import { useGroupsPagination } from "@/hooks/useGroupsPagination";
 import { fetchGroupSpans, fetchSingleGroup, fetchBatchGroupSpans, GenericGroupDTO, isTimeGroup, isThreadGroup, isRunGroup } from "@/services/groups-api";
 import { toast } from "sonner";
 import { tryParseJson } from "@/utils/modelUtils";
+import { getGroupKey } from "./utils";
 
 export type TracesPageContextType = ReturnType<typeof useTracesPageContext>;
 
@@ -19,6 +20,7 @@ export type Duration = 300 | 600 | 1200 | 1800 | 3600 | 7200 | 10800 | 21600 | 4
 
 // Allowed query params for traces page
 const ALLOWED_QUERY_PARAMS = ['tab', 'groupBy', 'duration', 'page'] as const;
+
 
 export function useTracesPageContext(props: { projectId: string }) {
   const { projectId } = props;
@@ -178,23 +180,10 @@ export function useTracesPageContext(props: { projectId: string }) {
     groupBy: groupByMode === 'time' ? 'time' : groupByMode === 'thread' ? 'thread' : groupByMode === 'run' ? 'run' : 'time',
     initialPage,
     onGroupsLoaded: async (groups) => {
-      // OPTION 1: Manual batching (fallback for SQLite compatibility)
-      // Uncomment this if you need to revert to manual batching
-      /*
-      if (groups && groups.length > 0) {
-        const BATCH_SIZE = 5; // SQLite can handle ~5 concurrent reads comfortably
-
-        for (let i = 0; i < groups.length; i += BATCH_SIZE) {
-          const batch = groups.slice(i, i + BATCH_SIZE);
-          // Load this batch in parallel, then move to next batch
-          await Promise.all(batch.map(group => loadGroupSpans(group)));
-        }
-      }
-      */
-
-      // OPTION 2: Use batch API endpoint (current - recommended)
       // Single batched request for all groups - cleaner and more efficient
       if (groups && groups.length > 0) {
+        const groupKeys: string[] = [];
+
         try {
           // Convert groups to batch request format
           const groupIdentifiers = groups.map(group => {
@@ -218,6 +207,18 @@ export function useTracesPageContext(props: { projectId: string }) {
             return null;
           }).filter((id): id is NonNullable<typeof id> => id !== null);
 
+          // Collect group keys that need loading
+          groupKeys.push(...groups.map(g => getGroupKey(g))
+            .filter((key): key is NonNullable<typeof key> => key !== null)
+            .filter((key) => !loadingGroupsRef.current.has(key)));
+
+          // Mark groups as loading
+          setLoadingGroups(prev => {
+            const newSet = new Set(prev);
+            groupKeys.forEach(key => newSet.add(key));
+            return newSet;
+          });
+
           // Single batch request for all groups
           const response = await fetchBatchGroupSpans({
             projectId,
@@ -225,12 +226,19 @@ export function useTracesPageContext(props: { projectId: string }) {
             spansPerGroup: 100,
           });
 
-          // Flatten all spans from response into flattenSpans
+          // Flatten all spans from response
           const allSpans = Object.values(response.data).flatMap(g => g.spans);
           updateBySpansArray(allSpans);
         } catch (error: any) {
           toast.error("Failed to load group spans", {
             description: error.message || "An error occurred while loading group spans",
+          });
+        } finally {
+          // Clean up loading state
+          setLoadingGroups(prev => {
+            const newSet = new Set(prev);
+            groupKeys.forEach(key => newSet.delete(key));
+            return newSet;
           });
         }
       }
@@ -359,14 +367,8 @@ export function useTracesPageContext(props: { projectId: string }) {
   // Load spans for any group type using unified API
   const loadGroupSpans = useCallback(async (group: GenericGroupDTO) => {
     // Create a unique key for this group
-    let groupKey: string;
-    if (isTimeGroup(group)) {
-      groupKey = `time-${group.group_key.time_bucket}`;
-    } else if (isThreadGroup(group)) {
-      groupKey = `thread-${group.group_key.thread_id}`;
-    } else if (isRunGroup(group)) {
-      groupKey = `run-${group.group_key.run_id}`;
-    } else {
+    const groupKey = getGroupKey(group);
+    if (!groupKey) {
       return; // Unknown group type
     }
 
@@ -609,7 +611,7 @@ export function useTracesPageContext(props: { projectId: string }) {
         return updated.sort((a, b) => b.start_time_us - a.start_time_us);
       });
     }
-    
+
     if (event.type === 'Custom' && event.event.type === 'span_end' && event.event.operation_name === 'api_invoke') {
       const eventApiInvoke = event.event
       let apiInvokAtt = eventApiInvoke.attributes
@@ -623,7 +625,7 @@ export function useTracesPageContext(props: { projectId: string }) {
           if (groupIndex !== -1) {
             let requestModelsGroup = prev[groupIndex].request_models
             let usedModelsGroup = prev[groupIndex].used_models
-            
+
             requestModelsGroup.push(requestJson.model)
             let uniqueRequestModelsGroup = Array.from(new Set(requestModelsGroup))
             usedModelsGroup.push(requestJson.model)
@@ -631,7 +633,7 @@ export function useTracesPageContext(props: { projectId: string }) {
             let result = [...prev]
             result[groupIndex].request_models = uniqueRequestModelsGroup
             result[groupIndex].used_models = uniqueUsedModelsGroup
-            if(result[groupIndex].llm_calls < uniqueUsedModelsGroup.length){
+            if (result[groupIndex].llm_calls < uniqueUsedModelsGroup.length) {
               result[groupIndex].llm_calls = uniqueUsedModelsGroup.length
             }
             return result

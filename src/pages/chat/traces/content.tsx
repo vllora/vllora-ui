@@ -4,6 +4,7 @@ import { RunTable } from "./run-table";
 import { TracesPageConsumer } from "@/contexts/TracesPageContext";
 import { GroupingSelector } from "@/components/traces/GroupingSelector";
 import { useEffect } from "react";
+import { ProjectsConsumer } from "@/lib";
 
 export function TracesPageContent() {
   const {
@@ -17,9 +18,11 @@ export function TracesPageContent() {
     setDuration,
   } = TracesPageConsumer();
 
+  const {currentProjectId} = ProjectsConsumer();
+
   useEffect(() => {
     refreshGroups();
-  }, [groupByMode, duration]);
+  }, [groupByMode, duration, currentProjectId]);
 
   return <div className="flex flex-col flex-1 h-full overflow-hidden">
     {/* Grouping Controls */}
