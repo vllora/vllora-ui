@@ -33,7 +33,7 @@ export function JsonEditor({ value, onChange }: JsonEditorProps) {
     <div className="flex flex-col h-full gap-3">
       {/* Validation Status */}
       {jsonError ? (
-        <Alert variant="destructive" className="py-2">
+        <Alert variant="destructive" className="py-2 flex items-center">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription className="text-xs">
             <strong>JSON Error:</strong> {jsonError}
@@ -41,12 +41,12 @@ export function JsonEditor({ value, onChange }: JsonEditorProps) {
         </Alert>
       ) : (
         value.trim() && (
-          <Alert className="py-2 border-green-500/50 bg-green-500/10">
+          <div className="py-2 px-2 rounded-md border-green-500/50 bg-green-500/10 flex gap-2 items-center">
             <CheckCircle2 className="h-4 w-4 text-green-500" />
-            <AlertDescription className="text-xs text-green-600 dark:text-green-400">
+            <span className="text-xs text-green-600 dark:text-green-400">
               Valid JSON
-            </AlertDescription>
-          </Alert>
+            </span>
+            </div>
         )
       )}
 
