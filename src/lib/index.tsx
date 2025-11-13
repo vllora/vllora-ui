@@ -35,6 +35,7 @@ export type { CredentialFormValues } from '../pages/settings/ProviderCredentialF
 export { ProjectDropdown } from '../components/ProjectDropdown';
 export { BackendUrlInfo } from '../components/BackendUrlInfo';
 export { ModelSelector } from '../components/chat/traces/model-selector'
+export { ModelConfigDialog } from '../components/chat/conversation/model-config';
 export type { ModelInfo } from '../types/models';
 export {
   Select,
