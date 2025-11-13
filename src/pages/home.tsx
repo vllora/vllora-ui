@@ -71,26 +71,21 @@ function getTopModelsByBenchmark(models: ModelInfo[], limit: number = 12): Model
 export function HomePage() {
   const { models: localModels, loading: localLoading, error: localError } = ProjectModelsConsumer();
   const { currentProjectId, isDefaultProject, project_id_from } = ProjectsConsumer();
+  const { providers } = ProviderKeysConsumer();
   const { app_mode } = CurrentAppConsumer()
   const navigate = useNavigate();
 
-  // Create provider configuration status mapping from pricing API endpoints
-  // available === true means the provider is configured
+  // Create provider configuration status mapping from /providers API
+  // has_credentials === true means the provider has actual credentials configured
   const providerStatusMap = useMemo(() => {
     const map = new Map<string, boolean>();
-    localModels.forEach(model => {
-      if (model.endpoints && Array.isArray(model.endpoints)) {
-        model.endpoints.forEach(endpoint => {
-          if (endpoint.available === true && endpoint.provider?.provider) {
-            const providerName = endpoint.provider.provider.toLowerCase();
-            // Set to true if any endpoint for this provider is available
-            map.set(providerName, true);
-          }
-        });
+    providers.forEach(p => {
+      if (p?.name) {
+        map.set(p.name.toLowerCase(), p.has_credentials);
       }
     });
     return map;
-  }, [localModels]);
+  }, [providers]);
 
   // Get top models by benchmark ranking (4 columns × 3 rows = 12 cards)
   // Models are already grouped by the API, no need for client-side grouping

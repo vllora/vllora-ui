@@ -51,20 +51,19 @@ export const ProvidersIcons: React.FC<ProvidersIconsProps> = ({
               </div>
             </TooltipTrigger>
             <TooltipContent side="top" className="bg-zinc-800 border-zinc-700 text-white">
-              <div className="space-y-1.5">
+              {app_mode === 'langdb' ? (
+                // LangDB mode: Only show provider name, no status
                 <div>
                   <p className="text-xs font-medium">Provider</p>
                   <p className="text-xs text-zinc-300">{provider}</p>
                 </div>
-                {app_mode === 'langdb' ? (
-                  // LangDB mode: Only show status if configured, otherwise just provider name
-                  isConfigured && (
-                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-700/50">
-                      <p className="text-xs text-green-400">✓ Provider key configured</p>
-                    </div>
-                  )
-                ) : (
-                  // vLLora mode: Show configured/not configured with settings link
+              ) : (
+                // vLLora mode: Show provider name and configuration status
+                <div className="space-y-1.5">
+                  <div>
+                    <p className="text-xs font-medium">Provider</p>
+                    <p className="text-xs text-zinc-300">{provider}</p>
+                  </div>
                   <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-700/50">
                     <p className="text-xs text-zinc-400">
                       {isConfigured ? (
@@ -84,8 +83,8 @@ export const ProvidersIcons: React.FC<ProvidersIconsProps> = ({
                       </Link>
                     )}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </TooltipContent>
           </Tooltip>
         );
@@ -122,13 +121,10 @@ export const ProvidersIcons: React.FC<ProvidersIconsProps> = ({
                       </div>
                       <span className="text-xs text-zinc-300">{provider}</span>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      {app_mode === 'langdb' ? (
-                        // LangDB mode: Only show checkmark if configured
-                        isConfigured && <span className="text-xs text-green-400">✓</span>
-                      ) : (
-                        // vLLora mode: Show configured/not configured with settings link
-                        isConfigured ? (
+                    {app_mode !== 'langdb' && (
+                      // vLLora mode: Show configured/not configured with settings link
+                      <div className="flex items-center gap-1.5">
+                        {isConfigured ? (
                           <span className="text-xs text-green-400">✓</span>
                         ) : (
                           <>
@@ -141,9 +137,9 @@ export const ProvidersIcons: React.FC<ProvidersIconsProps> = ({
                               <ArrowUpRight className="w-3 h-3" />
                             </Link>
                           </>
-                        )
-                      )}
-                    </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
