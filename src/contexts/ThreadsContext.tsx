@@ -15,7 +15,7 @@ export type ThreadsContextType = ReturnType<typeof useThreads>;
 const ThreadsContext = createContext<ThreadsContextType | undefined>(undefined);
 
 // Allowed query params for threads/chat page
-const ALLOWED_QUERY_PARAMS = ['tab', 'threadId', 'projectId', 'model'] as const;
+const ALLOWED_QUERY_PARAMS = ['tab', 'thread_id', 'project_id', 'model'] as const;
 
 interface ThreadsProviderProps {
   projectId: string;
@@ -74,17 +74,17 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
     // Preserve only allowed params from current URL (except threadId, projectId, model which we'll set)
     ALLOWED_QUERY_PARAMS.forEach(param => {
       const value = searchParams.get(param);
-      if (value && param !== 'threadId' && param !== 'projectId' && param !== 'model') {
+      if (value && param !== 'thread_id' && param !== 'project_id' && param !== 'model') {
         params.set(param, value);
       }
     });
 
     // Set our managed params
-    params.set('threadId', inputThreadId);
+    params.set('thread_id', inputThreadId);
     params.set('tab', 'threads');
 
     if (!isDefaultProject(projectId) && project_id_from === 'query_string') {
-      params.set('projectId', projectId);
+      params.set('project_id', projectId);
     }
 
     // Set model parameter from input_models if available

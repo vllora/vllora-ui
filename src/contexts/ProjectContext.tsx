@@ -19,7 +19,7 @@ export function useProject(props: {
   // Extract projectId from URL path params (e.g., /projects/:projectId/chat)
   // or from query string (e.g., /chat?projectId=123)
   // Path params take precedence over query params
-  const projectIdFromSearchParam = searchParams.get('projectId');
+  const projectIdFromSearchParam = searchParams.get('project_id');
 
   const { data: projects = [], loading, error, run: refetchProjects } = useRequest(listProjects, {
     onError: (err) => {

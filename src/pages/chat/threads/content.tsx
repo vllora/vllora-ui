@@ -64,9 +64,9 @@ export function ThreadsPageContent() {
       handleSelectThread(threads[0].thread_id);
       return;
     }
-    if((!threads || threads.length === 0) && (searchParams.get('threadId') || searchParams.get('model'))) {
+    if((!threads || threads.length === 0) && (searchParams.get('thread_id') || searchParams.get('model'))) {
       // remove param threads from url
-      searchParams.delete('threadId');
+      searchParams.delete('thread_id');
       searchParams.delete('model');
       // update url
       window.history.replaceState(null, '', `?${searchParams.toString()}`);
