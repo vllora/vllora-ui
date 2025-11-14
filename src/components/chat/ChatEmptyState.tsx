@@ -3,27 +3,27 @@ import { Button } from '@/components/ui/button';
 import { CodeBlock } from '@/components/chat/traces/components/CodeBlock';
 import { getBackendUrl } from '@/config/api';
 import { CurrentAppConsumer } from '@/contexts/CurrentAppContext';
+import { AvailableApiKeysConsumer } from '@/contexts/AvailableApiKeys';
 
 interface ChatEmptyStateProps {
   onNewChat: () => void;
   projectId?: string;
-  apiKey?: string;
 }
 
-export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({ onNewChat, projectId, apiKey }) => {
+export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({ onNewChat, projectId }) => {
   const searchParam = new URLSearchParams(window.location.search);
   const threadIdFromUrl = searchParam.get('thread_id');
   const model = searchParam.get('model') || 'openai/gpt-4o-mini';
   const { app_mode } = CurrentAppConsumer();
+  const { available_api_keys } = AvailableApiKeysConsumer();
 
   // Only include x-project-id if project_id exists
   const projectIdHeader = projectId
     ? `  -H 'x-project-id: ${projectId}' \\\n`
     : '';
-  const apiKeyHeader = apiKey
-    ? `  -H 'Authorization: Bearer ${apiKey}' \\\n`
-    : app_mode === 'langdb' ? '  -H "Authorization: Bearer YOUR_API_KEY" \\\n' : '';
-
+  const apiKeyHeader = app_mode === 'vllora'? '': (available_api_keys.length > 0
+    ? `  -H 'Authorization: Bearer ${available_api_keys[0].api_key}' \\\n`
+    : '  -H "Authorization: Bearer YOUR_API_KEY" \\\n');
   // Only include x-thread-id if threadId exists in URL
   const threadIdHeader = threadIdFromUrl
     ? `  -H 'x-thread-id: ${threadIdFromUrl}' \\\n`

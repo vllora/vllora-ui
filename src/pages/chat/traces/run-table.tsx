@@ -3,6 +3,8 @@ import { TracesPageConsumer } from '@/contexts/TracesPageContext';
 import { GroupCardGrid } from './group-card/grid';
 import { TraceEmptyState } from '@/components/chat/traces/components/TraceEmptyState';
 import { GroupsSkeletonLoader } from '@/components/GroupsSkeletonLoader';
+import { AvailableApiKeysConsumer } from '@/contexts/AvailableApiKeys';
+import { CurrentAppConsumer } from '@/contexts/CurrentAppContext';
 
 export function RunTable() {
   const {
@@ -19,6 +21,9 @@ export function RunTable() {
     goToPreviousPage,
     currentPage,
   } = TracesPageConsumer();
+
+  const { app_mode } = CurrentAppConsumer();
+  const { available_api_keys } = AvailableApiKeysConsumer();
 
   const currentPageValue = currentPage || 1;
 
@@ -48,7 +53,7 @@ export function RunTable() {
 
   // Empty state
   if (!groupsLoading && groups.length === 0) {
-    return <TraceEmptyState projectId={projectId} />;
+    return <TraceEmptyState projectId={projectId} apiKeys={available_api_keys} haveIncludeApiKey={app_mode === 'langdb'} />;
   }
 
   // Groups list (unified for all modes: run, bucket, thread)

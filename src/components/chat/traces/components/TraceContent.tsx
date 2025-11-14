@@ -5,6 +5,7 @@ import { TraceList } from "./TraceList";
 import { cn } from "@/lib/utils";
 import { RunDTO } from "@/services/runs-api";
 import { TraceCodeView } from "./TraceCodeView";
+import { AvailableApiKey } from "@/lib";
 
 interface TraceContentProps {
   loadingSpans: boolean;
@@ -18,7 +19,8 @@ interface TraceContentProps {
     run_id: string;
     tab: "trace" | "code";
 }[];
-app_mode: 'langdb' | 'vllora'
+app_mode: 'langdb' | 'vllora';
+available_api_keys: AvailableApiKey[];
 }
 
 const TraceContentImpl: React.FC<TraceContentProps> = ({
@@ -29,8 +31,11 @@ const TraceContentImpl: React.FC<TraceContentProps> = ({
   loadingMore,
   observerTarget,
   openTraces,
-  app_mode
+  app_mode,
+  available_api_keys
 }) => {   
+
+  console.log('=== TraceContentImpl available_api_keys', available_api_keys);
    const currentRunId: string = useMemo(()=> {
       return openTraces && openTraces.length && openTraces[0] ? openTraces[0].run_id : ''
     }, [openTraces])
@@ -43,7 +48,7 @@ const TraceContentImpl: React.FC<TraceContentProps> = ({
   }
 
   if (!loadingSpans && (!runs || runs.length === 0)) {
-    return <TraceEmptyState haveIncludeApiKey={app_mode === 'langdb'} />;
+    return <TraceEmptyState apiKeys={available_api_keys} haveIncludeApiKey={app_mode === 'langdb'} />;
   }
 
   return (

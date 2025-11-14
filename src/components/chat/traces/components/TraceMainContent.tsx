@@ -3,6 +3,7 @@
 import React, { useRef } from "react";
 import { TraceContent } from "./TraceContent";
 import { RunDTO } from "@/services/runs-api";
+import { AvailableApiKey } from "@/contexts/AvailableApiKeys";
 
 interface TraceMainContentProps {
   loadingSpans: boolean;
@@ -15,7 +16,8 @@ interface TraceMainContentProps {
     run_id: string;
     tab: "trace" | "code";
   }[];
-  app_mode: 'langdb' | 'vllora'
+  app_mode: 'langdb' | 'vllora',
+  available_api_keys: AvailableApiKey[];
 }
 
 // Component implementation
@@ -27,7 +29,8 @@ const TraceMainContentImpl: React.FC<TraceMainContentProps> = ({
   loadingMore,
   threadId,
   openTraces,
-  app_mode
+  app_mode,
+  available_api_keys
 }) => {
   const observerTarget = useRef<HTMLDivElement>(null);
 
@@ -45,6 +48,7 @@ const TraceMainContentImpl: React.FC<TraceMainContentProps> = ({
           observerTarget={observerTarget}
           openTraces={openTraces}
           app_mode={app_mode}
+          available_api_keys={available_api_keys}
         />
       </div>
     </div>

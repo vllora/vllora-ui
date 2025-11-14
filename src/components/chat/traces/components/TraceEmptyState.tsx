@@ -2,14 +2,15 @@ import React from 'react';
 import { Sparkles } from 'lucide-react';
 import { CodeBlock } from './CodeBlock';
 import { getBackendUrl } from '@/config/api';
+import { AvailableApiKey } from '@/contexts/AvailableApiKeys';
 
 interface TraceEmptyStateProps {
   projectId?: string;
-  apiKey?: string;
+  apiKeys: AvailableApiKey[];
   haveIncludeApiKey?: boolean;
 }
 
-export const TraceEmptyState: React.FC<TraceEmptyStateProps> = ({ projectId, apiKey, haveIncludeApiKey }) => {
+export const TraceEmptyState: React.FC<TraceEmptyStateProps> = ({ projectId, apiKeys, haveIncludeApiKey }) => {
   const searchParam = new URLSearchParams(window.location.search);
   const projectIdFromUrl = searchParam.get('project_id') ?? projectId;
   const threadIdFromUrl = searchParam.get('thread_id');
@@ -21,8 +22,8 @@ export const TraceEmptyState: React.FC<TraceEmptyStateProps> = ({ projectId, api
     : '';
 
   // Only include x-api-key if apiKey exists
-  const apiKeyHeader = apiKey
-    ? `  -H 'Authorization: Bearer ${apiKey}' \\\n`
+  const apiKeyHeader = apiKeys.length > 0
+    ? `  -H 'Authorization: Bearer ${apiKeys[0].api_key}' \\\n`
     : haveIncludeApiKey ? '  -H "Authorization: Bearer YOUR_API_KEY" \\\n' : '';
 
   // Only include x-thread-id if threadId exists in URL

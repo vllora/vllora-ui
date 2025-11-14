@@ -6,6 +6,8 @@ export { ProjectEventsProvider, ProjectEventsConsumer } from '../contexts/projec
 export { CurrentAppProvider, CurrentAppConsumer } from '../contexts/CurrentAppContext';
 export { ProjectModelsProvider, ProjectModelsConsumer } from '../contexts/ProjectModelsContext';
 export { VirtualModelsProvider, VirtualModelsConsumer } from '../contexts/VirtualModelsContext';
+export { AvailableApiKeysProvider, AvailableApiKeysConsumer } from '../contexts/AvailableApiKeys'
+export type { AvailableApiKey } from '../contexts/AvailableApiKeys'
 export type { VirtualModel, VirtualModelVersion, VirtualModelVariable } from '../services/virtual-models-api';
 // Theme provider
 export { ThemeProvider } from '../components/theme-provider';

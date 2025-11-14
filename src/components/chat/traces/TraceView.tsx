@@ -8,6 +8,7 @@ import { TraceMainContent } from "./components/TraceMainContent";
 import { SpanDetailsOverlay } from "./components/SpanDetailsOverlay";
 import { ExclamationCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
 import { CurrentAppConsumer } from "@/contexts/CurrentAppContext";
+import { AvailableApiKeysConsumer } from "@/contexts/AvailableApiKeys";
 
 interface TraceViewProps {
   threadId: string;
@@ -25,8 +26,8 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
     detailSpanId,
     openTraces
   } = ChatWindowConsumer();
-  const {app_mode} = CurrentAppConsumer();
-
+  const { app_mode } = CurrentAppConsumer();
+  const { available_api_keys } = AvailableApiKeysConsumer();
   const [_, setShowErrorDialog] = useState(false);
 
   // Helper function to truncate error message for display
@@ -91,7 +92,7 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
         )}
 
         {/* Main content area */}
-        <TraceMainContent 
+        <TraceMainContent
           app_mode={app_mode}
           loadingSpans={runsLoading}
           runs={runs.sort((a, b) => a.start_time_us - b.start_time_us)}
@@ -100,6 +101,7 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
           loadingMore={loadingMoreRuns}
           threadId={threadId}
           openTraces={openTraces}
+          available_api_keys={available_api_keys}
         />
       </div>
 
