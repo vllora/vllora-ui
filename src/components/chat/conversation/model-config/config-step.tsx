@@ -10,7 +10,7 @@ interface ConfigStepProps {
   onModelChange?: (model: string) => void;
   config: Record<string, any>;
   onConfigChange: (config: Record<string, any>) => void;
-  modelInfo: ModelInfo;
+  modelInfo: ModelInfo | VirtualModel;
   jsonContent: string;
   onJsonContentChange: (content: string) => void;
   onReset: () => void;
@@ -24,6 +24,7 @@ interface ConfigStepProps {
   isSaving?: boolean;
   onApplyVirtualModel?: (virtualModel: VirtualModel, mode: 'base' | 'copy') => void;
   onClearVirtualModel?: () => void;
+  originalBaseModel?: string;
 }
 
 export function ConfigStep(props: ConfigStepProps) {
@@ -34,6 +35,7 @@ export function ConfigStep(props: ConfigStepProps) {
     isSaving = false,
     onApplyVirtualModel,
     onClearVirtualModel,
+    originalBaseModel,
     ...commonProps
   } = props;
 
@@ -53,6 +55,7 @@ export function ConfigStep(props: ConfigStepProps) {
       {...commonProps}
       onApplyVirtualModel={onApplyVirtualModel}
       onClearVirtualModel={onClearVirtualModel}
+      originalBaseModel={originalBaseModel}
     />
   );
 }

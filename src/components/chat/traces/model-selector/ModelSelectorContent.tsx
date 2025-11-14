@@ -2,6 +2,7 @@ import React from 'react';
 import { ModelInfo, ModelProviderInfo } from '@/types/models';
 import { ModelStepContent } from './ModelStepContent';
 import { ProviderStepContent } from './ProviderStepContent';
+import { VirtualModelOption } from './index';
 
 interface ModelSelectorContentProps {
   currentStep: 'model' | 'provider';
@@ -16,6 +17,7 @@ interface ModelSelectorContentProps {
   handleModelSelect: (modelId: string) => void;
   setSelectedProviderForConfig?: (providerName: string) => void;
   setConfigDialogOpen?: (open: boolean) => void;
+  virtualModels?: VirtualModelOption[];
 }
 
 export const ModelSelectorContent: React.FC<ModelSelectorContentProps> = ({
@@ -31,6 +33,7 @@ export const ModelSelectorContent: React.FC<ModelSelectorContentProps> = ({
   handleModelSelect,
   setSelectedProviderForConfig,
   setConfigDialogOpen,
+  virtualModels,
 }) => {
   return (
     <>
@@ -39,6 +42,7 @@ export const ModelSelectorContent: React.FC<ModelSelectorContentProps> = ({
           modelNames={modelNames}
           handleModelNameSelect={handleModelNameSelect}
           getProviderCount={getProviderCount}
+          virtualModels={virtualModels}
         />
       ) : (
         <ProviderStepContent

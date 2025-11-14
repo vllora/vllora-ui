@@ -14,7 +14,7 @@ interface ConfigureModelStepProps {
   onModelChange?: (model: string) => void;
   config: Record<string, any>;
   onConfigChange: (config: Record<string, any>) => void;
-  modelInfo: ModelInfo;
+  modelInfo: ModelInfo | VirtualModel;
   jsonContent: string;
   onJsonContentChange: (content: string) => void;
   onReset: () => void;
@@ -24,6 +24,7 @@ interface ConfigureModelStepProps {
   description?: string;
   onApplyVirtualModel?: (virtualModel: VirtualModel, mode: 'base' | 'copy') => void;
   onClearVirtualModel?: () => void;
+  originalBaseModel?: string;
 }
 
 export function ConfigureModelStep({
@@ -43,6 +44,7 @@ export function ConfigureModelStep({
   description = "Fine-tune parameters, caching, fallbacks, and retries for optimal performance",
   onApplyVirtualModel,
   onClearVirtualModel,
+  originalBaseModel,
 }: ConfigureModelStepProps) {
   return (
     <>
@@ -63,6 +65,7 @@ export function ConfigureModelStep({
           modelInfo={modelInfo}
           onApplyVirtualModel={onApplyVirtualModel}
           onClearVirtualModel={onClearVirtualModel}
+          originalBaseModel={originalBaseModel}
         />
       ) : (
         <div className="flex-1 overflow-hidden px-6 py-4">

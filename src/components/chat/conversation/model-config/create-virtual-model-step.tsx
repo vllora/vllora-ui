@@ -3,6 +3,7 @@ import { DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ModelInfo } from "@/types/models";
+import { VirtualModel } from "@/services/virtual-models-api";
 import { ModelConfigDialogHeader } from "./dialog-header";
 import { ModelConfigDialogContent } from "./dialog-content";
 import { JsonEditor } from "./json-editor";
@@ -14,7 +15,7 @@ interface CreateVirtualModelStepProps {
   onModelChange?: (model: string) => void;
   config: Record<string, any>;
   onConfigChange: (config: Record<string, any>) => void;
-  modelInfo: ModelInfo;
+  modelInfo: ModelInfo | VirtualModel;
   jsonContent: string;
   onJsonContentChange: (content: string) => void;
   onReset: () => void;

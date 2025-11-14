@@ -4,6 +4,7 @@ import {
   DialogContent,
 } from "@/components/ui/dialog";
 import { ModelInfo } from "@/types/models";
+import { VirtualModel } from "@/services/virtual-models-api";
 import { ConfigStep } from "./config-step";
 import { SaveStep } from "./save-step";
 import { ModeSwitchWarning } from "./mode-switch-warning";
@@ -13,7 +14,7 @@ import { useModelConfigDialog } from "./useModelConfigDialog";
 interface ModelConfigDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  modelInfo: ModelInfo;
+  modelInfo: ModelInfo | VirtualModel;
   onConfigChange?: (config: Record<string, any>) => void;
   initialConfig?: Record<string, any>;
   selectedModel?: string;
@@ -48,6 +49,7 @@ export function ModelConfigDialog({
     virtualModelName,
     isCreateMode,
     creating,
+    originalBaseModel,
     setConfig,
     setJsonContent,
     setShowWarning,
@@ -96,6 +98,7 @@ export function ModelConfigDialog({
             isSaving={creating}
             onApplyVirtualModel={!isCreateMode ? handleApplyVirtualModel : undefined}
             onClearVirtualModel={!isCreateMode ? handleClearVirtualModel : undefined}
+            originalBaseModel={originalBaseModel}
           />
         ) : (
           <SaveStep

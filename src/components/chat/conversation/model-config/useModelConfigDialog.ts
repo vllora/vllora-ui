@@ -5,9 +5,14 @@ import { toast } from "sonner";
 import { VirtualModelsConsumer } from "@/contexts/VirtualModelsContext";
 import { VirtualModel } from "@/services/virtual-models-api";
 
+// Type guard to check if the modelInfo is a ModelInfo
+function isModelInfo(modelInfo: ModelInfo | VirtualModel): modelInfo is ModelInfo {
+  return 'model' in modelInfo && 'model_provider' in modelInfo;
+}
+
 interface UseModelConfigDialogProps {
   open: boolean;
-  modelInfo: ModelInfo;
+  modelInfo: ModelInfo | VirtualModel;
   onConfigChange?: (config: Record<string, any>) => void;
   initialConfig?: Record<string, any>;
   selectedModel?: string;
@@ -72,17 +77,26 @@ export function useModelConfigDialog({
 
   // Initialize config when dialog opens
   useEffect(() => {
-    if (open && modelInfo.parameters) {
+    if (open) {
       const defaultConfig: Record<string, any> = {};
 
-      // Restore parameter values
-      Object.entries(modelInfo.parameters).forEach(([key, param]) => {
-        if (initialConfig[key] !== undefined) {
-          defaultConfig[key] = initialConfig[key];
-        } else if (param.default !== null) {
-          defaultConfig[key] = param.default;
+      // Handle ModelInfo case
+      if (isModelInfo(modelInfo) && modelInfo.parameters) {
+        // Restore parameter values
+        Object.entries(modelInfo.parameters).forEach(([key, param]) => {
+          if (initialConfig[key] !== undefined) {
+            defaultConfig[key] = initialConfig[key];
+          } else if (param.default !== null) {
+            defaultConfig[key] = param.default;
+          }
+        });
+      } else if (!isModelInfo(modelInfo)) {
+        // Handle VirtualModel case - use the latest version's target_configuration
+        const latestVersion = modelInfo.versions.find(v => v.latest) || modelInfo.versions[0];
+        if (latestVersion?.target_configuration) {
+          Object.assign(defaultConfig, latestVersion.target_configuration);
         }
-      });
+      }
 
       // Restore extra field (contains cache config)
       if (initialConfig.extra !== undefined) {
@@ -104,6 +118,11 @@ export function useModelConfigDialog({
         defaultConfig.messages = initialConfig.messages;
       }
 
+      // Restore model field if it exists (for virtual models used as base)
+      if (initialConfig.model !== undefined) {
+        defaultConfig.model = initialConfig.model;
+      }
+
       setConfig(defaultConfig);
     }
 
@@ -111,14 +130,14 @@ export function useModelConfigDialog({
     if (!open) {
       setVirtualModelName('');
     }
-  }, [open, modelInfo.parameters, initialConfig]);
+  }, [open, modelInfo, initialConfig]);
 
   // Helper: Extract only user-modified config (different from defaults)
   const getUserConfig = useCallback(() => {
     const userConfig: Record<string, any> = {};
 
-    // Save parameter configs that differ from defaults
-    if (modelInfo.parameters) {
+    // For ModelInfo: Save parameter configs that differ from defaults
+    if (isModelInfo(modelInfo) && modelInfo.parameters) {
       Object.entries(config).forEach(([key, value]) => {
         const param = modelInfo.parameters![key];
         // Only include if value is different from default
@@ -126,6 +145,9 @@ export function useModelConfigDialog({
           userConfig[key] = value;
         }
       });
+    } else if (!isModelInfo(modelInfo)) {
+      // For VirtualModel: Include all config as there are no "defaults" to compare against
+      Object.assign(userConfig, config);
     }
 
     // Always include extra field if it exists (contains cache config)
@@ -148,8 +170,13 @@ export function useModelConfigDialog({
       userConfig.messages = config.messages;
     }
 
+    // Include model if it exists (for virtual models used as base)
+    if (config.model !== undefined) {
+      userConfig.model = config.model;
+    }
+
     return userConfig;
-  }, [config, modelInfo.parameters]);
+  }, [config, modelInfo]);
 
   const handleSave = useCallback(async () => {
     // If in create mode, create virtual model directly
@@ -211,13 +238,19 @@ export function useModelConfigDialog({
   const handleReset = useCallback(() => {
     const defaultConfig: Record<string, any> = {};
 
-    // Reset parameters to defaults
-    if (modelInfo.parameters) {
+    // For ModelInfo: Reset parameters to defaults
+    if (isModelInfo(modelInfo) && modelInfo.parameters) {
       Object.entries(modelInfo.parameters).forEach(([key, param]) => {
         if (param.default !== null) {
           defaultConfig[key] = param.default;
         }
       });
+    } else if (!isModelInfo(modelInfo)) {
+      // For VirtualModel: Reset to the virtual model's original configuration
+      const latestVersion = modelInfo.versions.find(v => v.latest) || modelInfo.versions[0];
+      if (latestVersion?.target_configuration) {
+        Object.assign(defaultConfig, latestVersion.target_configuration);
+      }
     }
 
     // Cache is disabled by default (extra.cache is not included)
@@ -225,7 +258,7 @@ export function useModelConfigDialog({
 
     // Clear the saved config since we're resetting to defaults
     onConfigChange?.({});
-  }, [modelInfo.parameters, onConfigChange]);
+  }, [modelInfo, onConfigChange]);
 
   // Handle mode switching
   const handleModeSwitch = useCallback((newMode: 'basic' | 'advanced') => {
@@ -373,7 +406,8 @@ export function useModelConfigDialog({
         ...config,
         model: virtualModelIdentifier
       };
-      onModelChange?.(virtualModelIdentifier);
+      // Update the selected model in the UI to show the virtual model
+      //onModelChange?.(virtualModelIdentifier);
       setConfig(mergedConfig);
 
       // If merged config has complex features and we're in basic mode, switch to advanced
@@ -411,6 +445,7 @@ export function useModelConfigDialog({
     virtualModelName,
     isCreateMode,
     creating,
+    originalBaseModel,
 
     // Setters
     setMode,

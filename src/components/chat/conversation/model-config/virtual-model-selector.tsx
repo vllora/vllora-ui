@@ -39,7 +39,6 @@ export function VirtualModelSelector({
 
   // Check if a virtual model is being used as the base model
   const isUsingVirtualModelAsBase = config.model && typeof config.model === 'string' && config.model.startsWith('langdb/');
-
   const handleVirtualModelSelect = useCallback((virtualModelId: string) => {
     setSelectValue(virtualModelId);
     const virtualModel = virtualModels.find(vm => vm.id === virtualModelId);

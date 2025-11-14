@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { RefreshCcwIcon } from "lucide-react";
 import { ModelSelector } from "../traces/model-selector";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ModelInfo } from "@/types/models";
+import { VirtualModel } from "@/services/virtual-models-api";
+import { VirtualModelsConsumer } from "@/lib";
 import { ModelConfigDialog, ModelConfigButton } from "./model-config";
 
 interface ModelSelectorHeaderProps {
@@ -27,9 +29,22 @@ export function ConversationHeader({
   projectId
 }: ModelSelectorHeaderProps) {
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
+  const { virtualModels } = VirtualModelsConsumer();
 
   // Check if any configs are applied
   const hasActiveConfig = !!(modelConfig && Object.keys(modelConfig).length > 0);
+
+  // Get the virtual model if a virtual model is selected
+  const selectedVirtualModel = useMemo(() => {
+    if (modelName?.startsWith('langdb/')) {
+      const slug = modelName.replace('langdb/', '');
+      return virtualModels.find(vm => vm.slug === slug);
+    }
+    return undefined;
+  }, [modelName, virtualModels]);
+
+  // Determine the modelInfo to pass to the dialog (either ModelInfo or VirtualModel)
+  const dialogModelInfo = selectedVirtualModel || modelInfo;
 
   return (
     <>
@@ -41,7 +56,7 @@ export function ConversationHeader({
               onModelChange={onModelChange}
             />
           </div>
-            {(modelInfo || modelName?.startsWith('langdb/') ) &&  (
+            {dialogModelInfo && (
               <ModelConfigButton
                 hasActiveConfig={hasActiveConfig}
                 onClick={() => setConfigDialogOpen(true)}
@@ -68,11 +83,11 @@ export function ConversationHeader({
         )}
       </div>
 
-      {modelInfo && (
+      {dialogModelInfo && (
         <ModelConfigDialog
           open={configDialogOpen}
           onOpenChange={setConfigDialogOpen}
-          modelInfo={modelInfo}
+          modelInfo={dialogModelInfo}
           onConfigChange={onModelConfigChange}
           initialConfig={modelConfig}
           selectedModel={modelName}

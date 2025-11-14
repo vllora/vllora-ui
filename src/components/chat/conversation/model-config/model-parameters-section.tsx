@@ -1,4 +1,5 @@
 import { ModelInfo } from "@/types/models";
+import { VirtualModel } from "@/services/virtual-models-api";
 import { ModelParametersList } from "./parameters";
 import {
   Accordion,
@@ -7,8 +8,13 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 
+// Type guard to check if the modelInfo is a ModelInfo
+function isModelInfo(modelInfo: ModelInfo | VirtualModel): modelInfo is ModelInfo {
+  return 'model' in modelInfo && 'model_provider' in modelInfo;
+}
+
 interface ModelParametersSectionProps {
-  modelInfo: ModelInfo;
+  modelInfo: ModelInfo | VirtualModel;
   config: Record<string, any>;
   onConfigChange: (config: Record<string, any>) => void;
 }
@@ -18,7 +24,8 @@ export function ModelParametersSection({
   config,
   onConfigChange,
 }: ModelParametersSectionProps) {
-  if (!modelInfo.parameters) {
+  // Only ModelInfo has parameters, VirtualModel doesn't
+  if (!isModelInfo(modelInfo) || !modelInfo.parameters) {
     return null;
   }
 

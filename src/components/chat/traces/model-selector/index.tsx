@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { ChevronDown, AlertTriangle } from 'lucide-react';
+import { ChevronDown, AlertTriangle, Sparkles } from 'lucide-react';
 import { ProjectModelsConsumer } from '@/contexts/ProjectModelsContext';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import {
@@ -17,6 +17,7 @@ import { ModelInfo, ModelProviderInfo } from '@/types/models';
 import { ModelSelectorContent } from './ModelSelectorContent';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 import { CurrentAppConsumer } from '@/contexts/CurrentAppContext';
+import { VirtualModelsConsumer } from '@/lib';
 
 interface ModelSelectorProps {
   selectedModel: string;
@@ -32,8 +33,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   const { models } = ProjectModelsConsumer();
   const { app_mode } = CurrentAppConsumer();
   const { selectedModelInfo, selectedProvider, isSelectedProviderConfigured, setSelectedProviderForConfig, setConfigDialogOpen, handleWarningClick } = ChatWindowConsumer();
+  const { virtualModels } = VirtualModelsConsumer()
 
   return <ModelSelectorComponent
+    virtualModels={virtualModels}
     selectedModel={selectedModel}
     onModelChange={onModelChange}
     models={models.filter((model) => model.type === 'completions')}
@@ -44,6 +47,12 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     setConfigDialogOpen={setConfigDialogOpen}
     handleWarningClick={handleWarningClick} />
 }
+export interface VirtualModelOption {
+  id: string;
+  name: string;
+  slug: string;
+}
+
 interface ModelSelectorComponentProps {
   selectedModel: string;
   onModelChange?: (modelId: string) => void;
@@ -54,6 +63,7 @@ interface ModelSelectorComponentProps {
   setSelectedProviderForConfig?: (providerName: string) => void;
   setConfigDialogOpen?: (open: boolean) => void;
   handleWarningClick?: () => void;
+  virtualModels?: VirtualModelOption[];
 }
 export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
   selectedModel,
@@ -64,7 +74,8 @@ export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
   isSelectedProviderConfigured,
   setSelectedProviderForConfig,
   setConfigDialogOpen,
-  handleWarningClick
+  handleWarningClick,
+  virtualModels
 }) => {
   const [open, setOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState<'model' | 'provider'>('model');
@@ -111,7 +122,10 @@ export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
 
   const handleModelNameSelect = useCallback((modelName: string) => {
     const availableModels = modelNameGroups[modelName];
-
+    if (modelName.startsWith('langdb/')) {
+      handleModelSelect(modelName);
+      return
+    }
     // If only one provider offers this model, select it directly
     if (availableModels.endpoints?.length === 1) {
       handleModelSelect(modelName);
@@ -143,10 +157,16 @@ export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
       <DropdownMenu open={open} onOpenChange={handleOpenChange}>
         <DropdownMenuTrigger asChild>
           <div className="inline-flex border border-border rounded-md px-3 py-2 items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer w-full truncate">
-            {selectedModel && <ProviderIcon
-              provider_name={getIconForModel(selectedModel)}
-              className="w-4 h-4 flex-shrink-0"
-            />}
+            {selectedModel && (
+              selectedModel.startsWith('langdb/') ? (
+                <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
+              ) : (
+                <ProviderIcon
+                  provider_name={getIconForModel(selectedModel)}
+                  className="w-4 h-4 flex-shrink-0"
+                />
+              )
+            )}
             <span className="truncate flex-1">{selectedModel.includes('/') ? selectedModel.split('/')[1] : selectedModel}</span>
             <ChevronDown className={`w-4 h-4 transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`} />
           </div>
@@ -166,6 +186,7 @@ export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
             handleModelSelect={handleModelSelect}
             setSelectedProviderForConfig={setSelectedProviderForConfig}
             setConfigDialogOpen={setConfigDialogOpen}
+            virtualModels={virtualModels}
           />
         </DropdownMenuContent>
       </DropdownMenu>

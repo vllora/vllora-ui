@@ -1,17 +1,20 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Sparkles } from 'lucide-react';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { VirtualModelOption } from './index';
 
 interface ModelListViewProps {
   modelNames: string[];
   onModelNameSelect: (modelName: string) => void;
   getProviderCount: (modelName: string) => number;
+  virtualModels?: VirtualModelOption[];
 }
 
 export const ModelListView: React.FC<ModelListViewProps> = ({
   modelNames,
   onModelNameSelect,
   getProviderCount,
+  virtualModels,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
@@ -34,6 +37,13 @@ export const ModelListView: React.FC<ModelListViewProps> = ({
       modelName.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
     );
   }, [modelNames, debouncedSearchTerm]);
+
+  const filteredVirtualModels = useMemo(() => {
+    if (!virtualModels || !debouncedSearchTerm) return virtualModels || [];
+    return virtualModels.filter((vm) =>
+      vm.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
+    );
+  }, [virtualModels, debouncedSearchTerm]);
 
   return (
     <>
@@ -62,6 +72,39 @@ export const ModelListView: React.FC<ModelListViewProps> = ({
 
       {/* Content Area */}
       <div className="max-h-80 overflow-y-auto">
+        {/* Virtual Models Section */}
+        {virtualModels && filteredVirtualModels.length > 0 && (
+          <>
+            <div className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider bg-muted/50">
+              Virtual Models
+            </div>
+            {filteredVirtualModels.map((vm) => (
+              <DropdownMenuItem
+                key={vm.id}
+                onSelect={(e) => {
+                  e.preventDefault();
+                  onModelNameSelect(`langdb/${vm.slug}`);
+                }}
+                className="flex items-center gap-3 px-4 py-3 cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-popover-foreground truncate">
+                    {vm.name}
+                  </p>
+                </div>
+              </DropdownMenuItem>
+            ))}
+          </>
+        )}
+
+        {/* Regular Models Section */}
+        {virtualModels && filteredVirtualModels.length > 0 && filteredModelNames.length > 0 && (
+          <div className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider bg-muted/50">
+            Base Models
+          </div>
+        )}
+
         {filteredModelNames.length > 0 ? (
           filteredModelNames.map((modelName) => {
             const providerCount = getProviderCount(modelName);
@@ -78,19 +121,19 @@ export const ModelListView: React.FC<ModelListViewProps> = ({
                   <p className="text-sm font-medium text-popover-foreground truncate">
                     {modelName}
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  {providerCount > 1 && <p className="text-xs text-muted-foreground">
                     {providerCount} {providerCount === 1 ? 'provider' : 'providers'}
-                  </p>
+                  </p>}
                 </div>
                 <ChevronRight className="w-4 h-4 text-muted-foreground" />
               </DropdownMenuItem>
             );
           })
-        ) : (
+        ) : !virtualModels || filteredVirtualModels.length === 0 ? (
           <div className="px-4 py-8 text-center text-muted-foreground text-sm">
             No models found
           </div>
-        )}
+        ) : null}
       </div>
     </>
   );
