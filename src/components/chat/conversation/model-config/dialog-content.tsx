@@ -9,6 +9,8 @@ import { ModelParametersSection } from "./model-parameters-section";
 import { MessagesSection } from "./messages-section";
 import { Message } from "./types";
 import { useCallback } from "react";
+import { VirtualModelSelector } from "./virtual-model-selector";
+import { VirtualModel } from "@/services/virtual-models-api";
 
 interface ModelConfigDialogContentProps {
   selectedModel?: string;
@@ -16,6 +18,7 @@ interface ModelConfigDialogContentProps {
   config: Record<string, any>;
   onConfigChange: (config: Record<string, any>) => void;
   modelInfo: ModelInfo;
+  onApplyVirtualModel?: (virtualModel: VirtualModel, mode: 'base' | 'copy') => void;
 }
 
 export function ModelConfigDialogContent({
@@ -24,6 +27,7 @@ export function ModelConfigDialogContent({
   config,
   onConfigChange,
   modelInfo,
+  onApplyVirtualModel,
 }: ModelConfigDialogContentProps) {
   const { models } = ProjectModelsConsumer();
 
@@ -35,7 +39,7 @@ export function ModelConfigDialogContent({
     <div className="flex-1 overflow-y-auto px-6 py-4">
       {/* Base Model Section */}
       {selectedModel && onModelChange && (
-        <div className="space-y-2 pb-4">
+        <div className="space-y-2 pb-4 border-b">
           <div className="flex items-center gap-2">
             <Label className="text-sm font-semibold text-foreground">Base Model</Label>
           </div>
@@ -47,6 +51,11 @@ export function ModelConfigDialogContent({
             isSelectedProviderConfigured={true}
           />
         </div>
+      )}
+
+      {/* Virtual Model Selector */}
+      {onApplyVirtualModel && (
+        <VirtualModelSelector onApplyVirtualModel={onApplyVirtualModel} />
       )}
 
       {/* Messages Section */}

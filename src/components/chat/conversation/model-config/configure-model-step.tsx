@@ -5,6 +5,7 @@ import { ModelConfigDialogHeader } from "./dialog-header";
 import { ModelConfigDialogContent } from "./dialog-content";
 import { JsonEditor } from "./json-editor";
 import { BookmarkPlus } from "lucide-react";
+import { VirtualModel } from "@/services/virtual-models-api";
 
 interface ConfigureModelStepProps {
   mode: 'basic' | 'advanced';
@@ -21,6 +22,7 @@ interface ConfigureModelStepProps {
   onSaveAsVirtualModel: () => void;
   title?: string;
   description?: string;
+  onApplyVirtualModel?: (virtualModel: VirtualModel, mode: 'base' | 'copy') => void;
 }
 
 export function ConfigureModelStep({
@@ -38,6 +40,7 @@ export function ConfigureModelStep({
   onSaveAsVirtualModel,
   title = "Model Configuration",
   description = "Fine-tune parameters, caching, fallbacks, and retries for optimal performance",
+  onApplyVirtualModel,
 }: ConfigureModelStepProps) {
   return (
     <>
@@ -56,6 +59,7 @@ export function ConfigureModelStep({
           config={config}
           onConfigChange={onConfigChange}
           modelInfo={modelInfo}
+          onApplyVirtualModel={onApplyVirtualModel}
         />
       ) : (
         <div className="flex-1 overflow-hidden px-6 py-4">

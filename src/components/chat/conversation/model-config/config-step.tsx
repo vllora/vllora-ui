@@ -1,6 +1,7 @@
 import { ModelInfo } from "@/types/models";
 import { CreateVirtualModelStep } from "./create-virtual-model-step";
 import { ConfigureModelStep } from "./configure-model-step";
+import { VirtualModel } from "@/services/virtual-models-api";
 
 interface ConfigStepProps {
   mode: 'basic' | 'advanced';
@@ -21,6 +22,7 @@ interface ConfigStepProps {
   virtualModelName?: string;
   onVirtualModelNameChange?: (name: string) => void;
   isSaving?: boolean;
+  onApplyVirtualModel?: (virtualModel: VirtualModel, mode: 'base' | 'copy') => void;
 }
 
 export function ConfigStep(props: ConfigStepProps) {
@@ -29,6 +31,7 @@ export function ConfigStep(props: ConfigStepProps) {
     virtualModelName = '',
     onVirtualModelNameChange,
     isSaving = false,
+    onApplyVirtualModel,
     ...commonProps
   } = props;
 
@@ -43,5 +46,5 @@ export function ConfigStep(props: ConfigStepProps) {
     );
   }
 
-  return <ConfigureModelStep {...commonProps} />;
+  return <ConfigureModelStep {...commonProps} onApplyVirtualModel={onApplyVirtualModel} />;
 }
