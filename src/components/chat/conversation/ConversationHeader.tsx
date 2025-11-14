@@ -34,12 +34,14 @@ export function ConversationHeader({
   return (
     <>
       <div className="h-16 px-4 border-b border-border flex items-center justify-between bg-card/95 backdrop-blur-xl">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-1">
+          <div className="flex-1 flex max-w-[20vw]">
             <ModelSelector
               selectedModel={modelName || 'Select a model'}
               onModelChange={onModelChange}
             />
-            {modelInfo && (
+          </div>
+            {(modelInfo || modelName?.startsWith('langdb/') ) &&  (
               <ModelConfigButton
                 hasActiveConfig={hasActiveConfig}
                 onClick={() => setConfigDialogOpen(true)}

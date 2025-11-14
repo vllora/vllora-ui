@@ -11,6 +11,13 @@ import { Message } from "./types";
 import { useCallback } from "react";
 import { VirtualModelSelector } from "./virtual-model-selector";
 import { VirtualModel } from "@/services/virtual-models-api";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Info } from "lucide-react";
 
 interface ModelConfigDialogContentProps {
   selectedModel?: string;
@@ -42,31 +49,50 @@ export function ModelConfigDialogContent({
 
   return (
     <div className="flex-1 overflow-y-auto px-6 py-4">
-      {/* Base Model Section - Hidden when virtual model is used as base */}
-      {selectedModel && onModelChange && !isUsingVirtualModelAsBase && (
-        <div className="space-y-2 pb-4 border-b">
-          <div className="flex items-center gap-2">
-            <Label className="text-sm font-semibold text-foreground">Base Model</Label>
-          </div>
-          <ModelSelectorComponent
-            selectedModel={selectedModel}
-            onModelChange={onModelChange}
-            models={models.filter((model) => model.type === 'completions')}
-            selectedModelInfo={modelInfo}
-            isSelectedProviderConfigured={true}
-          />
-        </div>
-      )}
+      <TooltipProvider>
+        {/* Model Selection Section */}
+        <div className="grid grid-cols-2 gap-4 pb-4 border-b">
+          {/* Base Model - Hidden when virtual model is used as base */}
+          {selectedModel && onModelChange && !isUsingVirtualModelAsBase && (
+            <div>
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <Label className="text-sm font-semibold text-foreground">Base Model</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Select the foundation model for your configuration</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <div className="flex-1 flex">
+                <ModelSelectorComponent
+                  selectedModel={selectedModel}
+                  onModelChange={onModelChange}
+                  models={models.filter((model) => model.type === 'completions')}
+                  selectedModelInfo={modelInfo}
+                  isSelectedProviderConfigured={true}
+                />
+                </div>
+              </div>
+            </div>
+          )}
 
-      {/* Virtual Model Selector */}
-      {onApplyVirtualModel && (
-        <VirtualModelSelector
-          onApplyVirtualModel={onApplyVirtualModel}
-          config={config}
-          onConfigChange={onConfigChange}
-          onClearVirtualModel={onClearVirtualModel}
-        />
-      )}
+          {/* Virtual Model Selector */}
+          {onApplyVirtualModel && (
+            <div className={isUsingVirtualModelAsBase ? "col-span-2" : ""}>
+              <VirtualModelSelector
+                onApplyVirtualModel={onApplyVirtualModel}
+                config={config}
+                onConfigChange={onConfigChange}
+                onClearVirtualModel={onClearVirtualModel}
+              />
+            </div>
+          )}
+        </div>
+      </TooltipProvider>
 
       {/* Messages Section */}
       <div className="space-y-2 py-4 border-t">

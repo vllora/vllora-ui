@@ -11,8 +11,13 @@ import { VirtualModelsConsumer } from "@/contexts/VirtualModelsContext";
 import { VirtualModel } from "@/services/virtual-models-api";
 import { ApplyVirtualModelDialog } from "./apply-virtual-model-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, X } from "lucide-react";
+import { Sparkles, X, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface VirtualModelSelectorProps {
   onApplyVirtualModel: (virtualModel: VirtualModel, mode: 'base' | 'copy') => void;
@@ -74,10 +79,23 @@ export function VirtualModelSelector({
 
   return (
     <>
-      <div className="space-y-2 pb-4">
+      <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <Label className="text-sm font-semibold text-foreground">Virtual Model</Label>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs">
+                  {isUsingVirtualModelAsBase
+                    ? "This virtual model is currently used as your base configuration"
+                    : "Apply a saved virtual model configuration to quickly set up your parameters"
+                  }
+                </p>
+              </TooltipContent>
+            </Tooltip>
             <Sparkles className="h-3.5 w-3.5 text-primary" />
             {isUsingVirtualModelAsBase && (
               <Badge variant="default" className="text-xs h-5 px-2">
@@ -97,12 +115,6 @@ export function VirtualModelSelector({
             </Button>
           )}
         </div>
-        <p className="text-xs text-muted-foreground">
-          {isUsingVirtualModelAsBase
-            ? "This virtual model is currently used as your base configuration"
-            : "Apply a saved virtual model configuration to quickly set up your parameters"
-          }
-        </p>
         <Select value={selectValue} onValueChange={handleVirtualModelSelect}>
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Select a virtual model..." />

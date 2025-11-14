@@ -3,16 +3,18 @@ import { useRequest } from 'ahooks';
 import { toast } from 'sonner';
 import { fetchProjectModels } from '@/services/models-api';
 import { ModelInfo } from '@/types/models';
+import { ProjectsConsumer } from './ProjectContext';
 
 export type ProjectModelsContextType = ReturnType<typeof useProjectModels>;
 
 const LocalModelsContext = createContext<ProjectModelsContextType | undefined>(undefined);
 
-export function useProjectModels(projectId?: string) {
+export function useProjectModels() {
+  const {currentProjectId} = ProjectsConsumer();
   const { data, loading, error, run: refetchModels } = useRequest<ModelInfo[], []>(
-    () => fetchProjectModels({ projectId }),
+    () => fetchProjectModels({ projectId: currentProjectId }),
     {
-      refreshDeps: [projectId],
+      refreshDeps: [currentProjectId],
       onError: (err) => {
         toast.error('Failed to load local models', {
           description: err.message || 'An error occurred while loading local models',
@@ -30,13 +32,11 @@ export function useProjectModels(projectId?: string) {
 }
 
 export function ProjectModelsProvider({
-  projectId,
   children
 }: {
-  projectId?: string;
   children: ReactNode;
 }) {
-  const value = useProjectModels(projectId);
+  const value = useProjectModels();
   return <LocalModelsContext.Provider value={value}>{children}</LocalModelsContext.Provider>;
 }
 
