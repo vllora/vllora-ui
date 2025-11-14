@@ -1,7 +1,6 @@
 // Context providers and consumers
 export { AuthProvider, AuthConsumer } from '../contexts/AuthContext';
 export { ProjectsProvider, ProjectsConsumer } from '../contexts/ProjectContext';
-export { ProjectModelsProvider as LocalModelsProvider, ProjectModelsConsumer as LocalModelsConsumer } from '../contexts/ProjectModelsContext';
 export { ProviderKeysProvider, ProviderKeysConsumer } from '../contexts/ProviderKeysContext';
 export { ProjectEventsProvider, ProjectEventsConsumer } from '../contexts/project-events';
 export { CurrentAppProvider, CurrentAppConsumer } from '../contexts/CurrentAppContext';
