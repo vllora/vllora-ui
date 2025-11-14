@@ -7,9 +7,10 @@ import { CurrentAppConsumer } from '@/contexts/CurrentAppContext';
 interface ChatEmptyStateProps {
   onNewChat: () => void;
   projectId?: string;
+  apiKey?: string;
 }
 
-export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({ onNewChat, projectId }) => {
+export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({ onNewChat, projectId, apiKey }) => {
   const searchParam = new URLSearchParams(window.location.search);
   const threadIdFromUrl = searchParam.get('thread_id');
   const model = searchParam.get('model') || 'openai/gpt-4o-mini';
@@ -19,6 +20,9 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({ onNewChat, proje
   const projectIdHeader = projectId
     ? `  -H 'x-project-id: ${projectId}' \\\n`
     : '';
+  const apiKeyHeader = apiKey
+    ? `  -H 'Authorization: Bearer ${apiKey}' \\\n`
+    : app_mode === 'langdb' ? '  -H "Authorization: Bearer YOUR_API_KEY" \\\n' : '';
 
   // Only include x-thread-id if threadId exists in URL
   const threadIdHeader = threadIdFromUrl
@@ -27,7 +31,7 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({ onNewChat, proje
 
   const sampleCurlCommand = `curl -X POST \\
   '${getBackendUrl()}/v1/chat/completions' \\
-${projectIdHeader}${threadIdHeader}  -H 'content-type: application/json' \\
+${projectIdHeader}${threadIdHeader}${apiKeyHeader}  -H 'content-type: application/json' \\
   -d '{
   "model": "${model}",
   "messages": [
