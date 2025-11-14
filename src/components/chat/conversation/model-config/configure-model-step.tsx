@@ -23,6 +23,7 @@ interface ConfigureModelStepProps {
   title?: string;
   description?: string;
   onApplyVirtualModel?: (virtualModel: VirtualModel, mode: 'base' | 'copy') => void;
+  onClearVirtualModel?: () => void;
 }
 
 export function ConfigureModelStep({
@@ -41,6 +42,7 @@ export function ConfigureModelStep({
   title = "Model Configuration",
   description = "Fine-tune parameters, caching, fallbacks, and retries for optimal performance",
   onApplyVirtualModel,
+  onClearVirtualModel,
 }: ConfigureModelStepProps) {
   return (
     <>
@@ -60,6 +62,7 @@ export function ConfigureModelStep({
           onConfigChange={onConfigChange}
           modelInfo={modelInfo}
           onApplyVirtualModel={onApplyVirtualModel}
+          onClearVirtualModel={onClearVirtualModel}
         />
       ) : (
         <div className="flex-1 overflow-hidden px-6 py-4">

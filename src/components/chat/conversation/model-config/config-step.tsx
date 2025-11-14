@@ -23,6 +23,7 @@ interface ConfigStepProps {
   onVirtualModelNameChange?: (name: string) => void;
   isSaving?: boolean;
   onApplyVirtualModel?: (virtualModel: VirtualModel, mode: 'base' | 'copy') => void;
+  onClearVirtualModel?: () => void;
 }
 
 export function ConfigStep(props: ConfigStepProps) {
@@ -32,6 +33,7 @@ export function ConfigStep(props: ConfigStepProps) {
     onVirtualModelNameChange,
     isSaving = false,
     onApplyVirtualModel,
+    onClearVirtualModel,
     ...commonProps
   } = props;
 
@@ -46,5 +48,11 @@ export function ConfigStep(props: ConfigStepProps) {
     );
   }
 
-  return <ConfigureModelStep {...commonProps} onApplyVirtualModel={onApplyVirtualModel} />;
+  return (
+    <ConfigureModelStep
+      {...commonProps}
+      onApplyVirtualModel={onApplyVirtualModel}
+      onClearVirtualModel={onClearVirtualModel}
+    />
+  );
 }

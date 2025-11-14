@@ -15,13 +15,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import {
   createProject,
+  Project,
   type CreateProjectRequest,
 } from '@/services/projects-api';
 
 interface CreateProjectDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onProjectCreated: () => void;
+  onProjectCreated: (newProject: Project) => void;
 }
 
 export function CreateProjectDialog({
@@ -50,15 +51,14 @@ export function CreateProjectDialog({
         name: newProjectName.trim(),
         description: newProjectDescription.trim() || undefined,
       };
-      await createProject(request);
-
+     let newProjectCreated =  await createProject(request);
       // Reset form
       setNewProjectName('');
       setNewProjectDescription('');
       onOpenChange(false);
 
       // Refresh projects list
-      onProjectCreated();
+      onProjectCreated(newProjectCreated);
       toast.success('Project created', {
         description: `${newProjectName} has been created successfully`,
       });

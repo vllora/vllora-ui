@@ -32,9 +32,6 @@ export interface GetProjectResponse {
   project: Project;
 }
 
-export interface CreateProjectResponse {
-  project: Project;
-}
 
 export interface UpdateProjectResponse {
   project: Project;
@@ -62,8 +59,8 @@ export async function getProject(projectId: string): Promise<Project> {
  */
 export async function createProject(request: CreateProjectRequest): Promise<Project> {
   const response = await api.post('/projects', request);
-  const data = await handleApiResponse<CreateProjectResponse>(response);
-  return data.project;
+  const data = await handleApiResponse<Project>(response);
+  return data;
 }
 
 /**
@@ -74,14 +71,14 @@ export async function updateProject(
   request: UpdateProjectRequest
 ): Promise<Project> {
   const response = await api.put(`/projects/${projectId}`, request);
-  const data = await handleApiResponse<UpdateProjectResponse>(response);
-  return data.project;
+  const data = await handleApiResponse<Project>(response);
+  return data;
 }
 
 /**
- * Delete a project
+ * Delete a project (archive)
  */
 export async function deleteProject(projectId: string): Promise<void> {
-  const response = await api.delete(`/projects/${projectId}`);
+  const response = await api.post(`/projects/${projectId}/archive`);
   await handleApiResponse<void>(response);
 }

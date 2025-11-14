@@ -19,6 +19,7 @@ interface ModelConfigDialogContentProps {
   onConfigChange: (config: Record<string, any>) => void;
   modelInfo: ModelInfo;
   onApplyVirtualModel?: (virtualModel: VirtualModel, mode: 'base' | 'copy') => void;
+  onClearVirtualModel?: () => void;
 }
 
 export function ModelConfigDialogContent({
@@ -28,6 +29,7 @@ export function ModelConfigDialogContent({
   onConfigChange,
   modelInfo,
   onApplyVirtualModel,
+  onClearVirtualModel,
 }: ModelConfigDialogContentProps) {
   const { models } = ProjectModelsConsumer();
 
@@ -35,10 +37,13 @@ export function ModelConfigDialogContent({
     onConfigChange({ ...config, messages });
   }, [config, onConfigChange]);
 
+  // Check if a virtual model is being used as the base model
+  const isUsingVirtualModelAsBase = config.model && typeof config.model === 'string' && config.model.startsWith('langdb/');
+
   return (
     <div className="flex-1 overflow-y-auto px-6 py-4">
-      {/* Base Model Section */}
-      {selectedModel && onModelChange && (
+      {/* Base Model Section - Hidden when virtual model is used as base */}
+      {selectedModel && onModelChange && !isUsingVirtualModelAsBase && (
         <div className="space-y-2 pb-4 border-b">
           <div className="flex items-center gap-2">
             <Label className="text-sm font-semibold text-foreground">Base Model</Label>
@@ -55,7 +60,12 @@ export function ModelConfigDialogContent({
 
       {/* Virtual Model Selector */}
       {onApplyVirtualModel && (
-        <VirtualModelSelector onApplyVirtualModel={onApplyVirtualModel} />
+        <VirtualModelSelector
+          onApplyVirtualModel={onApplyVirtualModel}
+          config={config}
+          onConfigChange={onConfigChange}
+          onClearVirtualModel={onClearVirtualModel}
+        />
       )}
 
       {/* Messages Section */}

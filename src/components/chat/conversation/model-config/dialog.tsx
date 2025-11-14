@@ -59,6 +59,7 @@ export function ModelConfigDialog({
     confirmModeSwitch,
     handleSaveAsVirtualModel,
     handleApplyVirtualModel,
+    handleClearVirtualModel,
   } = useModelConfigDialog({
     open,
     modelInfo,
@@ -94,6 +95,7 @@ export function ModelConfigDialog({
             onVirtualModelNameChange={setVirtualModelName}
             isSaving={creating}
             onApplyVirtualModel={!isCreateMode ? handleApplyVirtualModel : undefined}
+            onClearVirtualModel={!isCreateMode ? handleClearVirtualModel : undefined}
           />
         ) : (
           <SaveStep

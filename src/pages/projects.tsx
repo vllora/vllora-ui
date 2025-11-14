@@ -6,20 +6,36 @@ import {
   CardContent,
   CardHeader,
 } from '@/components/ui/card';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { deleteProject } from '@/services/projects-api';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { ProjectCard } from './ProjectCard';
 import { CurrentAppConsumer } from '@/lib';
+import { useState } from 'react';
 
 export function ProjectsPage() {
   const { projects, loading, refetchProjects, isDefaultProject} = ProjectsConsumer();
   const { app_mode } = CurrentAppConsumer();
+  const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
 
   const handleDeleteProject = async (projectId: string) => {
-    if (!confirm('Are you sure you want to delete this project?')) return;
+    setProjectToDelete(projectId);
+  };
+
+  const confirmDelete = async () => {
+    if (!projectToDelete) return;
 
     try {
-      await deleteProject(projectId);
+      await deleteProject(projectToDelete);
       refetchProjects();
       toast.success('Project deleted', {
         description: 'The project has been deleted successfully',
@@ -29,6 +45,8 @@ export function ProjectsPage() {
         description: error instanceof Error ? error.message : 'An error occurred',
       });
       console.error('Failed to delete project:', error);
+    } finally {
+      setProjectToDelete(null);
     }
   };
 
@@ -136,7 +154,23 @@ export function ProjectsPage() {
         </div>
       </div>
 
-      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!projectToDelete} onOpenChange={(open) => !open && setProjectToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Project</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this project? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

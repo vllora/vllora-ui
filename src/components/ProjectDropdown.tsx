@@ -135,7 +135,15 @@ export function ProjectDropdown({ onProjectChange }: ProjectDropdownProps) {
     <CreateProjectDialog
       isOpen={isCreateDialogOpen}
       onOpenChange={setIsCreateDialogOpen}
-      onProjectCreated={refetchProjects}
+      onProjectCreated={(project)=> {
+        if(!project.is_default){
+          navigate(`/?project_id=${project.id}`)
+        } else {
+          navigate(`/`)
+        }
+        setIsCreateDialogOpen(false)
+        refetchProjects()
+      }}
     />
   </>
   );

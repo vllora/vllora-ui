@@ -38,6 +38,7 @@ export function useModelConfigDialog({
   const [pendingJsonToSwitch, setPendingJsonToSwitch] = useState<string>('');
   const [step, setStep] = useState<'config' | 'save'>('config');
   const [virtualModelName, setVirtualModelName] = useState('');
+  const [originalBaseModel, setOriginalBaseModel] = useState<string | undefined>(selectedModel);
 
   // Determine if this is a "create mode" (no onConfigChange means it's for creating virtual models only)
   const isCreateMode = !onConfigChange;
@@ -306,6 +307,18 @@ export function useModelConfigDialog({
     }
   }, [projectId, mode, jsonContent, config, getUserConfig, createVirtualModel, onOpenChange, jsonToConfig]);
 
+  // Handle clearing virtual model (restore original base model)
+  const handleClearVirtualModel = useCallback(() => {
+    // Remove the virtual model from config
+    const { model, ...restConfig } = config;
+    setConfig(restConfig);
+
+    // Restore original base model if available
+    if (originalBaseModel && onModelChange) {
+      onModelChange(originalBaseModel);
+    }
+  }, [config, originalBaseModel, onModelChange]);
+
   // Handle applying virtual model configuration
   const handleApplyVirtualModel = useCallback((virtualModel: VirtualModel, applyMode: 'base' | 'copy') => {
     const latestVersion = virtualModel.versions.find(v => v.latest);
@@ -348,12 +361,19 @@ export function useModelConfigDialog({
         toast.success(`Copied configuration from "${virtualModel.name}"`);
       }
     } else {
-      // Base mode: Merge virtual model config with current config
-      // Virtual model config serves as base, current config overrides
+      // Base mode: Use virtual model as the base model
+      // User's current form configuration is preserved and applied on top
+      // Save the current base model before applying virtual model
+      if (!config.model || !config.model.startsWith('langdb/')) {
+        setOriginalBaseModel(selectedModel);
+      }
+
+      const virtualModelIdentifier = `langdb/${virtualModel.slug}`;
       const mergedConfig = {
-        ...targetConfig,
         ...config,
+        model: virtualModelIdentifier
       };
+      onModelChange?.(virtualModelIdentifier);
       setConfig(mergedConfig);
 
       // If merged config has complex features and we're in basic mode, switch to advanced
@@ -407,5 +427,6 @@ export function useModelConfigDialog({
     confirmModeSwitch,
     handleSaveAsVirtualModel,
     handleApplyVirtualModel,
+    handleClearVirtualModel,
   };
 }
