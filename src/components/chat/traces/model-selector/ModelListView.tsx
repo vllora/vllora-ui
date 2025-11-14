@@ -48,7 +48,11 @@ export const ModelListView: React.FC<ModelListViewProps> = ({
   return (
     <>
       {/* Search Input */}
-      <div className="p-3 border-b border-border">
+      <div
+        className="p-3 border-b border-border"
+        onKeyDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         <input
           ref={inputRef}
           type="text"
@@ -71,7 +75,11 @@ export const ModelListView: React.FC<ModelListViewProps> = ({
       </div>
 
       {/* Content Area */}
-      <div className="max-h-80 overflow-y-auto">
+      <div
+        className="max-h-80 overflow-y-auto"
+        onWheel={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         {/* Virtual Models Section */}
         {virtualModels && filteredVirtualModels.length > 0 && (
           <>

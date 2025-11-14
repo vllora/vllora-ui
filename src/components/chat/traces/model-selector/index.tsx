@@ -172,7 +172,10 @@ export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
           </div>
         </DropdownMenuTrigger>
 
-        <DropdownMenuContent className="w-96 p-0" align="start">
+        <DropdownMenuContent
+          className="w-96 p-0"
+          align="start"
+        >
           <ModelSelectorContent
             currentStep={currentStep}
             handleBack={handleBack}
