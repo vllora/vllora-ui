@@ -18,6 +18,7 @@ interface TraceContentProps {
     run_id: string;
     tab: "trace" | "code";
 }[];
+app_mode: 'langdb' | 'vllora'
 }
 
 const TraceContentImpl: React.FC<TraceContentProps> = ({
@@ -28,6 +29,7 @@ const TraceContentImpl: React.FC<TraceContentProps> = ({
   loadingMore,
   observerTarget,
   openTraces,
+  app_mode
 }) => {   
    const currentRunId: string = useMemo(()=> {
       return openTraces && openTraces.length && openTraces[0] ? openTraces[0].run_id : ''
@@ -41,7 +43,7 @@ const TraceContentImpl: React.FC<TraceContentProps> = ({
   }
 
   if (!loadingSpans && (!runs || runs.length === 0)) {
-    return <TraceEmptyState />;
+    return <TraceEmptyState haveIncludeApiKey={app_mode === 'langdb'} />;
   }
 
   return (

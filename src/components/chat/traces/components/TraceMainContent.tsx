@@ -15,6 +15,7 @@ interface TraceMainContentProps {
     run_id: string;
     tab: "trace" | "code";
   }[];
+  app_mode: 'langdb' | 'vllora'
 }
 
 // Component implementation
@@ -26,6 +27,7 @@ const TraceMainContentImpl: React.FC<TraceMainContentProps> = ({
   loadingMore,
   threadId,
   openTraces,
+  app_mode
 }) => {
   const observerTarget = useRef<HTMLDivElement>(null);
 
@@ -42,6 +44,7 @@ const TraceMainContentImpl: React.FC<TraceMainContentProps> = ({
           threadId={threadId}
           observerTarget={observerTarget}
           openTraces={openTraces}
+          app_mode={app_mode}
         />
       </div>
     </div>

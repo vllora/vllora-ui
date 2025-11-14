@@ -7,6 +7,7 @@ import { TraceHeader } from "./components/header";
 import { TraceMainContent } from "./components/TraceMainContent";
 import { SpanDetailsOverlay } from "./components/SpanDetailsOverlay";
 import { ExclamationCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
+import { CurrentAppConsumer } from "@/contexts/CurrentAppContext";
 
 interface TraceViewProps {
   threadId: string;
@@ -24,6 +25,7 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
     detailSpanId,
     openTraces
   } = ChatWindowConsumer();
+  const {app_mode} = CurrentAppConsumer();
 
   const [_, setShowErrorDialog] = useState(false);
 
@@ -89,7 +91,8 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
         )}
 
         {/* Main content area */}
-        <TraceMainContent
+        <TraceMainContent 
+          app_mode={app_mode}
           loadingSpans={runsLoading}
           runs={runs.sort((a, b) => a.start_time_us - b.start_time_us)}
           hasMore={hasMoreRuns}

@@ -5,9 +5,11 @@ import { getBackendUrl } from '@/config/api';
 
 interface TraceEmptyStateProps {
   projectId?: string;
+  apiKey?: string;
+  haveIncludeApiKey?: boolean;
 }
 
-export const TraceEmptyState: React.FC<TraceEmptyStateProps> = ({ projectId }) => {
+export const TraceEmptyState: React.FC<TraceEmptyStateProps> = ({ projectId, apiKey, haveIncludeApiKey }) => {
   const searchParam = new URLSearchParams(window.location.search);
   const projectIdFromUrl = searchParam.get('project_id') ?? projectId;
   const threadIdFromUrl = searchParam.get('thread_id');
@@ -18,6 +20,11 @@ export const TraceEmptyState: React.FC<TraceEmptyStateProps> = ({ projectId }) =
     ? `  -H 'x-project-id: ${projectIdFromUrl}' \\\n`
     : '';
 
+  // Only include x-api-key if apiKey exists
+  const apiKeyHeader = apiKey
+    ? `  -H 'Authorization: Bearer ${apiKey}' \\\n`
+    : haveIncludeApiKey ? '  -H "Authorization: Bearer YOUR_API_KEY" \\\n' : '';
+
   // Only include x-thread-id if threadId exists in URL
   const threadIdHeader = threadIdFromUrl
     ? `  -H 'x-thread-id: ${threadIdFromUrl}' \\\n`
@@ -25,7 +32,7 @@ export const TraceEmptyState: React.FC<TraceEmptyStateProps> = ({ projectId }) =
 
   const sampleCurlCommand = `curl -X POST \\
   '${getBackendUrl()}/v1/chat/completions' \\
-${projectIdHeader}${threadIdHeader}  -H 'content-type: application/json' \\
+${projectIdHeader}${threadIdHeader}${apiKeyHeader}  -H 'content-type: application/json' \\
   -d '{
   "model": "${model}",
   "messages": [
