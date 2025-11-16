@@ -1,16 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { RefreshCcwIcon } from "lucide-react";
 import { ModelSelector } from "../traces/model-selector";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ModelInfo } from "@/types/models";
-import { VirtualModel } from "@/services/virtual-models-api";
-import { VirtualModelsConsumer } from "@/lib";
 import { ModelConfigDialog, ModelConfigButton } from "./model-config";
 
 interface ModelSelectorHeaderProps {
-  modelName?: string;
-  modelInfo?: ModelInfo;
-  onModelChange: (model: string) => void;
   onRefresh?: () => void;
   onModelConfigChange?: (config: any) => void;
   isLoading?: boolean;
@@ -19,32 +13,18 @@ interface ModelSelectorHeaderProps {
 }
 
 export function ConversationHeader({
-  modelName,
-  onModelChange,
   onRefresh,
   isLoading,
-  modelInfo,
   onModelConfigChange,
   modelConfig,
   projectId
 }: ModelSelectorHeaderProps) {
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
-  const { virtualModels } = VirtualModelsConsumer();
-
   // Check if any configs are applied
-  const hasActiveConfig = !!(modelConfig && Object.keys(modelConfig).length > 0);
-
-  // Get the virtual model if a virtual model is selected
-  const selectedVirtualModel = useMemo(() => {
-    if (modelName?.startsWith('langdb/')) {
-      const slug = modelName.replace('langdb/', '');
-      return virtualModels.find(vm => vm.slug === slug);
-    }
-    return undefined;
-  }, [modelName, virtualModels]);
+  const hasActiveConfig = !!(modelConfig && Object.keys(modelConfig).filter(key => key !== 'model').length > 0);
+  const modelName = modelConfig?.model;
 
   // Determine the modelInfo to pass to the dialog (either ModelInfo or VirtualModel)
-  const dialogModelInfo = selectedVirtualModel || modelInfo;
 
   return (
     <>
@@ -53,15 +33,15 @@ export function ConversationHeader({
           <div className="flex-1 flex max-w-[20vw]">
             <ModelSelector
               selectedModel={modelName || 'Select a model'}
-              onModelChange={onModelChange}
+              onModelChange={(modelId) => {
+                onModelConfigChange?.({ model: modelId });
+              }}
             />
           </div>
-            {dialogModelInfo && (
-              <ModelConfigButton
-                hasActiveConfig={hasActiveConfig}
-                onClick={() => setConfigDialogOpen(true)}
-              />
-            )}
+          <ModelConfigButton
+            hasActiveConfig={hasActiveConfig}
+            onClick={() => setConfigDialogOpen(true)}
+          />
         </div>
         {onRefresh && (
           <TooltipProvider>
@@ -83,18 +63,13 @@ export function ConversationHeader({
         )}
       </div>
 
-      {dialogModelInfo && (
-        <ModelConfigDialog
+      <ModelConfigDialog
           open={configDialogOpen}
           onOpenChange={setConfigDialogOpen}
-          modelInfo={dialogModelInfo}
           onConfigChange={onModelConfigChange}
           initialConfig={modelConfig}
-          selectedModel={modelName}
-          onModelChange={onModelChange}
           projectId={projectId}
         />
-      )}
     </>
   );
 }

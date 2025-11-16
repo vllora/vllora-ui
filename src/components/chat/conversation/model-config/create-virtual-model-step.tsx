@@ -2,22 +2,12 @@ import { Button } from "@/components/ui/button";
 import { DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ModelInfo } from "@/types/models";
-import { VirtualModel } from "@/services/virtual-models-api";
 import { ModelConfigDialogHeader } from "./dialog-header";
 import { ModelConfigDialogContent } from "./dialog-content";
 import { JsonEditor } from "./json-editor";
+import { ModelConfigDialogConsumer } from "./useModelConfigDialog";
 
 interface CreateVirtualModelStepProps {
-  mode: 'basic' | 'advanced';
-  onModeChange: (mode: 'basic' | 'advanced') => void;
-  selectedModel?: string;
-  onModelChange?: (model: string) => void;
-  config: Record<string, any>;
-  onConfigChange: (config: Record<string, any>) => void;
-  modelInfo: ModelInfo | VirtualModel;
-  jsonContent: string;
-  onJsonContentChange: (content: string) => void;
   onReset: () => void;
   onSave: () => void;
   title?: string;
@@ -28,15 +18,6 @@ interface CreateVirtualModelStepProps {
 }
 
 export function CreateVirtualModelStep({
-  mode,
-  onModeChange,
-  selectedModel,
-  onModelChange,
-  config,
-  onConfigChange,
-  modelInfo,
-  jsonContent,
-  onJsonContentChange,
   onReset,
   onSave,
   title = "Create Virtual Model",
@@ -45,13 +26,12 @@ export function CreateVirtualModelStep({
   onVirtualModelNameChange,
   isSaving,
 }: CreateVirtualModelStepProps) {
+  const { mode, jsonContent, setJsonContent } = ModelConfigDialogConsumer()
   return (
     <>
       <ModelConfigDialogHeader
         title={title}
         description={description}
-        mode={mode}
-        onModeChange={onModeChange}
       />
 
       {/* Virtual Model Name Input */}
@@ -70,18 +50,12 @@ export function CreateVirtualModelStep({
 
       {/* Configuration Content */}
       {mode === 'basic' ? (
-        <ModelConfigDialogContent
-          selectedModel={selectedModel}
-          onModelChange={onModelChange}
-          config={config}
-          onConfigChange={onConfigChange}
-          modelInfo={modelInfo}
-        />
+        <ModelConfigDialogContent isCreateMode={true} />
       ) : (
         <div className="flex-1 overflow-hidden px-6 py-4">
           <JsonEditor
             value={jsonContent}
-            onChange={onJsonContentChange}
+            onChange={setJsonContent}
           />
         </div>
       )}

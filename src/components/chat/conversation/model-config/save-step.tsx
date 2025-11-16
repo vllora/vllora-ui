@@ -18,8 +18,6 @@ export const SaveStep = forwardRef<SaveVirtualModelFormRef, SaveStepProps>(
         <ModelConfigDialogHeader
           title="Save as Virtual Model"
           description="Give your model configuration a name"
-          mode="basic"
-          onModeChange={() => {}}
           hideToggle
         />
 

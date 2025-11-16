@@ -35,13 +35,15 @@ export function VirtualModelSelector({
   const { virtualModels, loading } = VirtualModelsConsumer();
   const [selectedVirtualModel, setSelectedVirtualModel] = useState<VirtualModel | null>(null);
   const [applyDialogOpen, setApplyDialogOpen] = useState(false);
-  const [selectValue, setSelectValue] = useState<string>("");
+  const [selectValue, setSelectValue] = useState<string>(config.model && config.model.startsWith('langdb/') ? config.model : '');
 
   // Check if a virtual model is being used as the base model
   const isUsingVirtualModelAsBase = config.model && typeof config.model === 'string' && config.model.startsWith('langdb/');
   const handleVirtualModelSelect = useCallback((virtualModelId: string) => {
     setSelectValue(virtualModelId);
-    const virtualModel = virtualModels.find(vm => vm.id === virtualModelId);
+    const virtualModel = virtualModels.find((vm) =>{
+      return `langdb/${vm.slug}` === virtualModelId;
+    });
     if (virtualModel) {
       setSelectedVirtualModel(virtualModel);
       setApplyDialogOpen(true);
@@ -107,7 +109,7 @@ export function VirtualModelSelector({
               variant="ghost"
               size="sm"
               onClick={handleClearClick}
-              className="h-7 px-2 text-xs"
+              className="h-5 px-2 text-xs"
             >
               <X className="h-3.5 w-3.5 mr-1" />
               Clear
@@ -124,7 +126,7 @@ export function VirtualModelSelector({
               const versionNumber = latestVersion?.version || vm.versions[0]?.version;
 
               return (
-                <SelectItem key={vm.id} value={vm.id}>
+                <SelectItem key={`langdb/${vm.slug}`} value={`langdb/${vm.slug}`}>
                   <div className="flex items-center gap-2">
                     <span>{vm.name}</span>
                     {versionNumber !== undefined && (

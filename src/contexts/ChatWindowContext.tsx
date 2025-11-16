@@ -190,24 +190,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
       duration: 0,
       avgTTFT: 0,
     }
-    // if (!displayMessages || displayMessages.length === 0) return undefined;
-
-    // let totalDuration = 0;
-    // let totalCost = 0;
-    // let totalInputTokens = 0;
-    // let totalOutputTokens = 0;
-    // let totalTTFT = 0;
-    // let ttftCount = 0;
-
-
-
-    // return {
-    //   cost: totalCost > 0 ? totalCost : undefined,
-    //   inputTokens: totalInputTokens > 0 ? totalInputTokens : undefined,
-    //   outputTokens: totalOutputTokens > 0 ? totalOutputTokens : undefined,
-    //   duration: totalDuration > 0 ? totalDuration / 1000 : undefined, // Convert ms to seconds
-    //   avgTTFT: ttftCount > 0 ? (totalTTFT / ttftCount) / 1000 : undefined, // Convert ms to seconds and average
-    // };
+    
   }, []);
 
   return {

@@ -18,6 +18,7 @@ import { ModelSelectorContent } from './ModelSelectorContent';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 import { CurrentAppConsumer } from '@/contexts/CurrentAppContext';
 import { VirtualModelsConsumer } from '@/lib';
+import { getModelInfoFromConfig, getModelInfoFromString } from '../../conversation/model-config/utils';
 
 interface ModelSelectorProps {
   selectedModel: string;
@@ -40,7 +41,6 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     selectedModel={selectedModel}
     onModelChange={onModelChange}
     models={models.filter((model) => model.type === 'completions')}
-    selectedModelInfo={selectedModelInfo}
     selectedProvider={selectedProvider}
     isSelectedProviderConfigured={app_mode === 'langdb' || isSelectedProviderConfigured}
     setSelectedProviderForConfig={setSelectedProviderForConfig}
@@ -57,27 +57,25 @@ export interface VirtualModelOption {
 interface ModelSelectorComponentProps {
   selectedModel: string;
   onModelChange?: (modelId: string) => void;
-  models: ModelInfo[];
-  selectedModelInfo?: ModelInfo;
   selectedProvider?: ModelProviderInfo;
   isSelectedProviderConfigured?: boolean;
   setSelectedProviderForConfig?: (providerName: string) => void;
   setConfigDialogOpen?: (open: boolean) => void;
   handleWarningClick?: () => void;
   virtualModels?: VirtualModelOption[];
+  models: ModelInfo[];
   app_mode:'langdb' | 'vllora'
 }
 export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
   selectedModel,
   onModelChange,
-  models,
-  selectedModelInfo,
   selectedProvider,
   isSelectedProviderConfigured,
   setSelectedProviderForConfig,
   setConfigDialogOpen,
   handleWarningClick,
   virtualModels,
+  models,
   app_mode
 }) => {
   const [open, setOpen] = useState(false);
@@ -111,11 +109,19 @@ export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
 
   // Get all providers for selected model
   const providers: ModelProviderInfo[] = useMemo(() => {
-    if (!selectedModelInfo) {
+    // if (!selectedModelInfo) {
+    //   return [];
+    // }
+    // return selectedModelInfo.endpoints || [];
+    const modelInfo = getModelInfoFromString({modelStr: selectedModel, availableModels: models, availableVirtualModels: []});
+    if (!modelInfo) {
       return [];
     }
-    return selectedModelInfo.endpoints || [];
-  }, [selectedModelInfo]);
+    if (modelInfo && 'endpoints' in modelInfo) {
+      return modelInfo.endpoints || [];
+    }
+    return [];
+  }, [selectedModel, models]);
 
   const handleModelSelect = (modelId: string) => {
     onModelChange?.(modelId);
@@ -187,7 +193,7 @@ export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
             handleModelNameSelect={handleModelNameSelect}
             getProviderCount={getProviderCount}
             providers={providers}
-            selectedModelInfo={selectedModelInfo}
+            selectedModelInfo={getModelInfoFromString({modelStr: selectedModel, availableModels: models, availableVirtualModels: []})}
             selectedModel={selectedModel}
             handleModelSelect={handleModelSelect}
             setSelectedProviderForConfig={setSelectedProviderForConfig}

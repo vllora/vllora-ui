@@ -10,7 +10,6 @@ import { MessagesSection } from "./messages-section";
 import { Message } from "./types";
 import { useCallback } from "react";
 import { VirtualModelSelector } from "./virtual-model-selector";
-import { VirtualModel } from "@/services/virtual-models-api";
 import {
   Tooltip,
   TooltipContent,
@@ -19,53 +18,53 @@ import {
 } from "@/components/ui/tooltip";
 import { Info } from "lucide-react";
 import { CurrentAppConsumer } from "@/lib";
+import { ModelConfigDialogConsumer } from "./useModelConfigDialog";
+import { Input } from "@/components/ui/input";
 
-// Type guard to check if the modelInfo is a ModelInfo
-function isModelInfo(modelInfo: ModelInfo | VirtualModel): modelInfo is ModelInfo {
-  return 'model' in modelInfo && 'model_provider' in modelInfo;
-}
 
-interface ModelConfigDialogContentProps {
-  selectedModel?: string;
-  onModelChange?: (model: string) => void;
-  config: Record<string, any>;
-  onConfigChange: (config: Record<string, any>) => void;
-  modelInfo: ModelInfo | VirtualModel;
-  onApplyVirtualModel?: (virtualModel: VirtualModel, mode: 'base' | 'copy') => void;
-  onClearVirtualModel?: () => void;
-  originalBaseModel?: string;
-}
 
-export function ModelConfigDialogContent({
-  selectedModel,
-  onModelChange,
-  config,
-  onConfigChange,
-  modelInfo,
-  onApplyVirtualModel,
-  onClearVirtualModel,
-  originalBaseModel,
-}: ModelConfigDialogContentProps) {
+// interface ModelConfigDialogContentProps {
+//   config: Record<string, any>;
+//   onConfigChange: (config: Record<string, any>) => void;
+//   onApplyVirtualModel?: (virtualModel: VirtualModel, mode: 'base' | 'copy') => void;
+//   onClearVirtualModel?: () => void;
+// }
+
+export function ModelConfigDialogContent(props: {
+  isCreateMode: boolean;
+}) {
+
+  const { isCreateMode } = props;
   const { models } = ProjectModelsConsumer();
   const { app_mode } = CurrentAppConsumer();
 
+  const { config, setConfig, currentModelInfo, handleApplyVirtualModel, handleClearVirtualModel } = ModelConfigDialogConsumer();
+
+
   const handleMessagesChange = useCallback((messages: Message[]) => {
-    onConfigChange({ ...config, messages });
-  }, [config, onConfigChange]);
+    setConfig({ ...config, messages });
+  }, [config, setConfig]);
 
   // Check if a virtual model is being used as the base model
   const isUsingVirtualModelAsBase = config.model && typeof config.model === 'string' && config.model.startsWith('langdb/');
 
+  // Get the current selected model from config, or derive from modelInfo
+  // const selectedModel = config.model || (isModelInfo(modelInfo) ? `${modelInfo.model_provider}/${modelInfo.model}` : undefined);
+
   // When a virtual model is used as base, show the original base model that was saved
-  const displayedBaseModel = isUsingVirtualModelAsBase ? originalBaseModel : selectedModel;
+  // const displayedBaseModel = isUsingVirtualModelAsBase ? originalBaseModel : selectedModel;
+
+  // Handle base model change - update config.model
+  const handleModelChange = useCallback((model: string) => {
+    setConfig({ ...config, model });
+  }, [config, setConfig]);
 
   return (
     <div className="flex-1 overflow-y-auto px-6 py-4">
       <TooltipProvider>
         {/* Model Selection Section */}
-        <div className={`grid ${onApplyVirtualModel ? 'grid-cols-2' : 'grid-cols-1'} gap-4 pb-4`}>
-          {/* Base Model - Show when we have a regular model (not viewing a VirtualModel directly) */}
-          {displayedBaseModel && onModelChange && isModelInfo(modelInfo) && (
+        <div className={`grid ${!isCreateMode ? 'grid-cols-2' : 'grid-cols-1'} gap-4 pb-4`}>
+          {config.model && (
             <div className={isUsingVirtualModelAsBase ? "opacity-50 pointer-events-none" : ""}>
               <div className="space-y-2">
                 <div className="flex items-center gap-1.5">
@@ -85,28 +84,26 @@ export function ModelConfigDialogContent({
                   </Tooltip>
                 </div>
                 <div className="flex-1 flex">
-                <ModelSelectorComponent
-                  selectedModel={displayedBaseModel}
-                  onModelChange={onModelChange}
-                  models={models.filter((model) => model.type === 'completions')}
-                  selectedModelInfo={modelInfo}
-                  isSelectedProviderConfigured={true}
-                  app_mode={app_mode}
-
-                />
+                  {!isUsingVirtualModelAsBase ? <ModelSelectorComponent
+                    selectedModel={config.model}
+                    onModelChange={handleModelChange}
+                    models={models.filter((model) => model.type === 'completions')}
+                    isSelectedProviderConfigured={true}
+                    app_mode={app_mode}
+                  /> : <><Input disabled placeholder="Select base model" /></>}
                 </div>
               </div>
             </div>
           )}
 
           {/* Virtual Model Selector */}
-          {onApplyVirtualModel && (
+          {!isCreateMode && (
             <div>
               <VirtualModelSelector
-                onApplyVirtualModel={onApplyVirtualModel}
+                onApplyVirtualModel={handleApplyVirtualModel}
                 config={config}
-                onConfigChange={onConfigChange}
-                onClearVirtualModel={onClearVirtualModel}
+                onConfigChange={setConfig}
+                onClearVirtualModel={handleClearVirtualModel}
               />
             </div>
           )}
@@ -125,7 +122,7 @@ export function ModelConfigDialogContent({
       <div className="space-y-2 py-4 border-t">
         <ResponseCacheConfig
           config={config}
-          onConfigChange={onConfigChange}
+          onConfigChange={setConfig}
         />
       </div>
 
@@ -133,7 +130,7 @@ export function ModelConfigDialogContent({
       <div className="space-y-2 py-4 border-t">
         <FallbackModelsConfig
           config={config}
-          onConfigChange={onConfigChange}
+          onConfigChange={setConfig}
         />
       </div>
 
@@ -141,16 +138,17 @@ export function ModelConfigDialogContent({
       <div className="space-y-2 py-4 border-t">
         <MaxRetriesConfig
           config={config}
-          onConfigChange={onConfigChange}
+          onConfigChange={setConfig}
         />
       </div>
 
       {/* Model Parameters Section - Always last since it varies by model */}
       <ModelParametersSection
-        modelInfo={modelInfo}
+        modelInfo={currentModelInfo as ModelInfo}
         config={config}
-        onConfigChange={onConfigChange}
+        onConfigChange={setConfig}
       />
     </div>
   );
 }
+

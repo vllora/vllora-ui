@@ -2,6 +2,8 @@
  * Utility functions for Model Configuration
  */
 
+import { ModelInfo, VirtualModel } from "@/lib";
+
 /**
  * Detects complex features in a configuration object that may not be
  * fully supported in Basic mode
@@ -84,3 +86,40 @@ export function isValidJson(jsonStr: string): boolean {
     return false;
   }
 }
+
+
+export function getModelInfoFromConfig(props:{config: Record<string, any>, availableModels: ModelInfo[], availableVirtualModels: VirtualModel[] }): ModelInfo | VirtualModel | undefined {
+  const {config, availableModels, availableVirtualModels} = props;
+  if (config.model && typeof config.model === 'string') {
+    return getModelInfoFromString({modelStr: config.model, availableModels, availableVirtualModels})
+  }
+  return undefined
+}
+
+export function getModelInfoFromString(props:{modelStr: string, availableModels: ModelInfo[], availableVirtualModels: VirtualModel[] }): ModelInfo | VirtualModel | undefined {
+  const {modelStr, availableModels, availableVirtualModels} = props;
+  if (modelStr && modelStr.startsWith('langdb/')) {
+    const modelSlug = modelStr.split('/')[1];
+    const virtualModel = availableVirtualModels.find((model) => model.slug === modelSlug);
+    if (virtualModel) {
+      return virtualModel;
+    }
+  }
+  if (modelStr) {
+    if(modelStr.includes('/')) {
+      const splited = modelStr.split('/');
+      const modelProvider = splited[0];
+      const modelName = splited[1];
+      const modelInfo = availableModels.find((model) => model.model === modelName && model.model_provider === modelProvider);
+      if (modelInfo) {
+        return modelInfo;
+      }
+    }
+    const modelInfo = availableModels.find((m) => m.model === modelStr);
+    if (modelInfo) {
+      return modelInfo;
+    }
+  }
+  return undefined
+}
+  

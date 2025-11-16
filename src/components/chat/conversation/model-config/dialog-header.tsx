@@ -1,17 +1,16 @@
 import { DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Settings2, Sparkles, Code2, Sliders } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ModelConfigDialogConsumer } from "./useModelConfigDialog";
 
 interface EnhancedDialogHeaderProps {
   title: string;
   description: string;
-  mode: 'basic' | 'advanced';
-  onModeChange: (mode: 'basic' | 'advanced') => void;
   hideToggle?: boolean;
 }
 
-export function ModelConfigDialogHeader({ title, description, mode, onModeChange, hideToggle = false }: EnhancedDialogHeaderProps) {
-
+export function ModelConfigDialogHeader({ title, description, hideToggle = false }: EnhancedDialogHeaderProps) {
+  const { mode, handleModeSwitch } = ModelConfigDialogConsumer()
   return (
     <DialogHeader className="space-y-4 pb-4 border-b border-border">
       <div className="flex items-start gap-3">
@@ -30,7 +29,7 @@ export function ModelConfigDialogHeader({ title, description, mode, onModeChange
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => onModeChange(mode === 'basic' ? 'advanced' : 'basic')}
+                onClick={() => handleModeSwitch(mode === 'basic' ? 'advanced' : 'basic')}
                 className="flex items-center gap-1.5 h-8 px-3 text-xs shrink-0"
               >
                 {mode === 'basic' ? (

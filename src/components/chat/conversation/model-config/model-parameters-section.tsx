@@ -10,7 +10,7 @@ import {
 
 // Type guard to check if the modelInfo is a ModelInfo
 function isModelInfo(modelInfo: ModelInfo | VirtualModel): modelInfo is ModelInfo {
-  return 'model' in modelInfo && 'model_provider' in modelInfo;
+  return modelInfo && 'model' in modelInfo && 'model_provider' in modelInfo;
 }
 
 interface ModelParametersSectionProps {

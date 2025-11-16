@@ -15,7 +15,7 @@ import { McpServerConfig } from '@/services/mcp-api';
 import { ProviderConfigDialog } from '../traces/model-selector/ProviderConfigDialog';
 import { MultiProviderConfigDialog } from '../traces/model-selector/MultiProviderConfigDialog';
 import { CurrentAppConsumer } from '@/contexts/CurrentAppContext';
-import { VirtualModelsProvider } from '@/contexts/VirtualModelsContext';
+import { ModelInfo } from '@/lib';
 
 interface ChatWindowProps {
   threadId?: string;
@@ -66,8 +66,17 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     modelConfig,
     setModelConfig,
   } = ChatWindowConsumer();
-
   const { app_mode } = CurrentAppConsumer();
+
+  // Wrapper for model config change that also updates the selected model if config contains a model field
+  const handleModelConfigChange = useCallback((newConfig: Record<string, any>) => {
+    setModelConfig(newConfig);
+    // If config has a model field, also update the selected model
+    if (newConfig.model && typeof newConfig.model === 'string') {
+      onModelChange(newConfig.model);
+    }
+  }, [setModelConfig, onModelChange]);
+
   useEffect(() => {
     clearAll();
     if (threadId && !isDraft) {
@@ -217,8 +226,12 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       continousMessage = extractMessageFromApiInvokeSpan(lastApiInvokeSpan);
     }
 
-    // Filter out null/undefined values from modelConfig and merge with other params
+    // Filter out null/undefined values and internal metadata fields from modelConfig
     const filteredModelConfig = Object.entries(modelConfig).reduce((acc, [key, value]) => {
+      // Skip internal metadata fields that start with underscore
+      if (key.startsWith('_')) {
+        return acc;
+      }
       if (value !== null && value !== undefined && value !== '') {
         acc[key] = value;
       }
@@ -259,18 +272,13 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       {/* Chat Header */}
       <div className="bg-card w-full flex-shrink-0">
         {/* Model Selector - Top row aligned with Project Dropdown */}
-        <VirtualModelsProvider projectId={projectId}>
           <ConversationHeader
-            modelName={selectedModel}
-            modelInfo={selectedModelInfo}
-            onModelChange={onModelChange}
             onRefresh={refreshSpans}
             isLoading={isLoadingSpans}
-            onModelConfigChange={setModelConfig}
+            onModelConfigChange={handleModelConfigChange}
             modelConfig={modelConfig}
             projectId={projectId}
           />
-        </VirtualModelsProvider>
       </div>
 
 
@@ -332,7 +340,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       {/* Multiple Providers List Dialog */}
       <MultiProviderConfigDialog
         open={providerListDialogOpen}
-        providers={selectedModelInfo?.endpoints?.filter(ep => !ep.available) || []}
+        providers={(selectedModelInfo as ModelInfo)?.endpoints?.filter(ep => !ep.available) || []}
         onOpenChange={(inputOpen) => {
           setProviderListDialogOpen?.(inputOpen);
         }}

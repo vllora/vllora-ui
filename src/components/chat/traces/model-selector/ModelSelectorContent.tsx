@@ -3,6 +3,7 @@ import { ModelInfo, ModelProviderInfo } from '@/types/models';
 import { ModelStepContent } from './ModelStepContent';
 import { ProviderStepContent } from './ProviderStepContent';
 import { VirtualModelOption } from './index';
+import { VirtualModel } from '@/lib';
 
 interface ModelSelectorContentProps {
   currentStep: 'model' | 'provider';
@@ -12,7 +13,7 @@ interface ModelSelectorContentProps {
   handleModelNameSelect: (modelName: string) => void;
   getProviderCount: (modelName: string) => number;
   providers: ModelProviderInfo[];
-  selectedModelInfo?: ModelInfo;
+  selectedModelInfo?: ModelInfo | VirtualModel;
   selectedModel: string;
   handleModelSelect: (modelId: string) => void;
   setSelectedProviderForConfig?: (providerName: string) => void;
@@ -51,7 +52,7 @@ export const ModelSelectorContent: React.FC<ModelSelectorContentProps> = ({
           handleBack={handleBack}
           selectedProvider={selectedProvider}
           providers={providers}
-          selectedModelInfo={selectedModelInfo}
+          selectedModelInfo={selectedModelInfo && 'endpoints' in selectedModelInfo ? selectedModelInfo : undefined}
           selectedModel={selectedModel}
           handleModelSelect={handleModelSelect}
           setSelectedProviderForConfig={setSelectedProviderForConfig}

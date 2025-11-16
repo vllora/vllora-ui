@@ -1,30 +1,44 @@
 import { ProjectModelsConsumer } from "@/contexts/ProjectModelsContext";
 import { ModelInfo, ModelProviderInfo } from "@/types/models";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { VirtualModelsConsumer } from "@/contexts/VirtualModelsContext";
+import { VirtualModel } from "@/lib";
 
 export const useUserProviderOfSelectedModelConfig = (props: {
   selectedModel: string;
 }) => {
   const { selectedModel } = props;
   const { models } = ProjectModelsConsumer();
+  const { virtualModels } = VirtualModelsConsumer();
   const [selectedProviderForConfig, setSelectedProviderForConfig] = useState<
     string | undefined
   >(undefined);
   const [providerListDialogOpen, setProviderListDialogOpen] = useState(false);
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [modelConfig, setModelConfig] = useState<Record<string, any>>({});
-  const selectedModelInfo: ModelInfo | undefined = useMemo(() => {
-    let isFullName = selectedModel.includes("/");
-    if (isFullName) {
-      let splited = selectedModel.split("/");
-      let modelName = splited[1];
-      let modelInfo = models.find((model) => model.model === modelName);
-      return modelInfo;
-    } else {
-      let modelInfo = models.find((model) => model.model === selectedModel);
-      return modelInfo;
-    }
-  }, [models, selectedModel]);
+  useEffect(() => {
+    setModelConfig(prev => ({
+      ...prev,
+      model: selectedModel || "openai/gpt-4o-mini",
+    }));
+  }, [selectedModel]);
+
+  const selectedModelInfo: ModelInfo | VirtualModel | undefined =
+    useMemo(() => {
+      let isFullName = selectedModel.includes("/");
+      if (isFullName) {
+        let splited = selectedModel.split("/");
+        let modelName = splited[1];
+        if (selectedModel.startsWith("langdb/")) {
+          return virtualModels.find((model) => model.slug === modelName);
+        }
+        let modelInfo = models.find((model) => model.model === modelName);
+        return modelInfo;
+      } else {
+        let modelInfo = models.find((model) => model.model === selectedModel);
+        return modelInfo;
+      }
+    }, [models, selectedModel]);
 
   const selectedProvider: ModelProviderInfo | undefined = useMemo(() => {
     let isFullName = selectedModel.includes("/");
@@ -32,10 +46,10 @@ export const useUserProviderOfSelectedModelConfig = (props: {
       return undefined;
     }
 
-    if (selectedModelInfo) {
+    if (selectedModelInfo && (selectedModelInfo as ModelInfo)) {
       let providerName = selectedModel.split("/")[0];
 
-      return selectedModelInfo.endpoints?.find(
+      return (selectedModelInfo as ModelInfo).endpoints?.find(
         (endpoint) => endpoint.provider.provider === providerName
       );
     }
@@ -43,12 +57,14 @@ export const useUserProviderOfSelectedModelConfig = (props: {
   }, [selectedModelInfo, selectedModel]);
 
   const isNoProviderConfigured = useMemo(() => {
-    if (!selectedModelInfo || selectedModelInfo.endpoints?.length === 0) {
+    let modelInfo = selectedModelInfo as ModelInfo;
+    if (!modelInfo) return false;
+    if (!modelInfo || modelInfo.endpoints?.length === 0) {
       return true;
     }
     return (
-      selectedModelInfo.endpoints?.filter((endpoint) => !endpoint.available)
-        .length === selectedModelInfo.endpoints?.length
+      modelInfo.endpoints?.filter((endpoint) => !endpoint.available).length ===
+      modelInfo.endpoints?.length
     );
   }, [selectedModelInfo]);
 
@@ -65,11 +81,14 @@ export const useUserProviderOfSelectedModelConfig = (props: {
 
     return true;
   }, [selectedModel, selectedProvider, isNoProviderConfigured]);
-  
-  const handleWarningClick = useCallback(() => {
-    if (!selectedModelInfo) return;
 
-    const unconfiguredProviders = selectedModelInfo.endpoints?.filter(ep => !ep.available) || [];
+  const handleWarningClick = useCallback(() => {
+    if (!selectedModelInfo || !(selectedModelInfo as ModelInfo)) return;
+
+    const unconfiguredProviders =
+      (selectedModelInfo as ModelInfo).endpoints?.filter(
+        (ep) => !ep.available
+      ) || [];
 
     // If only one unconfigured provider, open config dialog directly
     if (unconfiguredProviders.length === 1) {
@@ -80,11 +99,6 @@ export const useUserProviderOfSelectedModelConfig = (props: {
       setProviderListDialogOpen?.(true);
     }
   }, [selectedModelInfo, setConfigDialogOpen, setProviderListDialogOpen]);
-
-  // Reset model config when selected model changes
-  useEffect(() => {
-    setModelConfig({});
-  }, [selectedModel]);
 
   return {
     selectedModel,
