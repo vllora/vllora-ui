@@ -18,6 +18,7 @@ interface ModelSelectorContentProps {
   setSelectedProviderForConfig?: (providerName: string) => void;
   setConfigDialogOpen?: (open: boolean) => void;
   virtualModels?: VirtualModelOption[];
+  app_mode:'langdb' | 'vllora'
 }
 
 export const ModelSelectorContent: React.FC<ModelSelectorContentProps> = ({
@@ -34,6 +35,7 @@ export const ModelSelectorContent: React.FC<ModelSelectorContentProps> = ({
   setSelectedProviderForConfig,
   setConfigDialogOpen,
   virtualModels,
+  app_mode
 }) => {
   return (
     <>
@@ -54,6 +56,7 @@ export const ModelSelectorContent: React.FC<ModelSelectorContentProps> = ({
           handleModelSelect={handleModelSelect}
           setSelectedProviderForConfig={setSelectedProviderForConfig}
           setConfigDialogOpen={setConfigDialogOpen}
+          app_mode={app_mode}
         />
       )}
     </>

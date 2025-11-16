@@ -11,6 +11,7 @@ interface ProviderListViewProps {
   selectedModel: string;
   onProviderSelect: (modelFullName: string) => void;
   onConfigureProvider?: (providerName: string) => void;
+  app_mode:'langdb' | 'vllora'
 }
 
 export const ProviderListView: React.FC<ProviderListViewProps> = ({
@@ -19,6 +20,7 @@ export const ProviderListView: React.FC<ProviderListViewProps> = ({
   selectedModel,
   onProviderSelect,
   onConfigureProvider,
+  app_mode
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const filteredProviders = useMemo(() => {
@@ -51,7 +53,7 @@ export const ProviderListView: React.FC<ProviderListViewProps> = ({
               ? getModelFullName(selectedModelInfo, providerInfo)
               : '';
             const isSelected = modelFullName === selectedModel;
-            const isConfigured = providerInfo.available;
+            const isConfigured = providerInfo.available || app_mode === 'langdb';
 
             return (
               <DropdownMenuItem

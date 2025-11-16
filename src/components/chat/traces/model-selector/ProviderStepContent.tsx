@@ -12,6 +12,7 @@ interface ProviderStepContentProps {
   handleModelSelect: (modelId: string) => void;
   setSelectedProviderForConfig?: (providerName: string) => void;
   setConfigDialogOpen?: (open: boolean) => void;
+  app_mode:'langdb' | 'vllora'
 }
 
 export const ProviderStepContent: React.FC<ProviderStepContentProps> = ({
@@ -23,6 +24,7 @@ export const ProviderStepContent: React.FC<ProviderStepContentProps> = ({
   handleModelSelect,
   setSelectedProviderForConfig,
   setConfigDialogOpen,
+  app_mode
 }) => {
   return (
     <>
@@ -50,6 +52,7 @@ export const ProviderStepContent: React.FC<ProviderStepContentProps> = ({
           setSelectedProviderForConfig?.(providerName);
           setConfigDialogOpen?.(true);
         }}
+        app_mode={app_mode}
       />
     </>
   );

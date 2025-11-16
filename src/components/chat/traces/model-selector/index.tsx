@@ -45,7 +45,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     isSelectedProviderConfigured={app_mode === 'langdb' || isSelectedProviderConfigured}
     setSelectedProviderForConfig={setSelectedProviderForConfig}
     setConfigDialogOpen={setConfigDialogOpen}
-    handleWarningClick={handleWarningClick} />
+    handleWarningClick={handleWarningClick}
+    app_mode={app_mode} />
 }
 export interface VirtualModelOption {
   id: string;
@@ -64,6 +65,7 @@ interface ModelSelectorComponentProps {
   setConfigDialogOpen?: (open: boolean) => void;
   handleWarningClick?: () => void;
   virtualModels?: VirtualModelOption[];
+  app_mode:'langdb' | 'vllora'
 }
 export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
   selectedModel,
@@ -75,7 +77,8 @@ export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
   setSelectedProviderForConfig,
   setConfigDialogOpen,
   handleWarningClick,
-  virtualModels
+  virtualModels,
+  app_mode
 }) => {
   const [open, setOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState<'model' | 'provider'>('model');
@@ -190,6 +193,7 @@ export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
             setSelectedProviderForConfig={setSelectedProviderForConfig}
             setConfigDialogOpen={setConfigDialogOpen}
             virtualModels={virtualModels}
+            app_mode={app_mode}
           />
         </DropdownMenuContent>
       </DropdownMenu>
