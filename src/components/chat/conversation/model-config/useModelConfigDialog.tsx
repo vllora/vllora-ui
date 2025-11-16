@@ -29,6 +29,9 @@ export type ModelConfigDialogContextType = ReturnType<
   typeof useModelConfigDialog
 >;
 
+const UI_PROPERTIES_CONFIG = ['messages', 'max_retries', 'fallback', 'extra', 'model', 'cache']
+
+
 const ModelConfigDialogContext = createContext<
   ModelConfigDialogContextType | undefined
 >(undefined);
@@ -169,14 +172,13 @@ function useModelConfigDialog({
   const getUserConfig = useCallback(() => {
     const userConfig: Record<string, any> = {};
 
-    // For ModelInfo: Save parameter configs that differ from defaults
     if (
-      intialModelInfo &&
-      isModelInfo(intialModelInfo) &&
-      intialModelInfo.parameters
+      currentModelInfo &&
+      isModelInfo(currentModelInfo) &&
+      currentModelInfo.parameters
     ) {
       Object.entries(config).forEach(([key, value]) => {
-        const param = intialModelInfo.parameters![key];
+        const param = currentModelInfo.parameters![key];
         // Only include if value is different from default
         if (param && value !== param.default) {
           userConfig[key] = value;
@@ -202,20 +204,12 @@ function useModelConfigDialog({
     if (config.messages && config.messages.length > 0) {
       userConfig.messages = config.messages;
     }
-
     // Include model if it exists (for virtual models used as base)
     if (config.model !== undefined) {
       userConfig.model = config.model;
     }
-
-    // Include _originalBaseModel for persistence across dialog sessions
-    // (will be filtered out when sending to API by parent component)
-    if (config._originalBaseModel !== undefined) {
-      userConfig._originalBaseModel = config._originalBaseModel;
-    }
-
     return userConfig;
-  }, [config, intialModelInfo]);
+  }, [config, currentModelInfo]);
 
   const handleDoneBtn = useCallback(async () => {
     // If in create mode, create virtual model directly
@@ -316,13 +310,10 @@ function useModelConfigDialog({
       if (newMode === "advanced") {
         // UI → JSON: Convert current config to JSON, filtering out defaults
         const userConfig = getUserConfig();
-        const json = formatJson(configToJson(userConfig));
+        const json = JSON.stringify(userConfig, null, 2)
         setJsonContent(json);
         setMode("advanced");
-        // Persist mode to sessionStorage
-        if (typeof window !== "undefined") {
-          sessionStorage.setItem("modelConfigDialogMode", "advanced");
-        }
+       
       } else {
         // JSON → UI: Check for complex features first
         const result = jsonToConfig(jsonContent);
@@ -341,7 +332,7 @@ function useModelConfigDialog({
         }
       }
     },
-    [getUserConfig, configToJson, jsonContent, jsonToConfig]
+    [getUserConfig, configToJson, jsonContent, jsonToConfig, config]
   );
 
   // Confirm mode switch after warning
@@ -356,10 +347,7 @@ function useModelConfigDialog({
 
       setConfig(configData || config);
       setMode("basic");
-      // Persist mode to sessionStorage
-      if (typeof window !== "undefined") {
-        sessionStorage.setItem("modelConfigDialogMode", "basic");
-      }
+     
       // Reset pending state
       setPendingJsonToSwitch("");
     },
@@ -444,9 +432,7 @@ function useModelConfigDialog({
           const json = formatJson(configToJson(targetConfig));
           setJsonContent(json);
           setMode("advanced");
-          if (typeof window !== "undefined") {
-            sessionStorage.setItem("modelConfigDialogMode", "advanced");
-          }
+         
           toast.success(
             `Copied configuration from "${virtualModel.name}" and switched to Advanced mode (config contains complex features)`
           );
@@ -478,9 +464,6 @@ function useModelConfigDialog({
           const json = formatJson(configToJson(mergedConfig));
           setJsonContent(json);
           setMode("advanced");
-          if (typeof window !== "undefined") {
-            sessionStorage.setItem("modelConfigDialogMode", "advanced");
-          }
           toast.success(
             `Using "${virtualModel.name}" as base and switched to Advanced mode (config contains complex features)`
           );

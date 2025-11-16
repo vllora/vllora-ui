@@ -41,13 +41,7 @@ export function detectComplexFeatures(config: Record<string, any>): string[] {
     complexFeatures.push("Custom Headers/Metadata");
   }
 
-  // Check for advanced cache configuration beyond simple enable/disable
-  if (config.extra?.cache && typeof config.extra.cache === 'object') {
-    const cacheKeys = Object.keys(config.extra.cache);
-    if (cacheKeys.length > 1 || !cacheKeys.includes('enabled')) {
-      complexFeatures.push("Advanced Cache Configuration");
-    }
-  }
+  
 
   // Check for nested or complex message structures
   if (config.messages && Array.isArray(config.messages)) {
