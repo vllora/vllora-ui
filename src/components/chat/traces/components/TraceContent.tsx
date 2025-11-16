@@ -35,7 +35,6 @@ const TraceContentImpl: React.FC<TraceContentProps> = ({
   available_api_keys
 }) => {   
 
-  console.log('=== TraceContentImpl available_api_keys', available_api_keys);
    const currentRunId: string = useMemo(()=> {
       return openTraces && openTraces.length && openTraces[0] ? openTraces[0].run_id : ''
     }, [openTraces])

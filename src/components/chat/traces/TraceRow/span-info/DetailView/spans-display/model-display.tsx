@@ -27,8 +27,7 @@ export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelIn
     if (!response || response === "\"\"") {
         response = currentAttribute?.response;
     }
-
-    const raw_request_string = currentAttribute?.request || apiInvokeAttribute?.request;
+    const raw_request_string = apiInvokeAttribute?.request || currentAttribute?.request;
     const raw_response_string = output;
     const raw_response_json = raw_response_string ? tryParseJson(raw_response_string) : null;
     const raw_request_json = raw_request_string ? tryParseJson(raw_request_string) : null;

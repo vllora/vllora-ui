@@ -61,7 +61,7 @@ export function ModelConfigDialogContent({
     <div className="flex-1 overflow-y-auto px-6 py-4">
       <TooltipProvider>
         {/* Model Selection Section */}
-        <div className={`grid ${onApplyVirtualModel ? 'grid-cols-2' : 'grid-cols-1'} gap-4 pb-4 border-b`}>
+        <div className={`grid ${onApplyVirtualModel ? 'grid-cols-2' : 'grid-cols-1'} gap-4 pb-4`}>
           {/* Base Model - Show when we have a regular model (not viewing a VirtualModel directly) */}
           {displayedBaseModel && onModelChange && isModelInfo(modelInfo) && (
             <div className={isUsingVirtualModelAsBase ? "opacity-50 pointer-events-none" : ""}>
