@@ -310,6 +310,14 @@ function useModelConfigDialog({
       if (newMode === "advanced") {
         // UI → JSON: Convert current config to JSON, filtering out defaults
         const userConfig = getUserConfig();
+        if(userConfig.messages && userConfig.messages.length > 0){
+          userConfig.messages = userConfig.messages.map((message: any) => {
+            return {
+              role: message.role,
+              content: message.content,
+            };
+          });
+        }
         const json = JSON.stringify(userConfig, null, 2)
         setJsonContent(json);
         setMode("advanced");
@@ -368,7 +376,6 @@ function useModelConfigDialog({
           mode === "advanced"
             ? jsonToConfig(jsonContent).config || config
             : getUserConfig();
-
         // Use context method to save virtual model
         let virtualModelCreated = await createVirtualModel({
           name: data.name,
@@ -379,10 +386,12 @@ function useModelConfigDialog({
 
         // Go back to config step
         setStep("config");
-
-        setConfig({
+        let newConfig = {
           model: `langdb/${virtualModelCreated.slug}`,
-        });
+        }
+        setConfig(newConfig);
+        setJsonContent(JSON.stringify(newConfig, null, 2));
+        setMode("basic");
       } catch (error) {
         // Error handling is done in the context
         console.error("Error saving virtual model:", error);

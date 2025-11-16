@@ -40,9 +40,6 @@ export function detectComplexFeatures(config: Record<string, any>): string[] {
   if (config.headers || config.metadata) {
     complexFeatures.push("Custom Headers/Metadata");
   }
-
-  
-
   // Check for nested or complex message structures
   if (config.messages && Array.isArray(config.messages)) {
     const hasComplexMessages = config.messages.some(
