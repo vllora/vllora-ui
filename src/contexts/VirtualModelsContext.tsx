@@ -4,8 +4,10 @@ import { toast } from 'sonner';
 import {
   fetchVirtualModels,
   createVirtualModel,
+  updateVirtualModel,
   deleteVirtualModel,
   CreateVirtualModelParams,
+  UpdateVirtualModelParams,
   VirtualModel
 } from '@/services/virtual-models-api';
 
@@ -58,6 +60,31 @@ export function useVirtualModels(projectId?: string) {
     }
   );
 
+  // Update virtual model
+  const {
+    loading: updating,
+    runAsync: updateVirtualModelAsync
+  } = useRequest<VirtualModel, [Omit<UpdateVirtualModelParams, 'projectId'>]>(
+    async (params: Omit<UpdateVirtualModelParams, 'projectId'>) => {
+      if (!projectId) {
+        throw new Error('Project ID is required');
+      }
+      return updateVirtualModel({ ...params, projectId });
+    },
+    {
+      manual: true,
+      onSuccess: (data) => {
+        toast.success(`Virtual Model "${data.name}" updated successfully!`);
+        refetchVirtualModels();
+      },
+      onError: (err) => {
+        toast.error('Failed to update virtual model', {
+          description: err.message || 'An error occurred while updating the virtual model',
+        });
+      },
+    }
+  );
+
   // Delete virtual model
   const {
     loading: deleting,
@@ -87,10 +114,12 @@ export function useVirtualModels(projectId?: string) {
     virtualModels: data || [],
     loading,
     creating,
+    updating,
     deleting,
     error,
     refetchVirtualModels,
     createVirtualModel: createVirtualModelAsync,
+    updateVirtualModel: updateVirtualModelAsync,
     deleteVirtualModel: deleteVirtualModelAsync,
   };
 }

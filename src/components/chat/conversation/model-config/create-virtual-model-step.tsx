@@ -50,14 +50,15 @@ export function CreateVirtualModelStep({
             e.preventDefault()
             handleSaveAsVirtualModel({ name: virtualModelName })
             .then(() => {
-              console.log("==== handleSaveAsVirtualModel onOpenChange")
               onOpenChange(false)
               handleReset()
             })
           }}
           disabled={isSaving || !virtualModelName.trim()}
         >
-          {isSaving ? 'Creating...' : 'Create Virtual Model'}
+          {isSaving
+            ? (modified_mode === 'edit' ? 'Updating...' : 'Creating...')
+            : (modified_mode === 'edit' ? 'Update Virtual Model' : 'Create Virtual Model')}
         </Button>
       </DialogFooter>
     </>

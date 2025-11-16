@@ -41,10 +41,8 @@ export function ModelConfigDialog({
 export const ModelConfigDialogInner = ({ open, title, description }: { open: boolean; title?: string; description?: string }) => {
   const saveFormRef = useRef<SaveVirtualModelFormRef>(null);
   const { step, config, showWarning, complexFeatures, virtualModelName, isCreateMode, creating, setConfig, setShowWarning, setStep, setVirtualModelName, handleModeSwitch, confirmModeSwitch, handleSaveAsVirtualModel, handleApplyVirtualModel, handleClearVirtualModel, modified_mode, onOpenChange } = ModelConfigDialogConsumer()
-  return <Dialog open={open} onOpenChange={(change) => {
-    console.log("==== onOpenChange ModelConfigDialogInner", change)
-    onOpenChange(change)
-  }} modal={false}>
+
+  return <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
     <DialogContent className="max-w-[60vw] h-[80vh] overflow-hidden flex flex-col">
       {step === 'config' ? (
         <ConfigStep

@@ -43,6 +43,15 @@ export interface CreateVirtualModelParams {
   latest?: boolean;
 }
 
+export interface UpdateVirtualModelParams {
+  projectId: string;
+  virtualModelId: string;
+  name?: string;
+  target_configuration?: Record<string, any>;
+  is_public?: boolean;
+  latest?: boolean;
+}
+
 export async function fetchVirtualModels(props: {
   projectId?: string;
 }): Promise<VirtualModel[]> {
@@ -72,6 +81,26 @@ export async function createVirtualModel(
       is_public: body.is_public ?? false,
       latest: body.latest ?? true,
     },
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "x-project-id": projectId,
+      },
+    }
+  );
+
+  const data = await handleApiResponse<VirtualModel>(response);
+  return data;
+}
+
+export async function updateVirtualModel(
+  params: UpdateVirtualModelParams
+): Promise<VirtualModel> {
+  const { projectId, virtualModelId, ...body } = params;
+
+  const response = await api.put(
+    `/virtual-models/${virtualModelId}`,
+    body,
     {
       headers: {
         "Content-Type": "application/json",

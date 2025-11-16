@@ -54,7 +54,7 @@ function useModelConfigDialog({
   virtualModelSlug?: string,
 }) {
   // Get virtual models context
-  const { createVirtualModel, creating, virtualModels } =
+  const { createVirtualModel, updateVirtualModel, creating, updating, virtualModels } =
     VirtualModelsConsumer();
   const { models } = ProjectModelsConsumer();
 
@@ -172,6 +172,16 @@ function useModelConfigDialog({
     }
   }, [open, initialConfig, intialModelInfo]);
 
+  // Initialize virtual model name when in edit mode (separate effect to avoid re-running config initialization)
+  useEffect(() => {
+    if (open && modified_mode === 'edit' && virtualModelSlug) {
+      const virtualModel = virtualModels.find((vm) => vm.slug === virtualModelSlug);
+      if (virtualModel) {
+        setVirtualModelName(virtualModel.name);
+      }
+    }
+  }, [open, modified_mode, virtualModelSlug, virtualModels]);
+
   // Helper: Extract only user-modified config (different from defaults)
   const getUserConfig = useCallback(() => {
     const userConfig: Record<string, any> = {};
@@ -244,7 +254,6 @@ function useModelConfigDialog({
         });
 
         // Close the dialog
-        console.log("==== handleDonebtn onOpenChange 1");
         onOpenChange(false);
       } catch (error) {
         // Error handling is done in the context
@@ -271,7 +280,6 @@ function useModelConfigDialog({
     }
 
     onConfigChange?.(finalConfig);
-    console.log("==== handleDonebtn onOpenChange 2");
     onOpenChange(false);
     setStep("config");
     setMode("basic");
@@ -386,18 +394,38 @@ function useModelConfigDialog({
           mode === "advanced"
             ? jsonToConfig(jsonContent).config || config
             : getUserConfig();
-        // Use context method to save virtual model
-        let virtualModelCreated = await createVirtualModel({
-          name: data.name,
-          target_configuration: configToSave,
-          is_public: false,
-          latest: true,
-        });
+
+        let virtualModelResult: any;
+
+        if (modified_mode === 'edit' && virtualModelSlug) {
+          // Update existing virtual model
+          const virtualModel = virtualModels.find((vm) => vm.slug === virtualModelSlug);
+          if (!virtualModel) {
+            toast.error("Virtual model not found");
+            return;
+          }
+
+          virtualModelResult = await updateVirtualModel({
+            virtualModelId: virtualModel.id,
+            name: data.name,
+            target_configuration: configToSave,
+            is_public: false,
+            latest: true,
+          });
+        } else {
+          // Create new virtual model
+          virtualModelResult = await createVirtualModel({
+            name: data.name,
+            target_configuration: configToSave,
+            is_public: false,
+            latest: true,
+          });
+        }
 
         // Go back to config step
         setStep("config");
         let newConfig = {
-          model: `langdb/${virtualModelCreated.slug}`,
+          model: `langdb/${virtualModelResult.slug}`,
         }
         setConfig(newConfig);
         setJsonContent(JSON.stringify(newConfig, null, 2));
@@ -414,6 +442,10 @@ function useModelConfigDialog({
       config,
       getUserConfig,
       createVirtualModel,
+      updateVirtualModel,
+      virtualModels,
+      virtualModelSlug,
+      modified_mode,
       onOpenChange,
       jsonToConfig,
     ]
@@ -508,7 +540,7 @@ function useModelConfigDialog({
     step,
     virtualModelName,
     isCreateMode,
-    creating,
+    creating: creating || updating, // Combined loading state for both create and update
     initialConfig,
     currentModelInfo,
     // Setters
