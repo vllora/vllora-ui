@@ -168,7 +168,7 @@ export function extractMessagesFromSpan(
   // Also extract the response/output to create an assistant message
   const outputStr = attribute?.output;
   const outputJson = outputStr ? tryParseJson(outputStr) : null;
-  const responseContent = extractResponseContent(outputJson, attribute);
+  const responseContent = extractResponseContent(outputJson, attribute) || attribute?.response;
   // Calculate metrics for this span
   const spanMetrics = calculateSpanMetrics(span);
   let requestModel = requestJson?.model;

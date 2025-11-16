@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Span } from "@/types/common-type";
 import { extractMessagesFromSpan } from "@/utils/span-to-message";
 import { Message } from "@/types/chat";
+import { getParentApiInvoke } from "@/components/chat/traces/TraceRow/span-info/DetailView";
 
 /**
  * Hook that returns a specific span by span_id from the flattenSpans array.
@@ -87,6 +88,14 @@ export const useMessageExtractSpanById = (
   const span = useSpanById(flattenSpans, spanId);
   return useMemo(() => {
     if (!span) return [];
+    if(span.operation_name === 'cache') {
+      // get api invoke span
+      const apiInvokeSpan = getParentApiInvoke(flattenSpans, span.span_id);
+      if(apiInvokeSpan) {
+        return extractMessagesFromSpan(apiInvokeSpan);
+      }
+      return [];
+    }
     let messages = extractMessagesFromSpan(span);
     return messages;
   }, [span]);
