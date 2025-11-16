@@ -18,7 +18,7 @@ import { ModelSelectorContent } from './ModelSelectorContent';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 import { CurrentAppConsumer } from '@/contexts/CurrentAppContext';
 import { VirtualModelsConsumer } from '@/lib';
-import { getModelInfoFromConfig, getModelInfoFromString } from '../../conversation/model-config/utils';
+import { getModelInfoFromString } from '../../conversation/model-config/utils';
 
 interface ModelSelectorProps {
   selectedModel: string;
@@ -33,7 +33,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 }) => {
   const { models } = ProjectModelsConsumer();
   const { app_mode } = CurrentAppConsumer();
-  const { selectedModelInfo, selectedProvider, isSelectedProviderConfigured, setSelectedProviderForConfig, setConfigDialogOpen, handleWarningClick } = ChatWindowConsumer();
+  const { selectedProvider, isSelectedProviderConfigured, setSelectedProviderForConfig, setConfigDialogOpen, handleWarningClick } = ChatWindowConsumer();
   const { virtualModels } = VirtualModelsConsumer()
 
   return <ModelSelectorComponent
@@ -64,7 +64,7 @@ interface ModelSelectorComponentProps {
   handleWarningClick?: () => void;
   virtualModels?: VirtualModelOption[];
   models: ModelInfo[];
-  app_mode:'langdb' | 'vllora'
+  app_mode: 'langdb' | 'vllora'
 }
 export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
   selectedModel,
@@ -113,7 +113,7 @@ export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
     //   return [];
     // }
     // return selectedModelInfo.endpoints || [];
-    const modelInfo = getModelInfoFromString({modelStr: selectedModel, availableModels: models, availableVirtualModels: []});
+    const modelInfo = getModelInfoFromString({ modelStr: selectedModel, availableModels: models, availableVirtualModels: [] });
     if (!modelInfo) {
       return [];
     }
@@ -193,7 +193,7 @@ export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
             handleModelNameSelect={handleModelNameSelect}
             getProviderCount={getProviderCount}
             providers={providers}
-            selectedModelInfo={getModelInfoFromString({modelStr: selectedModel, availableModels: models, availableVirtualModels: []})}
+            selectedModelInfo={getModelInfoFromString({ modelStr: selectedModel, availableModels: models, availableVirtualModels: [] })}
             selectedModel={selectedModel}
             handleModelSelect={handleModelSelect}
             setSelectedProviderForConfig={setSelectedProviderForConfig}
