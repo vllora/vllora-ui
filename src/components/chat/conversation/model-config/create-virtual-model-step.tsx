@@ -1,58 +1,37 @@
 import { Button } from "@/components/ui/button";
 import { DialogFooter } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ModelConfigDialogHeader } from "./dialog-header";
 import { ModelConfigDialogContent } from "./dialog-content";
 import { JsonEditor } from "./json-editor";
 import { ModelConfigDialogConsumer } from "./useModelConfigDialog";
+import { VirtualModelNameInput } from "./dialog-content/name-input";
 
 interface CreateVirtualModelStepProps {
-  onReset: () => void;
-  onSave: () => void;
   title?: string;
   description?: string;
-  virtualModelName: string;
-  onVirtualModelNameChange: (name: string) => void;
   isSaving: boolean;
 }
 
 export function CreateVirtualModelStep({
-  onReset,
-  onSave,
   title = "Create Virtual Model",
   description = "Configure your model parameters and settings to create a reusable virtual model",
-  virtualModelName,
-  onVirtualModelNameChange,
   isSaving,
 }: CreateVirtualModelStepProps) {
-  const { mode, jsonContent, setJsonContent } = ModelConfigDialogConsumer()
+  const { mode, jsonContent, setJsonContent, handleReset, handleSaveAsVirtualModel, virtualModelName, setVirtualModelName, modified_mode, onOpenChange } = ModelConfigDialogConsumer()
   return (
     <>
       <ModelConfigDialogHeader
         title={title}
         description={description}
       />
-
-      {/* Virtual Model Name Input */}
-      <div className="px-6 pb-2 border-b">
-        <Label htmlFor="virtual-model-name" className="text-sm font-semibold">
-          Virtual Model Name <span className="text-red-500">*</span>
-        </Label>
-        <Input
-          id="virtual-model-name"
-          placeholder="Enter a name for this virtual model"
-          value={virtualModelName}
-          onChange={(e) => onVirtualModelNameChange(e.target.value)}
-          className="mt-2"
-        />
-      </div>
-
       {/* Configuration Content */}
       {mode === 'basic' ? (
-        <ModelConfigDialogContent isCreateMode={true} />
+        <ModelConfigDialogContent />
       ) : (
-        <div className="flex-1 overflow-hidden px-6 py-4">
+        <div className="flex-1 overflow-hidden px-6">
+          {modified_mode === 'create' || modified_mode === 'edit' ? (
+            <VirtualModelNameInput virtualModelName={virtualModelName} setVirtualModelName={setVirtualModelName} />
+          ) : null}
           <JsonEditor
             value={jsonContent}
             onChange={setJsonContent}
@@ -63,11 +42,19 @@ export function CreateVirtualModelStep({
       {/* Footer */}
       <DialogFooter className="gap-2 border-t pt-4">
         <div className="flex-1" />
-        <Button variant="outline" onClick={onReset}>
+        <Button variant="outline" onClick={handleReset}>
           Reset to Defaults
         </Button>
         <Button
-          onClick={onSave}
+          onClick={(e) => {
+            e.preventDefault()
+            handleSaveAsVirtualModel({ name: virtualModelName })
+            .then(() => {
+              console.log("==== handleSaveAsVirtualModel onOpenChange")
+              onOpenChange(false)
+              handleReset()
+            })
+          }}
           disabled={isSaving || !virtualModelName.trim()}
         >
           {isSaving ? 'Creating...' : 'Create Virtual Model'}

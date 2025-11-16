@@ -1,49 +1,21 @@
-import { Label } from "@/components/ui/label";
-import { ModelInfo } from "@/types/models";
-import { ResponseCacheConfig } from "./response-cache";
-import { FallbackModelsConfig } from "./fallback-models/fallback-models";
-import { MaxRetriesConfig } from "./max-retries";
-import { ModelSelectorComponent } from "../../traces/model-selector";
-import { ProjectModelsConsumer } from "@/contexts/ProjectModelsContext";
-import { ModelParametersSection } from "./model-parameters-section";
-import { MessagesSection } from "./messages-section";
-import { Message } from "./types";
-import { useCallback } from "react";
-import { VirtualModelSelector } from "./virtual-model-selector";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Info } from "lucide-react";
+import { ProjectModelsConsumer } from "@/lib";
 import { CurrentAppConsumer } from "@/lib";
-import { ModelConfigDialogConsumer } from "./useModelConfigDialog";
+import { ModelConfigDialogConsumer } from "../useModelConfigDialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Info } from "lucide-react";
+import { ModelSelectorComponent } from "../../../traces/model-selector";
+import { useCallback } from "react";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { GeneralModelConfigSections } from "../general-model-config-sections";
+import { VirtualModelSelector } from "../virtual-model-selector";
 
-
-
-// interface ModelConfigDialogContentProps {
-//   config: Record<string, any>;
-//   onConfigChange: (config: Record<string, any>) => void;
-//   onApplyVirtualModel?: (virtualModel: VirtualModel, mode: 'base' | 'copy') => void;
-//   onClearVirtualModel?: () => void;
-// }
-
-export function ModelConfigDialogContent(props: {
-  isCreateMode: boolean;
-}) {
-
-  const { isCreateMode } = props;
+export const ModelConfigMode = () => {
+  
   const { models } = ProjectModelsConsumer();
   const { app_mode } = CurrentAppConsumer();
 
-  const { config, setConfig, currentModelInfo, handleApplyVirtualModel, handleClearVirtualModel } = ModelConfigDialogConsumer();
-
-
-  const handleMessagesChange = useCallback((messages: Message[]) => {
-    setConfig({ ...config, messages });
-  }, [config, setConfig]);
+  const { config, setConfig, currentModelInfo, handleApplyVirtualModel, handleClearVirtualModel, modified_mode } = ModelConfigDialogConsumer();
 
   // Check if a virtual model is being used as the base model
   const isUsingVirtualModelAsBase = config.model && typeof config.model === 'string' && config.model.startsWith('langdb/');
@@ -58,6 +30,8 @@ export function ModelConfigDialogContent(props: {
   const handleModelChange = useCallback((model: string) => {
     setConfig({ ...config, model });
   }, [config, setConfig]);
+
+  const isCreateMode = modified_mode === 'create' || modified_mode === 'edit';
 
   return (
     <div className="flex-1 overflow-y-auto px-6 py-4">
@@ -110,43 +84,11 @@ export function ModelConfigDialogContent(props: {
         </div>
       </TooltipProvider>
 
-      {/* Messages Section */}
-      <div className="space-y-2 py-4 border-t">
-        <MessagesSection
-          messages={config.messages || []}
-          onMessagesChange={handleMessagesChange}
-        />
-      </div>
-
-      {/* Response Cache Section */}
-      <div className="space-y-2 py-4 border-t">
-        <ResponseCacheConfig
-          config={config}
-          onConfigChange={setConfig}
-        />
-      </div>
-
-      {/* Fallback Models Section */}
-      <div className="space-y-2 py-4 border-t">
-        <FallbackModelsConfig
-          config={config}
-          onConfigChange={setConfig}
-        />
-      </div>
-
-      {/* Max Retries Section */}
-      <div className="space-y-2 py-4 border-t">
-        <MaxRetriesConfig
-          config={config}
-          onConfigChange={setConfig}
-        />
-      </div>
-
-      {/* Model Parameters Section - Always last since it varies by model */}
-      <ModelParametersSection
-        modelInfo={currentModelInfo as ModelInfo}
+      {/* Configuration Sections */}
+      <GeneralModelConfigSections
         config={config}
         onConfigChange={setConfig}
+        modelInfo={currentModelInfo}
       />
     </div>
   );

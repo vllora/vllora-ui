@@ -1,13 +1,12 @@
 import { CreateVirtualModelStep } from "./create-virtual-model-step";
 import { ConfigureModelStep } from "./configure-model-step";
 import { VirtualModel } from "@/services/virtual-models-api";
+import { ModelConfigDialogConsumer } from "./useModelConfigDialog";
 
 interface ConfigStepProps {
   onModeChange: (mode: 'basic' | 'advanced') => void;
   config: Record<string, any>;
   onConfigChange: (config: Record<string, any>) => void;
-  onReset: () => void;
-  onSave: () => void;
   onSaveAsVirtualModel: () => void;
   title?: string;
   description?: string;
@@ -21,19 +20,16 @@ interface ConfigStepProps {
 
 export function ConfigStep(props: ConfigStepProps) {
   const {
-    isCreateMode = false,
-    virtualModelName = '',
     onVirtualModelNameChange,
     isSaving = false,
     ...commonProps
   } = props;
+  const { modified_mode } = ModelConfigDialogConsumer()
 
-  if (isCreateMode) {
+  if (modified_mode === 'create' || modified_mode === 'edit') {
     return (
       <CreateVirtualModelStep
         {...commonProps}
-        virtualModelName={virtualModelName}
-        onVirtualModelNameChange={onVirtualModelNameChange!}
         isSaving={isSaving}
       />
     );

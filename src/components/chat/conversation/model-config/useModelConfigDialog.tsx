@@ -42,12 +42,16 @@ function useModelConfigDialog({
   initialConfig = {},
   projectId,
   onOpenChange,
+  modified_mode,
+  virtualModelSlug,
 }: {
   open: boolean;
   onConfigChange?: (config: Record<string, any>) => void;
   initialConfig?: Record<string, any>;
   projectId?: string;
   onOpenChange: (open: boolean) => void;
+  modified_mode: 'model_config' | 'create' | 'edit',
+  virtualModelSlug?: string,
 }) {
   // Get virtual models context
   const { createVirtualModel, creating, virtualModels } =
@@ -240,6 +244,7 @@ function useModelConfigDialog({
         });
 
         // Close the dialog
+        console.log("==== handleDonebtn onOpenChange 1");
         onOpenChange(false);
       } catch (error) {
         // Error handling is done in the context
@@ -266,6 +271,7 @@ function useModelConfigDialog({
     }
 
     onConfigChange?.(finalConfig);
+    console.log("==== handleDonebtn onOpenChange 2");
     onOpenChange(false);
     setStep("config");
     setMode("basic");
@@ -523,7 +529,10 @@ function useModelConfigDialog({
     handleClearVirtualModel,
 
 
-    
+    // Props
+    modified_mode,
+    virtualModelSlug,
+    onOpenChange,
     
   };
 }
@@ -535,6 +544,8 @@ export function ModelConfigDialogProvider({
   initialConfig,
   projectId,
   onOpenChange,
+  modified_mode,
+  virtualModelSlug,
 }: {
   children: ReactNode;
   open: boolean;
@@ -542,6 +553,8 @@ export function ModelConfigDialogProvider({
   initialConfig?: Record<string, any>;
   projectId?: string;
   onOpenChange: (open: boolean) => void;
+  modified_mode: 'model_config' | 'create' | 'edit',
+  virtualModelSlug?: string,
 }) {
   const value = useModelConfigDialog({
     open,
@@ -549,6 +562,8 @@ export function ModelConfigDialogProvider({
     initialConfig,
     projectId,
     onOpenChange,
+    modified_mode,
+    virtualModelSlug,
   });
   return (
     <ModelConfigDialogContext.Provider value={value}>

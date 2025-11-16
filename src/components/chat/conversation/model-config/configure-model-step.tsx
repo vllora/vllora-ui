@@ -25,9 +25,7 @@ export function ConfigureModelStep({
 
       {/* Configuration Content */}
       {mode === 'basic' ? (
-        <ModelConfigDialogContent
-          isCreateMode={false}
-        />
+        <ModelConfigDialogContent/>
       ) : (
         <div className="flex-1 overflow-hidden px-6 py-4">
           <JsonEditor

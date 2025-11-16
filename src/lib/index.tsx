@@ -37,6 +37,7 @@ export { ProjectDropdown } from '../components/ProjectDropdown';
 export { BackendUrlInfo } from '../components/BackendUrlInfo';
 export { ModelSelector, ModelSelectorComponent } from '../components/chat/traces/model-selector'
 export { ModelConfigDialog } from '../components/chat/conversation/model-config';
+export { VirtualModelCRUDDialog } from '../components/chat/conversation/model-config/crud-virtual-model-dialog';
 export type { ModelInfo } from '../types/models';
 export {
   Select,

@@ -3,8 +3,6 @@ import {
   Dialog,
   DialogContent,
 } from "@/components/ui/dialog";
-import { ModelInfo } from "@/types/models";
-import { VirtualModel } from "@/services/virtual-models-api";
 import { ConfigStep } from "./config-step";
 import { SaveStep } from "./save-step";
 import { ModeSwitchWarning } from "./mode-switch-warning";
@@ -21,6 +19,8 @@ interface ModelConfigDialogProps {
   description?: string;
 }
 
+
+
 export function ModelConfigDialog({
   open,
   onOpenChange,
@@ -32,28 +32,28 @@ export function ModelConfigDialog({
 }: ModelConfigDialogProps) {
 
   return (
-    <ModelConfigDialogProvider open={open} onOpenChange={onOpenChange} onConfigChange={onConfigChange} initialConfig={initialConfig} projectId={projectId}>
-      <DialogInner open={open} onOpenChange={onOpenChange} title={title} description={description} />
+    <ModelConfigDialogProvider open={open} onOpenChange={onOpenChange} onConfigChange={onConfigChange} initialConfig={initialConfig} projectId={projectId} modified_mode="model_config">
+      <ModelConfigDialogInner open={open} title={title} description={description} />
     </ModelConfigDialogProvider>
   );
 }
 
-const DialogInner = ({ open, onOpenChange, title, description }: { open: boolean; onOpenChange: (open: boolean) => void; title?: string; description?: string }) => {
+export const ModelConfigDialogInner = ({ open, title, description }: { open: boolean; title?: string; description?: string }) => {
   const saveFormRef = useRef<SaveVirtualModelFormRef>(null);
-  const { step, config, showWarning, complexFeatures, virtualModelName, isCreateMode, creating, setConfig, setShowWarning, setStep, setVirtualModelName, handleSave, handleReset, handleModeSwitch, confirmModeSwitch, handleSaveAsVirtualModel, handleApplyVirtualModel, handleClearVirtualModel } = ModelConfigDialogConsumer()
-  return <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
+  const { step, config, showWarning, complexFeatures, virtualModelName, isCreateMode, creating, setConfig, setShowWarning, setStep, setVirtualModelName, handleModeSwitch, confirmModeSwitch, handleSaveAsVirtualModel, handleApplyVirtualModel, handleClearVirtualModel, modified_mode, onOpenChange } = ModelConfigDialogConsumer()
+  return <Dialog open={open} onOpenChange={(change) => {
+    console.log("==== onOpenChange ModelConfigDialogInner", change)
+    onOpenChange(change)
+  }} modal={false}>
     <DialogContent className="max-w-[60vw] h-[80vh] overflow-hidden flex flex-col">
       {step === 'config' ? (
         <ConfigStep
           onModeChange={handleModeSwitch}
           config={config}
           onConfigChange={setConfig}
-          onReset={handleReset}
-          onSave={handleSave}
           onSaveAsVirtualModel={() => setStep('save')}
           title={title}
           description={description}
-          isCreateMode={isCreateMode}
           virtualModelName={virtualModelName}
           onVirtualModelNameChange={setVirtualModelName}
           isSaving={creating}
@@ -70,7 +70,7 @@ const DialogInner = ({ open, onOpenChange, title, description }: { open: boolean
       )}
 
       {/* Warning dialog for complex features */}
-      <ModeSwitchWarning
+      {modified_mode === 'model_config' && <ModeSwitchWarning
         open={showWarning}
         onOpenChange={setShowWarning}
         complexFeatures={complexFeatures}
@@ -78,7 +78,7 @@ const DialogInner = ({ open, onOpenChange, title, description }: { open: boolean
           setShowWarning(false);
           confirmModeSwitch();
         }}
-      />
+      />}
     </DialogContent>
   </Dialog>
 }
