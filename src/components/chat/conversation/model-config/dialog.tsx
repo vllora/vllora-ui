@@ -74,7 +74,7 @@ export function ModelConfigDialog({
   });
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
       <DialogContent className="max-w-[60vw] h-[80vh] overflow-hidden flex flex-col">
         {step === 'config' ? (
           <ConfigStep
