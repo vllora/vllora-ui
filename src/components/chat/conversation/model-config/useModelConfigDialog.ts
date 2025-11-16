@@ -204,7 +204,7 @@ export function useModelConfigDialog({
           is_public: false,
           latest: true,
         });
-
+      
         // Close the dialog
         onOpenChange(false);
       } catch (error) {
@@ -322,7 +322,7 @@ export function useModelConfigDialog({
         : getUserConfig();
 
       // Use context method to save virtual model
-      await createVirtualModel({
+      let virtualModelCreated = await createVirtualModel({
         name: data.name,
         target_configuration: configToSave,
         is_public: false,
@@ -331,6 +331,13 @@ export function useModelConfigDialog({
 
       // Go back to config step
       setStep('config');
+
+      setConfig({
+        model: `langdb/${virtualModelCreated.slug}`
+      })
+
+      // clear the form
+      handleReset()
 
       // Close the dialog
       onOpenChange(false);

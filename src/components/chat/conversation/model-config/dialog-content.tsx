@@ -18,6 +18,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Info } from "lucide-react";
+import { CurrentAppConsumer } from "@/lib";
 
 // Type guard to check if the modelInfo is a ModelInfo
 function isModelInfo(modelInfo: ModelInfo | VirtualModel): modelInfo is ModelInfo {
@@ -46,6 +47,7 @@ export function ModelConfigDialogContent({
   originalBaseModel,
 }: ModelConfigDialogContentProps) {
   const { models } = ProjectModelsConsumer();
+  const { app_mode } = CurrentAppConsumer();
 
   const handleMessagesChange = useCallback((messages: Message[]) => {
     onConfigChange({ ...config, messages });
@@ -89,6 +91,8 @@ export function ModelConfigDialogContent({
                   models={models.filter((model) => model.type === 'completions')}
                   selectedModelInfo={modelInfo}
                   isSelectedProviderConfigured={true}
+                  app_mode={app_mode}
+
                 />
                 </div>
               </div>
