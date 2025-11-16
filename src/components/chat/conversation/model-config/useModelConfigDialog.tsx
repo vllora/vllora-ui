@@ -267,6 +267,10 @@ function useModelConfigDialog({
 
     onConfigChange?.(finalConfig);
     onOpenChange(false);
+    setStep("config");
+    setMode("basic");
+    setJsonContent("");
+    setConfig({});
   }, [
     isCreateMode,
     virtualModelName,
