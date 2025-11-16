@@ -52,6 +52,24 @@ export interface UpdateVirtualModelParams {
   latest?: boolean;
 }
 
+export interface UpdateVersionParams {
+  projectId: string;
+  virtualModelId: string;
+  version: number;
+  target_configuration?: Record<string, any>;
+  variables?: VirtualModelVariable[];
+  is_published?: boolean;
+  latest?: boolean;
+}
+
+export interface UpdateVersionMetaParams {
+  projectId: string;
+  virtualModelId: string;
+  version: number;
+  is_published?: boolean;
+  latest?: boolean;
+}
+
 export async function fetchVirtualModels(props: {
   projectId?: string;
 }): Promise<VirtualModel[]> {
@@ -134,4 +152,60 @@ export async function deleteVirtualModel(props: {
     const error = await response.text();
     throw new Error(error || `Failed to delete virtual model: ${response.status}`);
   }
+}
+
+export async function fetchVirtualModelVersions(props: {
+  projectId: string;
+  virtualModelId: string;
+}): Promise<VirtualModelVersion[]> {
+  const { projectId, virtualModelId } = props;
+
+  const response = await api.get(`/virtual-models/${virtualModelId}/versions`, {
+    headers: {
+      "x-project-id": projectId,
+    },
+  });
+
+  const data = await handleApiResponse<VirtualModelVersion[]>(response);
+  return data;
+}
+
+export async function updateVirtualModelVersion(
+  params: UpdateVersionParams
+): Promise<VirtualModel> {
+  const { projectId, virtualModelId, version, ...body } = params;
+
+  const response = await api.post(
+    `/virtual-models/${virtualModelId}/versions/${version}`,
+    body,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "x-project-id": projectId,
+      },
+    }
+  );
+
+  const data = await handleApiResponse<VirtualModel>(response);
+  return data;
+}
+
+export async function updateVirtualModelVersionMeta(
+  params: UpdateVersionMetaParams
+): Promise<VirtualModel> {
+  const { projectId, virtualModelId, version, ...body } = params;
+
+  const response = await api.post(
+    `/virtual-models/${virtualModelId}/versions/${version}/meta`,
+    body,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "x-project-id": projectId,
+      },
+    }
+  );
+
+  const data = await handleApiResponse<VirtualModel>(response);
+  return data;
 }

@@ -6,9 +6,15 @@ import {
   createVirtualModel,
   updateVirtualModel,
   deleteVirtualModel,
+  fetchVirtualModelVersions,
+  updateVirtualModelVersion,
+  updateVirtualModelVersionMeta,
   CreateVirtualModelParams,
   UpdateVirtualModelParams,
-  VirtualModel
+  UpdateVersionParams,
+  UpdateVersionMetaParams,
+  VirtualModel,
+  VirtualModelVersion
 } from '@/services/virtual-models-api';
 
 export type VirtualModelsContextType = ReturnType<typeof useVirtualModels>;
@@ -110,17 +116,94 @@ export function useVirtualModels(projectId?: string) {
     }
   );
 
+  // Fetch versions of a virtual model
+  const {
+    loading: loadingVersions,
+    runAsync: fetchVersionsAsync
+  } = useRequest<VirtualModelVersion[], [string]>(
+    async (virtualModelId: string) => {
+      if (!projectId) {
+        throw new Error('Project ID is required');
+      }
+      return fetchVirtualModelVersions({ projectId, virtualModelId });
+    },
+    {
+      manual: true,
+      onError: (err) => {
+        toast.error('Failed to load versions', {
+          description: err.message || 'An error occurred while loading versions',
+        });
+      },
+    }
+  );
+
+  // Update version
+  const {
+    loading: updatingVersion,
+    runAsync: updateVersionAsync
+  } = useRequest<VirtualModel, [Omit<UpdateVersionParams, 'projectId'>]>(
+    async (params: Omit<UpdateVersionParams, 'projectId'>) => {
+      if (!projectId) {
+        throw new Error('Project ID is required');
+      }
+      return updateVirtualModelVersion({ ...params, projectId });
+    },
+    {
+      manual: true,
+      onSuccess: (data) => {
+        toast.success('Version updated successfully!');
+        refetchVirtualModels();
+      },
+      onError: (err) => {
+        toast.error('Failed to update version', {
+          description: err.message || 'An error occurred while updating the version',
+        });
+      },
+    }
+  );
+
+  // Update version metadata
+  const {
+    loading: updatingVersionMeta,
+    runAsync: updateVersionMetaAsync
+  } = useRequest<VirtualModel, [Omit<UpdateVersionMetaParams, 'projectId'>]>(
+    async (params: Omit<UpdateVersionMetaParams, 'projectId'>) => {
+      if (!projectId) {
+        throw new Error('Project ID is required');
+      }
+      return updateVirtualModelVersionMeta({ ...params, projectId });
+    },
+    {
+      manual: true,
+      onSuccess: (data) => {
+        toast.success('Version published successfully!');
+        refetchVirtualModels();
+      },
+      onError: (err) => {
+        toast.error('Failed to publish version', {
+          description: err.message || 'An error occurred while publishing the version',
+        });
+      },
+    }
+  );
+
   return {
     virtualModels: data || [],
     loading,
     creating,
     updating,
     deleting,
+    loadingVersions,
+    updatingVersion,
+    updatingVersionMeta,
     error,
     refetchVirtualModels,
     createVirtualModel: createVirtualModelAsync,
     updateVirtualModel: updateVirtualModelAsync,
     deleteVirtualModel: deleteVirtualModelAsync,
+    fetchVersions: fetchVersionsAsync,
+    updateVersion: updateVersionAsync,
+    updateVersionMeta: updateVersionMetaAsync,
   };
 }
 

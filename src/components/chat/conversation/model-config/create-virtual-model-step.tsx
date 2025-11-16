@@ -5,6 +5,8 @@ import { ModelConfigDialogContent } from "./dialog-content";
 import { JsonEditor } from "./json-editor";
 import { ModelConfigDialogConsumer } from "./useModelConfigDialog";
 import { VirtualModelNameInput } from "./dialog-content/name-input";
+import { VirtualModelsConsumer } from "@/contexts/VirtualModelsContext";
+import { VirtualModel } from "@/services/virtual-models-api";
 
 interface CreateVirtualModelStepProps {
   title?: string;
@@ -17,7 +19,29 @@ export function CreateVirtualModelStep({
   description = "Configure your model parameters and settings to create a reusable virtual model",
   isSaving,
 }: CreateVirtualModelStepProps) {
-  const { mode, jsonContent, setJsonContent, handleReset, handleSaveAsVirtualModel, virtualModelName, setVirtualModelName, modified_mode, onOpenChange } = ModelConfigDialogConsumer()
+  const { mode, jsonContent, setJsonContent, handleReset, handleSaveAsVirtualModel, virtualModelName, setVirtualModelName, modified_mode, onOpenChange, selectedVersion, virtualModelSlug } = ModelConfigDialogConsumer()
+  const { virtualModels, updateVersionMeta, updatingVersionMeta } = VirtualModelsConsumer();
+
+  // Get the current virtual model and selected version
+  const virtualModel = virtualModels.find((vm: VirtualModel) => vm.slug === virtualModelSlug);
+  const currentVersion = virtualModel?.versions.find((v: any) => v.version === selectedVersion);
+  const isCurrentVersionLatest = currentVersion?.latest === true;
+
+  const handleMarkAsLatest = async () => {
+    if (!virtualModel || selectedVersion === undefined) return;
+
+    try {
+      await updateVersionMeta({
+        virtualModelId: virtualModel.id,
+        version: selectedVersion,
+        latest: true,
+        is_published: true,
+      });
+    } catch (error) {
+      console.error("Error marking version as latest:", error);
+    }
+  };
+
   return (
     <>
       <ModelConfigDialogHeader
@@ -41,7 +65,18 @@ export function CreateVirtualModelStep({
 
       {/* Footer */}
       <DialogFooter className="gap-2 border-t pt-4">
-        <div className="flex-1" />
+        <div className="flex-1">
+          {/* Mark as Latest Button - Only show when editing a version that's not already latest */}
+          {modified_mode === 'edit' && selectedVersion !== undefined && !isCurrentVersionLatest && (
+            <Button
+              variant="outline"
+              onClick={handleMarkAsLatest}
+              disabled={updatingVersionMeta}
+            >
+              {updatingVersionMeta ? 'Marking...' : 'Mark as Latest'}
+            </Button>
+          )}
+        </div>
         <Button variant="outline" onClick={handleReset}>
           Reset to Defaults
         </Button>

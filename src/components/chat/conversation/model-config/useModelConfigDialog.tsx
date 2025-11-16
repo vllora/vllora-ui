@@ -44,6 +44,8 @@ function useModelConfigDialog({
   onOpenChange,
   modified_mode,
   virtualModelSlug,
+  selectedVersion,
+  onVersionChange,
 }: {
   open: boolean;
   onConfigChange?: (config: Record<string, any>) => void;
@@ -52,9 +54,11 @@ function useModelConfigDialog({
   onOpenChange: (open: boolean) => void;
   modified_mode: 'model_config' | 'create' | 'edit',
   virtualModelSlug?: string,
+  selectedVersion?: number,
+  onVersionChange?: (version: number) => void,
 }) {
   // Get virtual models context
-  const { createVirtualModel, updateVirtualModel, creating, updating, virtualModels } =
+  const { createVirtualModel, updateVirtualModel, updateVersion, updateVersionMeta, creating, updating, updatingVersion, updatingVersionMeta, virtualModels } =
     VirtualModelsConsumer();
   const { models } = ProjectModelsConsumer();
 
@@ -405,13 +409,25 @@ function useModelConfigDialog({
             return;
           }
 
-          virtualModelResult = await updateVirtualModel({
-            virtualModelId: virtualModel.id,
-            name: data.name,
-            target_configuration: configToSave,
-            is_public: false,
-            latest: true,
-          });
+          // Check if we're updating a specific version
+          if (selectedVersion !== undefined) {
+            // Update specific version (without changing latest flag)
+            virtualModelResult = await updateVersion({
+              virtualModelId: virtualModel.id,
+              version: selectedVersion,
+              target_configuration: configToSave,
+              is_published: true,
+            });
+          } else {
+            // Update virtual model (creates new version)
+            virtualModelResult = await updateVirtualModel({
+              virtualModelId: virtualModel.id,
+              name: data.name,
+              target_configuration: configToSave,
+              is_public: false,
+              latest: true,
+            });
+          }
         } else {
           // Create new virtual model
           virtualModelResult = await createVirtualModel({
@@ -443,9 +459,11 @@ function useModelConfigDialog({
       getUserConfig,
       createVirtualModel,
       updateVirtualModel,
+      updateVersion,
       virtualModels,
       virtualModelSlug,
       modified_mode,
+      selectedVersion,
       onOpenChange,
       jsonToConfig,
     ]
@@ -540,9 +558,10 @@ function useModelConfigDialog({
     step,
     virtualModelName,
     isCreateMode,
-    creating: creating || updating, // Combined loading state for both create and update
+    creating: creating || updating || updatingVersion || updatingVersionMeta, // Combined loading state for all operations
     initialConfig,
     currentModelInfo,
+    selectedVersion,
     // Setters
     setMode,
     setConfig,
@@ -565,7 +584,8 @@ function useModelConfigDialog({
     modified_mode,
     virtualModelSlug,
     onOpenChange,
-    
+    onVersionChange,
+
   };
 }
 
@@ -578,6 +598,8 @@ export function ModelConfigDialogProvider({
   onOpenChange,
   modified_mode,
   virtualModelSlug,
+  selectedVersion,
+  onVersionChange,
 }: {
   children: ReactNode;
   open: boolean;
@@ -587,6 +609,8 @@ export function ModelConfigDialogProvider({
   onOpenChange: (open: boolean) => void;
   modified_mode: 'model_config' | 'create' | 'edit',
   virtualModelSlug?: string,
+  selectedVersion?: number,
+  onVersionChange?: (version: number) => void,
 }) {
   const value = useModelConfigDialog({
     open,
@@ -596,6 +620,8 @@ export function ModelConfigDialogProvider({
     onOpenChange,
     modified_mode,
     virtualModelSlug,
+    selectedVersion,
+    onVersionChange,
   });
   return (
     <ModelConfigDialogContext.Provider value={value}>
