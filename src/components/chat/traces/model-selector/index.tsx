@@ -19,6 +19,7 @@ import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 import { CurrentAppConsumer } from '@/contexts/CurrentAppContext';
 import { VirtualModelsConsumer } from '@/lib';
 import { getModelInfoFromString } from '../../conversation/model-config/utils';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 interface ModelSelectorProps {
   selectedModel: string;
@@ -162,70 +163,80 @@ export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
 
 
   return (
-    <div className="inline-flex flex-1 items-center gap-2">
-      <DropdownMenu open={open} onOpenChange={handleOpenChange}>
-        <DropdownMenuTrigger asChild>
-          <div className="inline-flex border border-border rounded-md px-3 py-2 items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer w-full truncate">
-            {selectedModel && (
-              selectedModel.startsWith('langdb/') ? (
-                <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
-              ) : (
-                <ProviderIcon
-                  provider_name={getIconForModel(selectedModel)}
-                  className="w-4 h-4 flex-shrink-0"
-                />
-              )
-            )}
-            <span className="truncate flex-1">{selectedModel.includes('/') ? selectedModel.split('/')[1] : selectedModel}</span>
-            <ChevronDown className={`w-4 h-4 transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`} />
-          </div>
-        </DropdownMenuTrigger>
+    <ErrorBoundary
+      fallback={
+        <div className="inline-flex flex-1 items-center gap-2 border border-border rounded-md px-3 py-2">
+          <span className="text-sm text-muted-foreground">Model selector unavailable</span>
+        </div>
+      }
+    >
+      <div className="inline-flex flex-1 items-center gap-2">
+        <DropdownMenu open={open} onOpenChange={handleOpenChange}>
+          <DropdownMenuTrigger asChild>
+            <div className="inline-flex border border-border rounded-md px-3 py-2 items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer w-full truncate">
+              {selectedModel && (
+                selectedModel.startsWith('langdb/') ? (
+                  <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
+                ) : (
+                  <ProviderIcon
+                    provider_name={getIconForModel(selectedModel)}
+                    className="w-4 h-4 flex-shrink-0"
+                  />
+                )
+              )}
+              <span className="truncate flex-1">
+                {selectedModel && selectedModel.includes('/') ? selectedModel.split('/')[1] : (selectedModel || 'Select a model')}
+              </span>
+              <ChevronDown className={`w-4 h-4 transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`} />
+            </div>
+          </DropdownMenuTrigger>
 
-        <DropdownMenuContent
-          className="w-96 p-0"
-          align="start"
-        >
-          <ModelSelectorContent
-            currentStep={currentStep}
-            handleBack={handleBack}
-            selectedProvider={selectedProvider}
-            modelNames={modelNames}
-            handleModelNameSelect={handleModelNameSelect}
-            getProviderCount={getProviderCount}
-            providers={providers}
-            selectedModelInfo={getModelInfoFromString({ modelStr: selectedModel, availableModels: models, availableVirtualModels: [] })}
-            selectedModel={selectedModel}
-            handleModelSelect={handleModelSelect}
-            setSelectedProviderForConfig={setSelectedProviderForConfig}
-            setConfigDialogOpen={setConfigDialogOpen}
-            virtualModels={virtualModels}
-            app_mode={app_mode}
-          />
-        </DropdownMenuContent>
-      </DropdownMenu>
+          <DropdownMenuContent
+            className="w-96 p-0"
+            align="start"
+          >
+            <ModelSelectorContent
+              currentStep={currentStep}
+              handleBack={handleBack}
+              selectedProvider={selectedProvider}
+              modelNames={modelNames}
+              handleModelNameSelect={handleModelNameSelect}
+              getProviderCount={getProviderCount}
+              providers={providers}
+              selectedModelInfo={getModelInfoFromString({ modelStr: selectedModel, availableModels: models, availableVirtualModels: [] })}
+              selectedModel={selectedModel}
+              handleModelSelect={handleModelSelect}
+              setSelectedProviderForConfig={setSelectedProviderForConfig}
+              setConfigDialogOpen={setConfigDialogOpen}
+              virtualModels={virtualModels}
+              app_mode={app_mode}
+            />
+          </DropdownMenuContent>
+        </DropdownMenu>
 
-      {!isSelectedProviderConfigured && (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleWarningClick?.();
-                }}
-                className="flex items-center"
-              >
-                <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 cursor-pointer hover:text-amber-600 transition-colors" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right">
-              <p className="text-sm">Provider credentials for this model not configured</p>
-              <p className="text-xs text-muted-foreground mt-1">Click to configure</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
+        {!isSelectedProviderConfigured && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleWarningClick?.();
+                  }}
+                  className="flex items-center"
+                >
+                  <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 cursor-pointer hover:text-amber-600 transition-colors" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                <p className="text-sm">Provider credentials for this model not configured</p>
+                <p className="text-xs text-muted-foreground mt-1">Click to configure</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
 
-    </div>
+      </div>
+    </ErrorBoundary>
   );
 };

@@ -17,6 +17,7 @@ export { ProtectedRoute } from '../components/ProtectedRoute';
 export { Layout } from '../components/layout';
 export { LocalModelsSkeletonLoader } from '../components/models/local/LocalModelsSkeletonLoader';
 export { ProviderIcon } from '../components/Icons/ProviderIcons';
+export { ErrorBoundary } from '../components/ErrorBoundary';
 
 // Page components (for custom routing)
 export { HomePage } from '../pages/home';
