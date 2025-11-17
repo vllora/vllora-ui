@@ -6,6 +6,7 @@ import { Info, ChevronUp, ChevronDown, X, Plus } from "lucide-react";
 import { ProjectModelsConsumer } from "@/contexts/ProjectModelsContext";
 import { FallbackModelsEmptyState } from "./fallback-models-empty-state";
 import { FallbackModelSelect } from "./fallback-model-select";
+import { StatusBadge } from "../status-badge";
 
 interface FallbackModelsConfigProps {
   config: Record<string, any>;
@@ -140,6 +141,7 @@ export function FallbackModelsConfig({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+          <StatusBadge active={fallbackModels && fallbackModels.length > 0 || fallbackEnabled} />
         </div>
         <Switch
           id="fallback_enabled"
@@ -209,7 +211,7 @@ export function FallbackModelsConfig({
               variant="outline"
               size="sm"
               onClick={addEmptyFallbackSlot}
-              className="w-full !mt-3"
+              className="w-full !mt-3 border-dashed"
             >
               <Plus className="w-4 h-4 mr-2" />
               Add Fallback Model

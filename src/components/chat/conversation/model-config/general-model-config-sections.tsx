@@ -41,7 +41,7 @@ export function GeneralModelConfigSections({
       </div>
 
       {/* Response Cache Section */}
-      <div className="space-y-2 py-4 border-t">
+      <div className="space-y-2 py-2 border-t">
         <ResponseCacheConfig
           config={config}
           onConfigChange={setConfig}
@@ -49,7 +49,7 @@ export function GeneralModelConfigSections({
       </div>
 
       {/* Fallback Models Section */}
-      <div className="space-y-2 py-4 border-t">
+      <div className="space-y-2 py-2 border-t">
         <FallbackModelsConfig
           config={config}
           onConfigChange={setConfig}
@@ -57,7 +57,7 @@ export function GeneralModelConfigSections({
       </div>
 
       {/* Max Retries Section */}
-      <div className="space-y-2 py-4 border-t">
+      <div className="space-y-2 py-2 border-t">
         <MaxRetriesConfig
           config={config}
           onConfigChange={setConfig}

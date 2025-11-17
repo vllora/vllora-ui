@@ -5,6 +5,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Info, Plus } from "lucide-react";
 import { Message, generateMessageId, DEFAULT_MESSAGE_CONTENT } from "./types";
 import { SingleMessage } from "./single-message";
+import { StatusBadge } from "./status-badge";
 
 interface MessagesSectionProps {
   messages: Message[];
@@ -68,6 +69,7 @@ export function MessagesSection({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+           <StatusBadge active={messages && messages.length > 0} />
         </div>
         <Switch
           id="messages_enabled"

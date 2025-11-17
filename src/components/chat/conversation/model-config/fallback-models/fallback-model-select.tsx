@@ -47,7 +47,7 @@ export function FallbackModelSelect({
       onValueChange={handleValueChange}
       onOpenChange={handleOpenChange}
     >
-      <SelectTrigger className="flex-1">
+      <SelectTrigger className="flex-1 focus:ring-0">
         {value ? (
           <div className="flex items-center gap-2 w-full">
             <ProviderIcon
@@ -86,7 +86,7 @@ export function FallbackModelSelect({
         )}
         {filteredModels.length > 0 ? (
           filteredModels.map((availableModel) => (
-            <SelectItem key={availableModel} value={availableModel}>
+            <SelectItem key={availableModel} className="" value={availableModel}>
               <div className="flex items-center gap-2">
                 <ProviderIcon
                   provider_name={getProviderForModel(availableModel)}
