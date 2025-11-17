@@ -41,18 +41,28 @@ export function VersionSelector() {
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
+    // Backend sends naive UTC timestamps without timezone info
+    // Remove microseconds and ensure 'Z' suffix to mark as UTC, then convert to browser's local time
+    // Input example: "2025-11-17T04:56:47.736088" -> "2025-11-17T04:56:47Z"
+    const cleanedDateStr = dateString.replace(/(\.\d+)?$/, 'Z');
+    const date = new Date(cleanedDateStr);
+
+    if (isNaN(date.getTime())) {
+      return dateString; // fallback if parsing fails
+    }
+
     return new Intl.DateTimeFormat('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
+      timeZoneName: 'short', // Shows timezone abbreviation
     }).format(date);
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 gap-1.5">
       <Label htmlFor="version-select" className="text-sm font-semibold flex items-center gap-1">
         Version
         <TooltipProvider>

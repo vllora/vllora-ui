@@ -30,6 +30,8 @@ export function ConfigStep(props: ConfigStepProps) {
     return (
       <CreateVirtualModelStep
         {...commonProps}
+        title={modified_mode === 'create' ? 'Create Virtual Model' : 'Edit Virtual Model'}
+        description={modified_mode === 'create' ? 'Configure your model parameters and settings to create a reusable virtual model' : 'Configure your model parameters and settings to create a reusable virtual model'}
         isSaving={isSaving}
       />
     );

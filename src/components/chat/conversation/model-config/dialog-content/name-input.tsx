@@ -12,7 +12,7 @@ export const VirtualModelNameInput = ({virtualModelName, setVirtualModelName}: {
             {modified_mode === 'edit' ? (
                 // Edit mode: Name and Version on the same row
                 <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
+                    <div className="gap-1.5 flex flex-col">
                         <Label htmlFor="virtual-model-name" className="text-sm font-semibold">
                             Name <span className="text-red-500">*</span>
                         </Label>

@@ -7,6 +7,8 @@ import { ModelConfigDialogConsumer } from "./useModelConfigDialog";
 import { VirtualModelNameInput } from "./dialog-content/name-input";
 import { VirtualModelsConsumer } from "@/contexts/VirtualModelsContext";
 import { VirtualModel } from "@/services/virtual-models-api";
+import { Info } from "lucide-react";
+import { AlertDescription } from "@/components/ui/alert";
 
 interface CreateVirtualModelStepProps {
   title?: string;
@@ -26,6 +28,7 @@ export function CreateVirtualModelStep({
   const virtualModel = virtualModels.find((vm: VirtualModel) => vm.slug === virtualModelSlug);
   const currentVersion = virtualModel?.versions.find((v: any) => v.version === selectedVersion);
   const isCurrentVersionLatest = currentVersion?.latest === true;
+  const isCurrentVersionPublished = !!currentVersion?.published_at;
 
   const handleMarkAsLatest = async () => {
     if (!virtualModel || selectedVersion === undefined) return;
@@ -39,6 +42,20 @@ export function CreateVirtualModelStep({
       });
     } catch (error) {
       console.error("Error marking version as latest:", error);
+    }
+  };
+
+  const handlePublishVersion = async () => {
+    if (!virtualModel || selectedVersion === undefined) return;
+
+    try {
+      await updateVersionMeta({
+        virtualModelId: virtualModel.id,
+        version: selectedVersion,
+        is_published: true,
+      });
+    } catch (error) {
+      console.error("Error publishing version:", error);
     }
   };
 
@@ -65,16 +82,38 @@ export function CreateVirtualModelStep({
 
       {/* Footer */}
       <DialogFooter className="gap-2 border-t pt-4">
-        <div className="flex-1">
-          {/* Mark as Latest Button - Only show when editing a version that's not already latest */}
-          {modified_mode === 'edit' && selectedVersion !== undefined && !isCurrentVersionLatest && (
-            <Button
-              variant="outline"
-              onClick={handleMarkAsLatest}
-              disabled={updatingVersionMeta}
-            >
-              {updatingVersionMeta ? 'Marking...' : 'Mark as Latest'}
-            </Button>
+        <div className="flex-1 flex flex-col gap-2">
+          {/* Info message when editing published version */}
+          {modified_mode === 'edit' && isCurrentVersionPublished && (
+            <div className="py-2 flex items-center gap-2">
+              <Info className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                This version is published and cannot be modified. Saving will create a new version.
+              </AlertDescription>
+            </div>
+          )}
+          {/* Action buttons for unpublished versions */}
+          {modified_mode === 'edit' && selectedVersion !== undefined && !isCurrentVersionPublished && (
+            <div className="flex gap-2">
+              {/* Publish Version Button */}
+              <Button
+                variant="outline"
+                onClick={handlePublishVersion}
+                disabled={updatingVersionMeta}
+              >
+                {updatingVersionMeta ? 'Publishing...' : 'Publish Version'}
+              </Button>
+              {/* Mark as Latest Button - Only show when not already latest */}
+              {!isCurrentVersionLatest && (
+                <Button
+                  variant="outline"
+                  onClick={handleMarkAsLatest}
+                  disabled={updatingVersionMeta}
+                >
+                  {updatingVersionMeta ? 'Marking...' : 'Mark as Latest & Publish'}
+                </Button>
+              )}
+            </div>
           )}
         </div>
         <Button variant="outline" onClick={handleReset}>
@@ -83,7 +122,10 @@ export function CreateVirtualModelStep({
         <Button
           onClick={(e) => {
             e.preventDefault()
-            handleSaveAsVirtualModel({ name: virtualModelName })
+            handleSaveAsVirtualModel({
+              name: virtualModelName,
+              forceCreateNewVersion: isCurrentVersionPublished
+            })
             .then(() => {
               onOpenChange(false)
               handleReset()
@@ -92,8 +134,8 @@ export function CreateVirtualModelStep({
           disabled={isSaving || !virtualModelName.trim()}
         >
           {isSaving
-            ? (modified_mode === 'edit' ? 'Updating...' : 'Creating...')
-            : (modified_mode === 'edit' ? 'Update Virtual Model' : 'Create Virtual Model')}
+            ? (modified_mode === 'edit' && isCurrentVersionPublished ? 'Creating New Version...' : modified_mode === 'edit' ? 'Updating...' : 'Creating...')
+            : (modified_mode === 'edit' && isCurrentVersionPublished ? 'Create New Version' : modified_mode === 'edit' ? 'Update Virtual Model' : 'Create Virtual Model')}
         </Button>
       </DialogFooter>
     </>

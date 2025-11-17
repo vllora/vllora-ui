@@ -386,7 +386,7 @@ function useModelConfigDialog({
 
   // Handle saving as virtual model
   const handleSaveAsVirtualModel = useCallback(
-    async (data: { name: string }) => {
+    async (data: { name: string; forceCreateNewVersion?: boolean }) => {
       if (!projectId) {
         toast.error("Project ID is required to save virtual model");
         return;
@@ -411,13 +411,25 @@ function useModelConfigDialog({
 
           // Check if we're updating a specific version
           if (selectedVersion !== undefined) {
-            // Update specific version (without changing latest flag)
-            virtualModelResult = await updateVersion({
-              virtualModelId: virtualModel.id,
-              version: selectedVersion,
-              target_configuration: configToSave,
-              is_published: true,
-            });
+            // If version is published or forceCreateNewVersion is true, create a new version instead
+            if (data.forceCreateNewVersion) {
+              virtualModelResult = await updateVirtualModel({
+                virtualModelId: virtualModel.id,
+                name: data.name,
+                target_configuration: configToSave,
+                is_public: false,
+                latest: true,
+              });
+              toast.success("Created new version for published configuration");
+            } else {
+              // Update specific version (without changing latest flag)
+              virtualModelResult = await updateVersion({
+                virtualModelId: virtualModel.id,
+                version: selectedVersion,
+                target_configuration: configToSave,
+                is_published: true,
+              });
+            }
           } else {
             // Update virtual model (creates new version)
             virtualModelResult = await updateVirtualModel({
