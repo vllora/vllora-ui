@@ -31,7 +31,7 @@ export function ModelParametersSection({
 
   return (
     <div className="py-4 border-t">
-      <Accordion type="single" collapsible defaultValue="">
+      <Accordion type="single" collapsible defaultValue="parameters">
         <AccordionItem value="parameters" className="border-none">
           <AccordionTrigger className="text-sm font-semibold text-foreground hover:no-underline py-1.5">
             Parameters

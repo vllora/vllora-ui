@@ -26,25 +26,23 @@ export function ModelParametersList({
 
     if (param.type === "boolean") {
       return (
-        <div key={key} className="flex items-center justify-between space-x-2 py-3 px-1">
-          <div className="space-y-0.5 flex-1">
-            <div className="flex items-center gap-1.5">
-              <Label htmlFor={key} className="text-sm font-medium">
-                {key}
-              </Label>
-              {param.description && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-xs">
-                      <p className="text-xs">{param.description}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-            </div>
+        <div key={key} className="flex items-center justify-between py-2">
+          <div className="flex items-center gap-1.5">
+            <Label htmlFor={key} className="text-sm font-medium">
+              {key}
+            </Label>
+            {param.description && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p className="text-xs">{param.description}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
           <Switch
             id={key}
@@ -62,81 +60,80 @@ export function ModelParametersList({
       const step = param.type === "int" ? 1 : 0.01;
 
       return (
-        <div key={key} className="space-y-2 py-3 px-1">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <Label htmlFor={key} className="text-sm font-medium">
-                {key}
-                {param.required && <span className="text-red-500 ml-1">*</span>}
-              </Label>
-              {param.description && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-xs">
-                      <p className="text-xs">{param.description}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-            </div>
-            <span className="text-sm font-mono text-muted-foreground">
-              {value ?? param.default ?? 0}
-            </span>
+        <div key={key} className="space-y-2 py-2">
+          <div className="flex items-center gap-1.5">
+            <Label htmlFor={key} className="text-sm font-medium">
+              {key}
+              {param.required && <span className="text-red-500 ml-1">*</span>}
+            </Label>
+            {param.description && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p className="text-xs">{param.description}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
 
           {hasRange ? (
             <div className="space-y-2">
-              <Slider
-                id={key}
-                min={param.min!}
-                max={param.max!}
-                step={step}
-                value={[value ?? param.default ?? param.min!]}
-                onValueChange={(vals: number[]) => {
-                  const val = vals[0];
-                  setConfig((prev) => ({
-                    ...prev,
-                    [key]: param.type === "int" ? Math.round(val) : val
-                  }));
-                }}
-                className="flex-1"
-              />
-              <div className="flex justify-between text-xs text-muted-foreground">
+              <div className="flex items-center gap-3">
+                <Slider
+                  id={key}
+                  min={param.min!}
+                  max={param.max!}
+                  step={step}
+                  value={[value ?? param.default ?? param.min!]}
+                  onValueChange={(vals: number[]) => {
+                    const val = vals[0];
+                    setConfig((prev) => ({
+                      ...prev,
+                      [key]: param.type === "int" ? Math.round(val) : val
+                    }));
+                  }}
+                  className="flex-1"
+                />
+                <Input
+                  type="number"
+                  value={value ?? param.default ?? param.min!}
+                  onChange={(e) => {
+                    const val = e.target.value === "" ? null :
+                      param.type === "int" ? parseInt(e.target.value) : parseFloat(e.target.value);
+                    if (val !== null && val >= param.min! && val <= param.max!) {
+                      setConfig((prev) => ({ ...prev, [key]: val }));
+                    }
+                  }}
+                  min={param.min ?? undefined}
+                  max={param.max ?? undefined}
+                  step={step}
+                  className="w-20"
+                />
+              </div>
+              <div className="flex justify-between text-[10px] text-muted-foreground">
                 <span>{param.min}</span>
                 <span>{param.max}</span>
               </div>
             </div>
           ) : (
-            <div className="flex items-center space-x-2">
-              <Input
-                id={key}
-                type="number"
-                value={value ?? ""}
-                onChange={(e) => {
-                  const val = e.target.value === "" ? null :
-                    param.type === "int" ? parseInt(e.target.value) : parseFloat(e.target.value);
-                  setConfig((prev) => ({ ...prev, [key]: val }));
-                }}
-                min={param.min ?? undefined}
-                max={param.max ?? undefined}
-                step={step}
-                className="flex-1"
-              />
-              {(param.min !== null || param.max !== null) && (
-                <span className="text-xs text-muted-foreground whitespace-nowrap">
-                  {param.min !== null
-                    ? `(min: ${param.min})`
-                    : `(max: ${param.max})`}
-                </span>
-              )}
-            </div>
-          )}
-
-          {param.default !== null && (
-            <p className="text-xs text-muted-foreground">Default: {param.default}</p>
+            <Input
+              id={key}
+              type="number"
+              value={value ?? ""}
+              onChange={(e) => {
+                const val = e.target.value === "" ? null :
+                  param.type === "int" ? parseInt(e.target.value) : parseFloat(e.target.value);
+                setConfig((prev) => ({ ...prev, [key]: val }));
+              }}
+              min={param.min ?? undefined}
+              max={param.max ?? undefined}
+              step={step}
+              placeholder={param.default !== null ? `Default: ${param.default}` : undefined}
+            />
           )}
         </div>
       );
@@ -144,7 +141,7 @@ export function ModelParametersList({
 
     if (param.type === "string" || param.type === "string/array") {
       return (
-        <div key={key} className="space-y-2 py-3 px-1">
+        <div key={key} className="space-y-2 py-2">
           <div className="flex items-center gap-1.5">
             <Label htmlFor={key} className="text-sm font-medium">
               {key}
@@ -170,13 +167,14 @@ export function ModelParametersList({
             onChange={(e) =>
               setConfig((prev) => ({ ...prev, [key]: e.target.value || null }))
             }
-            placeholder={param.type === "string/array" ? "Comma-separated values or single string" : ""}
+            placeholder={
+              param.type === "string/array"
+                ? "Comma-separated values or single string"
+                : param.default !== null
+                  ? `Default: ${typeof param.default === "object" ? JSON.stringify(param.default) : param.default}`
+                  : undefined
+            }
           />
-          {param.default !== null && (
-            <p className="text-xs text-muted-foreground">
-              Default: {typeof param.default === "object" ? JSON.stringify(param.default) : param.default}
-            </p>
-          )}
         </div>
       );
     }
@@ -185,12 +183,10 @@ export function ModelParametersList({
   };
 
   return (
-    <div className="divide-y divide-border/30">
-      {Object.entries(parameters).map(([key, param]) => (
-        <div key={key}>
-          {renderParameterInput(key, param)}
-        </div>
-      ))}
+    <div className="space-y-1">
+      {Object.entries(parameters).map(([key, param]) =>
+        renderParameterInput(key, param)
+      )}
     </div>
   );
 }
