@@ -175,7 +175,7 @@ export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
           <DropdownMenuTrigger asChild>
             <div className="inline-flex border border-border rounded-md px-3 py-2 items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer w-full truncate">
               {selectedModel && (
-                selectedModel.startsWith('langdb/') ? (
+                selectedModel.startsWith('langdb/') && app_mode === 'langdb' ? (
                   <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
                 ) : (
                   <ProviderIcon

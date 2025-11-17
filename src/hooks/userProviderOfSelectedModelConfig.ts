@@ -2,7 +2,7 @@ import { ProjectModelsConsumer } from "@/contexts/ProjectModelsContext";
 import { ModelInfo, ModelProviderInfo } from "@/types/models";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { VirtualModelsConsumer } from "@/contexts/VirtualModelsContext";
-import { VirtualModel } from "@/lib";
+import { CurrentAppConsumer, VirtualModel } from "@/lib";
 
 export const useUserProviderOfSelectedModelConfig = (props: {
   selectedModel: string;
@@ -10,6 +10,7 @@ export const useUserProviderOfSelectedModelConfig = (props: {
   const { selectedModel } = props;
   const { models } = ProjectModelsConsumer();
   const { virtualModels } = VirtualModelsConsumer();
+  const { app_mode } = CurrentAppConsumer();
   const [selectedProviderForConfig, setSelectedProviderForConfig] = useState<
     string | undefined
   >(undefined);
@@ -29,7 +30,7 @@ export const useUserProviderOfSelectedModelConfig = (props: {
       if (isFullName) {
         let splited = selectedModel.split("/");
         let modelName = splited[1];
-        if (selectedModel.startsWith("langdb/")) {
+        if (selectedModel.startsWith("langdb/") && app_mode === 'langdb') {
           return virtualModels.find((model) => model.slug === modelName);
         }
         let modelInfo = models.find((model) => model.model === modelName);
@@ -38,14 +39,13 @@ export const useUserProviderOfSelectedModelConfig = (props: {
         let modelInfo = models.find((model) => model.model === selectedModel);
         return modelInfo;
       }
-    }, [models, selectedModel]);
+    }, [models, selectedModel, app_mode]);
 
   const selectedProvider: ModelProviderInfo | undefined = useMemo(() => {
     let isFullName = selectedModel.includes("/");
     if (!isFullName) {
       return undefined;
     }
-
     if (selectedModelInfo && (selectedModelInfo as ModelInfo)) {
       let providerName = selectedModel.split("/")[0];
 
@@ -78,6 +78,7 @@ export const useUserProviderOfSelectedModelConfig = (props: {
     if (selectedProvider) {
       return selectedProvider.available;
     }
+  
 
     return true;
   }, [selectedModel, selectedProvider, isNoProviderConfigured]);

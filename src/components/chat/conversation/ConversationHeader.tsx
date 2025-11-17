@@ -23,7 +23,6 @@ export function ConversationHeader({
   // Check if any configs are applied
   const hasActiveConfig = !!(modelConfig && Object.keys(modelConfig).filter(key => key !== 'model').length > 0);
   const modelName = modelConfig?.model;
-
   // Determine the modelInfo to pass to the dialog (either ModelInfo or VirtualModel)
 
   return (
