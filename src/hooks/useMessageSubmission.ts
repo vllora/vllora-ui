@@ -181,7 +181,7 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
           
           // Convert Map to array - each server config becomes one entry
           const mcpServers: any[] = [];
-          for (const [serverName, config] of toolsUsage.entries()) {
+          for (const [_, config] of toolsUsage.entries()) {
             mcpServers.push({
               ...config.definition,
               filter: config.selectedTools.map((tool) => ({ name: tool })),

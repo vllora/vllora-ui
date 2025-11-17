@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams, useNavigate } from "react-router";
+import { useSearchParams } from "react-router";
 import { toast } from 'sonner';
 import {
   Dialog,

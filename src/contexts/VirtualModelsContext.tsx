@@ -150,7 +150,7 @@ export function useVirtualModels(projectId?: string) {
     },
     {
       manual: true,
-      onSuccess: (data) => {
+      onSuccess: () => {
         toast.success('Version updated successfully!');
         refetchVirtualModels();
       },
@@ -175,7 +175,7 @@ export function useVirtualModels(projectId?: string) {
     },
     {
       manual: true,
-      onSuccess: (data) => {
+      onSuccess: () => {
         toast.success('Version published successfully!');
         refetchVirtualModels();
       },

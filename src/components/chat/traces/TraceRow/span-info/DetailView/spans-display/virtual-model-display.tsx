@@ -1,14 +1,6 @@
 import { BaseSpanUIDetailsDisplay, getParentApiInvoke, getParentCloudApiInvoke } from ".."
-import { getStatus } from "../index";
-import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ExclamationTriangleIcon, CheckCircleIcon, ClockIcon, CodeBracketIcon, DocumentTextIcon, BoltIcon } from "@heroicons/react/24/outline";
-import { ErrorViewer } from "../error-viewer";
 import { UsageViewer } from "../usage-viewer";
-import { HeadersViewer } from "../headers-viewer";
 import { InputViewer } from "../input_viewer";
-import { SimpleTabsList, SimpleTabsTrigger, Tabs } from "@/components/ui/tabs";
-import { useState } from "react";
-import { ArrowRightLeftIcon } from "lucide-react";
 import { ResponseViewer } from "../response-viewer";
 import { Span } from "@/types/common-type";
 import { tryParseJson } from "@/utils/modelUtils";

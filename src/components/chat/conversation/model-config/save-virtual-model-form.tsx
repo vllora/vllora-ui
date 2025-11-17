@@ -14,7 +14,6 @@ export interface SaveVirtualModelFormRef {
 
 export const SaveVirtualModelForm = forwardRef<SaveVirtualModelFormRef, SaveVirtualModelFormProps>(({
   onSave,
-  onCancel,
   isSaving = false,
 }, ref) => {
   const [name, setName] = useState("");
