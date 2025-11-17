@@ -12,6 +12,7 @@ import {
   detectComplexFeatures,
   formatJson,
   getModelInfoFromConfig,
+  getValidVersion,
 } from "./utils";
 import { toast } from "sonner";
 import { VirtualModelsConsumer } from "@/contexts/VirtualModelsContext";
@@ -583,19 +584,16 @@ function useModelConfigDialog({
   const handleApplyVirtualModel = useCallback(
     (virtualModel: VirtualModel, applyMode: "base" | "copy") => {
       // Get the latest version or fallback to first version
-      const latestVersion = virtualModel.versions.find((v) => v.latest);
-      const targetConfig =
-        latestVersion?.target_configuration ||
-        virtualModel.versions[0]?.target_configuration;
+      const validVersion = getValidVersion(virtualModel);
 
-      if (!targetConfig) {
+      if (!validVersion) {
         toast.error("Virtual model configuration not found");
         return;
       }
 
       // Delegate to appropriate handler based on mode
       if (applyMode === "copy") {
-        applyVirtualModelCopyMode(virtualModel, targetConfig);
+        applyVirtualModelCopyMode(virtualModel, validVersion.target_configuration);
       } else {
         applyVirtualModelBaseMode(virtualModel);
       }

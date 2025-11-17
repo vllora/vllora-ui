@@ -2,7 +2,7 @@
  * Utility functions for Model Configuration
  */
 
-import { ModelInfo, VirtualModel } from "@/lib";
+import { ModelInfo, VirtualModel, VirtualModelVersion } from "@/lib";
 
 /**
  * Detects complex features in a configuration object that may not be
@@ -114,3 +114,19 @@ export function getModelInfoFromString(props:{modelStr: string, availableModels:
   return undefined
 }
   
+
+
+export const getValidVersion = (virtualModel: VirtualModel): VirtualModelVersion | undefined => {
+  const latestAndPublished = virtualModel.versions.find((v) => v.latest && v.published_at);
+  if(latestAndPublished) {
+    return latestAndPublished;
+  }
+  const publishVersion = virtualModel.versions.find((v) => v.published_at);
+  if(publishVersion) {
+    return publishVersion;
+  }
+  if(virtualModel.versions.length > 0) {
+    return virtualModel.versions[0];
+  }
+  return undefined;
+}

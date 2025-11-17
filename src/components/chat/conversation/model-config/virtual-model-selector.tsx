@@ -18,6 +18,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { getValidVersion } from "./utils";
 
 interface VirtualModelSelectorProps {
   onApplyVirtualModel: (virtualModel: VirtualModel, mode: 'base' | 'copy') => void;
@@ -55,8 +56,10 @@ export function VirtualModelSelector({
       onApplyVirtualModel(selectedVirtualModel, mode);
       setSelectedVirtualModel(null);
 
+      const validVersion = getValidVersion(selectedVirtualModel);
+
       // Only reset dropdown when copying, not when using as base
-      if (mode === 'copy') {
+      if (mode === 'copy' && validVersion && validVersion.target_configuration && validVersion.target_configuration.model && !validVersion.target_configuration.model.startsWith('langdb/')) {
         setSelectValue("");
       }
     }
