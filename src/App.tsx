@@ -16,7 +16,7 @@ import { ProviderKeysProvider } from "./contexts/ProviderKeysContext"
 import { AuthProvider } from "./contexts/AuthContext"
 import { ProtectedRoute } from "./components/ProtectedRoute"
 import { LocalModelsSkeletonLoader } from "./components/models/local/LocalModelsSkeletonLoader"
-import { AvailableApiKeysProvider, CurrentAppProvider } from "./lib"
+import { AvailableApiKeysProvider, CurrentAppProvider, VirtualModelsProvider } from "./lib"
 import { ThreadAndTracesPageProvider } from "./contexts/ThreadAndTracesPageContext"
 
 // Lazy load the models page
@@ -42,6 +42,7 @@ function App() {
               {/* Protected routes */}
               <Route path="/" element={<ProtectedRoute>
                 <ProjectsProvider project_id_from="query_string">
+                   <VirtualModelsProvider>
                   <AvailableApiKeysProvider available_api_keys={[]}>
                     <ProjectModelsProvider>
                       <ProviderKeysProvider>
@@ -49,6 +50,7 @@ function App() {
                       </ProviderKeysProvider>
                     </ProjectModelsProvider>
                   </AvailableApiKeysProvider>
+                </VirtualModelsProvider>
                 </ProjectsProvider>
               </ProtectedRoute>}>
                 {/* Project-scoped routes (now using query string ?project_id=...) */}

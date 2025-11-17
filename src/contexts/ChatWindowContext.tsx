@@ -59,8 +59,8 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
   } = useWrapperHook({ projectId, threadId });
 
 
-  const {selectedThread} = ThreadsConsumer()
- 
+  const { selectedThread } = ThreadsConsumer()
+
 
 
   const [isChatProcessing, setIsChatProcessing] = useState<boolean>(false);
@@ -69,7 +69,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
   const updateRunMetrics = useCallback((run_id: string, updatedSpans: Span[]) => {
     setRuns(prevRuns => {
       let runById = prevRuns.find(r => r.run_id === run_id)
-      if(!runById) {
+      if (!runById) {
         let newRun = updatedRunWithSpans({
           spans: updatedSpans.filter(s => s.run_id === run_id),
           run_id
@@ -99,7 +99,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
         event.run_id && setSelectedRunId(event.run_id);
         event.run_id && setOpenTraces([{ run_id: event.run_id, tab: 'trace' }]);
       }, 0)
-      if((event.type === 'RunFinished' || event.type === 'RunError') && event.run_id) {
+      if ((event.type === 'RunFinished' || event.type === 'RunError') && event.run_id) {
         setTimeout(() => {
           event.run_id && fetchSpansByRunId(event.run_id);
         }, 100)
@@ -142,8 +142,8 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     setSelectedSpanId(null);
     setSelectedRunId(null);
     setOpenTraces([]);
-    if(selectedThread ) {
-      if(!selectedThread.is_from_local) {
+    if (selectedThread) {
+      if (!selectedThread.is_from_local) {
         refreshRuns();
       } else {
         clearAll()
@@ -162,7 +162,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     return selectedRunId ? runs.find(r => r.run_id === selectedRunId) : undefined;
   }, [selectedRunId, runs]);
 
-  
+
 
   const selectedSpan = useMemo(() => {
     return selectedSpanId ? spansOfSelectedRun.find((s: Span) => s.span_id === selectedSpanId) : undefined;
@@ -190,7 +190,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
       duration: 0,
       avgTTFT: 0,
     }
-    
+
   }, []);
 
   return {

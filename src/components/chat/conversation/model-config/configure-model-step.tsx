@@ -5,6 +5,7 @@ import { ModelConfigDialogContent } from "./dialog-content";
 import { JsonEditor } from "./json-editor";
 import { BookmarkPlus } from "lucide-react";
 import { ModelConfigDialogConsumer } from "./useModelConfigDialog";
+import { CurrentAppConsumer } from "@/lib";
 
 interface ConfigureModelStepProps {
   title?: string;
@@ -16,6 +17,7 @@ export function ConfigureModelStep({
   description = "Fine-tune parameters, caching, fallbacks, and retries for optimal performance",
 }: ConfigureModelStepProps) {
   const { mode, setStep, handleReset, handleDoneBtn, jsonContent, setJsonContent } = ModelConfigDialogConsumer();
+  const { app_mode } = CurrentAppConsumer();
   return (
     <>
       <ModelConfigDialogHeader
@@ -25,7 +27,7 @@ export function ConfigureModelStep({
 
       {/* Configuration Content */}
       {mode === 'basic' ? (
-        <ModelConfigDialogContent/>
+        <ModelConfigDialogContent />
       ) : (
         <div className="flex-1 overflow-hidden px-6 py-4">
           <JsonEditor
@@ -37,7 +39,7 @@ export function ConfigureModelStep({
 
       {/* Footer */}
       <DialogFooter className="gap-2 border-t pt-4">
-        <Button
+        {app_mode === 'langdb' && <Button
           variant="outline"
           onClick={(e) => {
             e.preventDefault();
@@ -47,7 +49,7 @@ export function ConfigureModelStep({
         >
           <BookmarkPlus className="h-4 w-4" />
           Save as Virtual Model
-        </Button>
+        </Button>}
         <div className="flex-1" />
         <Button variant="outline" onClick={(e) => {
           e.preventDefault();
