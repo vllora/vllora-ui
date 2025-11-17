@@ -442,12 +442,22 @@ function useModelConfigDialog({
           }
         } else {
           // Create new virtual model
+          // If creating from conversation mode, automatically publish version 1
+          const shouldPublish = modified_mode === 'model_config';
+
           virtualModelResult = await createVirtualModel({
             name: data.name,
             target_configuration: configToSave,
             is_public: false,
             latest: true,
+            is_published: shouldPublish, // Auto-publish if from conversation mode
           });
+
+          if (shouldPublish) {
+            toast.success("Virtual model created and published successfully");
+          } else {
+            toast.success("Virtual model created successfully");
+          }
         }
 
         // Go back to config step
@@ -472,6 +482,7 @@ function useModelConfigDialog({
       createVirtualModel,
       updateVirtualModel,
       updateVersion,
+      updateVersionMeta,
       virtualModels,
       virtualModelSlug,
       modified_mode,

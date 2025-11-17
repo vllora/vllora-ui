@@ -41,6 +41,7 @@ export interface CreateVirtualModelParams {
   target_configuration: Record<string, any>;
   is_public?: boolean;
   latest?: boolean;
+  is_published?: boolean;
 }
 
 export interface UpdateVirtualModelParams {
