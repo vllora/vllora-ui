@@ -495,12 +495,94 @@ function useModelConfigDialog({
   // Handle clearing virtual model (restore original base model)
   const handleClearVirtualModel = useCallback(() => {
     // Remove the virtual model and restore original base model if available
-    setConfig(prev => ({ ...prev, model: initialConfig.model || 'openai/gpt-4o-mini' }));
-  }, [initialConfig]);
+    setConfig((prev) => {
+      const preservedConfig: Record<string, any> = { model: 'openai/gpt-4o-mini' };
+      UI_PROPERTIES_CONFIG.forEach((property) => {
+        if(prev[property]){
+          preservedConfig[property] = prev[property];
+        }
+      });
+      return {
+        ...preservedConfig,
+        model: 'openai/gpt-4o-mini',
+      };
+    });
+  }, []);
+
+  // Helper: Apply virtual model in copy mode
+  const applyVirtualModelCopyMode = useCallback(
+    (virtualModel: VirtualModel, targetConfig: Record<string, any>) => {
+      // Copy mode: Replace current config with virtual model config
+      setConfig(targetConfig);
+
+      // Check if config has complex features that require advanced mode
+      const complexFeatures = detectComplexFeatures(targetConfig);
+      const hasComplexFeatures = complexFeatures.length > 0;
+
+      if (hasComplexFeatures && mode === "basic") {
+        // Switch to advanced mode for complex features
+        const json = formatJson(configToJson(targetConfig));
+        setJsonContent(json);
+        setMode("advanced");
+        toast.success(
+          `Copied configuration from "${virtualModel.name}" and switched to Advanced mode (config contains complex features)`
+        );
+      } else if (mode === "advanced") {
+        // Already in advanced mode, just update JSON
+        const json = formatJson(configToJson(targetConfig));
+        setJsonContent(json);
+        toast.success(`Copied configuration from "${virtualModel.name}"`);
+      } else {
+        // Basic mode, no complex features
+        toast.success(`Copied configuration from "${virtualModel.name}"`);
+      }
+    },
+    [mode, configToJson]
+  );
+
+  // Helper: Apply virtual model in base mode
+  const applyVirtualModelBaseMode = useCallback(
+    (virtualModel: VirtualModel) => {
+      // Base mode: Use virtual model as the base model
+      // User's current form configuration is preserved and applied on top
+      const virtualModelIdentifier = `langdb/${virtualModel.slug}`;
+
+      const mergedConfig = {
+        ...config,
+        model: virtualModelIdentifier,
+      };
+
+      setConfig(mergedConfig);
+
+      // Check if merged config has complex features
+      const mergedComplexFeatures = detectComplexFeatures(mergedConfig);
+      const hasMergedComplexFeatures = mergedComplexFeatures.length > 0;
+
+      if (hasMergedComplexFeatures && mode === "basic") {
+        // Switch to advanced mode for complex features
+        const json = formatJson(configToJson(mergedConfig));
+        setJsonContent(json);
+        setMode("advanced");
+        toast.success(
+          `Using "${virtualModel.name}" as base and switched to Advanced mode (config contains complex features)`
+        );
+      } else if (mode === "advanced") {
+        // Already in advanced mode, just update JSON
+        const json = formatJson(configToJson(mergedConfig));
+        setJsonContent(json);
+        toast.success(`Using "${virtualModel.name}" as base configuration`);
+      } else {
+        // Basic mode, no complex features
+        toast.success(`Using "${virtualModel.name}" as base configuration`);
+      }
+    },
+    [config, mode, configToJson]
+  );
 
   // Handle applying virtual model configuration
   const handleApplyVirtualModel = useCallback(
     (virtualModel: VirtualModel, applyMode: "base" | "copy") => {
+      // Get the latest version or fallback to first version
       const latestVersion = virtualModel.versions.find((v) => v.latest);
       const targetConfig =
         latestVersion?.target_configuration ||
@@ -511,64 +593,14 @@ function useModelConfigDialog({
         return;
       }
 
-      // Check if config has complex features that require advanced mode
-      const complexFeatures = detectComplexFeatures(targetConfig);
-      const hasComplexFeatures = complexFeatures.length > 0;
-
+      // Delegate to appropriate handler based on mode
       if (applyMode === "copy") {
-        // Copy mode: Replace current config with virtual model config
-        setConfig(targetConfig);
-
-        // If config has complex features and we're in basic mode, switch to advanced
-        if (hasComplexFeatures && mode === "basic") {
-          const json = formatJson(configToJson(targetConfig));
-          setJsonContent(json);
-          setMode("advanced");
-         
-          toast.success(
-            `Copied configuration from "${virtualModel.name}" and switched to Advanced mode (config contains complex features)`
-          );
-        } else if (mode === "advanced") {
-          const json = formatJson(configToJson(targetConfig));
-          setJsonContent(json);
-          toast.success(`Copied configuration from "${virtualModel.name}"`);
-        } else {
-          toast.success(`Copied configuration from "${virtualModel.name}"`);
-        }
+        applyVirtualModelCopyMode(virtualModel, targetConfig);
       } else {
-        // Base mode: Use virtual model as the base model
-        // User's current form configuration is preserved and applied on top
-        const virtualModelIdentifier = `langdb/${virtualModel.slug}`;
-
-        // Store the current base model if not already stored
-        const mergedConfig = {
-          ...config,
-          model: virtualModelIdentifier,
-        };
-
-        setConfig(mergedConfig);
-
-        // If merged config has complex features and we're in basic mode, switch to advanced
-        const mergedComplexFeatures = detectComplexFeatures(mergedConfig);
-        const hasMergedComplexFeatures = mergedComplexFeatures.length > 0;
-
-        if (hasMergedComplexFeatures && mode === "basic") {
-          const json = formatJson(configToJson(mergedConfig));
-          setJsonContent(json);
-          setMode("advanced");
-          toast.success(
-            `Using "${virtualModel.name}" as base and switched to Advanced mode (config contains complex features)`
-          );
-        } else if (mode === "advanced") {
-          const json = formatJson(configToJson(mergedConfig));
-          setJsonContent(json);
-          toast.success(`Using "${virtualModel.name}" as base configuration`);
-        } else {
-          toast.success(`Using "${virtualModel.name}" as base configuration`);
-        }
+        applyVirtualModelBaseMode(virtualModel);
       }
     },
-    [config, mode, configToJson]
+    [applyVirtualModelCopyMode, applyVirtualModelBaseMode]
   );
 
   return {
