@@ -165,7 +165,6 @@ export function useProviderKeys() {
 
   const confirmDeleteProvider = useCallback(async () => {
     if (!providerToDelete) return;
-
     try {
       setSaving({ ...saving, [providerToDelete]: true });
       setLocalError(null);
@@ -187,7 +186,7 @@ export function useProviderKeys() {
     } finally {
       setSaving({ ...saving, [providerToDelete]: false });
     }
-  }, [currentProjectId]);
+  }, [currentProjectId, providerToDelete]);
 
   const cancelDeleteProvider = () => {
     setDeleteDialogOpen(false);
