@@ -278,6 +278,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
             onModelConfigChange={handleModelConfigChange}
             modelConfig={modelConfig}
             projectId={projectId}
+            app_mode={app_mode}
           />
       </div>
 

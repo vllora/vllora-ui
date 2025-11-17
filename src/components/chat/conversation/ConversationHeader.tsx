@@ -10,6 +10,7 @@ interface ModelSelectorHeaderProps {
   isLoading?: boolean;
   modelConfig?: Record<string, any>;
   projectId?: string;
+  app_mode?: string;
 }
 
 export function ConversationHeader({
@@ -17,7 +18,8 @@ export function ConversationHeader({
   isLoading,
   onModelConfigChange,
   modelConfig,
-  projectId
+  projectId,
+  app_mode
 }: ModelSelectorHeaderProps) {
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   // Check if any configs are applied
@@ -37,10 +39,10 @@ export function ConversationHeader({
               }}
             />
           </div>
-          <ModelConfigButton
+          {app_mode === 'langdb' && <ModelConfigButton
             hasActiveConfig={hasActiveConfig}
             onClick={() => setConfigDialogOpen(true)}
-          />
+          />}
         </div>
         {onRefresh && (
           <TooltipProvider>
