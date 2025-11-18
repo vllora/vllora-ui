@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import { VirtualModelsConsumer } from "@/lib";
 import { ModelConfigDialogProvider } from "./useModelConfigDialog";
 import { ModelConfigDialogInner } from "./dialog";
+import { getValidVersion } from "./utils";
 
 
 export function VirtualModelCRUDDialog(props:{
@@ -21,8 +22,8 @@ export function VirtualModelCRUDDialog(props:{
     // Reset selected version when dialog opens/closes or virtual model changes
     useEffect(() => {
       if (open && virtualModel) {
-        const latestVersion = virtualModel.versions.find((v) => v.latest === true);
-        setSelectedVersion(latestVersion?.version);
+        const validVersion = getValidVersion(virtualModel)
+        setSelectedVersion(validVersion?.version);
       } else if (!open) {
         setSelectedVersion(undefined);
       }
@@ -39,6 +40,12 @@ export function VirtualModelCRUDDialog(props:{
     // Memoize initialConfig based on selected version
     const initialConfig = useMemo(() => {
       if (virtualModel && selectedVersion !== undefined) {
+        const version = getValidVersion(virtualModel);
+        if (version) {
+          return version.target_configuration;
+        }
+      }
+      if(virtualModel && selectedVersion !== undefined) {
         const version = virtualModel.versions.find((v) => v.version === selectedVersion);
         if (version) {
           return version.target_configuration;

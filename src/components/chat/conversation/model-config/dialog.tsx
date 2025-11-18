@@ -68,7 +68,7 @@ export const ModelConfigDialogInner = ({ open, title, description }: { open: boo
       )}
 
       {/* Warning dialog for complex features */}
-      {modified_mode === 'model_config' && <ModeSwitchWarning
+       <ModeSwitchWarning
         open={showWarning}
         onOpenChange={setShowWarning}
         complexFeatures={complexFeatures}
@@ -76,7 +76,7 @@ export const ModelConfigDialogInner = ({ open, title, description }: { open: boo
           setShowWarning(false);
           confirmModeSwitch();
         }}
-      />}
+      />
     </DialogContent>
   </Dialog>
 }

@@ -129,6 +129,15 @@ function useModelConfigDialog({
   // Initialize config when dialog opens
   useEffect(() => {
     if (open) {
+
+      const detected = detectComplexFeatures(initialConfig);
+      if (detected.length > 0) {
+        setMode('advanced');
+        // Initialize JSON content with the config
+        const json = JSON.stringify(initialConfig, null, 2);
+        setConfig(initialConfig);
+        setJsonContent(json);
+      }
       const defaultConfig: Record<string, any> = {};
 
       // Handle ModelInfo case
@@ -186,6 +195,8 @@ function useModelConfigDialog({
       }
     }
   }, [open, modified_mode, virtualModelSlug, virtualModels]);
+
+ 
 
   // Helper: Extract only user-modified config (different from defaults)
   const getUserConfig = useCallback(() => {
@@ -305,6 +316,16 @@ function useModelConfigDialog({
   ]);
 
   const handleReset = useCallback(() => {
+    if(modified_mode === 'create' || modified_mode==='edit'){
+      let detected = detectComplexFeatures(initialConfig);
+      if (detected.length > 0) {
+        setMode('advanced')
+        setShowWarning(true)
+      }
+      setJsonContent(JSON.stringify(initialConfig, null, 2))
+      setConfig(initialConfig)
+      return 
+    }
     const defaultConfig: Record<string, any> = {};
 
     // For ModelInfo: Reset parameters to defaults
@@ -325,7 +346,7 @@ function useModelConfigDialog({
       ...defaultConfig,
       model: initialConfig.model,
     });
-  }, [initialConfig]);
+  }, [initialConfig, modified_mode]);
 
   // Handle mode switching
   const handleModeSwitch = useCallback(
@@ -350,7 +371,6 @@ function useModelConfigDialog({
         const result = jsonToConfig(jsonContent);
         if (result.success && result.config) {
           const detected = detectComplexFeatures(result.config);
-
           if (detected.length > 0) {
             // Show warning dialog
             setComplexFeatures(detected);

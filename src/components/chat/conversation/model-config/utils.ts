@@ -10,7 +10,9 @@ import { ModelInfo, VirtualModel, VirtualModelVersion } from "@/lib";
  */
 export function detectComplexFeatures(config: Record<string, any>): string[] {
   const complexFeatures: string[] = [];
-
+  if(config.model === 'router/dynamic') {
+    complexFeatures.push("Dynamic Router Configuration");
+  }
   // Check for router configuration
   if (config.router || config.routing) {
     complexFeatures.push("Router Configuration");
