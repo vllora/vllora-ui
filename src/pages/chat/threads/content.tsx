@@ -43,20 +43,21 @@ export function ThreadsPageContent() {
   const handleNewThread = useCallback(() => {
     const now = Date.now() * 1000; // Convert to microseconds
     const newThreadId = uuidv4();
+    const defaultModel = 'openai/gpt-4o-mini';
 
     const newThread: Thread = {
       thread_id: newThreadId,
       start_time_us: now,
       finish_time_us: now,
       run_ids: [],
-      input_models: selectedModel ? [selectedModel] : [],
+      input_models: [defaultModel],
       cost: 0,
       is_from_local: true,
     };
     addThread(newThread);
     // Navigate to the new thread using handleThreadClick
     handleThreadClick(newThreadId, newThread.input_models);
-  }, [selectedModel, addThread, handleThreadClick]);
+  }, [addThread, handleThreadClick]);
 
 
   useEffect(() => {
