@@ -137,6 +137,11 @@ function useModelConfigDialog({
         const json = JSON.stringify(initialConfig, null, 2);
         setConfig(initialConfig);
         setJsonContent(json);
+      } else {
+        setMode('basic');
+        const json = JSON.stringify(initialConfig, null, 2);
+        setConfig(initialConfig);
+        setJsonContent(json);
       }
       const defaultConfig: Record<string, any> = {};
 
