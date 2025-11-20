@@ -39,6 +39,14 @@ export function getBackendUrl(): string {
   return import.meta.env.VITE_BACKEND_URL || `http://localhost:${backendPort}`;
 }
 
+export function getGrpcBackendUrl(): string {
+  if (import.meta.env.VITE_BACKEND_URL) {
+    return import.meta.env.VITE_BACKEND_URL;
+  }
+ 
+  return `http://localhost:4317`;
+}
+
 // Initialize config on app startup
 export async function initApiConfig(): Promise<void> {
   await fetchEnvConfig();

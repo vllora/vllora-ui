@@ -8,7 +8,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from './ui/dialog';
-import { getBackendUrl } from '@/config/api';
+import { getBackendUrl, getGrpcBackendUrl } from '@/config/api';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 
 export function BackendUrlInfo() {
@@ -17,7 +17,7 @@ export function BackendUrlInfo() {
   const [copiedGrpcTracing, setCopiedGrpcTracing] = useState(false);
   const backendUrl = `${getBackendUrl()}/v1`;
   const mcpBackendUrl = `${getBackendUrl()}/mcp`;
-  const grpcTracingUrl = 'http://localhost:4317';
+  const grpcTracingUrl = getGrpcBackendUrl();
 
   const handleCopy = async () => {
     try {
