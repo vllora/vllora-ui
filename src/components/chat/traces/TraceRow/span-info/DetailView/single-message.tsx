@@ -38,6 +38,14 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
     const [showExpandButton, setShowExpandButton] = useState(false);
     const [copied, setCopied] = useState(false);
 
+    const handleToggleExpand = () => {
+        if (isExpanded && contentRef.current) {
+            // Reset scroll to top when collapsing
+            contentRef.current.scrollTop = 0;
+        }
+        setIsExpanded(!isExpanded);
+    };
+
     const getRoleLabel = () => {
         const normalizedRole = role?.toLowerCase?.() || '';
         const fallback = role ? `${role.charAt(0).toUpperCase()}${role.slice(1)}` : 'Message';
@@ -198,7 +206,7 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
     };
 
     return (
-        <div className={`flex flex-col gap-3 py-3 px-2 rounded-lg border border-zinc-800/50 bg-zinc-900/20 hover:border-zinc-700/50 transition-colors`}>
+        <div className={`flex flex-col gap-3 py-3 px-2  transition-colors`}>
             <div className="flex items-center justify-between gap-2">
                 <div className={`inline-flex justify-center items-center gap-1 rounded-md border px-2 py-1 ${roleStyle.bgColor} ${roleStyle.borderColor}`}>
                     <RoleIcon className={`h-2.5 w-2.5 ${roleStyle.textColor}`} />
@@ -227,23 +235,30 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
                 <div className={`flex flex-col gap-2 rounded-lg transition-all duration-200 overflow-hidden ${
                     'bg-zinc-800/30 border border-zinc-700/50 p-2'
                 }`}>
-                    <div
-                        ref={contentRef}
-                        className={`whitespace-pre-wrap break-words text-xs text-zinc-400 min-w-0 ${
-                            !isExpanded && showExpandButton
-                                ? 'line-clamp-3 overflow-hidden'
-                                : isExpanded && showExpandButton
-                                ? 'max-h-[400px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900'
-                                : ''
-                        }`}
-                    >
-                        <MarkdownViewer message={displayText} />
-                    </div>
+                    {!isExpanded && showExpandButton ? (
+                        <div
+                            ref={contentRef}
+                            className="whitespace-pre-wrap break-words text-xs text-zinc-400 min-w-0 line-clamp-3 overflow-hidden"
+                        >
+                            {displayText}
+                        </div>
+                    ) : (
+                        <div
+                            ref={contentRef}
+                            className={`whitespace-pre-wrap break-words text-xs text-zinc-400 min-w-0 ${
+                                isExpanded && showExpandButton
+                                    ? 'max-h-[400px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900'
+                                    : ''
+                            }`}
+                        >
+                            <MarkdownViewer message={displayText} />
+                        </div>
+                    )}
                     {showExpandButton && (
                         <div className="ml-auto">
                             <ExpandCollapseButton
                                 isExpanded={isExpanded}
-                                onClick={() => setIsExpanded(!isExpanded)}
+                                onClick={handleToggleExpand}
                             />
                         </div>
                     )}
@@ -252,7 +267,7 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
            
 
             {showStructuredBlock && (
-                <div className="rounded-lg px-3 py-2 overflow-hidden">
+                <div className="rounded-lg py-2 overflow-hidden">
                     <div className="pb-1 text-[10px] text-wrap font-semibold uppercase tracking-wide text-zinc-500">
                         Structured Content
                     </div>
@@ -305,39 +320,67 @@ const TextMessageContent = ({ text, cache_control }: { text: string, cache_contr
         }
     }, [text]);
 
+    const handleToggleExpand = () => {
+        if (isExpanded && contentRef.current) {
+            // Reset scroll to top when collapsing
+            contentRef.current.scrollTop = 0;
+        }
+        setIsExpanded(!isExpanded);
+    };
+
     return <div ref={contentRef} className={`flex flex-col items-start gap-2 py-2 rounded-lg transition-all duration-200 ${
         'bg-zinc-800/30 border border-zinc-700/50 px-2'
     }`}>
-        <div className={`flex items-start ${cache_control ? 'gap-2' : ''} ${
-            !isExpanded && showExpandButton
-                ? 'line-clamp-3 overflow-hidden max-h-[150px]'
-                : isExpanded && showExpandButton
-                ? 'max-h-[400px] overflow-y-auto w-full pr-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900'
-                : 'w-full'
-        }`}>
-            {cache_control && (
-                <div className="flex items-center flex-shrink-0">
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <div><DatabaseIcon className="w-4 h-4 text-zinc-300" /></div>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="bg-zinc-900 text-zinc-100 border-zinc-800">
-                                <p>This message uses cache control {cache_control.type ?  <span className=""> with type <span className="font-semibold text-white">{cache_control.type}</span></span> : ''}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
+        {!isExpanded && showExpandButton ? (
+            <div className="flex items-start w-full gap-2">
+                {cache_control && (
+                    <div className="flex items-center flex-shrink-0">
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div><DatabaseIcon className="w-4 h-4 text-zinc-300" /></div>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="bg-zinc-900 text-zinc-100 border-zinc-800">
+                                    <p>This message uses cache control {cache_control.type ?  <span className=""> with type <span className="font-semibold text-white">{cache_control.type}</span></span> : ''}</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
+                )}
+                <div className="flex-1 min-w-0 whitespace-pre-wrap break-words line-clamp-3 overflow-hidden">
+                    {text}
                 </div>
-            )}
-            <div className="flex flex-col gap-2 flex-1 min-w-0 whitespace-pre-wrap break-words overflow-wrap-anywhere">
-                <MarkdownViewer message={text} />
             </div>
-        </div>
+        ) : (
+            <div className={`flex items-start ${cache_control ? 'gap-2' : ''} ${
+                isExpanded && showExpandButton
+                    ? 'max-h-[400px] overflow-y-auto w-full pr-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900'
+                    : 'w-full'
+            }`}>
+                {cache_control && (
+                    <div className="flex items-center flex-shrink-0">
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div><DatabaseIcon className="w-4 h-4 text-zinc-300" /></div>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="bg-zinc-900 text-zinc-100 border-zinc-800">
+                                    <p>This message uses cache control {cache_control.type ?  <span className=""> with type <span className="font-semibold text-white">{cache_control.type}</span></span> : ''}</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
+                )}
+                <div className="flex flex-col gap-2 flex-1 min-w-0 whitespace-pre-wrap break-words overflow-wrap-anywhere">
+                    <MarkdownViewer message={text} />
+                </div>
+            </div>
+        )}
         {showExpandButton && (
             <div className="ml-auto">
                 <ExpandCollapseButton
                     isExpanded={isExpanded}
-                    onClick={() => setIsExpanded(!isExpanded)}
+                    onClick={handleToggleExpand}
                 />
             </div>
         )}
