@@ -31,7 +31,7 @@ const ExpandCollapseButton = ({ isExpanded, onClick }: { isExpanded: boolean; on
 );
 
 export const SingleMessage = (props: { role: string, content?: string, objectContent?: any, toolCalls?: any[], isFirst?: boolean, isLast?: boolean, parts?: any, tool_call_id?: string }) => {
-    const { role, content, objectContent, toolCalls, parts, tool_call_id } = props;
+    const { role, content, objectContent, toolCalls, parts } = props;
 
     const [isExpanded, setIsExpanded] = useState(false);
     const contentRef = useRef<HTMLDivElement>(null);
