@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MarkdownViewer } from "./markdown-viewer";
 import { JsonViewer } from "../JsonViewer";
-import { DatabaseIcon, ChevronDown, ChevronUp, User, Bot, Settings, Wrench, Brain, Cpu, Copy, Check } from "lucide-react";
+import { DatabaseIcon, ChevronDown, ChevronUp, User, Bot, Settings, Wrench, Brain, Cpu, Copy, Check, Eye, EyeOff } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -37,6 +37,7 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
     const contentRef = useRef<HTMLDivElement>(null);
     const [showExpandButton, setShowExpandButton] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [rawMode, setRawMode] = useState(false);
 
     const handleToggleExpand = () => {
         if (isExpanded && contentRef.current) {
@@ -178,12 +179,12 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
             label: `${partsCount} ${partsCount === 1 ? 'part' : 'parts'}`
         });
     }
-    if (showStructuredBlock) {
-        metaChips.push({
-            key: 'structured',
-            label: Array.isArray(structuredContent) ? 'Structured parts' : tool_call_id ?`Tool Call ID: ${tool_call_id}` :  'JSON payload'
-        });
-    }
+    // if (showStructuredBlock) {
+    //     metaChips.push({
+    //         key: 'structured',
+    //         label: Array.isArray(structuredContent) ? 'Structured parts' : tool_call_id ?`Tool Call ID: ${tool_call_id}` :  'JSON payload'
+    //     });
+    // }
     if (toolCalls && toolCalls.length > 0) {
         metaChips.push({
             key: 'tool-calls',
@@ -218,6 +219,25 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
                 {metaSummary && (
                     <span className="text-[11px] text-zinc-500">{metaSummary}</span>
                 )}
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <button
+                                onClick={() => setRawMode(!rawMode)}
+                                className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 hover:text-zinc-300  hover:bg-zinc-700 rounded transition-colors"
+                            >
+                                {rawMode ? (
+                                    <EyeOff className="w-3 h-3" />
+                                ) : (
+                                    <Eye className="w-3 h-3" />
+                                )}
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="bg-zinc-900 text-zinc-100 border-zinc-800">
+                            <p>{rawMode ? "Show formatted" : "Show raw"}</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
                 <button
                     onClick={handleCopy}
                     className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 hover:text-zinc-300  hover:bg-zinc-700 rounded transition-colors"
@@ -235,7 +255,13 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
                 <div className={`flex flex-col gap-2 rounded-lg transition-all duration-200 overflow-hidden ${
                     'bg-zinc-800/30 border border-zinc-700/50 p-2'
                 }`}>
-                    {!isExpanded && showExpandButton ? (
+                    {rawMode ? (
+                        <div
+                            className="whitespace-pre-wrap break-words text-xs text-zinc-400 min-w-0 max-h-[400px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900"
+                        >
+                            {displayText}
+                        </div>
+                    ) : !isExpanded && showExpandButton ? (
                         <div
                             ref={contentRef}
                             className="whitespace-pre-wrap break-words text-xs text-zinc-400 min-w-0 line-clamp-3 overflow-hidden"
@@ -254,7 +280,7 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
                             <MarkdownViewer message={displayText} />
                         </div>
                     )}
-                    {showExpandButton && (
+                    {!rawMode && showExpandButton && (
                         <div className="ml-auto">
                             <ExpandCollapseButton
                                 isExpanded={isExpanded}
@@ -272,7 +298,11 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
                         Structured Content
                     </div>
                     <div className="max-w-full overflow-x-auto">
-                        <ObjectMessageContent objectContent={structuredContent} />
+                        {rawMode ? (
+                            <JsonViewer data={structuredContent} />
+                        ) : (
+                            <ObjectMessageContent objectContent={structuredContent} />
+                        )}
                     </div>
                 </div>
             )}
@@ -280,8 +310,20 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
            
 
             {toolCalls && toolCalls.length > 0 && (
-                <ToolCallList toolCalls={toolCalls} />
-              
+                <div className="rounded-lg py-2 overflow-hidden">
+                    {rawMode ? (
+                        <>
+                            <div className="pb-1 text-[10px] text-wrap font-semibold uppercase tracking-wide text-zinc-500">
+                                Tool Calls (Raw)
+                            </div>
+                            <div className="max-w-full overflow-x-auto">
+                                <JsonViewer data={toolCalls} />
+                            </div>
+                        </>
+                    ) : (
+                        <ToolCallList toolCalls={toolCalls} />
+                    )}
+                </div>
             )}
         </div>
     );
