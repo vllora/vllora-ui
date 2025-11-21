@@ -3,10 +3,10 @@ import { MarkdownViewer } from "./markdown-viewer";
 import { JsonViewer } from "../JsonViewer";
 import { DatabaseIcon, ChevronDown, ChevronUp, User, Bot, Settings, Wrench, Brain, Cpu, Copy, Check, Eye, EyeOff } from "lucide-react";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { tryParseJson } from "@/utils/modelUtils";
 import { ToolCallList } from "@/components/chat/messages/ToolCallList";
@@ -216,45 +216,44 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
                     </span>
                 </div>
                 <div className="flex items-center gap-2">
-                {metaSummary && (
-                    <span className="text-[11px] text-zinc-500">{metaSummary}</span>
-                )}
-                <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <button
-                                onClick={() => setRawMode(!rawMode)}
-                                className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 hover:text-zinc-300  hover:bg-zinc-700 rounded transition-colors"
-                            >
-                                {rawMode ? (
-                                    <EyeOff className="w-3 h-3" />
-                                ) : (
-                                    <Eye className="w-3 h-3" />
-                                )}
-                            </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="bg-zinc-900 text-zinc-100 border-zinc-800">
-                            <p>{rawMode ? "Show formatted" : "Show raw"}</p>
-                        </TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
-                <button
-                    onClick={handleCopy}
-                    className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 hover:text-zinc-300  hover:bg-zinc-700 rounded transition-colors"
-                >
-                    {copied ? (
-                        <Check className="w-3 h-3 text-green-500" />
-                    ) : (
-                        <Copy className="w-3 h-3" />
+                    {metaSummary && (
+                        <span className="text-[11px] text-zinc-500">{metaSummary}</span>
                     )}
-                </button>
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <button
+                                    onClick={() => setRawMode(!rawMode)}
+                                    className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 hover:text-zinc-300  hover:bg-zinc-700 rounded transition-colors"
+                                >
+                                    {rawMode ? (
+                                        <EyeOff className="w-3 h-3" />
+                                    ) : (
+                                        <Eye className="w-3 h-3" />
+                                    )}
+                                </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="bg-zinc-900 text-zinc-100 border-zinc-800">
+                                <p>{rawMode ? "Show formatted" : "Show raw"}</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                    <button
+                        onClick={handleCopy}
+                        className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 hover:text-zinc-300  hover:bg-zinc-700 rounded transition-colors"
+                    >
+                        {copied ? (
+                            <Check className="w-3 h-3 text-green-500" />
+                        ) : (
+                            <Copy className="w-3 h-3" />
+                        )}
+                    </button>
                 </div>
             </div>
-             
+
             {hasTextContent && (
-                <div className={`flex flex-col gap-2 rounded-lg transition-all duration-200 overflow-hidden ${
-                    'bg-zinc-800/30 border border-zinc-700/50 p-2'
-                }`}>
+                <div className={`flex flex-col gap-2 rounded-lg transition-all duration-200 overflow-hidden ${'bg-zinc-800/30 border border-zinc-700/50 p-2'
+                    }`}>
                     {rawMode ? (
                         <div
                             className="whitespace-pre-wrap break-words text-xs text-zinc-400 min-w-0 max-h-[400px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900"
@@ -271,11 +270,10 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
                     ) : (
                         <div
                             ref={contentRef}
-                            className={`whitespace-pre-wrap break-words text-xs text-zinc-400 min-w-0 ${
-                                isExpanded && showExpandButton
+                            className={`whitespace-pre-wrap break-words text-xs text-zinc-400 min-w-0 ${isExpanded && showExpandButton
                                     ? 'max-h-[400px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900'
                                     : ''
-                            }`}
+                                }`}
                         >
                             <MarkdownViewer message={displayText} />
                         </div>
@@ -290,7 +288,7 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
                     )}
                 </div>
             )}
-           
+
 
             {showStructuredBlock && (
                 <div className="rounded-lg py-2 overflow-hidden">
@@ -307,7 +305,7 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
                 </div>
             )}
 
-           
+
 
             {toolCalls && toolCalls.length > 0 && (
                 <div className="rounded-lg py-2 overflow-hidden">
@@ -341,7 +339,7 @@ export const ObjectMessageContent = ({ objectContent }: { objectContent: any }) 
             return <div key={`${index}_${item.type}`} className="max-w-full overflow-x-auto"><JsonViewer data={item} /></div>;
         })}</div>
     }
-    return  typeof objectContent === 'string' ? <TextMessageContent text={objectContent} /> : <div className="max-w-full overflow-x-auto"><JsonViewer data={objectContent} /></div>;
+    return typeof objectContent === 'string' ? <TextMessageContent text={objectContent} /> : <div className="max-w-full overflow-x-auto"><JsonViewer data={objectContent} /></div>;
 };
 
 const TextMessageContent = ({ text, cache_control }: { text: string, cache_control?: any }) => {
@@ -370,9 +368,8 @@ const TextMessageContent = ({ text, cache_control }: { text: string, cache_contr
         setIsExpanded(!isExpanded);
     };
 
-    return <div ref={contentRef} className={`flex flex-col items-start gap-2 py-2 rounded-lg transition-all duration-200 ${
-        'bg-zinc-800/30 border border-zinc-700/50 px-2'
-    }`}>
+    return <div ref={contentRef} className={`flex flex-col items-start gap-2 py-2 rounded-lg transition-all duration-200 ${'bg-zinc-800/30 border border-zinc-700/50 px-2'
+        }`}>
         {!isExpanded && showExpandButton ? (
             <div className="flex items-start w-full gap-2">
                 {cache_control && (
@@ -383,7 +380,7 @@ const TextMessageContent = ({ text, cache_control }: { text: string, cache_contr
                                     <div><DatabaseIcon className="w-4 h-4 text-zinc-300" /></div>
                                 </TooltipTrigger>
                                 <TooltipContent side="top" className="bg-zinc-900 text-zinc-100 border-zinc-800">
-                                    <p>This message uses cache control {cache_control.type ?  <span className=""> with type <span className="font-semibold text-white">{cache_control.type}</span></span> : ''}</p>
+                                    <p>This message uses cache control {cache_control.type ? <span className=""> with type <span className="font-semibold text-white">{cache_control.type}</span></span> : ''}</p>
                                 </TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
@@ -394,11 +391,10 @@ const TextMessageContent = ({ text, cache_control }: { text: string, cache_contr
                 </div>
             </div>
         ) : (
-            <div className={`flex items-start ${cache_control ? 'gap-2' : ''} ${
-                isExpanded && showExpandButton
+            <div className={`flex items-start ${cache_control ? 'gap-2' : ''} ${isExpanded && showExpandButton
                     ? 'max-h-[400px] overflow-y-auto w-full pr-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900'
                     : 'w-full'
-            }`}>
+                }`}>
                 {cache_control && (
                     <div className="flex items-center flex-shrink-0">
                         <TooltipProvider>
@@ -407,7 +403,7 @@ const TextMessageContent = ({ text, cache_control }: { text: string, cache_contr
                                     <div><DatabaseIcon className="w-4 h-4 text-zinc-300" /></div>
                                 </TooltipTrigger>
                                 <TooltipContent side="top" className="bg-zinc-900 text-zinc-100 border-zinc-800">
-                                    <p>This message uses cache control {cache_control.type ?  <span className=""> with type <span className="font-semibold text-white">{cache_control.type}</span></span> : ''}</p>
+                                    <p>This message uses cache control {cache_control.type ? <span className=""> with type <span className="font-semibold text-white">{cache_control.type}</span></span> : ''}</p>
                                 </TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
