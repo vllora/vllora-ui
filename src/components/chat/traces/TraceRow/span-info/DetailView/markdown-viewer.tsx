@@ -81,10 +81,10 @@ export const MarkdownViewer: React.FC<{ message: string }> = ({ message }) => {
           );
         },
         h1({ children, ...props }) {
-          return <h1 className="font-bold text-3xl pb-[0.3em] border-b border-border " {...props}>{children}</h1>
+          return <h1 className="font-bold text-xl pb-[0.2em] border-b border-border " {...props}>{children}</h1>
         },
         h2({ children, ...props }) {
-          return <h2 className="font-bold text-2xl pb-[0.3em] border-b border-border" {...props}>{children}</h2>
+          return <h2 className="font-bold text-xl pb-[0.2em] border-b border-border" {...props}>{children}</h2>
         },
         h3({ children, ...props }) {
           return <h3 className="font-bold text-xl" {...props}>{children}</h3>
