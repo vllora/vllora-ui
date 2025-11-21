@@ -24,7 +24,7 @@ const ExpandCollapseButton = ({ isExpanded, onClick }: { isExpanded: boolean; on
         ) : (
             <>
                 <ChevronDown className="h-3 w-3" />
-                <span className="text-[10px]"> Show more</span>
+                <span className="text-[10px]"> Read more</span>
             </>
         )}
     </button>
@@ -198,7 +198,7 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
     };
 
     return (
-        <div className={`flex flex-col gap-3 py-2`}>
+        <div className={`flex flex-col gap-3 py-3 px-2 rounded-lg border border-zinc-800/50 bg-zinc-900/20 hover:border-zinc-700/50 transition-colors`}>
             <div className="flex items-center justify-between gap-2">
                 <div className={`inline-flex justify-center items-center gap-1 rounded-md border px-2 py-1 ${roleStyle.bgColor} ${roleStyle.borderColor}`}>
                     <RoleIcon className={`h-2.5 w-2.5 ${roleStyle.textColor}`} />
@@ -224,10 +224,18 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
             </div>
              
             {hasTextContent && (
-                <div className="flex flex-col gap-2">
+                <div className={`flex flex-col gap-2 rounded-lg transition-all duration-200 overflow-hidden ${
+                    'bg-zinc-800/30 border border-zinc-700/50 p-2'
+                }`}>
                     <div
                         ref={contentRef}
-                        className={`whitespace-pre-wrap text-xs text-zinc-400 ${!isExpanded && showExpandButton ? 'line-clamp-3 overflow-hidden' : ''}`}
+                        className={`whitespace-pre-wrap break-words text-xs text-zinc-400 min-w-0 ${
+                            !isExpanded && showExpandButton
+                                ? 'line-clamp-3 overflow-hidden'
+                                : isExpanded && showExpandButton
+                                ? 'max-h-[400px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900'
+                                : ''
+                        }`}
                     >
                         <MarkdownViewer message={displayText} />
                     </div>
@@ -244,11 +252,13 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
            
 
             {showStructuredBlock && (
-                <div className="rounded-lg px-3 py-2">
+                <div className="rounded-lg px-3 py-2 overflow-hidden">
                     <div className="pb-1 text-[10px] text-wrap font-semibold uppercase tracking-wide text-zinc-500">
                         Structured Content
                     </div>
-                    <ObjectMessageContent objectContent={structuredContent} />
+                    <div className="max-w-full overflow-x-auto">
+                        <ObjectMessageContent objectContent={structuredContent} />
+                    </div>
                 </div>
             )}
 
@@ -267,37 +277,46 @@ export const ObjectMessageContent = ({ objectContent }: { objectContent: any }) 
     // check if objectContent is array
     let isArray = Array.isArray(objectContent);
     if (isArray) {
-        return <div className="flex flex-col gap-1 divide-y divide-border text-zinc-400">{objectContent.map((item: any, index: number) => {
+        return <div className="flex flex-col gap-2 divide-y divide-border text-zinc-400 max-w-full overflow-hidden">{objectContent.map((item: any, index: number) => {
             if (item.type === 'text' && item.text) {
                 return <TextMessageContent key={`${index}_text`} text={item.text} cache_control={item.cache_control} />
             }
-            return <JsonViewer key={`${index}_${item.type}`} data={item} />;
+            return <div key={`${index}_${item.type}`} className="max-w-full overflow-x-auto"><JsonViewer data={item} /></div>;
         })}</div>
     }
-    return  typeof objectContent === 'string' ? <TextMessageContent text={objectContent} /> : <JsonViewer data={objectContent} />;
+    return  typeof objectContent === 'string' ? <TextMessageContent text={objectContent} /> : <div className="max-w-full overflow-x-auto"><JsonViewer data={objectContent} /></div>;
 };
 
 const TextMessageContent = ({ text, cache_control }: { text: string, cache_control?: any }) => {
     const [showExpandButton, setShowExpandButton] = useState(false);
     const [isExpanded, setIsExpanded] = useState(false);
     const contentRef = useRef<HTMLDivElement>(null);
+
     useEffect(() => {
         if (!contentRef.current) {
             setShowExpandButton(false);
             setIsExpanded(false);
             return;
         }
-        // Check if content height exceeds approximately 3 lines (using 72px as estimate)
         const exceedsThreeLines = contentRef.current.scrollHeight > 72;
         setShowExpandButton(exceedsThreeLines);
         if (!exceedsThreeLines) {
             setIsExpanded(false);
         }
     }, [text]);
-    return <div ref={contentRef} className={`flex flex-col items-start gap-2 overflow-hidden py-2`}>
-        <div className={`flex items-start ${!isExpanded && showExpandButton ? 'line-clamp-3 overflow-hidden max-h-[150px]' : ''} ${cache_control ? ' gap-2' : ''}`}>
+
+    return <div ref={contentRef} className={`flex flex-col items-start gap-2 py-2 rounded-lg transition-all duration-200 ${
+        'bg-zinc-800/30 border border-zinc-700/50 px-2'
+    }`}>
+        <div className={`flex items-start ${cache_control ? 'gap-2' : ''} ${
+            !isExpanded && showExpandButton
+                ? 'line-clamp-3 overflow-hidden max-h-[150px]'
+                : isExpanded && showExpandButton
+                ? 'max-h-[400px] overflow-y-auto w-full pr-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900'
+                : 'w-full'
+        }`}>
             {cache_control && (
-                <div className="flex items-center">
+                <div className="flex items-center flex-shrink-0">
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
@@ -310,16 +329,16 @@ const TextMessageContent = ({ text, cache_control }: { text: string, cache_contr
                     </TooltipProvider>
                 </div>
             )}
-            <div className="flex flex-col gap-2 flex-1 whitespace-pre-wrap">
+            <div className="flex flex-col gap-2 flex-1 min-w-0 whitespace-pre-wrap break-words overflow-wrap-anywhere">
                 <MarkdownViewer message={text} />
             </div>
         </div>
         {showExpandButton && (
             <div className="ml-auto">
-            <ExpandCollapseButton
-                isExpanded={isExpanded}
-                onClick={() => setIsExpanded(!isExpanded)}
-            />
+                <ExpandCollapseButton
+                    isExpanded={isExpanded}
+                    onClick={() => setIsExpanded(!isExpanded)}
+                />
             </div>
         )}
     </div>

@@ -13,7 +13,7 @@ export const MessageViewer = ({
     showSection?: boolean
 }) => {
     const content = (
-        <div className="flex flex-col text-xs divide-y divide-border/50">
+        <div className="flex flex-col text-xs gap-2 divide-y divide-border/50">
             {messages.map((message, index) => {
                     // check if content is string
                     if (message.content && typeof message.content !== 'string') {
