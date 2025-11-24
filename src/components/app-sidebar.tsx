@@ -5,6 +5,7 @@ import {
   MessageSquare,
   Settings,
   Menu,
+  Sparkles,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -19,6 +20,7 @@ import {
 const mainMenuItems = [
   { id: "home", label: "Home", icon: Home, path: "/" },
   { id: "chat", label: "Chat", icon: MessageSquare, path: "/chat" },
+  { id: "experiments", label: "Experiments", icon: Sparkles, path: "/experiments" },
 ]
 
 const bottomMenuItems = [

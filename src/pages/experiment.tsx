@@ -1,0 +1,54 @@
+import { useSearchParams } from "react-router";
+import { useExperiment } from "@/hooks/useExperiment";
+import { ExperimentHeader } from "@/components/experiment/ExperimentHeader";
+import { ExperimentFooterControls } from "@/components/experiment/ExperimentFooterControls";
+import { ExperimentMainContent } from "@/components/experiment/ExperimentMainContent";
+import { ExperimentLoadingState } from "@/components/experiment/ExperimentLoadingState";
+
+export const ExperimentPage = () => {
+  const [searchParams] = useSearchParams();
+  const spanId = searchParams.get("span_id");
+
+  // Use the experiment hook
+  const {
+    loading,
+    experimentData,
+    result,
+    originalOutput,
+    running,
+    runExperiment,
+    addMessage,
+    updateMessage,
+    deleteMessage,
+    updateExperimentData,
+  } = useExperiment(spanId);
+
+  if (loading) {
+    return <ExperimentLoadingState />;
+  }
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-background">
+      {/* Header */}
+      <ExperimentHeader experimentData={experimentData} />
+
+      {/* Main Content */}
+      <ExperimentMainContent
+        experimentData={experimentData}
+        result={result}
+        originalOutput={originalOutput}
+        addMessage={addMessage}
+        updateMessage={updateMessage}
+        deleteMessage={deleteMessage}
+      />
+
+      {/* Footer Controls */}
+      <ExperimentFooterControls
+        experimentData={experimentData}
+        running={running}
+        updateExperimentData={updateExperimentData}
+        runExperiment={runExperiment}
+      />
+    </div>
+  );
+};

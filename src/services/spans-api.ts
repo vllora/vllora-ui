@@ -217,6 +217,20 @@ export const getSpansByOperation = async (props: {
 };
 
 /**
+ * Get a single span by ID
+ */
+export const getSpanById = async (props: {
+  spanId: string;
+}): Promise<Span | null> => {
+  const response = await apiClient(`/spans?span_id=${props.spanId}`, {
+    method: 'GET',
+  });
+
+  const data = await handleApiResponse<PaginatedSpansResponse>(response);
+  return data.data.length > 0 ? data.data[0] : null;
+};
+
+/**
  * Get spans within a time range
  */
 export const getSpansInTimeRange = async (props: {

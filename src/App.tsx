@@ -6,6 +6,8 @@ import { ProjectsPage } from "./pages/projects"
 import { AnalyticsPage } from "./pages/analytics"
 import { SettingsPage } from "./pages/settings"
 import { LoginPage } from "./pages/login"
+import { ExperimentPage } from "./pages/experiment"
+import { ExperimentsPage } from "./pages/experiments"
 import { ThemeProvider } from "./components/theme-provider"
 import { ProjectsProvider } from "./contexts/ProjectContext"
 import { ProjectModelsProvider } from "./contexts/ProjectModelsContext"
@@ -15,6 +17,7 @@ import { applyTheme, getThemeFromStorage } from "./themes/themes"
 import { ProviderKeysProvider } from "./contexts/ProviderKeysContext"
 import { AuthProvider } from "./contexts/AuthContext"
 import { ProtectedRoute } from "./components/ProtectedRoute"
+import { ExperimentsProvider } from "./contexts/ExperimentsContext"
 import { LocalModelsSkeletonLoader } from "./components/models/local/LocalModelsSkeletonLoader"
 import { AvailableApiKeysProvider, CurrentAppProvider, VirtualModelsProvider } from "./lib"
 import { ThreadAndTracesPageProvider } from "./contexts/ThreadAndTracesPageContext"
@@ -46,7 +49,9 @@ function App() {
                   <AvailableApiKeysProvider available_api_keys={[]}>
                     <ProjectModelsProvider>
                       <ProviderKeysProvider>
-                        <Layout />
+                        <ExperimentsProvider>
+                          <Layout />
+                        </ExperimentsProvider>
                       </ProviderKeysProvider>
                     </ProjectModelsProvider>
                   </AvailableApiKeysProvider>
@@ -57,6 +62,8 @@ function App() {
                 <Route index element={<HomePage />} />
                 <Route path="chat" element={<ThreadAndTracesPageProvider><ThreadsAndTracesPage /></ThreadAndTracesPageProvider>} />
                 <Route path="analytics" element={<AnalyticsPage />} />
+                <Route path="experiments" element={<ExperimentsPage />} />
+                <Route path="experiment" element={<ExperimentPage />} />
                 <Route
                   path="models"
                   element={
