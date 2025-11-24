@@ -22,7 +22,7 @@ export const RawSpanMessage = React.memo((props: {
         [level]
     );
 
-    return <div style={indentStyle} className="flex flex-col">
+    return <div style={indentStyle} className="flex flex-col gap-3">
         <InnerRawSpanMessage spanId={messageStructure.span_id} flattenSpans={flattenSpans} />
         {messageStructure.children && messageStructure.children.length > 0 && (
             <div className="flex flex-col space-y-4">

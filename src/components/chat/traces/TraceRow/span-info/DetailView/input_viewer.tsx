@@ -1,9 +1,5 @@
-import { CodeBracketIcon } from "@heroicons/react/24/outline";
 import { JsonViewer } from "../JsonViewer";
-import { HeaderViewer } from "./header-viewer";
-import { MessageViewer } from "./message-viewer";
-import { ToolDefinitionsViewer } from "./tool-definitions-viewer";
-import { ViewerCollapsibleSection } from "./ViewerCollapsibleSection";
+import { InputTabContent } from "./InputTabContent";
 import { useState } from "react";
 import { useLocalStorageState } from "ahooks";
 import { Copy, Check } from "lucide-react";
@@ -18,8 +14,7 @@ export const InputViewer = (props: {
 }) => {
 
     const { jsonRequest, headers } = props;
-    const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview');
-    const [codeViewMode, setCodeViewMode] = useState<'curl' | 'json'>('curl');
+    const [activeTab, setActiveTab] = useState<'input' | 'json' | 'code'>('input');
     const [copied, setCopied] = useState(false);
     const [copiedJson, setCopiedJson] = useState(false);
     const [showAllHeaders, setShowAllHeaders] = useLocalStorageState<boolean>('vllora-traces-show-all-headers', {
@@ -83,14 +78,24 @@ export const InputViewer = (props: {
             {hasMessages ? (
                 <div className="flex items-center gap-0.5 bg-border rounded">
                     <button
-                        onClick={() => setActiveTab('preview')}
+                        onClick={() => setActiveTab('input')}
                         className={`px-3 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
-                            activeTab === 'preview'
+                            activeTab === 'input'
                                 ? 'bg-zinc-700 text-white rounded'
                                 : 'text-zinc-400 hover:text-zinc-300'
                         }`}
                     >
                         Input
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('json')}
+                        className={`px-3 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+                            activeTab === 'json'
+                                ? 'bg-zinc-700 text-white rounded'
+                                : 'text-zinc-400 hover:text-zinc-300'
+                        }`}
+                    >
+                        Json
                     </button>
                     <button
                         onClick={() => setActiveTab('code')}
@@ -110,78 +115,33 @@ export const InputViewer = (props: {
             )}
         </div>
         <div className="flex flex-col gap-6 overflow-y-auto text-xs">
-            {activeTab === 'preview' ? (
-                <>
-                    {headers && (
-                        <HeaderViewer
-                            headers={headers}
-                            showAll={showAllHeaders}
-                            onShowAllChange={setShowAllHeaders}
-                            collapsed={headersCollapsed}
-                            onCollapsedChange={setHeadersCollapsed}
-                        />
-                    )}
-                    {messages && (
-                        <MessageViewer
-                            messages={messages as any}
-                            collapsed={messagesCollapsed}
-                            onCollapsedChange={setMessagesCollapsed}
-                        />
-                    )}
-
-                    {tools && (
-                        <ToolDefinitionsViewer
-                            toolCalls={tools}
-                            tool_choice={tool_choice}
-                            collapsed={toolsCollapsed}
-                            onCollapsedChange={setToolsCollapsed}
-                        />
-                    )}
-
-                    {/* Additional Parameters Section */}
-                    {extraDataKeys && extraDataKeys.length > 0 && (
-                        <ViewerCollapsibleSection
-                            title="Additional Fields"
-                            icon={<CodeBracketIcon className="h-3.5 w-3.5 text-zinc-400" />}
-                            collapsed={extraFieldsCollapsed}
-                            onCollapsedChange={setExtraFieldsCollapsed}
-                        >
-                            <JsonViewer data={extraDataDisplay} />
-                        </ViewerCollapsibleSection>
-                    )}
-                </>
-            ) : (
-                <div className="flex flex-col gap-2 divide-y divide-zinc-800">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-0.5 bg-zinc-800 rounded p-0.5">
-                                <button
-                                    onClick={() => setCodeViewMode('curl')}
-                                    className={`px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider transition-colors rounded ${
-                                        codeViewMode === 'curl'
-                                            ? 'bg-zinc-600 text-white'
-                                            : 'text-zinc-400 hover:text-zinc-300'
-                                    }`}
-                                >
-                                    cURL
-                                </button>
-                                <button
-                                    onClick={() => setCodeViewMode('json')}
-                                    className={`px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider transition-colors rounded ${
-                                        codeViewMode === 'json'
-                                            ? 'bg-zinc-600 text-white'
-                                            : 'text-zinc-400 hover:text-zinc-300'
-                                    }`}
-                                >
-                                    JSON
-                                </button>
-                            </div>
-                        </div>
+            {activeTab === 'input' ? (
+                <InputTabContent
+                    headers={headers}
+                    showAllHeaders={showAllHeaders}
+                    onShowAllHeadersChange={setShowAllHeaders}
+                    headersCollapsed={headersCollapsed}
+                    onHeadersCollapsedChange={setHeadersCollapsed}
+                    messages={messages}
+                    messagesCollapsed={messagesCollapsed}
+                    onMessagesCollapsedChange={setMessagesCollapsed}
+                    tools={tools}
+                    tool_choice={tool_choice}
+                    toolsCollapsed={toolsCollapsed}
+                    onToolsCollapsedChange={setToolsCollapsed}
+                    extraDataKeys={extraDataKeys}
+                    extraDataDisplay={extraDataDisplay}
+                    extraFieldsCollapsed={extraFieldsCollapsed}
+                    onExtraFieldsCollapsedChange={setExtraFieldsCollapsed}
+                />
+            ) : activeTab === 'json' ? (
+                <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-end">
                         <button
-                            onClick={codeViewMode === 'curl' ? handleCopyCurl : handleCopyJson}
+                            onClick={handleCopyJson}
                             className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-medium text-zinc-400 hover:text-zinc-300 bg-zinc-800 hover:bg-zinc-700 rounded transition-colors"
                         >
-                            {(codeViewMode === 'curl' ? copied : copiedJson) ? (
+                            {copiedJson ? (
                                 <>
                                     <Check className="w-3 h-3 text-green-500" />
                                     <span>Copied!</span>
@@ -194,24 +154,40 @@ export const InputViewer = (props: {
                             )}
                         </button>
                     </div>
-                    <div className="pt-2">
-                        {codeViewMode === 'curl' ? (
-                            <CodeBlock
-                                title="cURL"
-                                code={generateCurlCommand({
-                                    requestObj: jsonRequest,
-                                    headerObj: headers,
-                                    method: 'POST',
-                                    fullUrl: `${getBackendUrl()}/v1/chat/completions`,
-                                    showAllHeaders,
-                                })}
-                                language="bash"
-                                hideTitle={true}
-                            />
-                        ) : (
-                            <JsonViewer data={jsonRequest} />
-                        )}
+                    <JsonViewer data={jsonRequest} collapsed={10} />
+                </div>
+            ) : (
+                <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-end">
+                        <button
+                            onClick={handleCopyCurl}
+                            className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-medium text-zinc-400 hover:text-zinc-300 bg-zinc-800 hover:bg-zinc-700 rounded transition-colors"
+                        >
+                            {copied ? (
+                                <>
+                                    <Check className="w-3 h-3 text-green-500" />
+                                    <span>Copied!</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Copy className="w-3 h-3" />
+                                    <span>Copy</span>
+                                </>
+                            )}
+                        </button>
                     </div>
+                    <CodeBlock
+                        title="cURL"
+                        code={generateCurlCommand({
+                            requestObj: jsonRequest,
+                            headerObj: headers,
+                            method: 'POST',
+                            fullUrl: `${getBackendUrl()}/v1/chat/completions`,
+                            showAllHeaders,
+                        })}
+                        language="bash"
+                        hideTitle={true}
+                    />
                 </div>
             )}
         </div>

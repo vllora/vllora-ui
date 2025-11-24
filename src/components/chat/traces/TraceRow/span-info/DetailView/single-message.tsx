@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { MarkdownViewer } from "./markdown-viewer";
 import { JsonViewer } from "../JsonViewer";
-import { DatabaseIcon, ChevronDown, ChevronUp, User, Bot, Settings, Wrench, Brain, Cpu, Copy, Check } from "lucide-react";
+import { DatabaseIcon, ChevronDown, ChevronUp, User, Bot, Settings, Wrench, Brain, Cpu, Copy, Check, Eye, EyeOff } from "lucide-react";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { tryParseJson } from "@/utils/modelUtils";
 import { ToolCallList } from "@/components/chat/messages/ToolCallList";
@@ -24,19 +24,28 @@ const ExpandCollapseButton = ({ isExpanded, onClick }: { isExpanded: boolean; on
         ) : (
             <>
                 <ChevronDown className="h-3 w-3" />
-                <span className="text-[10px]"> Show more</span>
+                <span className="text-[10px]"> Read more</span>
             </>
         )}
     </button>
 );
 
 export const SingleMessage = (props: { role: string, content?: string, objectContent?: any, toolCalls?: any[], isFirst?: boolean, isLast?: boolean, parts?: any, tool_call_id?: string }) => {
-    const { role, content, objectContent, toolCalls, parts, tool_call_id } = props;
+    const { role, content, objectContent, toolCalls, parts } = props;
 
     const [isExpanded, setIsExpanded] = useState(false);
     const contentRef = useRef<HTMLDivElement>(null);
     const [showExpandButton, setShowExpandButton] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [rawMode, setRawMode] = useState(false);
+
+    const handleToggleExpand = () => {
+        if (isExpanded && contentRef.current) {
+            // Reset scroll to top when collapsing
+            contentRef.current.scrollTop = 0;
+        }
+        setIsExpanded(!isExpanded);
+    };
 
     const getRoleLabel = () => {
         const normalizedRole = role?.toLowerCase?.() || '';
@@ -170,12 +179,12 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
             label: `${partsCount} ${partsCount === 1 ? 'part' : 'parts'}`
         });
     }
-    if (showStructuredBlock) {
-        metaChips.push({
-            key: 'structured',
-            label: Array.isArray(structuredContent) ? 'Structured parts' : tool_call_id ?`Tool Call ID: ${tool_call_id}` :  'JSON payload'
-        });
-    }
+    // if (showStructuredBlock) {
+    //     metaChips.push({
+    //         key: 'structured',
+    //         label: Array.isArray(structuredContent) ? 'Structured parts' : tool_call_id ?`Tool Call ID: ${tool_call_id}` :  'JSON payload'
+    //     });
+    // }
     if (toolCalls && toolCalls.length > 0) {
         metaChips.push({
             key: 'tool-calls',
@@ -198,7 +207,7 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
     };
 
     return (
-        <div className={`flex flex-col gap-3 py-2`}>
+        <div className={`flex flex-col gap-3 py-3 px-2  transition-colors`}>
             <div className="flex items-center justify-between gap-2">
                 <div className={`inline-flex justify-center items-center gap-1 rounded-md border px-2 py-1 ${roleStyle.bgColor} ${roleStyle.borderColor}`}>
                     <RoleIcon className={`h-2.5 w-2.5 ${roleStyle.textColor}`} />
@@ -207,56 +216,112 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
                     </span>
                 </div>
                 <div className="flex items-center gap-2">
-                {metaSummary && (
-                    <span className="text-[11px] text-zinc-500">{metaSummary}</span>
-                )}
-                <button
-                    onClick={handleCopy}
-                    className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 hover:text-zinc-300  hover:bg-zinc-700 rounded transition-colors"
-                >
-                    {copied ? (
-                        <Check className="w-3 h-3 text-green-500" />
-                    ) : (
-                        <Copy className="w-3 h-3" />
+                    {metaSummary && (
+                        <span className="text-[11px] text-zinc-500">{metaSummary}</span>
                     )}
-                </button>
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <button
+                                    onClick={() => setRawMode(!rawMode)}
+                                    className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 hover:text-zinc-300  hover:bg-zinc-700 rounded transition-colors"
+                                >
+                                    {rawMode ? (
+                                        <EyeOff className="w-3 h-3" />
+                                    ) : (
+                                        <Eye className="w-3 h-3" />
+                                    )}
+                                </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="bg-zinc-900 text-zinc-100 border-zinc-800">
+                                <p>{rawMode ? "Show formatted" : "Show raw"}</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                    <button
+                        onClick={handleCopy}
+                        className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 hover:text-zinc-300  hover:bg-zinc-700 rounded transition-colors"
+                    >
+                        {copied ? (
+                            <Check className="w-3 h-3 text-green-500" />
+                        ) : (
+                            <Copy className="w-3 h-3" />
+                        )}
+                    </button>
                 </div>
             </div>
-             
+
             {hasTextContent && (
-                <div className="flex flex-col gap-2">
-                    <div
-                        ref={contentRef}
-                        className={`whitespace-pre-wrap text-xs text-zinc-400 ${!isExpanded && showExpandButton ? 'line-clamp-3 overflow-hidden' : ''}`}
-                    >
-                        <MarkdownViewer message={displayText} />
-                    </div>
-                    {showExpandButton && (
+                <div className={`flex flex-col gap-2 rounded-lg transition-all duration-200 overflow-hidden ${'bg-zinc-800/30 border border-zinc-700/50 p-2'
+                    }`}>
+                    {rawMode ? (
+                        <div
+                            className="whitespace-pre-wrap break-words text-xs text-zinc-400 min-w-0 max-h-[400px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900"
+                        >
+                            {displayText}
+                        </div>
+                    ) : !isExpanded && showExpandButton ? (
+                        <div
+                            ref={contentRef}
+                            className="whitespace-pre-wrap break-words text-xs text-zinc-400 min-w-0 line-clamp-3 overflow-hidden"
+                        >
+                            {displayText}
+                        </div>
+                    ) : (
+                        <div
+                            ref={contentRef}
+                            className={`whitespace-pre-wrap break-words text-xs text-zinc-400 min-w-0 ${isExpanded && showExpandButton
+                                    ? 'max-h-[400px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900'
+                                    : ''
+                                }`}
+                        >
+                            <MarkdownViewer message={displayText} />
+                        </div>
+                    )}
+                    {!rawMode && showExpandButton && (
                         <div className="ml-auto">
                             <ExpandCollapseButton
                                 isExpanded={isExpanded}
-                                onClick={() => setIsExpanded(!isExpanded)}
+                                onClick={handleToggleExpand}
                             />
                         </div>
                     )}
                 </div>
             )}
-           
+
 
             {showStructuredBlock && (
-                <div className="rounded-lg px-3 py-2">
+                <div className="rounded-lg py-2 overflow-hidden">
                     <div className="pb-1 text-[10px] text-wrap font-semibold uppercase tracking-wide text-zinc-500">
                         Structured Content
                     </div>
-                    <ObjectMessageContent objectContent={structuredContent} />
+                    <div className="max-w-full overflow-x-auto">
+                        {rawMode ? (
+                            <JsonViewer data={structuredContent} />
+                        ) : (
+                            <ObjectMessageContent objectContent={structuredContent} />
+                        )}
+                    </div>
                 </div>
             )}
 
-           
+
 
             {toolCalls && toolCalls.length > 0 && (
-                <ToolCallList toolCalls={toolCalls} />
-              
+                <div className="rounded-lg py-2 overflow-hidden">
+                    {rawMode ? (
+                        <>
+                            <div className="pb-1 text-[10px] text-wrap font-semibold uppercase tracking-wide text-zinc-500">
+                                Tool Calls (Raw)
+                            </div>
+                            <div className="max-w-full overflow-x-auto">
+                                <JsonViewer data={toolCalls} />
+                            </div>
+                        </>
+                    ) : (
+                        <ToolCallList toolCalls={toolCalls} />
+                    )}
+                </div>
             )}
         </div>
     );
@@ -267,59 +332,94 @@ export const ObjectMessageContent = ({ objectContent }: { objectContent: any }) 
     // check if objectContent is array
     let isArray = Array.isArray(objectContent);
     if (isArray) {
-        return <div className="flex flex-col gap-1 divide-y divide-border text-zinc-400">{objectContent.map((item: any, index: number) => {
+        return <div className="flex flex-col gap-2 text-zinc-400 max-w-full overflow-hidden">{objectContent.map((item: any, index: number) => {
             if (item.type === 'text' && item.text) {
                 return <TextMessageContent key={`${index}_text`} text={item.text} cache_control={item.cache_control} />
             }
-            return <JsonViewer key={`${index}_${item.type}`} data={item} />;
+            return <div key={`${index}_${item.type}`} className="max-w-full overflow-x-auto"><JsonViewer data={item} /></div>;
         })}</div>
     }
-    return  typeof objectContent === 'string' ? <TextMessageContent text={objectContent} /> : <JsonViewer data={objectContent} />;
+    return typeof objectContent === 'string' ? <TextMessageContent text={objectContent} /> : <div className="max-w-full overflow-x-auto"><JsonViewer data={objectContent} /></div>;
 };
 
 const TextMessageContent = ({ text, cache_control }: { text: string, cache_control?: any }) => {
     const [showExpandButton, setShowExpandButton] = useState(false);
     const [isExpanded, setIsExpanded] = useState(false);
     const contentRef = useRef<HTMLDivElement>(null);
+
     useEffect(() => {
         if (!contentRef.current) {
             setShowExpandButton(false);
             setIsExpanded(false);
             return;
         }
-        // Check if content height exceeds approximately 3 lines (using 72px as estimate)
         const exceedsThreeLines = contentRef.current.scrollHeight > 72;
         setShowExpandButton(exceedsThreeLines);
         if (!exceedsThreeLines) {
             setIsExpanded(false);
         }
     }, [text]);
-    return <div ref={contentRef} className={`flex flex-col items-start gap-2 overflow-hidden py-2`}>
-        <div className={`flex items-start ${!isExpanded && showExpandButton ? 'line-clamp-3 overflow-hidden max-h-[150px]' : ''} ${cache_control ? ' gap-2' : ''}`}>
-            {cache_control && (
-                <div className="flex items-center">
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <div><DatabaseIcon className="w-4 h-4 text-zinc-300" /></div>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="bg-zinc-900 text-zinc-100 border-zinc-800">
-                                <p>This message uses cache control {cache_control.type ?  <span className=""> with type <span className="font-semibold text-white">{cache_control.type}</span></span> : ''}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
+
+    const handleToggleExpand = () => {
+        if (isExpanded && contentRef.current) {
+            // Reset scroll to top when collapsing
+            contentRef.current.scrollTop = 0;
+        }
+        setIsExpanded(!isExpanded);
+    };
+
+    return <div ref={contentRef} className={`flex flex-col items-start gap-2 py-2 rounded-lg transition-all duration-200 ${'bg-zinc-800/30 border border-zinc-700/50 px-2'
+        }`}>
+        {!isExpanded && showExpandButton ? (
+            <div className="flex items-start w-full gap-2">
+                {cache_control && (
+                    <div className="flex items-center flex-shrink-0">
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div><DatabaseIcon className="w-4 h-4 text-zinc-300" /></div>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="bg-zinc-900 text-zinc-100 border-zinc-800">
+                                    <p>This message uses cache control {cache_control.type ? <span className=""> with type <span className="font-semibold text-white">{cache_control.type}</span></span> : ''}</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
+                )}
+                <div className="flex-1 min-w-0 whitespace-pre-wrap break-words line-clamp-3 overflow-hidden">
+                    {text}
                 </div>
-            )}
-            <div className="flex flex-col gap-2 flex-1 whitespace-pre-wrap">
-                <MarkdownViewer message={text} />
             </div>
-        </div>
+        ) : (
+            <div className={`flex items-start ${cache_control ? 'gap-2' : ''} ${isExpanded && showExpandButton
+                    ? 'max-h-[400px] overflow-y-auto w-full pr-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900'
+                    : 'w-full'
+                }`}>
+                {cache_control && (
+                    <div className="flex items-center flex-shrink-0">
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div><DatabaseIcon className="w-4 h-4 text-zinc-300" /></div>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="bg-zinc-900 text-zinc-100 border-zinc-800">
+                                    <p>This message uses cache control {cache_control.type ? <span className=""> with type <span className="font-semibold text-white">{cache_control.type}</span></span> : ''}</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
+                )}
+                <div className="flex flex-col gap-2 flex-1 min-w-0 whitespace-pre-wrap break-words overflow-wrap-anywhere">
+                    <MarkdownViewer message={text} />
+                </div>
+            </div>
+        )}
         {showExpandButton && (
             <div className="ml-auto">
-            <ExpandCollapseButton
-                isExpanded={isExpanded}
-                onClick={() => setIsExpanded(!isExpanded)}
-            />
+                <ExpandCollapseButton
+                    isExpanded={isExpanded}
+                    onClick={handleToggleExpand}
+                />
             </div>
         )}
     </div>
