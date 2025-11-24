@@ -4,6 +4,9 @@ import { tryParseJson } from "@/utils/modelUtils";
 import { Span } from "@/types/common-type";
 import { InputViewer } from "../input_viewer";
 import { UsageViewer } from "../usage-viewer";
+import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
+import { FlaskConical } from "lucide-react";
 
 interface ModelInvokeUIDetailsDisplayProps {
     span: Span;
@@ -11,6 +14,7 @@ interface ModelInvokeUIDetailsDisplayProps {
 }
 
 export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelInvokeUIDetailsDisplayProps) => {
+    const navigate = useNavigate();
     const apiCloudInvokeSpan = getApiCloudInvokeSpans(relatedSpans, span.span_id);
     const apiInvokeSpan = getApiInvokeSpans(relatedSpans, span.span_id);
     const modelCallSpan = getModelCallSpans(relatedSpans, span.span_id);
@@ -40,9 +44,25 @@ export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelIn
 
     const headersStr = apiCloudInvokeAttribute?.['http.request.header'];
     const headers = headersStr ? tryParseJson(headersStr) : undefined;
+
+    const handleExperiment = () => {
+        navigate(`/experiment/${span.span_id}`);
+    };
+
     return (
         <BaseSpanUIDetailsDisplay>
             <div className="flex flex-col gap-6 pb-4">
+                <div className="flex justify-end">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleExperiment}
+                        className="gap-2"
+                    >
+                        <FlaskConical className="h-4 w-4" />
+                        Experiment
+                    </Button>
+                </div>
                 <InputViewer jsonRequest={raw_request_json} headers={headers} />
                 <ResponseViewer response={raw_response_json} />
                 <UsageViewer

@@ -6,6 +6,7 @@ import { ProjectsPage } from "./pages/projects"
 import { AnalyticsPage } from "./pages/analytics"
 import { SettingsPage } from "./pages/settings"
 import { LoginPage } from "./pages/login"
+import { ExperimentPage } from "./pages/experiment"
 import { ThemeProvider } from "./components/theme-provider"
 import { ProjectsProvider } from "./contexts/ProjectContext"
 import { ProjectModelsProvider } from "./contexts/ProjectModelsContext"
@@ -71,6 +72,7 @@ function App() {
                     </Suspense>
                   }
                 />
+                <Route path="experiment/:spanId" element={<ExperimentPage />} />
 
                 {/* Global routes */}
                 <Route path="projects" element={<ProjectsPage />} />
