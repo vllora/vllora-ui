@@ -10,6 +10,7 @@ interface ExperimentVisualEditorProps {
   tools: Tool[];
   addMessage: () => void;
   updateMessage: (index: number, content: string) => void;
+  updateMessageRole: (index: number, role: Message["role"]) => void;
   deleteMessage: (index: number) => void;
   onToolsChange: (tools: Tool[]) => void;
 }
@@ -19,6 +20,7 @@ export function ExperimentVisualEditor({
   tools,
   addMessage,
   updateMessage,
+  updateMessageRole,
   deleteMessage,
   onToolsChange,
 }: ExperimentVisualEditorProps) {
@@ -93,6 +95,7 @@ export function ExperimentVisualEditor({
         <MessagesSection
           messages={messages}
           updateMessage={updateMessage}
+          updateMessageRole={updateMessageRole}
           deleteMessage={deleteMessage}
           highlightedIndex={highlightedMessageIndex}
           lastMessageRef={messagesEndRef}

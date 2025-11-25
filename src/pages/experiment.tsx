@@ -21,6 +21,7 @@ export const ExperimentPage = () => {
     runExperiment,
     addMessage,
     updateMessage,
+    updateMessageRole,
     deleteMessage,
     updateExperimentData,
   } = useExperiment(spanId);
@@ -41,6 +42,7 @@ export const ExperimentPage = () => {
         originalOutput={originalOutput}
         addMessage={addMessage}
         updateMessage={updateMessage}
+        updateMessageRole={updateMessageRole}
         deleteMessage={deleteMessage}
         updateExperimentData={updateExperimentData}
         activeTab={activeTab}

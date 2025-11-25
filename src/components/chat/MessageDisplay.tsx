@@ -269,6 +269,9 @@ const BaseMessageDisplay: React.FC<{ message: string }> = ({ message }) => {
           );
         },
         img({ ...props }) {
+          if (!props.src) {
+            return <></>;
+          }
           return <img className="max-w-full rounded-lg my-2" {...props} />;
         },
         p({ children, ...props }) {

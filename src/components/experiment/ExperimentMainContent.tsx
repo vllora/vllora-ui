@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ExperimentData } from "@/hooks/useExperiment";
+import type { ExperimentData, Message } from "@/hooks/useExperiment";
 import { ExperimentVisualEditor } from "./ExperimentVisualEditor";
 import { ExperimentJsonEditor } from "./ExperimentJsonEditor";
 
@@ -9,6 +9,7 @@ interface ExperimentMainContentProps {
   originalOutput: string;
   addMessage: () => void;
   updateMessage: (index: number, content: string) => void;
+  updateMessageRole: (index: number, role: Message["role"]) => void;
   deleteMessage: (index: number) => void;
   updateExperimentData: (updates: Partial<ExperimentData>) => void;
   activeTab: "visual" | "json";
@@ -21,6 +22,7 @@ export function ExperimentMainContent({
   originalOutput,
   addMessage,
   updateMessage,
+  updateMessageRole,
   deleteMessage,
   updateExperimentData,
   activeTab,
@@ -68,6 +70,7 @@ export function ExperimentMainContent({
               tools={experimentData.tools || []}
               addMessage={addMessage}
               updateMessage={updateMessage}
+              updateMessageRole={updateMessageRole}
               deleteMessage={deleteMessage}
               onToolsChange={(tools) => updateExperimentData({ tools })}
             />

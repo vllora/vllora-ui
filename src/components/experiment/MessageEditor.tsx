@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Maximize2, X } from "lucide-react";
 import type { Message } from "@/hooks/useExperiment";
-import Editor from "@monaco-editor/react";
 import {
   Tooltip,
   TooltipContent,
@@ -9,11 +8,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { MessageEditorDialog } from "./MessageEditorDialog";
+import { CodeMirrorEditor } from "./CodeMirrorEditor";
+import { RoleSelector } from "./RoleSelector";
 
 interface MessageEditorProps {
   message: Message;
   index: number;
   updateMessage: (index: number, content: string) => void;
+  updateMessageRole: (index: number, role: Message["role"]) => void;
   deleteMessage: (index: number) => void;
   isHighlighted?: boolean;
 }
@@ -22,18 +24,12 @@ export function MessageEditor({
   message,
   index,
   updateMessage,
+  updateMessageRole,
   deleteMessage,
   isHighlighted,
 }: MessageEditorProps) {
   const [useMarkdown, setUseMarkdown] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-
-  const roleColor =
-    message.role === "system"
-      ? "text-purple-500"
-      : message.role === "user"
-      ? "text-blue-500"
-      : "text-green-500";
 
   return (
     <>
@@ -43,10 +39,12 @@ export function MessageEditor({
         }`}
       >
         <div className="flex items-center justify-between mb-2">
-          {/* Left side - Role label */}
-          <span className={`text-xs font-semibold uppercase ${roleColor}`}>
-            {message.role}
-          </span>
+          {/* Left side - Role selector */}
+          <RoleSelector
+            value={message.role}
+            onChange={(role) => updateMessageRole(index, role)}
+            size="sm"
+          />
 
           {/* Right side - Action buttons */}
           <div className="flex items-center gap-2">
@@ -112,34 +110,19 @@ export function MessageEditor({
 
         {/* Inline editor - compact view */}
         {useMarkdown ? (
-          <div className="border border-border rounded overflow-hidden">
-            <Editor
-              height="150px"
-              language="markdown"
-              value={message.content}
-              onChange={(value) => updateMessage(index, value || "")}
-              theme="vs-dark"
-              options={{
-                minimap: { enabled: false },
-                fontSize: 13,
-                lineNumbers: "off",
-                wordWrap: "on",
-                scrollBeyondLastLine: false,
-                automaticLayout: true,
-                padding: { top: 8, bottom: 8 },
-                renderLineHighlight: "none",
-                folding: false,
-                lineDecorationsWidth: 8,
-                lineNumbersMinChars: 0,
-              }}
-            />
-          </div>
+          <CodeMirrorEditor
+            content={message.content}
+            onChange={(content: string) => updateMessage(index, content)}
+            placeholder="Enter message content... Use {{variable}} for mustache variables"
+            minHeight="15vh"
+            maxHeight="15vh"
+          />
         ) : (
           <textarea
             value={message.content}
             onChange={(e) => updateMessage(index, e.target.value)}
             placeholder="Enter message content... Use {{variable}} for mustache variables"
-            className="w-full min-h-[80px] max-h-[150px] bg-background border border-border rounded px-3 py-2 text-sm resize-none focus:outline-none focus:border-muted-foreground/50 transition-colors overflow-auto"
+            className="w-full min-h-[15vh] max-h-[15vh] bg-background border border-border rounded px-3 py-2 text-sm resize-none focus:outline-none focus:border-muted-foreground/50 transition-colors overflow-auto"
             rows={3}
           />
         )}
@@ -151,8 +134,11 @@ export function MessageEditor({
         isOpen={isDialogOpen}
         onOpenChange={setIsDialogOpen}
         initialUseMarkdown={useMarkdown}
-        onApply={(content, newUseMarkdown) => {
+        onApply={(content, newUseMarkdown, newRole) => {
           updateMessage(index, content);
+          if (newRole !== message.role) {
+            updateMessageRole(index, newRole);
+          }
           setUseMarkdown(newUseMarkdown);
         }}
       />

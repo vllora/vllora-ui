@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
-import { useRequest } from 'ahooks';
-import { toast } from 'sonner';
-import { getSpanById } from '@/services/spans-api';
-import { api } from '@/lib/api-client';
+import { useState, useEffect } from "react";
+import { useRequest } from "ahooks";
+import { toast } from "sonner";
+import { getSpanById } from "@/services/spans-api";
+import { api } from "@/lib/api-client";
+import { tryParseJson } from "@/utils/modelUtils";
 
 export interface Message {
   role: "system" | "user" | "assistant";
@@ -48,7 +49,7 @@ export function useExperiment(spanId: string | null) {
     name: "Experiment",
     description: "",
     messages: [],
-    model: "gpt-4",
+    model: "openai/gpt-4.1-mini",
     temperature: 0.7,
     headers: {},
     promptVariables: {},
@@ -58,18 +59,22 @@ export function useExperiment(spanId: string | null) {
   const [running, setRunning] = useState(false);
 
   // Fetch span data
-  const { data: span, loading, error } = useRequest(
+  const {
+    data: span,
+    loading,
+    error,
+  } = useRequest(
     async () => {
       if (!spanId) {
-        throw new Error('No span ID provided');
+        throw new Error("No span ID provided");
       }
       return getSpanById({ spanId });
     },
     {
       ready: !!spanId,
       onError: (err) => {
-        toast.error('Failed to load span data', {
-          description: err.message || 'An error occurred',
+        toast.error("Failed to load span data", {
+          description: err.message || "An error occurred",
         });
       },
     }
@@ -82,23 +87,20 @@ export function useExperiment(spanId: string | null) {
     const attribute = span.attribute || {};
 
     // Parse request
-    let request: any = {};
-    if (attribute.request) {
-      try {
-        request = JSON.parse(attribute.request);
-      } catch (e) {
-        console.error('Failed to parse request:', e);
-      }
-    }
+    let request: any = attribute.request && tryParseJson(attribute.request);
 
     // Extract messages
-    const messages: Message[] = request.messages || [];
+    const messages: Message[] = request?.messages || [];
+
+    // extract tools 
+    const tools: Tool[] = request?.tools || [];
 
     return {
       name: `Experiment: ${span.operation_name}`,
       description: `Based on span ${span.span_id}`,
       messages,
-      model: request.model || 'gpt-4',
+      tools,
+      model: request.model || "gpt-4",
       temperature: request.temperature || 0.7,
       max_tokens: request.max_tokens,
       headers: {},
@@ -118,13 +120,21 @@ export function useExperiment(spanId: string | null) {
       const attribute = span.attribute || {};
       if (attribute.output) {
         try {
-          const outputStr = typeof attribute.output === 'string'
-            ? attribute.output
-            : JSON.stringify(attribute.output);
+          const outputStr =
+            typeof attribute.output === "string"
+              ? attribute.output
+              : JSON.stringify(attribute.output);
           const outputObj = JSON.parse(outputStr);
-          setOriginalOutput(outputObj.choices?.[0]?.message?.content || JSON.stringify(outputObj));
+          setOriginalOutput(
+            outputObj.choices?.[0]?.message?.content ||
+              JSON.stringify(outputObj)
+          );
         } catch (e) {
-          setOriginalOutput(typeof attribute.output === 'string' ? attribute.output : JSON.stringify(attribute.output));
+          setOriginalOutput(
+            typeof attribute.output === "string"
+              ? attribute.output
+              : JSON.stringify(attribute.output)
+          );
         }
       }
     }
@@ -138,24 +148,27 @@ export function useExperiment(spanId: string | null) {
         model: experimentData.model,
         messages: experimentData.messages,
         temperature: experimentData.temperature,
-        ...(experimentData.max_tokens && { max_tokens: experimentData.max_tokens }),
+        ...(experimentData.max_tokens && {
+          max_tokens: experimentData.max_tokens,
+        }),
       };
 
-      const response = await api.post('/v1/chat/completions', payload, {
+      const response = await api.post("/v1/chat/completions", payload, {
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           ...experimentData.headers,
         },
       });
 
       if (!response.ok) {
-        throw new Error('Failed to run experiment');
+        throw new Error("Failed to run experiment");
       }
 
       const data = await response.json();
-      const content = data.choices?.[0]?.message?.content || JSON.stringify(data);
+      const content =
+        data.choices?.[0]?.message?.content || JSON.stringify(data);
 
-      toast.success('Experiment completed successfully');
+      toast.success("Experiment completed successfully");
       setResult(content);
 
       return {
@@ -163,8 +176,9 @@ export function useExperiment(spanId: string | null) {
         rawResponse: data,
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to run experiment';
-      toast.error('Failed to run experiment', {
+      const message =
+        error instanceof Error ? error.message : "Failed to run experiment";
+      toast.error("Failed to run experiment", {
         description: message,
       });
       throw error;
@@ -184,6 +198,12 @@ export function useExperiment(spanId: string | null) {
   const updateMessage = (index: number, content: string) => {
     const newMessages = [...experimentData.messages];
     newMessages[index].content = content;
+    setExperimentData({ ...experimentData, messages: newMessages });
+  };
+
+  const updateMessageRole = (index: number, role: Message["role"]) => {
+    const newMessages = [...experimentData.messages];
+    newMessages[index].role = role;
     setExperimentData({ ...experimentData, messages: newMessages });
   };
 
@@ -210,6 +230,7 @@ export function useExperiment(spanId: string | null) {
     runExperiment: handleRunExperiment,
     addMessage,
     updateMessage,
+    updateMessageRole,
     deleteMessage,
     updateExperimentData,
   };

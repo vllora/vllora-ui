@@ -5,6 +5,7 @@ import { MessageEditor } from "./MessageEditor";
 interface MessagesSectionProps {
   messages: Message[];
   updateMessage: (index: number, content: string) => void;
+  updateMessageRole: (index: number, role: Message["role"]) => void;
   deleteMessage: (index: number) => void;
   highlightedIndex?: number | null;
   lastMessageRef?: RefObject<HTMLDivElement | null>;
@@ -13,6 +14,7 @@ interface MessagesSectionProps {
 export function MessagesSection({
   messages,
   updateMessage,
+  updateMessageRole,
   deleteMessage,
   highlightedIndex,
   lastMessageRef,
@@ -63,6 +65,7 @@ export function MessagesSection({
                 message={message}
                 index={index}
                 updateMessage={updateMessage}
+                updateMessageRole={updateMessageRole}
                 deleteMessage={deleteMessage}
                 isHighlighted={highlightedIndex === index}
               />

@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import type { Message } from "@/hooks/useExperiment";
-import Editor from "@monaco-editor/react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -8,12 +7,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { CodeMirrorEditor } from "./CodeMirrorEditor";
+import { RoleSelector } from "./RoleSelector";
 
 interface MessageEditorDialogProps {
   message: Message;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onApply: (content: string, useMarkdown: boolean) => void;
+  onApply: (content: string, useMarkdown: boolean, role: Message["role"]) => void;
   initialUseMarkdown: boolean;
 }
 
@@ -24,27 +25,20 @@ export function MessageEditorDialog({
   onApply,
   initialUseMarkdown,
 }: MessageEditorDialogProps) {
-  // Local draft state
   const [draftContent, setDraftContent] = useState(message.content);
+  const [draftRole, setDraftRole] = useState<Message["role"]>(message.role);
   const [useMarkdown, setUseMarkdown] = useState(initialUseMarkdown);
 
-  // Reset draft when dialog opens
   useEffect(() => {
     if (isOpen) {
       setDraftContent(message.content);
+      setDraftRole(message.role);
       setUseMarkdown(initialUseMarkdown);
     }
-  }, [isOpen, message.content, initialUseMarkdown]);
-
-  const roleColorClass =
-    message.role === "system"
-      ? "bg-purple-500/10 text-purple-500"
-      : message.role === "user"
-        ? "bg-blue-500/10 text-blue-500"
-        : "bg-green-500/10 text-green-500";
+  }, [isOpen, message.content, message.role, initialUseMarkdown]);
 
   const handleApply = () => {
-    onApply(draftContent, useMarkdown);
+    onApply(draftContent, useMarkdown, draftRole);
     onOpenChange(false);
   };
 
@@ -52,7 +46,7 @@ export function MessageEditorDialog({
     onOpenChange(false);
   };
 
-  const hasChanges = draftContent !== message.content || useMarkdown !== initialUseMarkdown;
+  const hasChanges = draftContent !== message.content || useMarkdown !== initialUseMarkdown || draftRole !== message.role;
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -60,11 +54,10 @@ export function MessageEditorDialog({
         <DialogHeader className="px-6 py-4 border-b border-border flex-shrink-0">
           <div className="flex items-center justify-between">
             <DialogTitle className="flex items-center gap-3">
-              <span
-                className={`text-sm font-semibold uppercase px-2 py-1 rounded ${roleColorClass}`}
-              >
-                {message.role}
-              </span>
+              <RoleSelector
+                value={draftRole}
+                onChange={setDraftRole}
+              />
             </DialogTitle>
             <div className="flex items-center bg-muted rounded-md p-0.5">
               <button
@@ -92,27 +85,27 @@ export function MessageEditorDialog({
             </div>
           </div>
         </DialogHeader>
-        <div className="flex-1 overflow-hidden">
-          <Editor
-            height="100%"
-            language={useMarkdown ? "markdown" : "plaintext"}
-            value={draftContent}
-            onChange={(value) => setDraftContent(value || "")}
-            theme="vs-dark"
-            options={{
-              minimap: { enabled: false },
-              fontSize: 14,
-              lineNumbers: "off",
-              wordWrap: "on",
-              scrollBeyondLastLine: false,
-              automaticLayout: true,
-              padding: { top: 16, bottom: 16 },
-              renderLineHighlight: "none",
-              folding: false,
-              lineDecorationsWidth: 16,
-              lineNumbersMinChars: 0,
-            }}
-          />
+
+        <div className="flex-1 overflow-hidden p-4">
+          {useMarkdown ? (
+            <div className="h-full flex flex-col">
+              <CodeMirrorEditor
+                content={draftContent}
+                onChange={setDraftContent}
+                placeholder="Enter message content... Use {{variable}} for mustache variables"
+                showToolbar={true}
+                fullHeight={true}
+              />
+            </div>
+          ) : (
+            <textarea
+              value={draftContent}
+              onChange={(e) => setDraftContent(e.target.value)}
+              placeholder="Enter message content... Use {{variable}} for mustache variables"
+              className="w-full h-full bg-background border border-border rounded-lg px-4 py-3 text-sm resize-none focus:outline-none focus:border-muted-foreground/50 transition-colors font-mono"
+              autoFocus
+            />
+          )}
         </div>
         <div className="px-6 py-4 border-t border-border flex items-center justify-end gap-2 flex-shrink-0">
           <Button variant="outline" size="sm" onClick={handleDiscard}>
