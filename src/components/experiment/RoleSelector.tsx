@@ -11,6 +11,7 @@ const ROLE_OPTIONS: { value: Message["role"]; label: string; color: string }[] =
   { value: "system", label: "System", color: "text-purple-500" },
   { value: "user", label: "User", color: "text-blue-500" },
   { value: "assistant", label: "Assistant", color: "text-green-500" },
+  { value: "tool", label: "Tool", color: "text-orange-500" },
 ];
 
 interface RoleSelectorProps {

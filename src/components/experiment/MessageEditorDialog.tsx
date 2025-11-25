@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import type { Message } from "@/hooks/useExperiment";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +11,7 @@ import {
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { CodeMirrorEditor } from "./CodeMirrorEditor";
 import { RoleSelector } from "./RoleSelector";
+import { MarkdownViewer } from "@/components/chat/traces/TraceRow/span-info/DetailView/markdown-viewer";
 
 interface MessageEditorDialogProps {
   message: Message;
@@ -29,12 +31,14 @@ export function MessageEditorDialog({
   const [draftContent, setDraftContent] = useState(message.content);
   const [draftRole, setDraftRole] = useState<Message["role"]>(message.role);
   const [useMarkdown, setUseMarkdown] = useState(initialUseMarkdown);
+  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setDraftContent(message.content);
       setDraftRole(message.role);
       setUseMarkdown(initialUseMarkdown);
+      setShowPreview(false);
     }
   }, [isOpen, message.content, message.role, initialUseMarkdown]);
 
@@ -53,35 +57,57 @@ export function MessageEditorDialog({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[80vw] h-[80vh] flex flex-col gap-0 p-0">
         <DialogHeader className="px-6 py-4 border-b border-border flex-shrink-0">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between pr-4">
             <DialogTitle className="flex items-center gap-3">
               <RoleSelector
                 value={draftRole}
                 onChange={setDraftRole}
               />
             </DialogTitle>
-            <SegmentedControl
-              options={[
-                { value: "plain", label: "Plain" },
-                { value: "markdown", label: "Markdown" },
-              ]}
-              value={useMarkdown ? "markdown" : "plain"}
-              onChange={(val) => setUseMarkdown(val === "markdown")}
-            />
+            <div className="flex items-center gap-2">
+              <SegmentedControl
+                options={[
+                  { value: "plain", label: "Plain" },
+                  { value: "markdown", label: "Markdown" },
+                ]}
+                value={useMarkdown ? "markdown" : "plain"}
+                onChange={(val) => {
+                  setUseMarkdown(val === "markdown");
+                  if (val === "plain") setShowPreview(false);
+                }}
+              />
+              {useMarkdown && (
+                <Button
+                  variant={showPreview ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setShowPreview(!showPreview)}
+                  className="gap-1"
+                >
+                  {showPreview ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showPreview ? "Edit" : "Preview"}
+                </Button>
+              )}
+            </div>
           </div>
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden p-4">
           {useMarkdown ? (
-            <div className="h-full flex flex-col">
-              <CodeMirrorEditor
-                content={draftContent}
-                onChange={setDraftContent}
-                placeholder="Enter message content... Use {{variable}} for mustache variables"
-                showToolbar={true}
-                fullHeight={true}
-              />
-            </div>
+            showPreview ? (
+              <div className="h-full overflow-auto prose prose-sm dark:prose-invert max-w-none">
+                <MarkdownViewer message={draftContent} />
+              </div>
+            ) : (
+              <div className="h-full flex flex-col">
+                <CodeMirrorEditor
+                  content={draftContent}
+                  onChange={setDraftContent}
+                  placeholder="Enter message content... Use {{variable}} for mustache variables"
+                  showToolbar={true}
+                  fullHeight={true}
+                />
+              </div>
+            )
           ) : (
             <textarea
               value={draftContent}

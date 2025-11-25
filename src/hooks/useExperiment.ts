@@ -6,7 +6,7 @@ import { api } from "@/lib/api-client";
 import { tryParseJson } from "@/utils/modelUtils";
 
 export interface Message {
-  role: "system" | "user" | "assistant";
+  role: "system" | "user" | "assistant" | "tool";
   content: string;
 }
 

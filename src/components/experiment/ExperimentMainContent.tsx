@@ -1,9 +1,8 @@
 import { useState, useRef } from "react";
-import { Plus } from "lucide-react";
 import type { ExperimentData, Message, Tool } from "@/hooks/useExperiment";
-import { Button } from "@/components/ui/button";
 import { ExperimentVisualEditor, type ExperimentVisualEditorRef } from "./ExperimentVisualEditor";
 import { ExperimentJsonEditor } from "./ExperimentJsonEditor";
+import { ExperimentToolbarActions } from "./ExperimentToolbarActions";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 
 interface ExperimentMainContentProps {
@@ -72,26 +71,10 @@ export function ExperimentMainContent({
           <div className="flex items-center gap-2">
            
             {activeTab === "visual" && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleAddMessage}
-                  className="gap-1"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Message
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleAddTool}
-                  className="gap-1"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Tool
-                </Button>
-              </>
+              <ExperimentToolbarActions
+                onAddMessage={handleAddMessage}
+                onAddTool={handleAddTool}
+              />
             )}
           </div>
           <SegmentedControl
