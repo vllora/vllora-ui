@@ -1,8 +1,9 @@
-import { useState, useRef } from "react";
+import { useRef } from "react";
 import type { ExperimentData, Message, Tool } from "@/hooks/useExperiment";
 import { ExperimentVisualEditor, type ExperimentVisualEditorRef } from "./ExperimentVisualEditor";
 import { ExperimentJsonEditor } from "./ExperimentJsonEditor";
 import { ExperimentToolbarActions } from "./ExperimentToolbarActions";
+import { ExperimentOutputPanel } from "./ExperimentOutputPanel";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 
 interface ExperimentMainContentProps {
@@ -30,7 +31,6 @@ export function ExperimentMainContent({
   activeTab,
   setActiveTab,
 }: ExperimentMainContentProps) {
-  const [activeViewTab, setActiveViewTab] = useState<"output" | "trace">("output");
   const visualEditorRef = useRef<ExperimentVisualEditorRef>(null);
 
   const handleAddMessage = () => {
@@ -109,67 +109,7 @@ export function ExperimentMainContent({
       </div>
 
       {/* Right Column - Outputs */}
-      <div className="w-2/5 flex flex-col overflow-hidden">
-        <div className="p-4 flex-1 overflow-y-auto">
-          {/* Tabs */}
-          <div className="flex items-center gap-4 border-b border-border pb-2 mb-4">
-            <button
-              onClick={() => setActiveViewTab("output")}
-              className={`text-sm font-semibold pb-2 ${
-                activeViewTab === "output"
-                  ? "border-b-2 border-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Output
-            </button>
-            <button
-              onClick={() => setActiveViewTab("trace")}
-              className={`text-sm font-semibold pb-2 ${
-                activeViewTab === "trace"
-                  ? "border-b-2 border-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Trace
-            </button>
-          </div>
-
-          {activeViewTab === "output" ? (
-            <>
-              {/* New Output */}
-              {result && (
-                <div className="mb-4 border-2 border-green-500 rounded-lg p-4 bg-green-50 dark:bg-green-950">
-                  <h3 className="text-sm font-semibold mb-2">New Output</h3>
-                  <pre className="text-sm whitespace-pre-wrap font-mono">{result}</pre>
-                </div>
-              )}
-
-              {/* Original Output */}
-              {originalOutput && (
-                <div className="border-2 border-dashed border-border rounded-lg p-4 bg-muted">
-                  <h3 className="text-sm font-semibold mb-2 text-muted-foreground">
-                    Original Output
-                  </h3>
-                  <pre className="text-sm whitespace-pre-wrap font-mono text-muted-foreground">
-                    {originalOutput}
-                  </pre>
-                </div>
-              )}
-
-              {!result && !originalOutput && (
-                <div className="text-center text-muted-foreground text-sm">
-                  Run the experiment to see output
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="text-center text-muted-foreground text-sm">
-              Trace view will be available after running the experiment
-            </div>
-          )}
-        </div>
-      </div>
+      <ExperimentOutputPanel result={result} originalOutput={originalOutput} />
     </div>
   );
 }

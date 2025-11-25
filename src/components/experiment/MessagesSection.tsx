@@ -19,8 +19,6 @@ export function MessagesSection({
   highlightedIndex,
   lastMessageRef,
 }: MessagesSectionProps) {
-
-  console.log('==== messages', messages)
   // Extract mustache variables from all messages
   const extractedVariables = Array.from(
     new Set(
