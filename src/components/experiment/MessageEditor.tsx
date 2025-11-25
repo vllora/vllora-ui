@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Maximize2, X } from "lucide-react";
+import { Maximize2, X, Copy, Check } from "lucide-react";
 import type { Message } from "@/hooks/useExperiment";
 import {
   Tooltip,
@@ -7,6 +7,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { MessageEditorDialog } from "./MessageEditorDialog";
 import { CodeMirrorEditor } from "./CodeMirrorEditor";
 import { RoleSelector } from "./RoleSelector";
@@ -30,6 +31,13 @@ export function MessageEditor({
 }: MessageEditorProps) {
   const [useMarkdown, setUseMarkdown] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(message.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <>
@@ -48,34 +56,33 @@ export function MessageEditor({
 
           {/* Right side - Action buttons */}
           <div className="flex items-center gap-2">
-            {/* Markdown toggle - segmented control style */}
-            <div className="flex items-center bg-muted rounded-md p-0.5">
-              <button
-                type="button"
-                onClick={() => setUseMarkdown(false)}
-                className={`px-2 py-0.5 text-xs rounded transition-colors ${
-                  !useMarkdown
-                    ? "bg-background shadow-sm font-semibold"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Plain
-              </button>
-              <button
-                type="button"
-                onClick={() => setUseMarkdown(true)}
-                className={`px-2 py-0.5 text-xs rounded transition-colors ${
-                  useMarkdown
-                    ? "bg-background shadow-sm font-semibold"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Markdown
-              </button>
-            </div>
+            {/* Markdown toggle */}
+            <SegmentedControl
+              options={[
+                { value: "plain", label: "Plain" },
+                { value: "markdown", label: "Markdown" },
+              ]}
+              value={useMarkdown ? "markdown" : "plain"}
+              onChange={(val) => setUseMarkdown(val === "markdown")}
+              size="sm"
+            />
 
             <TooltipProvider delayDuration={200}>
               <div className="flex items-center gap-1">
+                {/* Copy button */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={handleCopy}
+                      className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    >
+                      {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>{copied ? "Copied!" : "Copy content"}</TooltipContent>
+                </Tooltip>
+
                 {/* Expand to dialog */}
                 <Tooltip>
                   <TooltipTrigger asChild>

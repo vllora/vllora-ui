@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { CodeMirrorEditor } from "./CodeMirrorEditor";
 import { RoleSelector } from "./RoleSelector";
 
@@ -59,30 +60,14 @@ export function MessageEditorDialog({
                 onChange={setDraftRole}
               />
             </DialogTitle>
-            <div className="flex items-center bg-muted rounded-md p-0.5">
-              <button
-                type="button"
-                onClick={() => setUseMarkdown(false)}
-                className={`px-3 py-1 text-xs rounded transition-colors ${
-                  !useMarkdown
-                    ? "bg-background shadow-sm font-semibold"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Plain
-              </button>
-              <button
-                type="button"
-                onClick={() => setUseMarkdown(true)}
-                className={`px-3 py-1 text-xs rounded transition-colors ${
-                  useMarkdown
-                    ? "bg-background shadow-sm font-semibold"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Markdown
-              </button>
-            </div>
+            <SegmentedControl
+              options={[
+                { value: "plain", label: "Plain" },
+                { value: "markdown", label: "Markdown" },
+              ]}
+              value={useMarkdown ? "markdown" : "plain"}
+              onChange={(val) => setUseMarkdown(val === "markdown")}
+            />
           </div>
         </DialogHeader>
 

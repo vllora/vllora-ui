@@ -38,9 +38,10 @@ interface JsonEditorProps {
   value: string;
   onChange: (value: string) => void;
   hideValidation?: boolean;
+  transparentBackground?: boolean;
 }
 
-export function JsonEditor({ value, onChange, hideValidation }: JsonEditorProps) {
+export function JsonEditor({ value, onChange, hideValidation, transparentBackground }: JsonEditorProps) {
   const [jsonError, setJsonError] = useState<string | null>(null);
 
   // Validate JSON whenever value changes
@@ -70,23 +71,35 @@ export function JsonEditor({ value, onChange, hideValidation }: JsonEditorProps)
       )}
 
       {/* Monaco Editor */}
-      <div className="flex-1 rounded-lg border border-border overflow-hidden">
+      <div className={`flex-1 overflow-hidden ${transparentBackground ? "" : "rounded-lg border border-border"}`}>
         <Editor
           height="100%"
           defaultLanguage="json"
           value={value}
           onChange={handleEditorChange}
-          theme="vs-dark"
+          theme={transparentBackground ? "transparent" : "vs-dark"}
           options={{
             minimap: { enabled: false },
             fontSize: 13,
-            lineNumbers: "on",
+            lineNumbers: transparentBackground ? "off" : "on",
             scrollBeyondLastLine: false,
             automaticLayout: true,
             tabSize: 2,
             wordWrap: "on",
             formatOnPaste: true,
             formatOnType: true,
+          }}
+          beforeMount={(monaco) => {
+            monaco.editor.defineTheme("transparent", {
+              base: "vs-dark",
+              inherit: true,
+              rules: [],
+              colors: {
+                "editor.background": "#00000000",
+                "editor.lineHighlightBackground": "#00000000",
+                "editorGutter.background": "#00000000",
+              },
+            });
           }}
         />
       </div>

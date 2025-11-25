@@ -1,5 +1,5 @@
 import { useState, type RefObject } from "react";
-import { ChevronDown, ChevronRight, Maximize2, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Maximize2, X, Copy, Check } from "lucide-react";
 import type { Tool } from "@/hooks/useExperiment";
 import { JsonEditor } from "@/components/chat/conversation/model-config/json-editor";
 import { ToolEditorDialog } from "./ToolEditorDialog";
@@ -23,6 +23,14 @@ export function ToolsSection({ tools, onToolsChange, highlightedIndex, lastToolR
   const [draftContents, setDraftContents] = useState<Record<number, string>>({});
   // Track which tool's dialog is open
   const [dialogOpenIndex, setDialogOpenIndex] = useState<number | null>(null);
+  // Track which tool was copied (for showing checkmark)
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+
+  const handleCopy = async (index: number, tool: Tool) => {
+    await navigator.clipboard.writeText(JSON.stringify(tool, null, 2));
+    setCopiedIndex(index);
+    setTimeout(() => setCopiedIndex(null), 2000);
+  };
 
   const getToolContent = (index: number, tool: Tool): string => {
     return draftContents[index] ?? JSON.stringify(tool, null, 2);
@@ -77,7 +85,7 @@ export function ToolsSection({ tools, onToolsChange, highlightedIndex, lastToolR
               <div
                 key={index}
                 ref={isLast ? lastToolRef : undefined}
-                className={`border border-border rounded-lg p-3 bg-muted/30 transition-all ${
+                className={`border border-border rounded-lg p-3 transition-all ${
                   highlightedIndex === index ? "animate-highlight-flash" : ""
                 }`}
               >
@@ -87,6 +95,20 @@ export function ToolsSection({ tools, onToolsChange, highlightedIndex, lastToolR
                 </span>
                 <TooltipProvider delayDuration={200}>
                   <div className="flex items-center gap-1">
+                    {/* Copy button */}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(index, tool)}
+                          className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                        >
+                          {copiedIndex === index ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>{copiedIndex === index ? "Copied!" : "Copy JSON"}</TooltipContent>
+                    </Tooltip>
+
                     {/* Expand to dialog */}
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -122,6 +144,7 @@ export function ToolsSection({ tools, onToolsChange, highlightedIndex, lastToolR
                   value={getToolContent(index, tool)}
                   hideValidation
                   onChange={(content) => handleToolChange(index, content)}
+                  transparentBackground
                 />
               </div>
 

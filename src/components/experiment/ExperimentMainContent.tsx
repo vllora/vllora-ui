@@ -1,7 +1,10 @@
-import { useState } from "react";
-import type { ExperimentData, Message } from "@/hooks/useExperiment";
-import { ExperimentVisualEditor } from "./ExperimentVisualEditor";
+import { useState, useRef } from "react";
+import { Plus } from "lucide-react";
+import type { ExperimentData, Message, Tool } from "@/hooks/useExperiment";
+import { Button } from "@/components/ui/button";
+import { ExperimentVisualEditor, type ExperimentVisualEditorRef } from "./ExperimentVisualEditor";
 import { ExperimentJsonEditor } from "./ExperimentJsonEditor";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 
 interface ExperimentMainContentProps {
   experimentData: ExperimentData;
@@ -29,53 +32,95 @@ export function ExperimentMainContent({
   setActiveTab,
 }: ExperimentMainContentProps) {
   const [activeViewTab, setActiveViewTab] = useState<"output" | "trace">("output");
+  const visualEditorRef = useRef<ExperimentVisualEditorRef>(null);
+
+  const handleAddMessage = () => {
+    addMessage();
+    // Trigger scroll and highlight in visual editor
+    setTimeout(() => {
+      visualEditorRef.current?.scrollToNewMessage(experimentData.messages.length);
+    }, 100);
+  };
+
+  const handleAddTool = () => {
+    const newTool: Tool = {
+      type: "function",
+      function: {
+        name: "",
+        description: "",
+        parameters: {
+          type: "object",
+          properties: {},
+          required: [],
+        },
+      },
+    };
+    const tools = experimentData.tools || [];
+    updateExperimentData({ tools: [...tools, newTool] });
+    // Trigger scroll and highlight in visual editor
+    setTimeout(() => {
+      visualEditorRef.current?.scrollToNewTool(tools.length);
+    }, 100);
+  };
 
   return (
     <div className="flex-1 flex overflow-hidden">
       {/* Left Column - Request Editor */}
       <div className="w-3/5 border-r border-border flex flex-col overflow-hidden">
-        <div className="p-4 flex-1 overflow-y-auto">
-          {/* View Toggle */}
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Request Body
-            </h2>
-            <div className="flex items-center bg-muted rounded-md p-1">
-              <button
-                onClick={() => setActiveTab("visual")}
-                className={`px-3 py-1 text-xs rounded transition-colors ${
-                  activeTab === "visual"
-                    ? "bg-background shadow-sm font-semibold"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Visual
-              </button>
-              <button
-                onClick={() => setActiveTab("json")}
-                className={`px-3 py-1 text-xs rounded transition-colors ${
-                  activeTab === "json"
-                    ? "bg-background shadow-sm font-semibold"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                JSON
-              </button>
-            </div>
+        {/* Sticky Toolbar */}
+        <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+           
+            {activeTab === "visual" && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddMessage}
+                  className="gap-1"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Message
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddTool}
+                  className="gap-1"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Tool
+                </Button>
+              </>
+            )}
           </div>
+          <SegmentedControl
+            options={[
+              { value: "visual", label: "Visual" },
+              { value: "json", label: "JSON" },
+            ]}
+            value={activeTab}
+            onChange={setActiveTab}
+          />
+        </div>
 
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4">
           {activeTab === "visual" ? (
             <ExperimentVisualEditor
+              ref={visualEditorRef}
               messages={experimentData.messages}
               tools={experimentData.tools || []}
-              addMessage={addMessage}
               updateMessage={updateMessage}
               updateMessageRole={updateMessageRole}
               deleteMessage={deleteMessage}
               onToolsChange={(tools) => updateExperimentData({ tools })}
             />
           ) : (
-            <ExperimentJsonEditor experimentData={experimentData} />
+            <ExperimentJsonEditor
+              experimentData={experimentData}
+              onExperimentDataChange={updateExperimentData}
+            />
           )}
         </div>
       </div>
