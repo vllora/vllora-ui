@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Play, Settings } from "lucide-react";
+import { Play } from "lucide-react";
 import type { ExperimentData } from "@/hooks/useExperiment";
 import { ModelSelectorComponent } from "@/components/chat/traces/model-selector";
 import { ProjectModelsConsumer } from "@/contexts/ProjectModelsContext";
@@ -10,9 +10,11 @@ import { ProviderConfigDialog } from "@/components/chat/traces/model-selector/Pr
 import { MultiProviderConfigDialog } from "@/components/chat/traces/model-selector/MultiProviderConfigDialog";
 import { ModelInfo } from "@/types/models";
 import { ExperimentParametersDialog } from "./ExperimentParametersDialog";
+import { SettingsButton } from "./SettingsButton";
 
 interface ExperimentFooterControlsProps {
   experimentData: ExperimentData;
+  originalExperimentData: ExperimentData | null;
   running: boolean;
   updateExperimentData: (updates: Partial<ExperimentData>) => void;
   runExperiment: () => void;
@@ -21,6 +23,7 @@ interface ExperimentFooterControlsProps {
 
 export function ExperimentFooterControls({
   experimentData,
+  originalExperimentData,
   running,
   updateExperimentData,
   runExperiment,
@@ -64,14 +67,12 @@ export function ExperimentFooterControls({
                   handleWarningClick={handleWarningClick}
                 />
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
+              <SettingsButton
+                experimentData={experimentData}
+                originalExperimentData={originalExperimentData}
+                selectedModelInfo={selectedModelInfo}
                 onClick={() => setParametersDialogOpen(true)}
-                className="gap-2"
-              >
-                <Settings className="w-4 h-4" />
-              </Button>
+              />
             </div>
           )}
 

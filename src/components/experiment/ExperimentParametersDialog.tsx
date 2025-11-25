@@ -3,19 +3,26 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
-import { ModelParametersSection } from "@/components/chat/conversation/model-config/model-parameters-section";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Button } from "@/components/ui/button";
+import { ModelParametersList } from "@/components/chat/conversation/model-config";
 import type { ExperimentData } from "@/hooks/useExperiment";
 import { ModelInfo } from "@/types/models";
 import { VirtualModel } from "@/services/virtual-models-api";
 import { HeadersEditor } from "./HeadersEditor";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { SlidersHorizontal, FileCode2, ChevronDown } from "lucide-react";
+import { useState } from "react";
+
+// Type guard to check if the modelInfo is a ModelInfo
+function isModelInfo(modelInfo: ModelInfo | VirtualModel): modelInfo is ModelInfo {
+  return modelInfo && 'model' in modelInfo && 'model_provider' in modelInfo;
+}
 
 interface ExperimentParametersDialogProps {
   open: boolean;
@@ -32,29 +39,32 @@ export function ExperimentParametersDialog({
   updateExperimentData,
   selectedModelInfo,
 }: ExperimentParametersDialogProps) {
+  const [parametersOpen, setParametersOpen] = useState(true);
+  const [headersOpen, setHeadersOpen] = useState(true);
+
   const headerCount = Object.keys(experimentData.headers || {}).length;
+  const hasParameters = selectedModelInfo && isModelInfo(selectedModelInfo) && selectedModelInfo.parameters;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[500px] max-h-[80vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Request Settings</DialogTitle>
-          <DialogDescription>
-            Configure parameters and headers for the request
-          </DialogDescription>
+      <DialogContent className="max-w-[520px] max-h-[80vh] overflow-hidden flex flex-col gap-0 p-0">
+        <DialogHeader className="px-5 pt-5 pb-4 border-b border-border">
+          <DialogTitle className="text-base">Request Settings</DialogTitle>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto">
-          <Accordion type="multiple" defaultValue={["parameters", "headers"]} className="w-full">
-            {/* Model Parameters Section */}
-            <AccordionItem value="parameters" className="border-b">
-              <AccordionTrigger className="px-4 py-3 text-sm font-medium hover:no-underline">
-                Model Parameters
-              </AccordionTrigger>
-              <AccordionContent className="px-4 pb-4">
-                {selectedModelInfo ? (
-                  <ModelParametersSection
-                    modelInfo={selectedModelInfo}
+          {/* Model Parameters Section */}
+          <Collapsible open={parametersOpen} onOpenChange={setParametersOpen} className="border-b border-border">
+            <CollapsibleTrigger className="flex items-center gap-2 px-5 py-3 bg-muted/30 w-full hover:bg-muted/50 transition-colors">
+              <SlidersHorizontal className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Model Parameters</span>
+              <ChevronDown className={`w-4 h-4 ml-auto text-muted-foreground transition-transform duration-200 ${parametersOpen ? '' : '-rotate-90'}`} />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="px-5 py-4">
+                {hasParameters ? (
+                  <ModelParametersList
+                    parameters={(selectedModelInfo as ModelInfo).parameters!}
                     config={experimentData}
                     onConfigChange={updateExperimentData}
                   />
@@ -63,28 +73,44 @@ export function ExperimentParametersDialog({
                     No parameters available for this model
                   </p>
                 )}
-              </AccordionContent>
-            </AccordionItem>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
 
-            {/* Headers Section */}
-            <AccordionItem value="headers" className="border-b-0">
-              <AccordionTrigger className="px-4 py-3 text-sm font-medium hover:no-underline">
-                <span className="flex items-center gap-2">
-                  Request Headers
-                  {headerCount > 0 && (
-                    <span className="text-xs text-muted-foreground">({headerCount})</span>
-                  )}
+          {/* Headers Section */}
+          <Collapsible open={headersOpen} onOpenChange={setHeadersOpen}>
+            <CollapsibleTrigger className="flex items-center gap-2 px-5 py-3 bg-muted/30 w-full hover:bg-muted/50 transition-colors">
+              <FileCode2 className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Request Headers</span>
+              {headerCount > 0 && (
+                <span className="text-xs bg-muted px-2 py-0.5 rounded-full text-muted-foreground">
+                  {headerCount}
                 </span>
-              </AccordionTrigger>
-              <AccordionContent className="px-4 pb-4">
+              )}
+              <ChevronDown className={`w-4 h-4 ml-auto text-muted-foreground transition-transform duration-200 ${headersOpen ? '' : '-rotate-90'}`} />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="px-5 py-4">
                 <HeadersEditor
                   headers={experimentData.headers || {}}
                   onChange={(headers) => updateExperimentData({ headers })}
                 />
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
         </div>
+
+        <DialogFooter className="px-5 py-4 border-t border-border">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => onOpenChange(false)}
+            className="bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
+          >
+            Done
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

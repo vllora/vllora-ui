@@ -54,6 +54,8 @@ export function useExperiment(spanId: string | null) {
     headers: {},
     promptVariables: {},
   });
+  // Store the original experiment data from span for comparison
+  const [originalExperimentData, setOriginalExperimentData] = useState<ExperimentData | null>(null);
   const [result, setResult] = useState<string>("");
   const [originalOutput, setOriginalOutput] = useState<string>("");
   const [running, setRunning] = useState(false);
@@ -114,6 +116,8 @@ export function useExperiment(spanId: string | null) {
       const parsedData = parseSpanToExperiment(span);
       if (parsedData) {
         setExperimentData(parsedData);
+        // Store original data for comparison (deep clone)
+        setOriginalExperimentData(JSON.parse(JSON.stringify(parsedData)));
       }
 
       // Extract original output
@@ -223,6 +227,7 @@ export function useExperiment(spanId: string | null) {
     error,
     // Form state
     experimentData,
+    originalExperimentData,
     result,
     originalOutput,
     running,

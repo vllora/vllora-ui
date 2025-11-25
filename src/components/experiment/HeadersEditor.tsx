@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, X } from "lucide-react";
 
 interface HeadersEditorProps {
   headers: Record<string, string>;
@@ -48,29 +48,38 @@ export function HeadersEditor({ headers, onChange }: HeadersEditorProps) {
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
+      {/* Column headers */}
+      {(headerEntries.length > 0 || newKey) && (
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground uppercase tracking-wider">
+          <span className="flex-1 px-1">Name</span>
+          <span className="flex-1 px-1">Value</span>
+          <span className="w-7" />
+        </div>
+      )}
+
       {/* Existing headers */}
       {headerEntries.map(([key, value]) => (
-        <div key={key} className="flex items-center gap-2">
+        <div key={key} className="flex items-center gap-2 group">
           <Input
             value={key}
             onChange={(e) => handleUpdate(key, e.target.value, value)}
             placeholder="Header name"
-            className="flex-1 h-8 text-sm"
+            className="flex-1 h-8 text-sm font-mono bg-muted/50 border-transparent focus:border-border focus:bg-background"
           />
           <Input
             value={value}
             onChange={(e) => handleUpdate(key, key, e.target.value)}
             placeholder="Value"
-            className="flex-1 h-8 text-sm"
+            className="flex-1 h-8 text-sm font-mono bg-muted/50 border-transparent focus:border-border focus:bg-background"
           />
           <Button
             variant="ghost"
             size="icon"
             onClick={() => handleRemove(key)}
-            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+            className="h-7 w-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-opacity"
           >
-            <Trash2 className="w-4 h-4" />
+            <X className="w-3.5 h-3.5" />
           </Button>
         </div>
       ))}
@@ -81,32 +90,26 @@ export function HeadersEditor({ headers, onChange }: HeadersEditorProps) {
           value={newKey}
           onChange={(e) => setNewKey(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Header name"
-          className="flex-1 h-8 text-sm"
+          placeholder="x-custom-header"
+          className="flex-1 h-8 text-sm font-mono"
         />
         <Input
           value={newValue}
           onChange={(e) => setNewValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Value"
-          className="flex-1 h-8 text-sm"
+          placeholder="value"
+          className="flex-1 h-8 text-sm font-mono"
         />
         <Button
           variant="ghost"
           size="icon"
           onClick={handleAdd}
           disabled={!newKey.trim()}
-          className="h-8 w-8 text-muted-foreground hover:text-[rgb(var(--theme-500))]"
+          className="h-7 w-7 text-muted-foreground hover:text-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-500)/0.1)] disabled:opacity-30"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-3.5 h-3.5" />
         </Button>
       </div>
-
-      {headerEntries.length === 0 && !newKey && (
-        <p className="text-xs text-muted-foreground">
-          Add custom headers like x-label, x-thread-id, etc.
-        </p>
-      )}
     </div>
   );
 }

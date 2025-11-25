@@ -15,6 +15,7 @@ export const ExperimentPage = () => {
   const {
     loading,
     experimentData,
+    originalExperimentData,
     result,
     originalOutput,
     running,
@@ -52,6 +53,7 @@ export const ExperimentPage = () => {
       {/* Footer Controls */}
       <ExperimentFooterControls
         experimentData={experimentData}
+        originalExperimentData={originalExperimentData}
         running={running}
         updateExperimentData={updateExperimentData}
         runExperiment={runExperiment}
