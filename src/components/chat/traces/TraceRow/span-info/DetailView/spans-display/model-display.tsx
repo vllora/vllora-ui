@@ -7,6 +7,12 @@ import { UsageViewer } from "../usage-viewer";
 import { Button } from "@/components/ui/button";
 import { Sparkles } from "lucide-react";
 import { useNavigate } from "react-router";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface ModelInvokeUIDetailsDisplayProps {
     span: Span;
@@ -50,26 +56,34 @@ export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelIn
     };
 
     return (
-        <BaseSpanUIDetailsDisplay>
-            <div className="flex flex-col gap-6 pb-4">
-                <div className="flex items-center justify-end">
-                    <Button
-                        onClick={handleExperiment}
-                        variant="outline"
-                        size="sm"
-                        className="gap-2"
-                    >
-                        <Sparkles className="w-4 h-4" />
-                        Experiment
-                    </Button>
+        <div className="relative">
+            <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button
+                            onClick={handleExperiment}
+                            variant="ghost"
+                            size="icon"
+                            className="absolute -top-[25px] right-0 z-10 h-7 w-7 rounded-full text-[rgb(var(--theme-500))] hover:text-[rgb(var(--theme-400))] hover:bg-[rgb(var(--theme-500)/0.15)] transition-all duration-200 hover:scale-110"
+                        >
+                            <Sparkles className="w-4 h-4 animate-pulse" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="left">
+                        <p>Open this in Experiment</p>
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+            <BaseSpanUIDetailsDisplay>
+                <div className="flex flex-col gap-6 pb-4">
+                    <InputViewer jsonRequest={raw_request_json} headers={headers} />
+                    <ResponseViewer response={raw_response_json} />
+                    <UsageViewer
+                        cost={costInfo || undefined}
+                        ttft={ttf_str || undefined}
+                        usage={usageInfo || undefined}
+                    />
                 </div>
-                <InputViewer jsonRequest={raw_request_json} headers={headers} />
-                <ResponseViewer response={raw_response_json} />
-                <UsageViewer
-                    cost={costInfo || undefined}
-                    ttft={ttf_str || undefined}
-                    usage={usageInfo || undefined}
-                />
-            </div>
-        </BaseSpanUIDetailsDisplay>);
+            </BaseSpanUIDetailsDisplay>
+        </div>);
 };
