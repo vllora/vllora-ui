@@ -147,7 +147,7 @@ export function useExperiment(spanId: string | null) {
       const payload = {
         model: experimentData.model,
         messages: experimentData.messages,
-        temperature: experimentData.temperature,
+        ...(experimentData.tools && experimentData.tools.length > 0 && { tools: experimentData.tools }),
         ...(experimentData.max_tokens && {
           max_tokens: experimentData.max_tokens,
         }),
