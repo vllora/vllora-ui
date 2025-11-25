@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
 import type { ExperimentData } from "@/hooks/useExperiment";
+import { ExperimentVisualEditor } from "./ExperimentVisualEditor";
+import { ExperimentJsonEditor } from "./ExperimentJsonEditor";
 
 interface ExperimentMainContentProps {
   experimentData: ExperimentData;
@@ -9,6 +10,9 @@ interface ExperimentMainContentProps {
   addMessage: () => void;
   updateMessage: (index: number, content: string) => void;
   deleteMessage: (index: number) => void;
+  updateExperimentData: (updates: Partial<ExperimentData>) => void;
+  activeTab: "visual" | "json";
+  setActiveTab: (tab: "visual" | "json") => void;
 }
 
 export function ExperimentMainContent({
@@ -18,8 +22,10 @@ export function ExperimentMainContent({
   addMessage,
   updateMessage,
   deleteMessage,
+  updateExperimentData,
+  activeTab,
+  setActiveTab,
 }: ExperimentMainContentProps) {
-  const [activeTab, setActiveTab] = useState<"visual" | "json">("visual");
   const [activeViewTab, setActiveViewTab] = useState<"output" | "trace">("output");
 
   return (
@@ -57,63 +63,16 @@ export function ExperimentMainContent({
           </div>
 
           {activeTab === "visual" ? (
-            <div className="space-y-4">
-              {/* Messages */}
-              <div className="space-y-2">
-                {experimentData.messages.map((message, index) => (
-                  <div key={index} className="border border-border rounded-lg p-3 bg-card">
-                    <div className="flex items-center justify-between mb-2">
-                      <span
-                        className={`text-xs font-semibold uppercase ${
-                          message.role === "system"
-                            ? "text-purple-500"
-                            : message.role === "user"
-                            ? "text-blue-500"
-                            : "text-green-500"
-                        }`}
-                      >
-                        {message.role}
-                      </span>
-                      <button
-                        onClick={() => deleteMessage(index)}
-                        className="text-xs text-muted-foreground hover:text-destructive"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                    <textarea
-                      value={message.content}
-                      onChange={(e) => updateMessage(index, e.target.value)}
-                      className="w-full min-h-[80px] bg-background border border-border rounded px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-ring"
-                      placeholder="Enter message content..."
-                    />
-                  </div>
-                ))}
-              </div>
-
-              <Button
-                variant="outline"
-                onClick={addMessage}
-                className="w-full border-dashed"
-              >
-                + Add Message
-              </Button>
-            </div>
+            <ExperimentVisualEditor
+              messages={experimentData.messages}
+              tools={experimentData.tools || []}
+              addMessage={addMessage}
+              updateMessage={updateMessage}
+              deleteMessage={deleteMessage}
+              onToolsChange={(tools) => updateExperimentData({ tools })}
+            />
           ) : (
-            <div className="border border-border rounded-lg p-4 bg-black">
-              <pre className="text-sm text-green-400 overflow-auto">
-                {JSON.stringify(
-                  {
-                    model: experimentData.model,
-                    messages: experimentData.messages,
-                    temperature: experimentData.temperature,
-                    ...(experimentData.max_tokens && { max_tokens: experimentData.max_tokens }),
-                  },
-                  null,
-                  2
-                )}
-              </pre>
-            </div>
+            <ExperimentJsonEditor experimentData={experimentData} />
           )}
         </div>
       </div>

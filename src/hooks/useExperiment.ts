@@ -9,6 +9,17 @@ export interface Message {
   content: string;
 }
 
+export interface ToolFunction {
+  name: string;
+  description: string;
+  parameters: Record<string, any>;
+}
+
+export interface Tool {
+  type: "function";
+  function: ToolFunction;
+}
+
 export interface ExperimentData {
   name: string;
   description: string;
@@ -16,6 +27,8 @@ export interface ExperimentData {
   model: string;
   temperature: number;
   max_tokens?: number;
+  tools?: Tool[];
+  tool_choice?: string | { type: "function"; function: { name: string } };
   headers?: Record<string, string>;
   promptVariables?: Record<string, string>;
 }

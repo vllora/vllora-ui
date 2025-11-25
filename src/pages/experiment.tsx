@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useSearchParams } from "react-router";
 import { useExperiment } from "@/hooks/useExperiment";
 import { ExperimentHeader } from "@/components/experiment/ExperimentHeader";
@@ -8,6 +9,7 @@ import { ExperimentLoadingState } from "@/components/experiment/ExperimentLoadin
 export const ExperimentPage = () => {
   const [searchParams] = useSearchParams();
   const spanId = searchParams.get("span_id");
+  const [activeTab, setActiveTab] = useState<"visual" | "json">("visual");
 
   // Use the experiment hook
   const {
@@ -40,6 +42,9 @@ export const ExperimentPage = () => {
         addMessage={addMessage}
         updateMessage={updateMessage}
         deleteMessage={deleteMessage}
+        updateExperimentData={updateExperimentData}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
       />
 
       {/* Footer Controls */}
@@ -48,6 +53,7 @@ export const ExperimentPage = () => {
         running={running}
         updateExperimentData={updateExperimentData}
         runExperiment={runExperiment}
+        activeTab={activeTab}
       />
     </div>
   );
