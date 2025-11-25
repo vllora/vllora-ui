@@ -3,12 +3,44 @@ import Editor from "@monaco-editor/react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 
+interface JsonValidationStatusProps {
+  value: string;
+  error: string | null;
+}
+
+export function JsonValidationStatus({ value, error }: JsonValidationStatusProps) {
+  if (error) {
+    return (
+      <Alert variant="destructive" className="py-2 flex items-center">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription className="text-xs">
+          <strong>JSON Error:</strong> {error}
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  if (value.trim()) {
+    return (
+      <div className="py-2 px-2 rounded-md border-green-500/50 bg-green-500/10 flex gap-2 items-center">
+        <CheckCircle2 className="h-4 w-4 text-green-500" />
+        <span className="text-xs text-green-600 dark:text-green-400">
+          Valid JSON
+        </span>
+      </div>
+    );
+  }
+
+  return null;
+}
+
 interface JsonEditorProps {
   value: string;
   onChange: (value: string) => void;
+  hideValidation?: boolean;
 }
 
-export function JsonEditor({ value, onChange }: JsonEditorProps) {
+export function JsonEditor({ value, onChange, hideValidation }: JsonEditorProps) {
   const [jsonError, setJsonError] = useState<string | null>(null);
 
   // Validate JSON whenever value changes
@@ -16,6 +48,8 @@ export function JsonEditor({ value, onChange }: JsonEditorProps) {
     try {
       if (value.trim()) {
         JSON.parse(value);
+        setJsonError(null);
+      } else {
         setJsonError(null);
       }
     } catch (error) {
@@ -31,23 +65,8 @@ export function JsonEditor({ value, onChange }: JsonEditorProps) {
 
   return (
     <div className="flex flex-col h-full gap-3">
-      {/* Validation Status */}
-      {jsonError ? (
-        <Alert variant="destructive" className="py-2 flex items-center">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="text-xs">
-            <strong>JSON Error:</strong> {jsonError}
-          </AlertDescription>
-        </Alert>
-      ) : (
-        value.trim() && (
-          <div className="py-2 px-2 rounded-md border-green-500/50 bg-green-500/10 flex gap-2 items-center">
-            <CheckCircle2 className="h-4 w-4 text-green-500" />
-            <span className="text-xs text-green-600 dark:text-green-400">
-              Valid JSON
-            </span>
-            </div>
-        )
+      {!hideValidation && (
+        <JsonValidationStatus value={value} error={jsonError} />
       )}
 
       {/* Monaco Editor */}
