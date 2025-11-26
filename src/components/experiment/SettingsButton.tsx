@@ -105,59 +105,82 @@ export function SettingsButton({
             variant="ghost"
             size="sm"
             onClick={onClick}
-            className="gap-2 relative"
+            className="gap-2"
           >
-            <Settings className="w-4 h-4" />
-            {(settingsInfo.hasSettings || settingsInfo.hasChanges) && (
-              <span
-                className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-background ${
-                  settingsInfo.hasChanges
-                    ? "bg-amber-500"
-                    : "bg-[rgb(var(--theme-500))]"
-                }`}
-              />
-            )}
+            <span className="relative">
+              <Settings className="w-4 h-4" />
+              {(settingsInfo.hasSettings || settingsInfo.hasChanges) && (
+                <span
+                  className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${
+                    settingsInfo.hasChanges
+                      ? "bg-amber-500"
+                      : "bg-[rgb(var(--theme-500))]"
+                  }`}
+                />
+              )}
+            </span>
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-[280px]">
+        <TooltipContent side="top" className="p-0 overflow-hidden">
           {settingsInfo.hasSettings || settingsInfo.hasChanges ? (
-            <div className="text-xs space-y-1">
+            <div className="text-xs">
+              {/* Parameters Section */}
               {settingsInfo.setParameters.length > 0 && (
-                <div>
-                  <span className="font-medium">Parameters:</span>{" "}
-                  {settingsInfo.setParameters.map((param, i) => {
-                    // Format value for display - handle objects
-                    const displayValue =
-                      typeof param.value === "object"
-                        ? JSON.stringify(param.value)
-                        : String(param.value);
-                    return (
-                      <span key={param.key}>
-                        <span className={param.changed ? "text-amber-400" : ""}>
-                          {param.key}: {displayValue}
-                        </span>
-                        {i < settingsInfo.setParameters.length - 1 && ", "}
-                      </span>
-                    );
-                  })}
+                <div className="px-3 py-2 border-b border-border/50">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
+                    Parameters
+                  </div>
+                  <div className="space-y-1">
+                    {settingsInfo.setParameters.map((param) => {
+                      const displayValue =
+                        typeof param.value === "object"
+                          ? JSON.stringify(param.value)
+                          : String(param.value);
+                      return (
+                        <div
+                          key={param.key}
+                          className={`flex items-center justify-between gap-3 ${
+                            param.changed ? "text-amber-400" : ""
+                          }`}
+                        >
+                          <span className="text-muted-foreground">
+                            {param.key}
+                          </span>
+                          <span className="font-mono">{displayValue}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
+
+              {/* Headers Section */}
               {settingsInfo.headerCount > 0 && (
                 <div
-                  className={settingsInfo.headersChanged ? "text-amber-400" : ""}
+                  className={`px-3 py-2 ${
+                    settingsInfo.setParameters.length > 0 ? "" : ""
+                  } ${settingsInfo.headersChanged ? "text-amber-400" : ""}`}
                 >
-                  <span className="font-medium">Headers:</span>{" "}
-                  {settingsInfo.headerCount} configured
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">Headers</span>
+                    <span className="font-mono">
+                      {settingsInfo.headerCount}
+                    </span>
+                  </div>
                 </div>
               )}
+
+              {/* Modified indicator */}
               {settingsInfo.hasChanges && (
-                <div className="text-amber-400 text-[10px] mt-1">
-                  * Modified from original request
+                <div className="px-3 py-1.5 bg-amber-500/10 text-amber-400 text-[10px] border-t border-amber-500/20">
+                  Modified from original
                 </div>
               )}
             </div>
           ) : (
-            <p>Request Settings</p>
+            <div className="px-3 py-2 text-xs text-muted-foreground">
+              Request Settings
+            </div>
           )}
         </TooltipContent>
       </Tooltip>
