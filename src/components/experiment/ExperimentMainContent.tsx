@@ -205,6 +205,7 @@ export function ExperimentMainContent({
           result={result}
           originalOutput={originalOutput}
           running={running}
+          isStreaming={experimentData.stream ?? true}
           traceSpans={traceSpans}
           loadingTraceSpans={loadingTraceSpans}
           projectId={projectId}
