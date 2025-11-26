@@ -39,9 +39,10 @@ interface JsonEditorProps {
   onChange: (value: string) => void;
   hideValidation?: boolean;
   transparentBackground?: boolean;
+  disableStickyScroll?: boolean;
 }
 
-export function JsonEditor({ value, onChange, hideValidation, transparentBackground }: JsonEditorProps) {
+export function JsonEditor({ value, onChange, hideValidation, transparentBackground, disableStickyScroll }: JsonEditorProps) {
   const [jsonError, setJsonError] = useState<string | null>(null);
 
   // Validate JSON whenever value changes
@@ -88,6 +89,9 @@ export function JsonEditor({ value, onChange, hideValidation, transparentBackgro
             wordWrap: "on",
             formatOnPaste: true,
             formatOnType: true,
+            stickyScroll: {
+              enabled: !disableStickyScroll
+            }
           }}
           beforeMount={(monaco) => {
             monaco.editor.defineTheme("transparent", {

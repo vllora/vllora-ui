@@ -49,7 +49,8 @@ export function ExperimentJsonEditor({ experimentData, onExperimentDataChange }:
       <JsonEditor
         value={jsonValue}
         onChange={handleChange}
-        
+        transparentBackground
+        disableStickyScroll
       />
     </div>
   );

@@ -145,6 +145,7 @@ export function ToolsSection({ tools, onToolsChange, highlightedIndex, lastToolR
                   hideValidation
                   onChange={(content) => handleToolChange(index, content)}
                   transparentBackground
+                  disableStickyScroll
                 />
               </div>
 

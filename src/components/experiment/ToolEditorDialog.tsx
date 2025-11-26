@@ -71,6 +71,8 @@ export function ToolEditorDialog({
           <JsonEditor
             value={draftContent}
             onChange={handleContentChange}
+            transparentBackground
+            disableStickyScroll
           />
         </div>
 
