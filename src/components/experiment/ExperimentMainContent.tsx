@@ -1,15 +1,17 @@
-import { useRef } from "react";
+import { useRef, useMemo } from "react";
 import type { ExperimentData, Message, Tool } from "@/hooks/useExperiment";
 import { ExperimentVisualEditor, type ExperimentVisualEditorRef } from "./ExperimentVisualEditor";
 import { ExperimentJsonEditor } from "./ExperimentJsonEditor";
 import { ExperimentToolbarActions } from "./ExperimentToolbarActions";
 import { ExperimentOutputPanel } from "./ExperimentOutputPanel";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { DetectedVariables } from "./DetectedVariables";
 
 interface ExperimentMainContentProps {
   experimentData: ExperimentData;
   result: string;
   originalOutput: string;
+  running: boolean;
   addMessage: () => void;
   updateMessage: (index: number, content: string) => void;
   updateMessageRole: (index: number, role: Message["role"]) => void;
@@ -23,6 +25,7 @@ export function ExperimentMainContent({
   experimentData,
   result,
   originalOutput,
+  running,
   addMessage,
   updateMessage,
   updateMessageRole,
@@ -62,6 +65,64 @@ export function ExperimentMainContent({
     }, 100);
   };
 
+  // Extract mustache variables from the entire experimentData object
+  const extractedVariables = useMemo(() => {
+    const variables = new Set<string>();
+
+    // Recursively extract variables from any string in the object
+    const extractFromValue = (value: unknown): void => {
+      if (typeof value === "string") {
+        const matches = value.match(/\{\{(\w+)\}\}/g) || [];
+        matches.forEach((match) => variables.add(match.slice(2, -2)));
+      } else if (Array.isArray(value)) {
+        value.forEach(extractFromValue);
+      } else if (value && typeof value === "object") {
+        Object.values(value).forEach(extractFromValue);
+      }
+    };
+
+    extractFromValue(experimentData);
+    return Array.from(variables);
+  }, [experimentData]);
+
+  const handleRenameVariable = (oldName: string, newName: string) => {
+    // Recursively replace variables in all strings
+    const replaceInValue = <T,>(value: T): T => {
+      if (typeof value === "string") {
+        return value.replace(
+          new RegExp(`\\{\\{${oldName}\\}\\}`, "g"),
+          `{{${newName}}}`
+        ) as T;
+      } else if (Array.isArray(value)) {
+        return value.map(replaceInValue) as T;
+      } else if (value && typeof value === "object") {
+        const result: Record<string, unknown> = {};
+        for (const [key, val] of Object.entries(value)) {
+          result[key] = replaceInValue(val);
+        }
+        return result as T;
+      }
+      return value;
+    };
+
+    // Replace in messages and tools
+    const updatedData: Partial<ExperimentData> = {};
+    if (experimentData.messages) {
+      updatedData.messages = replaceInValue(experimentData.messages);
+    }
+    if (experimentData.tools) {
+      updatedData.tools = replaceInValue(experimentData.tools);
+    }
+    if (experimentData.description) {
+      updatedData.description = replaceInValue(experimentData.description);
+    }
+    updateExperimentData(updatedData);
+  };
+
+  const handlePromptVariablesChange = (promptVariables: Record<string, string>) => {
+    updateExperimentData({ promptVariables });
+  };
+
   return (
     <div className="flex-1 flex overflow-hidden">
       {/* Left Column - Request Editor */}
@@ -87,6 +148,18 @@ export function ExperimentMainContent({
           />
         </div>
 
+        {/* Detected Variables - shown for both modes */}
+        {extractedVariables.length > 0 && (
+          <div className="px-4 py-3 border-b border-border">
+            <DetectedVariables
+              variables={extractedVariables}
+              values={experimentData.promptVariables || {}}
+              onChange={handlePromptVariablesChange}
+              onRenameVariable={handleRenameVariable}
+            />
+          </div>
+        )}
+
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
           {activeTab === "visual" ? (
@@ -109,7 +182,7 @@ export function ExperimentMainContent({
       </div>
 
       {/* Right Column - Outputs */}
-      <ExperimentOutputPanel result={result} originalOutput={originalOutput} />
+      <ExperimentOutputPanel result={result} originalOutput={originalOutput} running={running} />
     </div>
   );
 }

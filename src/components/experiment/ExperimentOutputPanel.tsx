@@ -1,13 +1,48 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { JsonViewer } from "@/components/chat/traces/TraceRow/span-info/JsonViewer";
+import { MarkdownViewer } from "@/components/chat/traces/TraceRow/span-info/DetailView/markdown-viewer";
+import { tryParseJson } from "@/utils/modelUtils";
 
 interface ExperimentOutputPanelProps {
   result: string;
   originalOutput: string;
+  running: boolean;
+}
+
+interface ContentDisplayProps {
+  content: string;
+  className?: string;
+}
+
+function ContentDisplay({ content, className }: ContentDisplayProps) {
+  const { isJson, parsedJson } = useMemo(() => {
+    if (!content) return { isJson: false, parsedJson: null };
+    const parsed = tryParseJson(content);
+    const isValidJson = parsed !== null && typeof parsed === "object";
+    return { isJson: isValidJson, parsedJson: parsed };
+  }, [content]);
+
+  if (!content) return null;
+
+  if (isJson && parsedJson) {
+    return (
+      <div className={className}>
+        <JsonViewer data={parsedJson} collapsed={3} collapseStringsAfterLength={100} />
+      </div>
+    );
+  }
+
+  return (
+    <div className={`prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:my-2 ${className || ""}`}>
+      <MarkdownViewer message={content} />
+    </div>
+  );
 }
 
 export function ExperimentOutputPanel({
   result,
   originalOutput,
+  running,
 }: ExperimentOutputPanelProps) {
   const [activeTab, setActiveTab] = useState<"output" | "trace">("output");
 
@@ -39,35 +74,59 @@ export function ExperimentOutputPanel({
         </div>
 
         {activeTab === "output" ? (
-          <>
+          <div className="space-y-4">
             {/* New Output */}
-            {result && (
-              <div className="mb-4 border-2 border-green-500 rounded-lg p-4 bg-green-50 dark:bg-green-950">
-                <h3 className="text-sm font-semibold mb-2">New Output</h3>
-                <pre className="text-sm whitespace-pre-wrap font-mono">{result}</pre>
+            {(result || running) && (
+              <div className="rounded-lg border border-border overflow-hidden">
+                <div className="px-3 py-2 bg-[rgb(var(--theme-500))]/10 border-b border-border flex items-center gap-2">
+                  {running ? (
+                    <div className="w-2 h-2 rounded-full bg-[rgb(var(--theme-500))] animate-pulse" />
+                  ) : (
+                    <div className="w-2 h-2 rounded-full bg-[rgb(var(--theme-500))]" />
+                  )}
+                  <span className="text-xs font-medium">New Output</span>
+                  {running && (
+                    <span className="text-xs text-muted-foreground animate-pulse">Streaming...</span>
+                  )}
+                </div>
+                <div className="p-3 max-h-[400px] overflow-y-auto text-sm">
+                  {result ? (
+                    <ContentDisplay content={result} />
+                  ) : running ? (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      <span className="text-sm">Waiting for response...</span>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             )}
 
             {/* Original Output */}
             {originalOutput && (
-              <div className="border-2 border-dashed border-border rounded-lg p-4 bg-muted">
-                <h3 className="text-sm font-semibold mb-2 text-muted-foreground">
-                  Original Output
-                </h3>
-                <pre className="text-sm whitespace-pre-wrap font-mono text-muted-foreground">
-                  {originalOutput}
-                </pre>
+              <div className="rounded-lg border border-dashed border-border overflow-hidden">
+                <div className="px-3 py-2 bg-muted/50 border-b border-dashed border-border">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Original Output
+                  </span>
+                </div>
+                <div className="p-3 max-h-[300px] overflow-y-auto text-sm">
+                  <ContentDisplay
+                    content={originalOutput}
+                    className="text-muted-foreground"
+                  />
+                </div>
               </div>
             )}
 
-            {!result && !originalOutput && (
-              <div className="text-center text-muted-foreground text-sm">
+            {!result && !originalOutput && !running && (
+              <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">
                 Run the experiment to see output
               </div>
             )}
-          </>
+          </div>
         ) : (
-          <div className="text-center text-muted-foreground text-sm">
+          <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">
             Trace view will be available after running the experiment
           </div>
         )}

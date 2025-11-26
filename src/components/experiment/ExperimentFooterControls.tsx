@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Play } from "lucide-react";
 import type { ExperimentData } from "@/hooks/useExperiment";
 import { ModelSelectorComponent } from "@/components/chat/traces/model-selector";
@@ -76,7 +78,19 @@ export function ExperimentFooterControls({
             </div>
           )}
 
-          <div className={activeTab === "json" ? "" : "ml-auto"}>
+          <div className="ml-auto flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="streaming"
+                checked={experimentData.stream ?? true}
+                onCheckedChange={(checked) =>
+                  updateExperimentData({ stream: checked === true })
+                }
+              />
+              <Label htmlFor="streaming" className="text-sm cursor-pointer">
+                Streaming
+              </Label>
+            </div>
             <Button
               onClick={runExperiment}
               disabled={running}

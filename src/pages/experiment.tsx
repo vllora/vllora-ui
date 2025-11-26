@@ -41,6 +41,7 @@ export const ExperimentPage = () => {
         experimentData={experimentData}
         result={result}
         originalOutput={originalOutput}
+        running={running}
         addMessage={addMessage}
         updateMessage={updateMessage}
         updateMessageRole={updateMessageRole}

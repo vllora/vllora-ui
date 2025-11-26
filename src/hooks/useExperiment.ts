@@ -26,12 +26,11 @@ export interface ExperimentData {
   description: string;
   messages: Message[];
   model: string;
-  temperature: number;
-  max_tokens?: number;
   tools?: Tool[];
   tool_choice?: string | { type: "function"; function: { name: string } };
   headers?: Record<string, string>;
   promptVariables?: Record<string, string>;
+  stream?: boolean;
 }
 
 export interface ExperimentResult {
@@ -50,12 +49,13 @@ export function useExperiment(spanId: string | null) {
     description: "",
     messages: [],
     model: "openai/gpt-4.1-mini",
-    temperature: 0.7,
     headers: {},
     promptVariables: {},
+    stream: true,
   });
   // Store the original experiment data from span for comparison
-  const [originalExperimentData, setOriginalExperimentData] = useState<ExperimentData | null>(null);
+  const [originalExperimentData, setOriginalExperimentData] =
+    useState<ExperimentData | null>(null);
   const [result, setResult] = useState<string>("");
   const [originalOutput, setOriginalOutput] = useState<string>("");
   const [running, setRunning] = useState(false);
@@ -94,7 +94,7 @@ export function useExperiment(spanId: string | null) {
     // Extract messages
     const messages: Message[] = request?.messages || [];
 
-    // extract tools 
+    // extract tools
     const tools: Tool[] = request?.tools || [];
 
     return {
@@ -103,10 +103,9 @@ export function useExperiment(spanId: string | null) {
       messages,
       tools,
       model: request.model || "gpt-4",
-      temperature: request.temperature || 0.7,
-      max_tokens: request.max_tokens,
       headers: {},
       promptVariables: {},
+      stream: request.stream ?? true,
     };
   };
 
@@ -147,20 +146,34 @@ export function useExperiment(spanId: string | null) {
   // Run experiment with the current experiment data
   const handleRunExperiment = async () => {
     setRunning(true);
+    setResult(""); // Clear previous result
+
     try {
+      // Extract non-API fields from experimentData
+      const {
+        name,
+        description,
+        headers,
+        promptVariables,
+        tools,
+        ...apiParams
+      } = experimentData;
+
       const payload = {
-        model: experimentData.model,
-        messages: experimentData.messages,
-        ...(experimentData.tools && experimentData.tools.length > 0 && { tools: experimentData.tools }),
-        ...(experimentData.max_tokens && {
-          max_tokens: experimentData.max_tokens,
-        }),
+        ...apiParams,
+        ...(tools && tools.length > 0 && { tools }),
       };
+
+      // Extract thread_id from span if available
+      const threadId = span?.thread_id;
+      const isStreaming = experimentData.stream ?? true;
 
       const response = await api.post("/v1/chat/completions", payload, {
         headers: {
           "Content-Type": "application/json",
-          ...experimentData.headers,
+          ...(threadId && { "x-thread-id": threadId }),
+          "x-label": "experiment",
+          ...headers,
         },
       });
 
@@ -168,17 +181,60 @@ export function useExperiment(spanId: string | null) {
         throw new Error("Failed to run experiment");
       }
 
-      const data = await response.json();
-      const content =
-        data.choices?.[0]?.message?.content || JSON.stringify(data);
+      if (isStreaming && response.body) {
+        // Handle streaming response
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let accumulatedContent = "";
+        let buffer = "";
 
-      toast.success("Experiment completed successfully");
-      setResult(content);
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-      return {
-        content,
-        rawResponse: data,
-      };
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || ""; // Keep incomplete line in buffer
+
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (!trimmedLine || !trimmedLine.startsWith("data:")) continue;
+
+            const data = trimmedLine.slice(5).trim();
+            if (data === "[DONE]") continue;
+
+            try {
+              const parsed = JSON.parse(data);
+              const delta = parsed.choices?.[0]?.delta?.content;
+              if (delta) {
+                accumulatedContent += delta;
+                setResult(accumulatedContent);
+              }
+            } catch {
+              // Skip invalid JSON chunks
+            }
+          }
+        }
+
+        toast.success("Experiment completed successfully");
+        return {
+          content: accumulatedContent,
+          rawResponse: null,
+        };
+      } else {
+        // Handle non-streaming response
+        const data = await response.json();
+        const content =
+          data.choices?.[0]?.message?.content || JSON.stringify(data);
+
+        toast.success("Experiment completed successfully");
+        setResult(content);
+
+        return {
+          content,
+          rawResponse: data,
+        };
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to run experiment";

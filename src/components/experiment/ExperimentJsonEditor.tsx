@@ -13,8 +13,6 @@ export function ExperimentJsonEditor({ experimentData, onExperimentDataChange }:
       {
         model: experimentData.model,
         messages: experimentData.messages,
-        temperature: experimentData.temperature,
-        ...(experimentData.max_tokens && { max_tokens: experimentData.max_tokens }),
         ...(experimentData.tools && experimentData.tools.length > 0 && { tools: experimentData.tools }),
         ...(experimentData.tool_choice && { tool_choice: experimentData.tool_choice }),
       },
