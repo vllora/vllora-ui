@@ -1,10 +1,10 @@
 import type { RefObject } from "react";
-import type { Message } from "@/hooks/useExperiment";
+import type { Message, MessageContentPart } from "@/hooks/useExperiment";
 import { MessageEditor } from "./MessageEditor";
 
 interface MessagesSectionProps {
   messages: Message[];
-  updateMessage: (index: number, content: string) => void;
+  updateMessage: (index: number, content: string | MessageContentPart[]) => void;
   updateMessageRole: (index: number, role: Message["role"]) => void;
   deleteMessage: (index: number) => void;
   highlightedIndex?: number | null;

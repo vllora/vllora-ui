@@ -82,7 +82,7 @@ export function JsonEditor({ value, onChange, hideValidation, transparentBackgro
           options={{
             minimap: { enabled: false },
             fontSize: 13,
-            lineNumbers: 'on',
+            lineNumbers: transparentBackground ? 'off': 'on',
             scrollBeyondLastLine: false,
             automaticLayout: true,
             tabSize: 2,

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Maximize2, X, Copy, Check } from "lucide-react";
-import type { Message } from "@/hooks/useExperiment";
+import type { Message, MessageContentPart } from "@/hooks/useExperiment";
+import { normalizeContentToString } from "@/hooks/useExperiment";
 import {
   Tooltip,
   TooltipContent,
@@ -11,15 +12,39 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { MessageEditorDialog } from "./MessageEditorDialog";
 import { CodeMirrorEditor } from "./CodeMirrorEditor";
 import { RoleSelector } from "./RoleSelector";
+import { JsonEditor } from "@/components/chat/conversation/model-config/json-editor";
 
 interface MessageEditorProps {
   message: Message;
   index: number;
-  updateMessage: (index: number, content: string) => void;
+  updateMessage: (index: number, content: string | MessageContentPart[]) => void;
   updateMessageRole: (index: number, role: Message["role"]) => void;
   deleteMessage: (index: number) => void;
   isHighlighted?: boolean;
 }
+
+type EditorMode = "plain" | "markdown" | "structured";
+
+// Detect if content is structured (array or JSON array string)
+function isStructuredContent(content: string | MessageContentPart[]): boolean {
+  if (Array.isArray(content)) return true;
+  if (typeof content !== "string") return false;
+  const trimmed = content.trim();
+  if (!trimmed.startsWith("[")) return false;
+  try {
+    const parsed = JSON.parse(trimmed);
+    return Array.isArray(parsed);
+  } catch {
+    return false;
+  }
+}
+
+// Default template for structured content
+const STRUCTURED_CONTENT_TEMPLATE = JSON.stringify(
+  [{ type: "text", text: "" }],
+  null,
+  2
+);
 
 export function MessageEditor({
   message,
@@ -29,12 +54,48 @@ export function MessageEditor({
   deleteMessage,
   isHighlighted,
 }: MessageEditorProps) {
-  const [useMarkdown, setUseMarkdown] = useState(false);
+  // Determine initial editor mode based on content
+  const initialMode = useMemo((): EditorMode => {
+    if (isStructuredContent(message.content)) return "structured";
+    return "plain";
+  }, []);
+
+  const [editorMode, setEditorMode] = useState<EditorMode>(initialMode);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Keep track if content is structured (for display purposes)
+  const isStructured = useMemo(
+    () => isStructuredContent(message.content),
+    [message.content]
+  );
+
+  // Normalize content to string for editing
+  const contentAsString = normalizeContentToString(message.content);
+
+  // Handle editor mode change
+  // Only convert content when switching TO structured from empty/plain text
+  // Never auto-convert FROM structured to avoid losing data (images, etc.)
+  const handleModeChange = (newMode: EditorMode) => {
+    if (newMode === "structured" && !isStructured) {
+      // Switch to structured: only convert if content is plain text
+      const currentContent = contentAsString.trim();
+      if (currentContent) {
+        // Wrap existing text in structured format
+        updateMessage(
+          index,
+          JSON.stringify([{ type: "text", text: currentContent }], null, 2)
+        );
+      } else {
+        updateMessage(index, STRUCTURED_CONTENT_TEMPLATE);
+      }
+    }
+    // Don't auto-convert when switching FROM structured - user keeps JSON as-is
+    setEditorMode(newMode);
+  };
+
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(message.content);
+    await navigator.clipboard.writeText(contentAsString);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -56,14 +117,15 @@ export function MessageEditor({
 
           {/* Right side - Action buttons */}
           <div className="flex items-center gap-2">
-            {/* Markdown toggle */}
+            {/* Editor mode selector */}
             <SegmentedControl
               options={[
                 { value: "plain", label: "Plain" },
                 { value: "markdown", label: "Markdown" },
+                { value: "structured", label: "Structured" },
               ]}
-              value={useMarkdown ? "markdown" : "plain"}
-              onChange={(val) => setUseMarkdown(val === "markdown")}
+              value={editorMode}
+              onChange={(val) => handleModeChange(val as EditorMode)}
               size="sm"
             />
 
@@ -116,9 +178,19 @@ export function MessageEditor({
         </div>
 
         {/* Inline editor - compact view */}
-        {useMarkdown ? (
+        {editorMode === "structured" ? (
+          <div className="h-[15vh] border border-border rounded overflow-hidden">
+            <JsonEditor
+              value={contentAsString}
+              onChange={(content: string) => updateMessage(index, content)}
+              hideValidation
+              transparentBackground
+              disableStickyScroll
+            />
+          </div>
+        ) : editorMode === "markdown" ? (
           <CodeMirrorEditor
-            content={message.content}
+            content={contentAsString}
             onChange={(content: string) => updateMessage(index, content)}
             placeholder="Enter message content... Use {{variable}} for mustache variables"
             minHeight="15vh"
@@ -126,7 +198,7 @@ export function MessageEditor({
           />
         ) : (
           <textarea
-            value={message.content}
+            value={contentAsString}
             onChange={(e) => updateMessage(index, e.target.value)}
             placeholder="Enter message content... Use {{variable}} for mustache variables"
             className="w-full min-h-[15vh] max-h-[15vh] bg-background border border-border rounded px-3 py-2 text-sm resize-none focus:outline-none focus:border-muted-foreground/50 transition-colors overflow-auto"
@@ -140,13 +212,13 @@ export function MessageEditor({
         message={message}
         isOpen={isDialogOpen}
         onOpenChange={setIsDialogOpen}
-        initialUseMarkdown={useMarkdown}
-        onApply={(content, newUseMarkdown, newRole) => {
+        initialEditorMode={editorMode}
+        onApply={(content, newEditorMode, newRole) => {
           updateMessage(index, content);
           if (newRole !== message.role) {
             updateMessageRole(index, newRole);
           }
-          setUseMarkdown(newUseMarkdown);
+          setEditorMode(newEditorMode);
         }}
       />
     </>

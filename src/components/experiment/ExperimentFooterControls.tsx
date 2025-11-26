@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Play } from "lucide-react";
+import { Play, RotateCcw } from "lucide-react";
 import type { ExperimentData } from "@/hooks/useExperiment";
 import { ModelSelectorComponent } from "@/components/chat/traces/model-selector";
 import { ProjectModelsConsumer } from "@/contexts/ProjectModelsContext";
@@ -20,6 +20,7 @@ interface ExperimentFooterControlsProps {
   running: boolean;
   updateExperimentData: (updates: Partial<ExperimentData>) => void;
   runExperiment: () => void;
+  resetExperiment: () => void;
   activeTab: "visual" | "json";
 }
 
@@ -29,6 +30,7 @@ export function ExperimentFooterControls({
   running,
   updateExperimentData,
   runExperiment,
+  resetExperiment,
   activeTab,
 }: ExperimentFooterControlsProps) {
   const [parametersDialogOpen, setParametersDialogOpen] = useState(false);
@@ -91,6 +93,15 @@ export function ExperimentFooterControls({
                 Streaming
               </Label>
             </div>
+            <Button
+              variant="outline"
+              onClick={resetExperiment}
+              disabled={running}
+              className="gap-2"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Reset
+            </Button>
             <Button
               onClick={runExperiment}
               disabled={running}

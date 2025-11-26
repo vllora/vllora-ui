@@ -1,5 +1,5 @@
 import { useRef, useState, forwardRef, useImperativeHandle } from "react";
-import type { Message, Tool } from "@/hooks/useExperiment";
+import type { Message, Tool, MessageContentPart } from "@/hooks/useExperiment";
 import { MessagesSection } from "./MessagesSection";
 import { ToolsSection } from "./ToolsSection";
 
@@ -11,7 +11,7 @@ export interface ExperimentVisualEditorRef {
 interface ExperimentVisualEditorProps {
   messages: Message[];
   tools: Tool[];
-  updateMessage: (index: number, content: string) => void;
+  updateMessage: (index: number, content: string | MessageContentPart[]) => void;
   updateMessageRole: (index: number, role: Message["role"]) => void;
   deleteMessage: (index: number) => void;
   onToolsChange: (tools: Tool[]) => void;

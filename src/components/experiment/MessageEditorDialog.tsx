@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import type { Message } from "@/hooks/useExperiment";
+import type { Message, MessageContentPart } from "@/hooks/useExperiment";
+import { normalizeContentToString } from "@/hooks/useExperiment";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,13 +13,37 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { CodeMirrorEditor } from "./CodeMirrorEditor";
 import { RoleSelector } from "./RoleSelector";
 import { MarkdownViewer } from "@/components/chat/traces/TraceRow/span-info/DetailView/markdown-viewer";
+import { JsonEditor } from "@/components/chat/conversation/model-config/json-editor";
+
+type EditorMode = "plain" | "markdown" | "structured";
+
+// Detect if content is structured (array or JSON array string)
+function isStructuredContent(content: string | MessageContentPart[]): boolean {
+  if (Array.isArray(content)) return true;
+  if (typeof content !== "string") return false;
+  const trimmed = content.trim();
+  if (!trimmed.startsWith("[")) return false;
+  try {
+    const parsed = JSON.parse(trimmed);
+    return Array.isArray(parsed);
+  } catch {
+    return false;
+  }
+}
+
+// Default template for structured content
+const STRUCTURED_CONTENT_TEMPLATE = JSON.stringify(
+  [{ type: "text", text: "" }],
+  null,
+  2
+);
 
 interface MessageEditorDialogProps {
   message: Message;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onApply: (content: string, useMarkdown: boolean, role: Message["role"]) => void;
-  initialUseMarkdown: boolean;
+  onApply: (content: string, editorMode: EditorMode, role: Message["role"]) => void;
+  initialEditorMode: EditorMode;
 }
 
 export function MessageEditorDialog({
@@ -26,24 +51,51 @@ export function MessageEditorDialog({
   isOpen,
   onOpenChange,
   onApply,
-  initialUseMarkdown,
+  initialEditorMode,
 }: MessageEditorDialogProps) {
-  const [draftContent, setDraftContent] = useState(message.content);
+  // Normalize content to string for editing (arrays become JSON strings)
+  const [draftContent, setDraftContent] = useState(() => normalizeContentToString(message.content));
   const [draftRole, setDraftRole] = useState<Message["role"]>(message.role);
-  const [useMarkdown, setUseMarkdown] = useState(initialUseMarkdown);
+  const [editorMode, setEditorMode] = useState<EditorMode>(initialEditorMode);
   const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
-      setDraftContent(message.content);
+      setDraftContent(normalizeContentToString(message.content));
       setDraftRole(message.role);
-      setUseMarkdown(initialUseMarkdown);
+      setEditorMode(initialEditorMode);
       setShowPreview(false);
     }
-  }, [isOpen, message.content, message.role, initialUseMarkdown]);
+  }, [isOpen, message.content, message.role, initialEditorMode]);
+
+  // Handle editor mode change
+  // Only convert content when switching TO structured from empty/plain text
+  // Never auto-convert FROM structured to avoid losing data (images, etc.)
+  const handleModeChange = (newMode: EditorMode) => {
+    const isCurrentlyStructured = isStructuredContent(draftContent);
+
+    if (newMode === "structured" && !isCurrentlyStructured) {
+      // Switch to structured: only convert if content is plain text
+      const currentContent = draftContent.trim();
+      if (currentContent) {
+        // Wrap existing text in structured format
+        setDraftContent(
+          JSON.stringify([{ type: "text", text: currentContent }], null, 2)
+        );
+      } else {
+        setDraftContent(STRUCTURED_CONTENT_TEMPLATE);
+      }
+    }
+    // Don't auto-convert when switching FROM structured - user keeps JSON as-is
+
+    if (newMode !== "markdown") {
+      setShowPreview(false);
+    }
+    setEditorMode(newMode);
+  };
 
   const handleApply = () => {
-    onApply(draftContent, useMarkdown, draftRole);
+    onApply(draftContent, editorMode, draftRole);
     onOpenChange(false);
   };
 
@@ -51,7 +103,7 @@ export function MessageEditorDialog({
     onOpenChange(false);
   };
 
-  const hasChanges = draftContent !== message.content || useMarkdown !== initialUseMarkdown || draftRole !== message.role;
+  const hasChanges = draftContent !== message.content || editorMode !== initialEditorMode || draftRole !== message.role;
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -69,14 +121,12 @@ export function MessageEditorDialog({
                 options={[
                   { value: "plain", label: "Plain" },
                   { value: "markdown", label: "Markdown" },
+                  { value: "structured", label: "Structured" },
                 ]}
-                value={useMarkdown ? "markdown" : "plain"}
-                onChange={(val) => {
-                  setUseMarkdown(val === "markdown");
-                  if (val === "plain") setShowPreview(false);
-                }}
+                value={editorMode}
+                onChange={(val) => handleModeChange(val as EditorMode)}
               />
-              {useMarkdown && (
+              {editorMode === "markdown" && (
                 <Button
                   variant={showPreview ? "default" : "outline"}
                   size="sm"
@@ -92,7 +142,17 @@ export function MessageEditorDialog({
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden p-4">
-          {useMarkdown ? (
+          {editorMode === "structured" ? (
+            <div className="h-full">
+              <JsonEditor
+                value={draftContent}
+                onChange={setDraftContent}
+                hideValidation={false}
+                transparentBackground
+                disableStickyScroll
+              />
+            </div>
+          ) : editorMode === "markdown" ? (
             showPreview ? (
               <div className="h-full overflow-auto prose prose-sm dark:prose-invert max-w-none">
                 <MarkdownViewer message={draftContent} />

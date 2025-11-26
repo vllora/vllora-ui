@@ -30,6 +30,7 @@ export const ExperimentPage = () => {
     deleteMessage,
     updateExperimentData,
     loadTraceSpans,
+    resetExperiment,
   } = useExperiment(spanId, currentProjectId || null);
 
   if (loading) {
@@ -67,6 +68,7 @@ export const ExperimentPage = () => {
         running={running}
         updateExperimentData={updateExperimentData}
         runExperiment={runExperiment}
+        resetExperiment={resetExperiment}
         activeTab={activeTab}
       />
     </div>

@@ -1,5 +1,5 @@
 import { useRef, useMemo, useState } from "react";
-import type { ExperimentData, Message, Tool } from "@/hooks/useExperiment";
+import type { ExperimentData, Message, Tool, MessageContentPart } from "@/hooks/useExperiment";
 import type { Span } from "@/types/common-type";
 import { ExperimentVisualEditor, type ExperimentVisualEditorRef } from "./ExperimentVisualEditor";
 import { ExperimentJsonEditor } from "./ExperimentJsonEditor";
@@ -19,7 +19,7 @@ interface ExperimentMainContentProps {
   loadingTraceSpans: boolean;
   projectId: string;
   addMessage: () => void;
-  updateMessage: (index: number, content: string) => void;
+  updateMessage: (index: number, content: string | MessageContentPart[]) => void;
   updateMessageRole: (index: number, role: Message["role"]) => void;
   deleteMessage: (index: number) => void;
   updateExperimentData: (updates: Partial<ExperimentData>) => void;
@@ -200,7 +200,7 @@ export function ExperimentMainContent({
       </div>
 
       {/* Right Column - Outputs */}
-      <div className="w-2/5">
+      <div className="w-2/5 h-full overflow-hidden">
         <ExperimentOutputPanel
           result={result}
           originalOutput={originalOutput}

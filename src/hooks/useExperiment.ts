@@ -10,9 +10,26 @@ import { useDebugControl } from "@/hooks/events/useDebugControl";
 import { processEvent } from "@/hooks/events/utilities";
 import type { ProjectEventUnion } from "@/contexts/project-events/dto";
 
+// Content part type for structured/multimodal messages (text, images, etc.)
+export interface MessageContentPart {
+  type: "text" | "image_url";
+  text?: string;
+  image_url?: { url: string; detail?: "auto" | "low" | "high" };
+}
+
 export interface Message {
   role: "system" | "user" | "assistant" | "tool";
-  content: string;
+  // Content can be string or array of content parts (for multimodal/structured messages)
+  content: string | MessageContentPart[];
+  [key: string]: unknown;
+}
+
+// Helper to normalize content to string for UI editing
+export function normalizeContentToString(content: string | MessageContentPart[] | null | undefined): string {
+  if (content === null || content === undefined) return "";
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) return JSON.stringify(content, null, 2);
+  return String(content);
 }
 
 export interface ToolFunction {
@@ -36,6 +53,8 @@ export interface ExperimentData {
   headers?: Record<string, string>;
   promptVariables?: Record<string, string>;
   stream?: boolean;
+  // Allow any additional parameters (model-specific parameters like temperature, max_tokens, etc.)
+  [key: string]: unknown;
 }
 
 export interface ExperimentResult {
@@ -99,21 +118,33 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
     // Parse request
     let request: any = attribute.request && tryParseJson(attribute.request);
 
-    // Extract messages
-    const messages: Message[] = request?.messages || [];
+    // Extract messages - preserve ALL properties including original content type
+    const rawMessages = request?.messages || [];
+    const messages: Message[] = rawMessages.map((msg: any) => ({
+      ...msg, // Preserve all properties: role, content, tool_calls, tool_call_id, name, refusal, etc.
+    }));
 
-    // extract tools
-    const tools: Tool[] = request?.tools || [];
+    // Extract known fields, spread the rest (model parameters, etc.)
+    const {
+      model,
+      messages: _messages,
+      tools: requestTools,
+      ...restParams
+    } = request || {};
+
+    const tools: Tool[] = requestTools || [];
 
     return {
       name: `Experiment: ${span.operation_name}`,
       description: `Based on span ${span.span_id}`,
       messages,
       tools,
-      model: request.model || "gpt-4",
+      model: model || "gpt-4",
       headers: {},
       promptVariables: {},
-      stream: request.stream ?? true,
+      stream: restParams.stream ?? true,
+      // Include all other parameters from the original request (temperature, max_tokens, etc.)
+      ...restParams,
     };
   };
 
@@ -204,11 +235,34 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
         headers,
         promptVariables,
         tools,
+        messages,
         ...apiParams
       } = experimentData;
 
+      // Process messages - parse JSON string content back to arrays for API
+      const processedMessages = messages.map((msg) => {
+        // If content is already an array, use as-is
+        if (Array.isArray(msg.content)) {
+          return msg;
+        }
+        // If content is a string that looks like JSON array, parse it
+        const trimmed = (msg.content as string).trim();
+        if (trimmed.startsWith("[")) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) {
+              return { ...msg, content: parsed };
+            }
+          } catch {
+            // Not valid JSON, keep as string
+          }
+        }
+        return msg;
+      });
+
       const payload = {
         ...apiParams,
+        messages: processedMessages,
         ...(tools && tools.length > 0 && { tools }),
       };
 
@@ -226,7 +280,9 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to run experiment");
+        // extract error message from response
+        const errorResponse = await response.json();
+        throw new Error(errorResponse.error);
       }
 
       // Extract trace ID from response headers
@@ -310,7 +366,7 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
     });
   };
 
-  const updateMessage = (index: number, content: string) => {
+  const updateMessage = (index: number, content: string | MessageContentPart[]) => {
     const newMessages = [...experimentData.messages];
     newMessages[index].content = content;
     setExperimentData({ ...experimentData, messages: newMessages });
@@ -330,6 +386,16 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
   const updateExperimentData = (updates: Partial<ExperimentData>) => {
     setExperimentData({ ...experimentData, ...updates });
   };
+
+  // Reset experiment to original state
+  const resetExperiment = useCallback(() => {
+    if (originalExperimentData) {
+      setExperimentData(JSON.parse(JSON.stringify(originalExperimentData)));
+    }
+    setResult("");
+    setTraceId(null);
+    setTraceSpans([]);
+  }, [originalExperimentData]);
 
   // Wrapper to fetch trace spans with project ID
   const loadTraceSpans = useCallback(() => {
@@ -382,5 +448,6 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
     deleteMessage,
     updateExperimentData,
     loadTraceSpans,
+    resetExperiment,
   };
 }

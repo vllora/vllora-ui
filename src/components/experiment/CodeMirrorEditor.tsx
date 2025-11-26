@@ -102,8 +102,15 @@ export function CodeMirrorEditor({
       },
     });
 
+    // Ensure content is a string (could be array for multi-modal messages)
+    const docContent = typeof content === "string"
+      ? content
+      : Array.isArray(content)
+        ? JSON.stringify(content, null, 2)
+        : String(content ?? "");
+
     const state = EditorState.create({
-      doc: content,
+      doc: docContent,
       extensions: [
         history(),
         keymap.of([...defaultKeymap, ...historyKeymap]),
@@ -132,12 +139,19 @@ export function CodeMirrorEditor({
   // Sync external content changes
   useEffect(() => {
     const view = viewRef.current;
-    if (view && content !== view.state.doc.toString()) {
+    // Normalize content to string
+    const normalizedContent = typeof content === "string"
+      ? content
+      : Array.isArray(content)
+        ? JSON.stringify(content, null, 2)
+        : String(content ?? "");
+
+    if (view && normalizedContent !== view.state.doc.toString()) {
       view.dispatch({
         changes: {
           from: 0,
           to: view.state.doc.length,
-          insert: content,
+          insert: normalizedContent,
         },
       });
     }
