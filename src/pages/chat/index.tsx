@@ -21,14 +21,15 @@ export function ThreadsAndTracesPage(props: {
   useEffect(() => {
     setCurrentTab(tabFromUrl);
   }, [tabFromUrl]);
+  const handleProjectChange = useCallback((newProjectId: string) => {
+    localStorage.setItem('currentProjectId', newProjectId);
+  }, []);
 
   if (!currentProjectId) {
     return null;
   }
 
-  const handleProjectChange = useCallback((newProjectId: string) => {
-    localStorage.setItem('currentProjectId', newProjectId);
-  }, []);
+
 
   return (
     <PageContent

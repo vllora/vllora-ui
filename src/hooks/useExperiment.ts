@@ -4,11 +4,41 @@ import { toast } from "sonner";
 import { getSpanById } from "@/services/spans-api";
 import { listRuns, fetchRunSpans } from "@/services/runs-api";
 import { api } from "@/lib/api-client";
-import { tryParseJson } from "@/utils/modelUtils";
+import { tryParseJson, extractOutput } from "@/utils/modelUtils";
 import type { Span } from "@/types/common-type";
 import { useDebugControl } from "@/hooks/events/useDebugControl";
 import { processEvent } from "@/hooks/events/utilities";
 import type { ProjectEventUnion } from "@/contexts/project-events/dto";
+
+// Helper to apply Mustache-style variable substitution ({{variableName}})
+function applyMustacheVariables(
+  value: unknown,
+  variables: Record<string, string>
+): unknown {
+  if (!variables || Object.keys(variables).length === 0) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    return value.replace(/\{\{(\w+)\}\}/g, (match, key) => {
+      return variables[key] !== undefined ? variables[key] : match;
+    });
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => applyMustacheVariables(item, variables));
+  }
+
+  if (value !== null && typeof value === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value)) {
+      result[key] = applyMustacheVariables(val, variables);
+    }
+    return result;
+  }
+
+  return value;
+}
 
 // Content part type for structured/multimodal messages (text, images, etc.)
 export interface MessageContentPart {
@@ -25,7 +55,9 @@ export interface Message {
 }
 
 // Helper to normalize content to string for UI editing
-export function normalizeContentToString(content: string | MessageContentPart[] | null | undefined): string {
+export function normalizeContentToString(
+  content: string | MessageContentPart[] | null | undefined
+): string {
   if (content === null || content === undefined) return "";
   if (typeof content === "string") return content;
   if (Array.isArray(content)) return JSON.stringify(content, null, 2);
@@ -161,64 +193,51 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
       // Extract original output
       const attribute = span.attribute || {};
       if (attribute.output) {
-        try {
-          const outputStr =
-            typeof attribute.output === "string"
-              ? attribute.output
-              : JSON.stringify(attribute.output);
-          const outputObj = JSON.parse(outputStr);
-          setOriginalOutput(
-            outputObj.choices?.[0]?.message?.content ||
-              JSON.stringify(outputObj)
-          );
-        } catch (e) {
-          setOriginalOutput(
-            typeof attribute.output === "string"
-              ? attribute.output
-              : JSON.stringify(attribute.output)
-          );
-        }
+        setOriginalOutput(extractOutput(attribute.output));
       }
     }
   }, [span]);
 
   // Fetch trace spans when traceId changes
-  const fetchTraceSpans = useCallback(async (traceIdToFetch: string, projectId: string) => {
-    setLoadingTraceSpans(true);
-    setTraceSpans([]);
+  const fetchTraceSpans = useCallback(
+    async (traceIdToFetch: string, projectId: string) => {
+      setLoadingTraceSpans(true);
+      setTraceSpans([]);
 
-    try {
-      // First, get runs by trace ID
-      const runsResponse = await listRuns({
-        projectId,
-        params: { trace_ids: traceIdToFetch, limit: 100 },
-      });
+      try {
+        // First, get runs by trace ID
+        const runsResponse = await listRuns({
+          projectId,
+          params: { trace_ids: traceIdToFetch, limit: 100 },
+        });
 
-      if (runsResponse.data.length === 0) {
-        return;
-      }
-
-      // Fetch spans for each run
-      const allSpans: Span[] = [];
-      for (const run of runsResponse.data) {
-        if (run.run_id) {
-          const spansResponse = await fetchRunSpans({
-            runId: run.run_id,
-            projectId,
-            offset: 0,
-            limit: 1000,
-          });
-          allSpans.push(...spansResponse.data);
+        if (runsResponse.data.length === 0) {
+          return;
         }
-      }
 
-      setTraceSpans(allSpans);
-    } catch (error) {
-      console.error("Failed to fetch trace spans:", error);
-    } finally {
-      setLoadingTraceSpans(false);
-    }
-  }, []);
+        // Fetch spans for each run
+        const allSpans: Span[] = [];
+        for (const run of runsResponse.data) {
+          if (run.run_id) {
+            const spansResponse = await fetchRunSpans({
+              runId: run.run_id,
+              projectId,
+              offset: 0,
+              limit: 1000,
+            });
+            allSpans.push(...spansResponse.data);
+          }
+        }
+
+        setTraceSpans(allSpans);
+      } catch (error) {
+        console.error("Failed to fetch trace spans:", error);
+      } finally {
+        setLoadingTraceSpans(false);
+      }
+    },
+    []
+  );
 
   // Run experiment with the current experiment data
   const handleRunExperiment = async () => {
@@ -239,8 +258,22 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
         ...apiParams
       } = experimentData;
 
+      // Apply Mustache variable substitution if promptVariables has values
+      const substitutedHeaders = applyMustacheVariables(
+        headers,
+        promptVariables || {}
+      ) as Record<string, string>;
+      const substitutedTools = applyMustacheVariables(
+        tools,
+        promptVariables || {}
+      ) as Tool[] | undefined;
+      const substitutedMessages = applyMustacheVariables(
+        messages,
+        promptVariables || {}
+      ) as Message[];
+
       // Process messages - parse JSON string content back to arrays for API
-      const processedMessages = messages.map((msg) => {
+      const processedMessages = substitutedMessages.map((msg) => {
         // If content is already an array, use as-is
         if (Array.isArray(msg.content)) {
           return msg;
@@ -263,7 +296,8 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
       const payload = {
         ...apiParams,
         messages: processedMessages,
-        ...(tools && tools.length > 0 && { tools }),
+        ...(substitutedTools &&
+          substitutedTools.length > 0 && { tools: substitutedTools }),
       };
 
       // Extract thread_id from span if available
@@ -275,7 +309,7 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
           "Content-Type": "application/json",
           ...(threadId && { "x-thread-id": threadId }),
           "x-label": "experiment",
-          ...headers,
+          ...substitutedHeaders,
         },
       });
 
@@ -297,6 +331,36 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
         const decoder = new TextDecoder();
         let accumulatedContent = "";
         let buffer = "";
+        // Track tool calls: { [index]: { id, name, arguments } }
+        const toolCalls: Record<
+          number,
+          { id: string; name: string; arguments: string }
+        > = {};
+
+        const formatOutput = () => {
+          const toolCallEntries = Object.values(toolCalls);
+          // If there are tool calls, return the full message JSON
+          if (toolCallEntries.length > 0) {
+            const message: Record<string, unknown> = { role: "assistant" };
+            if (accumulatedContent) message.content = accumulatedContent;
+            message.tool_calls = toolCallEntries.map((tc) => {
+              let args = tc.arguments;
+              try {
+                args = JSON.parse(tc.arguments);
+              } catch {
+                // Keep as string if not valid JSON yet
+              }
+              return {
+                id: tc.id,
+                type: "function",
+                function: { name: tc.name, arguments: args },
+              };
+            });
+            return JSON.stringify(message, null, 2);
+          }
+          // Otherwise just return the content
+          return accumulatedContent;
+        };
 
         while (true) {
           const { done, value } = await reader.read();
@@ -315,10 +379,27 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
 
             try {
               const parsed = JSON.parse(data);
-              const delta = parsed.choices?.[0]?.delta?.content;
-              if (delta) {
-                accumulatedContent += delta;
-                setResult(accumulatedContent);
+              const delta = parsed.choices?.[0]?.delta;
+
+              // Handle content delta
+              if (delta?.content) {
+                accumulatedContent += delta.content;
+                setResult(formatOutput());
+              }
+
+              // Handle tool_calls delta
+              if (delta?.tool_calls) {
+                for (const tc of delta.tool_calls) {
+                  const idx = tc.index ?? 0;
+                  if (!toolCalls[idx]) {
+                    toolCalls[idx] = { id: "", name: "", arguments: "" };
+                  }
+                  if (tc.id) toolCalls[idx].id = tc.id;
+                  if (tc.function?.name) toolCalls[idx].name = tc.function.name;
+                  if (tc.function?.arguments)
+                    toolCalls[idx].arguments += tc.function.arguments;
+                }
+                setResult(formatOutput());
               }
             } catch {
               // Skip invalid JSON chunks
@@ -328,15 +409,15 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
 
         toast.success("Experiment completed successfully");
 
+        const finalOutput = formatOutput();
         return {
-          content: accumulatedContent,
+          content: finalOutput,
           rawResponse: null,
         };
       } else {
         // Handle non-streaming response
         const data = await response.json();
-        const content =
-          data.choices?.[0]?.message?.content || JSON.stringify(data);
+        const content = extractOutput(data);
 
         toast.success("Experiment completed successfully");
         setResult(content);
@@ -366,7 +447,10 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
     });
   };
 
-  const updateMessage = (index: number, content: string | MessageContentPart[]) => {
+  const updateMessage = (
+    index: number,
+    content: string | MessageContentPart[]
+  ) => {
     const newMessages = [...experimentData.messages];
     newMessages[index].content = content;
     setExperimentData({ ...experimentData, messages: newMessages });
@@ -405,24 +489,33 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
         fetchTraceSpans(traceId, projectId);
       }, 1500);
     }
-  }, [traceId, projectId, loadingTraceSpans, traceSpans.length, fetchTraceSpans]);
+  }, [
+    traceId,
+    projectId,
+    loadingTraceSpans,
+    traceSpans.length,
+    fetchTraceSpans,
+  ]);
 
   // Handle real-time events for the experiment's thread
-  const handleEvent = useCallback((event: ProjectEventUnion) => {
-    // Only process events that match the original span's thread_id
-    const originalThreadId = span?.thread_id;
-    if (!originalThreadId || event.thread_id !== originalThreadId) {
-      return;
-    }
+  const handleEvent = useCallback(
+    (event: ProjectEventUnion) => {
+      // Only process events that match the original span's thread_id
+      const originalThreadId = span?.thread_id;
+      if (!originalThreadId || event.thread_id !== originalThreadId) {
+        return;
+      }
 
-    // Update traceSpans with the new event
-    setTraceSpans(prevSpans => processEvent(prevSpans, event));
-  }, [span?.thread_id]);
+      // Update traceSpans with the new event
+      setTraceSpans((prevSpans) => processEvent(prevSpans, event));
+    },
+    [span?.thread_id]
+  );
 
   // Subscribe to real-time events for the experiment
   useDebugControl({
     handleEvent,
-    channel_name: 'debug-experiment-events',
+    channel_name: "debug-experiment-events",
   });
 
   return {

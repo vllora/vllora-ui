@@ -73,7 +73,6 @@ export function ExperimentOutputPanel({
                 result={result}
                 running={running}
                 isStreaming={isStreaming}
-                hasOriginalOutput={!!originalOutput}
               />
             </div>
 

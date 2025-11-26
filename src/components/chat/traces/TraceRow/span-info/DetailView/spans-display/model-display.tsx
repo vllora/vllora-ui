@@ -4,8 +4,7 @@ import { tryParseJson } from "@/utils/modelUtils";
 import { Span } from "@/types/common-type";
 import { InputViewer } from "../input_viewer";
 import { UsageViewer } from "../usage-viewer";
-import { Button } from "@/components/ui/button";
-import { Sparkles } from "lucide-react";
+import { WandSparkles } from "lucide-react";
 import { useNavigate } from "react-router";
 import {
     Tooltip,
@@ -55,35 +54,47 @@ export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelIn
         navigate(`/experiment?span_id=${span.span_id}`);
     };
 
+    const experimentButton = (
+        <TooltipProvider>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <button
+                        onClick={handleExperiment}
+                        className="px-2 py-1 text-[rgb(var(--theme-500))] transition-all duration-300 hover:scale-110 hover:text-[rgb(var(--theme-500))]"
+                    >
+                        <WandSparkles className="w-3.5 h-3.5" />
+                    </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="px-3 py-2.5 max-w-[220px]">
+                    <div className="flex gap-2">
+                        <WandSparkles className="w-3.5 h-3.5 text-[rgb(var(--theme-500))] flex-shrink-0 mt-0.5" />
+                        <div className="flex flex-col gap-0.5">
+                            <span className="font-medium text-xs">Replicate request</span>
+                            <span className="text-[10px] text-muted-foreground leading-tight">
+                                Clone this request to experiment with various prompts, models, or parameters
+                            </span>
+                        </div>
+                    </div>
+                </TooltipContent>
+            </Tooltip>
+        </TooltipProvider>
+    );
+
     return (
-        <div className="relative">
-            <TooltipProvider>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button
-                            onClick={handleExperiment}
-                            variant="ghost"
-                            size="icon"
-                            className="absolute -top-[25px] right-0 z-10 h-7 w-7 rounded-full text-[rgb(var(--theme-500))] hover:text-[rgb(var(--theme-400))] hover:bg-[rgb(var(--theme-500)/0.15)] transition-all duration-200 hover:scale-110"
-                        >
-                            <Sparkles className="w-4 h-4 animate-pulse" />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="left">
-                        <p>Open this in Experiment</p>
-                    </TooltipContent>
-                </Tooltip>
-            </TooltipProvider>
-            <BaseSpanUIDetailsDisplay>
-                <div className="flex flex-col gap-6 pb-4">
-                    <InputViewer jsonRequest={raw_request_json} headers={headers} />
-                    <ResponseViewer response={raw_response_json} />
-                    <UsageViewer
-                        cost={costInfo || undefined}
-                        ttft={ttf_str || undefined}
-                        usage={usageInfo || undefined}
-                    />
-                </div>
-            </BaseSpanUIDetailsDisplay>
-        </div>);
+        <BaseSpanUIDetailsDisplay>
+            <div className="flex flex-col gap-6 pb-4">
+                <InputViewer
+                    jsonRequest={raw_request_json}
+                    headers={headers}
+                    headerAction={experimentButton}
+                />
+                <ResponseViewer response={raw_response_json} />
+                <UsageViewer
+                    cost={costInfo || undefined}
+                    ttft={ttf_str || undefined}
+                    usage={usageInfo || undefined}
+                />
+            </div>
+        </BaseSpanUIDetailsDisplay>
+    );
 };

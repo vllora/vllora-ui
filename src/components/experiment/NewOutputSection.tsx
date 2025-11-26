@@ -1,22 +1,21 @@
 import { ContentDisplay } from "./ContentDisplay";
+import { EmptyOutputState } from "./EmptyOutputState";
 
 interface NewOutputSectionProps {
   result: string;
   running: boolean;
   isStreaming: boolean;
-  hasOriginalOutput: boolean;
 }
 
-export function NewOutputSection({ result, running, isStreaming, hasOriginalOutput }: NewOutputSectionProps) {
+export function NewOutputSection({ result, running, isStreaming }: NewOutputSectionProps) {
+  // Empty state - no result and not running
   if (!result && !running) {
-    if (!hasOriginalOutput) {
-      return (
-        <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-          Run the experiment to see output
-        </div>
-      );
-    }
-    return null;
+    return (
+      <EmptyOutputState
+        title="New Output"
+        message="Run the experiment to see output"
+      />
+    );
   }
 
   return (
