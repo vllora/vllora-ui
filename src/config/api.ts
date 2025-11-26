@@ -1,6 +1,7 @@
 // Backend configuration fetched from /api/env
 interface EnvConfig {
   VITE_BACKEND_PORT: number;
+  VITE_OTEL_PORT: number;
 }
 
 let cachedEnvConfig: EnvConfig | null = null;
@@ -23,6 +24,7 @@ async function fetchEnvConfig(): Promise<EnvConfig> {
     // Fallback to default or env variable
     cachedEnvConfig = {
       VITE_BACKEND_PORT: Number(import.meta.env.VITE_BACKEND_PORT) || 8080,
+      VITE_OTEL_PORT: Number(import.meta.env.VITE_OTEL_PORT) || 4317,
     };
     return cachedEnvConfig;
   }
@@ -31,6 +33,11 @@ async function fetchEnvConfig(): Promise<EnvConfig> {
 // Get the backend port (synchronous, uses fallback if not yet fetched)
 function getBackendPort(): number {
   return cachedEnvConfig?.VITE_BACKEND_PORT || Number(import.meta.env.VITE_BACKEND_PORT) || 8080;
+}
+
+// Get the otel port (synchronous, uses fallback if not yet fetched)
+function getOtelPort(): number {
+  return cachedEnvConfig?.VITE_OTEL_PORT || Number(import.meta.env.VITE_OTEL_PORT) || 4317;
 }
 
 // Get the current backend URL (exported for use in other services)
@@ -44,7 +51,7 @@ export function getGrpcBackendUrl(): string {
     return import.meta.env.VITE_BACKEND_URL;
   }
  
-  return `http://localhost:4317`;
+  return `http://localhost:${getOtelPort()}`;
 }
 
 // Initialize config on app startup
