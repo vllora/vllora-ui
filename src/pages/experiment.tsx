@@ -5,11 +5,13 @@ import { ExperimentHeader } from "@/components/experiment/ExperimentHeader";
 import { ExperimentFooterControls } from "@/components/experiment/ExperimentFooterControls";
 import { ExperimentMainContent } from "@/components/experiment/ExperimentMainContent";
 import { ExperimentLoadingState } from "@/components/experiment/ExperimentLoadingState";
+import { ProjectsConsumer } from "@/contexts/ProjectContext";
 
 export const ExperimentPage = () => {
   const [searchParams] = useSearchParams();
   const spanId = searchParams.get("span_id");
   const [activeTab, setActiveTab] = useState<"visual" | "json">("visual");
+  const { currentProjectId } = ProjectsConsumer();
 
   // Use the experiment hook
   const {
@@ -19,13 +21,16 @@ export const ExperimentPage = () => {
     result,
     originalOutput,
     running,
+    traceSpans,
+    loadingTraceSpans,
     runExperiment,
     addMessage,
     updateMessage,
     updateMessageRole,
     deleteMessage,
     updateExperimentData,
-  } = useExperiment(spanId);
+    loadTraceSpans,
+  } = useExperiment(spanId, currentProjectId || null);
 
   if (loading) {
     return <ExperimentLoadingState />;
@@ -42,6 +47,9 @@ export const ExperimentPage = () => {
         result={result}
         originalOutput={originalOutput}
         running={running}
+        traceSpans={traceSpans}
+        loadingTraceSpans={loadingTraceSpans}
+        projectId={currentProjectId || ""}
         addMessage={addMessage}
         updateMessage={updateMessage}
         updateMessageRole={updateMessageRole}
@@ -49,6 +57,7 @@ export const ExperimentPage = () => {
         updateExperimentData={updateExperimentData}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
+        loadTraceSpans={loadTraceSpans}
       />
 
       {/* Footer Controls */}

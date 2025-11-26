@@ -62,7 +62,7 @@ function App() {
                 <Route index element={<HomePage />} />
                 <Route path="chat" element={<ThreadAndTracesPageProvider><ThreadsAndTracesPage /></ThreadAndTracesPageProvider>} />
                 <Route path="analytics" element={<AnalyticsPage />} />
-                <Route path="experiments" element={<ExperimentsPage />} />
+                {/* <Route path="experiments" element={<ExperimentsPage />} /> */}
                 <Route path="experiment" element={<ExperimentPage />} />
                 <Route
                   path="models"

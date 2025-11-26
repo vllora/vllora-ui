@@ -1,12 +1,19 @@
 import { useState, useMemo } from "react";
 import { JsonViewer } from "@/components/chat/traces/TraceRow/span-info/JsonViewer";
 import { MarkdownViewer } from "@/components/chat/traces/TraceRow/span-info/DetailView/markdown-viewer";
+import { TimelineContent } from "@/components/chat/traces/components/TimelineContent";
+import { SpanDetailPanel } from "@/components/debug/SpanDetailPanel";
 import { tryParseJson } from "@/utils/modelUtils";
+import type { Span } from "@/types/common-type";
 
 interface ExperimentOutputPanelProps {
   result: string;
   originalOutput: string;
   running: boolean;
+  traceSpans: Span[];
+  loadingTraceSpans: boolean;
+  projectId: string;
+  onLoadTraceSpans: () => void;
 }
 
 interface ContentDisplayProps {
@@ -43,8 +50,21 @@ export function ExperimentOutputPanel({
   result,
   originalOutput,
   running,
+  traceSpans,
+  loadingTraceSpans,
+  projectId,
+  onLoadTraceSpans,
 }: ExperimentOutputPanelProps) {
   const [activeTab, setActiveTab] = useState<"output" | "trace">("output");
+  const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
+  const [detailSpanId, setDetailSpanId] = useState<string | null>(null);
+  const [collapsedSpans, setCollapsedSpans] = useState<string[]>([]);
+
+  // Find the detail span from traceSpans
+  const detailSpan = useMemo(() => {
+    if (!detailSpanId) return null;
+    return traceSpans.find(span => span.span_id === detailSpanId) || null;
+  }, [detailSpanId, traceSpans]);
 
   return (
     <div className="w-2/5 flex flex-col overflow-hidden">
@@ -62,7 +82,10 @@ export function ExperimentOutputPanel({
             Output
           </button>
           <button
-            onClick={() => setActiveTab("trace")}
+            onClick={() => {
+              setActiveTab("trace");
+              onLoadTraceSpans();
+            }}
             className={`text-sm font-semibold pb-2 ${
               activeTab === "trace"
                 ? "border-b-2 border-foreground"
@@ -126,8 +149,49 @@ export function ExperimentOutputPanel({
             )}
           </div>
         ) : (
-          <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">
-            Trace view will be available after running the experiment
+          <div className="h-full">
+            {loadingTraceSpans ? (
+              <div className="flex items-center justify-center h-32 text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  <span className="text-sm">Loading trace...</span>
+                </div>
+              </div>
+            ) : traceSpans.length > 0 ? (
+              <div className="flex h-full">
+                <div className={`flex-1 overflow-auto ${detailSpan ? 'max-w-[50%]' : ''}`}>
+                  <TimelineContent
+                    spansByRunId={traceSpans}
+                    projectId={projectId}
+                    selectedSpanId={selectedSpanId}
+                    setSelectedSpanId={setSelectedSpanId}
+                    setSelectedRunId={() => {}}
+                    setDetailSpanId={setDetailSpanId}
+                    collapsedSpans={collapsedSpans}
+                    onToggle={(spanId) => {
+                      if (collapsedSpans.includes(spanId)) {
+                        setCollapsedSpans(collapsedSpans.filter(id => id !== spanId));
+                      } else {
+                        setCollapsedSpans([...collapsedSpans, spanId]);
+                      }
+                    }}
+                  />
+                </div>
+                {detailSpan && (
+                  <div className="flex-1 border-l border-border overflow-hidden animate-in slide-in-from-right duration-300">
+                    <SpanDetailPanel
+                      span={detailSpan}
+                      relatedSpans={traceSpans}
+                      onClose={() => setDetailSpanId(null)}
+                    />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">
+                Run the experiment to see trace
+              </div>
+            )}
           </div>
         )}
       </div>

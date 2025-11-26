@@ -1,5 +1,6 @@
 import { useRef, useMemo } from "react";
 import type { ExperimentData, Message, Tool } from "@/hooks/useExperiment";
+import type { Span } from "@/types/common-type";
 import { ExperimentVisualEditor, type ExperimentVisualEditorRef } from "./ExperimentVisualEditor";
 import { ExperimentJsonEditor } from "./ExperimentJsonEditor";
 import { ExperimentToolbarActions } from "./ExperimentToolbarActions";
@@ -12,6 +13,9 @@ interface ExperimentMainContentProps {
   result: string;
   originalOutput: string;
   running: boolean;
+  traceSpans: Span[];
+  loadingTraceSpans: boolean;
+  projectId: string;
   addMessage: () => void;
   updateMessage: (index: number, content: string) => void;
   updateMessageRole: (index: number, role: Message["role"]) => void;
@@ -19,6 +23,7 @@ interface ExperimentMainContentProps {
   updateExperimentData: (updates: Partial<ExperimentData>) => void;
   activeTab: "visual" | "json";
   setActiveTab: (tab: "visual" | "json") => void;
+  loadTraceSpans: () => void;
 }
 
 export function ExperimentMainContent({
@@ -26,6 +31,9 @@ export function ExperimentMainContent({
   result,
   originalOutput,
   running,
+  traceSpans,
+  loadingTraceSpans,
+  projectId,
   addMessage,
   updateMessage,
   updateMessageRole,
@@ -33,6 +41,7 @@ export function ExperimentMainContent({
   updateExperimentData,
   activeTab,
   setActiveTab,
+  loadTraceSpans,
 }: ExperimentMainContentProps) {
   const visualEditorRef = useRef<ExperimentVisualEditorRef>(null);
 
@@ -182,7 +191,15 @@ export function ExperimentMainContent({
       </div>
 
       {/* Right Column - Outputs */}
-      <ExperimentOutputPanel result={result} originalOutput={originalOutput} running={running} />
+      <ExperimentOutputPanel
+        result={result}
+        originalOutput={originalOutput}
+        running={running}
+        traceSpans={traceSpans}
+        loadingTraceSpans={loadingTraceSpans}
+        projectId={projectId}
+        onLoadTraceSpans={loadTraceSpans}
+      />
     </div>
   );
 }

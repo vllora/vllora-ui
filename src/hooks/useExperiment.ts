@@ -1,9 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRequest } from "ahooks";
 import { toast } from "sonner";
 import { getSpanById } from "@/services/spans-api";
+import { listRuns, fetchRunSpans } from "@/services/runs-api";
 import { api } from "@/lib/api-client";
 import { tryParseJson } from "@/utils/modelUtils";
+import type { Span } from "@/types/common-type";
+import { useDebugControl } from "@/hooks/events/useDebugControl";
+import { processEvent } from "@/hooks/events/utilities";
+import type { ProjectEventUnion } from "@/contexts/project-events/dto";
 
 export interface Message {
   role: "system" | "user" | "assistant" | "tool";
@@ -42,7 +47,7 @@ export interface ExperimentResult {
  * Custom hook for managing experiment functionality
  * Handles fetching span data, form state, and running experiments
  */
-export function useExperiment(spanId: string | null) {
+export function useExperiment(spanId: string | null, projectId: string | null) {
   // Form state
   const [experimentData, setExperimentData] = useState<ExperimentData>({
     name: "Experiment",
@@ -59,6 +64,9 @@ export function useExperiment(spanId: string | null) {
   const [result, setResult] = useState<string>("");
   const [originalOutput, setOriginalOutput] = useState<string>("");
   const [running, setRunning] = useState(false);
+  const [traceId, setTraceId] = useState<string | null>(null);
+  const [traceSpans, setTraceSpans] = useState<Span[]>([]);
+  const [loadingTraceSpans, setLoadingTraceSpans] = useState(false);
 
   // Fetch span data
   const {
@@ -143,10 +151,50 @@ export function useExperiment(spanId: string | null) {
     }
   }, [span]);
 
+  // Fetch trace spans when traceId changes
+  const fetchTraceSpans = useCallback(async (traceIdToFetch: string, projectId: string) => {
+    setLoadingTraceSpans(true);
+    setTraceSpans([]);
+
+    try {
+      // First, get runs by trace ID
+      const runsResponse = await listRuns({
+        projectId,
+        params: { trace_ids: traceIdToFetch, limit: 100 },
+      });
+
+      if (runsResponse.data.length === 0) {
+        return;
+      }
+
+      // Fetch spans for each run
+      const allSpans: Span[] = [];
+      for (const run of runsResponse.data) {
+        if (run.run_id) {
+          const spansResponse = await fetchRunSpans({
+            runId: run.run_id,
+            projectId,
+            offset: 0,
+            limit: 1000,
+          });
+          allSpans.push(...spansResponse.data);
+        }
+      }
+
+      setTraceSpans(allSpans);
+    } catch (error) {
+      console.error("Failed to fetch trace spans:", error);
+    } finally {
+      setLoadingTraceSpans(false);
+    }
+  }, []);
+
   // Run experiment with the current experiment data
   const handleRunExperiment = async () => {
     setRunning(true);
     setResult(""); // Clear previous result
+    setTraceId(null); // Clear previous trace
+    setTraceSpans([]);
 
     try {
       // Extract non-API fields from experimentData
@@ -179,6 +227,12 @@ export function useExperiment(spanId: string | null) {
 
       if (!response.ok) {
         throw new Error("Failed to run experiment");
+      }
+
+      // Extract trace ID from response headers
+      const responseTraceId = response.headers.get("x-trace-id");
+      if (responseTraceId) {
+        setTraceId(responseTraceId);
       }
 
       if (isStreaming && response.body) {
@@ -217,6 +271,7 @@ export function useExperiment(spanId: string | null) {
         }
 
         toast.success("Experiment completed successfully");
+
         return {
           content: accumulatedContent,
           rawResponse: null,
@@ -276,6 +331,34 @@ export function useExperiment(spanId: string | null) {
     setExperimentData({ ...experimentData, ...updates });
   };
 
+  // Wrapper to fetch trace spans with project ID
+  const loadTraceSpans = useCallback(() => {
+    if (traceId && projectId && !loadingTraceSpans && traceSpans.length === 0) {
+      // Add delay to ensure backend has flushed traces (flushes every 1 second)
+      setTimeout(() => {
+        fetchTraceSpans(traceId, projectId);
+      }, 1500);
+    }
+  }, [traceId, projectId, loadingTraceSpans, traceSpans.length, fetchTraceSpans]);
+
+  // Handle real-time events for the experiment's thread
+  const handleEvent = useCallback((event: ProjectEventUnion) => {
+    // Only process events that match the original span's thread_id
+    const originalThreadId = span?.thread_id;
+    if (!originalThreadId || event.thread_id !== originalThreadId) {
+      return;
+    }
+
+    // Update traceSpans with the new event
+    setTraceSpans(prevSpans => processEvent(prevSpans, event));
+  }, [span?.thread_id]);
+
+  // Subscribe to real-time events for the experiment
+  useDebugControl({
+    handleEvent,
+    channel_name: 'debug-experiment-events',
+  });
+
   return {
     // Span data
     span,
@@ -287,6 +370,10 @@ export function useExperiment(spanId: string | null) {
     result,
     originalOutput,
     running,
+    // Trace data
+    traceId,
+    traceSpans,
+    loadingTraceSpans,
     // Actions
     runExperiment: handleRunExperiment,
     addMessage,
@@ -294,5 +381,6 @@ export function useExperiment(spanId: string | null) {
     updateMessageRole,
     deleteMessage,
     updateExperimentData,
+    loadTraceSpans,
   };
 }

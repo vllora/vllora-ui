@@ -22,15 +22,9 @@ export function Layout() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <AppHeader onProjectChange={handleProjectChange} />
         <main className="flex-1 flex overflow-hidden">
-          {currentProjectId ? (
-            <ProjectEventsProvider projectId={currentProjectId}>
-              <Outlet />
-              {/* Create Project Dialog */}
-              
-            </ProjectEventsProvider>
-          ) : (
+          <ProjectEventsProvider projectId={currentProjectId || ""}>
             <Outlet />
-          )}
+          </ProjectEventsProvider>
         </main>
       </div>
     </div>
