@@ -1,12 +1,14 @@
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useState } from "react";
 import type { ExperimentData, Message, Tool } from "@/hooks/useExperiment";
 import type { Span } from "@/types/common-type";
 import { ExperimentVisualEditor, type ExperimentVisualEditorRef } from "./ExperimentVisualEditor";
 import { ExperimentJsonEditor } from "./ExperimentJsonEditor";
 import { ExperimentToolbarActions } from "./ExperimentToolbarActions";
 import { ExperimentOutputPanel } from "./ExperimentOutputPanel";
+import { SpanDetailPanel } from "@/components/debug/SpanDetailPanel";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { DetectedVariables } from "./DetectedVariables";
+import { TRACE_PANEL_WIDTH } from "@/utils/constant";
 
 interface ExperimentMainContentProps {
   experimentData: ExperimentData;
@@ -44,6 +46,13 @@ export function ExperimentMainContent({
   loadTraceSpans,
 }: ExperimentMainContentProps) {
   const visualEditorRef = useRef<ExperimentVisualEditorRef>(null);
+  const [detailSpanId, setDetailSpanId] = useState<string | null>(null);
+
+  // Find the detail span from traceSpans
+  const detailSpan = useMemo(() => {
+    if (!detailSpanId) return null;
+    return traceSpans.find(span => span.span_id === detailSpanId) || null;
+  }, [detailSpanId, traceSpans]);
 
   const handleAddMessage = () => {
     addMessage();
@@ -133,7 +142,7 @@ export function ExperimentMainContent({
   };
 
   return (
-    <div className="flex-1 flex overflow-hidden">
+    <div className="flex-1 flex overflow-hidden relative">
       {/* Left Column - Request Editor */}
       <div className="w-3/5 border-r border-border flex flex-col overflow-hidden">
         {/* Sticky Toolbar */}
@@ -191,15 +200,41 @@ export function ExperimentMainContent({
       </div>
 
       {/* Right Column - Outputs */}
-      <ExperimentOutputPanel
-        result={result}
-        originalOutput={originalOutput}
-        running={running}
-        traceSpans={traceSpans}
-        loadingTraceSpans={loadingTraceSpans}
-        projectId={projectId}
-        onLoadTraceSpans={loadTraceSpans}
-      />
+      <div className="w-2/5">
+        <ExperimentOutputPanel
+          result={result}
+          originalOutput={originalOutput}
+          running={running}
+          traceSpans={traceSpans}
+          loadingTraceSpans={loadingTraceSpans}
+          projectId={projectId}
+          onLoadTraceSpans={loadTraceSpans}
+          setDetailSpanId={setDetailSpanId}
+        />
+      </div>
+
+      {/* Span Details Overlay */}
+      {detailSpan && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm z-40 transition-opacity"
+            onClick={() => setDetailSpanId(null)}
+          />
+
+          {/* Sidebar Panel */}
+          <div
+            className="absolute top-0 right-0 bottom-0 bg-background z-50 shadow-2xl animate-in slide-in-from-right duration-300 flex flex-col border-l border-border"
+            style={{ width: TRACE_PANEL_WIDTH }}
+          >
+            <SpanDetailPanel
+              span={detailSpan}
+              relatedSpans={traceSpans}
+              onClose={() => setDetailSpanId(null)}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

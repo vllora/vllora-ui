@@ -2,7 +2,6 @@ import { useState, useMemo } from "react";
 import { JsonViewer } from "@/components/chat/traces/TraceRow/span-info/JsonViewer";
 import { MarkdownViewer } from "@/components/chat/traces/TraceRow/span-info/DetailView/markdown-viewer";
 import { TimelineContent } from "@/components/chat/traces/components/TimelineContent";
-import { SpanDetailPanel } from "@/components/debug/SpanDetailPanel";
 import { tryParseJson } from "@/utils/modelUtils";
 import type { Span } from "@/types/common-type";
 
@@ -14,6 +13,7 @@ interface ExperimentOutputPanelProps {
   loadingTraceSpans: boolean;
   projectId: string;
   onLoadTraceSpans: () => void;
+  setDetailSpanId: (id: string | null) => void;
 }
 
 interface ContentDisplayProps {
@@ -54,20 +54,14 @@ export function ExperimentOutputPanel({
   loadingTraceSpans,
   projectId,
   onLoadTraceSpans,
+  setDetailSpanId,
 }: ExperimentOutputPanelProps) {
   const [activeTab, setActiveTab] = useState<"output" | "trace">("output");
   const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
-  const [detailSpanId, setDetailSpanId] = useState<string | null>(null);
   const [collapsedSpans, setCollapsedSpans] = useState<string[]>([]);
 
-  // Find the detail span from traceSpans
-  const detailSpan = useMemo(() => {
-    if (!detailSpanId) return null;
-    return traceSpans.find(span => span.span_id === detailSpanId) || null;
-  }, [detailSpanId, traceSpans]);
-
   return (
-    <div className="w-2/5 flex flex-col overflow-hidden">
+    <div className="flex flex-col overflow-hidden h-full">
       <div className="p-4 flex-1 overflow-y-auto">
         {/* Tabs */}
         <div className="flex items-center gap-4 border-b border-border pb-2 mb-4">
@@ -158,35 +152,22 @@ export function ExperimentOutputPanel({
                 </div>
               </div>
             ) : traceSpans.length > 0 ? (
-              <div className="flex h-full">
-                <div className={`flex-1 overflow-auto ${detailSpan ? 'max-w-[50%]' : ''}`}>
-                  <TimelineContent
-                    spansByRunId={traceSpans}
-                    projectId={projectId}
-                    selectedSpanId={selectedSpanId}
-                    setSelectedSpanId={setSelectedSpanId}
-                    setSelectedRunId={() => {}}
-                    setDetailSpanId={setDetailSpanId}
-                    collapsedSpans={collapsedSpans}
-                    onToggle={(spanId) => {
-                      if (collapsedSpans.includes(spanId)) {
-                        setCollapsedSpans(collapsedSpans.filter(id => id !== spanId));
-                      } else {
-                        setCollapsedSpans([...collapsedSpans, spanId]);
-                      }
-                    }}
-                  />
-                </div>
-                {detailSpan && (
-                  <div className="flex-1 border-l border-border overflow-hidden animate-in slide-in-from-right duration-300">
-                    <SpanDetailPanel
-                      span={detailSpan}
-                      relatedSpans={traceSpans}
-                      onClose={() => setDetailSpanId(null)}
-                    />
-                  </div>
-                )}
-              </div>
+              <TimelineContent
+                spansByRunId={traceSpans}
+                projectId={projectId}
+                selectedSpanId={selectedSpanId}
+                setSelectedSpanId={setSelectedSpanId}
+                setSelectedRunId={() => {}}
+                setDetailSpanId={setDetailSpanId}
+                collapsedSpans={collapsedSpans}
+                onToggle={(spanId) => {
+                  if (collapsedSpans.includes(spanId)) {
+                    setCollapsedSpans(collapsedSpans.filter(id => id !== spanId));
+                  } else {
+                    setCollapsedSpans([...collapsedSpans, spanId]);
+                  }
+                }}
+              />
             ) : (
               <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">
                 Run the experiment to see trace
