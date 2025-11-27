@@ -25,8 +25,6 @@ export function ExperimentJsonEditor({ experimentData, onExperimentDataChange }:
     }
     if (experimentData.messages !== undefined) {
       jsonObj.messages = experimentData.messages;
-            console.log('=== experimentData.messages', experimentData.messages)
-
     }
 
     // Add all other non-internal fields dynamically

@@ -20,8 +20,6 @@ interface ParsedMetadata {
 
 export function NewOutputSection({ result, running, isStreaming }: NewOutputSectionProps) {
   // Try to parse result and extract usage/finish_reason
-  
-  console.log('==== NewOutputSection', result)
   const metadata = useMemo((): ParsedMetadata => {
     if (!result) return {};
     try {

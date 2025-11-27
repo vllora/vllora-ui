@@ -1,5 +1,5 @@
 import { useState, type RefObject } from "react";
-import { ChevronDown, ChevronRight, Maximize2, X, Copy, Check } from "lucide-react";
+import { ChevronDown, ChevronRight, Maximize2, X, Copy, Check, Code2 } from "lucide-react";
 import type { Tool } from "@/hooks/useExperiment";
 import { JsonEditor } from "@/components/chat/conversation/model-config/json-editor";
 import { ToolEditorDialog } from "./ToolEditorDialog";
@@ -64,7 +64,7 @@ export function ToolsSection({ tools, onToolsChange, highlightedIndex, lastToolR
   return (
     <div className="border-t border-border pt-4">
       <div
-        className="flex items-center gap-2 cursor-pointer mb-3"
+        className="flex items-center gap-2 cursor-pointer mb-3 px-3 py-2 -mx-3 rounded-md hover:bg-muted/50 transition-colors"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         {isExpanded ? (
@@ -72,9 +72,10 @@ export function ToolsSection({ tools, onToolsChange, highlightedIndex, lastToolR
         ) : (
           <ChevronRight className="w-4 h-4 text-muted-foreground" />
         )}
-        <h3 className="text-sm font-semibold">
-          Tools / Functions ({tools.length})
-        </h3>
+        <h3 className="text-sm font-semibold">Tools / Functions</h3>
+        <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+          {tools.length}
+        </span>
       </div>
 
       {isExpanded && (
@@ -90,9 +91,12 @@ export function ToolsSection({ tools, onToolsChange, highlightedIndex, lastToolR
                 }`}
               >
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-muted-foreground">
-                  {tool.function.name || `Tool ${index + 1}`}
-                </span>
+                <div className="flex items-center gap-1.5 px-2 py-1 bg-muted/50 rounded border border-border/50">
+                  <Code2 className="w-3 h-3 text-muted-foreground" />
+                  <span className="text-xs font-medium font-mono text-foreground">
+                    {tool.function.name || `Tool ${index + 1}`}
+                  </span>
+                </div>
                 <TooltipProvider delayDuration={200}>
                   <div className="flex items-center gap-1">
                     {/* Copy button */}

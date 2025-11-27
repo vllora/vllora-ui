@@ -1,4 +1,5 @@
-import { useRef, useMemo, useState } from "react";
+import { useRef, useMemo, useState, useCallback } from "react";
+import { Copy, Check } from "lucide-react";
 import type { ExperimentData, Message, Tool, MessageContentPart } from "@/hooks/useExperiment";
 import type { Span } from "@/types/common-type";
 import { ExperimentVisualEditor, type ExperimentVisualEditorRef } from "./ExperimentVisualEditor";
@@ -9,6 +10,15 @@ import { SpanDetailPanel } from "@/components/debug/SpanDetailPanel";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { DetectedVariables } from "./DetectedVariables";
 import { TRACE_PANEL_WIDTH } from "@/utils/constant";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+// Internal fields that shouldn't be included in the API JSON
+const INTERNAL_FIELDS = new Set(["name", "description", "headers", "promptVariables"]);
 
 interface ExperimentMainContentProps {
   experimentData: ExperimentData;
@@ -47,6 +57,37 @@ export function ExperimentMainContent({
 }: ExperimentMainContentProps) {
   const visualEditorRef = useRef<ExperimentVisualEditorRef>(null);
   const [detailSpanId, setDetailSpanId] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // Build JSON string for copying (excludes internal fields)
+  const buildJsonValue = useCallback(() => {
+    const jsonObj: Record<string, unknown> = {};
+
+    // Add model and messages first for better ordering
+    if (experimentData.model !== undefined) {
+      jsonObj.model = experimentData.model;
+    }
+    if (experimentData.messages !== undefined) {
+      jsonObj.messages = experimentData.messages;
+    }
+
+    // Add all other non-internal fields dynamically
+    for (const [key, value] of Object.entries(experimentData)) {
+      if (INTERNAL_FIELDS.has(key)) continue;
+      if (key === "model" || key === "messages") continue;
+      if (value === undefined) continue;
+      if (key === "tools" && Array.isArray(value) && value.length === 0) continue;
+      jsonObj[key] = value;
+    }
+
+    return JSON.stringify(jsonObj, null, 2);
+  }, [experimentData]);
+
+  const handleCopyJson = async () => {
+    await navigator.clipboard.writeText(buildJsonValue());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   // Find the detail span from traceSpans
   const detailSpan = useMemo(() => {
@@ -156,14 +197,30 @@ export function ExperimentMainContent({
               />
             )}
           </div>
-          <SegmentedControl
-            options={[
-              { value: "visual", label: "Visual" },
-              { value: "json", label: "JSON" },
-            ]}
-            value={activeTab}
-            onChange={setActiveTab}
-          />
+          <div className="flex items-center gap-2">
+            <SegmentedControl
+              options={[
+                { value: "visual", label: "Visual" },
+                { value: "json", label: "JSON" },
+              ]}
+              value={activeTab}
+              onChange={setActiveTab}
+            />
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={handleCopyJson}
+                    className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  >
+                    {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Copy JSON</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </div>
 
         {/* Detected Variables - shown for both modes */}
