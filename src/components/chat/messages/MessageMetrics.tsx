@@ -80,14 +80,9 @@ export const MessageMetrics: React.FC<MessageMetricsProps> = ({
             {ttft !== undefined && (
               <div className="flex items-center gap-1">
                 <span>TTFT:</span>
-                <span>{formatToSeconds(ttft)}</span>
+                <span>{formatToMilliseconds(ttft)}</span>
               </div>
             )}
-
-            
-            
-
-            
           </div>
         </TooltipTrigger>
         <TooltipContent className="max-w-xs">
