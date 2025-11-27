@@ -34,8 +34,7 @@ export const MessageMetrics: React.FC<MessageMetricsProps> = ({
   if (!usage && !ttft && !duration && !cost) return null;
 
   // Helper function to format milliseconds to seconds
-  const formatToSeconds = (microseconds: number) => {
-    let milliseconds = microseconds / 1000;
+  const formatToSeconds = (milliseconds: number) => {
     return formatDuration(milliseconds);
     // return seconds < 1 ? `${seconds.toFixed(2)}s` : `${seconds.toFixed(1)}s`;
   };
