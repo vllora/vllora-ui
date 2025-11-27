@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { MessageDisplay } from '../MessageDisplay';
+import { ImageWithPreview } from './ImageWithPreview';
 import {
   Dialog,
   DialogContent,
 } from "@/components/ui/dialog";
+import { JsonViewer } from '../traces/TraceRow/span-info/JsonViewer';
 
 interface ContentArrayDisplayProps {
   contentArray: any[];
@@ -11,22 +13,6 @@ interface ContentArrayDisplayProps {
 
 export const ContentArrayDisplay: React.FC<ContentArrayDisplayProps> = ({ contentArray }) => {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-
-  // Reusable image component with click-to-preview
-  const ImageWithPreview = ({ src, alt }: { src: string; alt: string }) => (
-    <button
-      type="button"
-      onClick={() => setPreviewImage(src)}
-      className="relative cursor-pointer hover:opacity-90 transition-opacity"
-    >
-      <img
-        src={src}
-        alt={alt}
-        className="max-w-md rounded-lg border border-border"
-      />
-    </button>
-  );
-
   return (
     <div className="flex flex-col gap-3">
       {contentArray.map((item, index) => {
@@ -40,6 +26,7 @@ export const ContentArrayDisplay: React.FC<ContentArrayDisplayProps> = ({ conten
               <ImageWithPreview
                 src={item.image_url.url}
                 alt={`Image ${index + 1}`}
+                onClick={() => setPreviewImage(item.image_url.url)}
               />
             </div>
           );
@@ -54,6 +41,7 @@ export const ContentArrayDisplay: React.FC<ContentArrayDisplayProps> = ({ conten
                 <ImageWithPreview
                   src={content}
                   alt={`Image ${index + 1}`}
+                  onClick={() => setPreviewImage(content)}
                 />
               </div>
             );
@@ -65,6 +53,9 @@ export const ContentArrayDisplay: React.FC<ContentArrayDisplayProps> = ({ conten
               <MessageDisplay message={content} />
             </div>
           );
+        }
+        if(!type && !content && typeof item === 'object' && item !== null) {
+          return <JsonViewer data={item} key={`json-${index}`} collapsed={10} />;
         }
 
         return null;

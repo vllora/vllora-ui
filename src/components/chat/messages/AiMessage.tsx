@@ -26,6 +26,7 @@ export const AiMessage: React.FC<{
   const { setIsRightSidebarCollapsed } = ThreadsConsumer();
   const messageRef = React.useRef<HTMLDivElement>(null);
 
+  
   // Only update relative time when message is visible and less than 60 seconds old
   useRelativeTime(messageRef, msg?.created_at);
 
@@ -44,7 +45,6 @@ export const AiMessage: React.FC<{
   };
 
   const providerName = getProviderName(msg?.model_name);
-
   const handleOpenTrace = useCallback(() => {
     const runId = msg?.span?.run_id;
     const spanId = msg?.span_id;

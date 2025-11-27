@@ -23,7 +23,7 @@ const tryParseJson = (str: string) => {
   }
 };
 
-export const MessageDisplay: React.FC<MessageDisplayProps> = ({ message }) => {
+export const MessageDisplay: React.FC<MessageDisplayProps> = ({ message }) => {  
   return <BaseMessageDisplay message={message} />;
 };
 

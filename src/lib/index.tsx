@@ -27,6 +27,7 @@ export { AnalyticsPage } from '../pages/analytics';
 export { SettingsPage } from '../pages/settings';
 export { ModelsPage } from '../pages/models';
 export { McpConfigPage } from '../pages/settings/mcp-config';
+export { ExperimentPage } from '../pages/experiment';
 export { ProviderKeysPage } from '../pages/settings/provider-keys';
 // Provider form components (API-agnostic UI)
 export { ProviderCredentialForm } from '../pages/settings/ProviderCredentialForm';

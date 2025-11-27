@@ -94,7 +94,7 @@ export function ToolsSection({ tools, onToolsChange, highlightedIndex, lastToolR
                 <div className="flex items-center gap-1.5 px-2 py-1 bg-muted/50 rounded border border-border/50">
                   <Code2 className="w-3 h-3 text-muted-foreground" />
                   <span className="text-xs font-medium font-mono text-foreground">
-                    {tool.function.name || `Tool ${index + 1}`}
+                    {tool.function?.name || `Tool ${index + 1}`}
                   </span>
                 </div>
                 <TooltipProvider delayDuration={200}>
@@ -156,7 +156,7 @@ export function ToolsSection({ tools, onToolsChange, highlightedIndex, lastToolR
               {/* Tool Editor Dialog */}
               <ToolEditorDialog
                 tool={tool}
-                toolName={tool.function.name || `Tool ${index + 1}`}
+                toolName={tool.function?.name || `Tool ${index + 1}`}
                 isOpen={dialogOpenIndex === index}
                 onOpenChange={(open) => setDialogOpenIndex(open ? index : null)}
                 onApply={(content) => handleToolChange(index, content)}
