@@ -194,9 +194,9 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
       }
 
       // Extract original output
-      const attribute = span.attribute || {};
-      if (attribute.output) {
-        setOriginalOutput(attribute.output );
+      const attribute: any = span.attribute || {};
+      if (attribute.output || attribute.response) {
+        setOriginalOutput(attribute.output || attribute.response);
       }
     }
   }, [span]);
