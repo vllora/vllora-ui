@@ -135,6 +135,7 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
     },
     {
       ready: !!spanId,
+      refreshDeps: [spanId], // Re-fetch when spanId changes
       onError: (err) => {
         toast.error("Failed to load span data", {
           description: err.message || "An error occurred",
