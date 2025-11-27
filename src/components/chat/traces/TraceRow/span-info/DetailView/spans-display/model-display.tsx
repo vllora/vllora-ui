@@ -51,7 +51,7 @@ export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelIn
     const headers = headersStr ? tryParseJson(headersStr) : undefined;
 
     const handleExperiment = () => {
-        navigate(`/experiment?span_id=${span.span_id}`);
+        navigate(`/experiment?span_id=${apiInvokeSpan?.span_id}`);
     };
 
     const experimentButton = (
