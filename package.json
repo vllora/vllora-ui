@@ -48,6 +48,12 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.10.0",
+    "@codemirror/lang-markdown": "^6.5.0",
+    "@codemirror/language": "^6.11.3",
+    "@codemirror/language-data": "^6.5.2",
+    "@codemirror/state": "^6.5.2",
+    "@codemirror/view": "^6.38.8",
     "@heroicons/react": "^2.2.0",
     "@microsoft/fetch-event-source": "^2.0.1",
     "@monaco-editor/react": "^4.7.0",
@@ -74,6 +80,7 @@
     "aws-amplify": "^6.15.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "codemirror": "^6.0.2",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.23.22",
     "lucide-react": "^0.544.0",

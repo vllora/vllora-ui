@@ -14,10 +14,11 @@ export function AppHeader({ onProjectChange }: HeaderProps) {
   const isProjectsPage = location.pathname === '/projects';
   const isChatPage = location.pathname.includes('/chat');
   const isSettingsPage = location.pathname === '/settings';
+  const isExperimentPage = location.pathname.includes('/experiment');
   const { app_mode } = CurrentAppConsumer()
 
   // Hide header on projects page and chat page
-  if (isProjectsPage || isChatPage || isSettingsPage) {
+  if (isProjectsPage || isChatPage || isSettingsPage || isExperimentPage) {
     return null;
   }
 

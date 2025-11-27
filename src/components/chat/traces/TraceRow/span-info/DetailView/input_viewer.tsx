@@ -6,14 +6,21 @@ import { Copy, Check } from "lucide-react";
 import { getBackendUrl } from "@/config/api";
 import { CodeBlock } from "../../../components/CodeBlock";
 import { generateCurlCommand } from "../../../components/TraceCodeView";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export const InputViewer = (props: {
     jsonRequest: any,
     headers?: any,
-    viewMode?: 'ui' | 'raw'
+    viewMode?: 'ui' | 'raw',
+    headerAction?: React.ReactNode,
 }) => {
 
-    const { jsonRequest, headers } = props;
+    const { jsonRequest, headers, headerAction } = props;
     const [activeTab, setActiveTab] = useState<'input' | 'json' | 'code'>('input');
     const [copied, setCopied] = useState(false);
     const [copiedJson, setCopiedJson] = useState(false);
@@ -76,38 +83,62 @@ export const InputViewer = (props: {
     return (<div className="relative flex flex-col gap-4 rounded-lg border border-border  p-4 pt-6 bg-black">
         <div className="absolute -top-[10px] left-0 right-0 flex justify-center items-center gap-2">
             {hasMessages ? (
-                <div className="flex items-center gap-0.5 bg-border rounded">
-                    <button
-                        onClick={() => setActiveTab('input')}
-                        className={`px-3 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
-                            activeTab === 'input'
-                                ? 'bg-zinc-700 text-white rounded'
-                                : 'text-zinc-400 hover:text-zinc-300'
-                        }`}
-                    >
-                        Input
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('json')}
-                        className={`px-3 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
-                            activeTab === 'json'
-                                ? 'bg-zinc-700 text-white rounded'
-                                : 'text-zinc-400 hover:text-zinc-300'
-                        }`}
-                    >
-                        Json
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('code')}
-                        className={`px-3 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
-                            activeTab === 'code'
-                                ? 'bg-zinc-700 text-white rounded'
-                                : 'text-zinc-400 hover:text-zinc-300'
-                        }`}
-                    >
-                        Code
-                    </button>
-                </div>
+                <TooltipProvider>
+                    <div className="flex items-center gap-0.5 bg-border rounded">
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <button
+                                    onClick={() => setActiveTab('input')}
+                                    className={`px-3 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+                                        activeTab === 'input'
+                                            ? 'bg-zinc-700 text-white rounded'
+                                            : 'text-zinc-400 hover:text-zinc-300'
+                                    }`}
+                                >
+                                    Input
+                                </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom">
+                                <p className="text-xs">Formatted view of messages and parameters</p>
+                            </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <button
+                                    onClick={() => setActiveTab('json')}
+                                    className={`px-3 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+                                        activeTab === 'json'
+                                            ? 'bg-zinc-700 text-white rounded'
+                                            : 'text-zinc-400 hover:text-zinc-300'
+                                    }`}
+                                >
+                                    Json
+                                </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom">
+                                <p className="text-xs">Raw JSON request payload</p>
+                            </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <button
+                                    onClick={() => setActiveTab('code')}
+                                    className={`px-3 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+                                        activeTab === 'code'
+                                            ? 'bg-zinc-700 text-white rounded'
+                                            : 'text-zinc-400 hover:text-zinc-300'
+                                    }`}
+                                >
+                                    Code
+                                </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom">
+                                <p className="text-xs">cURL command to replay this request</p>
+                            </TooltipContent>
+                        </Tooltip>
+                        {headerAction}
+                    </div>
+                </TooltipProvider>
             ) : (
                 <span className="px-2 rounded bg-border text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
                     Input

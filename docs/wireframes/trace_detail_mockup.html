@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vllora Trace Detail Wireframe</title>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f4f5;
+            color: #18181b;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        .wireframe-container {
+            width: 1200px;
+            height: 800px;
+            background: white;
+            border: 2px solid #000;
+            display: flex;
+            box-shadow: 10px 10px 0px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 64px;
+            /* Fixed collapsed width */
+            background: #f9f9f9;
+            border-right: 2px solid #000;
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            /* Prevent shrinking */
+        }
+
+        .nav-item {
+            padding: 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            color: #666;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            /* Center icons */
+            gap: 0;
+            /* Remove gap */
+            white-space: nowrap;
+            overflow: hidden;
+            height: 44px;
+            /* Fixed height for touch target */
+        }
+
+        .nav-label {
+            display: none;
+            /* Hide labels permanently */
+        }
+
+        .nav-item:hover {
+            background: #eee;
+        }
+
+        .nav-item.active {
+            background: #000;
+            color: white;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            height: 60px;
+            border-bottom: 2px solid #000;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            font-weight: bold;
+            font-size: 14px;
+            justify-content: space-between;
+            background: white;
+        }
+
+        .tabs-toggle {
+            display: flex;
+            background: #151515;
+            padding: 4px;
+            border-radius: 6px;
+            gap: 4px;
+        }
+
+        .tab-toggle-item {
+            padding: 6px 12px;
+            border-radius: 4px;
+            color: #888;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .tab-toggle-item.active {
+            background: #333;
+            color: white;
+        }
+
+        .content-body {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .trace-tree {
+            width: 300px;
+            border-right: 1px solid #eee;
+            padding: 20px;
+            background: #fafafa;
+            font-family: monospace;
+            font-size: 13px;
+        }
+
+        .trace-detail {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .tree-item {
+            padding: 5px;
+            cursor: pointer;
+        }
+
+        .tree-item:hover {
+            background: #eee;
+        }
+
+        .tree-item.active {
+            background: #e0e7ff;
+            color: #3730a3;
+            font-weight: bold;
+        }
+
+        .detail-card {
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .tag {
+            background: #eee;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-right: 5px;
+        }
+
+        .action-btn {
+            background: #000;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 4px;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        th,
+        td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        th {
+            background-color: #f0f0f0;
+            font-weight: 500;
+        }
+
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+
+        .status-badge {
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .status-success {
+            background-color: #dcfce7;
+            color: #16a34a;
+        }
+
+        .status-error {
+            background-color: #fee2e2;
+            color: #dc2626;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="wireframe-container">
+        <!-- AppSidebar (Global) -->
+        <div class="sidebar">
+            <div
+                style="height: 64px; display: flex; align-items: center; justify-content: center; border-bottom: 1px solid #eee;">
+                <img src="https://placehold.co/32x32/000000/FFFFFF/png" alt="Logo" style="height: 32px;">
+            </div>
+            <nav style="flex: 1; padding: 10px; display: flex; flex-direction: column; gap: 5px;">
+                <a href="home_mockup.html" class="nav-item" title="Home">
+                    <span style="font-size: 20px;">🏠</span>
+                    <span class="nav-label">Home</span>
+                </a>
+                <a href="chat_page_mockup.html" class="nav-item active" title="Chat">
+                    <span style="font-size: 20px;">💬</span>
+                    <span class="nav-label">Chat</span>
+                </a>
+            </nav>
+            <div style="padding: 10px; border-top: 1px solid #eee;">
+                <a href="#" class="nav-item" title="Settings">
+                    <span style="font-size: 20px;">⚙️</span>
+                    <span class="nav-label">Settings</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <!-- TabSelectionHeader -->
+            <div class="header">
+                <div class="tree-item" style="padding-left: 20px;">&#9658; get_weather (0.1s)</div>
+            </div>
+
+            <!-- Span Detail (Right) -->
+            <div class="trace-detail">
+                <div style="margin-bottom: 20px;">
+                    <span class="tag">gpt-4</span>
+                    <span class="tag">success</span>
+                    <span class="tag">1.2s</span>
+                    <span class="tag">$0.03</span>
+                </div>
+
+                <div class="detail-card">
+                    <div style="font-weight: bold; margin-bottom: 10px;">Input (Messages)</div>
+                    <div
+                        style="background: #f9f9f9; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px;">
+                        <div style="color: #d946ef;">[SYSTEM] You are a helpful coding assistant.</div>
+                        <div style="margin-top: 5px; color: #2563eb;">[USER] How do I center a div?</div>
+                    </div>
+                </div>
+
+                <div class="detail-card">
+                    <div style="font-weight: bold; margin-bottom: 10px;">Output</div>
+                    <div
+                        style="background: #f0fdf4; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px;">
+                        <div style="color: #16a34a;">You can use Flexbox. Here is the code...</div>
+                    </div>
+                </div>
+
+                <div class="detail-card">
+                    <div style="font-weight: bold; margin-bottom: 10px;">Metadata</div>
+                    <div style="font-size: 13px; color: #666;">
+                        <div>Model: gpt-4-0613</div>
+                        <div>Temperature: 0.7</div>
+                        <div>User ID: user_123</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
+
+</body>
+
+</html>

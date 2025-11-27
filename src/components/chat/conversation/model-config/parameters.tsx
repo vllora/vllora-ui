@@ -55,9 +55,10 @@ export function ModelParametersList({
       );
     }
 
-    if (param.type === "int" || param.type === "number") {
+    if (param.type === "int" || param.type === "number" || param.type === "float") {
       const hasRange = param.min !== null && param.max !== null;
       const step = param.type === "int" ? 1 : 0.01;
+      const isInteger = param.type === "int";
 
       return (
         <div key={key} className="space-y-2 py-2">
@@ -93,7 +94,7 @@ export function ModelParametersList({
                     const val = vals[0];
                     setConfig((prev) => ({
                       ...prev,
-                      [key]: param.type === "int" ? Math.round(val) : val
+                      [key]: isInteger ? Math.round(val) : val
                     }));
                   }}
                   className="flex-1"
@@ -103,7 +104,7 @@ export function ModelParametersList({
                   value={value ?? param.default ?? param.min!}
                   onChange={(e) => {
                     const val = e.target.value === "" ? null :
-                      param.type === "int" ? parseInt(e.target.value) : parseFloat(e.target.value);
+                      isInteger ? parseInt(e.target.value) : parseFloat(e.target.value);
                     if (val !== null && val >= param.min! && val <= param.max!) {
                       setConfig((prev) => ({ ...prev, [key]: val }));
                     }
@@ -126,7 +127,7 @@ export function ModelParametersList({
               value={value ?? ""}
               onChange={(e) => {
                 const val = e.target.value === "" ? null :
-                  param.type === "int" ? parseInt(e.target.value) : parseFloat(e.target.value);
+                  isInteger ? parseInt(e.target.value) : parseFloat(e.target.value);
                 setConfig((prev) => ({ ...prev, [key]: val }));
               }}
               min={param.min ?? undefined}

@@ -6,6 +6,7 @@ import { ProjectsPage } from "./pages/projects"
 import { AnalyticsPage } from "./pages/analytics"
 import { SettingsPage } from "./pages/settings"
 import { LoginPage } from "./pages/login"
+import { ExperimentPage } from "./pages/experiment"
 import { ThemeProvider } from "./components/theme-provider"
 import { ProjectsProvider } from "./contexts/ProjectContext"
 import { ProjectModelsProvider } from "./contexts/ProjectModelsContext"
@@ -46,7 +47,7 @@ function App() {
                   <AvailableApiKeysProvider available_api_keys={[]}>
                     <ProjectModelsProvider>
                       <ProviderKeysProvider>
-                        <Layout />
+                          <Layout />
                       </ProviderKeysProvider>
                     </ProjectModelsProvider>
                   </AvailableApiKeysProvider>
@@ -57,6 +58,8 @@ function App() {
                 <Route index element={<HomePage />} />
                 <Route path="chat" element={<ThreadAndTracesPageProvider><ThreadsAndTracesPage /></ThreadAndTracesPageProvider>} />
                 <Route path="analytics" element={<AnalyticsPage />} />
+                {/* <Route path="experiments" element={<ExperimentsPage />} /> */}
+                <Route path="experiment" element={<ExperimentPage />} />
                 <Route
                   path="models"
                   element={
