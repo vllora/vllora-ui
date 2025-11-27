@@ -16,7 +16,6 @@ import { applyTheme, getThemeFromStorage } from "./themes/themes"
 import { ProviderKeysProvider } from "./contexts/ProviderKeysContext"
 import { AuthProvider } from "./contexts/AuthContext"
 import { ProtectedRoute } from "./components/ProtectedRoute"
-import { ExperimentsProvider } from "./contexts/ExperimentsContext"
 import { LocalModelsSkeletonLoader } from "./components/models/local/LocalModelsSkeletonLoader"
 import { AvailableApiKeysProvider, CurrentAppProvider, VirtualModelsProvider } from "./lib"
 import { ThreadAndTracesPageProvider } from "./contexts/ThreadAndTracesPageContext"
@@ -48,9 +47,7 @@ function App() {
                   <AvailableApiKeysProvider available_api_keys={[]}>
                     <ProjectModelsProvider>
                       <ProviderKeysProvider>
-                        <ExperimentsProvider>
                           <Layout />
-                        </ExperimentsProvider>
                       </ProviderKeysProvider>
                     </ProjectModelsProvider>
                   </AvailableApiKeysProvider>

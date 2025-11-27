@@ -25,7 +25,10 @@ import {
   addImageToContent,
   addAudioToContent,
   addFileToContent,
+  extractAttachments,
+  removeAttachment,
 } from "./message-editor-utils";
+import { AttachmentPreview } from "./AttachmentPreview";
 
 interface MessageEditorProps {
   message: Message;
@@ -67,6 +70,25 @@ export function MessageEditor({
 
   // Normalize content to string for editing
   const contentAsString = normalizeContentToString(message.content);
+
+  // Extract attachments for preview
+  const attachments = useMemo(
+    () => extractAttachments(message.content),
+    [message.content]
+  );
+
+  // Handle removing an attachment
+  const handleRemoveAttachment = useCallback(
+    (attachmentIndex: number) => {
+      const newContent = removeAttachment(message.content, attachmentIndex);
+      updateMessage(index, newContent);
+      // If content becomes plain text, switch to plain mode
+      if (!isStructuredContent(newContent)) {
+        setEditorMode("plain");
+      }
+    },
+    [message.content, index, updateMessage]
+  );
 
   // Handle editor mode change
   const handleModeChange = (newMode: EditorMode) => {
@@ -306,6 +328,12 @@ export function MessageEditor({
             rows={3}
           />
         )}
+
+        {/* Attachment previews */}
+        <AttachmentPreview
+          attachments={attachments}
+          onRemove={handleRemoveAttachment}
+        />
       </div>
 
       {/* Expanded editor dialog */}

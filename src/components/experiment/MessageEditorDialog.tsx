@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Eye, EyeOff, Paperclip } from "lucide-react";
 import type { Message } from "@/hooks/useExperiment";
 import { normalizeContentToString } from "@/hooks/useExperiment";
@@ -32,7 +32,10 @@ import {
   addImageToContent,
   addAudioToContent,
   addFileToContent,
+  extractAttachments,
+  removeAttachment,
 } from "./message-editor-utils";
+import { AttachmentPreview } from "./AttachmentPreview";
 
 interface MessageEditorDialogProps {
   message: Message;
@@ -69,6 +72,25 @@ export function MessageEditorDialog({
       setIsDragOver(false);
     }
   }, [isOpen, message.content, message.role, initialEditorMode]);
+
+  // Extract attachments for preview
+  const attachments = useMemo(
+    () => extractAttachments(draftContent),
+    [draftContent]
+  );
+
+  // Handle removing an attachment
+  const handleRemoveAttachment = useCallback(
+    (attachmentIndex: number) => {
+      const newContent = removeAttachment(draftContent, attachmentIndex);
+      setDraftContent(newContent);
+      // If content becomes plain text, switch to plain mode
+      if (!isStructuredContent(newContent)) {
+        setEditorMode("plain");
+      }
+    },
+    [draftContent]
+  );
 
   // Handle file processing (images, audio, and generic files)
   const handleFile = useCallback(
@@ -229,7 +251,7 @@ export function MessageEditorDialog({
         </DialogHeader>
 
         <div
-          className={`flex-1 overflow-hidden p-4 relative ${
+          className={`flex-1 min-h-0 p-4 relative flex flex-col ${
             isDragOver ? "ring-2 ring-[rgb(var(--theme-500))] ring-inset" : ""
           }`}
           onDragOver={handleDragOver}
@@ -256,41 +278,52 @@ export function MessageEditorDialog({
             </div>
           )}
 
-          {editorMode === "structured" ? (
-            <div className="h-full">
-              <JsonEditor
-                value={draftContent}
-                onChange={setDraftContent}
-                hideValidation={false}
-                transparentBackground
-                disableStickyScroll
-              />
-            </div>
-          ) : editorMode === "markdown" ? (
-            showPreview ? (
-              <div className="h-full overflow-auto prose prose-sm dark:prose-invert max-w-none">
-                <MarkdownViewer message={draftContent} />
-              </div>
-            ) : (
-              <div className="h-full flex flex-col">
-                <CodeMirrorEditor
-                  content={draftContent}
+          {/* Editor area - takes remaining space */}
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {editorMode === "structured" ? (
+              <div className="h-full">
+                <JsonEditor
+                  value={draftContent}
                   onChange={setDraftContent}
-                  placeholder="Enter message content... Use {{variable}} for mustache variables"
-                  showToolbar={true}
-                  fullHeight={true}
+                  hideValidation={false}
+                  transparentBackground
+                  disableStickyScroll
                 />
               </div>
-            )
-          ) : (
-            <textarea
-              value={draftContent}
-              onChange={(e) => setDraftContent(e.target.value)}
-              placeholder="Enter message content... Use {{variable}} for mustache variables"
-              className="w-full h-full bg-background border border-border rounded-lg px-4 py-3 text-sm resize-none focus:outline-none focus:border-muted-foreground/50 transition-colors font-mono"
-              autoFocus
+            ) : editorMode === "markdown" ? (
+              showPreview ? (
+                <div className="h-full overflow-auto prose prose-sm dark:prose-invert max-w-none">
+                  <MarkdownViewer message={draftContent} />
+                </div>
+              ) : (
+                <div className="h-full flex flex-col">
+                  <CodeMirrorEditor
+                    content={draftContent}
+                    onChange={setDraftContent}
+                    placeholder="Enter message content... Use {{variable}} for mustache variables"
+                    showToolbar={true}
+                    fullHeight={true}
+                  />
+                </div>
+              )
+            ) : (
+              <textarea
+                value={draftContent}
+                onChange={(e) => setDraftContent(e.target.value)}
+                placeholder="Enter message content... Use {{variable}} for mustache variables"
+                className="w-full h-full bg-background border border-border rounded-lg px-4 py-3 text-sm resize-none focus:outline-none focus:border-muted-foreground/50 transition-colors font-mono"
+                autoFocus
+              />
+            )}
+          </div>
+
+          {/* Attachment previews - fixed at bottom */}
+          <div className="flex-shrink-0 overflow-visible">
+            <AttachmentPreview
+              attachments={attachments}
+              onRemove={handleRemoveAttachment}
             />
-          )}
+          </div>
         </div>
         <div className="px-6 py-4 border-t border-border flex items-center justify-end gap-2 flex-shrink-0">
           <Button variant="outline" size="sm" onClick={handleDiscard}>
