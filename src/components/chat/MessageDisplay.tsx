@@ -63,7 +63,7 @@ const BaseMessageDisplay: React.FC<{ message: string }> = ({ message }) => {
                 {isValidJson ? (
                   <div className="px-3 py-2">
 
-                    <JsonViewer data={tempParsedJson} />
+                    <JsonViewer data={tempParsedJson} collapsed={10} />
                     {/* <ReactJson
                       name={false}
                       collapsed={2}
