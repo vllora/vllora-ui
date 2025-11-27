@@ -80,7 +80,7 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
   const totalUsage = span && getTotalUsage({ span }) || 0;
   return (
     <div className="flex flex-row items-center gap-1 justify-between w-full">
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 min-w-0 flex-1">
         {onClose && closePosition === 'left' && <Button
           variant="ghost"
           size="icon"
@@ -120,11 +120,11 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
             </div>
           </>
         )}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 min-w-0">
           <TooltipProvider>
             <Tooltip delayDuration={300}>
               <TooltipTrigger asChild>
-                <h3 className="text-xs font-medium text-white hover:cursor-help max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap">
+                <h3 className="text-xs font-medium text-white hover:cursor-help min-w-[75px] max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap">
                   {spanTitle}
                 </h3>
                 
@@ -143,7 +143,7 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#1a1a1a] text-teal-500 cursor-help">
+                  <div className="flex items-center gap-1 px-0 py-0.5 rounded-md bg-[#1a1a1a] text-teal-500 cursor-help flex-shrink-0">
                     <Timer className="h-3 w-3" />
                     <span className="text-xs font-mono">{duration}s</span>
                   </div>
@@ -172,7 +172,7 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#1a1a1a] text-white cursor-help">
+                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#1a1a1a] text-white cursor-help flex-shrink-0">
                     <ClockFadingIcon className="h-3 w-3" />
                     <span className="text-xs font-mono">{ttftSeconds}s</span>
                   </div>
@@ -192,12 +192,12 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
           {modelName && totalUsage > 0 && <ModelContextViewer usage_tokens={totalUsage} model_name={modelName} />}
         </div>
       </div>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 flex-shrink-0">
         {labelOfSpan && (
-          <LabelTag label={labelOfSpan} />
+          <LabelTag label={labelOfSpan} maxWidth={75} />
         )}
         {status && (
-          <div className={`flex items-center py-1 rounded-md text-xs ${isSuccessStatus ? ' text-green-500' : 'text-red-500'}`}>
+          <div className={cn(`flex items-center py-1 rounded-md text-xs ${isSuccessStatus ? ' text-green-500' : 'text-red-500'}`)}>
             {isSuccessStatus ? (
               <CheckCircleIcon className="w-3 h-3 mr-1" />
             ) : (
