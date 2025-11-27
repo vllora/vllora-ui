@@ -15,7 +15,7 @@ export function useThreadPagination(
   const [offset, setOffset] = useState<number>(0);
   const [total, setTotal] = useState<number>(0);
   const [hasMore, setHasMore] = useState<boolean>(true);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [loadingThreadsError, setLoadingThreadsError] = useState<string | null>(
     null

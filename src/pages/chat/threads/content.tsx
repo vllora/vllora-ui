@@ -65,7 +65,9 @@ export function ThreadsPageContent() {
       handleSelectThread(threads[0].thread_id);
       return;
     }
-    if((!threads || threads.length === 0) && (searchParams.get('thread_id') || searchParams.get('model'))) {
+    // Only remove thread_id/model params if loading is complete and there are no threads
+    // This prevents removing params during initial page load before threads are fetched
+    if(!loading && (!threads || threads.length === 0) && (searchParams.get('thread_id') || searchParams.get('model'))) {
       // remove param threads from url
       searchParams.delete('thread_id');
       searchParams.delete('model');
@@ -73,7 +75,7 @@ export function ThreadsPageContent() {
       window.history.replaceState(null, '', `?${searchParams.toString()}`);
       return;
     }
-  }, [selectedThreadId, threads, handleSelectThread, searchParams]);
+  }, [selectedThreadId, threads, handleSelectThread, searchParams, loading]);
 
   // Show loading state while threads are being fetched
   if (loading && threads.length === 0) {
