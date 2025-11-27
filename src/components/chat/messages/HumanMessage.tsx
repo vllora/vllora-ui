@@ -12,7 +12,6 @@ interface HumanMessageProps {
 
 export const HumanMessage: React.FC<HumanMessageProps> = ({ message }) => {
   const messageRef = React.useRef<HTMLDivElement>(null);
-
   // Only update relative time when message is visible
   useRelativeTime(messageRef, message.created_at);
 
@@ -50,12 +49,12 @@ export const HumanMessage: React.FC<HumanMessageProps> = ({ message }) => {
             ))}
           </div>
         )}
-        {message.content && <div className="flex flex-col justify-end overflow-hidden max-w-[80%] min-w-[80px] ">
+        {message.content && (!message.content_array || message.content_array.length === 0) && <div className="flex flex-col justify-end overflow-hidden max-w-[80%] min-w-[80px] ">
           <div className="text-neutral-200 flex-1 leading-relaxed  whitespace-normal break-words text-sm bg-neutral-900/30 border border-neutral-800/50 rounded-lg px-4 py-3">
             <MessageDisplay message={message.content} />
           </div>
         </div>}
-        {!message.content && message.content_array && message.content_array.length > 0 && (
+        {message.content_array && message.content_array.length > 0 && (
           <div className="flex flex-col  justify-end overflow-hidden max-w-[80%]  text-neutral-200 leading-relaxed whitespace-normal break-words text-sm bg-neutral-900/30 border border-neutral-800/50 rounded-lg px-4 py-3">
             <ContentArrayDisplay contentArray={message.content_array} />
           </div>
