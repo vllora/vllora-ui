@@ -174,7 +174,7 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
       description: `Based on span ${span.span_id}`,
       messages,
       tools,
-      model: model || "gpt-4",
+      model: model || "openai/gpt-4o-mini",
       headers: {},
       promptVariables: {},
       stream: restParams.stream ?? true,
