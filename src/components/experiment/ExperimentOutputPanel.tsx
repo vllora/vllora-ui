@@ -6,8 +6,8 @@ import { OriginalOutputSection } from "./OriginalOutputSection";
 
 // Main ExperimentOutputPanel Component
 interface ExperimentOutputPanelProps {
-  result: string;
-  originalOutput: string;
+  result: string | object[];
+  originalOutput: string | object[];
   running: boolean;
   isStreaming: boolean;
   traceSpans: Span[];

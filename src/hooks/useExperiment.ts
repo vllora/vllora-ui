@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { getSpanById } from "@/services/spans-api";
 import { listRuns, fetchRunSpans } from "@/services/runs-api";
 import { api } from "@/lib/api-client";
-import { tryParseJson, extractOutput } from "@/utils/modelUtils";
+import { tryParseJson } from "@/utils/modelUtils";
 import type { Span } from "@/types/common-type";
 import { useDebugControl } from "@/hooks/events/useDebugControl";
 import { processEvent } from "@/hooks/events/utilities";
@@ -114,8 +114,8 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
   // Store the original experiment data from span for comparison
   const [originalExperimentData, setOriginalExperimentData] =
     useState<ExperimentData | null>(null);
-  const [result, setResult] = useState<string>("");
-  const [originalOutput, setOriginalOutput] = useState<string>("");
+  const [result, setResult] = useState<string | object[]>("");
+  const [originalOutput, setOriginalOutput] = useState<string | object[]>("");
   const [running, setRunning] = useState(false);
   const [traceId, setTraceId] = useState<string | null>(null);
   const [traceSpans, setTraceSpans] = useState<Span[]>([]);
@@ -195,7 +195,7 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
       // Extract original output
       const attribute = span.attribute || {};
       if (attribute.output) {
-        setOriginalOutput(extractOutput(attribute.output));
+        setOriginalOutput(attribute.output );
       }
     }
   }, [span]);
@@ -419,13 +419,11 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
       } else {
         // Handle non-streaming response
         const data = await response.json();
-        const content = extractOutput(data);
-
         toast.success("Experiment completed successfully");
-        setResult(content);
+        setResult(data);
 
         return {
-          content,
+          content: data,
           rawResponse: data,
         };
       }

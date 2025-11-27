@@ -12,8 +12,8 @@ import { TRACE_PANEL_WIDTH } from "@/utils/constant";
 
 interface ExperimentMainContentProps {
   experimentData: ExperimentData;
-  result: string;
-  originalOutput: string;
+  result: string | object[];
+  originalOutput: string | object[];
   running: boolean;
   traceSpans: Span[];
   loadingTraceSpans: boolean;
