@@ -39,6 +39,12 @@ const BaseMessageDisplay: React.FC<{ message: string }> = ({ message }) => {
       components={{
         code({ className, children, ref, ...props }) {
           const match = /language-(\w+)/.exec(className || '');
+          let tempParsedJson = match &&
+                match.length > 0 &&
+                match[1].toLowerCase().includes('json') ? ( tryParseJson(String(children).replace(/\n$/, '')) || {}) : undefined
+          let isValidJson = match &&
+                match.length > 0 &&
+                match[1].toLowerCase().includes('json') && tempParsedJson && typeof tempParsedJson === 'object'
           return match ? (
             <div className="relative my-2">
               <div
@@ -53,9 +59,7 @@ const BaseMessageDisplay: React.FC<{ message: string }> = ({ message }) => {
                   overflowX: 'auto',
                 }}
               >
-                {match &&
-                match.length > 0 &&
-                match[1].toLowerCase().includes('json') ? (
+                {isValidJson ? (
                   <div className="px-3 py-2">
                     <ReactJson
                       name={false}
@@ -276,8 +280,8 @@ const BaseMessageDisplay: React.FC<{ message: string }> = ({ message }) => {
         },
         p({ children, ...props }) {
           if (typeof children === 'string') {
-            const jsonObject = tryParseJson(children);
-            if (jsonObject && jsonObject.length > 0) {
+            const jsonObject = tryParseJson(children) || {};
+            if (jsonObject && Object.keys(jsonObject).length > 0) {
               return (
                 <BaseMessageDisplay
                   message={`\`\`\`json\n${JSON.stringify(jsonObject, null, 2)}`}
