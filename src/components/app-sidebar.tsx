@@ -5,7 +5,6 @@ import {
   MessageSquare,
   Settings,
   Menu,
-  Sparkles,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -68,15 +67,15 @@ export function AppSidebar({ isCollapsed, currentProjectId }: AppSidebarProps) {
         )}
       >
         <div
-        onClick={() => {
-          // TODO: add redirect to home
-          navigate("/")
-        }}
-         className={cn(
-          "flex h-16 items-center justify-center px-4 cursor-pointer",
-          "border-b border-border/50 backdrop-blur-sm"
-        )}>
-            <img src="/logo-icon-white.svg" alt="vLLora" className="h-8" />
+          onClick={() => {
+            // TODO: add redirect to home
+            navigate("/")
+          }}
+          className={cn(
+            "flex h-16 items-center justify-center px-4 cursor-pointer",
+            "border-b border-border/50 backdrop-blur-sm"
+          )}>
+          <img src="/logo-icon-white.svg" alt="vLLora" className="h-8" />
         </div>
 
         <nav className="flex-1 overflow-y-auto p-4">
