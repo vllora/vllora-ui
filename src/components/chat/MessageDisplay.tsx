@@ -10,6 +10,7 @@ import remarkGfm from 'remark-gfm';
 import remarkFlexibleParagraphs from 'remark-flexible-paragraphs';
 import ReactJson from 'react-json-view';
 import { sanitizeSchema } from '@/utils/sanitizeSchema';
+import { JsonViewer } from './traces/TraceRow/span-info/JsonViewer';
 
 interface MessageDisplayProps {
   message: string;
@@ -61,7 +62,9 @@ const BaseMessageDisplay: React.FC<{ message: string }> = ({ message }) => {
               >
                 {isValidJson ? (
                   <div className="px-3 py-2">
-                    <ReactJson
+
+                    <JsonViewer data={tempParsedJson} />
+                    {/* <ReactJson
                       name={false}
                       collapsed={2}
                       displayDataTypes={false}
@@ -97,7 +100,7 @@ const BaseMessageDisplay: React.FC<{ message: string }> = ({ message }) => {
                       src={
                         tryParseJson(String(children).replace(/\n$/, '')) || {}
                       }
-                    />
+                    /> */}
                   </div>
                 ) : (
                   <SyntaxHighlighter
