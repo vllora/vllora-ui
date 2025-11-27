@@ -8,7 +8,6 @@ import rehypeSanitize from 'rehype-sanitize';
 import behead from 'remark-behead';
 import remarkGfm from 'remark-gfm';
 import remarkFlexibleParagraphs from 'remark-flexible-paragraphs';
-import ReactJson from 'react-json-view';
 import { sanitizeSchema } from '@/utils/sanitizeSchema';
 import { JsonViewer } from './traces/TraceRow/span-info/JsonViewer';
 
