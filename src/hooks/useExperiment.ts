@@ -170,7 +170,7 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
     const tools: Tool[] = requestTools || [];
 
     return {
-      name: `Experiment: ${span.operation_name}`,
+      name: `Experiment`,
       description: `Based on span ${span.span_id}`,
       messages,
       tools,
