@@ -12,6 +12,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useCallback } from "react";
 
 interface ModelInvokeUIDetailsDisplayProps {
     span: Span;
@@ -50,9 +51,13 @@ export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelIn
     const headersStr = apiCloudInvokeAttribute?.['http.request.header'];
     const headers = headersStr ? tryParseJson(headersStr) : undefined;
 
-    const handleExperiment = () => {
-        navigate(`/experiment?span_id=${apiInvokeSpan?.span_id}`);
-    };
+    const handleExperiment = useCallback(() => {
+        if (apiInvokeSpan?.span_id) {
+            navigate(`/experiment?span_id=${apiInvokeSpan?.span_id}`);
+        } else if (span?.span_id) {
+            navigate(`/experiment?span_id=${span?.span_id}`);
+        }
+    }, [apiInvokeSpan, span]);
 
     const experimentButton = (
         <TooltipProvider>
