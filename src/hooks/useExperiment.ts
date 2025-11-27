@@ -281,8 +281,12 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
         if (Array.isArray(msg.content)) {
           return msg;
         }
+        // If content is undefined/null, keep as-is
+        if (msg.content === undefined || msg.content === null) {
+          return msg;
+        }
         // If content is a string that looks like JSON array, parse it
-        const trimmed = (msg.content as string).trim();
+        const trimmed = String(msg.content).trim();
         if (trimmed.startsWith("[")) {
           try {
             const parsed = JSON.parse(trimmed);
