@@ -112,7 +112,7 @@ export const MessageMetrics: React.FC<MessageMetricsProps> = ({
                       Total Duration:
                     </span>
                     <span className="text-xs font-mono">
-                      {formatToMilliseconds(duration)}
+                      {formatToSeconds(duration)}
                     </span>
                   </div>
                 )}
