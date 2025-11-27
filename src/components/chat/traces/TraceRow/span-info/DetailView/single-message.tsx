@@ -271,8 +271,8 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
                         <div
                             ref={contentRef}
                             className={`whitespace-pre-wrap break-words text-xs text-zinc-400 min-w-0 ${isExpanded && showExpandButton
-                                    ? 'max-h-[400px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900'
-                                    : ''
+                                ? 'max-h-[400px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900'
+                                : ''
                                 }`}
                         >
                             <MarkdownViewer message={displayText} />
@@ -332,14 +332,22 @@ export const ObjectMessageContent = ({ objectContent }: { objectContent: any }) 
     // check if objectContent is array
     let isArray = Array.isArray(objectContent);
     if (isArray) {
+        if (objectContent.length === 0) {
+            return (
+                <div className="flex items-center gap-2 py-2 px-3 rounded-lg bg-zinc-800/30 border border-zinc-700/50 text-zinc-500 text-xs">
+                    <span className="font-mono">[]</span>
+                    <span className="text-zinc-600">Empty array</span>
+                </div>
+            );
+        }
         return <div className="flex flex-col gap-2 text-zinc-400 max-w-full overflow-hidden">{objectContent.map((item: any, index: number) => {
             if (item.type === 'text' && item.text) {
                 return <TextMessageContent key={`${index}_text`} text={item.text} cache_control={item.cache_control} />
             }
-            return <div key={`${index}_${item.type}`} className="max-w-full overflow-x-auto"><JsonViewer data={item} /></div>;
+            return <div key={`${index}_${item.type}`} className="max-w-full whitespace-pre-wrap my-0 overflow-x-auto flex flex-col items-start gap-2 py-2 rounded-lg transition-all duration-200 bg-zinc-800/30 border border-zinc-700/50 px-2"><JsonViewer data={item} collapseStringsAfterLength={10} /></div>;
         })}</div>
     }
-    return typeof objectContent === 'string' ? <TextMessageContent text={objectContent} /> : <div className="max-w-full overflow-x-auto"><JsonViewer data={objectContent} /></div>;
+    return typeof objectContent === 'string' ? <TextMessageContent text={objectContent} /> : <div className="max-w-full whitespace-pre-wrap my-0 overflow-x-auto flex flex-col items-start gap-2 py-2 rounded-lg transition-all duration-200 bg-zinc-800/30 border border-zinc-700/50 px-2"><JsonViewer data={objectContent} /></div>;
 };
 
 const TextMessageContent = ({ text, cache_control }: { text: string, cache_control?: any }) => {
@@ -392,8 +400,8 @@ const TextMessageContent = ({ text, cache_control }: { text: string, cache_contr
             </div>
         ) : (
             <div className={`flex items-start ${cache_control ? 'gap-2' : ''} ${isExpanded && showExpandButton
-                    ? 'max-h-[400px] overflow-y-auto w-full pr-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900'
-                    : 'w-full'
+                ? 'max-h-[400px] overflow-y-auto w-full pr-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900'
+                : 'w-full'
                 }`}>
                 {cache_control && (
                     <div className="flex items-center flex-shrink-0">
