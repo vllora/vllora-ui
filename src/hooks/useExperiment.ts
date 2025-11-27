@@ -40,11 +40,13 @@ function applyMustacheVariables(
   return value;
 }
 
-// Content part type for structured/multimodal messages (text, images, etc.)
+// Content part type for structured/multimodal messages (text, images, audio, files)
 export interface MessageContentPart {
-  type: "text" | "image_url";
+  type: "text" | "image_url" | "input_audio" | "file";
   text?: string;
   image_url?: { url: string; detail?: "auto" | "low" | "high" };
+  input_audio?: { data: string; format: "wav" | "mp3" };
+  file?: { file_data: string; file_id?: string; filename?: string };
 }
 
 export interface Message {

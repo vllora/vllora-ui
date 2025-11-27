@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { Maximize2, X, Copy, Check } from "lucide-react";
+import { useState, useMemo, useRef, useCallback } from "react";
+import { Maximize2, X, Copy, Check, Paperclip } from "lucide-react";
 import type { Message, MessageContentPart } from "@/hooks/useExperiment";
 import { normalizeContentToString } from "@/hooks/useExperiment";
 import {
@@ -13,6 +13,19 @@ import { MessageEditorDialog } from "./MessageEditorDialog";
 import { CodeMirrorEditor } from "./CodeMirrorEditor";
 import { RoleSelector } from "./RoleSelector";
 import { JsonEditor } from "@/components/chat/conversation/model-config/json-editor";
+import {
+  type EditorMode,
+  isStructuredContent,
+  convertContentForModeChange,
+  fileToBase64,
+  fileToBase64Raw,
+  isImageFile,
+  isAudioFile,
+  getAudioFormat,
+  addImageToContent,
+  addAudioToContent,
+  addFileToContent,
+} from "./message-editor-utils";
 
 interface MessageEditorProps {
   message: Message;
@@ -21,30 +34,9 @@ interface MessageEditorProps {
   updateMessageRole: (index: number, role: Message["role"]) => void;
   deleteMessage: (index: number) => void;
   isHighlighted?: boolean;
+  /** When true, allows attaching any file type. When false, only images and audio are allowed. */
+  allowAllFiles?: boolean;
 }
-
-type EditorMode = "plain" | "markdown" | "structured";
-
-// Detect if content is structured (array or JSON array string)
-function isStructuredContent(content: string | MessageContentPart[]): boolean {
-  if (Array.isArray(content)) return true;
-  if (typeof content !== "string") return false;
-  const trimmed = content.trim();
-  if (!trimmed.startsWith("[")) return false;
-  try {
-    const parsed = JSON.parse(trimmed);
-    return Array.isArray(parsed);
-  } catch {
-    return false;
-  }
-}
-
-// Default template for structured content
-const STRUCTURED_CONTENT_TEMPLATE = JSON.stringify(
-  [{ type: "text", text: "" }],
-  null,
-  2
-);
 
 export function MessageEditor({
   message,
@@ -53,6 +45,7 @@ export function MessageEditor({
   updateMessageRole,
   deleteMessage,
   isHighlighted,
+  allowAllFiles = false,
 }: MessageEditorProps) {
   // Determine initial editor mode based on content
   const initialMode = useMemo((): EditorMode => {
@@ -63,6 +56,8 @@ export function MessageEditor({
   const [editorMode, setEditorMode] = useState<EditorMode>(initialMode);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Keep track if content is structured (for display purposes)
   const isStructured = useMemo(
@@ -74,23 +69,16 @@ export function MessageEditor({
   const contentAsString = normalizeContentToString(message.content);
 
   // Handle editor mode change
-  // Only convert content when switching TO structured from empty/plain text
-  // Never auto-convert FROM structured to avoid losing data (images, etc.)
   const handleModeChange = (newMode: EditorMode) => {
-    if (newMode === "structured" && !isStructured) {
-      // Switch to structured: only convert if content is plain text
-      const currentContent = contentAsString.trim();
-      if (currentContent) {
-        // Wrap existing text in structured format
-        updateMessage(
-          index,
-          JSON.stringify([{ type: "text", text: currentContent }], null, 2)
-        );
-      } else {
-        updateMessage(index, STRUCTURED_CONTENT_TEMPLATE);
-      }
+    const convertedContent = convertContentForModeChange(
+      message.content,
+      contentAsString,
+      isStructured,
+      newMode
+    );
+    if (convertedContent !== null) {
+      updateMessage(index, convertedContent);
     }
-    // Don't auto-convert when switching FROM structured - user keeps JSON as-is
     setEditorMode(newMode);
   };
 
@@ -100,13 +88,112 @@ export function MessageEditor({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // Handle file processing (images, audio, and generic files)
+  const handleFile = useCallback(
+    async (file: File) => {
+      try {
+        let newContent: string;
+        if (isImageFile(file)) {
+          // Images use data URL format
+          const base64Url = await fileToBase64(file);
+          newContent = addImageToContent(message.content, base64Url);
+        } else if (isAudioFile(file)) {
+          // Audio uses raw base64 with format
+          const base64Data = await fileToBase64Raw(file);
+          const format = getAudioFormat(file);
+          newContent = addAudioToContent(message.content, base64Data, format);
+        } else if (allowAllFiles) {
+          // Generic files use raw base64 with filename (only when enabled)
+          const base64Data = await fileToBase64Raw(file);
+          newContent = addFileToContent(message.content, base64Data, file.name);
+        } else {
+          // Generic files not allowed
+          console.warn("File type not supported. Only images and audio files are allowed.");
+          return;
+        }
+        updateMessage(index, newContent);
+        setEditorMode("structured");
+      } catch (error) {
+        console.error("Failed to process file:", error);
+      }
+    },
+    [message.content, index, updateMessage, allowAllFiles]
+  );
+
+  // Drag and drop handlers
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOver(false);
+
+      const files = Array.from(e.dataTransfer.files);
+      for (const file of files) {
+        await handleFile(file);
+      }
+    },
+    [handleFile]
+  );
+
+  // File input handler
+  const handleFileSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files) return;
+
+      for (const file of Array.from(files)) {
+        await handleFile(file);
+      }
+
+      // Reset the input so the same file can be selected again
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    },
+    [handleFile]
+  );
+
   return (
     <>
       <div
-        className={`border border-border rounded-lg p-3 bg-card transition-all ${
+        className={`border border-border rounded-lg p-3 bg-card transition-all relative ${
           isHighlighted ? "animate-highlight-flash" : ""
-        }`}
+        } ${isDragOver ? "ring-2 ring-[rgb(var(--theme-500))] border-transparent" : ""}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
+        {/* Hidden file input for file attachment */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept={allowAllFiles ? undefined : "image/png,image/jpeg,image/gif,image/webp,audio/wav,audio/mpeg,audio/mp3"}
+          className="hidden"
+          onChange={handleFileSelect}
+        />
+
+        {/* Drag overlay */}
+        {isDragOver && (
+          <div className="absolute inset-0 bg-[rgb(var(--theme-500))]/10 rounded-lg flex items-center justify-center z-10 pointer-events-none">
+            <div className="flex items-center gap-2 text-[rgb(var(--theme-500))] font-medium">
+              <Paperclip className="w-5 h-5" />
+              <span>Drop file here</span>
+            </div>
+          </div>
+        )}
         <div className="flex items-center justify-between mb-2">
           {/* Left side - Role selector */}
           <RoleSelector
@@ -131,6 +218,20 @@ export function MessageEditor({
 
             <TooltipProvider delayDuration={200}>
               <div className="flex items-center gap-1">
+                {/* Attach file button */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    >
+                      <Paperclip className="w-4 h-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>Attach file</TooltipContent>
+                </Tooltip>
+
                 {/* Copy button */}
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -213,6 +314,7 @@ export function MessageEditor({
         isOpen={isDialogOpen}
         onOpenChange={setIsDialogOpen}
         initialEditorMode={editorMode}
+        allowAllFiles={allowAllFiles}
         onApply={(content, newEditorMode, newRole) => {
           updateMessage(index, content);
           if (newRole !== message.role) {

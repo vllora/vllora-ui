@@ -20,7 +20,6 @@ import {
 const mainMenuItems = [
   { id: "home", label: "Home", icon: Home, path: "/" },
   { id: "chat", label: "Chat", icon: MessageSquare, path: "/chat" },
-  { id: "experiments", label: "Experiments", icon: Sparkles, path: "/experiments" },
 ]
 
 const bottomMenuItems = [
