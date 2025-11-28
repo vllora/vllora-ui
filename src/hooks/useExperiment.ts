@@ -59,6 +59,24 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
   const [traceSpans, setTraceSpans] = useState<Span[]>([]);
   const [loadingTraceSpans, setLoadingTraceSpans] = useState(false);
 
+
+  useEffect(()=> {
+    if(traceSpans && traceSpans.length > 0) {
+      const newApiInvokeSpan = traceSpans.find((span) => span.operation_name === 'api_invoke');
+      if(newApiInvokeSpan && newApiInvokeSpan.attribute) {
+         let apiAtt = newApiInvokeSpan.attribute as any;
+        apiAtt && setResultInfo(prev => {
+          return {
+            ...prev,
+            usage: apiAtt.usage || '',
+            cost: apiAtt.cost || ''
+          }
+         })
+        
+      }
+    }
+  }, [traceSpans])
+
   // Fetch span data
   const {
     data: span,
@@ -96,6 +114,34 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
     }
   }, [span]);
 
+  const refreshSpansByRunId = useCallback(
+    async (runId: string) => {
+      if(!projectId) return;
+      const spansResponse = await fetchRunSpans({
+        runId: runId,
+        projectId,
+        offset: 0,
+        limit: 1000,
+      });
+      let newSpans = spansResponse.data;
+      setTraceSpans(prev => {
+        // for each newSpans, check if it is in prev, if not, add it, if exist, update it
+        let updatedSpans = [...prev];
+        for (const span of newSpans) {
+          const index = updatedSpans.findIndex((s) => s.span_id === span.span_id);
+          if (index === -1) {
+            updatedSpans.push(span);
+          } else {
+            updatedSpans[index] = span;
+          }
+        }
+        // sort updatedSpans by span_id
+        updatedSpans.sort((a, b) => a.start_time_us - b.start_time_us);
+        return updatedSpans;
+      });
+    },
+    [projectId]
+  );
   // Fetch trace spans when traceId changes
   const fetchTraceSpans = useCallback(
     async (traceIdToFetch: string, projectId: string) => {
@@ -141,6 +187,11 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
   const handleRunExperiment = async () => {
     setRunning(true);
     setResult(""); // Clear previous result
+    setResultInfo({
+      usage: "",
+      cost: "",
+      model: "",
+    });
     setTraceId(null); // Clear previous trace
     setTraceSpans([]);
 
@@ -392,6 +443,11 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
       setExperimentData(JSON.parse(JSON.stringify(originalExperimentData)));
     }
     setResult("");
+    setResultInfo({
+      usage: "",
+      cost: "",
+      model: "",
+    });
     setTraceId(null);
     setTraceSpans([]);
   }, [originalExperimentData]);
@@ -423,8 +479,13 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
 
       // Update traceSpans with the new event
       setTraceSpans((prevSpans) => processEvent(prevSpans, event));
+      if (event.type === "RunFinished" && event.run_id) {
+       event.run_id && setTimeout(() => {
+          refreshSpansByRunId(event.run_id || '');
+        }, 1500);
+      }
     },
-    [span?.thread_id]
+    [span?.thread_id, projectId]
   );
 
   // Subscribe to real-time events for the experiment
