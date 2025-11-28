@@ -1,39 +1,55 @@
 import { useMemo } from "react";
 import { extractOutput } from "@/utils/modelUtils";
 import { ContentDisplay } from "./ContentDisplay";
+import { formatCost } from "@/utils/formatCost";
+import { ModelContextViewer } from "../chat/traces/TraceRow/span-info/DetailView/spans-display/model-context-viewer";
 
 interface OriginalOutputSectionProps {
-  content: string | object[];
-  usage?:string
+  info: { 
+    content: string | object[];
+     usage?: string, 
+     cost?: string,
+     model?: string,
+     }
 }
 
-interface ParsedMetadata {
+export interface ParsedMetadata {
   prompt_tokens?: number;
-    completion_tokens?: number;
-    total_tokens?: number;
-    input_tokens?: number;
-    output_tokens?: number;
-    prompt_tokens_details?: {
-      cached_tokens?: number;
-      cache_creation_tokens?: number;
-      [key: string]: any;
-    };
+  completion_tokens?: number;
+  total_tokens?: number;
+  input_tokens?: number;
+  output_tokens?: number;
+  prompt_tokens_details?: {
+    cached_tokens?: number;
+    cache_creation_tokens?: number;
+    [key: string]: any;
+  };
 }
 
-export function OriginalOutputSection({ content, usage }: OriginalOutputSectionProps) {
+export function OriginalOutputSection({ info }: OriginalOutputSectionProps) {
   // Try to parse content and extract usage/finish_reason
 
   const metadata = useMemo((): ParsedMetadata => {
     try {
-      const usageStr = typeof usage === "string" ? usage : JSON.stringify(usage);
+      const usageStr = typeof info.usage === "string" ? info.usage : JSON.stringify(info.usage);
       const parsed = JSON.parse(usageStr);
       return parsed
     } catch {
       return {};
     }
-  }, [usage]);
+  }, [info.usage]);
 
-  if (!content) return null;
+  const costDisplay = useMemo(() => {
+    try {
+      const cost = typeof info.cost === "string" ? info.cost : JSON.stringify(info.cost);
+      const costNumber = Number(cost);
+      return formatCost(costNumber, 5);
+    } catch {
+      return "";
+    }
+  }, [info.cost]);
+
+  if (!info.content) return null;
 
   return (
     <div className="rounded-lg flex-1 flex flex-col border border-dashed border-border overflow-hidden mt-4 flex-shrink-0">
@@ -48,19 +64,24 @@ export function OriginalOutputSection({ content, usage }: OriginalOutputSectionP
               <span className="font-medium">{metadata.finish_reason}</span>
             </span>
           )} */}
+          {info.model && <ModelContextViewer model_name={info.model} usage_tokens={metadata.total_tokens || 0} />}
           {metadata.total_tokens && (
             <span className="flex items-center gap-1">
               <span className="opacity-60">tokens:</span>
               <span className="font-medium">
-                {metadata.prompt_tokens || metadata.input_tokens|| 0} + {metadata.completion_tokens || metadata.output_tokens|| 0} = {metadata.total_tokens || 0}
+                {metadata.prompt_tokens || metadata.input_tokens || 0} + {metadata.completion_tokens || metadata.output_tokens || 0} = {metadata.total_tokens || 0}
               </span>
             </span>
           )}
+          {costDisplay && info.cost && (<span className="flex items-center gap-1">
+            <span className="opacity-60">cost:</span>
+            <span className="font-medium">{costDisplay}</span>
+          </span>)}
         </div>
       </div>
       <div className="p-3 flex-1 overflow-y-scroll text-sm">
         <ContentDisplay
-          content={extractOutput(content)}
+          content={extractOutput(info.content)}
           className="text-muted-foreground"
         />
       </div>

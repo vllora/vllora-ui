@@ -6,8 +6,8 @@ import { ExperimentConsumer } from "@/contexts/ExperimentContext";
 export function ExperimentOutputPanel() {
   const {
     result,
-    originalOutput,
-    originalUsage,
+    originalInfo,
+    resultInfo,
     
     running,
     experimentData,
@@ -65,13 +65,14 @@ export function ExperimentOutputPanel() {
             <div className="flex-1 min-h-0">
               <NewOutputSection
                 result={result}
+                info={resultInfo}
                 running={running}
                 isStreaming={isStreaming}
               />
             </div>
 
             {/* Original Output - always at bottom */}
-            <OriginalOutputSection content={originalOutput} usage={originalUsage} />
+            {originalInfo && <OriginalOutputSection info={originalInfo} />}
           </div>
         ) : (
           <div className="h-full">

@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useCallback } from "react";
 import { Maximize2, X, Copy, Check, Paperclip } from "lucide-react";
 import type { Message, MessageContentPart } from "@/hooks/useExperiment";
-import { normalizeContentToString } from "@/hooks/useExperiment";
+import { normalizeContentToString } from "@/utils/templateUtils";
 import {
   Tooltip,
   TooltipContent,

@@ -2,38 +2,43 @@ import { useMemo } from "react";
 import { extractOutput } from "@/utils/modelUtils";
 import { ContentDisplay } from "./ContentDisplay";
 import { EmptyOutputState } from "./EmptyOutputState";
+import { ParsedMetadata } from "./OriginalOutputSection";
+import { ModelContextViewer } from "../chat/traces/TraceRow/span-info/DetailView/spans-display/model-context-viewer";
+import { formatCost } from "@/utils/formatCost";
 
 interface NewOutputSectionProps {
   result: string | object[];
   running: boolean;
   isStreaming: boolean;
+  info: {
+    usage: string;
+    cost: string;
+    model: string;
+  }
 }
 
-interface ParsedMetadata {
-  usage?: {
-    prompt_tokens?: number;
-    completion_tokens?: number;
-    total_tokens?: number;
-  };
-  finish_reason?: string;
-}
 
-export function NewOutputSection({ result, running, isStreaming }: NewOutputSectionProps) {
-  // Try to parse result and extract usage/finish_reason
+export function NewOutputSection({ result, running, isStreaming, info }: NewOutputSectionProps) {
+ 
+
   const metadata = useMemo((): ParsedMetadata => {
-    if (!result) return {};
     try {
-      const contentStr = typeof result === "string" ? result : JSON.stringify(result);
-      const parsed = JSON.parse(contentStr);
-
-      return {
-        usage: parsed.usage,
-        finish_reason: parsed.choices?.[0]?.finish_reason,
-      };
+      const usageStr = typeof info.usage === "string" ? info.usage : JSON.stringify(info.usage);
+      const parsed = JSON.parse(usageStr);
+      return parsed
     } catch {
       return {};
     }
-  }, [result]);
+  }, [info.usage]);
+  const costDisplay = useMemo(() => {
+    try {
+      const cost = typeof info.cost === "string" ? info.cost : JSON.stringify(info.cost);
+      const costNumber = Number(cost);
+      return formatCost(costNumber, 5);
+    } catch {
+      return "";
+    }
+  }, [info.cost]);
 
   // Empty state - no result and not running
   if (!result && !running) {
@@ -61,22 +66,21 @@ export function NewOutputSection({ result, running, isStreaming }: NewOutputSect
             </span>
           )}
         </div>
-        {!running && (metadata.finish_reason || metadata.usage) && (
+        {!running && (info.usage) && (
           <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-            {metadata.finish_reason && (
-              <span className="flex items-center gap-1">
-                <span className="opacity-60">finish:</span>
-                <span className="font-medium">{metadata.finish_reason}</span>
-              </span>
-            )}
-            {metadata.usage && (
+            {info.model && <ModelContextViewer model_name={info.model} usage_tokens={metadata.total_tokens || 0} />}
+            {metadata.total_tokens && (
               <span className="flex items-center gap-1">
                 <span className="opacity-60">tokens:</span>
                 <span className="font-medium">
-                  {metadata.usage.prompt_tokens ?? 0} + {metadata.usage.completion_tokens ?? 0} = {metadata.usage.total_tokens ?? 0}
+                  {metadata.prompt_tokens || metadata.input_tokens || 0} + {metadata.completion_tokens || metadata.output_tokens || 0} = {metadata.total_tokens || 0}
                 </span>
               </span>
             )}
+            {costDisplay && info.cost && (<span className="flex items-center gap-1">
+              <span className="opacity-60">cost:</span>
+              <span className="font-medium">{costDisplay}</span>
+            </span>)}
           </div>
         )}
       </div>

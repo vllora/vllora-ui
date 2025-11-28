@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Eye, EyeOff, Paperclip } from "lucide-react";
 import type { Message } from "@/hooks/useExperiment";
-import { normalizeContentToString } from "@/hooks/useExperiment";
+import { normalizeContentToString } from "@/utils/templateUtils";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

@@ -1,100 +1,34 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRequest } from "ahooks";
 import { toast } from "sonner";
 import { getSpanById } from "@/services/spans-api";
 import { listRuns, fetchRunSpans } from "@/services/runs-api";
 import { api } from "@/lib/api-client";
-import { tryParseJson } from "@/utils/modelUtils";
+import { applyMustacheVariables } from "@/utils/templateUtils";
+import {
+  parseSpanToExperiment,
+  extractOriginalInfo,
+} from "@/utils/experimentUtils";
 import type { Span } from "@/types/common-type";
 import { useDebugControl } from "@/hooks/events/useDebugControl";
 import { processEvent } from "@/hooks/events/utilities";
 import type { ProjectEventUnion } from "@/contexts/project-events/dto";
+import type {
+  ExperimentData,
+  Message,
+  MessageContentPart,
+  Tool,
+} from "@/types/experiment";
 
-// Helper to apply Mustache-style variable substitution ({{variableName}})
-function applyMustacheVariables(
-  value: unknown,
-  variables: Record<string, string>
-): unknown {
-  if (!variables || Object.keys(variables).length === 0) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    return value.replace(/\{\{(\w+)\}\}/g, (match, key) => {
-      return variables[key] !== undefined ? variables[key] : match;
-    });
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => applyMustacheVariables(item, variables));
-  }
-
-  if (value !== null && typeof value === "object") {
-    const result: Record<string, unknown> = {};
-    for (const [key, val] of Object.entries(value)) {
-      result[key] = applyMustacheVariables(val, variables);
-    }
-    return result;
-  }
-
-  return value;
-}
-
-// Content part type for structured/multimodal messages (text, images, audio, files)
-export interface MessageContentPart {
-  type: "text" | "image_url" | "input_audio" | "file";
-  text?: string;
-  image_url?: { url: string; detail?: "auto" | "low" | "high" };
-  input_audio?: { data: string; format: "wav" | "mp3" };
-  file?: { file_data: string; file_id?: string; filename?: string };
-}
-
-export interface Message {
-  role: "system" | "user" | "assistant" | "tool";
-  // Content can be string or array of content parts (for multimodal/structured messages)
-  content: string | MessageContentPart[];
-  [key: string]: unknown;
-}
-
-// Helper to normalize content to string for UI editing
-export function normalizeContentToString(
-  content: string | MessageContentPart[] | null | undefined
-): string {
-  if (content === null || content === undefined) return "";
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) return JSON.stringify(content, null, 2);
-  return String(content);
-}
-
-export interface ToolFunction {
-  name: string;
-  description: string;
-  parameters: Record<string, any>;
-}
-
-export interface Tool {
-  type: "function";
-  function: ToolFunction;
-}
-
-export interface ExperimentData {
-  name: string;
-  description: string;
-  messages: Message[];
-  model: string;
-  tools?: Tool[];
-  tool_choice?: string | { type: "function"; function: { name: string } };
-  headers?: Record<string, string>;
-  promptVariables?: Record<string, string>;
-  stream?: boolean;
-  // Allow any additional parameters (model-specific parameters like temperature, max_tokens, etc.)
-  [key: string]: unknown;
-}
-
-export interface ExperimentResult {
-  content: string;
-  rawResponse: any;
-}
+// Re-export types for backward compatibility
+export type {
+  MessageContentPart,
+  Message,
+  ToolFunction,
+  Tool,
+  ExperimentData,
+  ExperimentResult,
+} from "@/types/experiment";
 
 /**
  * Custom hook for managing experiment functionality
@@ -115,8 +49,11 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
   const [originalExperimentData, setOriginalExperimentData] =
     useState<ExperimentData | null>(null);
   const [result, setResult] = useState<string | object[]>("");
-  const [originalOutput, setOriginalOutput] = useState<string | object[]>("");
-  const [originalUsage, setOriginalUsage] = useState<string>("");
+  const [resultInfo, setResultInfo] = useState({
+    usage: "",
+    cost: "",
+    model: "",
+  });
   const [running, setRunning] = useState(false);
   const [traceId, setTraceId] = useState<string | null>(null);
   const [traceSpans, setTraceSpans] = useState<Span[]>([]);
@@ -145,44 +82,7 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
     }
   );
 
-  // Parse span data into experiment data
-  const parseSpanToExperiment = (span: any): ExperimentData | null => {
-    if (!span) return null;
-
-    const attribute = span.attribute || {};
-
-    // Parse request
-    let request: any = attribute.request && tryParseJson(attribute.request);
-
-    // Extract messages - preserve ALL properties including original content type
-    const rawMessages = request?.messages || [];
-    const messages: Message[] = rawMessages.map((msg: any) => ({
-      ...msg, // Preserve all properties: role, content, tool_calls, tool_call_id, name, refusal, etc.
-    }));
-
-    // Extract known fields, spread the rest (model parameters, etc.)
-    const {
-      model,
-      messages: _messages,
-      tools: requestTools,
-      ...restParams
-    } = request || {};
-
-    const tools: Tool[] = requestTools || [];
-
-    return {
-      name: `Experiment`,
-      description: `Based on span ${span.span_id}`,
-      messages,
-      tools,
-      model: model || "openai/gpt-4o-mini",
-      headers: {},
-      promptVariables: {},
-      stream: restParams.stream ?? true,
-      // Include all other parameters from the original request (temperature, max_tokens, etc.)
-      ...restParams,
-    };
-  };
+  const originalInfo = useMemo(() => extractOriginalInfo(span), [span]);
 
   // Initialize experiment data and original output when span loads
   useEffect(() => {
@@ -192,15 +92,6 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
         setExperimentData(parsedData);
         // Store original data for comparison (deep clone)
         setOriginalExperimentData(JSON.parse(JSON.stringify(parsedData)));
-      }
-
-      // Extract original output
-      const attribute: any = span.attribute || {};
-      if (attribute.output || attribute.response) {
-        setOriginalOutput(attribute.output || attribute.response);
-      }
-      if(attribute.usage){
-        setOriginalUsage(attribute.usage);
       }
     }
   }, [span]);
@@ -390,6 +281,14 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
 
             try {
               const parsed = JSON.parse(data);
+              const usage = parsed && parsed.usage;
+              if (usage) {
+                setResultInfo({
+                  usage: usage,
+                  cost: usage.cost || "",
+                  model: payload.model,
+                });
+              }
               const delta = parsed.choices?.[0]?.delta;
 
               // Handle content delta
@@ -430,6 +329,13 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
         const data = await response.json();
         toast.success("Experiment completed successfully");
         setResult(data);
+
+        data.usage &&
+          setResultInfo({
+            usage: data.usage,
+            cost: data.usage.cost || "",
+            model: payload.model,
+          });
 
         return {
           content: data,
@@ -536,8 +442,6 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
     experimentData,
     originalExperimentData,
     result,
-    originalOutput,
-    originalUsage,
     running,
     // Trace data
     traceId,
@@ -552,5 +456,7 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
     updateExperimentData,
     loadTraceSpans,
     resetExperiment,
+    originalInfo,
+    resultInfo,
   };
 }
