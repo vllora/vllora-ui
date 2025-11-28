@@ -1,14 +1,11 @@
 import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, FlaskConical } from "lucide-react";
-import type { ExperimentData } from "@/hooks/useExperiment";
+import { ExperimentConsumer } from "@/contexts/ExperimentContext";
 
-interface ExperimentHeaderProps {
-  experimentData: ExperimentData;
-}
-
-export function ExperimentHeader({ experimentData }: ExperimentHeaderProps) {
+export function ExperimentHeader() {
   const navigate = useNavigate();
+  const { experimentData } = ExperimentConsumer();
 
   return (
     <div className="h-14 border-b border-border flex items-center px-4 justify-between flex-shrink-0 bg-background">

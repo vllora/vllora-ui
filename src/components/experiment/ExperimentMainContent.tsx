@@ -1,7 +1,6 @@
 import { useRef, useMemo, useState, useCallback } from "react";
 import { Copy, Check } from "lucide-react";
-import type { ExperimentData, Message, Tool, MessageContentPart } from "@/hooks/useExperiment";
-import type { Span } from "@/types/common-type";
+import type { ExperimentData, Tool } from "@/hooks/useExperiment";
 import { ExperimentVisualEditor, type ExperimentVisualEditorRef } from "./ExperimentVisualEditor";
 import { ExperimentJsonEditor } from "./ExperimentJsonEditor";
 import { ExperimentToolbarActions } from "./ExperimentToolbarActions";
@@ -10,6 +9,7 @@ import { SpanDetailPanel } from "@/components/debug/SpanDetailPanel";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { DetectedVariables } from "./DetectedVariables";
 import { TRACE_PANEL_WIDTH } from "@/utils/constant";
+import { ExperimentConsumer } from "@/contexts/ExperimentContext";
 import {
   Tooltip,
   TooltipContent,
@@ -20,43 +20,21 @@ import {
 // Internal fields that shouldn't be included in the API JSON
 const INTERNAL_FIELDS = new Set(["name", "description", "headers", "promptVariables"]);
 
-interface ExperimentMainContentProps {
-  experimentData: ExperimentData;
-  result: string | object[];
-  originalOutput: string | object[];
-  running: boolean;
-  traceSpans: Span[];
-  loadingTraceSpans: boolean;
-  projectId: string;
-  addMessage: () => void;
-  updateMessage: (index: number, content: string | MessageContentPart[]) => void;
-  updateMessageRole: (index: number, role: Message["role"]) => void;
-  deleteMessage: (index: number) => void;
-  updateExperimentData: (updates: Partial<ExperimentData>) => void;
-  activeTab: "visual" | "json";
-  setActiveTab: (tab: "visual" | "json") => void;
-  loadTraceSpans: () => void;
-}
-
-export function ExperimentMainContent({
-  experimentData,
-  result,
-  originalOutput,
-  running,
-  traceSpans,
-  loadingTraceSpans,
-  projectId,
-  addMessage,
-  updateMessage,
-  updateMessageRole,
-  deleteMessage,
-  updateExperimentData,
-  activeTab,
-  setActiveTab,
-  loadTraceSpans,
-}: ExperimentMainContentProps) {
+export function ExperimentMainContent() {
+  const {
+    experimentData,
+    traceSpans,
+    addMessage,
+    updateMessage,
+    updateMessageRole,
+    deleteMessage,
+    updateExperimentData,
+    activeTab,
+    setActiveTab,
+    detailSpanId,
+    setDetailSpanId,
+  } = ExperimentConsumer();
   const visualEditorRef = useRef<ExperimentVisualEditorRef>(null);
-  const [detailSpanId, setDetailSpanId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   // Build JSON string for copying (excludes internal fields)
@@ -258,17 +236,7 @@ export function ExperimentMainContent({
 
       {/* Right Column - Outputs */}
       <div className="w-2/5 h-full overflow-hidden">
-        <ExperimentOutputPanel
-          result={result}
-          originalOutput={originalOutput}
-          running={running}
-          isStreaming={experimentData.stream ?? true}
-          traceSpans={traceSpans}
-          loadingTraceSpans={loadingTraceSpans}
-          projectId={projectId}
-          onLoadTraceSpans={loadTraceSpans}
-          setDetailSpanId={setDetailSpanId}
-        />
+        <ExperimentOutputPanel />
       </div>
 
       {/* Span Details Overlay */}

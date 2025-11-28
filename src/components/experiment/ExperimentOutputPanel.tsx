@@ -1,36 +1,30 @@
-import { useState } from "react";
 import { TimelineContent } from "@/components/chat/traces/components/TimelineContent";
-import type { Span } from "@/types/common-type";
 import { NewOutputSection } from "./NewOutputSection";
 import { OriginalOutputSection } from "./OriginalOutputSection";
+import { ExperimentConsumer } from "@/contexts/ExperimentContext";
 
-// Main ExperimentOutputPanel Component
-interface ExperimentOutputPanelProps {
-  result: string | object[];
-  originalOutput: string | object[];
-  running: boolean;
-  isStreaming: boolean;
-  traceSpans: Span[];
-  loadingTraceSpans: boolean;
-  projectId: string;
-  onLoadTraceSpans: () => void;
-  setDetailSpanId: (id: string | null) => void;
-}
+export function ExperimentOutputPanel() {
+  const {
+    result,
+    originalOutput,
+    originalUsage,
+    
+    running,
+    experimentData,
+    traceSpans,
+    loadingTraceSpans,
+    projectId,
+    loadTraceSpans,
+    outputPanelTab,
+    setOutputPanelTab,
+    selectedSpanId,
+    setSelectedSpanId,
+    collapsedSpans,
+    setCollapsedSpans,
+    setDetailSpanId,
+  } = ExperimentConsumer();
 
-export function ExperimentOutputPanel({
-  result,
-  originalOutput,
-  running,
-  isStreaming,
-  traceSpans,
-  loadingTraceSpans,
-  projectId,
-  onLoadTraceSpans,
-  setDetailSpanId,
-}: ExperimentOutputPanelProps) {
-  const [activeTab, setActiveTab] = useState<"output" | "trace">("output");
-  const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
-  const [collapsedSpans, setCollapsedSpans] = useState<string[]>([]);
+  const isStreaming = experimentData.stream ?? true;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -38,9 +32,9 @@ export function ExperimentOutputPanel({
       <div className="px-4 pt-4 flex-shrink-0">
         <div className="flex items-center gap-4 border-b border-border pb-2">
           <button
-            onClick={() => setActiveTab("output")}
+            onClick={() => setOutputPanelTab("output")}
             className={`text-sm font-semibold pb-2 ${
-              activeTab === "output"
+              outputPanelTab === "output"
                 ? "border-b-2 border-foreground"
                 : "text-muted-foreground hover:text-foreground"
             }`}
@@ -49,11 +43,11 @@ export function ExperimentOutputPanel({
           </button>
           <button
             onClick={() => {
-              setActiveTab("trace");
-              onLoadTraceSpans();
+              setOutputPanelTab("trace");
+              loadTraceSpans();
             }}
             className={`text-sm font-semibold pb-2 ${
-              activeTab === "trace"
+              outputPanelTab === "trace"
                 ? "border-b-2 border-foreground"
                 : "text-muted-foreground hover:text-foreground"
             }`}
@@ -65,7 +59,7 @@ export function ExperimentOutputPanel({
 
       {/* Content - scrollable */}
       <div className="flex-1 overflow-y-auto min-h-0 px-4 pb-4">
-        {activeTab === "output" ? (
+        {outputPanelTab === "output" ? (
           <div className="flex flex-col h-full">
             {/* New Output - takes available space */}
             <div className="flex-1 min-h-0">
@@ -77,7 +71,7 @@ export function ExperimentOutputPanel({
             </div>
 
             {/* Original Output - always at bottom */}
-            <OriginalOutputSection content={originalOutput} />
+            <OriginalOutputSection content={originalOutput} usage={originalUsage} />
           </div>
         ) : (
           <div className="h-full">

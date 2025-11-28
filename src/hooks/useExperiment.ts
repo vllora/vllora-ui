@@ -116,6 +116,7 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
     useState<ExperimentData | null>(null);
   const [result, setResult] = useState<string | object[]>("");
   const [originalOutput, setOriginalOutput] = useState<string | object[]>("");
+  const [originalUsage, setOriginalUsage] = useState<string>("");
   const [running, setRunning] = useState(false);
   const [traceId, setTraceId] = useState<string | null>(null);
   const [traceSpans, setTraceSpans] = useState<Span[]>([]);
@@ -197,6 +198,9 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
       const attribute: any = span.attribute || {};
       if (attribute.output || attribute.response) {
         setOriginalOutput(attribute.output || attribute.response);
+      }
+      if(attribute.usage){
+        setOriginalUsage(attribute.usage);
       }
     }
   }, [span]);
@@ -533,6 +537,7 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
     originalExperimentData,
     result,
     originalOutput,
+    originalUsage,
     running,
     // Trace data
     traceId,

@@ -4,32 +4,34 @@ import { ContentDisplay } from "./ContentDisplay";
 
 interface OriginalOutputSectionProps {
   content: string | object[];
+  usage?:string
 }
 
 interface ParsedMetadata {
-  usage?: {
-    prompt_tokens?: number;
+  prompt_tokens?: number;
     completion_tokens?: number;
     total_tokens?: number;
-  };
-  finish_reason?: string;
+    input_tokens?: number;
+    output_tokens?: number;
+    prompt_tokens_details?: {
+      cached_tokens?: number;
+      cache_creation_tokens?: number;
+      [key: string]: any;
+    };
 }
 
-export function OriginalOutputSection({ content }: OriginalOutputSectionProps) {
+export function OriginalOutputSection({ content, usage }: OriginalOutputSectionProps) {
   // Try to parse content and extract usage/finish_reason
+
   const metadata = useMemo((): ParsedMetadata => {
     try {
-      const contentStr = typeof content === "string" ? content : JSON.stringify(content);
-      const parsed = JSON.parse(contentStr);
-
-      return {
-        usage: parsed.usage,
-        finish_reason: parsed.choices?.[0]?.finish_reason,
-      };
+      const usageStr = typeof usage === "string" ? usage : JSON.stringify(usage);
+      const parsed = JSON.parse(usageStr);
+      return parsed
     } catch {
       return {};
     }
-  }, [content]);
+  }, [usage]);
 
   if (!content) return null;
 
@@ -40,17 +42,17 @@ export function OriginalOutputSection({ content }: OriginalOutputSectionProps) {
           Original Output
         </span>
         <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-          {metadata.finish_reason && (
+          {/* {metadata.finish_reason && (
             <span className="flex items-center gap-1">
               <span className="opacity-60">finish:</span>
               <span className="font-medium">{metadata.finish_reason}</span>
             </span>
-          )}
-          {metadata.usage && (
+          )} */}
+          {metadata.total_tokens && (
             <span className="flex items-center gap-1">
               <span className="opacity-60">tokens:</span>
               <span className="font-medium">
-                {metadata.usage.prompt_tokens ?? 0} + {metadata.usage.completion_tokens ?? 0} = {metadata.usage.total_tokens ?? 0}
+                {metadata.prompt_tokens || metadata.input_tokens|| 0} + {metadata.completion_tokens || metadata.output_tokens|| 0} = {metadata.total_tokens || 0}
               </span>
             </span>
           )}

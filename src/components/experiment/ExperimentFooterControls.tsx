@@ -3,10 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Play, RotateCcw } from "lucide-react";
-import type { ExperimentData } from "@/hooks/useExperiment";
 import { ModelSelectorComponent } from "@/components/chat/traces/model-selector";
 import { ProjectModelsConsumer } from "@/contexts/ProjectModelsContext";
 import { CurrentAppConsumer } from "@/contexts/CurrentAppContext";
+import { ExperimentConsumer } from "@/contexts/ExperimentContext";
 import { useUserProviderOfSelectedModelConfig } from "@/hooks/userProviderOfSelectedModelConfig";
 import { ProviderConfigDialog } from "@/components/chat/traces/model-selector/ProviderConfigDialog";
 import { MultiProviderConfigDialog } from "@/components/chat/traces/model-selector/MultiProviderConfigDialog";
@@ -14,25 +14,16 @@ import { ModelInfo } from "@/types/models";
 import { ExperimentParametersDialog } from "./ExperimentParametersDialog";
 import { SettingsButton } from "./SettingsButton";
 
-interface ExperimentFooterControlsProps {
-  experimentData: ExperimentData;
-  originalExperimentData: ExperimentData | null;
-  running: boolean;
-  updateExperimentData: (updates: Partial<ExperimentData>) => void;
-  runExperiment: () => void;
-  resetExperiment: () => void;
-  activeTab: "visual" | "json";
-}
-
-export function ExperimentFooterControls({
-  experimentData,
-  originalExperimentData,
-  running,
-  updateExperimentData,
-  runExperiment,
-  resetExperiment,
-  activeTab,
-}: ExperimentFooterControlsProps) {
+export function ExperimentFooterControls() {
+  const {
+    experimentData,
+    originalExperimentData,
+    running,
+    updateExperimentData,
+    runExperiment,
+    resetExperiment,
+    activeTab,
+  } = ExperimentConsumer();
   const [parametersDialogOpen, setParametersDialogOpen] = useState(false);
   const { models } = ProjectModelsConsumer();
   const { app_mode } = CurrentAppConsumer();
