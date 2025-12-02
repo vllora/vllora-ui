@@ -27,6 +27,7 @@ export function ExperimentMainContent() {
     addMessage,
     updateMessage,
     updateMessageRole,
+    updateMessageToolCalls,
     deleteMessage,
     updateExperimentData,
     activeTab,
@@ -222,6 +223,7 @@ export function ExperimentMainContent() {
               tools={experimentData.tools || []}
               updateMessage={updateMessage}
               updateMessageRole={updateMessageRole}
+              updateMessageToolCalls={updateMessageToolCalls}
               deleteMessage={deleteMessage}
               onToolsChange={(tools) => updateExperimentData({ tools })}
             />
