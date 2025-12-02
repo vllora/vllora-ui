@@ -93,7 +93,8 @@ export interface UniqueMessageWithHash {
     id: string,
     [key: string]: any;
   }[],
-  tool_call_id?: string
+  tool_call_id?: string;
+  input_or_output?: 'input' | 'output'
 }
 
 /**
@@ -313,20 +314,95 @@ export const buildFlowDiagramFromSpans = (spans: Span[]): FlowDiagram => {
       callGroup: currentCallGroup
     });
   };
-  const messagesBySpan: { [spanId: string]: UniqueMessageWithHash[] } = {};
-  console.log('=== spans', spans)
+
+  let messagesBySpan: { 
+    span: Span;
+    messages: UniqueMessageWithHash[], 
+    previous_ref_span_id?: string, 
+    added_messages?: UniqueMessageWithHash[]
+   }[] = [];
   // Process each span (each span = one LLM call)
   spans.sort((a,b )=> a.start_time_us - b.start_time_us).forEach((span) => {
     try {
+
+      if(span.operation_name === 'tools' && span.attribute) {
+        let toolAtt = span.attribute as any;
+        let tool_calls_str = toolAtt.tool_calls;
+        let tool_name = toolAtt['tool.name'];
+        if(tool_calls_str) {
+          let tool_calls = JSON.parse(tool_calls_str);
+          let parentSpanIndex = messagesBySpan.findIndex(s => s.span.span_id === span.parent_span_id);
+          if(tool_calls && Array.isArray(tool_calls) && tool_calls.length > 0) {
+            let lastMessage = messagesBySpan[parentSpanIndex].messages[messagesBySpan[parentSpanIndex].messages.length - 1];
+            let firstToolCall = tool_calls[0];
+            if(firstToolCall && firstToolCall.id) {
+              let toolMessage: Message = {
+                type: 'tool',
+                content: tool_calls_str,
+                hash: getHashOfMessage({
+                  type: "tool",
+                  content: tool_calls_str,
+                  id: "",
+                  timestamp: 0
+                }),
+                model: lastMessage.model
+              }
+              
+            }
+            // messagesBySpan[parentSpanIndex].messages.push({
+            //   type: "tool",
+            //   role: "tool",
+            //   content: tool_calls_str,
+            //   hash: getHashOfMessage({
+            //     type: "tool",
+            //     content: tool_calls_str,
+            //     id: "",
+            //     timestamp: 0
+            //   }),
+            //   model: lastMessage.model
+            // })
+            //return;
+          }
+        }
+        // extract to tool messae 
+
+      }
+      
       // Use extractMessagesFromSpan to get properly parsed messages
       const extractedMessages = extractMessagesFromSpan(span, 0, false);
       const messageWithHash = convertToUniquMessageWithHash({ messages: extractedMessages });
       const uniquePatternWithHash = removeRepeatingPatterns(messageWithHash);
-      messagesBySpan[span.span_id] = uniquePatternWithHash;
+      messagesBySpan.push({
+        span,
+        messages: uniquePatternWithHash
+      })
     } catch {
       // Skip span if any error
     }
   });
+  messagesBySpan.forEach((messageBySpan, idx)=> {
+    if(idx === 0) {
+      return
+    }
+    const previousSpan = messagesBySpan[idx - 1];
+    if(previousSpan && previousSpan.messages && previousSpan.messages.length > 0) {
+       let previousSpanMessageHash = previousSpan.messages.map(m => m.hash);
+       let currentSpanMessageHash = messageBySpan.messages.map(m => m.hash);
+       if(previousSpanMessageHash.length > 0 && currentSpanMessageHash.length > 0) {
+          let stringHashPrevious = previousSpanMessageHash.join(',')
+          let stringHashCurrent = currentSpanMessageHash.join(',')
+          if(stringHashCurrent.startsWith(stringHashPrevious) && currentSpanMessageHash.length >= previousSpanMessageHash.length) {
+            messageBySpan.previous_ref_span_id = previousSpan.span.span_id;
+            // added message is the sub element from 
+            let addedMessages = [...messageBySpan.messages];
+            addedMessages.splice(0, previousSpanMessageHash.length)
+            messageBySpan.added_messages = addedMessages
+          }
+       }
+    }
+    
+  })
+  // consolidate spans = 
   console.log('==== messagesBySpan', messagesBySpan)
 
   return { nodes, edges };
@@ -346,7 +422,8 @@ export const convertToUniquMessageWithHash = (props: {
       content: message.content || '',
       hash: hashCalculated,
       tool_calls: message.tool_calls,
-      tool_call_id: message.tool_call_id
+      tool_call_id: message.tool_call_id,
+      input_or_output: message.input_or_output
     };
     return result;
   });

@@ -69,7 +69,9 @@ export interface Message {
   level?: number;
   span_id?: string;
   span?:Span,
-  children?: Message[]
+  children?: Message[],
+  
+  input_or_output?: 'input' | 'output'
 }
 
 export interface Thread {

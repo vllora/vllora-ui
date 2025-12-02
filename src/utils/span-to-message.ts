@@ -163,7 +163,10 @@ export function extractMessagesFromSpan(
     ? requestJson
     : requestJson?.messages || requestJson?.contents;
   if (!requestMessages || !Array.isArray(requestMessages)) {
-    return messages;
+    return messages.map(m => {
+      m.input_or_output = 'input';
+      return m;
+    });
   }
 
   // Also extract the response/output to create an assistant message
@@ -215,6 +218,7 @@ export function extractMessagesFromSpan(
       tool_call_id: msg.tool_call_id,
       metrics: index === requestMessages.length - 1 ? [spanMetrics] : undefined, // Attach metrics to last message
       level,
+      input_or_output: 'input'
     };
     messages.push(message);
   });
@@ -235,6 +239,7 @@ export function extractMessagesFromSpan(
       span,
       metrics: [spanMetrics],
       model_name: model_name,
+      input_or_output: 'output'
     };
     if( typeof responseContent === 'string') {
       messages.push(assistantMessage);
