@@ -24,6 +24,7 @@ import type {
 export type {
   MessageContentPart,
   Message,
+  ToolCall,
   ToolFunction,
   Tool,
   ExperimentData,
@@ -428,6 +429,17 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
     setExperimentData({ ...experimentData, messages: newMessages });
   };
 
+  const updateMessageToolCalls = (index: number, toolCalls: import("@/types/experiment").ToolCall[]) => {
+    const newMessages = [...experimentData.messages];
+    if (toolCalls.length > 0) {
+      newMessages[index].tool_calls = toolCalls;
+    } else {
+      // Remove tool_calls if empty
+      delete newMessages[index].tool_calls;
+    }
+    setExperimentData({ ...experimentData, messages: newMessages });
+  };
+
   const deleteMessage = (index: number) => {
     const newMessages = experimentData.messages.filter((_, i) => i !== index);
     setExperimentData({ ...experimentData, messages: newMessages });
@@ -513,6 +525,7 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
     addMessage,
     updateMessage,
     updateMessageRole,
+    updateMessageToolCalls,
     deleteMessage,
     updateExperimentData,
     loadTraceSpans,

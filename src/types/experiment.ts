@@ -7,10 +7,23 @@ export interface MessageContentPart {
   file?: { file_data: string; file_id?: string; filename?: string };
 }
 
+export interface ToolCall {
+  id: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string | Record<string, unknown>;
+  };
+}
+
 export interface Message {
   role: "system" | "user" | "assistant" | "tool";
   // Content can be string or array of content parts (for multimodal/structured messages)
   content: string | MessageContentPart[];
+  // Tool calls for assistant messages
+  tool_calls?: ToolCall[];
+  // Tool call ID for tool messages (response to a tool call)
+  tool_call_id?: string;
   [key: string]: unknown;
 }
 
