@@ -146,7 +146,8 @@ export function convertSpansToMessages(
  */
 export function extractMessagesFromSpan(
   span: Span,
-  level: number = 0
+  level: number = 0,
+  skipToolInvokeMessage: boolean = true
 ): Message[] {
   const attribute = span.attribute as any;
   const messages: Message[] = [];
@@ -220,11 +221,13 @@ export function extractMessagesFromSpan(
 
   // Add the assistant response message if available
   if (responseContent) {
+    
     const assistantMessage: Message = {
       id: `${span.span_id}_response`,
       type: "assistant",
       role: "assistant",
-      content: responseContent,
+      content: typeof responseContent === 'string' ? responseContent : '',
+      tool_calls: typeof responseContent === "object" ? responseContent : undefined,
       timestamp: span.finish_time_us ? span.finish_time_us / 1000 : Date.now(), // Use finish time for response
       thread_id: span.thread_id,
       trace_id: span.trace_id,
@@ -233,8 +236,11 @@ export function extractMessagesFromSpan(
       metrics: [spanMetrics],
       model_name: model_name,
     };
-
-    messages.push(assistantMessage);
+    if( typeof responseContent === 'string') {
+      messages.push(assistantMessage);
+    } else {
+      !skipToolInvokeMessage && assistantMessage.tool_calls && messages.push(assistantMessage);
+    }
   }
 
   return messages;
@@ -294,7 +300,7 @@ function extractMessageContent(msg: any): string {
 function extractResponseContent(
   outputJson: any,
   attribute: any
-): string | null {
+): string | object | null {
   if (!outputJson) return attribute?.content;
 
   // Try different fields for response content
@@ -326,6 +332,9 @@ function extractResponseContent(
 
   if (outputJson.choices?.[0]?.message?.content) {
     return outputJson.choices[0].message.content;
+  }
+  if(!outputJson.choices?.[0]?.message?.content && outputJson.choices?.[0]?.message?.tool_calls){
+    return outputJson.choices?.[0]?.message?.tool_calls;
   }
 
   if (outputJson.candidates?.[0]?.content) {

@@ -77,11 +77,6 @@ const HierarchicalMessageSpanItemComponent: React.FC<HierarchicalSpanItemProps> 
   if(type === 'tools') {
     return <EloraToolSpanMessage span_id={span_id} />
   }
-  // if(type === 'tool') {
-  //   return <OpenAIToolSpanMessage span_id={span_id} messages={children} level={level} />
-  // }
-  
-
   return <RawSpanMessage messageStructure={messageStructure} level={level} />;
 };
 
