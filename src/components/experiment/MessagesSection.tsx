@@ -1,12 +1,13 @@
 import { useState, type RefObject } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import type { Message, MessageContentPart } from "@/hooks/useExperiment";
+import type { Message, MessageContentPart, ToolCall } from "@/hooks/useExperiment";
 import { MessageEditor } from "./MessageEditor";
 
 interface MessagesSectionProps {
   messages: Message[];
   updateMessage: (index: number, content: string | MessageContentPart[]) => void;
   updateMessageRole: (index: number, role: Message["role"]) => void;
+  updateMessageToolCalls?: (index: number, toolCalls: ToolCall[]) => void;
   deleteMessage: (index: number) => void;
   highlightedIndex?: number | null;
   lastMessageRef?: RefObject<HTMLDivElement | null>;
@@ -16,6 +17,7 @@ export function MessagesSection({
   messages,
   updateMessage,
   updateMessageRole,
+  updateMessageToolCalls,
   deleteMessage,
   highlightedIndex,
   lastMessageRef,
@@ -50,6 +52,7 @@ export function MessagesSection({
                   index={index}
                   updateMessage={updateMessage}
                   updateMessageRole={updateMessageRole}
+                  updateMessageToolCalls={updateMessageToolCalls}
                   deleteMessage={deleteMessage}
                   isHighlighted={highlightedIndex === index}
                 />

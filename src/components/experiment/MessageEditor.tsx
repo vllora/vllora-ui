@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useCallback } from "react";
-import { Maximize2, X, Copy, Check, Paperclip } from "lucide-react";
-import type { Message, MessageContentPart } from "@/hooks/useExperiment";
+import { Maximize2, X, Copy, Check, Paperclip, Wrench } from "lucide-react";
+import type { Message, MessageContentPart, ToolCall } from "@/hooks/useExperiment";
 import { normalizeContentToString } from "@/utils/templateUtils";
 import {
   Tooltip,
@@ -29,12 +29,14 @@ import {
   removeAttachment,
 } from "./message-editor-utils";
 import { AttachmentPreview } from "./AttachmentPreview";
+import { ToolCallsEditor } from "./ToolCallsEditor";
 
 interface MessageEditorProps {
   message: Message;
   index: number;
   updateMessage: (index: number, content: string | MessageContentPart[]) => void;
   updateMessageRole: (index: number, role: Message["role"]) => void;
+  updateMessageToolCalls?: (index: number, toolCalls: ToolCall[]) => void;
   deleteMessage: (index: number) => void;
   isHighlighted?: boolean;
   /** When true, allows attaching any file type. When false, only images and audio are allowed. */
@@ -46,6 +48,7 @@ export function MessageEditor({
   index,
   updateMessage,
   updateMessageRole,
+  updateMessageToolCalls,
   deleteMessage,
   isHighlighted,
   allowAllFiles = false,
@@ -254,6 +257,32 @@ export function MessageEditor({
                   <TooltipContent>Attach file</TooltipContent>
                 </Tooltip>
 
+                {/* Add tool call button - only for assistant messages */}
+                {message.role === "assistant" && updateMessageToolCalls && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newToolCall: ToolCall = {
+                            id: `call_${Date.now()}`,
+                            type: "function",
+                            function: {
+                              name: "new_function",
+                              arguments: "{}",
+                            },
+                          };
+                          updateMessageToolCalls(index, [...(message.tool_calls || []), newToolCall]);
+                        }}
+                        className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      >
+                        <Wrench className="w-4 h-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>Add tool call</TooltipContent>
+                  </Tooltip>
+                )}
+
                 {/* Copy button */}
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -334,6 +363,14 @@ export function MessageEditor({
           attachments={attachments}
           onRemove={handleRemoveAttachment}
         />
+
+        {/* Tool calls editor - only show for assistant messages with tool calls */}
+        {message.role === "assistant" && message.tool_calls && message.tool_calls.length > 0 && updateMessageToolCalls && (
+          <ToolCallsEditor
+            toolCalls={message.tool_calls}
+            onChange={(toolCalls) => updateMessageToolCalls(index, toolCalls)}
+          />
+        )}
       </div>
 
       {/* Expanded editor dialog */}
