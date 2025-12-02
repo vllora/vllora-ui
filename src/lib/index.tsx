@@ -3,6 +3,7 @@ export { AuthProvider, AuthConsumer } from '../contexts/AuthContext';
 export { ProjectsProvider, ProjectsConsumer } from '../contexts/ProjectContext';
 export { ProviderKeysProvider, ProviderKeysConsumer } from '../contexts/ProviderKeysContext';
 export { ProjectEventsProvider, ProjectEventsConsumer } from '../contexts/project-events';
+export { BreakpointsProvider, BreakpointsConsumer } from '../contexts/breakpoints';
 export { CurrentAppProvider, CurrentAppConsumer } from '../contexts/CurrentAppContext';
 export { ProjectModelsProvider, ProjectModelsConsumer } from '../contexts/ProjectModelsContext';
 export { VirtualModelsProvider, VirtualModelsConsumer } from '../contexts/VirtualModelsContext';

@@ -12,6 +12,7 @@ export interface Span {
   parent_trace_id?: string;
   spans?: Span[];
   isInProgress?: boolean; // True if span has started but not finished
+  isInDebug?: boolean; // true if this span is in breakpoint
 }
 
 export type Attributes =

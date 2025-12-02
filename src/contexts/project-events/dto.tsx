@@ -173,6 +173,16 @@ export interface CustomCustomEventType {
   attributes: any;
 }
 
+export interface CustomBreakpointEventType {
+  type: 'breakpoint';
+  request: any; // ChatCompletionRequest
+}
+
+export interface CustomBreakpointResumeEventType {
+  type: 'breakpoint_resume';
+  updated_request?: any; // Optional ChatCompletionRequest
+}
+
 // Discriminated union of all custom event types
 export type CustomEventType =
   | CustomSpanStartEventType
@@ -182,7 +192,9 @@ export type CustomEventType =
   | CustomLlmStartEventType
   | CustomLlmStopEventType
   | CustomCostEventType
-  | CustomCustomEventType;
+  | CustomCustomEventType
+  | CustomBreakpointEventType
+  | CustomBreakpointResumeEventType;
 
 export interface CustomEvent extends BaseEvent {
   type: 'Custom';
