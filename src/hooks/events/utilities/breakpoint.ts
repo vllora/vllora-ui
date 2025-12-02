@@ -19,28 +19,17 @@ export const handleBreakpointEvent = (
   }
 
   // Check if span already exists
-  const existingSpan = currentSpans.find(
+  const existingSpanIndex = currentSpans.findIndex(
     (span) => span.span_id === customEvent.span_id
   );
-  console.log("==== existingSpan", existingSpan);
-  console.log("==== handleBreakpointEvent", customEvent, breakpointEvent);
-
-  if (existingSpan) {
-    // Update existing span
-    return currentSpans.map((span) =>
-      span.span_id === customEvent.span_id
-        ? {
-            ...span,
-            isInDebug: true,
-            attribute: {
-              ...span.attribute,
-              request: JSON.stringify(breakpointEvent.request),
-            },
-          }
-        : span
-    );
+  if (existingSpanIndex !== -1) {
+    currentSpans[existingSpanIndex].isInDebug = true;
+    currentSpans[existingSpanIndex].attribute = {
+      ...currentSpans[existingSpanIndex].attribute,
+      request: JSON.stringify(breakpointEvent.request),
+    };
+    return [...currentSpans];
   }
-  console.log("===== breakpoint event", customEvent, currentSpans);
   const newSpan: Span = {
     span_id: customEvent.span_id,
     parent_span_id: customEvent.parent_span_id,

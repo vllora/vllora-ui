@@ -4,8 +4,13 @@ import { createContext, ReactNode, useContext } from 'react';
 import { toast } from 'sonner';
 import { api, handleApiResponse } from '@/lib/api-client';
 import { BreakpointsState, BreakpointsResponse, SetGlobalBreakpointResponse, ContinueBreakpointResponse } from './dto';
-
-export const useBreakpointsState = () => {
+import { ProjectEventUnion } from '../project-events/dto';
+import { useDebugControl } from '@/hooks/events/useDebugControl';
+import {
+  CustomEvent,
+  CustomBreakpointEventType,
+} from "@/contexts/project-events/dto";
+export const useBreakpointsState = (projectId: string) => {
   const [state, setState] = useState<BreakpointsState>({
     isDebugActive: false,
     isLoading: true,
@@ -96,15 +101,78 @@ export const useBreakpointsState = () => {
     }
   }, []);
 
-  // Fetch once on mount
+  // Fetch on mount and when projectId changes
   useEffect(() => {
     isMountedRef.current = true;
+    // Reset state when projectId changes
+    setState({
+      isDebugActive: false,
+      isLoading: true,
+      breakpoints: [],
+      interceptAll: false,
+      error: null,
+    });
     fetchBreakpoints();
 
     return () => {
       isMountedRef.current = false;
     };
-  }, [fetchBreakpoints]);
+  }, [projectId, fetchBreakpoints]);
+
+  const handleEvent = useCallback((event: ProjectEventUnion) => {
+    if (event.type === "Custom") {
+      console.log('==== event', event)
+      const customEvent = event as unknown as CustomEvent;
+      if ("event" in customEvent && customEvent.event) {
+        const eventType = customEvent.event;
+
+        if (eventType.type === "breakpoint") {
+          const breakpointEvent = eventType as CustomBreakpointEventType;
+          const span_id = customEvent.span_id;
+
+          if (!span_id) return;
+
+          setState(prev => {
+            if (prev.breakpoints.some(b => b.breakpoint_id === span_id)) {
+              return {
+                ...prev,
+                breakpoints: prev.breakpoints.map(b => {
+                  if (b.breakpoint_id === span_id) {
+                    return {
+                      ...b,
+                      request: breakpointEvent.request
+                    };
+                  }
+                  return b;
+                }),
+              };
+            } else {
+              return {
+                ...prev,
+                breakpoints: [...prev.breakpoints, {
+                  breakpoint_id: span_id,
+                  request: breakpointEvent.request
+                }],
+              };
+            }
+          });
+        }
+        if (eventType.type === "breakpoint_resume") {
+          let span_id = customEvent.span_id;
+          span_id && setState(prev => {
+            return {
+              ...prev,
+              breakpoints: prev.breakpoints.filter(b => b.breakpoint_id !== span_id)
+            }
+          });
+          return;
+        }
+      }
+    }
+  }, [setState]);
+
+
+  useDebugControl({ handleEvent, channel_name: 'breakpoints-control' });
 
   return {
     ...state,
@@ -119,8 +187,8 @@ export type BreakpointsContextType = ReturnType<typeof useBreakpointsState>;
 
 export const BreakpointsContext = createContext<BreakpointsContextType | null>(null);
 
-export function BreakpointsProvider({ children }: { children: ReactNode }) {
-  const value = useBreakpointsState();
+export function BreakpointsProvider({ children, projectId }: { children: ReactNode; projectId: string }) {
+  const value = useBreakpointsState(projectId);
   return <BreakpointsContext.Provider value={value}>{children}</BreakpointsContext.Provider>;
 }
 

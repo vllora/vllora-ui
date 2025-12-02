@@ -9,11 +9,11 @@ export const handleBreakpointResumeEvent = (
   customEvent: CustomEvent
 ): Span[] => {
   if (customEvent.span_id) {
-    return currentSpans.map((span) =>
-      span.span_id === customEvent.span_id
-        ? { ...span, isInDebug: false }
-        : span
-    );
+    let existingSpanIndex = currentSpans.findIndex(s => s.span_id === customEvent.span_id)
+    if (existingSpanIndex !== -1) {
+      currentSpans[existingSpanIndex].isInDebug = false;
+      return [...currentSpans];
+    }
   }
   return currentSpans;
 };

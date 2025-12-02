@@ -23,11 +23,11 @@ export function Layout() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <AppHeader onProjectChange={handleProjectChange} />
         <main className="flex-1 flex overflow-hidden">
-          <BreakpointsProvider>
-            <ProjectEventsProvider projectId={currentProjectId || ""}>
+          <ProjectEventsProvider projectId={currentProjectId || ""}>
+            <BreakpointsProvider projectId={currentProjectId || ""}>
               <Outlet />
-            </ProjectEventsProvider>
-          </BreakpointsProvider>
+            </BreakpointsProvider>
+          </ProjectEventsProvider>
         </main>
       </div>
     </div>
