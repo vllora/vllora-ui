@@ -1,9 +1,5 @@
 import React, { useState } from "react";
-import {
-  CogIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
-} from "@heroicons/react/24/solid";
+import { CogIcon } from "@heroicons/react/24/solid";
 import {
   ClipboardDocumentIcon,
   CheckIcon,
@@ -16,35 +12,15 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { MessageDisplay } from "../MessageDisplay";
 import { ContentArrayDisplay } from "./ContentArrayDisplay";
+import { TextContent } from "./content-items";
 import { Message } from "@/types/chat";
 import { useRelativeTime } from "@/hooks/useRelativeTime";
 
 export const SystemMessage: React.FC<{ msg: Message }> = ({ msg }) => {
-  const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const messageRef = React.useRef<HTMLDivElement>(null);
   useRelativeTime(messageRef, msg.created_at);
-
-
-  // Function to count lines in a string
-  const countLines = (text: string): number => {
-    return text ? text.split("\n").length : 0;
-  };
-
-  // Function to get first N lines of text
-  const getFirstNLines = (text: string, n: number): string => {
-    if (!text) return "";
-    const lines = text.split("\n");
-    return lines.slice(0, n).join("\n");
-  };
-
-  const messageContent = msg.content || "";
-  const lineCount = countLines(messageContent);
-  const hasMoreLines = lineCount > 5;
-  const displayMessage =
-    expanded || !hasMoreLines ? messageContent : getFirstNLines(messageContent, 5);
 
   return (
     <div
@@ -128,31 +104,11 @@ export const SystemMessage: React.FC<{ msg: Message }> = ({ msg }) => {
           <div className="px-4 py-3">
             <ContentArrayDisplay contentArray={msg.content_array} />
           </div>
-        ) : (
+        ) : msg.content ? (
           <div className="px-4 py-3">
-            <div className="whitespace-normal text-neutral-200 break-words overflow-wrap break-all leading-relaxed text-sm">
-              <MessageDisplay message={displayMessage} />
-            </div>
-            {hasMoreLines && (
-              <button
-                onClick={() => setExpanded(!expanded)}
-                className="inline-flex items-center gap-1.5 mt-3 px-2.5 py-1 rounded text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50 transition-all font-medium text-xs"
-              >
-                {expanded ? (
-                  <>
-                    <ChevronUpIcon className="h-3.5 w-3.5" />
-                    Show less
-                  </>
-                ) : (
-                  <>
-                    <ChevronDownIcon className="h-3.5 w-3.5" />
-                    Show {lineCount - 5} more line{lineCount - 5 !== 1 ? 's' : ''}
-                  </>
-                )}
-              </button>
-            )}
+            <TextContent content={msg.content} />
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

@@ -1,11 +1,6 @@
 import React, { useState } from 'react';
-import { MessageDisplay } from '../MessageDisplay';
-import { ImageWithPreview } from './ImageWithPreview';
-import {
-  Dialog,
-  DialogContent,
-} from "@/components/ui/dialog";
-import { JsonViewer } from '../traces/TraceRow/span-info/JsonViewer';
+import { Layers } from 'lucide-react';
+import { ContentItem, ImagePreviewDialog } from './content-items';
 
 interface ContentArrayDisplayProps {
   contentArray: any[];
@@ -13,66 +8,34 @@ interface ContentArrayDisplayProps {
 
 export const ContentArrayDisplay: React.FC<ContentArrayDisplayProps> = ({ contentArray }) => {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  const hasMultipleItems = contentArray.length > 1;
+
   return (
     <div className="flex flex-col gap-3">
-      {contentArray.map((item, index) => {
-        const type = item.type?.toLowerCase();
-        const content = item.content || item.text;
+      {hasMultipleItems && (
+        <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-muted/50 border border-border/50 w-fit">
+          <Layers className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="text-xs font-medium text-muted-foreground">
+            {contentArray.length} content blocks
+          </span>
+        </div>
+      )}
 
-        // Handle image_url type
-        if (type === 'image_url' && item.image_url?.url) {
-          return (
-            <div key={index} className="relative">
-              <ImageWithPreview
-                src={item.image_url.url}
-                alt={`Image ${index + 1}`}
-                onClick={() => setPreviewImage(item.image_url.url)}
-              />
-            </div>
-          );
-        }
+      {contentArray.map((item, index) => (
+        <ContentItem
+          key={index}
+          item={item}
+          index={index}
+          showBadge={hasMultipleItems}
+          onPreview={setPreviewImage}
+        />
+      ))}
 
-        // Handle text type
-        if (type === 'text' && content) {
-          // Check if it's a base64 image
-          if (typeof content === 'string' && content.startsWith('data:image/')) {
-            return (
-              <div key={index} className="relative">
-                <ImageWithPreview
-                  src={content}
-                  alt={`Image ${index + 1}`}
-                  onClick={() => setPreviewImage(content)}
-                />
-              </div>
-            );
-          }
-
-          // Regular text content
-          return (
-            <div key={index} className="text-foreground leading-relaxed whitespace-normal break-words text-sm">
-              <MessageDisplay message={content} />
-            </div>
-          );
-        }
-        if(!type && !content && typeof item === 'object' && item !== null) {
-          return <JsonViewer data={item} key={`json-${index}`} collapsed={10} />;
-        }
-
-        return null;
-      })}
-
-      {/* Image preview dialog */}
-      <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
-        <DialogContent className="max-w-[90vw] max-h-[90vh] p-2">
-          {previewImage && (
-            <img
-              src={previewImage}
-              alt="Image preview"
-              className="w-full h-full object-contain max-h-[85vh]"
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+      <ImagePreviewDialog
+        src={previewImage}
+        onClose={() => setPreviewImage(null)}
+      />
     </div>
   );
 };
