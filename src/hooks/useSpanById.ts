@@ -3,6 +3,7 @@ import { Span } from "@/types/common-type";
 import { extractMessagesFromSpan } from "@/utils/span-to-message";
 import { Message } from "@/types/chat";
 import { getParentApiInvoke } from "@/components/chat/traces/TraceRow/span-info/DetailView";
+import { buildFlowDiagramFromSpans } from "@/utils/flow-diagram";
 
 /**
  * Hook that returns a specific span by span_id from the flattenSpans array.
@@ -84,17 +85,17 @@ export const errorFromApiInvokeSpansInSameRun = (props: {
 };
 
 export interface UniqueMessageWithHash {
-  type: string;
+  type?: string;
   model?: string;
-  role: string;
-  content: string;
+  role?: string;
+  content?: string;
   hash: string;
   tool_calls?: {
-    id: string,
+    id: string;
     [key: string]: any;
-  }[],
+  }[];
   tool_call_id?: string;
-  input_or_output?: 'input' | 'output'
+  input_or_output?: "input" | "output";
 }
 
 /**
@@ -121,15 +122,21 @@ const cyrb53 = (str: string, seed = 0): string => {
  * Generates a unique hash for a message based on its key properties.
  * Uses cyrb53 for efficient hashing of the message signature.
  */
-const getHashOfMessage = (message: Message): string => {
+const getHashOfMessage = (message: any): string => {
   const signature = [
-    message.type ?? '',
-    message.model_name ?? '',
-    message.role ?? '',
-    message.content ?? '',
-    message.tool_calls ? JSON.stringify(message.tool_calls) : '',
-    message.tool_call_id ?? '',
-  ].join('|');
+    message.type ?? "",
+    message.model_name ?? "",
+    message.role ?? "",
+    message.content ?? "",
+    message.tool_calls ? JSON.stringify(message.tool_calls) : "",
+    message.tool_call_id ?? "",
+  ].join("|");
+
+  // if (message.role === "user") {
+  //   console.log("=== message", message);
+  //   console.log("=== signature", signature);
+  //   console.log("===== encrypted", cyrb53(signature));
+  // }
 
   return cyrb53(signature);
 };
@@ -151,7 +158,11 @@ const getHashOfMessage = (message: Message): string => {
  * - User sends same content as system → validates full prefix match, not just boundary
  * - Single message → returns as-is
  */
-const removeRepeatingPatterns = <T extends { hash: string; type?: string; role?: string }>(items: T[]): T[] => {
+const removeRepeatingPatterns = <
+  T extends { hash: string; type?: string; role?: string }
+>(
+  items: T[]
+): T[] => {
   if (items.length === 0) return [];
   if (items.length === 1) return [...items];
 
@@ -161,7 +172,7 @@ const removeRepeatingPatterns = <T extends { hash: string; type?: string; role?:
   // Look for system message to use as boundary marker (more reliable)
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
-    if (item.type === 'system' || item.role === 'system') {
+    if (item.type === "system" || item.role === "system") {
       boundaryHash = item.hash;
       break;
     }
@@ -208,7 +219,10 @@ const removeRepeatingPatterns = <T extends { hash: string; type?: string; role?:
       // Verify that the prefix of current segment matches the last segment exactly
       isExtension = true;
       for (let i = 0; i < accumulatedLength; i++) {
-        if (i >= currentSegmentHashes.length || currentSegmentHashes[i] !== lastSegmentHashes[i]) {
+        if (
+          i >= currentSegmentHashes.length ||
+          currentSegmentHashes[i] !== lastSegmentHashes[i]
+        ) {
           isExtension = false;
           break;
         }
@@ -250,195 +264,42 @@ const removeRepeatingPatterns = <T extends { hash: string; type?: string; role?:
   return result;
 };
 
-export interface FlowNode {
-  id: string;
-  type: 'system' | 'user' | 'model' | 'tool';
-  label: string;
-  content?: any;
-}
+// Re-export flow diagram types for backwards compatibility
+export { buildFlowDiagramFromSpans };
+export type { FlowNode, FlowEdge, FlowDiagram } from "@/utils/flow-diagram";
 
-export interface FlowEdge {
-  index: number;
-  source: string;
-  target: string;
-  type: 'input' | 'tool_call' | 'tool_response' | 'paired';
-  callGroup?: number; // Groups edges that belong to the same LLM call
-}
-
-export interface FlowDiagram {
-  nodes: FlowNode[];
-  edges: FlowEdge[];
-}
-
-/**
- * Builds a flow diagram (nodes and edges) directly from spans.
- * This is more accurate than building from deduplicated messages because:
- * - Each span represents ONE complete LLM call
- * - We know exactly which system + user was sent to which model
- * - The model name comes from attribute.request.model (accurate)
- * - Tool calls come from the output (accurate)
- *
- * Node types:
- * - system: System prompt (optional, unique by hash)
- * - user: User message (optional, unique by hash)
- * - model: Model/LLM (unique by model name)
- * - tool: Tool (unique by tool name)
- *
- * Edge types:
- * - input: system/user → model
- * - tool_call: model → tool
- * - tool_response: tool → model
- */
-export const buildFlowDiagramFromSpans = (spans: Span[]): FlowDiagram => {
-  const nodes: FlowNode[] = [];
-  const edges: FlowEdge[] = [];
-  const nodeMap = new Map<string, FlowNode>();
-  let edgeIndex = 1;
-  let callGroup = 1;
-
-  // Helper to add node if not exists
-  const addNode = (node: FlowNode) => {
-    if (!nodeMap.has(node.id)) {
-      nodeMap.set(node.id, node);
-      nodes.push(node);
-    }
-  };
-
-  // Helper to add edge with callGroup
-  const addEdge = (source: string, target: string, type: FlowEdge['type'], currentCallGroup: number) => {
-    edges.push({
-      index: edgeIndex++,
-      source,
-      target,
-      type,
-      callGroup: currentCallGroup
-    });
-  };
-
-  let messagesBySpan: { 
-    span: Span;
-    messages: UniqueMessageWithHash[], 
-    previous_ref_span_id?: string, 
-    added_messages?: UniqueMessageWithHash[]
-   }[] = [];
-  // Process each span (each span = one LLM call)
-  spans.sort((a,b )=> a.start_time_us - b.start_time_us).forEach((span) => {
-    try {
-
-      if(span.operation_name === 'tools' && span.attribute) {
-        let toolAtt = span.attribute as any;
-        let tool_calls_str = toolAtt.tool_calls;
-        let tool_name = toolAtt['tool.name'];
-        if(tool_calls_str) {
-          let tool_calls = JSON.parse(tool_calls_str);
-          let parentSpanIndex = messagesBySpan.findIndex(s => s.span.span_id === span.parent_span_id);
-          if(tool_calls && Array.isArray(tool_calls) && tool_calls.length > 0) {
-            let lastMessage = messagesBySpan[parentSpanIndex].messages[messagesBySpan[parentSpanIndex].messages.length - 1];
-            let firstToolCall = tool_calls[0];
-            if(firstToolCall && firstToolCall.id) {
-              let toolMessage: Message = {
-                type: 'tool',
-                content: tool_calls_str,
-                hash: getHashOfMessage({
-                  type: "tool",
-                  content: tool_calls_str,
-                  id: "",
-                  timestamp: 0
-                }),
-                model: lastMessage.model
-              }
-              
-            }
-            // messagesBySpan[parentSpanIndex].messages.push({
-            //   type: "tool",
-            //   role: "tool",
-            //   content: tool_calls_str,
-            //   hash: getHashOfMessage({
-            //     type: "tool",
-            //     content: tool_calls_str,
-            //     id: "",
-            //     timestamp: 0
-            //   }),
-            //   model: lastMessage.model
-            // })
-            //return;
-          }
-        }
-        // extract to tool messae 
-
-      }
-      
-      // Use extractMessagesFromSpan to get properly parsed messages
-      const extractedMessages = extractMessagesFromSpan(span, 0, false);
-      const messageWithHash = convertToUniquMessageWithHash({ messages: extractedMessages });
-      const uniquePatternWithHash = removeRepeatingPatterns(messageWithHash);
-      messagesBySpan.push({
-        span,
-        messages: uniquePatternWithHash
-      })
-    } catch {
-      // Skip span if any error
-    }
-  });
-  messagesBySpan.forEach((messageBySpan, idx)=> {
-    if(idx === 0) {
-      return
-    }
-    const previousSpan = messagesBySpan[idx - 1];
-    if(previousSpan && previousSpan.messages && previousSpan.messages.length > 0) {
-       let previousSpanMessageHash = previousSpan.messages.map(m => m.hash);
-       let currentSpanMessageHash = messageBySpan.messages.map(m => m.hash);
-       if(previousSpanMessageHash.length > 0 && currentSpanMessageHash.length > 0) {
-          let stringHashPrevious = previousSpanMessageHash.join(',')
-          let stringHashCurrent = currentSpanMessageHash.join(',')
-          if(stringHashCurrent.startsWith(stringHashPrevious) && currentSpanMessageHash.length >= previousSpanMessageHash.length) {
-            messageBySpan.previous_ref_span_id = previousSpan.span.span_id;
-            // added message is the sub element from 
-            let addedMessages = [...messageBySpan.messages];
-            addedMessages.splice(0, previousSpanMessageHash.length)
-            messageBySpan.added_messages = addedMessages
-          }
-       }
-    }
-    
-  })
-  // consolidate spans = 
-  console.log('==== messagesBySpan', messagesBySpan)
-
-  return { nodes, edges };
-};
-
-
-export const convertToUniquMessageWithHash = (props: {
-  messages: Message[]
-}) => {
+export const convertToUniquMessageWithHash = (props: { messages: any[] }) => {
   const { messages } = props;
   const uniqueMessages: UniqueMessageWithHash[] = messages.map((message) => {
     let hashCalculated = getHashOfMessage(message);
     let result: UniqueMessageWithHash = {
       type: message.type,
-      model: message.model_name || '',
-      role: message.role || '',
-      content: message.content || '',
+      model: message.model_name || "",
+      role: message.role || "",
+      content: message.content || "",
       hash: hashCalculated,
       tool_calls: message.tool_calls,
       tool_call_id: message.tool_call_id,
-      input_or_output: message.input_or_output
+      input_or_output: message.input_or_output,
     };
     return result;
   });
   return uniqueMessages;
-}
+};
 export const getUniqueMessage = (props: { flattenSpans: Span[] }) => {
   const { flattenSpans } = props;
   let messages: Message[] = [];
 
-  let validSpans = flattenSpans.filter(m => !['api_invoke', 'model_call', 'run', 'cloud_api_invoke'].includes(m.operation_name)).sort((a, b) => a.start_time_us - b.start_time_us);
+  let validSpans = flattenSpans
+    .filter((m) => ["api_invoke"].includes(m.operation_name))
+    .sort((a, b) => a.start_time_us - b.start_time_us);
 
   validSpans.forEach((span) => {
     return messages.push(...extractMessagesFromSpan(span, 0, false));
   });
-  const uniqueMessages: UniqueMessageWithHash[] = convertToUniquMessageWithHash({ messages });
+  const uniqueMessages: UniqueMessageWithHash[] = convertToUniquMessageWithHash(
+    { messages }
+  );
   const deduplicatedMessages = removeRepeatingPatterns(uniqueMessages);
 
   // Build flow diagram from spans (more accurate) or fallback to messages

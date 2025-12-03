@@ -205,7 +205,7 @@ export function extractMessagesFromSpan(
     const message: Message = {
       id: `${span.span_id}_msg_${index}`,
       type: msg.role || "system",
-      role: msg.role as "user" | "assistant" | "system",
+      role: msg.role as "user" | "assistant" | "system" | 'tool',
       model_name: msg.role !== "user" ? model_name : undefined,
       content: msgContent,
       content_array: contentArray,
