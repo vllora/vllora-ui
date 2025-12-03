@@ -1,6 +1,7 @@
 import { ProjectDropdown } from './ProjectDropdown';
 import { useNavigate, useSearchParams, useLocation } from "react-router";
 import { DebugControl } from './DebugControl';
+import { DebugModeToggle } from './DebugModeToggle';
 import { GitHubLink } from './GitHubLink';
 import { BackendUrlInfo } from './BackendUrlInfo';
 import { SlackLink } from './SlackLink';
@@ -74,6 +75,9 @@ export function TabSelectionHeader({
             <span>Traces</span>
           </button>
         </div>
+
+        {/* Debug Mode Toggle - next to tabs */}
+        <DebugModeToggle />
       </div>
 
       <div className="flex items-center gap-3">
