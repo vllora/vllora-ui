@@ -25,7 +25,7 @@ export interface ToolCall {
   type: string;
   function: {
     name: string;
-    arguments: string;
+    arguments: string | object;
   };
 }
 
