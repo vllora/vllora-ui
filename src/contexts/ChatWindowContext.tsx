@@ -81,7 +81,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
         run_id,
         prevRun: runById
       })
-      return prevRuns.map(r => r.run_id === run_id ? updatedRun : r)
+      return [...prevRuns.map(r => r.run_id === run_id ? updatedRun : r)]
     })
   }, []);
   const handleEvent = useCallback((event: ProjectEventUnion) => {
@@ -89,7 +89,6 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
       setTimeout(() => {
         setFlattenSpans(prevSpans => {
           let newFlattenSpans = processEvent(prevSpans, event)
-
           // Update run metrics with the new spans
           event.run_id && updateRunMetrics(event.run_id, newFlattenSpans);
 
