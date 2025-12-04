@@ -1,5 +1,6 @@
 import { Span } from "@/types/common-type";
 import { TextMessageContentEvent } from "@/contexts/project-events/dto";
+import { getParentApiInvoke } from "@/components/chat/traces/TraceRow/span-info/DetailView";
 
 
 
@@ -11,20 +12,32 @@ export const handleTextMessageContentEvent = (currentSpans: Span[], event: TextM
        );
        if (existingIndex >= 0) {
          const updated = [...currentSpans];
+         let spanByIdex = updated[existingIndex]
+         // get apiInvokeSpan which is the parent 
+         let parentApiInvokeSpan:Span | undefined = spanByIdex.span_id  ? getParentApiInvoke(currentSpans,spanByIdex.span_id) : undefined
+         let parentApiInvokeSpan_id = parentApiInvokeSpan?.span_id
+
+         let apiInvokeSpan_idx = currentSpans.findIndex(s => s.span_id === parentApiInvokeSpan_id)         
          const attr = updated[existingIndex].attribute as any;
          const currentContent = attr.content || "";
          updated[existingIndex] = {
            ...updated[existingIndex],
-           parent_span_id: event.parent_span_id,
+           parent_span_id: event.parent_span_id || spanByIdex.parent_span_id,
            thread_id: event.thread_id || "",
            run_id: event.run_id || "",
            finish_time_us: timestamp * 1000,
            attribute: {
-             ...updated[existingIndex].attribute,
+             ...spanByIdex.attribute,
              content: currentContent + event.delta,
            } as any,
          };
-         return updated;
+         if(apiInvokeSpan_idx >= 0) {
+           updated[apiInvokeSpan_idx].attribute = {
+            ...updated[apiInvokeSpan_idx].attribute,
+            response: currentContent + event.delta, 
+           }
+         }
+         return [...updated];
        } else {
          // Create new span if it doesn't exist
          const newSpan: Span = {
