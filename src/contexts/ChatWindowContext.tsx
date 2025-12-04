@@ -56,6 +56,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     setHoverSpanId,
     collapsedSpans,
     setCollapsedSpans,
+    // getRunDetails,
   } = useWrapperHook({ projectId, threadId });
 
 
@@ -101,6 +102,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
       if ((event.type === 'RunFinished' || event.type === 'RunError') && event.run_id) {
         setTimeout(() => {
           event.run_id && fetchSpansByRunId(event.run_id);
+          // event.run_id && getRunDetails(event.run_id);
         }, 100)
       }
 
