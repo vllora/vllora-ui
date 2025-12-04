@@ -16,7 +16,6 @@ export const ToolStartMessageDisplay = (props: {
   const { flattenSpans } = ChatWindowConsumer();
 
   const span = useSpanById(flattenSpans, spanId);
-  console.log('=== toolSpan ', span)
   const attributes = span?.attribute;
   const labelAttribute = attributes?.['label'];
   const colorLabel = labelAttribute && getColorFromLabel(labelAttribute);

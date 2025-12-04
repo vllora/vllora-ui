@@ -7,6 +7,7 @@ import { compareMessageStructure, HierarchicalMessageSpanItem } from "./index";
 import { INDENT_PER_LEVEL } from "./constants";
 import { getColorFromLabel, LabelTag } from "../../traces/TraceRow/new-timeline/timeline-row/label-tag";
 import { cn } from "@/lib/utils";
+import { AlertCircle } from "lucide-react";
 
 
 export const RawSpanMessage = React.memo((props: {
@@ -62,6 +63,7 @@ const InnerRawSpanMessage = React.memo(({ spanId, flattenSpans }: {
     const span = useSpanById(flattenSpans, spanId);
     const attributes = span?.attribute;
     const labelAttribute = attributes?.['label'];
+    const error = attributes?.error;
     const colorLabel = labelAttribute && getColorFromLabel(labelAttribute);
     const messages = useMessageExtractSpanById(flattenSpans, spanId, {
         excludeToolInvokeMessage: true
@@ -71,13 +73,23 @@ const InnerRawSpanMessage = React.memo(({ spanId, flattenSpans }: {
 
     return (
         <div className={cn("flex flex-col")}>
+
             {labelAttribute && <div className="w-full flex justify-end py-4"><LabelTag label={labelAttribute} /></div>}
-            <div className={`flex flex-col gap-3`} style={ labelAttribute ?
-             { borderLeftColor: colorLabel?.background, borderLeftWidth: '1px',
-                 paddingLeft: '5px' } : {}}>
+            <div className={`flex flex-col gap-3`} style={labelAttribute ?
+                {
+                    borderLeftColor: colorLabel?.background, borderLeftWidth: '1px',
+                    paddingLeft: '5px'
+                } : {}}>
+                
                 {messages.map((message) => (
                     <MessageItem key={message.id} message={message} />
                 ))}
+                {error && (
+                    <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400">
+                        <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <span className="text-sm break-words">{error}</span>
+                    </div>
+                )}
             </div>
         </div>
     );
