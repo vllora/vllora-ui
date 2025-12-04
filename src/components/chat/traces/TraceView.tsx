@@ -48,7 +48,7 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
         )}
       >
         {/* Header with actions */}
-        <TraceHeader />
+        <TraceHeader threadId={threadId} />
 
         {/* Error display - positioned between header and filters */}
         {errorMessage && (

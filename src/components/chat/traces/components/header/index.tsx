@@ -1,10 +1,9 @@
-import React from 'react';
 import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 import { TraceListHeader } from './list-header';
 
-
-
-export const TraceHeader: React.FC<any> = () => {
+export const TraceHeader = (props: {
+  threadId?: string
+}) => {
   const {
     refreshRuns,
     loadingMoreRuns,
@@ -12,33 +11,15 @@ export const TraceHeader: React.FC<any> = () => {
     fetchSpansByRunId,
   } = ChatWindowConsumer();
 
+  const { threadId } = props;
   const hasOpenTraces = openTraces && openTraces.length > 0;
-  // const currentTab = hasOpenTraces ? openTraces[0].tab : 'trace';
-
-  // const handleTabChange = (tab: 'trace' | 'code') => {
-  //   if (hasOpenTraces) {
-  //     setOpenTraces([{ ...openTraces[0], tab }]);
-  //   }
-  // };
-
-  // if (hasOpenTraces) {
-  //   return (
-  //     <TraceDetailHeader
-  //       currentTab={currentTab}
-  //       onTabChange={handleTabChange}
-  //       onRefresh={()=>{
-  //         fetchSpansByRunId(openTraces[0].run_id);
-  //       }}
-  //       isLoading={loadingMoreRuns}
-  //     />
-  //   );
-  // }
 
   return (
     <TraceListHeader
-      onRefresh={()=>{
+      threadId={threadId}
+      onRefresh={() => {
         refreshRuns();
-        if(hasOpenTraces){
+        if (hasOpenTraces) {
           fetchSpansByRunId(openTraces[0].run_id);
         }
       }}

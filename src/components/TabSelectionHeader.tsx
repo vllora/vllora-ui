@@ -27,6 +27,7 @@ export function TabSelectionHeader({
   const handleTabChange = (tab: string) => {
     // Update URL with tab query parameter
     const params = new URLSearchParams(searchParams);
+    params.delete('thread_id')
     if (tab === 'threads') {
       params.delete('tab');
     } else {

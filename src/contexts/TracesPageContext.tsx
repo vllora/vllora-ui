@@ -19,7 +19,7 @@ export type GroupByMode = 'run' | 'time' | 'thread';
 export type Duration = 300 | 600 | 1200 | 1800 | 3600 | 7200 | 10800 | 21600 | 43200 | 86400; // 5m, 10m, 20m, 30m, 1h, 2h, 3h, 6h, 12h, 24h
 
 // Allowed query params for traces page
-const ALLOWED_QUERY_PARAMS = ['tab', 'group_by', 'duration', 'page', 'project_id'] as const;
+const ALLOWED_QUERY_PARAMS = ['tab', 'group_by', 'duration', 'page', 'project_id', 'thread_id'] as const;
 
 
 export function useTracesPageContext(props: { projectId: string }) {
@@ -142,7 +142,8 @@ export function useTracesPageContext(props: { projectId: string }) {
     setCollapsedSpans,
     updateBySpansArray
   } = useWrapperHook({
-    projectId, onRunsLoaded: (runs) => {
+    projectId,
+    onRunsLoaded: (runs) => {
       if (runs && runs.length > 0 && runs[0].run_id) {
         fetchSpansByRunId(runs[0].run_id)
       }
@@ -181,6 +182,7 @@ export function useTracesPageContext(props: { projectId: string }) {
     // setOpenGroups,
   } = useGroupsPagination({
     projectId,
+    threadId: searchParams.get('thread_id') || undefined,
     bucketSize: duration, // Map duration to bucketSize for API
     groupBy: groupByMode === 'time' ? 'time' : groupByMode === 'thread' ? 'thread' : groupByMode === 'run' ? 'run' : 'time',
     initialPage,

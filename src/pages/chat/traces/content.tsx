@@ -5,6 +5,9 @@ import { TracesPageConsumer } from "@/contexts/TracesPageContext";
 import { GroupingSelector } from "@/components/traces/GroupingSelector";
 import { useEffect } from "react";
 import { ProjectsConsumer } from "@/lib";
+import { useSearchParams, useNavigate, useLocation } from "react-router";
+import { X } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export function TracesPageContent() {
   const {
@@ -18,11 +21,44 @@ export function TracesPageContent() {
     setDuration,
   } = TracesPageConsumer();
 
-  const {currentProjectId} = ProjectsConsumer();
+  const { currentProjectId } = ProjectsConsumer();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const threadId = searchParams.get('thread_id');
+
+  const handleRemoveThreadFilter = () => {
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('thread_id');
+    navigate(`${location.pathname}?${newParams.toString()}`, { replace: true });
+  };
 
   useEffect(() => {
     refreshGroups();
-  }, [groupByMode, duration, currentProjectId]);
+  }, [groupByMode, duration, currentProjectId, threadId]);
+
+  const threadFilterBadge = threadId ? (
+    <div className="inline-flex items-center gap-2 h-6 px-2.5 bg-[#151515] rounded-lg border border-border text-xs">
+      <span className="text-muted-foreground">Thread:</span>
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="font-mono text-foreground max-w-[100px] truncate cursor-default">{threadId}</span>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p className="font-mono text-xs">{threadId}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <button
+        onClick={handleRemoveThreadFilter}
+        className="hover:bg-muted/50 rounded p-0.5 transition-colors text-muted-foreground hover:text-foreground"
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </div>
+  ) : undefined;
 
   return <div className="flex flex-col flex-1 h-full overflow-hidden">
     {/* Grouping Controls */}
@@ -32,6 +68,7 @@ export function TracesPageContent() {
         onGroupByModeChange={setGroupByMode}
         duration={duration}
         onDurationChange={setDuration}
+        filterBadge={threadFilterBadge}
       />
     </div>
 
