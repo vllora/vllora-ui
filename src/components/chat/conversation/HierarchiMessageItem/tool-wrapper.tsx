@@ -2,12 +2,12 @@
 import {  memo } from "react";
 import { ToolStartMessageDisplay } from "../ToolStartMessageDisplay";
 
-export const EloraToolSpanMessage = memo((props: {
+export const VloraToolSpanMessage = memo((props: {
     span_id: string;
 }) => {
     const { span_id } = props;
     return (
-        <div id={`elora-tool-span-conversation-${span_id}`} className="">
+        <div id={`vlora-tool-span-conversation-${span_id}`} className="">
             <ToolStartMessageDisplay spanId={span_id} />
         </div>
     );

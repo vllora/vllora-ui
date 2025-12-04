@@ -4,7 +4,7 @@ import { RunWrapperMessage } from './run-wrapper';
 import { TaskSpanMessage } from './task-wrapper';
 import { RawSpanMessage } from './raw-span';
 import { AgentSpanMessage } from './agent-wrapper';
-import { EloraToolSpanMessage } from './tool-wrapper';
+import { VloraToolSpanMessage } from './tool-wrapper';
 import { InvocationSpanMessage } from './invocation-wrapper';
 
 interface HierarchicalSpanItemProps {
@@ -75,7 +75,7 @@ const HierarchicalMessageSpanItemComponent: React.FC<HierarchicalSpanItemProps> 
     return <TaskSpanMessage run_id={run_id} span_id={span_id} messages={children} level={level} />
   }
   if(type === 'tools') {
-    return <EloraToolSpanMessage span_id={span_id} />
+    return <VloraToolSpanMessage span_id={span_id} />
   }
   // if(type === 'tool') {
   //   return <OpenAIToolSpanMessage span_id={span_id} messages={children} level={level} />
