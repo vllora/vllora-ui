@@ -10,7 +10,7 @@ import { ModalProvider } from '@/contexts/ModalContext';
 import { ModalManager } from '@/components/modals/ModalManager';
 import { useConversationEvents } from '@/hooks/events/useConversationEvents';
 import { Message } from '@/types/chat';
-import { extractMessageFromApiInvokeSpan, extractMessagesFromSpanById } from '@/utils/span-to-message';
+import { extractMessagesFromSpanById } from '@/utils/span-to-message';
 import { McpServerConfig } from '@/services/mcp-api';
 import { ProviderConfigDialog } from '../traces/model-selector/ProviderConfigDialog';
 import { MultiProviderConfigDialog } from '../traces/model-selector/MultiProviderConfigDialog';
@@ -79,7 +79,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
   }, [setModelConfig, onModelChange]);
 
   useEffect(() => {
-    if(isChatProcessing) return;
+    if (isChatProcessing) return;
     clearAll();
     if (threadId && !isDraft) {
       refreshSpans();
@@ -223,7 +223,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
 
     const listModelCallSpan = flattenSpans.filter(span => span.operation_name === 'model_call').sort((a, b) => a.start_time_us - b.start_time_us)
     let lastModelCallSpan = listModelCallSpan.length > 0 ? listModelCallSpan[listModelCallSpan.length - 1] : undefined
-    let actuallModelCallSpan = lastModelCallSpan ?  flattenSpans.find(s => s.parent_span_id === lastModelCallSpan?.span_id) : undefined
+    let actuallModelCallSpan = lastModelCallSpan ? flattenSpans.find(s => s.parent_span_id === lastModelCallSpan?.span_id) : undefined
 
     let continousMessage: Message[] = []
     if (actuallModelCallSpan) {
@@ -278,14 +278,14 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       {/* Chat Header */}
       <div className="bg-card w-full flex-shrink-0">
         {/* Model Selector - Top row aligned with Project Dropdown */}
-          <ConversationHeader
-            onRefresh={refreshSpans}
-            isLoading={isLoadingSpans}
-            onModelConfigChange={handleModelConfigChange}
-            modelConfig={modelConfig}
-            projectId={projectId}
-            app_mode={app_mode}
-          />
+        <ConversationHeader
+          onRefresh={refreshSpans}
+          isLoading={isLoadingSpans}
+          onModelConfigChange={handleModelConfigChange}
+          modelConfig={modelConfig}
+          projectId={projectId}
+          app_mode={app_mode}
+        />
       </div>
 
 
