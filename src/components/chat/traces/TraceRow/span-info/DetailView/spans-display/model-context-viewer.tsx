@@ -21,7 +21,6 @@ const formatNumber = (num: number) => {
 
 export const ModelContextViewer = ({ model_name, usage_tokens, expandMode, cost }: ModelContextViewerProps) => {
     const { models } = ProjectModelsConsumer()
-    console.log('==== cost', cost)
     const model_name_only = model_name.includes('/') ? model_name.split('/')[1] : model_name;
     const model = models.find((model) => model.model === model_name_only);
     const max_context_size = model?.limits?.max_context_size;
