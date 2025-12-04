@@ -92,7 +92,7 @@ export const ModelContextViewer = ({ model_name, usage_tokens, expandMode, cost 
             <div className="space-y-1.5">
                 {cost && cost > 0 && <div className="flex justify-between gap-4">
                     <span className="text-muted-foreground">Cost</span>
-                    <span className="font-mono font-medium">{formatCost(cost, 10)}</span>
+                    <span className="font-mono font-medium">{formatCost(cost, 4)}</span>
                 </div>}
                 <div className="flex justify-between gap-4">
                     <span className="text-muted-foreground">Used tokens:</span>
