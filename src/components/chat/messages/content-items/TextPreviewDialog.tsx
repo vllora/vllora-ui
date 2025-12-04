@@ -38,7 +38,7 @@ export const TextPreviewDialog: React.FC<TextPreviewDialogProps> = ({
 
   return (
     <Dialog open={!!content} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+      <DialogContent className="max-w-[90vw] h-[95vh] flex flex-col">
         <DialogHeader className="pb-3 border-b border-border">
           <div className="flex items-center justify-between">
             <DialogTitle className="flex items-center gap-2 text-base font-medium">
