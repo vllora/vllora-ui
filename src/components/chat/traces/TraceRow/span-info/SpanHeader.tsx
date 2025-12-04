@@ -8,7 +8,7 @@ import { Span } from "@/types/common-type";
 import { BasicSpanInfo } from "./DetailView/basic-span-info-section";
 import { ClientSdkIcon } from "@/components/client-sdk-icon";
 import { tryParseInt } from "@/utils/modelUtils";
-import { getLabelOfSpan, getModelName, getTotalUsage } from "../new-timeline/utils";
+import { getCost, getLabelOfSpan, getModelName, getTotalUsage } from "../new-timeline/utils";
 import { LabelTag } from "../new-timeline/timeline-row/label-tag";
 import { ModelContextViewer } from "./DetailView/spans-display/model-context-viewer";
 
@@ -78,6 +78,7 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
   const labelOfSpan = span && getLabelOfSpan({ span });
   const modelName = span && getModelName({ span });
   const totalUsage = span && getTotalUsage({ span }) || 0;
+  const costUsage = span && getCost({ span }) || 0;
   return (
     <div className="flex flex-row items-center gap-1 justify-between w-full">
       <div className="flex items-center gap-1 min-w-0 flex-1">
@@ -189,7 +190,7 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
               </Tooltip>
             </TooltipProvider>
           )}
-          {modelName && totalUsage > 0 && <ModelContextViewer usage_tokens={totalUsage} model_name={modelName} />}
+          {modelName && totalUsage > 0 && <ModelContextViewer cost={costUsage} usage_tokens={totalUsage} model_name={modelName} />}
         </div>
       </div>
       <div className="flex items-center gap-1 flex-shrink-0">
