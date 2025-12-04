@@ -15,8 +15,8 @@ interface TimelineContentProps {
   hoverSpanId?: string;
   onHoverSpanChange?: (spanId: string | undefined) => void;
   collapsedSpans: string[];
-
   onToggle?: (spanId: string) => void;
+  showHighlightButton?: boolean;
 }
 
 export const TimelineContent: React.FC<TimelineContentProps> = memo(({
@@ -30,7 +30,8 @@ export const TimelineContent: React.FC<TimelineContentProps> = memo(({
   hoverSpanId,
   onHoverSpanChange,
   collapsedSpans,
-  onToggle
+  onToggle,
+  showHighlightButton
 }) => {
 
   // For grouped views (like time buckets), spans can belong to multiple runs
@@ -63,6 +64,7 @@ export const TimelineContent: React.FC<TimelineContentProps> = memo(({
             onHoverSpanChange={onHoverSpanChange}
             collapsedSpans={collapsedSpans}
             onToggle={onToggle}
+            showHighlightButton={showHighlightButton}
           />
         </div>
       </div>
@@ -82,9 +84,10 @@ const TimelineContentInner = memo((props: {
   onHoverSpanChange?: (spanId: string | undefined) => void;
   collapsedSpans: string[];
   onToggle?: (spanId: string) => void;
+  showHighlightButton?: boolean;
 }) => {
   const { hierarchies, runId } = RunDetailConsumer()
-  const { selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, isInSidebar = true, hoverSpanId, onHoverSpanChange, collapsedSpans, onToggle } = props
+  const { selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, isInSidebar = true, hoverSpanId, onHoverSpanChange, collapsedSpans, onToggle, showHighlightButton } = props
 
   if (!hierarchies || hierarchies.length === 0) {
     return <div className="flex items-center justify-center p-4 text-sm text-gray-400">
@@ -105,6 +108,7 @@ const TimelineContentInner = memo((props: {
         onHoverSpanChange={onHoverSpanChange}
         collapsedSpans={collapsedSpans}
         onToggle={onToggle}
+        showHighlightButton={showHighlightButton}
         onSpanSelect={(spanId, runId) => {
           if (runId) {
             setSelectedSpanId(spanId);

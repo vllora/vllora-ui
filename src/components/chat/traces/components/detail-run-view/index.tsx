@@ -59,6 +59,7 @@ export const DetailedRunView: React.FC<{run: RunDTO}> = ({
                                             setCollapsedSpans([...collapsedSpans, spanId]);
                                         }
                                     }}
+                                    showHighlightButton={true}
                                     />
                             </ErrorBoundary>
                         </div>

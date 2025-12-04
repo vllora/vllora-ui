@@ -45,7 +45,6 @@ export const TextPreviewDialog: React.FC<TextPreviewDialogProps> = ({
               <div className="p-1.5 rounded-md bg-blue-400/10">
                 <FileText className="w-4 h-4 text-blue-400" />
               </div>
-              Full Content
             </DialogTitle>
             <div className="flex items-center gap-2 mr-3">
               <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/50">
