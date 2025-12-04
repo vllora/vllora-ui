@@ -40,6 +40,7 @@ export interface TimelineRowProps {
     selectedSpanId?: string;
     onSpanSelect?: (spanId: string, runId: string) => void;
     hoverSpanId?: string;
+    onHoverSpanChange?: (spanId: string | undefined) => void;
 }
 
 // Main TimelineRow component that uses the sub-components
@@ -61,6 +62,7 @@ export const TimelineRow = (props: TimelineRowProps) => {
         selectedSpanId,
         onSpanSelect,
         hoverSpanId,
+        onHoverSpanChange,
         isInSidebar = true
     } = props;
     // Common props for timeline content components
@@ -109,6 +111,8 @@ export const TimelineRow = (props: TimelineRowProps) => {
                     onSpanSelect(span.span_id, span.run_id);
                 }
             }}
+            onMouseEnter={() => onHoverSpanChange?.(span.span_id)}
+            onMouseLeave={() => onHoverSpanChange?.(undefined)}
         >
             <div className={classNames("flex w-full divide-x divide-border/50 px-1")}>
                 {/* Render either fullscreen or sidebar content based on mode */}

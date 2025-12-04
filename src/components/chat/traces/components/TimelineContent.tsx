@@ -13,6 +13,7 @@ interface TimelineContentProps {
   setDetailSpanId: (spanId: string | null) => void;
   isInSidebar?: boolean;
   hoverSpanId?: string;
+  onHoverSpanChange?: (spanId: string | undefined) => void;
   collapsedSpans: string[];
 
   onToggle?: (spanId: string) => void;
@@ -27,6 +28,7 @@ export const TimelineContent: React.FC<TimelineContentProps> = memo(({
   setDetailSpanId,
   isInSidebar = true,
   hoverSpanId,
+  onHoverSpanChange,
   collapsedSpans,
   onToggle
 }) => {
@@ -58,6 +60,7 @@ export const TimelineContent: React.FC<TimelineContentProps> = memo(({
             setDetailSpanId={setDetailSpanId}
             isInSidebar={isInSidebar}
             hoverSpanId={hoverSpanId}
+            onHoverSpanChange={onHoverSpanChange}
             collapsedSpans={collapsedSpans}
             onToggle={onToggle}
           />
@@ -76,11 +79,12 @@ const TimelineContentInner = memo((props: {
   setDetailSpanId: (spanId: string | null) => void;
   isInSidebar?: boolean;
   hoverSpanId?: string;
+  onHoverSpanChange?: (spanId: string | undefined) => void;
   collapsedSpans: string[];
   onToggle?: (spanId: string) => void;
 }) => {
   const { hierarchies, runId } = RunDetailConsumer()
-  const { selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, isInSidebar = true, hoverSpanId, collapsedSpans, onToggle } = props
+  const { selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, isInSidebar = true, hoverSpanId, onHoverSpanChange, collapsedSpans, onToggle } = props
 
   if (!hierarchies || hierarchies.length === 0) {
     return <div className="flex items-center justify-center p-4 text-sm text-gray-400">
@@ -98,6 +102,7 @@ const TimelineContentInner = memo((props: {
         selectedSpanId={selectedSpanId || undefined}
         level={0}
         hoverSpanId={hoverSpanId}
+        onHoverSpanChange={onHoverSpanChange}
         collapsedSpans={collapsedSpans}
         onToggle={onToggle}
         onSpanSelect={(spanId, runId) => {

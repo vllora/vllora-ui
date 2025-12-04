@@ -61,28 +61,32 @@ const HierarchicalMessageSpanItemComponent: React.FC<HierarchicalSpanItemProps> 
 }) => {
   const { type, span_id, run_id, children } = messageStructure;
 
-  if(type === 'agent') {
-    return <AgentSpanMessage span_id={span_id} run_id={run_id} messages={children} level={level} />
-  }
-  if(type === 'run_wrapper') {
-    return <RunWrapperMessage run_id={run_id} messages={children} level={level} />
-  }
-  if(type === 'run') {
-    return <InvocationSpanMessage run_id={run_id} span_id={span_id} messages={children} level={level} />
-  }
+  const renderContent = () => {
+    if(type === 'agent') {
+      return <AgentSpanMessage span_id={span_id} run_id={run_id} messages={children} level={level} />
+    }
+    if(type === 'run_wrapper') {
+      return <RunWrapperMessage run_id={run_id} messages={children} level={level} />
+    }
+    if(type === 'run') {
+      return <InvocationSpanMessage run_id={run_id} span_id={span_id} messages={children} level={level} />
+    }
 
-  if(type === 'task') {
-    return <TaskSpanMessage run_id={run_id} span_id={span_id} messages={children} level={level} />
-  }
-  if(type === 'tools') {
-    return <VloraToolSpanMessage span_id={span_id} />
-  }
-  // if(type === 'tool') {
-  //   return <OpenAIToolSpanMessage span_id={span_id} messages={children} level={level} />
-  // }
-  
+    if(type === 'task') {
+      return <TaskSpanMessage run_id={run_id} span_id={span_id} messages={children} level={level} />
+    }
+    if(type === 'tools') {
+      return <VloraToolSpanMessage span_id={span_id} />
+    }
 
-  return <RawSpanMessage messageStructure={messageStructure} level={level} />;
+    return <RawSpanMessage messageStructure={messageStructure} level={level} />;
+  };
+
+  return (
+    <div id={`hierachy-message-${span_id}`}>
+      {renderContent()}
+    </div>
+  );
 };
 
 export const HierarchicalMessageSpanItem = React.memo(
