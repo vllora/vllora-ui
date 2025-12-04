@@ -228,7 +228,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     let continousMessage: Message[] = []
     if (actuallModelCallSpan) {
       continousMessage = extractMessagesFromSpanById(flattenSpans, actuallModelCallSpan.span_id, {
-        excludeToolInvokeMessage: false
+        excludeToolInvokeMessage: false,
       });
     }
 
