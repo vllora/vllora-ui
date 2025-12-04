@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { CogIcon } from "@heroicons/react/24/solid";
 import {
   ClipboardDocumentIcon,
@@ -16,16 +16,31 @@ import { ContentArrayDisplay } from "./ContentArrayDisplay";
 import { TextContent } from "./content-items";
 import { Message } from "@/types/chat";
 import { useRelativeTime } from "@/hooks/useRelativeTime";
+import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 
 export const SystemMessage: React.FC<{ msg: Message }> = ({ msg }) => {
   const [copied, setCopied] = useState(false);
   const messageRef = React.useRef<HTMLDivElement>(null);
+  const { setHoverSpanId } = ChatWindowConsumer();
+
   useRelativeTime(messageRef, msg.created_at);
+
+  const handleMouseEnter = useCallback(() => {
+    if (msg?.span_id) {
+      setHoverSpanId(msg.span_id);
+    }
+  }, [msg?.span_id, setHoverSpanId]);
+
+  const handleMouseLeave = useCallback(() => {
+    setHoverSpanId(undefined);
+  }, [setHoverSpanId]);
 
   return (
     <div
       className="flex flex-col gap-3 group"
       ref={messageRef}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       {/* Header with Avatar and Metadata */}
       <div className="flex items-center gap-3">

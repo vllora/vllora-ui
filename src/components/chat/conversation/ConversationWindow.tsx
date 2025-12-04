@@ -10,7 +10,7 @@ import { ModalProvider } from '@/contexts/ModalContext';
 import { ModalManager } from '@/components/modals/ModalManager';
 import { useConversationEvents } from '@/hooks/events/useConversationEvents';
 import { Message } from '@/types/chat';
-import { extractMessageFromApiInvokeSpan } from '@/utils/span-to-message';
+import { extractMessageFromApiInvokeSpan, extractMessagesFromSpanById } from '@/utils/span-to-message';
 import { McpServerConfig } from '@/services/mcp-api';
 import { ProviderConfigDialog } from '../traces/model-selector/ProviderConfigDialog';
 import { MultiProviderConfigDialog } from '../traces/model-selector/MultiProviderConfigDialog';
@@ -221,11 +221,15 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     }
     setCurrentInput('');
 
-    // construct initial messages based on last api_invoke span
-    const lastApiInvokeSpan = flattenSpans.filter(span => span.operation_name === 'api_invoke').pop();
+    const listModelCallSpan = flattenSpans.filter(span => span.operation_name === 'model_call').sort((a, b) => a.start_time_us - b.start_time_us)
+    let lastModelCallSpan = listModelCallSpan.length > 0 ? listModelCallSpan[listModelCallSpan.length - 1] : undefined
+    let actuallModelCallSpan = lastModelCallSpan ?  flattenSpans.find(s => s.parent_span_id === lastModelCallSpan?.span_id) : undefined
+
     let continousMessage: Message[] = []
-    if (lastApiInvokeSpan) {
-      continousMessage = extractMessageFromApiInvokeSpan(lastApiInvokeSpan);
+    if (actuallModelCallSpan) {
+      continousMessage = extractMessagesFromSpanById(flattenSpans, actuallModelCallSpan.span_id, {
+        excludeToolInvokeMessage: false
+      });
     }
 
     // Filter out null/undefined values and internal metadata fields from modelConfig

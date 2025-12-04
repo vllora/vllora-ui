@@ -63,7 +63,9 @@ const InnerRawSpanMessage = React.memo(({ spanId, flattenSpans }: {
     const attributes = span?.attribute;
     const labelAttribute = attributes?.['label'];
     const colorLabel = labelAttribute && getColorFromLabel(labelAttribute);
-    const messages = useMessageExtractSpanById(flattenSpans, spanId);
+    const messages = useMessageExtractSpanById(flattenSpans, spanId, {
+        excludeToolInvokeMessage: true
+    });
 
     if (messages.length === 0) return <></>;
 

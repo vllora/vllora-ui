@@ -1,6 +1,8 @@
 import { Span } from "@/types/common-type";
 import { Message, MessageMetrics } from "@/types/chat";
 import { tryParseJson } from "@/utils/modelUtils";
+import { getParentApiInvoke } from "@/components/chat/traces/TraceRow/span-info/DetailView";
+import { findSpanById } from "@/utils/span-hierarchy";
 
 export const extractMessageFromApiInvokeSpan = (span: Span): Message[] => {
   if (span.operation_name !== "api_invoke") {
@@ -26,7 +28,7 @@ export const extractMessageFromApiInvokeSpan = (span: Span): Message[] => {
       const message: Message = {
         id: `${span.span_id}_msg_${index}`,
         type: msg.role || "system",
-        role: msg.role as "user" | "assistant" | "system",
+        role: msg.role as "user" | "assistant" | "system" | 'tool',
         content: msgContent,
         content_array:
           msg.parts || (Array.isArray(msg.content) ? msg.content : undefined),
@@ -34,7 +36,7 @@ export const extractMessageFromApiInvokeSpan = (span: Span): Message[] => {
         span,
         tool_calls: msg.tool_calls,
         tool_call_id: msg.tool_call_id,
-        timestamp: 0,
+        timestamp: span.start_time_us / 1000,
       };
       messages.push(message);
     });
@@ -146,7 +148,7 @@ export function convertSpansToMessages(
  */
 export function extractMessagesFromSpan(
   span: Span,
-  level: number = 0
+  level: number = 0,
 ): Message[] {
   const attribute = span.attribute as any;
   const messages: Message[] = [];
@@ -291,10 +293,11 @@ function extractMessageContent(msg: any): string {
  * @param attribute - The span attribute
  * @returns String content for the assistant message
  */
-function extractResponseContent(
+export function extractResponseContent(
   outputJson: any,
-  attribute: any
-): string | null {
+  attribute: any,
+  excludeToolInvokeMessage: boolean = true
+): string | any | null {
   if (!outputJson) return attribute?.content;
 
   // Try different fields for response content
@@ -326,6 +329,9 @@ function extractResponseContent(
 
   if (outputJson.choices?.[0]?.message?.content) {
     return outputJson.choices[0].message.content;
+  }
+  if(outputJson.choices?.[0]?.message?.tool_calls && outputJson.choices?.[0]?.message?.tool_calls.length > 0 && !excludeToolInvokeMessage) {
+    return outputJson.choices[0].message.tool_calls;
   }
 
   if (outputJson.candidates?.[0]?.content) {
@@ -428,4 +434,82 @@ export function convertSpansToSpanWithMessages(
       (item) =>
         item.messages.length > 0 || (item.children && item.children.length > 0)
     );
+}
+
+export interface ExtractMessagesFromSpanByIdOptions {
+  excludeToolInvokeMessage?: boolean;
+}
+
+/**
+ * Extracts messages from a span by its ID, including messages from parent api_invoke span
+ * and response content from the current span.
+ *
+ * @param flattenSpans - Flat array of all spans
+ * @param spanId - The span_id to extract messages from
+ * @param options - Optional configuration
+ * @param options.excludeToolInvokeMessage - If true, excludes response messages related tool invoke
+ * @returns Array of Message objects extracted from the span
+ *
+ * @example
+ * ```typescript
+ * const messages = extractMessagesFromSpanById(flattenSpans, 'abc123');
+ * const messagesWithoutTools = extractMessagesFromSpanById(flattenSpans, 'abc123', { excludeToolInvokeMessage: true });
+ * ```
+ */
+export function extractMessagesFromSpanById(
+  flattenSpans: Span[],
+  spanId: string,
+  options: ExtractMessagesFromSpanByIdOptions = {}
+): Message[] {
+  const { excludeToolInvokeMessage = true } = options;
+  const span = findSpanById(flattenSpans, spanId);
+  if (!span) return [];
+
+  // Get api invoke span to extract input messages
+  const apiInvokeSpan = getParentApiInvoke(flattenSpans, span.span_id);
+  let result: Message[] = [];
+
+  if (apiInvokeSpan) {
+    let inputMessageFromApiInvokeSpan =
+      extractMessageFromApiInvokeSpan(apiInvokeSpan);
+    inputMessageFromApiInvokeSpan = inputMessageFromApiInvokeSpan.map((m) => {
+      return {
+        ...m,
+        span,
+        span_id: span.span_id,
+      };
+    });
+    result = inputMessageFromApiInvokeSpan;
+  }
+
+  const currentSpanAtt = span.attribute as any;
+  if (currentSpanAtt) {
+    const requestStr = currentSpanAtt.request;
+    const requestJson = requestStr && tryParseJson(requestStr);
+    const outputStr = currentSpanAtt.output || currentSpanAtt.response;
+    const outputJson = tryParseJson(outputStr);
+    const responseContent = extractResponseContent(outputJson, currentSpanAtt, excludeToolInvokeMessage);
+    if (responseContent) {
+      const responseMessage: Message = {
+        id: `${span.span_id}_response`,
+        type: "assistant",
+        role: "assistant",
+        content: responseContent,
+        timestamp: span.finish_time_us
+          ? span.finish_time_us / 1000
+          : Date.now(),
+        thread_id: span.thread_id,
+        trace_id: span.trace_id,
+        span_id: span.span_id,
+        span,
+        model_name:
+          `${span.operation_name}/${requestJson?.model}` || span.operation_name,
+      };
+      result.push(responseMessage);
+    }
+  }
+
+ 
+
+  return result;
 }
