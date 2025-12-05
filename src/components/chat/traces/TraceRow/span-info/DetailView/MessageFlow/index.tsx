@@ -146,8 +146,8 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
       const preview = typeof message.content === 'string'
         ? message.content
         : (nodeType === 'tools' && message.tool_calls
-            ? message.tool_calls.map((t: Record<string, any>) => t.function?.name).join(', ')
-            : '');
+          ? message.tool_calls.map((t: Record<string, any>) => t.function?.name).join(', ')
+          : '');
 
       flowNodes.push({
         id: nodeId,
@@ -174,11 +174,25 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
     });
 
     // Add each tool as a separate input node
+    // Build a map of tool names to node IDs for linking tool_calls back to definitions
+    const toolNameToNodeId = new Map<string, string>();
     const toolsDefinition: Array<Record<string, any>> = rawRequest?.tools || [];
+
+    // Get the set of tool names that are called in the response
+    const calledToolNames = new Set(
+      (extractedResponse.tool_calls || []).map((tc: any) => tc.function?.name || tc.name)
+    );
+
     toolsDefinition.forEach((tool: Record<string, any>, index: number) => {
       const toolName = tool.function?.name || tool.name || 'Tool';
       const toolDescription = tool.function?.description || tool.description || '';
       const nodeId = `tool-${index}`;
+
+      // Store the mapping for later edge creation
+      toolNameToNodeId.set(toolName, nodeId);
+
+      // Check if this tool is called in the response
+      const isCalledInResponse = calledToolNames.has(toolName);
 
       flowNodes.push({
         id: nodeId,
@@ -188,7 +202,8 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
           label: toolName,
           nodeType: 'tools',
           preview: toolDescription,
-          toolInfo: tool
+          toolInfo: tool,
+          isCalledInResponse,
         },
       });
 
@@ -203,6 +218,8 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
 
       inputYOffset += inputSpacing;
     });
+
+    console.log('==== toolNameToNodeId', toolNameToNodeId)
 
     // Calculate model position (centered vertically)
     const totalInputHeight = Math.max(inputYOffset - inputSpacing, 0);
@@ -241,7 +258,8 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
           nodeType: 'response',
           count: extractedResponse.messages.length,
           preview: responseContent,
-          rawResponse
+          rawResponse,
+          hasToolCalls,
         },
       });
       flowEdges.push({
@@ -255,25 +273,32 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
       outputYOffset += outputSpacing;
     }
 
+    // Create edges from response to matching tool definition inputs when there are tool_calls
     if (hasToolCalls && extractedResponse.tool_calls) {
-      flowNodes.push({
-        id: 'tool_calls',
-        type: 'output',
-        position: { x: 550, y: outputYOffset },
-        data: {
-          label: 'Tool Calls',
-          nodeType: 'tool_calls',
-          count: extractedResponse.tool_calls.length,
-          preview: extractedResponse.tool_calls.map((t: any) => t.function?.name || t.name).join(', '),
-        },
-      });
-      flowEdges.push({
-        id: 'model-tool_calls',
-        source: 'model',
-        target: 'tool_calls',
-        type: 'default',
-        style: { stroke: getEdgeColor('model'), strokeWidth: 2 },
-        animated: true,
+      extractedResponse.tool_calls.forEach((toolCall: any, index: number) => {
+        const functionName = toolCall.function?.name || toolCall.name;
+        if (functionName && toolNameToNodeId.has(functionName)) {
+          const targetNodeId = toolNameToNodeId.get(functionName)!;
+          flowEdges.push({
+            id: `response-${targetNodeId}-${index}`,
+            source: 'response',
+            sourceHandle: 'bottom',
+            target: targetNodeId,
+            targetHandle: 'bottom',
+            type: 'smoothstep',
+            label: 'require invoke',
+            labelStyle: { fill: 'white', fontSize: 10 },
+            labelBgStyle: { fill: 'transparent', fillOpacity: 1 },
+            style: { stroke: '#71717a', strokeWidth: 1, strokeDasharray: '3 2' },
+            markerEnd: {
+              type: 'arrowclosed' as const,
+              color: 'white',
+              width: 10,
+              height: 10,
+            },
+            animated: false,
+          });
+        }
       });
     }
 

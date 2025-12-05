@@ -29,7 +29,7 @@ export function extractResponseMessage(props: {
 
   let messages: ExtractedResponseMessage[] | null = null;
   let finish_reason: string | null = null;
-  const tool_calls = response?.tool_calls || null;
+  let tool_calls: any[] | null = response?.tool_calls || null;
 
   // Extract from response.choices (OpenAI format)
   const choices: any[] | null = response?.choices || null;
@@ -90,6 +90,9 @@ export function extractResponseMessage(props: {
       content: response.content,
       role: (response.role as ExtractedResponseMessage['role']) || 'assistant',
     }];
+  }
+  if(!tool_calls && messages?.length === 1 && messages[0].tool_calls) {
+    tool_calls = messages[0].tool_calls;
   }
 
   return {

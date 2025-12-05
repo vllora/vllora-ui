@@ -1,14 +1,18 @@
 import { Handle, Position } from "@xyflow/react";
 import { NodeType } from "../types";
 import { getNodeIcon, getRoleStyle } from "../utils";
+import { extractResponseMessage } from "@/utils/extractResponseMessage";
 
-export const OutputNode = ({ data }: { data: Record<string, unknown> }) => {
+export const OutputNode = ({ data }: { data: Record<string, any> }) => {
   const nodeType = data.nodeType as NodeType;
   const label = data.label as string;
-  const count = data.count as number | undefined;
   const preview = data.preview as string | undefined;
   const roleStyle = getRoleStyle(nodeType);
-
+  const hasToolCalls = data.hasToolCalls as boolean | undefined;
+  const rawResponse = data.rawResponse
+  const { finish_reason } = rawResponse ? extractResponseMessage({
+    responseObject: rawResponse,
+  }) : {};
   // Get truncated preview text
   const getPreviewText = () => {
     if (!preview) return null;
@@ -19,19 +23,29 @@ export const OutputNode = ({ data }: { data: Record<string, unknown> }) => {
   const previewText = getPreviewText();
 
   return (
-    <div className={`relative ${roleStyle.bgColor} border ${roleStyle.borderColor} rounded-md min-w-[160px] max-w-[200px] shadow-sm cursor-pointer hover:brightness-110 transition-all`}>
+    <div className={`relative ${roleStyle.bgColor} border ${roleStyle.borderColor} rounded-md min-w-[160px] shadow-sm cursor-pointer hover:brightness-110 transition-all`}>
       <Handle type="target" position={Position.Left} className="!bg-[#30363d] !w-2 !h-2 !border-0 !left-[0px]" />
-      <div className="px-3 py-2.5">
-        <div className="flex items-center gap-2">
-          <span className={roleStyle.textColor}>{getNodeIcon(nodeType)}</span>
-          <span className={`text-xs font-medium ${roleStyle.textColor || 'text-zinc-200'}`}>{label}</span>
-          {count && count > 1 && (
-            <span className="text-xs text-zinc-500">×{count}</span>
-          )}
+      {hasToolCalls && (
+        <Handle type="source" id="bottom" position={Position.Bottom} className="!bg-[#30363d] !w-2 !h-2 !border-0" />
+      )}
+      <div className="px-3 py-2.5 flex flex-col justify.">
+        <div className="flex items-center gap-2 justify-between">
+          <div className="flex gap-2 items-center ">
+            <span className={roleStyle.textColor}>{getNodeIcon(nodeType)}</span>
+            <span className={`text-xs font-medium ${roleStyle.textColor || 'text-zinc-200'}`}>{label}</span>
+          </div>
         </div>
+
         {previewText && (
-          <div className="mt-1.5 text-xs text-zinc-500 truncate">
+          <div className="mt-1.5 text-xs text-left text-zinc-500 truncate">
             {previewText}
+          </div>
+        )}
+        {!previewText && finish_reason && (
+          <div className="mt-1.5 text-left">
+            <span className="inline-flex items-start px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-700/50 text-zinc-300">
+              {finish_reason}
+            </span>
           </div>
         )}
       </div>

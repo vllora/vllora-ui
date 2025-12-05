@@ -3,8 +3,6 @@ import { ProviderIcon } from "@/components/Icons/ProviderIcons";
 
 export const ModelNode = ({ data }: { data: Record<string, unknown> }) => {
   const label = data.label as string;
-  const finishReason = data.finishReason as string | undefined;
-
   // Parse provider and model name from label (e.g., "openai/gpt-4.1-mini")
   const hasProvider = label?.includes('/');
   const providerName = hasProvider ? label.split('/')[0] : null;
@@ -23,12 +21,6 @@ export const ModelNode = ({ data }: { data: Record<string, unknown> }) => {
           )}
           <span className="text-sm font-medium text-zinc-200 truncate max-w-[140px]">{modelName}</span>
         </div>
-        {finishReason && (
-          <div className="mt-2 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-pink-500"></span>
-            <span className="text-xs text-zinc-400">{finishReason}</span>
-          </div>
-        )}
       </div>
     </div>
   );
