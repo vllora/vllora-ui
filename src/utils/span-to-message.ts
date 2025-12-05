@@ -422,7 +422,7 @@ export function extractMessagesFromSpanById(
   if (apiInvokeSpan) {
     let inputMessageFromApiInvokeSpan = extractMessageFromApiInvokeSpan({
       span: apiInvokeSpan,
-      excludeToolInvokeMessage: excludeToolInvokeMessage,
+      excludeResponseToolInvokeMessage: excludeToolInvokeMessage,
       excludeResponseMessage: false,
     });
     inputMessageFromApiInvokeSpan = inputMessageFromApiInvokeSpan.map((m) => {
@@ -440,12 +440,12 @@ export function extractMessagesFromSpanById(
 
 export const extractMessageFromApiInvokeSpan = (props: {
   span: Span;
-  excludeToolInvokeMessage?: boolean;
+  excludeResponseToolInvokeMessage?: boolean;
   excludeResponseMessage?: boolean;
 }): Message[] => {
   const {
     span,
-    excludeToolInvokeMessage = false,
+    excludeResponseToolInvokeMessage: excludeToolInvokeMessage = false,
     excludeResponseMessage = false,
   } = props;
   if (span.operation_name !== "api_invoke") {

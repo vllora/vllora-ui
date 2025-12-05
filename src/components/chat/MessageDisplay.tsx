@@ -12,7 +12,7 @@ import { sanitizeSchema } from '@/utils/sanitizeSchema';
 import { JsonViewer } from './traces/TraceRow/span-info/JsonViewer';
 
 interface MessageDisplayProps {
-  message: string;
+  message: string | any[];
 }
 
 const tryParseJson = (str: string) => {
@@ -27,7 +27,7 @@ export const MessageDisplay: React.FC<MessageDisplayProps> = ({ message }) => {
   return <BaseMessageDisplay message={message} />;
 };
 
-const BaseMessageDisplay: React.FC<{ message: string }> = ({ message }) => {
+const BaseMessageDisplay: React.FC<{ message: string | any[] }> = ({ message }) => {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm, behead, remarkFlexibleParagraphs]}
@@ -299,7 +299,7 @@ const BaseMessageDisplay: React.FC<{ message: string }> = ({ message }) => {
         },
       }}
     >
-      {message}
+      {typeof message === 'string' ? message : JSON.stringify(message)}
     </ReactMarkdown>
   );
 };

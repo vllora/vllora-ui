@@ -166,7 +166,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
 
 
   const selectedSpan = useMemo(() => {
-    return selectedSpanId ? spansOfSelectedRun.find((s: Span) => s.span_id === selectedSpanId) : undefined;
+    return selectedSpanId && spansOfSelectedRun ? spansOfSelectedRun.find((s: Span) => s.span_id === selectedSpanId) : undefined;
   }, [selectedSpanId, spansOfSelectedRun]);
 
   const clearAll = useCallback(() => {
