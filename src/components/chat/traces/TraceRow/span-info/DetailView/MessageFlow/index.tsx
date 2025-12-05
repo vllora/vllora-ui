@@ -148,6 +148,7 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
           label: toolName,
           nodeType: 'tools',
           preview: toolDescription,
+          toolInfo: tool
         },
       });
 

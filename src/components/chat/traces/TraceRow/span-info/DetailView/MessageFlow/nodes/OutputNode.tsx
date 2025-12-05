@@ -1,7 +1,7 @@
 import { Handle, Position } from "@xyflow/react";
 import { NodeType } from "../types";
 import { getNodeIcon, getRoleStyle } from "../utils";
-import { NodeContentPreview } from "./NodeContentPreview";
+import { StringPreview } from "./StringPreview";
 
 export const OutputNode = ({ data }: { data: Record<string, unknown> }) => {
   const nodeType = data.nodeType as NodeType;
@@ -11,8 +11,8 @@ export const OutputNode = ({ data }: { data: Record<string, unknown> }) => {
   const roleStyle = getRoleStyle(nodeType);
 
   return (
-    <div className={`${roleStyle.bgColor} border ${roleStyle.borderColor} rounded-md min-w-[160px] max-w-[200px] shadow-sm`}>
-      <Handle type="target" position={Position.Left} className="!bg-[#30363d] !w-2 !h-2 !border-0" />
+    <div className={`relative ${roleStyle.bgColor} border ${roleStyle.borderColor} rounded-md min-w-[160px] max-w-[200px] shadow-sm`}>
+      <Handle type="target" position={Position.Left} className="!bg-[#30363d] !w-2 !h-2 !border-0 !left-[0px]" />
       <div className="px-3 py-2.5">
         <div className="flex items-center gap-2">
           <span className={roleStyle.textColor}>{getNodeIcon(nodeType)}</span>
@@ -21,7 +21,7 @@ export const OutputNode = ({ data }: { data: Record<string, unknown> }) => {
             <span className="text-xs text-zinc-500">×{count}</span>
           )}
         </div>
-        {preview && <NodeContentPreview content={preview} />}
+        {preview && <StringPreview content={preview} />}
       </div>
     </div>
   );
