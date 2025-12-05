@@ -1,11 +1,9 @@
 import { Handle, Position } from "@xyflow/react";
-import { getNodeIcon, getIconColor } from "../utils";
 import { ProviderIcon } from "@/components/Icons/ProviderIcons";
 
 export const ModelNode = ({ data }: { data: Record<string, unknown> }) => {
   const label = data.label as string;
   const finishReason = data.finishReason as string | undefined;
-  const iconColor = getIconColor('model');
 
   // Parse provider and model name from label (e.g., "openai/gpt-4.1-mini")
   const hasProvider = label?.includes('/');
@@ -21,7 +19,7 @@ export const ModelNode = ({ data }: { data: Record<string, unknown> }) => {
           {providerName ? (
             <ProviderIcon provider_name={providerName} className="w-5 h-5" />
           ) : (
-            <span className={iconColor}>{getNodeIcon('model')}</span>
+            <ProviderIcon provider_name={'langdb'} className="w-5 h-5" />
           )}
           <span className="text-sm font-medium text-zinc-200 truncate max-w-[140px]">{modelName}</span>
         </div>
