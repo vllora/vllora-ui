@@ -1,4 +1,5 @@
-import React, { useMemo, useState, useCallback, useRef, useEffect } from "react";
+import React, { Suspense, useMemo, useState, useCallback, useRef, useEffect } from "react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import {
   Dialog,
   DialogContent,
@@ -20,6 +21,7 @@ import "@xyflow/react/dist/style.css";
 
 import { FlowDialogProps, NodeType } from "./types";
 import { nodeTypes } from "./nodes";
+import { edgeTypes } from "./edges";
 import { getEdgeColor } from "./utils";
 import { extractResponseMessage } from "@/utils/extractResponseMessage";
 import { DetailPanel } from "./DetailPanel";
@@ -88,7 +90,7 @@ const flowStyles = `
   }
 `;
 
-export const FlowDialog: React.FC<FlowDialogProps> = ({
+const FlowDialogContent: React.FC<FlowDialogProps> = ({
   rawRequest,
   rawResponse,
 }) => {
@@ -218,9 +220,6 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
 
       inputYOffset += inputSpacing;
     });
-
-    console.log('==== toolNameToNodeId', toolNameToNodeId)
-
     // Calculate model position (centered vertically)
     const totalInputHeight = Math.max(inputYOffset - inputSpacing, 0);
     const modelY = totalInputHeight / 2;
@@ -237,13 +236,9 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
       },
     });
 
-    // Output nodes - calculate total output count first for centering
-    const outputSpacing = 70;
+    // Output nodes
     const hasResponse = extractedResponse.messages && extractedResponse.messages.length > 0;
     const hasToolCalls = extractedResponse.tool_calls && extractedResponse.tool_calls.length > 0;
-    const outputCount = (hasResponse ? 1 : 0) + (hasToolCalls ? 1 : 0);
-    const totalOutputHeight = Math.max((outputCount - 1) * outputSpacing, 0);
-    let outputYOffset = modelY - totalOutputHeight / 2;
 
     if (hasResponse) {
       const responseContent = extractedResponse.messages
@@ -252,7 +247,7 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
       flowNodes.push({
         id: 'response',
         type: 'output',
-        position: { x: 550, y: outputYOffset },
+        position: { x: 550, y: modelY },
         data: {
           label: 'Response',
           nodeType: 'response',
@@ -270,7 +265,6 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
         style: { stroke: getEdgeColor('model'), strokeWidth: 2 },
         animated: true,
       });
-      outputYOffset += outputSpacing;
     }
 
     // Create edges from response to matching tool definition inputs when there are tool_calls
@@ -285,7 +279,8 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
             sourceHandle: 'bottom',
             target: targetNodeId,
             targetHandle: 'bottom',
-            type: 'smoothstep',
+            type: 'offsetSmoothStep',
+            data: { offset: 20 + index * 20 },
             label: 'require invoke',
             labelStyle: { fill: 'white', fontSize: 10 },
             labelBgStyle: { fill: 'transparent', fillOpacity: 1 },
@@ -401,13 +396,15 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
               nodes={nodesWithSelection}
               edges={edges}
               nodeTypes={nodeTypes}
+              edgeTypes={edgeTypes}
               onNodeClick={onNodeClick}
-              onPaneClick={onPaneClick}
+              // onPaneClick={onPaneClick}
               onInit={(instance) => { reactFlowInstance.current = instance; }}
               fitView
-              fitViewOptions={{ padding: 0.4 }}
+              nodesDraggable={true}
+              fitViewOptions={{ padding: 1 }}
               proOptions={{ hideAttribution: true }}
-              nodesConnectable={false}
+              nodesConnectable={true}
               elementsSelectable={true}
             >
               <Controls
@@ -419,7 +416,7 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
 
           {/* Resize Handle */}
           <div
-            className="h-1 cursor-row-resize bg-[#30363d] hover:bg-[#0078d4] transition-colors"
+            className="h-[2px] cursor-row-resize bg-[#30363d] hover:bg-[rgb(var(--theme-500))] transition-colors"
             onMouseDown={handleResizeStart}
           />
 
@@ -430,5 +427,22 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
         </div>
       </DialogContent>
     </Dialog>
+  );
+};
+
+// Wrapper with ErrorBoundary and Suspense to prevent crashes
+export const FlowDialog: React.FC<FlowDialogProps> = (props) => {
+  return (
+    <ErrorBoundary
+      fallback={
+        <div className="text-xs text-zinc-500 px-2">
+          Flow view unavailable
+        </div>
+      }
+    >
+      <Suspense fallback={null}>
+        <FlowDialogContent {...props} />
+      </Suspense>
+    </ErrorBoundary>
   );
 };

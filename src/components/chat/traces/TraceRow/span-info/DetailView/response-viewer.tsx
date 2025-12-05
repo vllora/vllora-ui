@@ -137,7 +137,7 @@ const ResponseUIView = ({ response, otherLevelMessages }: { response: any, other
                 />
             )}
             {/* Tool calls */}
-            {tool_calls && responseToolCalls && responseToolCalls.length > 0 && (
+            {tool_calls && responseToolCalls && responseToolCalls.length > 0 && messages.length !== responseToolCalls.length && (
                 <ToolDefinitionsViewer
                     toolCalls={responseToolCalls}
                     collapsed={toolCallsCollapsed}
