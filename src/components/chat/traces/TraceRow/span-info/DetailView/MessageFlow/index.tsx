@@ -42,8 +42,30 @@ const flowStyles = `
     box-shadow: none !important;
   }
   .react-flow__node.selected > div {
-    outline: 2px solid #60a5fa !important;
-    outline-offset: 2px;
+    position: relative;
+  }
+  .react-flow__node.selected > div::before {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 8px;
+    padding: 2px;
+    background: conic-gradient(from var(--angle), rgb(var(--theme-500)), transparent, rgb(var(--theme-500)));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: rotate-gradient 2s linear infinite;
+  }
+  @property --angle {
+    syntax: '<angle>';
+    initial-value: 0deg;
+    inherits: false;
+  }
+  @keyframes rotate-gradient {
+    to {
+      --angle: 360deg;
+    }
   }
   .react-flow__handle {
     background: #30363d !important;
