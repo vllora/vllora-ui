@@ -89,7 +89,7 @@ export const SystemMessage: React.FC<{ msg: Message }> = ({ msg }) => {
                   }
                   if (msg.content) {
                     navigator.clipboard
-                      .writeText(msg.content)
+                      .writeText(msg.content as string)
                       .then(() => {
                         setCopied(true);
                         setTimeout(() => setCopied(false), 2000);
@@ -121,7 +121,7 @@ export const SystemMessage: React.FC<{ msg: Message }> = ({ msg }) => {
           </div>
         ) : msg.content ? (
           <div className="px-4 py-3">
-            <TextContent content={msg.content} />
+            <TextContent content={msg.content as string} />
           </div>
         ) : null}
       </div>

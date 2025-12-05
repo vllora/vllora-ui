@@ -398,7 +398,7 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes}
               onNodeClick={onNodeClick}
-              // onPaneClick={onPaneClick}
+              onPaneClick={onPaneClick}
               onInit={(instance) => { reactFlowInstance.current = instance; }}
               fitView
               nodesDraggable={true}

@@ -8,7 +8,7 @@ interface ModelPanelProps {
   requestJson?: Record<string, any>;
 }
 
-export const ModelPanel = ({ label, finishReason, requestJson }: ModelPanelProps) => {
+export const ModelPanel = ({ label, requestJson }: ModelPanelProps) => {
   // Parse provider and model name from label (e.g., "openai/gpt-4.1-mini")
   const hasProvider = label?.includes('/');
   const providerName = hasProvider ? label.split('/')[0] : null;
