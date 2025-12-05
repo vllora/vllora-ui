@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useRef } from "react";
+import React, { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -216,6 +216,7 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
       data: {
         label: modelInvoked || 'Model',
         finishReason: extractedResponse.finish_reason,
+        requestJson: rawRequest,
       },
     });
 
@@ -240,6 +241,7 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
           nodeType: 'response',
           count: extractedResponse.messages.length,
           preview: responseContent,
+          rawResponse
         },
       });
       flowEdges.push({
@@ -317,6 +319,20 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
   }, []);
+
+  // Select model node by default
+  useEffect(() => {
+    if (!selectedNode) {
+      const modelNode = nodes.find(n => n.id === 'model');
+      if (modelNode) {
+        setSelectedNode({
+          id: modelNode.id,
+          type: modelNode.type || 'model',
+          data: modelNode.data as Record<string, any>,
+        });
+      }
+    }
+  }, [nodes, selectedNode]);
 
   // Add selected state to nodes
   const nodesWithSelection = useMemo(() => {

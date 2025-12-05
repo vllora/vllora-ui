@@ -1,9 +1,11 @@
 import { Message } from "@/types/chat";
 import { MarkdownViewer } from "../markdown-viewer";
-import { ContentArrayDisplay } from "@/components/chat/messages/ContentArrayDisplay";
-import { JsonViewer } from "@/components/chat/traces/TraceRow/span-info/JsonViewer";
 import { NodeType } from "./types";
 import { getNodeIcon, getRoleStyle } from "./utils";
+import { ToolInfoPanel } from "./DetailPanel/ToolInfoPanel";
+import { MessagePanel } from "./DetailPanel/MessagePanel";
+import { ResponsePanel } from "./DetailPanel/ResponsePanel";
+import { ModelPanel } from "./DetailPanel/ModelPanel";
 
 interface DetailPanelProps {
   selectedNode: {
@@ -22,6 +24,7 @@ export const DetailPanel = ({ selectedNode }: DetailPanelProps) => {
     );
   }
 
+
   const { data, type } = selectedNode;
   const nodeType = data.nodeType as NodeType;
   const label = data.label as string;
@@ -30,72 +33,45 @@ export const DetailPanel = ({ selectedNode }: DetailPanelProps) => {
   // Handle different node types
   if (type === 'model') {
     return (
-      <div className="h-full overflow-y-auto p-4">
-        <div className="flex items-center gap-2 mb-4">
-          <span className={roleStyle.textColor}>{getNodeIcon('model')}</span>
-          <span className="text-sm font-medium text-zinc-200">{label}</span>
-        </div>
-        {data.finishReason && (
-          <div className="text-xs text-zinc-400">
-            <span className="font-medium">Finish Reason:</span> {data.finishReason}
-          </div>
-        )}
-      </div>
+      <ModelPanel
+        label={label}
+        finishReason={data.finishReason as string | undefined}
+        requestJson={data.requestJson as Record<string, any> | undefined}
+      />
     );
   }
 
   // Tool definition node
   if (data.toolInfo) {
-    const toolInfo = data.toolInfo as Record<string, any>;
-    const description = toolInfo.function?.description || toolInfo.description || '';
-    const parameters = toolInfo.function?.parameters || toolInfo.parameters;
-    const toolName = toolInfo.function?.name || toolInfo.name || '';
-
     return (
-      <div className="h-full overflow-y-auto p-4 space-y-4">
-        <div className="flex items-center gap-2">
-          <span className={roleStyle.textColor}>{getNodeIcon(nodeType)}</span>
-          <span className="text-sm font-medium text-zinc-200">{toolName || label}</span>
-        </div>
-        {description && (
-          <div>
-            <div className="text-xs font-medium text-zinc-400 mb-1">Description</div>
-            <div className="text-sm text-zinc-300 whitespace-pre-wrap">{description}</div>
-          </div>
-        )}
-        {parameters && (
-          <div>
-            <div className="text-xs font-medium text-zinc-400 mb-1">Parameters</div>
-            <div className="text-xs">
-              <JsonViewer data={parameters} collapsed={10} />
-            </div>
-          </div>
-        )}
-      </div>
+      <ToolInfoPanel
+        toolInfo={data.toolInfo as Record<string, any>}
+        nodeType={nodeType}
+        label={label}
+      />
     );
   }
 
   // Message node (input/output with rawMessage or preview)
   if (data.rawMessage) {
-    const rawMessage = data.rawMessage as Message;
-    const typeOfContent = typeof rawMessage.content;
-    const isStringContent = typeOfContent === 'string';
-    const stringContent = isStringContent ? rawMessage.content as string : undefined;
-    const arrayContent = !isStringContent && Array.isArray(rawMessage.content) ? rawMessage.content as any[] : undefined;
-
     return (
-      <div className="h-full overflow-y-auto p-4">
-        <div className="flex items-center gap-2 mb-4">
-          <span className={roleStyle.textColor}>{getNodeIcon(nodeType)}</span>
-          <span className="text-sm font-medium text-zinc-200">{label}</span>
-        </div>
-        {arrayContent && <ContentArrayDisplay contentArray={arrayContent} />}
-        {!arrayContent && stringContent && (
-          <div className="text-foreground leading-relaxed whitespace-normal break-words text-sm">
-            <MarkdownViewer message={stringContent} />
-          </div>
-        )}
-      </div>
+      <MessagePanel
+        rawMessage={data.rawMessage as Message}
+        nodeType={nodeType}
+        label={label}
+      />
+    );
+  }
+
+  // Response node with rawResponse
+  if (data.rawResponse) {
+    return (
+      <ResponsePanel
+        rawResponse={data.rawResponse as Record<string, any>}
+        nodeType={nodeType}
+        label={label}
+        count={data.count as number | undefined}
+      />
     );
   }
 

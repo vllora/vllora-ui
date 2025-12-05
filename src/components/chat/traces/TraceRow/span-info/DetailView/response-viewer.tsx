@@ -165,12 +165,10 @@ const ResponseUIView = ({ response, otherLevelMessages }: { response: any, other
 export const ResponseViewer = (props: {
     response: any,
     otherLevelMessages?: string[],
-    viewMode?: 'ui' | 'raw'
+    viewMode?: 'ui' | 'raw',
+    hideTitleOutput?: boolean,
 }) => {
-    const { response, otherLevelMessages, viewMode = 'ui' } = props;
-    console.log('==== ResponseViewer  ', response)
-    console.log('==== ResponseViewer  typeof response', typeof response)
-
+    const { response, otherLevelMessages, viewMode = 'ui', hideTitleOutput = false } = props;
     if (typeof response === 'string') {
         return <SingleMessage role="assistant" content={response} />;
     }
@@ -184,14 +182,18 @@ export const ResponseViewer = (props: {
     if (!hasExtractableResponse(response)) {
         return null;
     }
-    return (<div className="relative flex flex-col gap-4 rounded-lg border border-border p-4 pt-6 bg-black">
-        <div className="absolute -top-[10px] left-0 right-0 flex justify-center items-center gap-2">
-            <span className="px-2 rounded bg-border text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-                Output
-            </span>
+    return (
+        <div className="relative flex flex-col gap-4 rounded-lg border border-border p-4 pt-6 bg-black">
+            {!hideTitleOutput && (
+                <div className="absolute -top-[10px] left-0 right-0 flex justify-center items-center gap-2">
+                    <span className="px-2 rounded bg-border text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                        Output
+                    </span>
+                </div>
+            )}
+            <div className="flex flex-col gap-6 overflow-y-auto text-xs">
+                <ResponseUIView response={response} otherLevelMessages={otherLevelMessages} />
+            </div>
         </div>
-        <div className="flex flex-col gap-6 overflow-y-auto text-xs">
-            <ResponseUIView response={response} otherLevelMessages={otherLevelMessages} />
-        </div>
-    </div>);
+    );
 }
