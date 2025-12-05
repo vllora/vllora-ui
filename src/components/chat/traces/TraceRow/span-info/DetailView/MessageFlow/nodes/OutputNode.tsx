@@ -1,7 +1,6 @@
 import { Handle, Position } from "@xyflow/react";
 import { NodeType } from "../types";
 import { getNodeIcon, getRoleStyle } from "../utils";
-import { StringPreview } from "./StringPreview";
 
 export const OutputNode = ({ data }: { data: Record<string, unknown> }) => {
   const nodeType = data.nodeType as NodeType;
@@ -10,8 +9,17 @@ export const OutputNode = ({ data }: { data: Record<string, unknown> }) => {
   const preview = data.preview as string | undefined;
   const roleStyle = getRoleStyle(nodeType);
 
+  // Get truncated preview text
+  const getPreviewText = () => {
+    if (!preview) return null;
+    const firstLine = preview.split('\n')[0];
+    return firstLine.slice(0, 25) + (firstLine.length > 25 ? '...' : '');
+  };
+
+  const previewText = getPreviewText();
+
   return (
-    <div className={`relative ${roleStyle.bgColor} border ${roleStyle.borderColor} rounded-md min-w-[160px] max-w-[200px] shadow-sm`}>
+    <div className={`relative ${roleStyle.bgColor} border ${roleStyle.borderColor} rounded-md min-w-[160px] max-w-[200px] shadow-sm cursor-pointer hover:brightness-110 transition-all`}>
       <Handle type="target" position={Position.Left} className="!bg-[#30363d] !w-2 !h-2 !border-0 !left-[0px]" />
       <div className="px-3 py-2.5">
         <div className="flex items-center gap-2">
@@ -21,7 +29,11 @@ export const OutputNode = ({ data }: { data: Record<string, unknown> }) => {
             <span className="text-xs text-zinc-500">×{count}</span>
           )}
         </div>
-        {preview && <StringPreview content={preview} />}
+        {previewText && (
+          <div className="mt-1.5 text-xs text-zinc-500 truncate">
+            {previewText}
+          </div>
+        )}
       </div>
     </div>
   );

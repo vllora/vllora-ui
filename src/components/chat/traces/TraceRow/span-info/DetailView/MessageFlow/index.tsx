@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState, useCallback, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -13,6 +13,8 @@ import {
   Node,
   Edge,
   Controls,
+  NodeMouseHandler,
+  ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -20,6 +22,7 @@ import { FlowDialogProps, NodeType } from "./types";
 import { nodeTypes } from "./nodes";
 import { getEdgeColor } from "./utils";
 import { extractResponseMessage } from "@/utils/extractResponseMessage";
+import { DetailPanel } from "./DetailPanel";
 
 export type { FlowDialogProps, NodeType } from "./types";
 
@@ -37,6 +40,10 @@ const flowStyles = `
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
+  }
+  .react-flow__node.selected > div {
+    outline: 2px solid #60a5fa !important;
+    outline-offset: 2px;
   }
   .react-flow__handle {
     background: #30363d !important;
@@ -63,6 +70,17 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
   rawRequest,
   rawResponse,
 }) => {
+  const [selectedNode, setSelectedNode] = useState<{
+    id: string;
+    type: string;
+    data: Record<string, any>;
+  } | null>(null);
+  const [graphHeight, setGraphHeight] = useState(40); // percentage
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isResizing = useRef(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const reactFlowInstance = useRef<ReactFlowInstance<any, any> | null>(null);
+
   const { nodes, edges } = useMemo(() => {
     const flowNodes: Node[] = [];
     const flowEdges: Edge[] = [];
@@ -238,6 +256,54 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
     return { nodes: flowNodes, edges: flowEdges };
   }, [rawRequest, rawResponse]);
 
+  const onNodeClick: NodeMouseHandler = useCallback((_event, node) => {
+    setSelectedNode({
+      id: node.id,
+      type: node.type || '',
+      data: node.data as Record<string, any>,
+    });
+  }, []);
+
+  const onPaneClick = useCallback(() => {
+    setSelectedNode(null);
+  }, []);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing.current || !containerRef.current) return;
+
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const newHeight = ((e.clientY - containerRect.top) / containerRect.height) * 100;
+
+      // Clamp between 20% and 80%
+      setGraphHeight(Math.min(80, Math.max(20, newHeight)));
+    };
+
+    const handleMouseUp = () => {
+      isResizing.current = false;
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      // Fit view after resize ends
+      setTimeout(() => {
+        reactFlowInstance.current?.fitView({ padding: 0.4 });
+      }, 50);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, []);
+
+  // Add selected state to nodes
+  const nodesWithSelection = useMemo(() => {
+    return nodes.map(node => ({
+      ...node,
+      selected: node.id === selectedNode?.id,
+    }));
+  }, [nodes, selectedNode?.id]);
+
   const hasData = nodes.length > 1; // At least model + one other node
 
   if (!hasData) {
@@ -256,7 +322,7 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
           <span className="text-xs">Flow</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-[1200px] w-[90vw] h-[80vh] p-0 overflow-hidden border-[#30363d]">
+      <DialogContent className="max-w-[90vw] w-[90vw] h-[90vh] p-0 overflow-hidden border-[#30363d] flex flex-col">
         <style>{flowStyles}</style>
         <DialogHeader className="px-5 pt-4 pb-3 border-b border-[#30363d]">
           <DialogTitle className="flex items-center gap-2 text-zinc-200">
@@ -265,27 +331,39 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 h-[calc(80vh-60px)]">
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            nodeTypes={nodeTypes}
-            fitView
-            fitViewOptions={{ padding: 0.4 }}
-            proOptions={{ hideAttribution: true }}
-            // nodesDraggable={true}
-            // nodesConnectable={false}
-            // elementsSelectable={false}
-            // panOnDrag={true}
-            // zoomOnScroll={true}
-            // defaultEdgeOptions={{ type: 'default' }}
-          >
-            {/* <Background color="#21262d" gap={20} size={1} /> */}
-            <Controls
-              showInteractive={true}
-              className="!border-[#30363d] !shadow-none [&>button]:!bg-[#161b22] [&>button]:!border-[#30363d] [&>button]:!text-zinc-400 [&>button:hover]:!bg-[#21262d]"
-            />
-          </ReactFlow>
+        <div ref={containerRef} className="flex flex-col flex-1 overflow-hidden">
+          {/* Graph Section */}
+          <div style={{ height: `${graphHeight}%` }} className="min-h-0">
+            <ReactFlow
+              nodes={nodesWithSelection}
+              edges={edges}
+              nodeTypes={nodeTypes}
+              onNodeClick={onNodeClick}
+              onPaneClick={onPaneClick}
+              onInit={(instance) => { reactFlowInstance.current = instance; }}
+              fitView
+              fitViewOptions={{ padding: 0.4 }}
+              proOptions={{ hideAttribution: true }}
+              nodesConnectable={false}
+              elementsSelectable={true}
+            >
+              <Controls
+                showInteractive={false}
+                className="!border-[#30363d] !shadow-none [&>button]:!bg-[#161b22] [&>button]:!border-[#30363d] [&>button]:!text-zinc-400 [&>button:hover]:!bg-[#21262d]"
+              />
+            </ReactFlow>
+          </div>
+
+          {/* Resize Handle */}
+          <div
+            className="h-1 cursor-row-resize bg-[#30363d] hover:bg-[#0078d4] transition-colors"
+            onMouseDown={handleResizeStart}
+          />
+
+          {/* Detail Panel Section */}
+          <div className="flex-1 overflow-hidden min-h-0">
+            <DetailPanel selectedNode={selectedNode} />
+          </div>
         </div>
       </DialogContent>
     </Dialog>

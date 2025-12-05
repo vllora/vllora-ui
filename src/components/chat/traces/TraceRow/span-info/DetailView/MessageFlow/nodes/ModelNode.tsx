@@ -13,7 +13,7 @@ export const ModelNode = ({ data }: { data: Record<string, unknown> }) => {
   const modelName = hasProvider ? label.split('/').slice(1).join('/') : label;
 
   return (
-    <div className="relative bg-[#161b22] border border-[#30363d] rounded-md min-w-[180px] shadow-sm">
+    <div className="relative bg-[#161b22] border border-[#30363d] rounded-md min-w-[180px] shadow-sm cursor-pointer hover:brightness-110 transition-all">
       <Handle type="target" position={Position.Left} className="!bg-[#30363d] !w-2 !h-2 !border-0 !left-[0px]" />
       <Handle type="source" position={Position.Right} className="!bg-[#30363d] !w-2 !h-2 !border-0 !right-[0px]" />
       <div className="px-4 py-3">
