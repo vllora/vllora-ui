@@ -35,15 +35,20 @@ export const InputNode = ({ data }: { data: Record<string, unknown> }) => {
   const isCalledInResponse = data.isCalledInResponse as boolean | undefined;
 
   return (
-    <div className={`relative ${roleStyle.bgColor} border ${roleStyle.borderColor} rounded-md min-w-[160px] max-w-[200px] shadow-sm cursor-pointer hover:brightness-110 transition-all`}>
+    <div className={`relative ${roleStyle.bgColor} border ${roleStyle.borderColor} rounded-md min-w-[170px] max-w-[250px] shadow-sm cursor-pointer hover:brightness-110 transition-all`}>
       <Handle type="source" position={Position.Right} className="!bg-[#30363d] !w-2 !h-2 !border-0 !right-[0px]" />
       {isCalledInResponse && (
         <Handle type="target" id="bottom" position={Position.Bottom} className="!bg-[#30363d] !w-2 !h-2 !border-0" />
       )}
       <div className="px-3 py-2.5">
-        <div className="flex items-center gap-2">
-          <span className={roleStyle.textColor}>{getNodeIcon(nodeType)}</span>
-          <span className={`text-xs font-medium ${roleStyle.textColor || 'text-zinc-200'}`}>{label}</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className={`flex-shrink-0 ${roleStyle.textColor}`}>{getNodeIcon(nodeType)}</span>
+          <span
+            className={`text-xs font-medium truncate ${roleStyle.textColor || 'text-zinc-200'}`}
+            title={label}
+          >
+            {label}
+          </span>
         </div>
         {previewText && (
           <div className="mt-1.5 text-left text-xs text-zinc-500 truncate">

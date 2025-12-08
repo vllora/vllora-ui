@@ -114,7 +114,7 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
     const modelInvoked: string = rawRequest?.model || 'Model';
     const extractedResponse = extractResponseMessage({ responseObject: rawResponse });
 
-    const inputSpacing = 70;
+    const inputSpacing = 100;
     let inputYOffset = 0;
 
     // Create individual nodes for each message in order
@@ -228,7 +228,7 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
     flowNodes.push({
       id: 'model',
       type: 'model',
-      position: { x: 300, y: modelY },
+      position: { x: 400, y: modelY },
       data: {
         label: modelInvoked || 'Model',
         finishReason: extractedResponse.finish_reason,
@@ -247,7 +247,7 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
       flowNodes.push({
         id: 'response',
         type: 'output',
-        position: { x: 550, y: modelY },
+        position: { x: 750, y: modelY },
         data: {
           label: 'Response',
           nodeType: 'response',
@@ -380,9 +380,9 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
           <span className="text-xs">Flow</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-[90vw] w-[90vw] h-[90vh] p-0 overflow-hidden border-[#30363d] flex flex-col">
+      <DialogContent className="max-w-[90vw] w-[90vw] h-[90vh] p-0 overflow-hidden flex flex-col">
         <style>{flowStyles}</style>
-        <DialogHeader className="px-5 pt-4 pb-3 border-b border-[#30363d]">
+        <DialogHeader className="px-5 pt-4 pb-3 border-b border-border">
           <DialogTitle className="flex items-center gap-2 text-zinc-200">
             <GitBranch className="w-5 h-5" />
             Visual Flow
@@ -409,14 +409,14 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
             >
               <Controls
                 showInteractive={false}
-                className="!border-[#30363d] !shadow-none [&>button]:!bg-[#161b22] [&>button]:!border-[#30363d] [&>button]:!text-zinc-400 [&>button:hover]:!bg-[#21262d]"
+                className="!border-border !shadow-none [&>button]:!bg-[#161b22] [&>button]:!border-[#30363d] [&>button]:!text-zinc-400 [&>button:hover]:!bg-[#21262d]"
               />
             </ReactFlow>
           </div>
 
           {/* Resize Handle */}
           <div
-            className="h-[2px] cursor-row-resize bg-[#30363d] hover:bg-[rgb(var(--theme-500))] transition-colors"
+            className="h-[2px] cursor-row-resize bg-border hover:bg-[rgb(var(--theme-500))] transition-colors"
             onMouseDown={handleResizeStart}
           />
 
