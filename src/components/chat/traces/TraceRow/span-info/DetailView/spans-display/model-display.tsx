@@ -69,6 +69,8 @@ export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelIn
                 rawResponse={raw_response_json}
                 costInfo={costInfo}
                 duration={duration}
+                headers={headers}
+                operation_name={span.operation_name}
             />
             <TooltipProvider>
                 <Tooltip>

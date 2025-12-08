@@ -81,7 +81,9 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
   rawRequest,
   rawResponse,
   duration,
-  costInfo
+  costInfo,
+  headers,
+  operation_name
 }) => {
   const [expandedNodes, setExpandedNodes] = useState<Set<string> | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -225,9 +227,10 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
       type: 'model',
       position: { x: 0, y: 0 }, // Will be set by dagre
       data: {
-        label: modelInvoked || 'Model',
+        modelName:  operation_name ? `${operation_name}/${modelInvoked}` : modelInvoked || 'Model',
         finishReason: extractedResponse.finish_reason,
         requestJson: rawRequest,
+        headers:headers,
         inputHandles: inputNodeIds, // Pass input IDs for dynamic handle creation
       },
     });
@@ -245,7 +248,7 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
     setEdges(layoutedEdges);
 
     // return { nodes: flowNodes, edges: flowEdges };
-  }, [rawRequest, rawResponse, expandedNodes, expandedHeight, nodeWidth]);
+  }, [rawRequest,headers,operation_name, rawResponse, expandedNodes, expandedHeight, nodeWidth]);
 
   // Toggle expand/collapse for a specific node (called from ChevronDown click)
   const handleToggleExpand = useCallback((nodeId: string) => {
