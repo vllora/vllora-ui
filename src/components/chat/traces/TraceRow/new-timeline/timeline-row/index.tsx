@@ -4,6 +4,8 @@ import { TimelineVisualization } from "./timeline-visualization";
 import { SidebarTimelineContent } from "./sidebar-timeline-content";
 import { classNames } from "@/utils/modelUtils";
 import { Span } from "@/types/common-type";
+import { Eye } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 // Base props for timeline content components
 export interface TimelineContentBaseProps {
@@ -40,6 +42,8 @@ export interface TimelineRowProps {
     selectedSpanId?: string;
     onSpanSelect?: (spanId: string, runId: string) => void;
     hoverSpanId?: string;
+    onHoverSpanChange?: (spanId: string | undefined) => void;
+    showHighlightButton?: boolean;
 }
 
 // Main TimelineRow component that uses the sub-components
@@ -61,7 +65,9 @@ export const TimelineRow = (props: TimelineRowProps) => {
         selectedSpanId,
         onSpanSelect,
         hoverSpanId,
-        isInSidebar = true
+        onHoverSpanChange,
+        isInSidebar = true,
+        showHighlightButton = false
     } = props;
     // Common props for timeline content components
     const contentProps = {
@@ -94,6 +100,18 @@ export const TimelineRow = (props: TimelineRowProps) => {
         return "hover:bg-[#151515] border border-transparent !border-l-4 !border-l-transparent";
     }, [span.span_id, selectedSpanId, hoverSpanId]);
     
+    const isCurrentlyHighlighted = hoverSpanId === span.span_id;
+
+    const handleEyeClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+        if (isCurrentlyHighlighted) {
+            onHoverSpanChange?.(undefined);
+        } else {
+            onHoverSpanChange?.(span.span_id);
+        }
+    };
+
     return (
         <div
             key={`span-timeline-row-${span.span_id}`}
@@ -110,7 +128,29 @@ export const TimelineRow = (props: TimelineRowProps) => {
                 }
             }}
         >
-            <div className={classNames("flex w-full divide-x divide-border/50 px-1")}>
+            <div className={classNames(`flex w-full divide-x divide-border/50 ${!showHighlightButton ? "px-1" : ""}`)}>
+                {/* Eye icon for highlighting - only shown in threads tab */}
+                {showHighlightButton && (
+                    <TooltipProvider delayDuration={300}>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <button
+                                    onClick={handleEyeClick}
+                                    className={cn(
+                                        "flex items-center justify-center w-5 h-5 shrink-0 rounded transition-colors self-center",
+                                        "text-muted-foreground/50 hover:text-muted-foreground opacity-0 group-hover:opacity-100"
+                                    )}
+                                >
+                                    <Eye className="w-3 h-3" />
+                                </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">
+                                <p>Find in chat</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                )}
+
                 {/* Render either fullscreen or sidebar content based on mode */}
                 <SidebarTimelineContent {...contentProps} isInSidebar={isInSidebar} />
 

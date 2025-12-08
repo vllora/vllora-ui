@@ -1,6 +1,6 @@
 import { AcademicCapIcon, ArrowsUpDownIcon, CloudIcon, ShieldCheckIcon, ShieldExclamationIcon, WrenchScrewdriverIcon } from "@heroicons/react/24/outline";
 import { ProviderIcon } from "@/components/Icons/ProviderIcons";
-import { tryParseJson } from "@/utils/modelUtils";
+import { tryParseFloat, tryParseJson } from "@/utils/modelUtils";
 import { getColorByType, getClientSDKName, isAgentSpan, isClientSDK, isPromptCachingApplied, isRouterSpan } from "@/utils/graph-utils";
 import { BotIcon, CircleQuestionMarkIcon, ClapperboardIcon, ClipboardCheckIcon, PlayIcon } from "lucide-react";
 import { ArrowsPointingOutIcon } from "@heroicons/react/24/outline"
@@ -534,6 +534,18 @@ export const getTotalUsage = (props: {
     let totalUsageAttributeString = attribute['usage'] as string;
     let totalUsageJson = tryParseJson(totalUsageAttributeString);
     return totalUsageJson?.total_tokens || 0;
+}
+
+export const getCost = (props: {
+    span: Span,
+}) => {
+    const { span } = props;
+    let attribute = span.attribute as any;
+    if (!attribute) return 0;
+    if (!attribute['cost']) return 0;
+    let costAttributeString = attribute['cost'] as string;
+    let costJson = tryParseFloat(costAttributeString);
+    return costJson || 0;
 }
 export const getModelName = (props: {
     span: Span,

@@ -99,3 +99,44 @@ export function flattenSpanHierarchy(spans: Span[]): Span[] {
   spans.forEach(traverse);
   return flat.sort((a, b) => a.start_time_us - b.start_time_us);
 }
+
+/**
+ * Finds a span by its span_id in a flat array of spans
+ *
+ * @param flattenSpans - Flat array of spans to search
+ * @param spanId - The span_id to look for
+ * @returns The span with matching span_id, or undefined if not found
+ *
+ * @example
+ * ```typescript
+ * const span = findSpanById(flattenSpans, 'abc123');
+ * if (span) {
+ *   console.log(span.operation_name);
+ * }
+ * ```
+ */
+export function findSpanById(
+  flattenSpans: Span[],
+  spanId: string
+): Span | undefined {
+  return flattenSpans.find((s) => s.span_id === spanId);
+}
+
+/**
+ * Finds all spans in a flat array that belong to a specific run
+ *
+ * @param flattenSpans - Flat array of spans to search
+ * @param runId - The run_id to filter by
+ * @returns Array of spans with matching run_id
+ *
+ * @example
+ * ```typescript
+ * const runSpans = findSpansByRunId(flattenSpans, 'run-123');
+ * ```
+ */
+export function findSpansByRunId(
+  flattenSpans: Span[],
+  runId: string
+): Span[] {
+  return flattenSpans.filter((s) => s.run_id === runId);
+}

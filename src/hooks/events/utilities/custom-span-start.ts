@@ -1,10 +1,18 @@
-import { CustomEvent, CustomSpanStartEventType } from "@/contexts/project-events/dto";
+import {
+  CustomEvent,
+  CustomSpanStartEventType,
+} from "@/contexts/project-events/dto";
 import { Span } from "@/types/common-type";
 
 export const convertCustomSpanStartToSpan = (
   event: CustomEvent,
   spanStart: CustomSpanStartEventType
 ): Span => {
+  let attributes = spanStart.attributes || {};
+  if (attributes.request && typeof attributes.request === "object") {
+    // have to string request to have same behavior like we do when fetching spans from backend
+    attributes.request = JSON.stringify(attributes.request);
+  }
   return {
     span_id: event.span_id || `span_${Date.now()}`,
     parent_span_id: event.parent_span_id,
@@ -14,7 +22,7 @@ export const convertCustomSpanStartToSpan = (
     trace_id: "",
     start_time_us: event.timestamp * 1000,
     finish_time_us: undefined,
-    attribute: spanStart.attributes || {},
+    attribute: attributes || {},
     isInProgress: true,
   };
 };

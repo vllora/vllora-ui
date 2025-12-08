@@ -113,7 +113,7 @@ export const useMessageSubmission = (props: MessageSubmissionProps) => {
         const chatUrl = getChatCompletionsUrl();
 
         // Build the current message content with files
-        const buildMessageContent = (text: string, files: FileWithPreview[]) => {
+        const buildMessageContent = (text: string | any[], files: FileWithPreview[]) => {
           if (!files || files.length === 0) {
             return text;
           }

@@ -15,12 +15,14 @@ export interface HierarchyRowProps {
     onSpanSelect?: (spanId: string, runId?: string) => void;
     isInSidebar?: boolean;
     hoverSpanId?: string;
+    onHoverSpanChange?: (spanId: string | undefined) => void;
     collapsedSpans?: string[];
     onToggle?: (spanId: string) => void;
+    showHighlightButton?: boolean;
 }
 
 export const HierarchyRow = (props: HierarchyRowProps) => {
-    const { hierarchy, totalDuration, startTime, level, titleWidth: propTitleWidth = TIMELINE_DYNAMIC_TITLE_WIDTH_IN_SIDEBAR, relatedSpans = [], selectedSpanId, onSpanSelect, isInSidebar = true, hoverSpanId, collapsedSpans, onToggle } = props;
+    const { hierarchy, totalDuration, startTime, level, titleWidth: propTitleWidth = TIMELINE_DYNAMIC_TITLE_WIDTH_IN_SIDEBAR, relatedSpans = [], selectedSpanId, onSpanSelect, isInSidebar = true, hoverSpanId, onHoverSpanChange, collapsedSpans, onToggle, showHighlightButton } = props;
     // In ellora-ui, we're always in sidebar mode (chat sidebar)
     const titleWidth: string | number = `${propTitleWidth}px`.replace('pxpx', 'px');
     let root = hierarchy;
@@ -46,8 +48,10 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                             onSpanSelect={onSpanSelect}
                             isInSidebar={isInSidebar}
                             hoverSpanId={hoverSpanId}
+                            onHoverSpanChange={onHoverSpanChange}
                             collapsedSpans={collapsedSpans}
                             onToggle={onToggle}
+                            showHighlightButton={showHighlightButton}
                         />
                     ))}
                 </div>
@@ -101,6 +105,8 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                 onSpanSelect={onSpanSelect}
                 isInSidebar={isInSidebar}
                 hoverSpanId={hoverSpanId}
+                onHoverSpanChange={onHoverSpanChange}
+                showHighlightButton={showHighlightButton}
             />
         );
     }
@@ -125,6 +131,8 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                 onSpanSelect={onSpanSelect}
                 isInSidebar={isInSidebar}
                 hoverSpanId={hoverSpanId}
+                onHoverSpanChange={onHoverSpanChange}
+                showHighlightButton={showHighlightButton}
             />
             {!(collapsedSpans?.includes(root.span_id)) && (
                 <div className="flex flex-col divide-y divide-border/50">
@@ -141,8 +149,10 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                             onSpanSelect={onSpanSelect}
                             isInSidebar={isInSidebar}
                             hoverSpanId={hoverSpanId}
+                            onHoverSpanChange={onHoverSpanChange}
                             collapsedSpans={collapsedSpans}
                             onToggle={(v) => onToggle?.(v)}
+                            showHighlightButton={showHighlightButton}
                         />
                     ))}
                 </div>

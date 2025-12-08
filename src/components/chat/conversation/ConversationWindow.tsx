@@ -10,7 +10,7 @@ import { ModalProvider } from '@/contexts/ModalContext';
 import { ModalManager } from '@/components/modals/ModalManager';
 import { useConversationEvents } from '@/hooks/events/useConversationEvents';
 import { Message } from '@/types/chat';
-import { extractMessageFromApiInvokeSpan } from '@/utils/span-to-message';
+import { extractMessagesFromSpanById } from '@/utils/span-to-message';
 import { McpServerConfig } from '@/services/mcp-api';
 import { ProviderConfigDialog } from '../traces/model-selector/ProviderConfigDialog';
 import { MultiProviderConfigDialog } from '../traces/model-selector/MultiProviderConfigDialog';
@@ -52,7 +52,6 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     setTraceId,
     appendUsage,
     flattenSpans,
-    clearAll,
     selectedModel,
     selectedModelInfo,
     setSelectedProviderForConfig,
@@ -65,7 +64,8 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     handleWarningClick,
     modelConfig,
     setModelConfig,
-    isChatProcessing
+    isChatProcessing,
+    clearAll
   } = ChatWindowConsumer();
   const { app_mode } = CurrentAppConsumer();
 
@@ -79,12 +79,17 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
   }, [setModelConfig, onModelChange]);
 
   useEffect(() => {
-    if(isChatProcessing) return;
-    clearAll();
+    if (isChatProcessing) return;
     if (threadId && !isDraft) {
       refreshSpans();
     }
   }, [threadId, isDraft, refreshSpans, isChatProcessing]);
+
+  useEffect(()=> {
+    if(threadId && !isDraft) {
+      clearAll()
+    }
+  }, [threadId, isDraft])
 
   useConversationEvents({
     currentProjectId: projectId || '',
@@ -221,11 +226,15 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     }
     setCurrentInput('');
 
-    // construct initial messages based on last api_invoke span
-    const lastApiInvokeSpan = flattenSpans.filter(span => span.operation_name === 'api_invoke').pop();
+    const listModelCallSpan = flattenSpans.filter(span => span.operation_name === 'model_call').sort((a, b) => a.start_time_us - b.start_time_us)
+    let lastModelCallSpan = listModelCallSpan.length > 0 ? listModelCallSpan[listModelCallSpan.length - 1] : undefined
+    let actuallModelCallSpan = lastModelCallSpan ? flattenSpans.find(s => s.parent_span_id === lastModelCallSpan?.span_id) : undefined
+
     let continousMessage: Message[] = []
-    if (lastApiInvokeSpan) {
-      continousMessage = extractMessageFromApiInvokeSpan(lastApiInvokeSpan);
+    if (actuallModelCallSpan) {
+      continousMessage = extractMessagesFromSpanById(flattenSpans, actuallModelCallSpan.span_id, {
+        excludeToolInvokeMessage: false,
+      });
     }
 
     // Filter out null/undefined values and internal metadata fields from modelConfig
@@ -274,14 +283,14 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       {/* Chat Header */}
       <div className="bg-card w-full flex-shrink-0">
         {/* Model Selector - Top row aligned with Project Dropdown */}
-          <ConversationHeader
-            onRefresh={refreshSpans}
-            isLoading={isLoadingSpans}
-            onModelConfigChange={handleModelConfigChange}
-            modelConfig={modelConfig}
-            projectId={projectId}
-            app_mode={app_mode}
-          />
+        <ConversationHeader
+          onRefresh={refreshSpans}
+          isLoading={isLoadingSpans}
+          onModelConfigChange={handleModelConfigChange}
+          modelConfig={modelConfig}
+          projectId={projectId}
+          app_mode={app_mode}
+        />
       </div>
 
 

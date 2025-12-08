@@ -56,6 +56,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     setHoverSpanId,
     collapsedSpans,
     setCollapsedSpans,
+    // getRunDetails,
   } = useWrapperHook({ projectId, threadId });
 
 
@@ -81,7 +82,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
         run_id,
         prevRun: runById
       })
-      return prevRuns.map(r => r.run_id === run_id ? updatedRun : r)
+      return [...prevRuns.map(r => r.run_id === run_id ? updatedRun : r)]
     })
   }, []);
   const handleEvent = useCallback((event: ProjectEventUnion) => {
@@ -89,7 +90,6 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
       setTimeout(() => {
         setFlattenSpans(prevSpans => {
           let newFlattenSpans = processEvent(prevSpans, event)
-
           // Update run metrics with the new spans
           event.run_id && updateRunMetrics(event.run_id, newFlattenSpans);
 
@@ -102,6 +102,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
       if ((event.type === 'RunFinished' || event.type === 'RunError') && event.run_id) {
         setTimeout(() => {
           event.run_id && fetchSpansByRunId(event.run_id);
+          // event.run_id && getRunDetails(event.run_id);
         }, 100)
       }
 
@@ -165,7 +166,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
 
 
   const selectedSpan = useMemo(() => {
-    return selectedSpanId ? spansOfSelectedRun.find((s: Span) => s.span_id === selectedSpanId) : undefined;
+    return selectedSpanId && spansOfSelectedRun ? spansOfSelectedRun.find((s: Span) => s.span_id === selectedSpanId) : undefined;
   }, [selectedSpanId, spansOfSelectedRun]);
 
   const clearAll = useCallback(() => {

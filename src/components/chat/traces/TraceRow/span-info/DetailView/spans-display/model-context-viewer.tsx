@@ -5,10 +5,12 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { formatCost } from "@/utils/formatCost";
 
 interface ModelContextViewerProps {
     model_name: string;
     usage_tokens: number;
+    cost?: number;
     expandMode?: boolean;
 }
 
@@ -17,7 +19,7 @@ const formatNumber = (num: number) => {
     return new Intl.NumberFormat().format(num);
 };
 
-export const ModelContextViewer = ({ model_name, usage_tokens, expandMode }: ModelContextViewerProps) => {
+export const ModelContextViewer = ({ model_name, usage_tokens, expandMode, cost }: ModelContextViewerProps) => {
     const { models } = ProjectModelsConsumer()
     const model_name_only = model_name.includes('/') ? model_name.split('/')[1] : model_name;
     const model = models.find((model) => model.model === model_name_only);
@@ -76,9 +78,9 @@ export const ModelContextViewer = ({ model_name, usage_tokens, expandMode }: Mod
     const detailsContent = (
         <div className="space-y-2 text-xs min-w-[200px]">
             <div className="flex flex-row justify-between">
-            <p className="font-semibold text-sm">Context Usage</p>
-            {expandMode && (
-                <div className="flex items-center gap-1.5 cursor-help">
+                <p className="font-semibold text-sm">Context Usage</p>
+                {expandMode && (
+                    <div className="flex items-center gap-1.5 cursor-help">
                         {circleIcon}
                         <span className="text-xs font-medium" style={{ color }}>
                             {displayPercentage}%
@@ -87,7 +89,10 @@ export const ModelContextViewer = ({ model_name, usage_tokens, expandMode }: Mod
                 )}
             </div>
             <div className="space-y-1.5">
-                
+                {cost && cost > 0 && <div className="flex justify-between gap-4">
+                    <span className="text-muted-foreground">Cost</span>
+                    <span className="font-mono font-medium">{formatCost(cost, 4)}</span>
+                </div>}
                 <div className="flex justify-between gap-4">
                     <span className="text-muted-foreground">Used tokens:</span>
                     <span className="font-mono font-medium">{formatNumber(usage_tokens)}</span>
@@ -96,7 +101,7 @@ export const ModelContextViewer = ({ model_name, usage_tokens, expandMode }: Mod
                     <span className="text-muted-foreground">Max context:</span>
                     <span className="font-mono font-medium">{formatNumber(max_context_size)}</span>
                 </div>
-                
+
                 <div className="border-t border-border pt-1.5 flex justify-between gap-4">
                     <span className="text-muted-foreground">Usage:</span>
                     <span className="font-bold" style={{ color }}>

@@ -350,7 +350,7 @@ export const ObjectMessageContent = ({ objectContent }: { objectContent: any }) 
     return typeof objectContent === 'string' ? <TextMessageContent text={objectContent} /> : <div className="max-w-full whitespace-pre-wrap my-0 overflow-x-auto flex flex-col items-start gap-2 py-2 rounded-lg transition-all duration-200 bg-zinc-800/30 border border-zinc-700/50 px-2"><JsonViewer data={objectContent} /></div>;
 };
 
-const TextMessageContent = ({ text, cache_control }: { text: string, cache_control?: any }) => {
+export const TextMessageContent = ({ text, cache_control }: { text: string, cache_control?: any }) => {
     const [showExpandButton, setShowExpandButton] = useState(false);
     const [isExpanded, setIsExpanded] = useState(false);
     const contentRef = useRef<HTMLDivElement>(null);

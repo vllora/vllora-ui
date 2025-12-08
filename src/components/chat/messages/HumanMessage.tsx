@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Clock } from 'lucide-react';
 import { Message } from '@/types/chat';
 import { MessageDisplay } from '../MessageDisplay';
 import { ContentArrayDisplay } from './ContentArrayDisplay';
 import { formatMessageTime } from '@/utils/dateUtils';
 import { useRelativeTime } from '@/hooks/useRelativeTime';
+import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 
 interface HumanMessageProps {
   message: Message;
@@ -12,11 +13,28 @@ interface HumanMessageProps {
 
 export const HumanMessage: React.FC<HumanMessageProps> = ({ message }) => {
   const messageRef = React.useRef<HTMLDivElement>(null);
+  const { setHoverSpanId } = ChatWindowConsumer();
+
   // Only update relative time when message is visible
   useRelativeTime(messageRef, message.created_at);
 
+  const handleMouseEnter = useCallback(() => {
+    if (message?.span_id) {
+      setHoverSpanId(message.span_id);
+    }
+  }, [message?.span_id, setHoverSpanId]);
+
+  const handleMouseLeave = useCallback(() => {
+    setHoverSpanId(undefined);
+  }, [setHoverSpanId]);
+
   return (
-    <div className="flex flex-col gap-3 group overflow-hidden" ref={messageRef}>
+    <div
+      className="flex flex-col gap-3 group overflow-hidden"
+      ref={messageRef}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
       {/* Header with Metadata */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2 flex-1">

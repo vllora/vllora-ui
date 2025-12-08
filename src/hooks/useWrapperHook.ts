@@ -19,6 +19,7 @@ export const useWrapperHook = (props: {
     projectId,
     threadId,
     onRunsLoaded,
+    
   });
   // Use the span details hook
   let spanDetailState = useSpanDetails();

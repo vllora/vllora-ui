@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, Wrench } from "lucide-react";
 import { CheckIcon, ClipboardDocumentIcon } from "@heroicons/react/24/outline";
 import ReactJson from "react-json-view";
 import type { Message } from "@/types/chat";
+import { tryParseJson } from "@/utils/modelUtils";
 
 type ToolCall = NonNullable<Message["tool_calls"]>[number];
 
@@ -82,6 +83,11 @@ export const ToolCallList = ({ toolCalls }: { toolCalls: ToolCall[] }) => {
           }
           const functionName = formatFunctionName(toolCall.function?.name);
           const functionDisplay = toolCall.function;
+          let arguments_value = functionDisplay.arguments;
+          if (typeof arguments_value === 'string') {
+            arguments_value = tryParseJson(arguments_value) || arguments_value;
+            functionDisplay.arguments = arguments_value;
+          }
           const toolId = toolCall.id ?? `tool-call-${index}`;
           const isExpanded = toolCallLookup[toolId] ?? true;
           const isToolCopied = toolCopiedStates[toolId] || false;

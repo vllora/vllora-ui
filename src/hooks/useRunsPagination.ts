@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { useRequest, useLatest } from "ahooks";
 import { toast } from "sonner";
-import { listRuns } from "@/services/runs-api";
+import { listRuns, getRunDetails as getRunDetailsApi } from "@/services/runs-api";
 import { RunDTO } from "@/types/common-type";
 
 const LIMIT_LOADING_RUNS = 20;
@@ -141,6 +141,30 @@ export function useRunsPagination({
     triggerRefreshRuns();
   }, [triggerRefreshRuns]);
 
+  // Get run details and update rawRuns by run_id
+  const getRunDetails = useCallback(
+    async (runId: string) => {
+      try {
+        const runDetails = await getRunDetailsApi({
+          runId,
+          projectId: projectIdRef.current,
+        });
+
+        setRawRuns((prev) =>
+          prev.map((run) => (run.run_id === runId ? runDetails : run))
+        );
+
+        return runDetails;
+      } catch (err: any) {
+        toast.error("Failed to get run details", {
+          description: err.message || "An error occurred while fetching run details",
+        });
+        throw err;
+      }
+    },
+    [projectIdRef]
+  );
+
   return {
     runs: rawRuns,
     setRuns: setRawRuns,
@@ -153,5 +177,6 @@ export function useRunsPagination({
     loadingMoreRuns,
     openTraces,
     setOpenTraces,
+    getRunDetails,
   };
 }

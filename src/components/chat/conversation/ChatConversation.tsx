@@ -1,8 +1,9 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useEffect } from 'react';
 import { Bot, ArrowDown } from 'lucide-react';
 import { useInViewport } from 'ahooks';
 import { HierarchicalMessageSpanItem } from './HierarchiMessageItem';
 import { MessageStructure } from '@/utils/message-structure-from-span';
+import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 
 interface ChatConversationProps {
   messages: MessageStructure[];
@@ -23,6 +24,31 @@ const ChatConversationComponent: React.FC<ChatConversationProps> = ({
   const [inViewport] = useInViewport(messagesEndRef, {
     root: scrollContainerRef,
   });
+  const { hoverSpanId } = ChatWindowConsumer();
+
+  // Scroll to element when hoverSpanId changes
+  useEffect(() => {
+    if (!hoverSpanId || !scrollContainerRef.current) return;
+
+    const element = document.getElementById(`hierachy-message-${hoverSpanId}`);
+    if (!element) return;
+
+    // If cursor is already on this element, don't scroll
+    if (element.matches(':hover')) return;
+
+    const container = scrollContainerRef.current;
+    const containerRect = container.getBoundingClientRect();
+    const elementRect = element.getBoundingClientRect();
+
+    // Check if element is in viewport
+    const isInViewport =
+      elementRect.top >= containerRect.top &&
+      elementRect.bottom <= containerRect.bottom;
+
+    if (!isInViewport) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [hoverSpanId]);
 
   // const validMessages = extractValidDisplayMessages(messages);
   const scrollToBottom = useCallback(() => {

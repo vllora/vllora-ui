@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import { Span } from "@/types/common-type";
-import { extractMessagesFromSpan } from "@/utils/span-to-message";
 import { Message } from "@/types/chat";
-import { getParentApiInvoke } from "@/components/chat/traces/TraceRow/span-info/DetailView";
+import { extractMessagesFromSpanById, ExtractMessagesFromSpanByIdOptions } from "@/utils/span-to-message";
+import { findSpanById, findSpansByRunId } from "@/utils/span-hierarchy";
 
 /**
  * Hook that returns a specific span by span_id from the flattenSpans array.
@@ -28,7 +28,7 @@ export function useSpanById(
 ): Span | undefined {
   // Find the span and memoize based on its actual data, not the array reference
   const span = useMemo(() => {
-    return flattenSpans.find((s) => s.span_id === spanId);
+    return findSpanById(flattenSpans, spanId);
   }, [flattenSpans, spanId]);
 
   // Return a memoized span that only changes when the span's data actually changes
@@ -55,7 +55,7 @@ export const useSpansInSameRun = (
   runId: string
 ): Span[] => {
   return useMemo(() => {
-    return flattenSpans.filter((s) => s.run_id === runId);
+    return findSpansByRunId(flattenSpans, runId);
   }, [flattenSpans, runId]);
 };
 
@@ -77,26 +77,18 @@ export const errorFromApiInvokeSpansInSameRun = (props: {
   const { flattenSpans, runId } = props;
   const apiInvokeSpans = useApiInvokeSpanInSameRun({ flattenSpans, runId });
   return useMemo(() => {
-    return apiInvokeSpans.map((s) => s.attribute?.error).filter((e) => e) as string[];
+    return apiInvokeSpans
+      .map((s) => s.attribute?.error)
+      .filter((e) => e) as string[];
   }, [apiInvokeSpans]);
 };
 
 export const useMessageExtractSpanById = (
   flattenSpans: Span[],
-  spanId: string
+  spanId: string,
+  options: ExtractMessagesFromSpanByIdOptions = {}
 ): Message[] => {
-  const span = useSpanById(flattenSpans, spanId);
   return useMemo(() => {
-    if (!span) return [];
-    if(span.operation_name === 'cache') {
-      // get api invoke span
-      const apiInvokeSpan = getParentApiInvoke(flattenSpans, span.span_id);
-      if(apiInvokeSpan) {
-        return extractMessagesFromSpan(apiInvokeSpan);
-      }
-      return [];
-    }
-    let messages = extractMessagesFromSpan(span);
-    return messages;
-  }, [span]);
+    return extractMessagesFromSpanById(flattenSpans, spanId, options);
+  }, [flattenSpans, spanId, options]);
 };

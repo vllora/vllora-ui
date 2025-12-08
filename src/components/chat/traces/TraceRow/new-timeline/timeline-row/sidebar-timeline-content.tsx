@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { TimelineContentBaseProps } from ".";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { getOperationTitle, getLabelOfSpan, getModelName, getTotalUsage } from "../utils";
+import { getOperationTitle, getLabelOfSpan, getModelName, getTotalUsage, getCost } from "../utils";
 import { DatabaseIcon, ChevronRight, ChevronDown, TriangleAlertIcon, PauseCircle } from "lucide-react";
 import { BreakpointsConsumer } from "@/contexts/breakpoints";
 import { getClientSDKName, isAgentSpan, isPromptCachingApplied } from "@/utils/graph-utils";
@@ -41,6 +41,7 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
     const labelOfSpan = span && getLabelOfSpan({ span });
     const modelName = span && getModelName({ span });
     const totalUsage = span && getTotalUsage({ span }) || 0;
+    const cost = span && getCost({ span }) || 0;
     const error = span && span.attribute?.error;
 
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -206,7 +207,7 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                                         {labelOfSpan && <span className="opacity-70">{labelOfSpan}</span>}
                                     </div>
                                     {modelName && totalUsage > 0 && (
-                                        <ModelContextViewer model_name={modelName} usage_tokens={totalUsage} expandMode={true} />
+                                        <ModelContextViewer model_name={modelName} usage_tokens={totalUsage} cost={cost} expandMode={true} />
                                     )}
                                 </TooltipContent>
                             </Tooltip>

@@ -23,30 +23,38 @@ export const getDataFromSpan = (span: Span) => {
     let inputTokens = 0;
     let outputTokens = 0;
     let errors: string[] = [];
-    if(span.operation_name === 'model_call') {
+    if (span.operation_name === 'api_invoke') {
         let spanAttribute = span.attribute as any;
         let costStr = spanAttribute?.cost;
-        if(costStr){
+        // check type of spanAttribute?.cost
+        if (typeof costStr === 'string') {
             let costJson = tryParseJson(costStr);
-            if(costJson){
-                cost = costJson.cost ? costJson.cost : 0;
+            if (typeof costJson === 'number') {
+                cost = costJson
+            } else {
+                if (costJson) {
+                    cost = costJson.cost ? costJson.cost : 0;
+                }
             }
         }
+        if (typeof costStr === 'number') {
+            cost = costStr
+        }
         let usageStr = spanAttribute?.usage;
-        if(usageStr){
+        if (usageStr) {
             let usageJson = tryParseJson(usageStr);
-            if(usageJson){
+            if (usageJson) {
                 inputTokens = usageJson.input_tokens ? usageJson.input_tokens : 0;
                 outputTokens = usageJson.output_tokens ? usageJson.output_tokens : 0;
             }
         }
     }
-    return {cost, inputTokens, outputTokens, errors};
+    return { cost, inputTokens, outputTokens, errors };
 }
 
 export const convertSpanToRun = (span: Span, prevRun?: RunDTO): RunDTO => {
-    let {cost, inputTokens, outputTokens, errors} = getDataFromSpan(span);
-    if(!prevRun) {
+    let { cost, inputTokens, outputTokens, errors } = getDataFromSpan(span);
+    if (!prevRun) {
         let run: RunDTO = {
             run_id: span.run_id,
             trace_ids: span.trace_id ? [span.trace_id] : [],
@@ -73,6 +81,5 @@ export const convertSpanToRun = (span: Span, prevRun?: RunDTO): RunDTO => {
             errors: [...prevRun.errors, ...errors],
         }
     }
-   
+
 }
-    

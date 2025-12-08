@@ -1,61 +1,8 @@
 import { Span } from "@/types/common-type";
 import { Message, MessageMetrics } from "@/types/chat";
 import { tryParseJson } from "@/utils/modelUtils";
-
-export const extractMessageFromApiInvokeSpan = (span: Span): Message[] => {
-  if (span.operation_name !== "api_invoke") {
-    return [];
-  }
-  const attribute = span.attribute as any;
-  if (!attribute) {
-    return [];
-  }
-  let messages: Message[] = [];
-  let requestStr = attribute.request;
-  let outputStr = attribute.output || attribute.response;
-  let requestJson = tryParseJson(requestStr);
-  let outputJson = tryParseJson(outputStr);
-  if (
-    requestJson &&
-    requestJson.messages &&
-    Array.isArray(requestJson.messages)
-  ) {
-    let rawRequestMessages = requestJson.messages;
-    rawRequestMessages.forEach((msg: any, index: number) => {
-      let msgContent = extractMessageContent(msg);
-      const message: Message = {
-        id: `${span.span_id}_msg_${index}`,
-        type: msg.role || "system",
-        role: msg.role as "user" | "assistant" | "system",
-        content: msgContent,
-        content_array:
-          msg.parts || (Array.isArray(msg.content) ? msg.content : undefined),
-        span_id: span.span_id,
-        span,
-        tool_calls: msg.tool_calls,
-        tool_call_id: msg.tool_call_id,
-        timestamp: 0,
-      };
-      messages.push(message);
-    });
-  }
-  if (!outputJson && outputStr) {
-    messages.push({
-      id: `${span.span_id}_response`,
-      type: "assistant",
-      role: "assistant",
-      content: outputStr,
-      timestamp: span.finish_time_us ? span.finish_time_us / 1000 : Date.now(), // Use finish time for response
-      thread_id: span.thread_id,
-      trace_id: span.trace_id,
-      span_id: span.span_id,
-      span,
-      model_name: span.operation_name,
-    });
-  }
-
-  return messages;
-};
+import { getParentApiInvoke } from "@/components/chat/traces/TraceRow/span-info/DetailView";
+import { findSpanById } from "@/utils/span-hierarchy";
 
 /**
  * Checks if a span is an actual model call that contains messages
@@ -168,7 +115,8 @@ export function extractMessagesFromSpan(
   // Also extract the response/output to create an assistant message
   const outputStr = attribute?.output;
   const outputJson = outputStr ? tryParseJson(outputStr) : null;
-  const responseContent = extractResponseContent(outputJson, attribute) || attribute?.response;
+  const responseContent =
+    extractResponseContent(outputJson, attribute) || attribute?.response;
   // Calculate metrics for this span
   const spanMetrics = calculateSpanMetrics(span);
   let requestModel = requestJson?.model;
@@ -291,10 +239,11 @@ function extractMessageContent(msg: any): string {
  * @param attribute - The span attribute
  * @returns String content for the assistant message
  */
-function extractResponseContent(
+export function extractResponseContent(
   outputJson: any,
-  attribute: any
-): string | null {
+  attribute: any,
+  excludeToolInvokeMessage: boolean = true
+): string | any | null {
   if (!outputJson) return attribute?.content;
 
   // Try different fields for response content
@@ -326,6 +275,13 @@ function extractResponseContent(
 
   if (outputJson.choices?.[0]?.message?.content) {
     return outputJson.choices[0].message.content;
+  }
+  if (
+    outputJson.choices?.[0]?.message?.tool_calls &&
+    outputJson.choices?.[0]?.message?.tool_calls.length > 0 &&
+    !excludeToolInvokeMessage
+  ) {
+    return outputJson.choices[0].message.tool_calls;
   }
 
   if (outputJson.candidates?.[0]?.content) {
@@ -429,3 +385,148 @@ export function convertSpansToSpanWithMessages(
         item.messages.length > 0 || (item.children && item.children.length > 0)
     );
 }
+
+export interface ExtractMessagesFromSpanByIdOptions {
+  excludeToolInvokeMessage?: boolean;
+}
+
+/**
+ * Extracts messages from a span by its ID, including messages from parent api_invoke span
+ * and response content from the current span.
+ *
+ * @param flattenSpans - Flat array of all spans
+ * @param spanId - The span_id to extract messages from
+ * @param options - Optional configuration
+ * @param options.excludeToolInvokeMessage - If true, excludes response messages related tool invoke
+ * @returns Array of Message objects extracted from the span
+ *
+ * @example
+ * ```typescript
+ * const messages = extractMessagesFromSpanById(flattenSpans, 'abc123');
+ * const messagesWithoutTools = extractMessagesFromSpanById(flattenSpans, 'abc123', { excludeToolInvokeMessage: true });
+ * ```
+ */
+export function extractMessagesFromSpanById(
+  flattenSpans: Span[],
+  spanId: string,
+  options: ExtractMessagesFromSpanByIdOptions = {}
+): Message[] {
+  const { excludeToolInvokeMessage = true } = options;
+  const span = findSpanById(flattenSpans, spanId);
+  if (!span) return [];
+
+  // Get api invoke span to extract input messages
+  const apiInvokeSpan = getParentApiInvoke(flattenSpans, span.span_id);
+  let result: Message[] = [];
+
+  if (apiInvokeSpan) {
+    let inputMessageFromApiInvokeSpan = extractMessageFromApiInvokeSpan({
+      span: apiInvokeSpan,
+      excludeResponseToolInvokeMessage: excludeToolInvokeMessage,
+      excludeResponseMessage: false,
+    });
+    inputMessageFromApiInvokeSpan = inputMessageFromApiInvokeSpan.map((m) => {
+      return {
+        ...m,
+        span,
+        span_id: span.span_id,
+      };
+    });
+    result = inputMessageFromApiInvokeSpan;
+  }
+
+  return result;
+}
+
+export const extractMessageFromApiInvokeSpan = (props: {
+  span: Span;
+  excludeResponseToolInvokeMessage?: boolean;
+  excludeResponseMessage?: boolean;
+}): Message[] => {
+  const {
+    span,
+    excludeResponseToolInvokeMessage: excludeToolInvokeMessage = false,
+    excludeResponseMessage = false,
+  } = props;
+  if (span.operation_name !== "api_invoke") {
+    return [];
+  }
+  const attribute = span.attribute as any;
+  if (!attribute) {
+    return [];
+  }
+  let messages: Message[] = [];
+  let requestStr = attribute.request;
+  let outputStr = attribute.output || attribute.response;
+  let requestJson = tryParseJson(requestStr);
+  if (
+    requestJson &&
+    requestJson.messages &&
+    Array.isArray(requestJson.messages)
+  ) {
+    let rawRequestMessages = requestJson.messages;
+    rawRequestMessages.forEach((msg: any, index: number) => {
+      let msgContent = extractMessageContent(msg);
+      const message: Message = {
+        id: `${span.span_id}_msg_${index}`,
+        type: msg.role || "system",
+        role: msg.role as "user" | "assistant" | "system" | "tool",
+        content: msgContent,
+        content_array:
+          msg.parts || (Array.isArray(msg.content) ? msg.content : undefined),
+        span_id: span.span_id,
+        span,
+        tool_calls: msg.tool_calls,
+        tool_call_id: msg.tool_call_id,
+        timestamp: span.start_time_us / 1000,
+      };
+      messages.push(message);
+    });
+  }
+  let outputJson = tryParseJson(outputStr);
+  if(outputStr && !outputJson ) {
+    if(excludeResponseMessage) {
+      return messages
+    }else {
+      let responseMessage: Message = {
+        id: `${span.span_id}_response`,
+        type: "assistant",
+        role: "assistant",
+        content: outputStr,
+        timestamp: span.finish_time_us ? span.finish_time_us / 1000 : Date.now(),
+        thread_id: span.thread_id,
+        trace_id: span.trace_id,
+        span_id: span.span_id,
+        span,
+        model_name:requestJson?.model ||`${span.operation_name}/${requestJson?.model}` || span.operation_name,
+      }
+      messages.push(responseMessage)
+      return messages
+    }
+  }
+
+
+  const responseContent = extractResponseContent(
+    outputJson,
+    attribute,
+    excludeToolInvokeMessage
+  );
+  if (!excludeResponseMessage && responseContent) {
+    const responseMessage: Message = {
+      id: `${span.span_id}_response`,
+      type: "assistant",
+      role: "assistant",
+      content: responseContent,
+      timestamp: span.finish_time_us ? span.finish_time_us / 1000 : Date.now(),
+      thread_id: span.thread_id,
+      trace_id: span.trace_id,
+      span_id: span.span_id,
+      span,
+      model_name:
+        `${span.operation_name}/${requestJson?.model}` || span.operation_name,
+    };
+    messages.push(responseMessage);
+  }
+
+  return messages;
+};

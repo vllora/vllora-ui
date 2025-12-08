@@ -102,7 +102,6 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
   );
 
   const originalInfo = useMemo(() => extractOriginalInfo(span), [span]);
-
   // Initialize experiment data and original output when span loads
   useEffect(() => {
     if (span) {
