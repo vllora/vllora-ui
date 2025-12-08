@@ -129,7 +129,7 @@ export const getLayoutedElements = (
   }
 
   // Calculate radius based on number of inputs and max node size
-  const baseRadius = Math.max(250, inputNodes.length * 80, NODE_WIDTH * 1.2);
+  const baseRadius = Math.max(250,inputNodes.length * 60,  NODE_WIDTH * 1.2);
 
   // Model node position (center of the layout)
   const modelX = baseRadius + NODE_WIDTH;
@@ -138,8 +138,8 @@ export const getLayoutedElements = (
   const modelHeight = isModelExpanded ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT;
 
   // Position input nodes radially around the model (full 360° circle)
-  // Start from top (-90°) and go clockwise
-  const startAngle = -Math.PI / 2; // -90° = top
+  // Start from left (180°) and go clockwise
+  const startAngle = Math.PI; // 180° = left
 
   // Calculate angles for each input node - evenly distributed around the circle
   const inputAngles: Record<string, number> = {};

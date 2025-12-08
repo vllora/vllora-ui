@@ -226,10 +226,10 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
       type: 'model',
       position: { x: 0, y: 0 }, // Will be set by dagre
       data: {
-        modelName:  operation_name ? `${operation_name}/${modelInvoked}` : modelInvoked || 'Model',
+        modelName: operation_name ? `${operation_name}/${modelInvoked}` : modelInvoked || 'Model',
         finishReason: extractedResponse.finish_reason,
         requestJson: rawRequest,
-        headers:headers,
+        headers: headers,
         inputHandles: inputNodeIds, // Pass input IDs for dynamic handle creation
       },
     });
@@ -247,7 +247,7 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
     setEdges(layoutedEdges);
 
     // return { nodes: flowNodes, edges: flowEdges };
-  }, [rawRequest,headers,operation_name, rawResponse, expandedNodes, expandedHeight, nodeWidth]);
+  }, [rawRequest, headers, operation_name, rawResponse, expandedNodes, expandedHeight, nodeWidth]);
 
   // Toggle expand/collapse for a specific node (called from ChevronDown click)
   const handleToggleExpand = useCallback((nodeId: string) => {
@@ -308,7 +308,7 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
           className="h-7 px-2 text-muted-foreground hover:text-foreground"
         >
           <GitBranch className="w-3.5 h-3.5 mr-1" />
-          <span className="text-xs">Flow</span>
+          <span className="text-xs">Visual</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-[90vw] w-[90vw] h-[90vh] p-0 overflow-hidden flex flex-col">
@@ -327,12 +327,17 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             onPaneClick={onPaneClick}
+            nodesDraggable={true}
             fitView
+            fitViewOptions={{ padding: 0.3, includeHiddenNodes: true }}
+            minZoom={0.1}
+            maxZoom={2}
+            proOptions={{ hideAttribution: true }}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
+            onInit={(instance) => { reactFlowInstance.current = instance; }}
           >
             <Controls
-              showInteractive={false}
               className="!border-border !shadow-none [&>button]:!bg-[#161b22] [&>button]:!border-[#30363d] [&>button]:!text-zinc-400 [&>button:hover]:!bg-[#21262d]"
             />
           </ReactFlow>
