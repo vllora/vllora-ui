@@ -1,7 +1,7 @@
 import { TimelineContentBaseProps } from ".";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getOperationTitle, getLabelOfSpan, getModelName, getTotalUsage, getCost } from "../utils";
-import { DatabaseIcon, ChevronRight, ChevronDown, TriangleAlertIcon, PauseCircle } from "lucide-react";
+import { DatabaseIcon, ChevronRight, ChevronDown, TriangleAlertIcon, PauseCircle, PlayIcon, CirclePlayIcon } from "lucide-react";
 import { BreakpointsConsumer } from "@/contexts/breakpoints";
 import { getClientSDKName, isAgentSpan, isPromptCachingApplied } from "@/utils/graph-utils";
 import { ClientSdkIcon } from "@/components/client-sdk-icon";
@@ -85,13 +85,13 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                                     <TooltipTrigger asChild>
                                         <div className={`mr-1 flex-shrink-0 cursor-pointer`}>
                                             {/* Icon display with potential cache indicator */}
-                                            <div className="relative">
+                                            <div className="relative flex">
                                                 {span?.isInDebug ? (
                                                     <button
                                                         onClick={handleContinueOriginal}
-                                                        className={`p-1 rounded-full bg-yellow-500/30 hover:bg-yellow-500/40 transition-colors`}
+                                                        className={`p-1 rounded-full h-full transition-all hover:bg-green-500/20 hover:scale-110 active:scale-95`}
                                                     >
-                                                        <PauseCircle className="w-3.5 h-3.5 text-yellow-500" />
+                                                        <PlayIcon className="w-3.5 h-3.5 text-green-500 transition-colors" />
                                                     </button>) :
                                                     (<div className={`p-1 rounded-full ${operationIconColor}`}>
                                                         {operationIcon}
