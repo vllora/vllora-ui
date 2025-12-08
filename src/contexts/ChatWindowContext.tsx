@@ -9,6 +9,7 @@ import { processEvent, updatedRunWithSpans } from '@/hooks/events/utilities';
 import { useWrapperHook } from '@/hooks/useWrapperHook';
 import { useUserProviderOfSelectedModelConfig } from '@/hooks/userProviderOfSelectedModelConfig';
 import { ThreadsConsumer } from './ThreadsContext';
+import { BreakpointsConsumer } from './breakpoints';
 
 export type ChatWindowContextType = ReturnType<typeof useChatWindow>;
 
@@ -61,8 +62,6 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
 
 
   const { selectedThread } = ThreadsConsumer()
-
-
 
   const [isChatProcessing, setIsChatProcessing] = useState<boolean>(false);
   const [runHighlighted, setRunHighlighted] = useState<string | null>(null);
@@ -127,7 +126,6 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
 
   // Stabilize messageHierarchies to prevent unnecessary re-renders
   const messageHierarchies = useStableMessageHierarchies(unstableMessageHierarchies);
-
   // UI state
   const [currentInput, setCurrentInput] = useState<string>('');
   const [typing, setTyping] = useState(false);

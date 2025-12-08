@@ -24,7 +24,7 @@ export const RawSpanMessage = React.memo((props: {
     );
 
     return <div style={indentStyle} className="flex flex-col">
-        <InnerRawSpanMessage spanId={messageStructure.span_id} flattenSpans={flattenSpans} />
+        <InnerRawSpanMessage currentMessageStructure={messageStructure} flattenSpans={flattenSpans} />
         {messageStructure.children && messageStructure.children.length > 0 && (
             <div className="flex flex-col space-y-4">
                 {messageStructure.children.map((child) => (
@@ -56,18 +56,20 @@ export const RawSpanMessage = React.memo((props: {
 })
 
 // Simplified component - let useMessageExtraceSpanById handle the memoization
-const InnerRawSpanMessage = React.memo(({ spanId, flattenSpans }: {
-    spanId: string;
+const InnerRawSpanMessage = React.memo(({ currentMessageStructure, flattenSpans }: {
+    currentMessageStructure: MessageStructure;
     flattenSpans: any[];
 }) => {
-    const span = useSpanById(flattenSpans, spanId);
+    const span = useSpanById(flattenSpans, currentMessageStructure.span_id);
+    const extractedMessages = useMessageExtractSpanById(flattenSpans, currentMessageStructure.span_id, {
+        excludeToolInvokeMessage: true
+    });
+
     const attributes = span?.attribute;
     const labelAttribute = attributes?.['label'];
     const error = attributes?.error;
     const colorLabel = labelAttribute && getColorFromLabel(labelAttribute);
-    const messages = useMessageExtractSpanById(flattenSpans, spanId, {
-        excludeToolInvokeMessage: true
-    });
+    const messages = currentMessageStructure.type === 'api_invoke' && currentMessageStructure.children.length > 0 ? [] : extractedMessages;
 
     if (messages.length === 0) return <></>;
 

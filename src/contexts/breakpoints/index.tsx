@@ -121,7 +121,6 @@ export const useBreakpointsState = (projectId: string) => {
 
   const handleEvent = useCallback((event: ProjectEventUnion) => {
     if (event.type === "Custom") {
-      console.log('==== event', event)
       const customEvent = event as unknown as CustomEvent;
       if ("event" in customEvent && customEvent.event) {
         const eventType = customEvent.event;

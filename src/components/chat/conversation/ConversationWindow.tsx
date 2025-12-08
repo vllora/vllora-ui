@@ -65,7 +65,6 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     modelConfig,
     setModelConfig,
     isChatProcessing,
-    clearAll
   } = ChatWindowConsumer();
   const { app_mode } = CurrentAppConsumer();
 
@@ -84,12 +83,6 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       refreshSpans();
     }
   }, [threadId, isDraft, refreshSpans, isChatProcessing]);
-
-  useEffect(()=> {
-    if(threadId && !isDraft) {
-      clearAll()
-    }
-  }, [threadId, isDraft])
 
   useConversationEvents({
     currentProjectId: projectId || '',
