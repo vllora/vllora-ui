@@ -1,5 +1,5 @@
-import { OffsetSmoothStepEdge } from './OffsetSmoothStepEdge';
+import { FloatingEdge } from './FloatingEdge';
 
 export const edgeTypes = {
-  offsetSmoothStep: OffsetSmoothStepEdge,
+  floating: FloatingEdge,
 };

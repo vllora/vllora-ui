@@ -125,6 +125,126 @@ const getArguments = (rawArguments: any) => {
   return rawArguments;
 };
 
+interface ToolCallItemProps {
+  toolCall: ToolInfoCall;
+  index: number;
+  isExpanded: boolean;
+  onToggle?: () => void;
+  showBorder?: boolean;
+  hideTitle?: boolean
+}
+
+export const ToolCallItem = ({
+  toolCall,
+  index,
+  isExpanded,
+  onToggle,
+  showBorder = true,
+  hideTitle = false
+}: ToolCallItemProps) => {
+  const { id } = toolCall;
+  const func = toolCall.function;
+  const name = func?.name ?? "Tool call";
+  const description = func?.description;
+  const parameters = func?.parameters || {};
+  const parametersProps = parameters?.properties || {};
+  const requiredParams: string[] = parameters?.required || [];
+  const paramCount = Object.keys(parametersProps).length;
+  const argumentsJson = getArguments(func?.arguments);
+  const argumentsCount = argumentsJson
+    ? Object.keys(argumentsJson).length
+    : 0;
+
+  const meta: string[] = [];
+  if (paramCount > 0) {
+    meta.push(`${paramCount} ${paramCount === 1 ? "param" : "params"}`);
+  }
+  if (argumentsCount > 0) {
+    meta.push(`${argumentsCount} ${argumentsCount === 1 ? "arg" : "args"}`);
+  }
+
+  return (
+    <div
+      className={`${showBorder && index > 0 ? "border-t border-border/70 pt-4" : ""}`}
+    >
+      {!hideTitle && <button
+        type="button"
+        className="flex w-full items-center justify-between gap-2 text-left"
+        onClick={onToggle}
+      >
+        <div className="flex items-center gap-2">
+          <WrenchScrewdriverIcon className="h-3.5 w-3.5 text-zinc-400" />
+          <span className="text-sm font-semibold text-zinc-100">
+            {name}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 text-[11px] text-zinc-500">
+          {meta.length > 0 && <span>{meta.join(" • ")}</span>}
+          <ChevronDown
+            className={`h-3 w-3 transition-transform ${
+              isExpanded ? "rotate-180" : ""
+            }`}
+          />
+        </div>
+      </button>}
+
+      {isExpanded && (
+        <div className="mt-3 space-y-3 text-xs text-zinc-300">
+          {id && (
+            <div className="flex items-center gap-2 text-[11px] text-zinc-500">
+              <FingerPrintIcon className="h-3 w-3 text-zinc-500" />
+              <span className="font-mono">{id}</span>
+            </div>
+          )}
+
+          {description && (
+            <p className="leading-relaxed text-zinc-400">{description}</p>
+          )}
+
+          {paramCount > 0 && (
+            <div className="space-y-2">
+              <span className="text-[11px] uppercase tracking-wide text-zinc-500">
+                Parameters
+              </span>
+              <div className="space-y-1">
+                {Object.entries(parametersProps).map(
+                  ([paramName, paramSchema]: [string, any]) => (
+                    <ParameterItem
+                      key={paramName}
+                      name={paramName}
+                      schema={paramSchema}
+                      required={requiredParams.includes(paramName)}
+                    />
+                  )
+                )}
+              </div>
+            </div>
+          )}
+
+          {argumentsCount > 0 && argumentsJson && (
+            <div className="space-y-2">
+              <span className="text-[11px] uppercase tracking-wide text-zinc-500">
+                Arguments
+              </span>
+              <div className="space-y-1">
+                {Object.entries(argumentsJson).map(
+                  ([argName, argValue]: [string, any]) => (
+                    <ParameterItem
+                      key={argName}
+                      name={argName}
+                      valueInput={argValue}
+                    />
+                  )
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const ToolDefinitionsViewer = ({
   toolCalls,
   tool_choice,
@@ -154,111 +274,15 @@ export const ToolDefinitionsViewer = ({
 
   const content = (
     <div className="flex flex-col gap-4">
-      {toolCalls.map((toolCall, index) => {
-        const { id } = toolCall;
-        const func = toolCall.function;
-        const name = func?.name ?? "Tool call";
-        const description = func?.description;
-        const parameters = func?.parameters || {};
-        const parametersProps = parameters?.properties || {};
-        const requiredParams: string[] = parameters?.required || [];
-        const paramCount = Object.keys(parametersProps).length;
-        const argumentsJson = getArguments(func?.arguments);
-        const argumentsCount = argumentsJson
-          ? Object.keys(argumentsJson).length
-          : 0;
-        const isExpanded = expandedTools[index] ?? true;
-
-        const meta: string[] = [];
-        if (paramCount > 0) {
-          meta.push(`${paramCount} ${paramCount === 1 ? "param" : "params"}`);
-        }
-        if (argumentsCount > 0) {
-          meta.push(`${argumentsCount} ${argumentsCount === 1 ? "arg" : "args"}`);
-        }
-
-        return (
-          <div
-            key={`${name}-${index}`}
-            className={`${index > 0 ? "border-t border-border/70 pt-4" : ""}`}
-          >
-            <button
-              type="button"
-              className="flex w-full items-center justify-between gap-2 text-left"
-              onClick={() => toggleTool(index)}
-            >
-              <div className="flex items-center gap-2">
-                <WrenchScrewdriverIcon className="h-3.5 w-3.5 text-zinc-400" />
-                <span className="text-sm font-semibold text-zinc-100">
-                  {name}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-[11px] text-zinc-500">
-                {meta.length > 0 && <span>{meta.join(" • ")}</span>}
-                <ChevronDown
-                  className={`h-3 w-3 transition-transform ${
-                    isExpanded ? "rotate-180" : ""
-                  }`}
-                />
-              </div>
-            </button>
-
-            {isExpanded && (
-              <div className="mt-3 space-y-3 text-xs text-zinc-300">
-                {id && (
-                  <div className="flex items-center gap-2 text-[11px] text-zinc-500">
-                    <FingerPrintIcon className="h-3 w-3 text-zinc-500" />
-                    <span className="font-mono">{id}</span>
-                  </div>
-                )}
-
-                {description && (
-                  <p className="leading-relaxed text-zinc-400">{description}</p>
-                )}
-
-                {paramCount > 0 && (
-                  <div className="space-y-2">
-                    <span className="text-[11px] uppercase tracking-wide text-zinc-500">
-                      Parameters
-                    </span>
-                    <div className="space-y-1">
-                      {Object.entries(parametersProps).map(
-                        ([paramName, paramSchema]: [string, any]) => (
-                          <ParameterItem
-                            key={paramName}
-                            name={paramName}
-                            schema={paramSchema}
-                            required={requiredParams.includes(paramName)}
-                          />
-                        )
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {argumentsCount > 0 && argumentsJson && (
-                  <div className="space-y-2">
-                    <span className="text-[11px] uppercase tracking-wide text-zinc-500">
-                      Arguments
-                    </span>
-                    <div className="space-y-1">
-                      {Object.entries(argumentsJson).map(
-                        ([argName, argValue]: [string, any]) => (
-                          <ParameterItem
-                            key={argName}
-                            name={argName}
-                            valueInput={argValue}
-                          />
-                        )
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })}
+      {toolCalls.map((toolCall, index) => (
+        <ToolCallItem
+          key={`${toolCall.function?.name ?? "tool"}-${index}`}
+          toolCall={toolCall}
+          index={index}
+          isExpanded={expandedTools[index] ?? true}
+          onToggle={() => toggleTool(index)}
+        />
+      ))}
     </div>
   );
 
