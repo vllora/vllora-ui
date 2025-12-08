@@ -16,6 +16,7 @@ import {
   ReactFlowInstance,
   useNodesState,
   useEdgesState,
+  Controls,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -184,8 +185,7 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
         id: `${nodeId}-model`,
         source: nodeId,
         target: 'model',
-        targetHandle: nodeId, // Connect to specific handle on model
-        type: 'default',
+        type: 'floating',
         style: { stroke: getEdgeColor(nodeType), strokeWidth: 2 },
       });
     });
@@ -215,8 +215,7 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
         id: `${nodeId}-model`,
         source: nodeId,
         target: 'model',
-        targetHandle: nodeId, // Connect to specific handle on model
-        type: 'default',
+        type: 'floating',
         style: { stroke: getEdgeColor('tools'), strokeWidth: 2 },
       });
     });
@@ -317,7 +316,7 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
         <DialogHeader className="px-5 pt-4 pb-3 border-b border-border">
           <DialogTitle className="flex items-center gap-2 text-zinc-200">
             <GitBranch className="w-5 h-5" />
-            Visual Flow
+            Visual Diagram
           </DialogTitle>
         </DialogHeader>
 
@@ -332,10 +331,10 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
           >
-            {/* <Controls
+            <Controls
               showInteractive={false}
               className="!border-border !shadow-none [&>button]:!bg-[#161b22] [&>button]:!border-[#30363d] [&>button]:!text-zinc-400 [&>button:hover]:!bg-[#21262d]"
-            /> */}
+            />
           </ReactFlow>
         </div>
       </DialogContent>

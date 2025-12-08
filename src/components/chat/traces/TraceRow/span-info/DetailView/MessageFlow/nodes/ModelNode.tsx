@@ -9,8 +9,6 @@ export const ModelNode = ({ id, data }: { id: string; data: Record<string, unkno
   const requestJson = data.requestJson as Record<string, any> | undefined;
   const modelName = data.modelName as string;
   const xLabel = headers && typeof headers === 'object' ? headers['x-label'] : null;
-  const inputHandles = data.inputHandles as string[] | undefined;
-  const inputAngles = data.inputAngles as Record<string, number> | undefined;
   const nodeWidth = data.nodeWidth as number | undefined;
   const expandedHeight = data.expandedHeight as number | undefined;
   const onToggleExpand = data.onToggleExpand as ((nodeId: string) => void) | undefined;
@@ -41,7 +39,7 @@ export const ModelNode = ({ id, data }: { id: string; data: Record<string, unkno
       className="relative border border-border rounded-md shadow-sm cursor-pointer hover:brightness-110 transition-all"
       style={{ width: nodeWidth ?? 220 }}
     >
-      <DynamicHandles inputHandles={inputHandles} inputAngles={inputAngles} />
+      <DynamicHandles />
       <div className="px-4 py-3">
         <div className="flex items-center gap-2">
           {providerName ? (

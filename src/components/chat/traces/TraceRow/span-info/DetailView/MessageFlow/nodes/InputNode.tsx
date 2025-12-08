@@ -6,18 +6,19 @@ import { MarkdownViewer } from "../../markdown-viewer";
 import { ToolInfoDisplay } from "./ToolInfoDisplay";
 import { ContentArrayDisplay } from "@/components/chat/messages/ContentArrayDisplay";
 
-export const InputNode = ({ id, data }: { id: string; data: Record<string, unknown> }) => {
+export const InputNode = ({ data }: { id: string; data: Record<string, unknown> }) => {
   const nodeType = data.nodeType as NodeType;
   const label = data.label as string;
   const roleStyle = getRoleStyle(nodeType);
   const rawMessage = data.rawMessage as Record<string, any> | undefined;
   const toolInfo = data.toolInfo as Record<string, any> | undefined;
   const isExpanded = data.isExpanded as boolean;
-  const angle = data.angle as number | undefined;
   const nodeWidth = data.nodeWidth as number | undefined;
   const expandedHeight = data.expandedHeight as number | undefined;
   const onToggleExpand = data.onToggleExpand as ((nodeId: string) => void) | undefined;
+  const id = data.id as string;
 
+  console.log('=== nodeWidth', nodeWidth)
   // Get preview text
   const getPreviewText = () => {
     if (toolInfo) {
@@ -60,40 +61,16 @@ export const InputNode = ({ id, data }: { id: string; data: Record<string, unkno
     }
     return '';
   };
-  // Calculate handle position to face towards the model (centered on edge)
-  const getHandlePosition = () => {
-    if (angle === undefined) {
-      return Position.Right;
-    }
-
-    const sinAngle = Math.sin(angle);
-    const cosAngle = Math.cos(angle);
-
-    // Handle should point towards model (opposite direction of node's position)
-    // Use threshold of 0.7 (~45°) to determine primary direction
-    if (sinAngle < -0.7) {
-      // Node is above model → handle on BOTTOM edge
-      return Position.Bottom;
-    } else if (sinAngle > 0.7) {
-      // Node is below model → handle on TOP edge
-      return Position.Top;
-    } else if (cosAngle > 0.7) {
-      // Node is to the right of model → handle on LEFT edge
-      return Position.Left;
-    } else {
-      // Node is to the left of model → handle on RIGHT edge
-      return Position.Right;
-    }
-  };
-
-  const handlePosition = getHandlePosition();
-
   return (
     <div
-      className="relative border border-border rounded-md shadow-sm cursor-pointer hover:brightness-110 transition-all bg-background"
+      className={`relative border-2 ${roleStyle.borderColor} rounded-md shadow-sm cursor-pointer hover:brightness-110 transition-all bg-background`}
       style={{ width: nodeWidth ?? 220 }}
     >
-      <Handle type="source" position={handlePosition} className="!bg-[#30363d] !w-0 !h-0 !border-0" />
+      {/* Handles on all sides - floating edges calculate positions dynamically */}
+      <Handle type="source" position={Position.Top} id="top" className="!opacity-0 !w-1 !h-1" />
+      <Handle type="source" position={Position.Bottom} id="bottom" className="!opacity-0 !w-1 !h-1" />
+      <Handle type="source" position={Position.Left} id="left" className="!opacity-0 !w-1 !h-1" />
+      <Handle type="source" position={Position.Right} id="right" className="!opacity-0 !w-1 !h-1" />
       <div className="px-3 py-2.5">
         <div className="flex items-center gap-2 min-w-0">
           <span className={`flex-shrink-0 ${roleStyle.textColor}`}>{getNodeIcon(nodeType)}</span>
