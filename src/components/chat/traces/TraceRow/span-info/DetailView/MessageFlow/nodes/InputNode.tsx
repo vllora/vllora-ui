@@ -3,8 +3,10 @@ import { ChevronDown, Layers } from "lucide-react";
 import { NodeType } from "../types";
 import { getNodeIcon, getRoleStyle } from "../utils";
 import { MarkdownViewer } from "../../markdown-viewer";
+import { ToolInfoDisplay } from "./ToolInfoDisplay";
+import { ContentArrayDisplay } from "@/components/chat/messages/ContentArrayDisplay";
 
-export const InputNode = ({ data }: { data: Record<string, unknown> }) => {
+export const InputNode = ({ id, data }: { id: string; data: Record<string, unknown> }) => {
   const nodeType = data.nodeType as NodeType;
   const label = data.label as string;
   const roleStyle = getRoleStyle(nodeType);
@@ -12,6 +14,9 @@ export const InputNode = ({ data }: { data: Record<string, unknown> }) => {
   const toolInfo = data.toolInfo as Record<string, any> | undefined;
   const isExpanded = data.isExpanded as boolean;
   const angle = data.angle as number | undefined;
+  const nodeWidth = data.nodeWidth as number | undefined;
+  const expandedHeight = data.expandedHeight as number | undefined;
+  const onToggleExpand = data.onToggleExpand as ((nodeId: string) => void) | undefined;
 
   // Get preview text
   const getPreviewText = () => {
@@ -55,17 +60,6 @@ export const InputNode = ({ data }: { data: Record<string, unknown> }) => {
     }
     return '';
   };
-
-  // Truncate content for display
-  const getTruncatedContent = () => {
-    const fullContent = getFullContent();
-    const maxLength = 500;
-    if (fullContent.length > maxLength) {
-      return fullContent.slice(0, maxLength) + '...';
-    }
-    return fullContent;
-  };
-
   // Calculate handle position to face towards the model (centered on edge)
   const getHandlePosition = () => {
     if (angle === undefined) {
@@ -95,7 +89,10 @@ export const InputNode = ({ data }: { data: Record<string, unknown> }) => {
   const handlePosition = getHandlePosition();
 
   return (
-    <div className={`relative w-[220px] ${roleStyle.bgColor} border ${roleStyle.borderColor} rounded-md shadow-sm cursor-pointer hover:brightness-110 transition-all`}>
+    <div
+      className="relative border border-border rounded-md shadow-sm cursor-pointer hover:brightness-110 transition-all bg-background"
+      style={{ width: nodeWidth ?? 220 }}
+    >
       <Handle type="source" position={handlePosition} className="!bg-[#30363d] !w-0 !h-0 !border-0" />
       <div className="px-3 py-2.5">
         <div className="flex items-center gap-2 min-w-0">
@@ -106,7 +103,17 @@ export const InputNode = ({ data }: { data: Record<string, unknown> }) => {
           >
             {label}
           </span>
-          <ChevronDown className={`w-3 h-3 ml-auto text-zinc-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+          {
+            <div className="ml-auto flex items-center gap-2 text-[11px] text-zinc-500">
+              {toolInfo && toolInfo.function && toolInfo.function.parameters && Object.keys(toolInfo.function.parameters).length > 0 && <span>{Object.keys(toolInfo.function.parameters).length} params</span>}
+              <ChevronDown
+                className={`w-3 h-3 ml-auto text-zinc-500 transition-transform cursor-pointer hover:text-zinc-300 ${isExpanded ? 'rotate-180' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleExpand?.(id);
+                }}
+              />
+            </div>}
         </div>
 
         {!isExpanded && previewText && (
@@ -124,26 +131,15 @@ export const InputNode = ({ data }: { data: Record<string, unknown> }) => {
         {/* Expanded content */}
         {isExpanded && (
           <div
-            className="mt-2 pt-2 border-t border-zinc-700/50 max-h-[180px] overflow-y-auto nowheel nopan"
+            className="mt-2 pt-2 border-t border-zinc-700/50 overflow-y-auto nowheel nopan"
+            style={{ maxHeight: expandedHeight ?? 180 }}
             onWheelCapture={(e) => e.stopPropagation()}
           >
             {toolInfo ? (
-              <div className="space-y-2">
-                <div className="text-xs text-zinc-400 leading-relaxed line-clamp-4">
-                  {toolInfo.function?.description || toolInfo.description}
-                </div>
-                {(toolInfo.function?.parameters || toolInfo.parameters) && (
-                  <details className="text-xs">
-                    <summary className="text-zinc-500 cursor-pointer hover:text-zinc-400">Parameters</summary>
-                    <pre className="mt-1 p-1.5 bg-zinc-900/50 rounded text-zinc-400 overflow-x-auto max-h-[80px] overflow-y-auto text-[10px]">
-                      {JSON.stringify(toolInfo.function?.parameters || toolInfo.parameters, null, 2)}
-                    </pre>
-                  </details>
-                )}
-              </div>
-            ) : (
-              <div className="text-xs text-zinc-300 leading-relaxed">
-                <MarkdownViewer message={getTruncatedContent()} />
+              <ToolInfoDisplay toolInfo={toolInfo} />
+            ) : hasMultipleItems ? (<div className="text-xs text-left text-zinc-300 leading-relaxed"><ContentArrayDisplay contentArray={rawMessage.content} /> </div>) : (
+              <div className="text-xs text-left text-zinc-300 leading-relaxed">
+                <MarkdownViewer message={getFullContent()} />
               </div>
             )}
           </div>

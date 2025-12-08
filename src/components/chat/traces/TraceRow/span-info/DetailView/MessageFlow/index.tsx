@@ -13,7 +13,6 @@ import {
   ReactFlow,
   Node,
   Edge,
-  NodeMouseHandler,
   ReactFlowInstance,
   useNodesState,
   useEdgesState,
@@ -23,7 +22,7 @@ import "@xyflow/react/dist/style.css";
 import { FlowDialogProps, NodeType } from "./types";
 import { nodeTypes } from "./nodes";
 import { edgeTypes } from "./edges";
-import { getEdgeColor } from "./utils";
+import { getEdgeColor, getLayoutedElements } from "./utils";
 import { extractResponseMessage } from "@/utils/extractResponseMessage";
 
 export type { FlowDialogProps, NodeType } from "./types";
@@ -46,19 +45,7 @@ const flowStyles = `
   .react-flow__node.selected > div {
     position: relative;
   }
-  .react-flow__node.selected > div::before {
-    content: '';
-    position: absolute;
-    inset: -3px;
-    border-radius: 8px;
-    padding: 2px;
-    background: conic-gradient(from var(--angle), rgb(var(--theme-500)), transparent, rgb(var(--theme-500)));
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    animation: rotate-gradient 2s linear infinite;
-  }
+  
   @property --angle {
     syntax: '<angle>';
     initial-value: 0deg;
@@ -90,85 +77,6 @@ const flowStyles = `
   }
 `;
 
-// Custom radial layout - positions input nodes around the model node
-const getLayoutedElements = (
-  nodes: Node[],
-  edges: Edge[],
-  expandedNodes: Set<string>
-) => {
-  // Node size constants
-  const NODE_WIDTH = 220;
-  const COLLAPSED_HEIGHT = 60;
-  const EXPANDED_HEIGHT = 240;
-
-  // Find the model node and input nodes
-  const modelNode = nodes.find(n => n.id === 'model');
-  const inputNodes = nodes.filter(n => n.id !== 'model');
-
-  if (!modelNode) {
-    return { nodes, edges };
-  }
-
-  // Calculate radius based on number of inputs - needs to be large for expanded nodes
-  const baseRadius = Math.max(350, inputNodes.length * 100);
-
-  // Model node position (center of the layout)
-  const modelX = baseRadius + NODE_WIDTH;
-  const modelY = baseRadius + EXPANDED_HEIGHT / 2;
-  const isModelExpanded = expandedNodes.has('model');
-  const modelHeight = isModelExpanded ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT;
-
-  // Position input nodes radially around the model (full 360° circle)
-  // Start from top (-90°) and go clockwise
-  const startAngle = -Math.PI / 2; // -90° = top
-
-  // Calculate angles for each input node - evenly distributed around the circle
-  const inputAngles: Record<string, number> = {};
-  inputNodes.forEach((node, index) => {
-    const totalInputs = inputNodes.length;
-    // Distribute evenly around full circle
-    const angle = startAngle + (2 * Math.PI * index) / totalInputs;
-    inputAngles[node.id] = angle;
-  });
-
-  const layoutedNodes = nodes.map((node) => {
-    const isExpanded = expandedNodes.has(node.id);
-    const height = isExpanded ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT;
-
-    if (node.id === 'model') {
-      return {
-        ...node,
-        data: {
-          ...node.data,
-          inputAngles, // Pass angles to model node for handle positioning
-        },
-        position: {
-          x: modelX - NODE_WIDTH / 2,
-          y: modelY - modelHeight / 2,
-        },
-      };
-    }
-
-    // Calculate position for input node
-    const angle = inputAngles[node.id];
-
-    // Calculate position on the arc
-    const x = modelX + baseRadius * Math.cos(angle) - NODE_WIDTH / 2;
-    const y = modelY + baseRadius * Math.sin(angle) - height / 2;
-
-    return {
-      ...node,
-      data: {
-        ...node.data,
-        angle, // Pass angle to input node for handle positioning
-      },
-      position: { x, y },
-    };
-  });
-
-  return { nodes: layoutedNodes, edges };
-};
-
 const FlowDialogContent: React.FC<FlowDialogProps> = ({
   rawRequest,
   rawResponse,
@@ -180,6 +88,25 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const reactFlowInstance = useRef<ReactFlowInstance<any, any> | null>(null);
+
+  // Calculate expanded height as 20vh (20% of viewport height)
+  const [expandedHeight, setExpandedHeight] = useState(() =>
+    typeof window !== 'undefined' ? window.innerHeight * 0.2 : 240
+  );
+
+  // Calculate node width as 15vw (15% of viewport width), min 180px, max 300px
+  const [nodeWidth, setNodeWidth] = useState(() =>
+    typeof window !== 'undefined' ? Math.min(300, Math.max(180, window.innerWidth * 0.5)) : 220
+  );
+
+  useEffect(() => {
+    const updateDimensions = () => {
+      setExpandedHeight(window.innerHeight * 0.2);
+      setNodeWidth(Math.min(300, Math.max(180, window.innerWidth * 0.15)));
+    };
+    window.addEventListener('resize', updateDimensions);
+    return () => window.removeEventListener('resize', updateDimensions);
+  }, []);
 
   // Initialize expanded nodes with all node IDs on first render
   useEffect(() => {
@@ -309,22 +236,25 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
       flowNodes,
       flowEdges,
-      expandedNodes ?? new Set()
+      expandedNodes ?? new Set(),
+      expandedHeight,
+      nodeWidth
     );
 
     setNodes(layoutedNodes);
     setEdges(layoutedEdges);
 
     // return { nodes: flowNodes, edges: flowEdges };
-  }, [rawRequest, rawResponse, expandedNodes]);
+  }, [rawRequest, rawResponse, expandedNodes, expandedHeight, nodeWidth]);
 
-  const onNodeClick: NodeMouseHandler = useCallback((_event, node) => {
+  // Toggle expand/collapse for a specific node (called from ChevronDown click)
+  const handleToggleExpand = useCallback((nodeId: string) => {
     setExpandedNodes(prev => {
       const newSet = new Set(prev ?? []);
-      if (newSet.has(node.id)) {
-        newSet.delete(node.id);
+      if (newSet.has(nodeId)) {
+        newSet.delete(nodeId);
       } else {
-        newSet.add(node.id);
+        newSet.add(nodeId);
       }
       return newSet;
     });
@@ -354,9 +284,12 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
         rawRequest,
         duration,
         costInfo,
+        nodeWidth,
+        expandedHeight,
+        onToggleExpand: handleToggleExpand,
       },
     }));
-  }, [nodes, expandedNodes, rawRequest, duration, costInfo]);
+  }, [nodes, expandedNodes, rawRequest, duration, costInfo, nodeWidth, expandedHeight, handleToggleExpand]);
 
   const hasData = nodes.length > 1; // At least model + one other node
 
@@ -391,12 +324,10 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
             edges={edges}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
-            onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}
             fitView
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
-            
           >
             {/* <Controls
               showInteractive={false}

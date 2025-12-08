@@ -2,13 +2,16 @@ import { Handle, Position } from "@xyflow/react";
 import { ChevronDown } from "lucide-react";
 import { ProviderIcon } from "@/components/Icons/ProviderIcons";
 
-export const ModelNode = ({ data }: { data: Record<string, unknown> }) => {
+export const ModelNode = ({ id, data }: { id: string; data: Record<string, unknown> }) => {
   const label = data.label as string;
   const isExpanded = data.isExpanded as boolean;
   const requestJson = data.requestJson as Record<string, any> | undefined;
   const finishReason = data.finishReason as string | undefined;
   const inputHandles = data.inputHandles as string[] | undefined;
   const inputAngles = data.inputAngles as Record<string, number> | undefined;
+  const nodeWidth = data.nodeWidth as number | undefined;
+  const expandedHeight = data.expandedHeight as number | undefined;
+  const onToggleExpand = data.onToggleExpand as ((nodeId: string) => void) | undefined;
 
   // Parse provider and model name from label (e.g., "openai/gpt-4.1-mini")
   const hasProvider = label?.includes('/');
@@ -31,7 +34,10 @@ export const ModelNode = ({ data }: { data: Record<string, unknown> }) => {
   const requestParams = getRequestParams();
 
   return (
-    <div className="relative w-[220px] bg-[#161b22] border border-[#30363d] rounded-md shadow-sm cursor-pointer hover:brightness-110 transition-all">
+    <div
+      className="relative bg-[#161b22] border border-[#30363d] rounded-md shadow-sm cursor-pointer hover:brightness-110 transition-all"
+      style={{ width: nodeWidth ?? 220 }}
+    >
       {/* Dynamic handles positioned based on input node angles (centered on edges) */}
       {inputHandles && inputHandles.length > 0 ? (
         inputHandles.map((handleId) => {
@@ -80,13 +86,20 @@ export const ModelNode = ({ data }: { data: Record<string, unknown> }) => {
             <ProviderIcon provider_name={'langdb'} className="w-5 h-5" />
           )}
           <span className="text-sm font-medium text-zinc-200 truncate max-w-[140px]">{modelName}</span>
-          <ChevronDown className={`w-3 h-3 ml-auto text-zinc-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+          <ChevronDown
+            className={`w-3 h-3 ml-auto text-zinc-500 transition-transform cursor-pointer hover:text-zinc-300 ${isExpanded ? 'rotate-180' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleExpand?.(id);
+            }}
+          />
         </div>
 
         {/* Expanded content */}
         {isExpanded && (
           <div
-            className="mt-2 pt-2 border-t border-zinc-700/50 space-y-2 max-h-[180px] overflow-y-auto nowheel nopan"
+            className="mt-2 pt-2 border-t border-zinc-700/50 space-y-2 overflow-y-auto nowheel nopan"
+            style={{ maxHeight: expandedHeight ?? 180 }}
             onWheelCapture={(e) => e.stopPropagation()}
           >
             {finishReason && (
