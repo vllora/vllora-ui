@@ -129,7 +129,7 @@ export const getLayoutedElements = (
   }
 
   // Calculate radius based on number of inputs and max node size
-  const baseRadius = Math.max(350, inputNodes.length * 80, NODE_WIDTH * 1.5);
+  const baseRadius = Math.max(250, inputNodes.length * 80, NODE_WIDTH * 1.2);
 
   // Model node position (center of the layout)
   const modelX = baseRadius + NODE_WIDTH;

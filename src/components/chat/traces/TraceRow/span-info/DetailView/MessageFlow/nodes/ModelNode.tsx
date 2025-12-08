@@ -36,8 +36,11 @@ export const ModelNode = ({ id, data }: { id: string; data: Record<string, unkno
 
   return (
     <div
-      className="relative border border-border rounded-md shadow-sm cursor-pointer hover:brightness-110 transition-all"
-      style={{ width: nodeWidth ?? 220 }}
+      className="relative border border-border rounded-md cursor-pointer hover:brightness-110 transition-all"
+      style={{
+        width: nodeWidth ?? 220,
+        boxShadow: `0 0 10px rgba(var(--theme-500), 0.1), 0 0 20px rgba(var(--theme-500), 0.05), 0 0 30px rgba(var(--theme-500), 0.03)`,
+      }}
     >
       <DynamicHandles />
       <div className="px-4 py-3">

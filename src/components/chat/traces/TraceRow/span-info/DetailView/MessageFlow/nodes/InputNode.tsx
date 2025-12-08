@@ -1,7 +1,7 @@
 import { Handle, Position } from "@xyflow/react";
 import { ChevronDown, Layers } from "lucide-react";
 import { NodeType } from "../types";
-import { getNodeIcon, getRoleStyle } from "../utils";
+import { getNodeIcon, getRoleStyle, getEdgeColor } from "../utils";
 import { MarkdownViewer } from "../../markdown-viewer";
 import { ToolInfoDisplay } from "./ToolInfoDisplay";
 import { ContentArrayDisplay } from "@/components/chat/messages/ContentArrayDisplay";
@@ -61,10 +61,16 @@ export const InputNode = ({ data }: { id: string; data: Record<string, unknown> 
     }
     return '';
   };
+  // Get glow color based on node type
+  const glowColor = getEdgeColor(nodeType);
+
   return (
     <div
-      className={`relative border-2 ${roleStyle.borderColor} rounded-md shadow-sm cursor-pointer hover:brightness-110 transition-all bg-background`}
-      style={{ width: nodeWidth ?? 220 }}
+      className={`relative border-2 ${roleStyle.borderColor} rounded-md cursor-pointer hover:brightness-110 transition-all bg-background`}
+      style={{
+        width: nodeWidth ?? 220,
+        boxShadow: `0 0 10px ${glowColor}1A, 0 0 20px ${glowColor}0D, 0 0 30px ${glowColor}08`,
+      }}
     >
       {/* Handles on all sides - floating edges calculate positions dynamically */}
       <Handle type="source" position={Position.Top} id="top" className="!opacity-0 !w-1 !h-1" />

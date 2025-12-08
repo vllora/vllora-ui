@@ -89,16 +89,12 @@ export function FloatingEdge({ id, source, target, style }: EdgeProps) {
     targetY: ty,
   });
 
-  // Extract stroke color from style for gradient
+  // Extract stroke color from style
   const strokeColor = (style?.stroke as string) || '#60a5fa';
 
   return (
     <>
       <defs>
-        <linearGradient id={`gradient-${id}`} x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor={strokeColor} stopOpacity="0.4" />
-          <stop offset="100%" stopColor={strokeColor} stopOpacity="1" />
-        </linearGradient>
         {/* Arrow marker */}
         <marker
           id={`arrow-${id}`}
@@ -130,7 +126,7 @@ export function FloatingEdge({ id, source, target, style }: EdgeProps) {
         strokeOpacity={0.2}
         strokeLinecap="round"
       />
-      {/* Main edge with gradient and arrow */}
+      {/* Main edge with arrow */}
       <path
         id={id}
         d={edgePath}
