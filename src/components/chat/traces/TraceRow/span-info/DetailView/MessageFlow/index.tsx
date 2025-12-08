@@ -19,7 +19,6 @@ import {
   useEdgesState,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import Dagre from "@dagrejs/dagre";
 
 import { FlowDialogProps, NodeType } from "./types";
 import { nodeTypes } from "./nodes";
@@ -91,59 +90,79 @@ const flowStyles = `
   }
 `;
 
-// Dagre layout function
+// Custom radial layout - positions input nodes around the model node
 const getLayoutedElements = (
   nodes: Node[],
   edges: Edge[],
   expandedNodes: Set<string>
 ) => {
-  const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
-
-  // Configure graph layout - left to right flow
-  g.setGraph({
-    rankdir: 'LR',
-    nodesep: 60,
-    ranksep: 120,
-    marginx: 50,
-    marginy: 50,
-  });
-
   // Node size constants
-  const COLLAPSED_WIDTH = 180;
+  const NODE_WIDTH = 220;
   const COLLAPSED_HEIGHT = 60;
-  const EXPANDED_WIDTH = 300;
   const EXPANDED_HEIGHT = 240;
 
-  // Add nodes with their dimensions
-  nodes.forEach((node) => {
-    const isExpanded = expandedNodes.has(node.id);
-    g.setNode(node.id, {
-      width: isExpanded ? EXPANDED_WIDTH : COLLAPSED_WIDTH,
-      height: isExpanded ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT,
-    });
+  // Find the model node and input nodes
+  const modelNode = nodes.find(n => n.id === 'model');
+  const inputNodes = nodes.filter(n => n.id !== 'model');
+
+  if (!modelNode) {
+    return { nodes, edges };
+  }
+
+  // Calculate radius based on number of inputs - needs to be large for expanded nodes
+  const baseRadius = Math.max(350, inputNodes.length * 100);
+
+  // Model node position (center of the layout)
+  const modelX = baseRadius + NODE_WIDTH;
+  const modelY = baseRadius + EXPANDED_HEIGHT / 2;
+  const isModelExpanded = expandedNodes.has('model');
+  const modelHeight = isModelExpanded ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT;
+
+  // Position input nodes radially around the model (full 360° circle)
+  // Start from top (-90°) and go clockwise
+  const startAngle = -Math.PI / 2; // -90° = top
+
+  // Calculate angles for each input node - evenly distributed around the circle
+  const inputAngles: Record<string, number> = {};
+  inputNodes.forEach((node, index) => {
+    const totalInputs = inputNodes.length;
+    // Distribute evenly around full circle
+    const angle = startAngle + (2 * Math.PI * index) / totalInputs;
+    inputAngles[node.id] = angle;
   });
 
-  // Add edges
-  edges.forEach((edge) => {
-    g.setEdge(edge.source, edge.target);
-  });
-
-  // Run layout
-  Dagre.layout(g);
-
-  // Apply calculated positions to nodes
   const layoutedNodes = nodes.map((node) => {
-    const nodeWithPosition = g.node(node.id);
     const isExpanded = expandedNodes.has(node.id);
-    const width = isExpanded ? EXPANDED_WIDTH : COLLAPSED_WIDTH;
     const height = isExpanded ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT;
+
+    if (node.id === 'model') {
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          inputAngles, // Pass angles to model node for handle positioning
+        },
+        position: {
+          x: modelX - NODE_WIDTH / 2,
+          y: modelY - modelHeight / 2,
+        },
+      };
+    }
+
+    // Calculate position for input node
+    const angle = inputAngles[node.id];
+
+    // Calculate position on the arc
+    const x = modelX + baseRadius * Math.cos(angle) - NODE_WIDTH / 2;
+    const y = modelY + baseRadius * Math.sin(angle) - height / 2;
 
     return {
       ...node,
-      position: {
-        x: nodeWithPosition.x - width / 2,
-        y: nodeWithPosition.y - height / 2,
+      data: {
+        ...node.data,
+        angle, // Pass angle to input node for handle positioning
       },
+      position: { x, y },
     };
   });
 
@@ -156,15 +175,28 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
   duration,
   costInfo
 }) => {
-  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const [expandedNodes, setExpandedNodes] = useState<Set<string> | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const reactFlowInstance = useRef<ReactFlowInstance<any, any> | null>(null);
 
+  // Initialize expanded nodes with all node IDs on first render
+  useEffect(() => {
+    if (expandedNodes === null) {
+      const allNodeIds: string[] = ['model'];
+      const messages = rawRequest?.messages || [];
+      const tools = rawRequest?.tools || [];
+      messages.forEach((_: any, index: number) => allNodeIds.push(`input-${index}`));
+      tools.forEach((_: any, index: number) => allNodeIds.push(`tool-${index}`));
+      setExpandedNodes(new Set(allNodeIds));
+    }
+  }, [rawRequest, expandedNodes]);
+
   useEffect(() => {
     const flowNodes: Node[] = [];
     const flowEdges: Edge[] = [];
+    const inputNodeIds: string[] = []; // Track all input node IDs for model handles
 
     // Extract data from raw request/response
     const messagesInput: Array<Record<string, any>> = rawRequest?.messages || [];
@@ -199,6 +231,7 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
       }
 
       const nodeId = `input-${index}`;
+      inputNodeIds.push(nodeId);
 
       const preview = typeof message.content === 'string'
         ? message.content
@@ -222,9 +255,9 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
         id: `${nodeId}-model`,
         source: nodeId,
         target: 'model',
+        targetHandle: nodeId, // Connect to specific handle on model
         type: 'default',
         style: { stroke: getEdgeColor(nodeType), strokeWidth: 2 },
-        animated: true,
       });
     });
 
@@ -235,6 +268,7 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
       const toolName = tool.function?.name || tool.name || 'Tool';
       const toolDescription = tool.function?.description || tool.description || '';
       const nodeId = `tool-${index}`;
+      inputNodeIds.push(nodeId);
 
       flowNodes.push({
         id: nodeId,
@@ -252,13 +286,13 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
         id: `${nodeId}-model`,
         source: nodeId,
         target: 'model',
+        targetHandle: nodeId, // Connect to specific handle on model
         type: 'default',
         style: { stroke: getEdgeColor('tools'), strokeWidth: 2 },
-        animated: true,
       });
     });
 
-    // Add model node
+    // Add model node with handles for each input
     flowNodes.push({
       id: 'model',
       type: 'model',
@@ -267,6 +301,7 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
         label: modelInvoked || 'Model',
         finishReason: extractedResponse.finish_reason,
         requestJson: rawRequest,
+        inputHandles: inputNodeIds, // Pass input IDs for dynamic handle creation
       },
     });
 
@@ -274,7 +309,7 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
       flowNodes,
       flowEdges,
-      expandedNodes
+      expandedNodes ?? new Set()
     );
 
     setNodes(layoutedNodes);
@@ -285,7 +320,7 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
 
   const onNodeClick: NodeMouseHandler = useCallback((_event, node) => {
     setExpandedNodes(prev => {
-      const newSet = new Set(prev);
+      const newSet = new Set(prev ?? []);
       if (newSet.has(node.id)) {
         newSet.delete(node.id);
       } else {
@@ -309,12 +344,12 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
 
   // Add expanded state and extra data to nodes
   const nodesWithSelection = useMemo(() => {
+    const expanded = expandedNodes ?? new Set<string>();
     return nodes.map(node => ({
       ...node,
-      selected: expandedNodes.has(node.id),
       data: {
         ...node.data,
-        isExpanded: expandedNodes.has(node.id),
+        isExpanded: expanded.has(node.id),
         // Pass extra data needed for expanded details
         rawRequest,
         duration,
@@ -358,7 +393,6 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
             edgeTypes={edgeTypes}
             onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}
-            onInit={(instance) => { reactFlowInstance.current = instance; }}
             fitView
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}

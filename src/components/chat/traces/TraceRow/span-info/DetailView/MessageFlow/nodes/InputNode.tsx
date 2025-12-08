@@ -11,6 +11,7 @@ export const InputNode = ({ data }: { data: Record<string, unknown> }) => {
   const rawMessage = data.rawMessage as Record<string, any> | undefined;
   const toolInfo = data.toolInfo as Record<string, any> | undefined;
   const isExpanded = data.isExpanded as boolean;
+  const angle = data.angle as number | undefined;
 
   // Get preview text
   const getPreviewText = () => {
@@ -32,9 +33,6 @@ export const InputNode = ({ data }: { data: Record<string, unknown> }) => {
 
   const previewText = getPreviewText();
   const hasMultipleItems = rawMessage?.content && Array.isArray(rawMessage.content);
-
-  // Only tool definitions that are called in response need a target handle for "require invoke" edges
-  const isCalledInResponse = data.isCalledInResponse as boolean | undefined;
 
   // Get full content for expanded view
   const getFullContent = () => {
@@ -68,12 +66,37 @@ export const InputNode = ({ data }: { data: Record<string, unknown> }) => {
     return fullContent;
   };
 
+  // Calculate handle position to face towards the model (centered on edge)
+  const getHandlePosition = () => {
+    if (angle === undefined) {
+      return Position.Right;
+    }
+
+    const sinAngle = Math.sin(angle);
+    const cosAngle = Math.cos(angle);
+
+    // Handle should point towards model (opposite direction of node's position)
+    // Use threshold of 0.7 (~45°) to determine primary direction
+    if (sinAngle < -0.7) {
+      // Node is above model → handle on BOTTOM edge
+      return Position.Bottom;
+    } else if (sinAngle > 0.7) {
+      // Node is below model → handle on TOP edge
+      return Position.Top;
+    } else if (cosAngle > 0.7) {
+      // Node is to the right of model → handle on LEFT edge
+      return Position.Left;
+    } else {
+      // Node is to the left of model → handle on RIGHT edge
+      return Position.Right;
+    }
+  };
+
+  const handlePosition = getHandlePosition();
+
   return (
-    <div className={`relative ${roleStyle.bgColor} border ${roleStyle.borderColor} rounded-md shadow-sm cursor-pointer hover:brightness-110 transition-all ${isExpanded ? 'w-[300px]' : 'min-w-[170px] max-w-[250px]'}`}>
-      <Handle type="source" position={Position.Right} className="!bg-[#30363d] !w-2 !h-2 !border-0 !right-[0px]" />
-      {isCalledInResponse && (
-        <Handle type="target" id="bottom" position={Position.Bottom} className="!bg-[#30363d] !w-2 !h-2 !border-0" />
-      )}
+    <div className={`relative w-[220px] ${roleStyle.bgColor} border ${roleStyle.borderColor} rounded-md shadow-sm cursor-pointer hover:brightness-110 transition-all`}>
+      <Handle type="source" position={handlePosition} className="!bg-[#30363d] !w-0 !h-0 !border-0" />
       <div className="px-3 py-2.5">
         <div className="flex items-center gap-2 min-w-0">
           <span className={`flex-shrink-0 ${roleStyle.textColor}`}>{getNodeIcon(nodeType)}</span>

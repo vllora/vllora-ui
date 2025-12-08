@@ -7,6 +7,8 @@ export const ModelNode = ({ data }: { data: Record<string, unknown> }) => {
   const isExpanded = data.isExpanded as boolean;
   const requestJson = data.requestJson as Record<string, any> | undefined;
   const finishReason = data.finishReason as string | undefined;
+  const inputHandles = data.inputHandles as string[] | undefined;
+  const inputAngles = data.inputAngles as Record<string, number> | undefined;
 
   // Parse provider and model name from label (e.g., "openai/gpt-4.1-mini")
   const hasProvider = label?.includes('/');
@@ -29,8 +31,47 @@ export const ModelNode = ({ data }: { data: Record<string, unknown> }) => {
   const requestParams = getRequestParams();
 
   return (
-    <div className={`relative bg-[#161b22] border border-[#30363d] rounded-md shadow-sm cursor-pointer hover:brightness-110 transition-all ${isExpanded ? 'w-[280px]' : 'min-w-[180px]'}`}>
-      <Handle type="target" position={Position.Left} className="!bg-[#30363d] !w-2 !h-2 !border-0 !left-[0px]" />
+    <div className="relative w-[220px] bg-[#161b22] border border-[#30363d] rounded-md shadow-sm cursor-pointer hover:brightness-110 transition-all">
+      {/* Dynamic handles positioned based on input node angles (centered on edges) */}
+      {inputHandles && inputHandles.length > 0 ? (
+        inputHandles.map((handleId) => {
+          const angle = inputAngles?.[handleId];
+          if (angle === undefined) return null;
+
+          const sinAngle = Math.sin(angle);
+          const cosAngle = Math.cos(angle);
+
+          let position: Position;
+
+          // Determine which edge based on angle of input node
+          // Use threshold of 0.7 (~45°) to determine primary direction
+          if (sinAngle < -0.7) {
+            // Input is above → handle on TOP edge
+            position = Position.Top;
+          } else if (sinAngle > 0.7) {
+            // Input is below → handle on BOTTOM edge
+            position = Position.Bottom;
+          } else if (cosAngle > 0.7) {
+            // Input is to the right → handle on RIGHT edge
+            position = Position.Right;
+          } else {
+            // Input is to the left → handle on LEFT edge
+            position = Position.Left;
+          }
+
+          return (
+            <Handle
+              key={handleId}
+              type="target"
+              position={position}
+              id={handleId}
+              className="!bg-[#30363d] !w-0 !h-0 !border-0"
+            />
+          );
+        })
+      ) : (
+        <Handle type="target" position={Position.Left} className="!bg-[#30363d] !w-0 !h-0 !border-0" />
+      )}
       <div className="px-4 py-3">
         <div className="flex items-center gap-2">
           {providerName ? (
