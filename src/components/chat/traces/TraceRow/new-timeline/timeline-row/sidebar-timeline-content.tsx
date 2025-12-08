@@ -43,10 +43,6 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
     const totalUsage = span && getTotalUsage({ span }) || 0;
     const cost = span && getCost({ span }) || 0;
     const error = span && span.attribute?.error;
-
-    const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-    const [editedRequest, setEditedRequest] = useState<string>("");
-
     // Get the stored request from span attribute
     const getStoredRequest = () => {
         const attribute = span?.attribute as Record<string, unknown> | undefined;
@@ -60,35 +56,8 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
         }
         return request;
     };
+    
 
-    // Continue with original request
-    const handleContinueOriginal = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (span?.span_id) {
-            continueBreakpoint(span.span_id, null);
-        }
-    };
-
-    // Open edit dialog
-    const handleOpenEditDialog = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        const request = getStoredRequest();
-        setEditedRequest(request ? JSON.stringify(request, null, 2) : "{}");
-        setIsEditDialogOpen(true);
-    };
-
-    // Continue with edited request
-    const handleContinueWithEdit = () => {
-        if (span?.span_id) {
-            try {
-                const parsedRequest = JSON.parse(editedRequest);
-                continueBreakpoint(span.span_id, parsedRequest);
-                setIsEditDialogOpen(false);
-            } catch {
-                // Invalid JSON, don't continue
-            }
-        }
-    };
     return (
         <div
             style={{ width: titleWidth }}
@@ -127,18 +96,10 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                                         <div className={`mr-1 flex-shrink-0 cursor-pointer`}>
                                             {/* Icon display with potential cache indicator */}
                                             <div className="relative">
-                                                {span?.isInDebug ? (
-                                                    <button
-                                                        onClick={handleContinueOriginal}
-                                                        className={`p-1 rounded-full bg-yellow-500/30 hover:bg-yellow-500/40 transition-colors`}
-                                                    >
-                                                        <PauseCircle className="w-3.5 h-3.5 text-yellow-500" />
-                                                    </button>
-                                                ) : (
+                                                
                                                     <div className={`p-1 rounded-full ${operationIconColor}`}>
                                                         {operationIcon}
                                                     </div>
-                                                )}
                                                 {sdkName && !agentSpan && !span?.isInDebug && (
                                                     <div className="absolute -bottom-0 -right-1  bg-gray-800 rounded-full p-0.5 border border-gray-700 shadow-sm">
                                                         <ClientSdkIcon client_name={sdkName} className="w-2.5 h-2.5" />
@@ -165,19 +126,9 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                                             </div>
                                         </div>
                                     </TooltipTrigger>
-                                    {span?.isInDebug ? (
-                                        <TooltipContent side="right" className="max-w-md p-0">
-                                            <BreakpointTooltipContent
-                                                request={getStoredRequest()}
-                                                onContinue={handleContinueOriginal}
-                                                onEditAndContinue={handleOpenEditDialog}
-                                            />
-                                        </TooltipContent>
-                                    ) : (
-                                        <TooltipContent side="bottom" className="text-xs">
+                                    <TooltipContent side="bottom" className="text-xs">
                                             {getOperationTitle({ operation_name, span })}
-                                        </TooltipContent>
-                                    )}
+                                    </TooltipContent>
                                 </Tooltip>
                             </TooltipProvider>
                         )}
@@ -218,51 +169,6 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                     </span>
                 </div>
             </div>
-
-            {/* Edit Request Dialog */}
-            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-                <DialogContent className="max-w-2xl max-h-[80vh] p-0 gap-0" onClick={(e) => e.stopPropagation()}>
-                    <div className="p-4 space-y-4">
-                        {/* Header - matching BreakpointTooltipContent style */}
-                        <div className="flex items-center gap-2 text-yellow-500 font-medium text-sm">
-                            <Pencil className="w-4 h-4" />
-                            <span>Edit Request</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                            Modify the request JSON and continue execution
-                        </p>
-
-                        {/* JSON Editor */}
-                        <div className="h-[400px]">
-                            <JsonEditor
-                                value={editedRequest}
-                                onChange={setEditedRequest}
-                            />
-                        </div>
-
-                        {/* Action Buttons - matching BreakpointTooltipContent style */}
-                        <div className="flex gap-2 pt-2">
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                className="flex-1"
-                                onClick={() => setIsEditDialogOpen(false)}
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                className="flex-1 gap-1.5 text-green-500 border-green-500/50 hover:bg-green-500/10 hover:text-green-400"
-                                onClick={handleContinueWithEdit}
-                            >
-                                <Play className="w-3.5 h-3.5" />
-                                Continue
-                            </Button>
-                        </div>
-                    </div>
-                </DialogContent>
-            </Dialog>
         </div>
     );
 };
