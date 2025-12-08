@@ -4,14 +4,12 @@ import { TimelineVisualization } from "./timeline-visualization";
 import { SidebarTimelineContent } from "./sidebar-timeline-content";
 import { classNames } from "@/utils/modelUtils";
 import { Span } from "@/types/common-type";
-import { Eye, Pencil, Play } from "lucide-react";
+import { Eye } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { BreakpointIcon } from "@/components/Icons/BreakpointIcon";
 import { BreakpointTooltipContent } from "./breakpoint-tooltip-content";
 import { BreakpointsConsumer } from "@/lib";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { JsonEditor } from "@/components/chat/conversation/model-config/json-editor";
+import { EditRequestDialog } from "./EditRequestDialog";
 
 // Base props for timeline content components
 export interface TimelineContentBaseProps {
@@ -204,7 +202,7 @@ export const TimelineRow = (props: TimelineRowProps) => {
                                     <BreakpointIcon className="text-yellow-500" />
                                 </div>
                             </TooltipTrigger>
-                            <TooltipContent side="top">
+                            <TooltipContent>
                                 <BreakpointTooltipContent
                                                 request={getStoredRequest()}
                                                 onContinue={handleContinueOriginal}
@@ -216,8 +214,6 @@ export const TimelineRow = (props: TimelineRowProps) => {
 
                 {/* Render either fullscreen or sidebar content based on mode */}
                 <SidebarTimelineContent {...contentProps} isInSidebar={isInSidebar} />
-
-
                 {/* Timeline visualization */}
                 <TimelineVisualization
                     span={span}
@@ -227,50 +223,13 @@ export const TimelineRow = (props: TimelineRowProps) => {
                     timelineBgColor={timelineBgColor}
                 />
             </div>
-            {/* Edit Request Dialog */}
-            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-                <DialogContent className="max-w-2xl max-h-[80vh] p-0 gap-0" onClick={(e) => e.stopPropagation()}>
-                    <div className="p-4 space-y-4">
-                        {/* Header - matching BreakpointTooltipContent style */}
-                        <div className="flex items-center gap-2 text-yellow-500 font-medium text-sm">
-                            <Pencil className="w-4 h-4" />
-                            <span>Edit Request</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                            Modify the request JSON and continue execution
-                        </p>
-
-                        {/* JSON Editor */}
-                        <div className="h-[400px]">
-                            <JsonEditor
-                                value={editedRequest}
-                                onChange={setEditedRequest}
-                            />
-                        </div>
-
-                        {/* Action Buttons - matching BreakpointTooltipContent style */}
-                        <div className="flex gap-2 pt-2">
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                className="flex-1"
-                                onClick={() => setIsEditDialogOpen(false)}
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                className="flex-1 gap-1.5 text-green-500 border-green-500/50 hover:bg-green-500/10 hover:text-green-400"
-                                onClick={handleContinueWithEdit}
-                            >
-                                <Play className="w-3.5 h-3.5" />
-                                Continue
-                            </Button>
-                        </div>
-                    </div>
-                </DialogContent>
-            </Dialog>
+            <EditRequestDialog
+                open={isEditDialogOpen}
+                onOpenChange={setIsEditDialogOpen}
+                value={editedRequest}
+                onChange={setEditedRequest}
+                onContinue={handleContinueWithEdit}
+            />
         </div>
     );
 };
