@@ -13,9 +13,12 @@ interface DetailPanelProps {
     type: string;
     data: Record<string, any>;
   } | null;
+  rawRequest: object | undefined;
+  duration: any;
+  costInfo: any;
 }
 
-export const DetailPanel = ({ selectedNode }: DetailPanelProps) => {
+export const DetailPanel = ({ selectedNode, rawRequest, duration, costInfo }: DetailPanelProps) => {
   if (!selectedNode) {
     return (
       <div className="h-full flex items-center justify-center text-zinc-500 text-sm">
@@ -68,7 +71,10 @@ export const DetailPanel = ({ selectedNode }: DetailPanelProps) => {
     return (
       <ResponsePanel
         rawResponse={data.rawResponse as Record<string, any>}
+        rawRequest={rawRequest}
         nodeType={nodeType}
+        duration={duration}
+        costInfo={costInfo}
         label={label}
         count={data.count as number | undefined}
       />

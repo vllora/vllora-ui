@@ -12,7 +12,7 @@ import { getCost, getLabelOfSpan, getModelName, getTotalUsage } from "../new-tim
 import { LabelTag } from "../new-timeline/timeline-row/label-tag";
 import { ModelContextViewer } from "./DetailView/spans-display/model-context-viewer";
 
-const getDuration = (startTime?: number, endTime?: number): string | null => {
+export const getDuration = (startTime?: number, endTime?: number): string | null => {
   if (!startTime || !endTime) return null;
   // Convert microseconds to seconds
   const seconds = (endTime - startTime) / 1000 / 1000;

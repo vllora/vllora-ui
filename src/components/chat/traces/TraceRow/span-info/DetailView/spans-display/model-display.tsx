@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useCallback } from "react";
 import { FlowDialog } from "../MessageFlow";
+import { getDuration } from "../../SpanHeader";
 
 interface ModelInvokeUIDetailsDisplayProps {
     span: Span;
@@ -47,10 +48,11 @@ export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelIn
     const costInfo = cost_str ? tryParseJson(cost_str) : null;
     const usageInfo = usage_str ? tryParseJson(usage_str) : null;
     const ttf_str = modelCallAttribute?.ttft;
-
-
     const headersStr = apiCloudInvokeAttribute?.['http.request.header'];
     const headers = headersStr ? tryParseJson(headersStr) : undefined;
+    const startTime = span.start_time_us;
+    const endTime = span.finish_time_us;
+    const duration = endTime && startTime ? getDuration(startTime, endTime) : undefined;
 
     const handleExperiment = useCallback(() => {
         if (apiInvokeSpan?.span_id) {
@@ -65,6 +67,8 @@ export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelIn
             <FlowDialog
                 rawRequest={raw_request_json}
                 rawResponse={raw_response_json}
+                costInfo={costInfo}
+                duration={duration}
             />
             <TooltipProvider>
                 <Tooltip>
@@ -110,3 +114,4 @@ export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelIn
         </BaseSpanUIDetailsDisplay>
     );
 };
+

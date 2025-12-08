@@ -93,6 +93,8 @@ const flowStyles = `
 const FlowDialogContent: React.FC<FlowDialogProps> = ({
   rawRequest,
   rawResponse,
+  duration,
+  costInfo
 }) => {
   const [selectedNode, setSelectedNode] = useState<{
     id: string;
@@ -422,7 +424,7 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
 
           {/* Detail Panel Section */}
           <div className="flex-1 overflow-hidden min-h-0">
-            <DetailPanel selectedNode={selectedNode} />
+            <DetailPanel rawRequest={rawRequest} duration={duration} costInfo={costInfo} selectedNode={selectedNode} />
           </div>
         </div>
       </DialogContent>

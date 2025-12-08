@@ -1,20 +1,24 @@
 import { useState } from "react";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, Timer } from "lucide-react";
 import { JsonViewer } from "@/components/chat/traces/TraceRow/span-info/JsonViewer";
 import { NodeType } from "../types";
 import { getNodeIcon, getRoleStyle } from "../utils";
 import { ResponseViewer } from "../../response-viewer";
+import { ModelContextViewer } from "../../spans-display/model-context-viewer";
 
 type ViewMode = "visual" | "raw";
 
 interface ResponsePanelProps {
   rawResponse: Record<string, any>;
+  rawRequest: any | undefined;
   nodeType: NodeType;
+  duration: any;
+  costInfo: any;
   label: string;
   count?: number;
 }
 
-export const ResponsePanel = ({ rawResponse, nodeType, label, count }: ResponsePanelProps) => {
+export const ResponsePanel = ({ rawResponse, nodeType, label, count, rawRequest, duration, costInfo }: ResponsePanelProps) => {
   const roleStyle = getRoleStyle(nodeType);
   const [viewMode, setViewMode] = useState<ViewMode>("visual");
   const [copied, setCopied] = useState(false);
@@ -28,6 +32,7 @@ export const ResponsePanel = ({ rawResponse, nodeType, label, count }: ResponseP
       console.error('Failed to copy:', err);
     }
   };
+  const usage = rawResponse && rawResponse.usage
 
   return (
     <div className="h-full flex flex-col p-4">
@@ -38,6 +43,12 @@ export const ResponsePanel = ({ rawResponse, nodeType, label, count }: ResponseP
           {count && count > 1 && (
             <span className="text-xs text-zinc-500">×{count}</span>
           )}
+          {duration && <div className="flex items-center gap-1 px-0 py-0.5 rounded-md bg-[#1a1a1a] text-teal-500 flex-shrink-0">
+            <Timer className="h-3 w-3" />
+            <span className="text-xs font-mono">{duration}s</span>
+          </div>}
+          <ModelContextViewer model_name={rawRequest?.model || ''} usage_tokens={usage.total_tokens} cost={costInfo} />
+
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -50,21 +61,19 @@ export const ResponsePanel = ({ rawResponse, nodeType, label, count }: ResponseP
           <div className="flex items-center gap-1 bg-[#21262d] rounded-md p-0.5">
             <button
               onClick={() => setViewMode("visual")}
-              className={`px-2 py-1 text-xs rounded transition-colors ${
-                viewMode === "visual"
-                  ? "bg-[#30363d] text-zinc-200"
-                  : "text-zinc-500 hover:text-zinc-300"
-              }`}
+              className={`px-2 py-1 text-xs rounded transition-colors ${viewMode === "visual"
+                ? "bg-[#30363d] text-zinc-200"
+                : "text-zinc-500 hover:text-zinc-300"
+                }`}
             >
               Visual
             </button>
             <button
               onClick={() => setViewMode("raw")}
-              className={`px-2 py-1 text-xs rounded transition-colors ${
-                viewMode === "raw"
-                  ? "bg-[#30363d] text-zinc-200"
-                  : "text-zinc-500 hover:text-zinc-300"
-              }`}
+              className={`px-2 py-1 text-xs rounded transition-colors ${viewMode === "raw"
+                ? "bg-[#30363d] text-zinc-200"
+                : "text-zinc-500 hover:text-zinc-300"
+                }`}
             >
               Raw
             </button>
