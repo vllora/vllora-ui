@@ -38,16 +38,16 @@ export const SingleRunTimelineView = (props: SingleRunTimelineViewProps) => {
                                 {/* Time markers */}
                                 <div className="absolute left-0 bottom-1 text-[10px] text-white font-semibold whitespace-nowrap">0.0s</div>
                                 <div className="absolute left-1/4 bottom-1 -translate-x-1/2 text-[10px] font-semibold text-white whitespace-nowrap">
-                                    {(totalDuration * 0.25 / 1000000).toFixed(1)}s
+                                    { totalDuration === -Infinity ? 0 : (totalDuration * 0.25 / 1000000).toFixed(1)}s
                                 </div>
                                 <div className="absolute left-1/2 bottom-1 -translate-x-1/2 text-[10px] font-semibold text-white whitespace-nowrap">
-                                    {(totalDuration * 0.5 / 1000000).toFixed(1)}s
+                                    {totalDuration === -Infinity ? 0 :  (totalDuration * 0.5 / 1000000).toFixed(1)}s
                                 </div>
                                 <div className="absolute left-3/4 bottom-1 -translate-x-1/2 text-[10px] font-semibold text-white whitespace-nowrap">
-                                    {(totalDuration * 0.75 / 1000000).toFixed(1)}s
+                                    {totalDuration === -Infinity ? 0 : (totalDuration * 0.75 / 1000000).toFixed(1)}s
                                 </div>
                                 <div className="absolute right-0 bottom-1 text-right text-[10px] font-semibold text-white whitespace-nowrap">
-                                    {(totalDuration / 1000000).toFixed(1)}s
+                                    {totalDuration === -Infinity ? 0 : (totalDuration / 1000000).toFixed(1)}s
                                 </div>
                             </div>
                         </div>
