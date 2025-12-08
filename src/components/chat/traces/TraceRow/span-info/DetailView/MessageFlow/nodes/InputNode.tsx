@@ -18,7 +18,6 @@ export const InputNode = ({ data }: { id: string; data: Record<string, unknown> 
   const onToggleExpand = data.onToggleExpand as ((nodeId: string) => void) | undefined;
   const id = data.id as string;
 
-  console.log('=== nodeWidth', nodeWidth)
   // Get preview text
   const getPreviewText = () => {
     if (toolInfo) {
