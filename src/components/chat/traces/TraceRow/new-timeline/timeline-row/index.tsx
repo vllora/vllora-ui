@@ -73,9 +73,10 @@ export const TimelineRow = (props: TimelineRowProps) => {
         isInSidebar = true,
         showHighlightButton = false
     } = props;
-    const { continueBreakpoint } = BreakpointsConsumer();
-        const [editedRequest, setEditedRequest] = useState<string>("");
-        const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+    const { continueBreakpoint, breakpoints } = BreakpointsConsumer();
+
+    const [editedRequest, setEditedRequest] = useState<string>("");
+    const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
     // Common props for timeline content components
     const contentProps = {
@@ -92,6 +93,23 @@ export const TimelineRow = (props: TimelineRowProps) => {
         operation_name: span.operation_name,
         span,
     };
+
+    const currentSpan = useMemo(()=> {
+        if(breakpoints.length < 1) {
+         return span   
+        }
+        if(breakpoints.length > 0) {
+            const breakpoint_related_current = breakpoints.find(b => b.breakpoint_id === span.span_id)
+            if(breakpoint_related_current) {
+                return {
+                    ...span,
+                    isInDebug: true
+                }
+            }
+        }
+        return span
+
+    }, [span, breakpoints])
     const getStoredRequest = () => {
         const attribute = span?.attribute as Record<string, unknown> | undefined;
         let request = attribute?.request;
@@ -110,7 +128,7 @@ export const TimelineRow = (props: TimelineRowProps) => {
             continueBreakpoint(span.span_id, null);
         }
     };
-     const handleContinueWithEdit = () => {
+    const handleContinueWithEdit = () => {
         if (span?.span_id) {
             try {
                 const parsedRequest = JSON.parse(editedRequest);
@@ -133,18 +151,18 @@ export const TimelineRow = (props: TimelineRowProps) => {
     const classNameOfCurrentSpan = useMemo(() => {
         let isSelected = selectedSpanId && span.span_id === selectedSpanId
         let isHovered = hoverSpanId && span.span_id === hoverSpanId
-        if(isSelected && isHovered) {
+        if (isSelected && isHovered) {
             return "bg-amber-500/5 border border-amber-500/40 !border-l-4 !border-l-amber-500 shadow-md shadow-amber-500/10";
         }
-        if(isSelected){
+        if (isSelected) {
             return "border border-transparent !border-l-4 !border-l-[rgb(var(--theme-500))]";
         }
-        if(isHovered){
+        if (isHovered) {
             return "bg-amber-500/5 border border-amber-500/40 !border-l-4 !border-l-amber-500 shadow-md shadow-amber-500/10";
         }
         return "hover:bg-[#151515] border border-transparent !border-l-4 !border-l-transparent";
     }, [span.span_id, selectedSpanId, hoverSpanId]);
-    
+
     const isCurrentlyHighlighted = hoverSpanId === span.span_id;
 
     const handleEyeClick = (e: React.MouseEvent) => {
@@ -175,7 +193,7 @@ export const TimelineRow = (props: TimelineRowProps) => {
         >
             <div className={classNames(`flex w-full divide-x divide-border/50 ${!showHighlightButton ? "px-1" : ""}`)}>
                 {/* Eye icon for highlighting - only shown in threads tab */}
-                {showHighlightButton && !span.isInDebug && (
+                {showHighlightButton && !currentSpan.isInDebug && (
                     <TooltipProvider delayDuration={300}>
                         <Tooltip>
                             <TooltipTrigger asChild>
@@ -195,28 +213,28 @@ export const TimelineRow = (props: TimelineRowProps) => {
                         </Tooltip>
                     </TooltipProvider>
                 )}
-                {span.isInDebug && <TooltipProvider delayDuration={300}>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <div className="flex items-center justify-center w-5 h-5 shrink-0 self-center">
-                                    <BreakpointIcon className="text-yellow-500" />
-                                </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <BreakpointTooltipContent
-                                                request={getStoredRequest()}
-                                                onContinue={handleContinueOriginal}
-                                                onEditAndContinue={handleOpenEditDialog}
-                                            />
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>}
+                {currentSpan.isInDebug && <TooltipProvider delayDuration={300}>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <div className="flex items-center justify-center w-5 h-5 shrink-0 self-center">
+                                <BreakpointIcon className="text-yellow-500" />
+                            </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <BreakpointTooltipContent
+                                request={getStoredRequest()}
+                                onContinue={handleContinueOriginal}
+                                onEditAndContinue={handleOpenEditDialog}
+                            />
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>}
 
                 {/* Render either fullscreen or sidebar content based on mode */}
-                <SidebarTimelineContent {...contentProps} isInSidebar={isInSidebar} />
+                <SidebarTimelineContent {...contentProps} span={currentSpan} isInSidebar={isInSidebar} />
                 {/* Timeline visualization */}
                 <TimelineVisualization
-                    span={span}
+                    span={currentSpan}
                     widthPercent={widthPercent}
                     offsetPercent={offsetPercent}
                     selectedSpanId={selectedSpanId}

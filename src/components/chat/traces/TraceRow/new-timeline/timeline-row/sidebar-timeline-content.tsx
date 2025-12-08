@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { TimelineContentBaseProps } from ".";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getOperationTitle, getLabelOfSpan, getModelName, getTotalUsage, getCost } from "../utils";
@@ -9,11 +8,6 @@ import { ClientSdkIcon } from "@/components/client-sdk-icon";
 import { getTimelineTitleWidth, TIMELINE_INDENTATION } from "@/utils/constant";
 import { LabelTag } from "./label-tag";
 import { ModelContextViewer } from "../../span-info/DetailView/spans-display/model-context-viewer";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { BreakpointTooltipContent } from "./breakpoint-tooltip-content";
-import { JsonEditor } from "@/components/chat/conversation/model-config/json-editor";
-import { Pencil, Play } from "lucide-react";
 
 // Props for the SidebarTimelineContent component
 interface SidebarTimelineContentProps extends TimelineContentBaseProps { }
@@ -44,19 +38,15 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
     const cost = span && getCost({ span }) || 0;
     const error = span && span.attribute?.error;
     // Get the stored request from span attribute
-    const getStoredRequest = () => {
-        const attribute = span?.attribute as Record<string, unknown> | undefined;
-        let request = attribute?.request;
-        if (typeof request === 'string') {
-            try {
-                request = JSON.parse(request);
-            } catch {
-                return null;
-            }
+
+    // Continue with original request
+    const handleContinueOriginal = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (span?.span_id) {
+            continueBreakpoint(span.span_id, null);
         }
-        return request;
     };
-    
+
 
     return (
         <div
@@ -96,10 +86,16 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                                         <div className={`mr-1 flex-shrink-0 cursor-pointer`}>
                                             {/* Icon display with potential cache indicator */}
                                             <div className="relative">
-                                                
-                                                    <div className={`p-1 rounded-full ${operationIconColor}`}>
+                                                {span?.isInDebug ? (
+                                                    <button
+                                                        onClick={handleContinueOriginal}
+                                                        className={`p-1 rounded-full bg-yellow-500/30 hover:bg-yellow-500/40 transition-colors`}
+                                                    >
+                                                        <PauseCircle className="w-3.5 h-3.5 text-yellow-500" />
+                                                    </button>) :
+                                                    (<div className={`p-1 rounded-full ${operationIconColor}`}>
                                                         {operationIcon}
-                                                    </div>
+                                                    </div>)}
                                                 {sdkName && !agentSpan && !span?.isInDebug && (
                                                     <div className="absolute -bottom-0 -right-1  bg-gray-800 rounded-full p-0.5 border border-gray-700 shadow-sm">
                                                         <ClientSdkIcon client_name={sdkName} className="w-2.5 h-2.5" />
@@ -127,7 +123,7 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                                         </div>
                                     </TooltipTrigger>
                                     <TooltipContent side="bottom" className="text-xs">
-                                            {getOperationTitle({ operation_name, span })}
+                                        { span?.isInDebug ? "Click to continue": getOperationTitle({ operation_name, span })}
                                     </TooltipContent>
                                 </Tooltip>
                             </TooltipProvider>
