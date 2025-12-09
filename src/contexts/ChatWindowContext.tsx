@@ -106,13 +106,34 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
         }, 100)
       }
     }
-    if(event.thread_id) {
-      setTimeout(()=> {
+    if (event.type === 'Custom' && event.event && event.event.type === 'global_breakpoint') {
+      let isDebugActive = event.event.intercept_all
+      if (!isDebugActive) {
+        setThreads(prevThreads => {
+          let newThreads = prevThreads.map(v => {
+            v.is_debug = false
+            return v
+          })
+          return [...newThreads].sort((a, b) => a.finish_time_us - b.finish_time_us)
+        })
+      }
+    }
+    if (event.type === 'Custom' && event.event && event.event.type === 'breakpoint_resume' && event.thread_id) {
+        setThreads(prevThreads => {
+          let idxThreadById = prevThreads.findIndex(t => t.thread_id === event.thread_id)
+          if(idxThreadById !== -1){
+            prevThreads[idxThreadById].is_debug = false
+          }
+          return [...prevThreads].sort((a, b) => a.finish_time_us - b.finish_time_us)
+        })
+    }
+    if (event.thread_id) {
+      setTimeout(() => {
         setThreads(prev => {
-          let threadById =  prev?.find(t => t.thread_id === event.thread_id);
-          if(!threadById) {
+          let threadById = prev?.find(t => t.thread_id === event.thread_id);
+          if (!threadById) {
             const timestampInMicroseconds = event.timestamp * 1000;
-            let newThread:Thread = {
+            let newThread: Thread = {
               thread_id: event.thread_id || '',
               start_time_us: timestampInMicroseconds,
               finish_time_us: timestampInMicroseconds,
@@ -122,37 +143,38 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
             }
             threadById = newThread
           }
-          if(!threadById) {
+          if (!threadById) {
             return prev
           }
           threadById.finish_time_us = event.timestamp * 1000;
-          if(event.type === 'Custom' && event.event.type === 'breakpoint') {
+          if (event.type === 'Custom' && event.event.type === 'breakpoint') {
             let breakpointEvent = event.event as CustomBreakpointEventType;
             let modelName = breakpointEvent.request?.model;
-            if(modelName) {
+            threadById.is_debug = true
+            if (modelName) {
               let inputModels = threadById.input_models;
-              if(!inputModels.includes(modelName)) {
+              if (!inputModels.includes(modelName)) {
                 threadById.input_models.push(modelName)
               }
             }
           }
-          if(event.type === 'Custom' && event.event.type === 'span_start' && event.event.operation_name === 'api_invocation') {
+          if (event.type === 'Custom' && event.event.type === 'span_start' && event.event.operation_name === 'api_invocation') {
             let apiInvokeEvent = event.event as CustomSpanStartEventType;
             let requestString = apiInvokeEvent.attributes?.request
             let requestJson = tryParseJson(requestString)
             let modelName = requestJson?.model;
-            if(modelName) {
+            if (modelName) {
               let inputModels = threadById.input_models;
-              if(!inputModels.includes(modelName)) {
+              if (!inputModels.includes(modelName)) {
                 threadById.input_models.push(modelName)
               }
             }
           }
           let threadsWithoutCurrent = prev.filter(t => t.thread_id !== event.thread_id);
-          return  [...threadsWithoutCurrent, {...threadById, finish_time_us: event.timestamp * 1000}].sort((a, b) => b.finish_time_us - a.finish_time_us)
+          return [...threadsWithoutCurrent, { ...threadById, finish_time_us: event.timestamp * 1000 }].sort((a, b) => b.finish_time_us - a.finish_time_us)
         })
       })
-      
+
     }
   }, [threadId, updateRunMetrics]);
 

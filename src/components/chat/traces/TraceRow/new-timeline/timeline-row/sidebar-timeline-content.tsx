@@ -1,7 +1,7 @@
 import { TimelineContentBaseProps } from ".";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getOperationTitle, getLabelOfSpan, getModelName, getTotalUsage, getCost } from "../utils";
-import { DatabaseIcon, ChevronRight, ChevronDown, TriangleAlertIcon, PauseCircle, PlayIcon, CirclePlayIcon } from "lucide-react";
+import { DatabaseIcon, ChevronRight, ChevronDown, TriangleAlertIcon, PlayIcon } from "lucide-react";
 import { BreakpointsConsumer } from "@/contexts/breakpoints";
 import { getClientSDKName, isAgentSpan, isPromptCachingApplied } from "@/utils/graph-utils";
 import { ClientSdkIcon } from "@/components/client-sdk-icon";
