@@ -64,7 +64,6 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     handleWarningClick,
     modelConfig,
     setModelConfig,
-    isChatProcessing,
     clearAll,
     refreshRuns
   } = ChatWindowConsumer();

@@ -57,7 +57,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     setHoverSpanId,
     collapsedSpans,
     setCollapsedSpans,
-    // getRunDetails,
+    getRunDetails,
   } = useWrapperHook({ projectId, threadId });
 
 
@@ -169,6 +169,9 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
         setTimeout(() => {
           event.run_id && fetchSpansByRunId(event.run_id);
         }, 100);
+        setTimeout(()=> {
+          event.run_id && getRunDetails(event.run_id)
+        }, 1000)
       }
     }
 
@@ -238,7 +241,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
   }, []);
 
   const selectedRun = useMemo(() => {
-    return selectedRunId ? runs.find(r => r.run_id === selectedRunId) : undefined;
+    return selectedRunId ? runs?.find(r => r && r.run_id === selectedRunId) : undefined;
   }, [selectedRunId, runs]);
 
 
