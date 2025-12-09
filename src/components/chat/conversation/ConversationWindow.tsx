@@ -64,7 +64,8 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     handleWarningClick,
     modelConfig,
     setModelConfig,
-    clearAll,
+    isChatProcessing,
+    clearSelectPrevThread
   } = ChatWindowConsumer();
   const { app_mode } = CurrentAppConsumer();
 
@@ -78,12 +79,14 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
   }, [setModelConfig, onModelChange]);
 
   useEffect(() => {
-    if (isDraft) { return }
-    if (threadId) {
-      clearAll()
-      refreshSpans();
-    }
-  }, [threadId, isDraft]);
+    if (isChatProcessing || isDraft || !threadId) { return }
+
+    refreshSpans();
+  }, [isChatProcessing, isDraft, threadId]);
+
+  useEffect(()=> {
+    clearSelectPrevThread()
+  }, [threadId])
 
 
 

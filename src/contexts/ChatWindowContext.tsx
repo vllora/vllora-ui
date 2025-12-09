@@ -246,10 +246,13 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
   }, [selectedSpanId, spansOfSelectedRun]);
 
   const clearAll = useCallback(() => {
+
+    setFlattenSpans([]);
+
     setSelectedRunId(null);
     setSelectedSpanId(null);
     setDetailSpanId(null);
-    setFlattenSpans([]);
+    
     setCollapsedSpans([]);
     setRunHighlighted(null);
     setHoverSpanId(undefined);
@@ -257,6 +260,15 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     setError(undefined);
     setRuns([]);
   }, []);
+
+  const clearSelectPrevThread = useCallback(()=> {
+    setSelectedRunId(null);
+    setSelectedSpanId(null);
+    setDetailSpanId(null);
+    setRunHighlighted(null);
+    setHoverSpanId(undefined);
+    setError(undefined);
+  }, [])
 
   // Calculate sum of all message metrics from displayMessages
   const conversationMetrics = useMemo(() => {
@@ -320,6 +332,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     usageInfo,
     appendUsage,
     clearAll,
+    clearSelectPrevThread,
     setFlattenSpans,
 
     detailSpanId,
