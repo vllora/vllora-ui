@@ -26,15 +26,15 @@ export const AiMessage: React.FC<{
   const { setIsRightSidebarCollapsed } = ThreadsConsumer();
   const messageRef = React.useRef<HTMLDivElement>(null);
 
-  
+
   // Only update relative time when message is visible and less than 60 seconds old
   useRelativeTime(messageRef, msg?.created_at);
 
   const canClickToHighlightTraces = useMemo(() => {
-     if(msg?.span_id && msg?.span?.run_id){
+    if (msg?.span_id && msg?.span?.run_id) {
       return true;
-     }
-     return false;
+    }
+    return false;
   }, [msg]);
 
   // Extract provider name from model_name (e.g., "openai/gpt-4" -> "openai")
@@ -49,7 +49,7 @@ export const AiMessage: React.FC<{
     const runId = msg?.span?.run_id;
     const spanId = msg?.span_id;
     if (!runId || !spanId) return;
-    
+
     // Open the trace and fetch spans
     setOpenTraces([{ run_id: runId, tab: 'trace' }]);
     fetchSpansByRunId(runId);
@@ -60,7 +60,7 @@ export const AiMessage: React.FC<{
   }, [msg?.span?.run_id, setOpenTraces, fetchSpansByRunId, setIsRightSidebarCollapsed]);
 
   const handleMouseEnter = useCallback(() => {
-    if(msg?.span_id){
+    if (msg?.span_id) {
       setHoverSpanId(msg.span_id);
     }
   }, [msg?.span_id]);
@@ -73,7 +73,6 @@ export const AiMessage: React.FC<{
     <div
       ref={messageRef}
       className={`flex flex-col gap-3 group  ${canClickToHighlightTraces ? 'cursor-pointer hover:bg-neutral-800/20 rounded-lg p-2 -m-2 transition-colors' : ''}`}
-      onClick={canClickToHighlightTraces ? handleOpenTrace : undefined}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
@@ -116,7 +115,9 @@ export const AiMessage: React.FC<{
             </div>
           )}
           {canClickToHighlightTraces && (
-            <span className="text-[10px] text-blue-400/60 px-1.5 py-0.5 transition-opacity shrink-0">Click to view details</span>
+            <span
+              onClick={handleOpenTrace}
+              className="text-[10px] text-blue-400/60 px-1.5 py-0.5 transition-opacity shrink-0">Click to view details</span>
           )}
         </div>
       </div>}
