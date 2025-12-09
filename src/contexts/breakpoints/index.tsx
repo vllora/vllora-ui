@@ -50,7 +50,6 @@ export const useBreakpointsState = (projectId: string) => {
             // sort event by timestamp chronical order
           listOfEvents.sort((a, b) => a.timestamp - b.timestamp).forEach(e => {
             try {
-              console.log('===== emit event', e)
               emit(e);
             } catch (err) {
               console.error('Failed to emit event:', err);

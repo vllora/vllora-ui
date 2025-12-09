@@ -79,11 +79,11 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
   }, [setModelConfig, onModelChange]);
 
   useEffect(() => {
-    if (threadId && !isDraft) {
+    if (threadId) {
       clearAll()
       refreshSpans();
     }
-  }, [threadId, isDraft, refreshRuns, refreshSpans]);
+  }, [threadId]);
 
 
 
