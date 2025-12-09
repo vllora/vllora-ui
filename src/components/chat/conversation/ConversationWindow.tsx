@@ -65,7 +65,6 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     modelConfig,
     setModelConfig,
     clearAll,
-    refreshRuns
   } = ChatWindowConsumer();
   const { app_mode } = CurrentAppConsumer();
 
@@ -79,11 +78,12 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
   }, [setModelConfig, onModelChange]);
 
   useEffect(() => {
+    if (isDraft) { return }
     if (threadId) {
       clearAll()
       refreshSpans();
     }
-  }, [threadId]);
+  }, [threadId, isDraft]);
 
 
 
