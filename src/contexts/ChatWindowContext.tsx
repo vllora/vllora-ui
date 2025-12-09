@@ -1,6 +1,6 @@
 import { createContext, useContext, ReactNode, useCallback, useState, useMemo } from 'react';
 import { Span } from '@/types/common-type';
-import { ProjectEventUnion } from './project-events/dto';
+import { CustomBreakpointEventType, CustomSpanStartEventType, ProjectEventUnion } from './project-events/dto';
 import { buildSpanHierarchy } from '@/utils/span-hierarchy';
 import { buildMessageHierarchyFromSpan, MessageStructure } from '@/utils/message-structure-from-span';
 import { useStableMessageHierarchies } from '@/hooks/useStableMessageHierarchies';
@@ -9,7 +9,8 @@ import { processEvent, updatedRunWithSpans } from '@/hooks/events/utilities';
 import { useWrapperHook } from '@/hooks/useWrapperHook';
 import { useUserProviderOfSelectedModelConfig } from '@/hooks/userProviderOfSelectedModelConfig';
 import { ThreadsConsumer } from './ThreadsContext';
-import { BreakpointsConsumer } from './breakpoints';
+import { Thread } from '@/types/chat';
+import { tryParseJson } from '@/utils/modelUtils';
 
 export type ChatWindowContextType = ReturnType<typeof useChatWindow>;
 
@@ -61,7 +62,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
   } = useWrapperHook({ projectId, threadId });
 
 
-  const { selectedThread } = ThreadsConsumer()
+  const { selectedThread, setThreads } = ThreadsConsumer()
 
   const [isChatProcessing, setIsChatProcessing] = useState<boolean>(false);
   const [runHighlighted, setRunHighlighted] = useState<string | null>(null);
@@ -104,7 +105,54 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
           // event.run_id && getRunDetails(event.run_id);
         }, 100)
       }
-
+    }
+    if(event.thread_id) {
+      setTimeout(()=> {
+        setThreads(prev => {
+          let threadById =  prev?.find(t => t.thread_id === event.thread_id);
+          if(!threadById) {
+            const timestampInMicroseconds = event.timestamp * 1000;
+            let newThread:Thread = {
+              thread_id: event.thread_id || '',
+              start_time_us: timestampInMicroseconds,
+              finish_time_us: timestampInMicroseconds,
+              run_ids: event.run_id ? [event.run_id] : [],
+              input_models: [],
+              cost: 0,
+            }
+            threadById = newThread
+          }
+          if(!threadById) {
+            return prev
+          }
+          threadById.finish_time_us = event.timestamp * 1000;
+          if(event.type === 'Custom' && event.event.type === 'breakpoint') {
+            let breakpointEvent = event.event as CustomBreakpointEventType;
+            let modelName = breakpointEvent.request?.model;
+            if(modelName) {
+              let inputModels = threadById.input_models;
+              if(!inputModels.includes(modelName)) {
+                threadById.input_models.push(modelName)
+              }
+            }
+          }
+          if(event.type === 'Custom' && event.event.type === 'span_start' && event.event.operation_name === 'api_invocation') {
+            let apiInvokeEvent = event.event as CustomSpanStartEventType;
+            let requestString = apiInvokeEvent.attributes?.request
+            let requestJson = tryParseJson(requestString)
+            let modelName = requestJson?.model;
+            if(modelName) {
+              let inputModels = threadById.input_models;
+              if(!inputModels.includes(modelName)) {
+                threadById.input_models.push(modelName)
+              }
+            }
+          }
+          let threadsWithoutCurrent = prev.filter(t => t.thread_id !== event.thread_id);
+          return  [...threadsWithoutCurrent, {...threadById, finish_time_us: event.timestamp * 1000}].sort((a, b) => b.finish_time_us - a.finish_time_us)
+        })
+      })
+      
     }
   }, [threadId, updateRunMetrics]);
 

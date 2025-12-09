@@ -10,7 +10,10 @@ import {
   CustomEvent,
   CustomBreakpointEventType,
 } from "@/contexts/project-events/dto";
+import { ProjectEventsConsumer } from '../project-events';
 export const useBreakpointsState = (projectId: string) => {
+
+  const {emit} = ProjectEventsConsumer()
   const [state, setState] = useState<BreakpointsState>({
     isDebugActive: false,
     isLoading: true,
@@ -27,17 +30,35 @@ export const useBreakpointsState = (projectId: string) => {
       const data = await handleApiResponse<BreakpointsResponse>(response);
 
       if (isMountedRef.current) {
-        const isDebugActive = data.breakpoints.length > 0 || data.intercept_all;
+        const breakpoints = data.breakpoints ?? [];
+        const isDebugActive = breakpoints.length > 0 || data.intercept_all;
+
+        // Update state first
         setState({
           isDebugActive,
           isLoading: false,
-          breakpoints: data.breakpoints,
+          breakpoints,
           interceptAll: data.intercept_all,
           error: null,
         });
+
+        // Emit events after state is set, with error handling
+        if (isDebugActive) {
+          const listOfEvents = breakpoints
+            .flatMap(b => b.events ?? [])
+            .filter(Boolean);
+            // sort event by timestamp chronical order
+          listOfEvents.sort((a, b) => a.timestamp - b.timestamp).forEach(e => {
+            try {
+              console.log('===== emit event', e)
+              emit(e);
+            } catch (err) {
+              console.error('Failed to emit event:', err);
+            }
+          });
+        }
       }
     } catch (err) {
-      console.error('Failed to fetch breakpoints:', err);
       if (isMountedRef.current) {
         setState((prev) => ({
           ...prev,
@@ -46,16 +67,27 @@ export const useBreakpointsState = (projectId: string) => {
         }));
       }
     }
-  }, []);
-
+  }, [emit]);
+  const continueAllBreakpoints = useCallback(async () => {
+    try {
+      const response = await api.post('/debug/continue/all');
+      await handleApiResponse<{ status: string }>(response);
+      fetchBreakpoints();
+    } catch (err) {
+      toast.error('Failed to continue all breakpoints');
+    }
+  }, [fetchBreakpoints]);
   const toggleDebugMode = useCallback(async () => {
     try {
       const newState = !state.isDebugActive;
+      if (!newState) {
+        await api.post('/debug/continue/all');
+      }
       const response = await api.post('/debug/global_breakpoint', {
         intercept_all: newState,
       });
       await handleApiResponse<SetGlobalBreakpointResponse>(response);
-
+      fetchBreakpoints();
       // Immediately update state optimistically
       if (isMountedRef.current) {
         setState((prev) => ({
@@ -67,10 +99,9 @@ export const useBreakpointsState = (projectId: string) => {
 
       toast.success(newState ? 'Debug mode enabled' : 'Debug mode disabled');
     } catch (err) {
-      console.error('Failed to toggle debug mode:', err);
       toast.error('Failed to toggle debug mode');
     }
-  }, [state.isDebugActive]);
+  }, [state.isDebugActive, fetchBreakpoints]);
 
   const refresh = useCallback(() => {
     fetchBreakpoints();
@@ -84,22 +115,12 @@ export const useBreakpointsState = (projectId: string) => {
       });
       await handleApiResponse<ContinueBreakpointResponse>(response);
       toast.success('Breakpoint continued');
-    } catch (err) {
-      console.error('Failed to continue breakpoint:', err);
-      toast.error('Failed to continue breakpoint');
+    } catch (err: any) {
+      toast.error(`Failed to continue breakpoint: ${err.message || err.error || JSON.stringify(err)}`);
     }
   }, []);
 
-  const continueAllBreakpoints = useCallback(async () => {
-    try {
-      const response = await api.post('/debug/continue/all');
-      await handleApiResponse<{ status: string }>(response);
-      fetchBreakpoints();
-    } catch (err) {
-      console.error('Failed to continue all breakpoints:', err);
-      toast.error('Failed to continue all breakpoints');
-    }
-  }, []);
+
 
   // Fetch on mount and when projectId changes
   useEffect(() => {
@@ -150,8 +171,11 @@ export const useBreakpointsState = (projectId: string) => {
                 ...prev,
                 breakpoints: [...prev.breakpoints, {
                   breakpoint_id: span_id,
-                  request: breakpointEvent.request
+                  request: breakpointEvent.request,
+                  events: [],
+                  thread_id: customEvent.thread_id || ''
                 }],
+
               };
             }
           });
@@ -166,9 +190,20 @@ export const useBreakpointsState = (projectId: string) => {
           });
           return;
         }
+        if (eventType.type === "global_breakpoint") {
+          setState(prev => {
+            return {
+              ...prev,
+              isDebugActive: eventType.intercept_all,
+              breakpoints: [],
+              error: null,
+            }
+          })
+          return
+        }
       }
     }
-  }, [setState]);
+  }, []);
 
 
   useDebugControl({ handleEvent, channel_name: 'breakpoints-control' });

@@ -185,7 +185,7 @@ export const useProjectEvents = (props: ProjectEventsHookProps) => {
               timestamp: parsedData.timestamp || Date.now()
             } as ProjectEventUnion;
             const isBreakpointEvent = projectEvent.type === 'Custom' &&
-              (projectEvent.event?.type === 'breakpoint' || projectEvent.event?.type === 'breakpoint_resume');
+              (projectEvent.event?.type === 'breakpoint' || projectEvent.event?.type === 'breakpoint_resume' || projectEvent.event?.type === 'global_breakpoint');
             const ignoreThisEvent = projectEvent.type === 'Custom' &&
               !isBreakpointEvent &&
               (projectEvent.event?.type === 'ping' || (projectEvent.event && !projectEvent.run_id));
@@ -348,7 +348,8 @@ export const useProjectEvents = (props: ProjectEventsHookProps) => {
     ...state,
     startSubscription,
     stopSubscription,
-    subscribe
+    subscribe,
+    emit // should not used this, the only case using this is breakpoint info include list of events to re-emit
   };
 };
 

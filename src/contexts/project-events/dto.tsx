@@ -162,6 +162,11 @@ export interface CustomLlmStopEventType {
   content?: string;
 }
 
+export interface CustomGlobalBreakpointEventType {
+  type: "global_breakpoint";
+  intercept_all: true
+}
+
 export interface CustomCostEventType {
   type: 'cost';
   value: CostEvent;
@@ -194,7 +199,8 @@ export type CustomEventType =
   | CustomCostEventType
   | CustomCustomEventType
   | CustomBreakpointEventType
-  | CustomBreakpointResumeEventType;
+  | CustomBreakpointResumeEventType
+  | CustomGlobalBreakpointEventType;
 
 export interface CustomEvent extends BaseEvent {
   type: 'Custom';

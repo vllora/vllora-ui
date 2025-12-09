@@ -1,6 +1,8 @@
 export interface Breakpoint {
   breakpoint_id: string;
   request: unknown;
+  events: any[];
+  thread_id: string;
 }
 
 export interface BreakpointsResponse {

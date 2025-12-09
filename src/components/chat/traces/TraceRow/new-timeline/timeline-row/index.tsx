@@ -96,7 +96,7 @@ export const TimelineRow = (props: TimelineRowProps) => {
 
     const currentSpan = useMemo(()=> {
         if(breakpoints.length < 1) {
-         return span   
+         return {...span, isInDebug: false}   
         }
         if(breakpoints.length > 0) {
             const breakpoint_related_current = breakpoints.find(b => b.breakpoint_id === span.span_id)
@@ -104,6 +104,11 @@ export const TimelineRow = (props: TimelineRowProps) => {
                 return {
                     ...span,
                     isInDebug: true
+                }
+            } else {
+                return  {
+                    ...span,
+                    isInDebug: false
                 }
             }
         }
