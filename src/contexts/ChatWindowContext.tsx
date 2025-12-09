@@ -216,7 +216,6 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
 
   // Wrap refreshRuns to also reset UI state
   const handleRefreshRuns = useCallback(() => {
-    setFlattenSpans([]);
     setSelectedSpanId(null);
     setSelectedRunId(null);
     setOpenTraces([]);
