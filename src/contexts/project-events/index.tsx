@@ -29,32 +29,25 @@ export const useProjectEvents = (props: ProjectEventsHookProps) => {
   // Observable pattern - store subscribers instead of events
   const subscribersRef = useRef<Map<string, (event: ProjectEventUnion) => void>>(new Map());
 
-  // Update projectId ref when it changes and clear subscribers
+  // Update projectId ref when it changes
+  // Note: We no longer clear subscribers here because it causes race conditions
+  // where subscribers get cleared before they can re-subscribe.
+  // Instead, subscribers should handle projectId changes themselves if needed.
   useEffect(() => {
-
-    if(projectIdRef.current === projectId)  {
-      return;
-    }
     projectIdRef.current = projectId;
-    // Clear subscribers when projectId changes to prevent cross-project event pollution
-    subscribersRef.current.clear();
   }, [projectId]);
 
   // Observable methods
   const subscribe = useCallback((id: string, callback: (event: ProjectEventUnion) => void, filter?: (event: ProjectEventUnion) => boolean) => {
-
-    // check if the callback is already subscribed, if so, return
-    if(subscribersRef.current.has(id)) {
-      return;
-    }
-
     const wrappedCallback = filter ? (event: ProjectEventUnion) => {
       if (filter(event)) {
         callback(event);
       }
     } : callback;
 
+    // Always update the callback (handles both new subscriptions and callback updates)
     subscribersRef.current.set(id, wrappedCallback);
+
     return () => {
       subscribersRef.current.delete(id);
     };
@@ -64,7 +57,7 @@ export const useProjectEvents = (props: ProjectEventsHookProps) => {
     // Use requestIdleCallback to defer event emission and prevent blocking UI
     if ('requestIdleCallback' in window) {
       requestIdleCallback(() => {
-        subscribersRef.current.forEach(callback => {
+        subscribersRef.current.forEach((callback) => {
           try {
             callback(event);
           } catch (error) {
@@ -75,7 +68,7 @@ export const useProjectEvents = (props: ProjectEventsHookProps) => {
     } else {
       // Fallback for browsers without requestIdleCallback
       setTimeout(() => {
-        subscribersRef.current.forEach(callback => {
+        subscribersRef.current.forEach((callback) => {
           try {
             callback(event);
           } catch (error) {
@@ -191,9 +184,12 @@ export const useProjectEvents = (props: ProjectEventsHookProps) => {
               ...parsedData,
               timestamp: parsedData.timestamp || Date.now()
             } as ProjectEventUnion;
-            let ignoreThisEvent = projectEvent.type === 'Custom' && (projectEvent.event?.type === 'ping' || (projectEvent.type === 'Custom' &&projectEvent.event && !projectEvent.run_id))
+            const isBreakpointEvent = projectEvent.type === 'Custom' &&
+              (projectEvent.event?.type === 'breakpoint' || projectEvent.event?.type === 'breakpoint_resume' || projectEvent.event?.type === 'global_breakpoint');
+            const ignoreThisEvent = projectEvent.type === 'Custom' &&
+              !isBreakpointEvent &&
+              (projectEvent.event?.type === 'ping' || (projectEvent.event && !projectEvent.run_id));
             if (!ignoreThisEvent) {
-              // Emit to subscribers instead of storing in array
               emit(projectEvent);
             }
           } catch (error) {
@@ -352,7 +348,8 @@ export const useProjectEvents = (props: ProjectEventsHookProps) => {
     ...state,
     startSubscription,
     stopSubscription,
-    subscribe
+    subscribe,
+    emit // should not used this, the only case using this is breakpoint info include list of events to re-emit
   };
 };
 

@@ -3,6 +3,7 @@ import { AppSidebar } from "./app-sidebar"
 import { AppHeader } from "./Header"
 import { ProjectsConsumer } from "@/contexts/ProjectContext"
 import { ProjectEventsProvider } from "@/contexts/project-events"
+import { BreakpointsProvider } from "@/contexts/breakpoints"
 
 export function Layout() {
   const { currentProjectId } = ProjectsConsumer()
@@ -23,7 +24,9 @@ export function Layout() {
         <AppHeader onProjectChange={handleProjectChange} />
         <main className="flex-1 flex overflow-hidden">
           <ProjectEventsProvider projectId={currentProjectId || ""}>
-            <Outlet />
+            <BreakpointsProvider projectId={currentProjectId || ""}>
+              <Outlet />
+            </BreakpointsProvider>
           </ProjectEventsProvider>
         </main>
       </div>

@@ -5,6 +5,7 @@ import {
   CustomLlmStartEventType,
   CustomLlmStopEventType,
   CustomCostEventType,
+  CustomBreakpointEventType,
 } from "@/contexts/project-events/dto";
 import { RunDTO, Span } from "@/types/common-type";
 import { RunMap } from "../../useSpanDetails";
@@ -30,6 +31,8 @@ import { handleCustomSpanEndEvent } from "./custom-span-end";
 import { handleCustomLlmStartEvent } from "./custom-llm-start";
 import { handleCustomLlmStopEvent } from "./custom-llm-stop";
 import { handleCustomCostEvent } from "./custom-cost";
+import { handleBreakpointEvent } from "./breakpoint";
+import { handleBreakpointResumeEvent } from "./breakpoint-resume";
 
 export const convertTextMessageStartToSpan = (
   event: TextMessageStartEvent
@@ -251,6 +254,22 @@ export const processEvent = (
       // Handle ping events (ignore them)
       if (eventType.type === "ping") {
         return currentSpans;
+      }
+
+      // Handle breakpoint event - set isInDebug to true
+      if (eventType.type === "breakpoint") {
+        const breakpointEvent = eventType as CustomBreakpointEventType;
+        return handleBreakpointEvent(
+          currentSpans,
+          customEvent,
+          breakpointEvent,
+          timestamp
+        );
+      }
+
+      // Handle breakpoint_resume event - set isInDebug to false
+      if (eventType.type === "breakpoint_resume") {
+        return handleBreakpointResumeEvent(currentSpans, customEvent);
       }
 
       // Unknown custom event type - log warning but don't crash

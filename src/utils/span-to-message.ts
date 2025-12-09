@@ -416,7 +416,7 @@ export function extractMessagesFromSpanById(
   if (!span) return [];
 
   // Get api invoke span to extract input messages
-  const apiInvokeSpan = getParentApiInvoke(flattenSpans, span.span_id);
+  const apiInvokeSpan = span.operation_name === 'api_invoke' ? span : getParentApiInvoke(flattenSpans, span.span_id);
   let result: Message[] = [];
 
   if (apiInvokeSpan) {

@@ -84,6 +84,7 @@ export interface Thread {
   // UI-specific fields (derived or fetched separately)
   title?: string; // Fetched from threads table or generated
   is_from_local?: boolean; // For draft threads
+  is_debug?: boolean;
 }
 
 export interface CreateThreadRequest {

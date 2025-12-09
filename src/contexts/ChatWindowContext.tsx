@@ -1,6 +1,6 @@
 import { createContext, useContext, ReactNode, useCallback, useState, useMemo } from 'react';
 import { Span } from '@/types/common-type';
-import { ProjectEventUnion } from './project-events/dto';
+import { CustomBreakpointEventType, CustomSpanStartEventType, ProjectEventUnion } from './project-events/dto';
 import { buildSpanHierarchy } from '@/utils/span-hierarchy';
 import { buildMessageHierarchyFromSpan, MessageStructure } from '@/utils/message-structure-from-span';
 import { useStableMessageHierarchies } from '@/hooks/useStableMessageHierarchies';
@@ -9,6 +9,7 @@ import { processEvent, updatedRunWithSpans } from '@/hooks/events/utilities';
 import { useWrapperHook } from '@/hooks/useWrapperHook';
 import { useUserProviderOfSelectedModelConfig } from '@/hooks/userProviderOfSelectedModelConfig';
 import { ThreadsConsumer } from './ThreadsContext';
+import { tryParseJson } from '@/utils/modelUtils';
 
 export type ChatWindowContextType = ReturnType<typeof useChatWindow>;
 
@@ -60,12 +61,77 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
   } = useWrapperHook({ projectId, threadId });
 
 
-  const { selectedThread } = ThreadsConsumer()
-
-
+  const { selectedThread, setThreads } = ThreadsConsumer()
 
   const [isChatProcessing, setIsChatProcessing] = useState<boolean>(false);
   const [runHighlighted, setRunHighlighted] = useState<string | null>(null);
+
+  // Thread update helper functions
+  const handleGlobalBreakpointDisabled = useCallback(() => {
+    setThreads(prevThreads => {
+      const newThreads = prevThreads.map(t => ({ ...t, is_debug: false }));
+      return [...newThreads].sort((a, b) => a.finish_time_us - b.finish_time_us);
+    });
+  }, [setThreads]);
+
+  const handleBreakpointResume = useCallback((threadIdToResume: string) => {
+    setThreads(prevThreads => {
+      const idx = prevThreads.findIndex(t => t.thread_id === threadIdToResume);
+      if (idx !== -1) {
+        prevThreads[idx].is_debug = false;
+      }
+      return [...prevThreads].sort((a, b) => a.finish_time_us - b.finish_time_us);
+    });
+  }, [setThreads]);
+
+  const handleThreadUpdate = useCallback((event: ProjectEventUnion) => {
+    if (!event.thread_id) return;
+
+    setThreads(prev => {
+      let threadById = prev?.find(t => t.thread_id === event.thread_id);
+
+      // Create new thread if not found
+      if (!threadById) {
+        const timestampInMicroseconds = event.timestamp * 1000;
+        threadById = {
+          thread_id: event.thread_id || '',
+          start_time_us: timestampInMicroseconds,
+          finish_time_us: timestampInMicroseconds,
+          run_ids: event.run_id ? [event.run_id] : [],
+          input_models: [],
+          cost: 0,
+        };
+      }
+
+      // Update finish time
+      threadById.finish_time_us = event.timestamp * 1000;
+
+      // Handle breakpoint event - mark thread as debug and add model
+      if (event.type === 'Custom' && event.event.type === 'breakpoint') {
+        const breakpointEvent = event.event as CustomBreakpointEventType;
+        const modelName = breakpointEvent.request?.model;
+        threadById.is_debug = true;
+        if (modelName && !threadById.input_models.includes(modelName)) {
+          threadById.input_models.push(modelName);
+        }
+      }
+
+      // Handle api_invocation span_start event - add model to thread
+      if (event.type === 'Custom' && event.event.type === 'span_start' && event.event.operation_name === 'api_invocation') {
+        const apiInvokeEvent = event.event as CustomSpanStartEventType;
+        const requestString = apiInvokeEvent.attributes?.request;
+        const requestJson = tryParseJson(requestString);
+        const modelName = requestJson?.model;
+        if (modelName && !threadById.input_models.includes(modelName)) {
+          threadById.input_models.push(modelName);
+        }
+      }
+
+      const threadsWithoutCurrent = prev.filter(t => t.thread_id !== event.thread_id);
+      return [...threadsWithoutCurrent, { ...threadById, finish_time_us: event.timestamp * 1000 }]
+        .sort((a, b) => b.finish_time_us - a.finish_time_us);
+    });
+  }, [setThreads]);
 
   const updateRunMetrics = useCallback((run_id: string, updatedSpans: Span[]) => {
     setRuns(prevRuns => {
@@ -86,28 +152,41 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     })
   }, []);
   const handleEvent = useCallback((event: ProjectEventUnion) => {
+    // Handle run events for the current thread
     if (event.run_id && event.thread_id === threadId) {
       setTimeout(() => {
         setFlattenSpans(prevSpans => {
-          let newFlattenSpans = processEvent(prevSpans, event)
-          // Update run metrics with the new spans
+          const newFlattenSpans = processEvent(prevSpans, event);
           event.run_id && updateRunMetrics(event.run_id, newFlattenSpans);
-
-          return newFlattenSpans
+          return newFlattenSpans;
         });
 
         event.run_id && setSelectedRunId(event.run_id);
         event.run_id && setOpenTraces([{ run_id: event.run_id, tab: 'trace' }]);
-      }, 0)
+      }, 0);
+
       if ((event.type === 'RunFinished' || event.type === 'RunError') && event.run_id) {
         setTimeout(() => {
           event.run_id && fetchSpansByRunId(event.run_id);
-          // event.run_id && getRunDetails(event.run_id);
-        }, 100)
+        }, 100);
       }
-
     }
-  }, [threadId, updateRunMetrics]);
+
+    // Handle global breakpoint disabled
+    if (event.type === 'Custom' && event.event?.type === 'global_breakpoint' && !event.event.intercept_all) {
+      handleGlobalBreakpointDisabled();
+    }
+
+    // Handle breakpoint resume for specific thread
+    if (event.type === 'Custom' && event.event?.type === 'breakpoint_resume' && event.thread_id) {
+      handleBreakpointResume(event.thread_id);
+    }
+
+    // Handle general thread updates
+    if (event.thread_id) {
+      setTimeout(() => handleThreadUpdate(event), 0);
+    }
+  }, [threadId, updateRunMetrics, handleGlobalBreakpointDisabled, handleBreakpointResume, handleThreadUpdate]);
 
 
   useDebugControl({ handleEvent, channel_name: 'debug-thread-trace-timeline-events' });
@@ -127,7 +206,6 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
 
   // Stabilize messageHierarchies to prevent unnecessary re-renders
   const messageHierarchies = useStableMessageHierarchies(unstableMessageHierarchies);
-
   // UI state
   const [currentInput, setCurrentInput] = useState<string>('');
   const [typing, setTyping] = useState(false);
