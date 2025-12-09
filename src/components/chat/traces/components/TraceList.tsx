@@ -75,7 +75,7 @@ export const TraceList: React.FC<TraceListProps> = ({
 
   return (
     <div ref={containerRef} className="space-y-2">
-      {runs.map((run) => (
+      {runs.filter(run => run != null).map((run) => (
         <TraceRow key={`run-${run.run_id}`} run={run} isInSidebar={true} />
       ))}
 
