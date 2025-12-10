@@ -146,11 +146,11 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
         nodeType = 'user';
         label = 'User';
       } else if (role === 'tool') {
-        nodeType = 'tool';
+        nodeType = 'assistant';
         label = 'Tool Result';
       } else if (role === 'assistant') {
         if (message.tool_calls && message.tool_calls.length > 0) {
-          nodeType = 'tools';
+          nodeType = 'assistant';
           label = 'Tool Calls';
         } else {
           nodeType = 'assistant';
@@ -162,11 +162,10 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
 
       const nodeId = `input-${index}`;
       inputNodeIds.push(nodeId);
-
       const preview = typeof message.content === 'string'
         ? message.content
-        : (nodeType === 'tools' && message.tool_calls
-          ? message.tool_calls.map((t: Record<string, any>) => t.function?.name).join(', ')
+        : (nodeType === 'assistant' && message.rawMessage && message.rawMessage.tool_calls
+          ? message.rawMessage.tool_calls.map((t: Record<string, any>) => t.function?.name).join(', ')
           : '');
 
       flowNodes.push({

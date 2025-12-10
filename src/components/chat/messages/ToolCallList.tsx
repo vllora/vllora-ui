@@ -16,7 +16,7 @@ const formatFunctionName = (name?: string) => {
     .replace(/^./, (str) => str.toUpperCase());
 };
 
-export const ToolCallList = ({ toolCalls }: { toolCalls: ToolCall[] }) => {
+export const ToolCallList = ({ toolCalls, hideTitle }: { toolCalls: ToolCall[], hideTitle?: boolean }) => {
   const [expandedToolCalls, setExpandedToolCalls] = useState<
     Record<string, boolean>
   >({});
@@ -67,7 +67,7 @@ export const ToolCallList = ({ toolCalls }: { toolCalls: ToolCall[] }) => {
 
   return (
     <div className="mb-3 overflow-hidden rounded-lg border border-border">
-      <div className="flex items-center justify-between border-b border-border  px-3 py-2">
+      {!hideTitle && <div className="flex items-center justify-between border-b border-border  px-3 py-2">
         <div className="flex items-center gap-2">
           <Wrench className="h-3.5 w-3.5 text-neutral-400" />
           <span className="text-xs font-medium text-neutral-300">Tool Calls</span>
@@ -75,7 +75,7 @@ export const ToolCallList = ({ toolCalls }: { toolCalls: ToolCall[] }) => {
             {toolCalls.length} {toolCalls.length === 1 ? "call" : "calls"}
           </span>
         </div>
-      </div>
+      </div>}
       <div className="divide-y divide-border">
         {toolCalls.map((toolCall, index) => {
           if (!toolCall?.function) {

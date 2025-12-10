@@ -5,6 +5,46 @@ import { getNodeIcon, getRoleStyle, getEdgeColor } from "../utils";
 import { MarkdownViewer } from "../../markdown-viewer";
 import { ToolInfoDisplay } from "./ToolInfoDisplay";
 import { ContentArrayDisplay } from "@/components/chat/messages/ContentArrayDisplay";
+import { ToolCallList } from "@/components/chat/messages/ToolCallList";
+
+interface ExpandedContentDisplayProps {
+  toolInfo?: Record<string, any>;
+  tool_calls?: any[];
+  hasMultipleItems: boolean;
+  contentArray?: any[];
+  getFullContent: () => string;
+}
+
+const ExpandedContentDisplay = ({
+  tool_calls,
+  toolInfo,
+  hasMultipleItems,
+  contentArray,
+  getFullContent,
+}: ExpandedContentDisplayProps) => {
+  if (toolInfo) {
+    return <ToolInfoDisplay toolInfo={toolInfo} />;
+  }
+
+  if (hasMultipleItems && contentArray) {
+    return (
+      <div className="text-xs text-left text-zinc-300 leading-relaxed">
+        <ContentArrayDisplay contentArray={contentArray} />
+      </div>
+    );
+  }
+  if(tool_calls && tool_calls.length> 0) {
+    return <div className="text-xs text-left text-zinc-300 leading-relaxed">
+      <ToolCallList toolCalls={tool_calls} hideTitle={true}/>
+    </div>
+  }
+
+  return (
+    <div className="text-xs text-left text-zinc-300 leading-relaxed">
+      <MarkdownViewer message={getFullContent()} />
+    </div>
+  );
+};
 
 export const InputNode = ({ data }: { id: string; data: Record<string, unknown> }) => {
   const nodeType = data.nodeType as NodeType;
@@ -17,6 +57,8 @@ export const InputNode = ({ data }: { id: string; data: Record<string, unknown> 
   const expandedHeight = data.expandedHeight as number | undefined;
   const onToggleExpand = data.onToggleExpand as ((nodeId: string) => void) | undefined;
   const id = data.id as string;
+
+  rawMessage?.tool_calls && rawMessage.tool_calls && console.log('=== rawMessage', rawMessage)
 
   // Get preview text
   const getPreviewText = () => {
@@ -32,6 +74,9 @@ export const InputNode = ({ data }: { id: string; data: Record<string, unknown> 
       if (Array.isArray(rawMessage.content)) {
         return null; // Will show content blocks indicator
       }
+    }
+    if(rawMessage?.tool_calls && rawMessage.tool_calls.length > 0){
+      return rawMessage.tool_calls.map((t: Record<string, any>) => t.function?.name).join(', ')
     }
     return null;
   };
@@ -117,13 +162,13 @@ export const InputNode = ({ data }: { id: string; data: Record<string, unknown> 
             style={{ maxHeight: expandedHeight ?? 180 }}
             onWheelCapture={(e) => e.stopPropagation()}
           >
-            {toolInfo ? (
-              <ToolInfoDisplay toolInfo={toolInfo} />
-            ) : hasMultipleItems ? (<div className="text-xs text-left text-zinc-300 leading-relaxed"><ContentArrayDisplay contentArray={rawMessage.content} /> </div>) : (
-              <div className="text-xs text-left text-zinc-300 leading-relaxed">
-                <MarkdownViewer message={getFullContent()} />
-              </div>
-            )}
+            <ExpandedContentDisplay
+              toolInfo={toolInfo}
+              tool_calls={rawMessage?.tool_calls}
+              hasMultipleItems={!!hasMultipleItems}
+              contentArray={rawMessage?.content}
+              getFullContent={getFullContent}
+            />
           </div>
         )}
       </div>
