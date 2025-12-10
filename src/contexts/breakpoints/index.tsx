@@ -11,9 +11,11 @@ import {
   CustomBreakpointEventType,
 } from "@/contexts/project-events/dto";
 import { ProjectEventsConsumer } from '../project-events';
+import { CurrentAppConsumer } from '../CurrentAppContext';
 export const useBreakpointsState = (projectId: string) => {
 
-  const {emit} = ProjectEventsConsumer()
+  const { app_mode } = CurrentAppConsumer()
+  const { emit } = ProjectEventsConsumer()
   const [state, setState] = useState<BreakpointsState>({
     isDebugActive: false,
     isLoading: true,
@@ -47,7 +49,7 @@ export const useBreakpointsState = (projectId: string) => {
           const listOfEvents = breakpoints
             .flatMap(b => b.events ?? [])
             .filter(Boolean);
-            // sort event by timestamp chronical order
+          // sort event by timestamp chronical order
           listOfEvents.sort((a, b) => a.timestamp - b.timestamp).forEach(e => {
             try {
               emit(e);
@@ -127,17 +129,21 @@ export const useBreakpointsState = (projectId: string) => {
     // Reset state when projectId changes
     setState({
       isDebugActive: false,
-      isLoading: true,
+      isLoading: app_mode === 'langdb' ? false : true,
       breakpoints: [],
       interceptAll: false,
       error: null,
     });
-    fetchBreakpoints();
+
+    // Skip fetching breakpoints for langdb mode
+    if (app_mode !== 'langdb') {
+      fetchBreakpoints();
+    }
 
     return () => {
       isMountedRef.current = false;
     };
-  }, [projectId, fetchBreakpoints]);
+  }, [projectId, fetchBreakpoints, app_mode]);
 
   const handleEvent = useCallback((event: ProjectEventUnion) => {
     if (event.type === "Custom") {

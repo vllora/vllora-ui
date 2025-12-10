@@ -2,10 +2,15 @@ import { Loader2, BugOff } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { BreakpointsConsumer } from '@/contexts/breakpoints';
 import { DebugToolbar } from './DebugToolbar';
+import { CurrentAppConsumer } from '@/lib';
 
 export function DebugModeToggle() {
   const { isDebugActive, isLoading, toggleDebugMode } = BreakpointsConsumer();
+  const { app_mode } = CurrentAppConsumer()
 
+  if (app_mode === 'langdb') {
+    return
+  }
   if (isDebugActive) {
     return <DebugToolbar />;
   }
