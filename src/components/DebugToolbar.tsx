@@ -52,7 +52,7 @@ export function DebugToolbar() {
             </button>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Stop Debug</p>
+            <p>Exit debug mode & resume all</p>
           </TooltipContent>
         </Tooltip>
       </div>
