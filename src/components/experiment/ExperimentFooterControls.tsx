@@ -13,6 +13,7 @@ import { MultiProviderConfigDialog } from "@/components/chat/traces/model-select
 import { ModelInfo } from "@/types/models";
 import { ExperimentParametersDialog } from "./ExperimentParametersDialog";
 import { SettingsButton } from "./SettingsButton";
+import { BreakpointsConsumer } from "@/contexts/breakpoints";
 
 export function ExperimentFooterControls() {
   const {
@@ -23,10 +24,12 @@ export function ExperimentFooterControls() {
     runExperiment,
     resetExperiment,
     activeTab,
+    setOutputPanelTab
   } = ExperimentConsumer();
   const [parametersDialogOpen, setParametersDialogOpen] = useState(false);
   const { models } = ProjectModelsConsumer();
   const { app_mode } = CurrentAppConsumer();
+  const { isDebugActive } = BreakpointsConsumer();
 
   // Use the provider config hook for model selector warnings and dialogs
   const {
@@ -94,7 +97,15 @@ export function ExperimentFooterControls() {
               Reset
             </Button>
             <Button
-              onClick={runExperiment}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                runExperiment({
+                  beforeRunExperiment: isDebugActive ? () => {
+                    setOutputPanelTab('trace')
+                  } : undefined
+                })
+              }}
               disabled={running}
               className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white px-6"
             >
@@ -119,7 +130,7 @@ export function ExperimentFooterControls() {
           open={configDialogOpen}
           providerName={selectedProviderForConfig}
           onOpenChange={setConfigDialogOpen}
-          onSaveSuccess={() => {}}
+          onSaveSuccess={() => { }}
         />
       )}
 

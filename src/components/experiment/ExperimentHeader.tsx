@@ -2,6 +2,7 @@ import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, FlaskConical } from "lucide-react";
 import { ExperimentConsumer } from "@/contexts/ExperimentContext";
+import { DebugModeToggle } from "../DebugModeToggle";
 
 export function ExperimentHeader() {
   const navigate = useNavigate();
@@ -33,6 +34,8 @@ export function ExperimentHeader() {
             )}
           </div>
         </div>
+        <div className="w-px h-6 bg-border" />
+        <DebugModeToggle/>
       </div>
     </div>
   );
