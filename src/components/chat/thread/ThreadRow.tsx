@@ -9,7 +9,6 @@ import { cn } from "@/lib/utils";
 import { useClickAway } from "ahooks";
 import { Card } from "../../ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../ui/tooltip";
-import { motion } from "framer-motion";
 import { ThreadTimeDisplay } from './ThreadTimeDisplay';
 import { ListProviders } from "./ListProviders";
 import { formatCost } from "@/utils/formatCost";
@@ -93,12 +92,7 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
     // No need to calculate model count as we're not displaying it
 
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
-        >
-            <Card
+        <Card
                 id={`thread-row-${thread.thread_id}`}
                 key={thread.thread_id}
                 onClick={(e) => {
@@ -243,7 +237,6 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                         </TooltipProvider>
                     )}
                 </div>
-            </Card>
-        </motion.div>
+        </Card>
     );
 });

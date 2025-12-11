@@ -84,11 +84,10 @@ export const ThreadList: React.FC<ThreadListProps> = ({
                     top: `${virtualRow.start}px`,
                     left: 0,
                     width: '100%',
+                    padding: '4px 8px',
                   }}
                 >
-                  <div style={{ paddingLeft: '8px', paddingRight: '8px', paddingBottom: '8px' }}>
-                    <ThreadRow thread={thread}/>
-                  </div>
+                  <ThreadRow thread={thread}/>
                 </div>
               );
             })}
