@@ -159,7 +159,6 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
           event.run_id && updateRunMetrics(event.run_id, newFlattenSpans);
           return newFlattenSpans;
         });
-
         event.run_id && setSelectedRunId(event.run_id);
         event.run_id && setOpenTraces([{ run_id: event.run_id, tab: 'trace' }]);
       }, 0);
@@ -177,7 +176,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     }
 
     // Handle breakpoint resume for specific thread
-    if (event.type === 'Custom' && event.event?.type === 'breakpoint_resume' && event.thread_id) {
+    if ((event.type === 'Custom' && event.event?.type === 'breakpoint_resume' && event.thread_id)) {
       handleBreakpointResume(event.thread_id);
     }
 
@@ -334,6 +333,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     clearAll,
     clearSelectPrevThread,
     setFlattenSpans,
+    setRuns,
 
     detailSpanId,
     setDetailSpanId,

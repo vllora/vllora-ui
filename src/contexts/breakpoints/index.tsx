@@ -10,12 +10,10 @@ import {
   CustomEvent,
   CustomBreakpointEventType,
 } from "@/contexts/project-events/dto";
-import { ProjectEventsConsumer } from '../project-events';
 import { CurrentAppConsumer } from '../CurrentAppContext';
 export const useBreakpointsState = (projectId: string) => {
 
   const { app_mode } = CurrentAppConsumer()
-  const { emit } = ProjectEventsConsumer()
   const [state, setState] = useState<BreakpointsState>({
     isDebugActive: false,
     isLoading: true,
@@ -35,7 +33,8 @@ export const useBreakpointsState = (projectId: string) => {
         const breakpoints = data.breakpoints ?? [];
         const isDebugActive = breakpoints.length > 0 || data.intercept_all;
 
-        // Update state first
+        // Update state - spans will be reconstructed in ConversationWindow
+        // using batched updates to avoid UI flickering
         setState({
           isDebugActive,
           isLoading: false,
@@ -43,21 +42,6 @@ export const useBreakpointsState = (projectId: string) => {
           interceptAll: data.intercept_all,
           error: null,
         });
-
-        // Emit events after state is set, with error handling
-        if (isDebugActive) {
-          const listOfEvents = breakpoints
-            .flatMap(b => b.events ?? [])
-            .filter(Boolean);
-          // sort event by timestamp chronical order
-          listOfEvents.sort((a, b) => a.timestamp - b.timestamp).forEach(e => {
-            try {
-              emit(e);
-            } catch (err) {
-              console.error('Failed to emit event:', err);
-            }
-          });
-        }
       }
     } catch (err) {
       if (isMountedRef.current) {
@@ -68,7 +52,7 @@ export const useBreakpointsState = (projectId: string) => {
         }));
       }
     }
-  }, [emit]);
+  }, []);
   const continueAllBreakpoints = useCallback(async () => {
     try {
       const response = await api.post('/debug/continue/all');
@@ -185,7 +169,7 @@ export const useBreakpointsState = (projectId: string) => {
             }
           });
         }
-        if (eventType.type === "breakpoint_resume") {
+        if (eventType.type === "breakpoint_resume" || eventType.type === 'span_end') {
           let span_id = customEvent.span_id;
           span_id && setState(prev => {
             return {
@@ -195,6 +179,7 @@ export const useBreakpointsState = (projectId: string) => {
           });
           return;
         }
+
         if (eventType.type === "global_breakpoint") {
           setState(prev => {
             return {
