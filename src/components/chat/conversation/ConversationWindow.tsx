@@ -27,11 +27,11 @@ import { processEvent, updatedRunWithSpans } from '@/hooks/events/utilities';
  * Manual creation allows batching all span updates into a single state change
  */
 const createSpansFromBreakpoint = (breakpoint: Breakpoint): Span[] => {
-  let initialSpans:Span[] = []
+  let initialSpans: Span[] = []
   let breakpoin_events = breakpoint.events;
   let result = initialSpans;
   breakpoin_events.forEach(e => {
-     result = processEvent(result,e)
+    result = processEvent(result, e)
   })
   return result;
 };
@@ -130,81 +130,60 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
       if (breakpointsForThread.length > 0) {
         // Track run_ids that need to be updated
         const runIdsToUpdate = new Set<string>();
+        let spansFromBreakPoints: Span[] = breakpointsForThread.map(b => createSpansFromBreakpoint(b)).flat().sort((a, b) => a.start_time_us - b.start_time_us)
+        spansFromBreakPoints.forEach(s => {
+          runIdsToUpdate.add(s.run_id)
+        })
 
+        setRuns(prevRuns => {
+          let updatedRuns = [...prevRuns];
+          for (const runId of runIdsToUpdate) {
+            const existingRunIndex = updatedRuns.findIndex(r => r.run_id === runId);
+            const updatedRun = updatedRunWithSpans({
+              spans: spansFromBreakPoints.filter(s => s.run_id === runId),
+              run_id: runId,
+              prevRun: existingRunIndex >= 0 ? updatedRuns[existingRunIndex] : undefined
+            });
+            if (existingRunIndex >= 0) {
+              updatedRuns[existingRunIndex] = updatedRun;
+            } else {
+              updatedRuns = [updatedRun, ...updatedRuns];
+            }
+          }
+          return updatedRuns;
+        });
+
+        // Open traces for runs in debug mode
+        setOpenTraces(prevOpenTraces => {
+          const newOpenTraces = [...prevOpenTraces];
+          for (const runId of runIdsToUpdate) {
+            if (!newOpenTraces.some(t => t.run_id === runId)) {
+              newOpenTraces.push({ run_id: runId, tab: 'trace' });
+            }
+          }
+          return newOpenTraces;
+        });
         setFlattenSpans(prevSpans => {
           const newSpans = [...prevSpans];
           let hasChanges = false;
 
-          for (const bp of breakpointsForThread) {
-            const existingIndex = newSpans.findIndex(s => s.span_id === bp.breakpoint_id);
-            if (existingIndex === -1) {
-              // Create paused span from breakpoint
-              let spansFromBreakPoint = createSpansFromBreakpoint(bp)
-              // update spans same span_id in newSpan
-              spansFromBreakPoint.forEach(breakpointSpan => {
-                let existIdx = newSpans.findIndex(s => s.span_id === breakpointSpan.span_id)
-                if(existIdx >=0) {
-                  newSpans[existIdx] = breakpointSpan
-                } else {
-                  newSpans.push({...breakpointSpan})
-                }
-                // Track run_id for updating runs
-                if (breakpointSpan.run_id) {
-                  runIdsToUpdate.add(breakpointSpan.run_id);
-                }
-              })
-
-              hasChanges = true;
-            } else if (!newSpans[existingIndex].isInDebug) {
-              // Span exists but not marked as debug, update it
-              newSpans[existingIndex] = {
-                ...newSpans[existingIndex],
-                isInDebug: true,
-                isInProgress: true,
-              };
-              hasChanges = true;
-              // Track run_id for updating runs
-              if (newSpans[existingIndex].run_id) {
-                runIdsToUpdate.add(newSpans[existingIndex].run_id);
+          // Merge precomputed breakpoint spans into existing spans
+          for (const breakpointSpan of spansFromBreakPoints) {
+            const existIdx = newSpans.findIndex(s => s.span_id === breakpointSpan.span_id);
+            if (existIdx >= 0) {
+              // Update existing span if not already marked as debug
+              if (!newSpans[existIdx].isInDebug) {
+                newSpans[existIdx] = breakpointSpan;
+                hasChanges = true;
               }
+            } else {
+              // Add new span
+              newSpans.push({ ...breakpointSpan });
+              hasChanges = true;
             }
           }
 
-          // Update runs for affected run_ids
-          if (hasChanges && runIdsToUpdate.size > 0) {
-            const sortedSpans = newSpans.sort((a, b) => a.start_time_us - b.start_time_us);
-            setRuns(prevRuns => {
-              let updatedRuns = [...prevRuns];
-              for (const runId of runIdsToUpdate) {
-                const existingRunIndex = updatedRuns.findIndex(r => r.run_id === runId);
-                const updatedRun = updatedRunWithSpans({
-                  spans: sortedSpans.filter(s => s.run_id === runId),
-                  run_id: runId,
-                  prevRun: existingRunIndex >= 0 ? updatedRuns[existingRunIndex] : undefined
-                });
-                if (existingRunIndex >= 0) {
-                  updatedRuns[existingRunIndex] = updatedRun;
-                } else {
-                  updatedRuns = [updatedRun, ...updatedRuns];
-                }
-              }
-              return updatedRuns;
-            });
-
-            // Open traces for runs in debug mode
-            setOpenTraces(prevOpenTraces => {
-              const newOpenTraces = [...prevOpenTraces];
-              for (const runId of runIdsToUpdate) {
-                if (!newOpenTraces.some(t => t.run_id === runId)) {
-                  newOpenTraces.push({ run_id: runId, tab: 'trace' });
-                }
-              }
-              return newOpenTraces;
-            });
-          }
-
-          // Only return new array if there were changes to avoid unnecessary re-renders
-          return hasChanges ? newSpans.sort((a,b) => a.start_time_us - b.start_time_us) : prevSpans;
+          return hasChanges ? newSpans.sort((a, b) => a.start_time_us - b.start_time_us) : prevSpans;
         });
       }
     }
@@ -273,7 +252,7 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     }
   }, [breakpoints, setThreads, isLoadingThreads]);
 
-  useEffect(()=> {
+  useEffect(() => {
     clearSelectPrevThread()
   }, [threadId])
 
