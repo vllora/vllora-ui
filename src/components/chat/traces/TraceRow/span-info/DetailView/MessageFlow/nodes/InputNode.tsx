@@ -46,7 +46,7 @@ const ExpandedContentDisplay = ({
   );
 };
 
-export const InputNode = ({ data }: { id: string; data: Record<string, unknown> }) => {
+export const InputNode = ({ id, data }: { id: string; data: Record<string, unknown> }) => {
   const nodeType = data.nodeType as NodeType;
   const label = data.label as string;
   const roleStyle = getRoleStyle(nodeType);
@@ -56,7 +56,6 @@ export const InputNode = ({ data }: { id: string; data: Record<string, unknown> 
   const nodeWidth = data.nodeWidth as number | undefined;
   const expandedHeight = data.expandedHeight as number | undefined;
   const onToggleExpand = data.onToggleExpand as ((nodeId: string) => void) | undefined;
-  const id = data.id as string;
 
   rawMessage?.tool_calls && rawMessage.tool_calls && console.log('=== rawMessage', rawMessage)
 
