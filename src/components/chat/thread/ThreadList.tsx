@@ -13,12 +13,8 @@ export const ThreadList: React.FC<ThreadListProps> = ({
   threads,
 }) => {
   const { loading, loadingMore, loadingThreadsError, loadMoreThreads, hasMore } = ThreadsConsumer();
-  const loadingRef = useRef(false);
   const parentRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    loadingRef.current = loading || loadingMore;
-  }, [loading, loadingMore]);
-
+  const isLoadingMoreRef = useRef(false);
 
   // Virtualize the list
   const rowVirtualizer = useVirtualizer({
@@ -32,24 +28,36 @@ export const ThreadList: React.FC<ThreadListProps> = ({
     },
   });
 
+  const virtualItems = rowVirtualizer.getVirtualItems();
+  const lastItemIndex = virtualItems.length > 0 ? virtualItems[virtualItems.length - 1]?.index : -1;
+
+  // Reset ref when loadingMore state changes to false
+  useEffect(() => {
+    if (!loadingMore) {
+      isLoadingMoreRef.current = false;
+    }
+  }, [loadingMore]);
+
   // Load more when scrolling near the end
   useEffect(() => {
-    const [lastItem] = [...rowVirtualizer.getVirtualItems()].reverse();
-
-    if (!lastItem) return;
-
     if (
-      lastItem.index >= threads.length - 1 &&
+      lastItemIndex >= threads.length - 1 &&
       hasMore &&
-      !loadingRef.current
+      !loading &&
+      !loadingMore &&
+      !isLoadingMoreRef.current
     ) {
+      // Set ref synchronously before calling loadMoreThreads
+      isLoadingMoreRef.current = true;
       loadMoreThreads();
     }
   }, [
+    lastItemIndex,
     hasMore,
+    loading,
+    loadingMore,
     loadMoreThreads,
     threads.length,
-    rowVirtualizer.getVirtualItems(),
   ]);
 
   return (
