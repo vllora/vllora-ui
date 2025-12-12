@@ -434,6 +434,20 @@ export function extractMessagesFromSpanById(
     });
     result = inputMessageFromApiInvokeSpan;
   }
+  if(result.length === 0 && !apiInvokeSpan && span.operation_name !== 'api_invoke' && span.attribute && (span.attribute  as any).content) {
+    result = [{
+      id: `${span.span_id}_response`,
+      type: "assistant",
+      role: "assistant",
+      content: (span.attribute  as any).content,
+      timestamp: span.finish_time_us ? span.finish_time_us / 1000 : Date.now(),
+      thread_id: span.thread_id,
+      trace_id: span.trace_id,
+      span_id: span.span_id,
+      span,
+      model_name:span.operation_name,
+    }]
+  }
 
   return result;
 }
