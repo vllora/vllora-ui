@@ -8,7 +8,6 @@ import { emitter } from '@/utils/eventEmitter';
 import { XCircle } from 'lucide-react';
 import { ModalProvider } from '@/contexts/ModalContext';
 import { ModalManager } from '@/components/modals/ModalManager';
-import { useConversationEvents } from '@/hooks/events/useConversationEvents';
 import { Message } from '@/types/chat';
 import { extractMessagesFromSpanById } from '@/utils/span-to-message';
 import { McpServerConfig } from '@/services/mcp-api';
@@ -182,7 +181,6 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
               hasChanges = true;
             }
           }
-
           return hasChanges ? newSpans.sort((a, b) => a.start_time_us - b.start_time_us) : prevSpans;
         });
       }
@@ -258,10 +256,6 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
 
 
 
-  useConversationEvents({
-    currentProjectId: projectId || '',
-    currentThreadId: threadId || '',
-  });
 
   const {
     submitMessageFn: handleSubmit,

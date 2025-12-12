@@ -150,9 +150,21 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
       return [...prevRuns.map(r => r.run_id === run_id ? updatedRun : r)]
     })
   }, []);
+
+  const [typing, setTyping] = useState(false);
+
   const handleEvent = useCallback((event: ProjectEventUnion) => {
+
+    // Handle typing state for the current thread
+    if (event.thread_id === threadId) {
+      if (event.type === "TextMessageContent") {
+        setTyping(true);
+      } else if (event.type === "TextMessageEnd") {
+        setTyping(false);
+      }
+    }
     // Handle run events for the current thread
-    if (event.run_id && event.thread_id === threadId) {
+    if (event.run_id) {
       setTimeout(() => {
         setFlattenSpans(prevSpans => {
           const newFlattenSpans = processEvent(prevSpans, event);
@@ -162,7 +174,6 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
         event.run_id && setSelectedRunId(event.run_id);
         event.run_id && setOpenTraces([{ run_id: event.run_id, tab: 'trace' }]);
       }, 0);
-
       if ((event.type === 'RunFinished' || event.type === 'RunError') && event.run_id) {
         setTimeout(() => {
           event.run_id && fetchSpansByRunId(event.run_id);
@@ -184,7 +195,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     if (event.thread_id) {
       setTimeout(() => handleThreadUpdate(event), 0);
     }
-  }, [threadId, updateRunMetrics, handleGlobalBreakpointDisabled, handleBreakpointResume, handleThreadUpdate]);
+  }, [updateRunMetrics, handleGlobalBreakpointDisabled, handleBreakpointResume, handleThreadUpdate, setFlattenSpans]);
 
 
   useDebugControl({ handleEvent, channel_name: 'debug-thread-trace-timeline-events' });
@@ -206,7 +217,6 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
   const messageHierarchies = useStableMessageHierarchies(unstableMessageHierarchies);
   // UI state
   const [currentInput, setCurrentInput] = useState<string>('');
-  const [typing, setTyping] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [traceId, setTraceId] = useState<string | undefined>();
   const [usageInfo, setUsageInfo] = useState<any[]>([]);
@@ -245,13 +255,12 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
   }, [selectedSpanId, spansOfSelectedRun]);
 
   const clearAll = useCallback(() => {
-
     setFlattenSpans([]);
 
     setSelectedRunId(null);
     setSelectedSpanId(null);
     setDetailSpanId(null);
-    
+
     setCollapsedSpans([]);
     setRunHighlighted(null);
     setHoverSpanId(undefined);
@@ -260,7 +269,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     setRuns([]);
   }, []);
 
-  const clearSelectPrevThread = useCallback(()=> {
+  const clearSelectPrevThread = useCallback(() => {
     setSelectedRunId(null);
     setSelectedSpanId(null);
     setDetailSpanId(null);
