@@ -53,6 +53,7 @@ export interface ProviderInfo {
   terms_of_service_url?: string;
   provider_type: string;
   has_credentials: boolean;
+  custom_endpoint?: string;
 }
 
 export interface ListProvidersResponse {

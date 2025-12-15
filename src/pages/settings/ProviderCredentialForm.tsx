@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Eye, EyeOff, ExternalLink } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 
 export interface CredentialFormValues {
     [key: string]: string;
@@ -43,6 +44,7 @@ export const ProviderCredentialForm = ({
     const firstInputRef = useRef<HTMLInputElement>(null);
     const pollingIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const loginWindowRef = useRef<Window | null>(null);
+    const [useCustomEndpoint, setUseCustomEndpoint] = useState(false);
 
     useEffect(() => {
         // Auto-focus first input when form opens
@@ -51,6 +53,12 @@ export const ProviderCredentialForm = ({
         }, 100);
         return () => clearTimeout(timer);
     }, []);
+
+    useEffect(() => {
+        if (values.endpoint) {
+            setUseCustomEndpoint(true);
+        }
+    }, [values]);
 
     // Cleanup polling and window on unmount
     useEffect(() => {
@@ -148,6 +156,15 @@ export const ProviderCredentialForm = ({
             return (
                 <div className="space-y-4">
                     {renderPasswordField('api_key', 'API Key', 'Enter your API key', true)}
+                    <div className="flex items-center space-x-2">
+                        <Checkbox 
+                            id="use_endpoint" 
+                            checked={useCustomEndpoint} 
+                            onCheckedChange={(checked: boolean) => setUseCustomEndpoint(checked)} 
+                        />
+                        <Label htmlFor="use_endpoint">Use Custom Endpoint</Label>
+                    </div>
+                    {useCustomEndpoint && renderTextField('endpoint', 'Endpoint URL', 'https://api.example.com')}
                     {renderDocLink()}
                 </div>
             );
