@@ -203,8 +203,6 @@ export function useProviderKeys() {
 
   const startEditing = (providerName: string) => {
     setEditingProvider(providerName);
-    console.log('providers', providers);
-    console.log('providerName', providerName);
     let provider = providers.find(p => p.name === providerName);
     if (provider?.custom_endpoint) {
       setCredentialValues({ ...credentialValues, [providerName]: {
