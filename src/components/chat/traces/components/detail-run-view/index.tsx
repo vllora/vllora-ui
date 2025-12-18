@@ -23,7 +23,7 @@ export const DetailedRunView: React.FC<{run: RunDTO}> = ({
     const detailViewRef = useRef<HTMLDivElement>(null);
 
     // Show loading state while deferred value is catching up
-    const isDeferred = deferredSpans !== spansByRunId;
+    // const isDeferred = deferredSpans !== spansByRunId;
 
     if (spansByRunId?.length > 0) {
 
@@ -39,7 +39,7 @@ export const DetailedRunView: React.FC<{run: RunDTO}> = ({
                     <div className="overflow-hidden">
                         <div className={cn(
                             "overflow-hidden relative transition-opacity duration-150",
-                            isDeferred && "opacity-50"
+                            // isDeferred && "opacity-50"
                         )}>
                             <ErrorBoundary FallbackComponent={CustomErrorFallback}>
                                 <TimelineContent

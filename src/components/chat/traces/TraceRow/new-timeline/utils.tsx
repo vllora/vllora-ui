@@ -517,6 +517,9 @@ export const getLabelOfSpan = (props: {
     span: Span
 }) => {
     const { span } = props;
+    if(span.operation_name === 'tools') {
+        return '';
+    }
     let attribute = span.attribute as any;
     if (!attribute) return '';
     if (!attribute['label']) return '';
