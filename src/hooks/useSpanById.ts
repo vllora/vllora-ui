@@ -51,6 +51,7 @@ export function useSpanById(
     attr?.label,
     attr?.request,
     attr?.response,
+    attr?.usage,
   ]);
 }
 
