@@ -15,7 +15,15 @@ interface MessageDisplayProps {
   message: string | any[];
 }
 
+// Fast check to avoid expensive JSON.parse on obvious non-JSON strings
+const looksLikeJson = (str: string): boolean => {
+  const firstChar = str.trimStart()[0];
+  return firstChar === '{' || firstChar === '[';
+};
+
 const tryParseJson = (str: string): object | undefined => {
+  // Skip JSON parsing for strings that clearly aren't JSON
+  if (!looksLikeJson(str)) return undefined;
   try {
     const result = JSON.parse(str);
     return typeof result === 'object' ? result : undefined;
