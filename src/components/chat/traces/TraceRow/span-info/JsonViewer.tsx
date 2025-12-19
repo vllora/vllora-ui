@@ -44,7 +44,7 @@ export const JsonViewer: React.FC<JsonViewerProps> = ({
         style={{
           ...style,
         }}
-        collapseStringsAfterLength={collapseStringsAfterLength ?? 50}
+        collapseStringsAfterLength={collapseStringsAfterLength ?? 500}
         collapsed={collapsed ?? 2}
         enableClipboard
         displayDataTypes={false}
