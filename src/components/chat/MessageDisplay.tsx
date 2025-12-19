@@ -11,6 +11,10 @@ import remarkFlexibleParagraphs from 'remark-flexible-paragraphs';
 import { sanitizeSchema } from '@/utils/sanitizeSchema';
 import { JsonViewer } from './traces/TraceRow/span-info/JsonViewer';
 
+// Regex to detect if content needs markdown parsing (has markdown syntax)
+// This allows us to skip expensive parsing for plain text
+const MARKDOWN_SYNTAX_REGEX = /[*_`#\[\]!|>~\\-]|^\s*[-*+]\s|^\s*\d+\.\s|```|<[a-z]/im;
+
 interface MessageDisplayProps {
   message: string | any[];
 }
@@ -211,17 +215,19 @@ export const MessageDisplay: React.FC<MessageDisplayProps> = memo(({ message }) 
 });
 
 const BaseMessageDisplay: React.FC<{ message: string | any[] }> = memo(({ message }) => {
-  // Check if entire message is valid JSON
-  const parsedJsonMessage = useMemo(() => {
+  // Memoize all computed values together for better performance
+  const { parsedJsonMessage, markdownContent, needsMarkdown } = useMemo(() => {
     if (typeof message === 'string') {
-      return tryParseJson(message);
+      const parsedJson = tryParseJson(message);
+      if (parsedJson) {
+        return { parsedJsonMessage: parsedJson, markdownContent: '', needsMarkdown: false };
+      }
+      // Check if content has markdown syntax - skip expensive parsing for plain text
+      const hasMarkdown = MARKDOWN_SYNTAX_REGEX.test(message);
+      return { parsedJsonMessage: undefined, markdownContent: message, needsMarkdown: hasMarkdown };
     }
-    return undefined;
-  }, [message]);
-
-  // Memoize markdown content
-  const markdownContent = useMemo(() => {
-    return typeof message === 'string' ? message : JSON.stringify(message);
+    const stringified = JSON.stringify(message);
+    return { parsedJsonMessage: undefined, markdownContent: stringified, needsMarkdown: true };
   }, [message]);
 
   // Memoize components object with paragraph component that references this component
@@ -231,10 +237,17 @@ const BaseMessageDisplay: React.FC<{ message: string | any[] }> = memo(({ messag
     p: createParagraphComponent(BaseMessageDisplay),
   }), []);
 
+  // Fast path: render JSON directly
   if (parsedJsonMessage) {
     return <JsonViewer data={parsedJsonMessage} collapsed={10} />;
   }
 
+  // Fast path: plain text without markdown syntax - skip ReactMarkdown entirely
+  if (!needsMarkdown) {
+    return <p className="whitespace-pre-wrap my-1">{markdownContent}</p>;
+  }
+
+  // Full markdown rendering for content with markdown syntax
   return (
     <ReactMarkdown
       remarkPlugins={REMARK_PLUGINS}

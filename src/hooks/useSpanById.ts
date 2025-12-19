@@ -33,11 +33,11 @@ export function useSpanById(
 
   // Return a memoized span that only changes when the span's data actually changes
   // This prevents unnecessary re-renders when other spans in the array change
+  // Cast attribute to Record for dynamic property access
+  const attr = span?.attribute as Record<string, unknown> | undefined;
+
   return useMemo(() => {
     if (!span) return undefined;
-
-    // Create a stable reference based on span's serialized data
-    // This will only trigger re-render when this specific span's data changes
     return span;
   }, [
     span?.span_id,
@@ -45,8 +45,12 @@ export function useSpanById(
     span?.start_time_us,
     span?.finish_time_us,
     span?.isInProgress,
-    // Serialize attribute to detect content changes
-    span?.attribute ? JSON.stringify(span.attribute) : undefined,
+    // Use specific attribute keys instead of JSON.stringify for performance
+    attr?.content,
+    attr?.error,
+    attr?.label,
+    attr?.request,
+    attr?.response,
   ]);
 }
 

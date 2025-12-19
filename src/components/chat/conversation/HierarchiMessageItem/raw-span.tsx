@@ -9,6 +9,12 @@ import { getColorFromLabel, LabelTag } from "../../traces/TraceRow/new-timeline/
 import { cn } from "@/lib/utils";
 import { AlertCircle } from "lucide-react";
 
+// Static options object to prevent re-renders from new object references
+const EXTRACT_MESSAGE_OPTIONS = { excludeToolInvokeMessage: true } as const;
+
+// Static style for labeled spans
+const LABEL_BORDER_STYLE_BASE = { borderLeftWidth: '1px', paddingLeft: '5px' } as const;
+
 
 export const RawSpanMessage = React.memo((props: {
     messageStructure: MessageStructure;
@@ -55,34 +61,36 @@ export const RawSpanMessage = React.memo((props: {
     return true;
 })
 
-// Simplified component - let useMessageExtraceSpanById handle the memoization
+// Simplified component - let useMessageExtractSpanById handle the memoization
 const InnerRawSpanMessage = React.memo(({ currentMessageStructure, flattenSpans }: {
     currentMessageStructure: MessageStructure;
     flattenSpans: any[];
 }) => {
     const span = useSpanById(flattenSpans, currentMessageStructure.span_id);
-    const extractedMessages = useMessageExtractSpanById(flattenSpans, currentMessageStructure.span_id, {
-        excludeToolInvokeMessage: true
-    });
+    const extractedMessages = useMessageExtractSpanById(
+        flattenSpans,
+        currentMessageStructure.span_id,
+        EXTRACT_MESSAGE_OPTIONS
+    );
 
     const attributes = span?.attribute;
     const labelAttribute = attributes?.['label'];
     const error = attributes?.error;
-    const colorLabel = labelAttribute && getColorFromLabel(labelAttribute);
+    const colorLabel = labelAttribute ? getColorFromLabel(labelAttribute) : undefined;
     const messages = currentMessageStructure.type === 'api_invoke' && currentMessageStructure.children.length > 0 ? [] : extractedMessages;
 
-    if (messages.length === 0) return <></>;
+    // Memoize the label border style to avoid creating new object on each render
+    const labelStyle = useMemo(() => {
+        if (!labelAttribute || !colorLabel) return undefined;
+        return { ...LABEL_BORDER_STYLE_BASE, borderLeftColor: colorLabel.background };
+    }, [labelAttribute, colorLabel?.background]);
+
+    if (messages.length === 0) return null;
 
     return (
         <div className={cn("flex flex-col")}>
-
             {labelAttribute && <div className="w-full flex justify-end py-4"><LabelTag label={labelAttribute} /></div>}
-            <div className={`flex flex-col gap-3`} style={labelAttribute ?
-                {
-                    borderLeftColor: colorLabel?.background, borderLeftWidth: '1px',
-                    paddingLeft: '5px'
-                } : {}}>
-                
+            <div className="flex flex-col gap-3" style={labelStyle}>
                 {messages.map((message) => (
                     <MessageItem key={message.id} message={message} />
                 ))}
