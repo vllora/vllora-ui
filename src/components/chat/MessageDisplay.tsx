@@ -66,7 +66,7 @@ const BaseMessageDisplay: React.FC<{ message: string | any[] }> = memo(({ messag
   if (parsedJsonMessage) {
     return (
       <Suspense fallback={<JsonLoadingFallback />}>
-        <LazyJsonViewer data={parsedJsonMessage} collapsed={10} />
+        <LazyJsonViewer data={parsedJsonMessage} collapsed={3} />
       </Suspense>
     );
   }
