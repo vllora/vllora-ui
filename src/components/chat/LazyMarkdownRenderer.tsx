@@ -62,9 +62,107 @@ const CodeComponent = memo(({
 
 CodeComponent.displayName = 'CodeComponent';
 
-// Static components object - only code needs special handling
+// Static component definitions - simple ones that don't need special logic
 const staticComponents: Partial<Components> = {
   code: CodeComponent as Components['code'],
+  pre: ({ children, ...props }) => (
+    <pre
+      {...props}
+      className={`py-0 px-0 mx-0 my-0 whitespace-pre-wrap overflow-auto ${(props as any).className || ''}`}
+    >
+      {children}
+    </pre>
+  ),
+  blockquote: ({ children, ...props }) => (
+    <blockquote
+      className="border-l-4 border-muted-foreground pl-4 italic text-muted-foreground my-2"
+      {...props}
+    >
+      {children}
+    </blockquote>
+  ),
+  h1: ({ children, ...props }) => (
+    <h1 className="font-bold text-2xl pb-2 border-b border-border my-3" {...props}>
+      {children}
+    </h1>
+  ),
+  h2: ({ children, ...props }) => (
+    <h2 className="font-bold text-xl pb-2 border-b border-border my-2" {...props}>
+      {children}
+    </h2>
+  ),
+  h3: ({ children, ...props }) => (
+    <h3 className="font-bold text-lg my-2" {...props}>
+      {children}
+    </h3>
+  ),
+  h4: ({ children, ...props }) => (
+    <h4 className="font-bold text-base my-1" {...props}>
+      {children}
+    </h4>
+  ),
+  h5: ({ children, ...props }) => (
+    <h5 className="font-semibold text-sm my-1" {...props}>
+      {children}
+    </h5>
+  ),
+  h6: ({ children, ...props }) => (
+    <h6 className="font-semibold text-xs my-1" {...props}>
+      {children}
+    </h6>
+  ),
+  ul: ({ children, ...props }) => (
+    <ul {...props} className={`list-disc list-inside my-2 space-y-1 ${(props as any).className || ''}`}>
+      {children}
+    </ul>
+  ),
+  ol: ({ children, ...props }) => (
+    <ol {...props} className={`list-decimal list-inside my-2 space-y-1 ${(props as any).className || ''}`}>
+      {children}
+    </ol>
+  ),
+  li: ({ children, ...props }) => (
+    <li {...props} className={`my-0.5 ${(props as any).className || ''}`}>
+      {children}
+    </li>
+  ),
+  a: ({ children, ...props }) => (
+    <a className="text-blue-500 hover:underline hover:text-blue-600" {...props}>
+      {children}
+    </a>
+  ),
+  table: ({ children, ...props }) => (
+    <div className="overflow-x-auto my-2">
+      <table className="min-w-full border-collapse" {...props}>
+        {children}
+      </table>
+    </div>
+  ),
+  thead: ({ children, ...props }) => (
+    <thead className="bg-secondary" {...props}>
+      {children}
+    </thead>
+  ),
+  tbody: ({ children, ...props }) => <tbody {...props}>{children}</tbody>,
+  tr: ({ children, ...props }) => (
+    <tr className="border-b border-border" {...props}>
+      {children}
+    </tr>
+  ),
+  td: ({ children, ...props }) => (
+    <td className="px-3 py-2 border border-border" {...props}>
+      {children}
+    </td>
+  ),
+  th: ({ children, ...props }) => (
+    <th className="px-3 py-2 border border-border font-semibold text-left" {...props}>
+      {children}
+    </th>
+  ),
+  img: (props) => {
+    if (!(props as any).src) return null;
+    return <img className="max-w-full rounded-lg my-2" {...props} />;
+  },
 };
 
 interface LazyMarkdownRendererProps {

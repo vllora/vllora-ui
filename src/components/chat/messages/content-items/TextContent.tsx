@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Expand } from 'lucide-react';
 import { ContentTypeBadge } from '../ContentTypeBadge';
 import { TextPreviewDialog } from './TextPreviewDialog';
+import { MessageDisplay } from '../../MessageDisplay';
 
 interface TextContentProps {
   content: string;
@@ -40,7 +41,7 @@ export const TextContent: React.FC<TextContentProps> = ({
         </div>
       )}
       <div className="text-foreground leading-relaxed whitespace-normal break-words text-sm">
-        <p className="whitespace-pre-wrap line-clamp-3">{previewText}</p>
+       <MessageDisplay message={isTruncated ? previewText: content} />
         {isTruncated && (
           <button
             onClick={() => setShowDialog(true)}
