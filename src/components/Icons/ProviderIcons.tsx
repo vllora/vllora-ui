@@ -38,7 +38,7 @@ import arli from "./arli.svg";
 import upstage from "./upstage.svg";
 import infermatic from "./infermatic.svg";
 import inflection from "./inflection.svg";
-import google   from './google.svg';
+import google from './google.svg';
 import mancer from "./mancer.svg";
 import aws from "./aws.svg";
 import parasail from "./parasail.svg";
@@ -49,6 +49,7 @@ import ai21 from "./ai21.svg";
 import pygmalionai from "./pygmalionai.svg";
 import groq from "./groq.svg";
 import { cn } from "@/lib/utils";
+import { CuboidIcon } from "lucide-react";
 // Use relative URLs for better compatibility with different ports/domains
 const getIconUrl = (iconName: string) => {
   return `/provider-icons/${iconName}.svg`;
@@ -105,63 +106,63 @@ export const providerIcons: Record<string, { icon: any; invert: boolean; urlSour
   ai21: { icon: ai21, invert: true, urlSource: getIconUrl('ai21') },
   pygmalionai: { icon: pygmalionai, invert: false, urlSource: getIconUrl('pygmalionai') },
   groq: { icon: groq, invert: true, urlSource: getIconUrl('groq') },
-  
+
   default: { icon: langdb, invert: false, urlSource: getIconUrl('langdb') },
 }
 
 
 export const getActualyIconName = (provider_name: string, fallbackProviderName?: string) => {
   let actualProviderName = provider_name;
-  if(provider_name ==='z-ai') {
+  if (provider_name === 'z-ai') {
     actualProviderName = 'zai';
   }
-  if(provider_name ==='mistralai') {
+  if (provider_name === 'mistralai') {
     actualProviderName = 'mistral';
   }
-  if(provider_name ==='meta-llama') {
+  if (provider_name === 'meta-llama') {
     actualProviderName = 'meta';
   }
-  if(provider_name ==='minimax') {
+  if (provider_name === 'minimax') {
     actualProviderName = 'minimax';
   }
-  if(provider_name ==='x-ai') {
+  if (provider_name === 'x-ai') {
     actualProviderName = 'xai';
   }
-  if(provider_name ==='stepfun-ai' || provider_name ==='stepfun') {
+  if (provider_name === 'stepfun-ai' || provider_name === 'stepfun') {
     actualProviderName = 'stepfun';
   }
-  if(provider_name ==='aion-labs') {
+  if (provider_name === 'aion-labs') {
     actualProviderName = 'aionlabs';
   }
-  if(['arli', 'arliai', 'arli-ai'].includes(provider_name)) {
+  if (['arli', 'arliai', 'arli-ai'].includes(provider_name)) {
     actualProviderName = 'arli';
   }
-  if(['moonshot', 'moonshot-ai', 'moonshotai'].includes(provider_name)) {
+  if (['moonshot', 'moonshot-ai', 'moonshotai'].includes(provider_name)) {
     actualProviderName = 'moonshot';
   }
-  if(['arcee', 'arceeai', 'arcee-ai'].includes(provider_name)) {
+  if (['arcee', 'arceeai', 'arcee-ai'].includes(provider_name)) {
     actualProviderName = 'arcee';
   }
-  if(['huggingface', 'huggingface-color', 'anthracite-org','gryphe', 'neversleep','scb10x',  'cognitivecomputations','sophosympatheia', 'alfredpros', 'alpindale', 'eleutherai',, 'shisa-ai', 'sao10k', 'thudm','raifle', 'tngtech', 'undi95'].includes(provider_name)) {
+  if (['huggingface', 'huggingface-color', 'anthracite-org', 'gryphe', 'neversleep', 'scb10x', 'cognitivecomputations', 'sophosympatheia', 'alfredpros', 'alpindale', 'eleutherai', , 'shisa-ai', 'sao10k', 'thudm', 'raifle', 'tngtech', 'undi95'].includes(provider_name)) {
     actualProviderName = 'huggingface';
   }
-  if(!fallbackProviderName && ['openrouter', 'opengvlab'].includes(provider_name)) {
+  if (!fallbackProviderName && ['openrouter', 'opengvlab'].includes(provider_name)) {
     actualProviderName = 'openrouter';
   }
-  if(['agentica', 'agenticaai', 'agentica-ai', 'agentica-org'].includes(provider_name)) {
+  if (['agentica', 'agenticaai', 'agentica-ai', 'agentica-org'].includes(provider_name)) {
     actualProviderName = 'agentica';
   }
-  
-  if(['aws', 'amazon-web-services', 'amazon'].includes(provider_name)) {
+
+  if (['aws', 'amazon-web-services', 'amazon'].includes(provider_name)) {
     actualProviderName = 'aws';
   }
-  if(['parasail', 'parasail-ai', 'parasailai'].includes(provider_name)) {
+  if (['parasail', 'parasail-ai', 'parasailai'].includes(provider_name)) {
     actualProviderName = 'parasail';
   }
-  if(['azureai', 'azure-ai', 'azureai-ai', 'azure'].includes(provider_name)) {
+  if (['azureai', 'azure-ai', 'azureai-ai', 'azure'].includes(provider_name)) {
     actualProviderName = 'azureai';
   }
-  if(['vertexai', 'vertex-ai', 'vertexai-ai', 'vertex'].includes(provider_name)) {
+  if (['vertexai', 'vertex-ai', 'vertexai-ai', 'vertex'].includes(provider_name)) {
     actualProviderName = 'vertexai';
   }
   return actualProviderName;
@@ -169,38 +170,38 @@ export const getActualyIconName = (provider_name: string, fallbackProviderName?:
 
 export const getProviderIconByName = (provider_name: string, fallbackProviderName?: string): any => {
 
-  
-  if(['deepcogito'].includes(provider_name)) {
+
+  if (['deepcogito'].includes(provider_name)) {
     return {
       urlSource: 'https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://www.deepcogito.com/&size=256'
     }
   }
-  if(['morph'].includes(provider_name)) {
+  if (['morph'].includes(provider_name)) {
     return {
       urlSource: 'https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://morphllm.com&size=256'
     }
   }
-  if(['allenai'].includes(provider_name)) {
+  if (['allenai'].includes(provider_name)) {
     return {
       urlSource: 'https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://allenai.org/&size=256'
     }
   }
-  if(['inception'].includes(provider_name)) {
+  if (['inception'].includes(provider_name)) {
     return {
       urlSource: 'https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://www.inceptionlabs.ai/&size=256'
     }
   }
-  if(['thedrummer'].includes(provider_name)) {
+  if (['thedrummer'].includes(provider_name)) {
     return {
       urlSource: 'https://openrouter.ai/images/icons/TheDrummer.png'
     }
   }
   let actualProviderName = getActualyIconName(provider_name, fallbackProviderName);
   let result = providerIcons[actualProviderName.toLowerCase() as keyof typeof providerIcons]
-  if(result) {
+  if (result) {
     return result;
   }
-  if(fallbackProviderName){
+  if (fallbackProviderName) {
     let fallbackResult = getProviderIconByName(fallbackProviderName);
     return fallbackResult;
   }
@@ -215,15 +216,26 @@ export interface ProviderIconProps extends SVGProps<SVGSVGElement> {
 }
 export const ProviderIcon = (props: ProviderIconProps) => {
   const { provider_name, className, fallbackProviderName, invert } = props;
-  
-  const icon = provider_name ? getProviderIconByName(provider_name, fallbackProviderName) : providerIcons.default;
+
+  const icon = provider_name ? getProviderIconByName(provider_name, fallbackProviderName) : null;
   let providerName = provider_name;
 
-  return icon ? <div className={cn( className ? className : 'w-6 h-6 mr-2', `${(icon?.invert || invert) ? 'dark:invert' : ''}`)}>
-    <img
-      src={icon.urlSource}
-      alt={providerName}
-      className={className ? className : "w-6 h-6 mr-2"}
-    />
-  </div> : <></>;
+  // If no icon found, show a puzzle icon for custom providers
+  if (!icon || icon === providerIcons.default) {
+    return (
+      <div className={cn(className ? className : 'w-6 h-6 mr-2', 'flex items-center justify-center')}>
+        <CuboidIcon className={className ? className : 'w-5 h-5'} style={{ color: 'rgb(var(--theme-500))' }} />
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn(className ? className : 'w-6 h-6 mr-2', `${(icon?.invert || invert) ? 'dark:invert' : ''}`)}>
+      <img
+        src={icon.urlSource}
+        alt={providerName}
+        className={className ? className : "w-6 h-6 mr-2"}
+      />
+    </div>
+  );
 }

@@ -7,6 +7,7 @@ interface ModelStepContentProps {
   handleModelNameSelect: (modelName: string) => void;
   getProviderCount: (modelName: string) => number;
   virtualModels?: VirtualModelOption[];
+  onAddCustomModel?: () => void;
 }
 
 export const ModelStepContent: React.FC<ModelStepContentProps> = ({
@@ -14,6 +15,7 @@ export const ModelStepContent: React.FC<ModelStepContentProps> = ({
   handleModelNameSelect,
   getProviderCount,
   virtualModels,
+  onAddCustomModel,
 }) => {
   return (
     <ModelListView
@@ -21,6 +23,7 @@ export const ModelStepContent: React.FC<ModelStepContentProps> = ({
       onModelNameSelect={handleModelNameSelect}
       getProviderCount={getProviderCount}
       virtualModels={virtualModels}
+      onAddCustomModel={onAddCustomModel}
     />
   );
 };
