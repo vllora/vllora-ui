@@ -1,10 +1,14 @@
-import { Trash2, AlertCircle } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Trash2, AlertCircle, Plus, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { ProviderKeysConsumer } from '@/contexts/ProviderKeysContext';
 import { ProviderKeysLoader } from './ProviderKeysLoader';
 import { ProviderCredentialModal } from './ProviderCredentialModal';
 import { DeleteProviderDialog } from './DeleteProviderDialog';
+import { CustomProviderDialog } from '@/components/settings/CustomProviderDialog';
+import { AddCustomModelDialog } from '@/components/settings/AddCustomModelDialog';
+import { QuickAddModelDialog } from '@/components/settings/QuickAddModelDialog';
 
 export const ProviderKeysPage = () => {
     return (
@@ -40,6 +44,22 @@ const ProviderKeysContent = () => {
         refetchProviders,
     } = ProviderKeysConsumer();
 
+    // Custom dialog states
+    const [customProviderDialogOpen, setCustomProviderDialogOpen] = useState(false);
+    const [quickAddModelDialogOpen, setQuickAddModelDialogOpen] = useState(false);
+    const [addModelDialogOpen, setAddModelDialogOpen] = useState(false);
+    const [addModelProvider, setAddModelProvider] = useState<string>('');
+
+    // Separate providers into predefined and custom
+    const { predefinedProviders, customProviders } = useMemo(() => {
+        const predefined = providers.filter(p => !p.is_custom);
+        const custom = providers.filter(p => p.is_custom);
+        return { predefinedProviders: predefined, customProviders: custom };
+    }, [providers]);
+
+    const configuredPredefined = predefinedProviders.filter(p => p.has_credentials);
+    const availablePredefined = predefinedProviders.filter(p => !p.has_credentials);
+
     const editingProviderData = providers.find(p => p.name === editingProvider);
 
     if (loading) {
@@ -60,6 +80,11 @@ const ProviderKeysContent = () => {
         if (editingProvider) {
             saveProvider(editingProvider);
         }
+    };
+
+    const handleAddModel = (providerName: string) => {
+        setAddModelProvider(providerName);
+        setAddModelDialogOpen(true);
     };
 
     return (
@@ -96,12 +121,53 @@ const ProviderKeysContent = () => {
                 onConfirm={confirmDeleteProvider}
             />
 
+            {/* Custom Provider Dialog */}
+            <CustomProviderDialog
+                open={customProviderDialogOpen}
+                onOpenChange={setCustomProviderDialogOpen}
+                onSuccess={refetchProviders}
+            />
+
+            {/* Quick Add Model Dialog */}
+            <QuickAddModelDialog
+                open={quickAddModelDialogOpen}
+                onOpenChange={setQuickAddModelDialogOpen}
+                onSuccess={refetchProviders}
+            />
+
+            {/* Add Model to Provider Dialog */}
+            <AddCustomModelDialog
+                open={addModelDialogOpen}
+                onOpenChange={setAddModelDialogOpen}
+                providerName={addModelProvider}
+                onSuccess={refetchProviders}
+            />
+
             <div className="space-y-6">
-                <div>
-                    <h2 className="text-2xl font-semibold">Provider Keys</h2>
-                    <p className="text-sm text-muted-foreground mt-1">
-                        Configure API keys for different AI providers. Your keys are stored securely and associated with your current project.
-                    </p>
+                <div className="flex items-start justify-between">
+                    <div>
+                        <h2 className="text-2xl font-semibold">Provider Keys</h2>
+                        <p className="text-sm text-muted-foreground mt-1">
+                            Configure API keys for different AI providers. Your keys are stored securely and associated with your current project.
+                        </p>
+                    </div>
+                    <div className="flex gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setQuickAddModelDialogOpen(true)}
+                        >
+                            <Bot className="h-4 w-4 mr-1" />
+                            Add Model
+                        </Button>
+                        <Button
+                            size="sm"
+                            onClick={() => setCustomProviderDialogOpen(true)}
+                        >
+                            <Plus className="h-4 w-4 mr-1" />
+                            Add Provider
+                        </Button>
+                    </div>
                 </div>
 
                 {/* Error Message */}
@@ -113,73 +179,142 @@ const ProviderKeysContent = () => {
                 )}
 
                 {/* Configured Providers */}
-                {providers.filter(p => p.has_credentials).length > 0 && (
+                {configuredPredefined.length > 0 && (
                     <div className="space-y-2">
                         <h3 className="text-sm font-medium text-muted-foreground px-3">
                             Configured
                         </h3>
                         <div className="border border-border rounded-lg divide-y divide-border">
-                            {providers
-                                .filter(p => p.has_credentials)
-                                .map((provider) => (
-                                    <div
-                                        key={provider.name}
-                                        className="flex items-center justify-between px-4 py-3 hover:bg-accent/50 transition-colors group cursor-pointer"
-                                        onClick={() => handleStartEditing(provider)}
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <ProviderIcon provider_name={provider.name} className="w-6 h-6" />
-                                            <span className="font-medium capitalize">{provider.name}</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs text-muted-foreground">
-                                                Configured
-                                            </span>
-                                            <Button
-                                                size="sm"
-                                                variant="ghost"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    startDeleteProvider(provider.name);
-                                                }}
-                                                disabled={saving[provider.name]}
-                                                className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-opacity"
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
+                            {configuredPredefined.map((provider) => (
+                                <div
+                                    key={provider.name}
+                                    className="flex items-center justify-between px-4 py-3 hover:bg-accent/50 transition-colors group cursor-pointer"
+                                    onClick={() => handleStartEditing(provider)}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <ProviderIcon provider_name={provider.name} className="w-6 h-6" />
+                                        <span className="font-medium capitalize">{provider.name}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-muted-foreground">
+                                            Configured
+                                        </span>
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleAddModel(provider.name);
+                                            }}
+                                            className="h-8 px-2 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                                            title="Add custom model"
+                                        >
+                                            <Plus className="h-3 w-3 mr-1" />
+                                            Model
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                startDeleteProvider(provider.name);
+                                            }}
+                                            disabled={saving[provider.name]}
+                                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Custom Providers */}
+                {customProviders.length > 0 && (
+                    <div className="space-y-2">
+                        <h3 className="text-sm font-medium text-muted-foreground px-3">
+                            Custom Providers
+                        </h3>
+                        <div className="border border-border rounded-lg divide-y divide-border">
+                            {customProviders.map((provider) => (
+                                <div
+                                    key={provider.name}
+                                    className="flex items-center justify-between px-4 py-3 hover:bg-accent/50 transition-colors group cursor-pointer"
+                                    onClick={() => handleStartEditing(provider)}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <ProviderIcon provider_name={provider.name} className="w-6 h-6" />
+                                        <div>
+                                            <span className="font-medium">{provider.name}</span>
+                                            {provider.endpoint && (
+                                                <p className="text-xs text-muted-foreground truncate max-w-[300px]">
+                                                    {provider.endpoint}
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
-                                ))}
+                                    <div className="flex items-center gap-2">
+                                        <span className={`text-xs ${provider.has_credentials ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>
+                                            {provider.has_credentials ? 'Configured' : 'No credentials'}
+                                        </span>
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleAddModel(provider.name);
+                                            }}
+                                            className="h-8 px-2 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                                            title="Add model"
+                                        >
+                                            <Plus className="h-3 w-3 mr-1" />
+                                            Model
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                startDeleteProvider(provider.name);
+                                            }}
+                                            disabled={saving[provider.name]}
+                                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 )}
 
                 {/* Available Providers */}
-                {providers.filter(p => !p.has_credentials).length > 0 && (
+                {availablePredefined.length > 0 && (
                     <div className="space-y-2">
                         <h3 className="text-sm font-medium text-muted-foreground px-3">
                             Available
                         </h3>
                         <div className="border border-border rounded-lg divide-y divide-border">
-                            {providers
-                                .filter(p => !p.has_credentials)
-                                .map((provider) => (
-                                    <div
-                                        key={provider.name}
-                                        className="flex items-center justify-between px-4 py-3 hover:bg-accent/50 transition-colors group cursor-pointer"
-                                        onClick={() => handleStartEditing(provider)}
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <ProviderIcon provider_name={provider.name} className="w-6 h-6" />
-                                            <span className="font-medium capitalize">{provider.name}</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs text-muted-foreground">
-                                                Not configured
-                                            </span>
-                                        </div>
+                            {availablePredefined.map((provider) => (
+                                <div
+                                    key={provider.name}
+                                    className="flex items-center justify-between px-4 py-3 hover:bg-accent/50 transition-colors group cursor-pointer"
+                                    onClick={() => handleStartEditing(provider)}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <ProviderIcon provider_name={provider.name} className="w-6 h-6" />
+                                        <span className="font-medium capitalize">{provider.name}</span>
                                     </div>
-                                ))}
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-muted-foreground">
+                                            Not configured
+                                        </span>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 )}

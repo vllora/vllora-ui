@@ -20,6 +20,8 @@ import { CurrentAppConsumer } from '@/contexts/CurrentAppContext';
 import { VirtualModelsConsumer } from '@/lib';
 import { getModelInfoFromString } from '../../conversation/model-config/utils';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { QuickAddModelDialog } from '@/components/settings/QuickAddModelDialog';
+import { ProviderKeysConsumer } from '@/contexts/ProviderKeysContext';
 
 interface ModelSelectorProps {
   selectedModel: string;
@@ -32,22 +34,46 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   selectedModel,
   onModelChange,
 }) => {
-  const { models } = ProjectModelsConsumer();
+  const { models, refetchModels } = ProjectModelsConsumer();
   const { app_mode } = CurrentAppConsumer();
   const { selectedProvider, isSelectedProviderConfigured, setSelectedProviderForConfig, setConfigDialogOpen, handleWarningClick } = ChatWindowConsumer();
-  const { virtualModels } = VirtualModelsConsumer()
+  const { virtualModels } = VirtualModelsConsumer();
+  const { refetchProviders } = ProviderKeysConsumer();
+  const [quickAddModelOpen, setQuickAddModelOpen] = useState(false);
 
-  return <ModelSelectorComponent
-    virtualModels={virtualModels}
-    selectedModel={selectedModel}
-    onModelChange={onModelChange}
-    models={models.filter((model) => model.type === 'completions')}
-    selectedProvider={selectedProvider}
-    isSelectedProviderConfigured={app_mode === 'langdb' || isSelectedProviderConfigured}
-    setSelectedProviderForConfig={setSelectedProviderForConfig}
-    setConfigDialogOpen={setConfigDialogOpen}
-    handleWarningClick={handleWarningClick}
-    app_mode={app_mode} />
+  const handleAddCustomModel = useCallback(() => {
+    setQuickAddModelOpen(true);
+  }, []);
+
+  const handleQuickAddSuccess = useCallback(() => {
+    refetchProviders();
+    refetchModels();
+  }, [refetchProviders, refetchModels]);
+
+  return (
+    <>
+      <ModelSelectorComponent
+        virtualModels={virtualModels}
+        selectedModel={selectedModel}
+        onModelChange={onModelChange}
+        models={models.filter((model) => model.type === 'completions')}
+        selectedProvider={selectedProvider}
+        isSelectedProviderConfigured={app_mode === 'langdb' || isSelectedProviderConfigured}
+        setSelectedProviderForConfig={setSelectedProviderForConfig}
+        setConfigDialogOpen={setConfigDialogOpen}
+        handleWarningClick={handleWarningClick}
+        app_mode={app_mode}
+        onAddCustomModel={app_mode === 'vllora' ? handleAddCustomModel : undefined}
+      />
+      {app_mode === 'vllora' && (
+        <QuickAddModelDialog
+          open={quickAddModelOpen}
+          onOpenChange={setQuickAddModelOpen}
+          onSuccess={handleQuickAddSuccess}
+        />
+      )}
+    </>
+  );
 }
 export interface VirtualModelOption {
   id: string;
@@ -65,7 +91,8 @@ interface ModelSelectorComponentProps {
   handleWarningClick?: () => void;
   virtualModels?: VirtualModelOption[];
   models: ModelInfo[];
-  app_mode: 'langdb' | 'vllora'
+  app_mode: 'langdb' | 'vllora';
+  onAddCustomModel?: () => void;
 }
 export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
   selectedModel,
@@ -77,7 +104,8 @@ export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
   handleWarningClick,
   virtualModels,
   models,
-  app_mode
+  app_mode,
+  onAddCustomModel,
 }) => {
   const [open, setOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState<'model' | 'provider'>('model');
@@ -210,6 +238,7 @@ export const ModelSelectorComponent: React.FC<ModelSelectorComponentProps> = ({
               setConfigDialogOpen={setConfigDialogOpen}
               virtualModels={virtualModels}
               app_mode={app_mode}
+              onAddCustomModel={onAddCustomModel}
             />
           </DropdownMenuContent>
         </DropdownMenu>
