@@ -21,6 +21,7 @@ export interface ModelParameterConfig {
 export interface ModelInfo {
   model: string;
   model_provider: string;
+  is_custom?: boolean;
   inference_provider: {
     provider: string;
     model_name: string;

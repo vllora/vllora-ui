@@ -153,13 +153,31 @@ export async function updateCustomProviderDefinition(
 }
 
 /**
- * Delete a custom provider definition
+ * Delete a custom provider definition by ID
  */
 export async function deleteCustomProviderDefinition(
   providerId: string,
   projectId?: string
 ): Promise<void> {
   const response = await apiClient(`/providers/definitions/${providerId}`, {
+    method: 'DELETE',
+    ...(projectId && {
+      headers: {
+        'x-project-id': projectId,
+      },
+    }),
+  });
+  await handleApiResponse<void>(response);
+}
+
+/**
+ * Delete a custom provider by name
+ */
+export async function deleteCustomProvider(
+  providerName: string,
+  projectId?: string
+): Promise<void> {
+  const response = await apiClient(`/providers/${encodeURIComponent(providerName)}`, {
     method: 'DELETE',
     ...(projectId && {
       headers: {
