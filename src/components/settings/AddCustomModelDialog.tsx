@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -12,7 +11,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { ProjectModelsConsumer } from '@/contexts/ProjectModelsContext';
@@ -20,13 +18,7 @@ import {
   createCustomModel,
   type ModelCapability,
 } from '@/services/custom-providers-api';
-
-const CAPABILITIES: { value: ModelCapability; label: string }[] = [
-  { value: 'vision', label: 'Vision' },
-  { value: 'function_calling', label: 'Function Calling' },
-  { value: 'json_mode', label: 'JSON Mode' },
-  { value: 'streaming', label: 'Streaming' },
-];
+import { AdvancedModelOptions } from './AdvancedModelOptions';
 
 interface AddCustomModelDialogProps {
   open: boolean;
@@ -134,8 +126,11 @@ export function AddCustomModelDialog({
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="model-id">
+            <Label htmlFor="model-id" className="flex items-center gap-2">
               Model ID <span className="text-destructive">*</span>
+              <span className="text-xs text-muted-foreground font-normal">
+                (The exact model identifier used in API calls)
+              </span>
             </Label>
             <Input
               id="model-id"
@@ -143,66 +138,19 @@ export function AddCustomModelDialog({
               value={modelId}
               onChange={e => setModelId(e.target.value)}
             />
-            <p className="text-xs text-muted-foreground">
-              The exact model identifier used in API calls
-            </p>
           </div>
 
-          {/* Advanced Options */}
-          <button
-            type="button"
-            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-            onClick={() => setShowAdvanced(!showAdvanced)}
-          >
-            {showAdvanced ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            Advanced Options
-          </button>
-
-          {showAdvanced && (
-            <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
-              <div className="space-y-2">
-                <Label htmlFor="context-size">Context Size (tokens)</Label>
-                <Input
-                  id="context-size"
-                  type="number"
-                  placeholder="e.g., 128000"
-                  value={contextSize ?? ''}
-                  onChange={e => setContextSize(e.target.value ? parseInt(e.target.value) : undefined)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="endpoint">Custom Endpoint (optional)</Label>
-                <Input
-                  id="endpoint"
-                  placeholder="Override base URL for this model"
-                  value={endpoint}
-                  onChange={e => setEndpoint(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Leave empty to use the provider's default endpoint
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Capabilities</Label>
-                <div className="flex flex-wrap gap-4">
-                  {CAPABILITIES.map(cap => (
-                    <div key={cap.value} className="flex items-center gap-2">
-                      <Checkbox
-                        id={`cap-${cap.value}`}
-                        checked={capabilities.includes(cap.value)}
-                        onCheckedChange={() => toggleCapability(cap.value)}
-                      />
-                      <Label htmlFor={`cap-${cap.value}`} className="font-normal cursor-pointer">
-                        {cap.label}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
+          <AdvancedModelOptions
+            isOpen={showAdvanced}
+            onToggle={() => setShowAdvanced(!showAdvanced)}
+            contextSize={contextSize}
+            onContextSizeChange={setContextSize}
+            capabilities={capabilities}
+            onCapabilityToggle={toggleCapability}
+            endpoint={endpoint}
+            onEndpointChange={setEndpoint}
+            showEndpoint
+          />
         </div>
 
         <DialogFooter>

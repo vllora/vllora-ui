@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -12,7 +11,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import { ProviderKeysConsumer } from '@/contexts/ProviderKeysContext';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { ProjectModelsConsumer } from '@/contexts/ProjectModelsContext';
@@ -23,13 +21,7 @@ import {
   type ModelCapability,
 } from '@/services/custom-providers-api';
 import { ProviderSelector, type NewProviderFormData } from './ProviderSelector';
-
-const CAPABILITIES: { value: ModelCapability; label: string }[] = [
-  { value: 'vision', label: 'Vision' },
-  { value: 'function_calling', label: 'Function Calling' },
-  { value: 'json_mode', label: 'JSON Mode' },
-  { value: 'streaming', label: 'Streaming' },
-];
+import { AdvancedModelOptions } from './AdvancedModelOptions';
 
 interface QuickAddModelDialogProps {
   open: boolean;
@@ -48,7 +40,6 @@ export function QuickAddModelDialog({
 
   // Model form state
   const [modelId, setModelId] = useState('');
-  const [displayName, setDisplayName] = useState(''); // Optional, defaults to modelId
   const [contextSize, setContextSize] = useState<number | undefined>();
   const [capabilities, setCapabilities] = useState<ModelCapability[]>([]);
 
@@ -68,7 +59,6 @@ export function QuickAddModelDialog({
 
   const resetForm = useCallback(() => {
     setModelId('');
-    setDisplayName('');
     setContextSize(undefined);
     setCapabilities([]);
     setSelectedProvider('');
@@ -147,12 +137,9 @@ export function QuickAddModelDialog({
         }
       }
 
-      // Use displayName if provided, otherwise use modelId
-      const finalDisplayName = displayName.trim() || modelId.trim();
-
       // Create the model
       await createCustomModel({
-        model_name: finalDisplayName,
+        model_name: modelId.trim(),
         provider_name: providerName,
         model_type: 'completions',
         model_name_in_provider: modelId.trim(),
@@ -160,7 +147,7 @@ export function QuickAddModelDialog({
         capabilities: capabilities.length > 0 ? capabilities : undefined,
       }, currentProjectId);
 
-      toast.success(`Model "${finalDisplayName}" added to ${providerName}`);
+      toast.success(`Model "${modelId.trim()}" added to ${providerName}`);
 
       // Refresh data
       await refetchProviders();
@@ -177,7 +164,6 @@ export function QuickAddModelDialog({
     }
   }, [
     modelId,
-    displayName,
     selectedProvider,
     isCreatingNewProvider,
     newProviderData,
@@ -243,65 +229,14 @@ export function QuickAddModelDialog({
           />
 
           {/* Advanced Options */}
-          <div className="space-y-4">
-            <button
-              type="button"
-              className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full"
-              onClick={() => setShowAdvanced(!showAdvanced)}
-            >
-              <span className="h-px flex-1 bg-border" />
-              {showAdvanced ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              Advanced (Optional)
-              {showAdvanced ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              <span className="h-px flex-1 bg-border" />
-            </button>
-
-            {showAdvanced && (
-              <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
-                <div className="space-y-2">
-                  <Label htmlFor="display-name">Display Name</Label>
-                  <Input
-                    id="display-name"
-                    placeholder={modelId || 'Same as Model ID'}
-                    value={displayName}
-                    onChange={e => setDisplayName(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Custom name shown in the UI (defaults to Model ID)
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="context-size">Context Size (tokens)</Label>
-                  <Input
-                    id="context-size"
-                    type="number"
-                    placeholder="e.g., 128000"
-                    value={contextSize ?? ''}
-                    onChange={e => setContextSize(e.target.value ? parseInt(e.target.value) : undefined)}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Capabilities</Label>
-                  <div className="flex flex-wrap gap-4">
-                    {CAPABILITIES.map(cap => (
-                      <div key={cap.value} className="flex items-center gap-2">
-                        <Checkbox
-                          id={`cap-${cap.value}`}
-                          checked={capabilities.includes(cap.value)}
-                          onCheckedChange={() => toggleCapability(cap.value)}
-                        />
-                        <Label htmlFor={`cap-${cap.value}`} className="font-normal cursor-pointer">
-                          {cap.label}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          <AdvancedModelOptions
+            isOpen={showAdvanced}
+            onToggle={() => setShowAdvanced(!showAdvanced)}
+            contextSize={contextSize}
+            onContextSizeChange={setContextSize}
+            capabilities={capabilities}
+            onCapabilityToggle={toggleCapability}
+          />
         </div>
 
         <DialogFooter>

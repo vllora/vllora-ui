@@ -1,7 +1,12 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { ChevronRight, Sparkles, Plus } from 'lucide-react';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
-import { Button } from '@/components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { VirtualModelOption } from './index';
 
 interface ModelListViewProps {
@@ -77,19 +82,26 @@ export const ModelListView: React.FC<ModelListViewProps> = ({
             autoFocus
           />
           {onAddCustomModel && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                onAddCustomModel();
-              }}
-              onMouseDown={(e) => e.stopPropagation()}
-              className="shrink-0 h-[38px]"
-            >
-              <Plus className="w-4 h-4 mr-1" />
-              Custom
-            </Button>
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAddCustomModel();
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    className="shrink-0 h-[38px] w-[38px] rounded-md flex items-center justify-center border border-input bg-background text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p>Add custom model</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </div>
       </div>
