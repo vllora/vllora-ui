@@ -35,7 +35,6 @@ import { cn } from '@/lib/utils';
 const API_TYPES: { value: CustomInferenceApiType; label: string }[] = [
   { value: 'openai', label: 'OpenAI-compatible' },
   { value: 'anthropic', label: 'Anthropic' },
-  { value: 'bedrock', label: 'AWS Bedrock' },
   { value: 'gemini', label: 'Google Gemini' },
 ];
 
