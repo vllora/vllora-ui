@@ -196,9 +196,7 @@ const ProviderKeysContent = () => {
                                         <span className="font-medium capitalize">{provider.name}</span>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <span className="text-xs text-muted-foreground">
-                                            Configured
-                                        </span>
+                                       
                                         <Button
                                             size="sm"
                                             variant="ghost"
@@ -224,6 +222,9 @@ const ProviderKeysContent = () => {
                                         >
                                             <Trash2 className="h-4 w-4" />
                                         </Button>
+                                         <span className="text-xs text-muted-foreground">
+                                            Configured
+                                        </span>
                                     </div>
                                 </div>
                             ))}
