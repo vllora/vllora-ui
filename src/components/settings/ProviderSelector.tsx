@@ -16,15 +16,8 @@ import {
 } from '@/components/ui/popover';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { type ProviderInfo } from '@/services/providers-api';
-import { type CustomInferenceApiType } from '@/services/custom-providers-api';
+import { type CustomInferenceApiType, API_TYPES } from '@/services/custom-providers-api';
 import { cn } from '@/lib/utils';
-
-const API_TYPES: { value: CustomInferenceApiType; label: string }[] = [
-  { value: 'openai', label: 'OpenAI-compatible' },
-  { value: 'anthropic', label: 'Anthropic' },
-  { value: 'bedrock', label: 'AWS Bedrock' },
-  { value: 'gemini', label: 'Google Gemini' },
-];
 
 export interface NewProviderFormData {
   name: string;

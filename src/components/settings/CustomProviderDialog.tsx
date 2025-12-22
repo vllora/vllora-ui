@@ -28,15 +28,10 @@ import {
   setCustomProviderCredentials,
   type CustomInferenceApiType,
   type ModelCapability,
+  API_TYPES,
 } from '@/services/custom-providers-api';
 
 import { cn } from '@/lib/utils';
-
-const API_TYPES: { value: CustomInferenceApiType; label: string }[] = [
-  { value: 'openai', label: 'OpenAI-compatible' },
-  { value: 'anthropic', label: 'Anthropic' },
-  { value: 'gemini', label: 'Google Gemini' },
-];
 
 const CAPABILITIES: { value: ModelCapability; label: string; icon: typeof Wrench }[] = [
   { value: 'tools', label: 'Tools', icon: Wrench },

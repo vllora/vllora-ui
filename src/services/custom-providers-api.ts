@@ -10,6 +10,11 @@ export type CustomInferenceApiType =
   | 'bedrock'
   | 'gemini';
 
+export const API_TYPES: { value: CustomInferenceApiType; label: string }[] = [
+  { value: 'openai', label: 'OpenAI-compatible' },
+  { value: 'anthropic', label: 'Anthropic' },
+];
+
 export interface CustomProviderDefinition {
   id: string;
   provider_name: string;

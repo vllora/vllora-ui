@@ -206,8 +206,11 @@ export function QuickAddModelDialog({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="model-id">
+              <Label htmlFor="model-id" className="flex items-center gap-2">
                 Model ID <span className="text-destructive">*</span>
+                <span className="text-xs text-muted-foreground font-normal">
+                  (The exact model identifier used in API calls)
+                </span>
               </Label>
               <Input
                 id="model-id"
@@ -215,9 +218,6 @@ export function QuickAddModelDialog({
                 value={modelId}
                 onChange={e => setModelId(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
-                The exact model identifier used in API calls
-              </p>
             </div>
           </div>
 
