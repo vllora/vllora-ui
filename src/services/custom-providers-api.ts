@@ -52,11 +52,7 @@ export interface CustomProviderResponse {
 
 export type ModelType = 'completions' | 'embeddings' | 'image_generation';
 
-export type ModelCapability =
-  | 'vision'
-  | 'function_calling'
-  | 'json_mode'
-  | 'streaming';
+export type ModelCapability = 'tools' | 'reasoning';
 
 export type ModelIOFormat = 'Text' | 'Image' | 'Video' | 'Audio';
 

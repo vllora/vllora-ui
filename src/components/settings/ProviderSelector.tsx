@@ -1,6 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Eye, EyeOff, Search, ChevronDown, Check } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Plus, Eye, EyeOff, Search, ChevronDown, Check, Server, Key, Globe, Sparkles } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -238,77 +237,102 @@ export function ProviderSelector({
 
       {/* New Provider Form */}
       {isCreatingNewProvider && (
-        <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
-          <div className="text-sm font-medium">New Provider Details</div>
-
-          <div className="space-y-2">
-            <Label htmlFor="provider-name">
-              Provider Name <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="provider-name"
-              placeholder="e.g., groq, together, local-llm"
-              value={newProviderData.name}
-              onChange={e => onNewProviderDataChange({ name: e.target.value })}
-            />
+        <div className="border rounded-xl overflow-hidden bg-gradient-to-b from-muted/50 to-muted/20">
+          {/* Header */}
+          <div className="px-4 py-3 border-b bg-muted/30 flex items-center gap-2">
+            <div className="p-1.5 rounded-md bg-primary/10">
+              <Sparkles className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <div className="text-sm font-medium">New Provider</div>
+              <div className="text-xs text-muted-foreground">Configure your custom provider</div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          {/* Form Content */}
+          <div className="p-4 space-y-4">
+            {/* Provider Name */}
             <div className="space-y-2">
-              <Label>API Type</Label>
-              <Select
-                value={newProviderData.apiType}
-                onValueChange={v => onNewProviderDataChange({ apiType: v as CustomInferenceApiType })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {API_TYPES.map(type => (
-                    <SelectItem key={type.value} value={type.value}>
-                      {type.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="provider-endpoint">
-                Endpoint URL <span className="text-destructive">*</span>
+              <Label htmlFor="provider-name" className="flex items-center gap-2">
+                <Server className="h-3.5 w-3.5 text-muted-foreground" />
+                Provider Name <span className="text-destructive">*</span>
               </Label>
               <Input
-                id="provider-endpoint"
-                placeholder="https://api.example.com/v1"
-                value={newProviderData.endpoint}
-                onChange={e => onNewProviderDataChange({ endpoint: e.target.value })}
+                id="provider-name"
+                placeholder="e.g., groq, together, local-llm"
+                value={newProviderData.name}
+                onChange={e => onNewProviderDataChange({ name: e.target.value })}
+                className="bg-background"
               />
             </div>
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="provider-api-key">API Key (optional)</Label>
-            <div className="relative">
-              <Input
-                id="provider-api-key"
-                type={showApiKey ? 'text' : 'password'}
-                placeholder="Enter API key if required"
-                value={newProviderData.apiKey}
-                onChange={e => onNewProviderDataChange({ apiKey: e.target.value })}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="absolute right-0 top-0 h-full px-3"
-                onClick={() => setShowApiKey(!showApiKey)}
-              >
-                {showApiKey ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
-              </Button>
+            {/* API Type & Endpoint Row */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+                  API Type
+                </Label>
+                <Select
+                  value={newProviderData.apiType}
+                  onValueChange={v => onNewProviderDataChange({ apiType: v as CustomInferenceApiType })}
+                >
+                  <SelectTrigger className="bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {API_TYPES.map(type => (
+                      <SelectItem key={type.value} value={type.value}>
+                        {type.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="provider-endpoint" className="flex items-center gap-2">
+                  <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+                  Endpoint URL <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="provider-endpoint"
+                  placeholder="https://api.example.com/v1"
+                  value={newProviderData.endpoint}
+                  onChange={e => onNewProviderDataChange({ endpoint: e.target.value })}
+                  className="bg-background"
+                />
+              </div>
+            </div>
+
+            {/* API Key */}
+            <div className="space-y-2">
+              <Label htmlFor="provider-api-key" className="flex items-center gap-2">
+                <Key className="h-3.5 w-3.5 text-muted-foreground" />
+                API Key
+                <span className="text-xs text-muted-foreground font-normal">(optional)</span>
+              </Label>
+              <div className="relative">
+                <Input
+                  id="provider-api-key"
+                  type={showApiKey ? 'text' : 'password'}
+                  placeholder="Enter API key if required"
+                  value={newProviderData.apiKey}
+                  onChange={e => onNewProviderDataChange({ apiKey: e.target.value })}
+                  className="bg-background pr-10"
+                />
+                <button
+                  type="button"
+                  className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowApiKey(!showApiKey)}
+                >
+                  {showApiKey ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

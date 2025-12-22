@@ -39,10 +39,8 @@ const API_TYPES: { value: CustomInferenceApiType; label: string }[] = [
 ];
 
 const CAPABILITIES: { value: ModelCapability; label: string }[] = [
-  { value: 'vision', label: 'Vision' },
-  { value: 'function_calling', label: 'Function Calling' },
-  { value: 'json_mode', label: 'JSON Mode' },
-  { value: 'streaming', label: 'Streaming' },
+  { value: 'tools', label: 'Tools' },
+  { value: 'reasoning', label: 'Reasoning' },
 ];
 
 interface PendingModel {
