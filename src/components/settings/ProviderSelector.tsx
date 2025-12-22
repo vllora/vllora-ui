@@ -237,23 +237,22 @@ export function ProviderSelector({
 
           {/* Form Content */}
           <div className="p-4 space-y-4">
-            {/* Provider Name */}
-            <div className="space-y-2">
-              <Label htmlFor="provider-name" className="flex items-center gap-2">
-                <Server className="h-3.5 w-3.5 text-muted-foreground" />
-                Provider Name <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="provider-name"
-                placeholder="e.g., groq, together, local-llm"
-                value={newProviderData.name}
-                onChange={e => onNewProviderDataChange({ name: e.target.value })}
-                className="bg-background"
-              />
-            </div>
-
-            {/* API Type & Endpoint Row */}
+            {/* Provider Name & API Type Row */}
             <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="provider-name" className="flex items-center gap-2">
+                  <Server className="h-3.5 w-3.5 text-muted-foreground" />
+                  Provider Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="provider-name"
+                  placeholder="e.g., groq, together, local-llm"
+                  value={newProviderData.name}
+                  onChange={e => onNewProviderDataChange({ name: e.target.value })}
+                  className="bg-background"
+                />
+              </div>
+
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
                   <Globe className="h-3.5 w-3.5 text-muted-foreground" />
@@ -275,20 +274,21 @@ export function ProviderSelector({
                   </SelectContent>
                 </Select>
               </div>
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="provider-endpoint" className="flex items-center gap-2">
-                  <Globe className="h-3.5 w-3.5 text-muted-foreground" />
-                  Endpoint URL <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="provider-endpoint"
-                  placeholder="https://api.example.com/v1"
-                  value={newProviderData.endpoint}
-                  onChange={e => onNewProviderDataChange({ endpoint: e.target.value })}
-                  className="bg-background"
-                />
-              </div>
+            {/* Endpoint URL */}
+            <div className="space-y-2">
+              <Label htmlFor="provider-endpoint" className="flex items-center gap-2">
+                <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+                Endpoint URL <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="provider-endpoint"
+                placeholder="https://api.example.com/v1"
+                value={newProviderData.endpoint}
+                onChange={e => onNewProviderDataChange({ endpoint: e.target.value })}
+                className="bg-background"
+              />
             </div>
 
             {/* API Key */}
