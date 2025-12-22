@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { ModelInfo } from '@/types/models';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
-import { Copy, Check, ChevronUp, ChevronDown, ChevronsUpDown, ChevronRight } from 'lucide-react';
+import { Copy, Check, ChevronUp, ChevronDown, ChevronsUpDown, ChevronRight, Trash2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { LocalModelCard } from './LocalModelCard';
 import { CostDisplay } from '@/components/shared/CostDisplay';
@@ -9,6 +9,12 @@ import { formatContextSize } from '@/utils/format';
 import { ModalitiesDisplay } from '@/components/models/card-sections/ModalitiesDisplay';
 import { CapabilitiesIcons } from '@/components/models/card-sections/CapabilitiesIcons';
 import { ProvidersIcons } from '@/components/models/card-sections/ProvidersIcons';
+import { Button } from '@/components/ui/button';
+import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
+import { toast } from 'sonner';
+import { deleteCustomModel } from '@/services/custom-providers-api';
+import { ProjectsConsumer } from '@/contexts/ProjectContext';
+import { ProjectModelsConsumer } from '@/contexts/ProjectModelsContext';
 
 interface LocalModelsTableProps {
   models: ModelInfo[];
@@ -26,9 +32,38 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
   copyModelName,
   providerStatusMap,
 }) => {
+  const { currentProjectId } = ProjectsConsumer();
+  const { refetchModels } = ProjectModelsConsumer();
+
   const [sortField, setSortField] = useState<SortField>('none');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set());
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [modelToDelete, setModelToDelete] = useState<ModelInfo | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeleteClick = (model: ModelInfo) => {
+    setModelToDelete(model);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!modelToDelete) return;
+
+    setDeleting(true);
+    try {
+      // Use the model name for deletion via /models/custom/{name} endpoint
+      await deleteCustomModel(modelToDelete.model, currentProjectId);
+      toast.success(`Model "${modelToDelete.model}" deleted`);
+      refetchModels();
+      setDeleteDialogOpen(false);
+      setModelToDelete(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete model');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const toggleDescription = (modelKey: string) => {
     setExpandedDescriptions(prev => {
@@ -279,12 +314,30 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
                       </div>
 
                       {/* Provider */}
-                      <div className="w-[12%] flex justify-end">
+                      <div className="w-[10%] flex justify-end">
                         <ProvidersIcons
                           providers={providers as string[]}
                           maxDisplay={3}
                           providerStatusMap={providerStatusMap}
                         />
+                      </div>
+
+                      {/* Actions - only for custom models */}
+                      <div className="w-[2%] ml-2 flex justify-end">
+                        {model.is_custom && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteClick(model);
+                            }}
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Delete model"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -296,6 +349,15 @@ export const LocalModelsTable: React.FC<LocalModelsTableProps> = ({
           </div>
         </div>
       </div>
+
+      <DeleteConfirmationDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Delete Model"
+        description={`Are you sure you want to delete "${modelToDelete?.model}"?`}
+        onConfirm={handleDeleteConfirm}
+        isDeleting={deleting}
+      />
     </div>
   );
 };

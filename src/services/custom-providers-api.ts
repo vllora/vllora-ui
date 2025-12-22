@@ -232,13 +232,13 @@ export async function updateCustomModel(
 }
 
 /**
- * Delete a custom model
+ * Delete a custom model by name
  */
 export async function deleteCustomModel(
-  modelId: string,
+  modelName: string,
   projectId?: string
 ): Promise<void> {
-  const response = await apiClient(`/models/${modelId}`, {
+  const response = await apiClient(`/models/custom/${encodeURIComponent(modelName)}`, {
     method: 'DELETE',
     ...(projectId && {
       headers: {

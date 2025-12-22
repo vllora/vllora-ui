@@ -22,6 +22,8 @@ interface LocalModelSearchFiltersProps {
   totalCount?: number;
   showConfiguredOnly?: boolean;
   onShowConfiguredOnlyChange?: (value: boolean) => void;
+  showCustomOnly?: boolean;
+  onShowCustomOnlyChange?: (value: boolean) => void;
   // New optional filter props
   selectedInputFormats?: string[];
   onInputFormatsChange?: (formats: string[]) => void;
@@ -65,6 +67,8 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
   owners,
   showConfiguredOnly = false,
   onShowConfiguredOnlyChange,
+  showCustomOnly = false,
+  onShowCustomOnlyChange,
   // New optional props with defaults
   selectedInputFormats = [],
   onInputFormatsChange = () => {},
@@ -134,6 +138,7 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
     if (onMaxOutputCostChange) onMaxOutputCostChange(undefined);
     if (onCachingEnabledChange) onCachingEnabledChange(undefined);
     if (onTypeChange) onTypeChange('all');
+    if (onShowCustomOnlyChange) onShowCustomOnlyChange(false);
   };
 
   const hasActiveFilters = selectedProviders.length > 0 ||
@@ -149,6 +154,7 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
     maxOutputCost !== undefined ||
     cachingEnabled !== undefined ||
     (selectedType && selectedType !== 'all') ||
+    showCustomOnly ||
     searchTerm;
 
   return (
@@ -290,6 +296,19 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
             <span>Configured</span>
           </label>
         )}
+
+        {/* Custom Filter */}
+        {onShowCustomOnlyChange && (
+          <label className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
+            <input
+              type="checkbox"
+              checked={showCustomOnly}
+              onChange={(e) => onShowCustomOnlyChange(e.target.checked)}
+              className="w-4 h-4 rounded border-border bg-background text-[rgb(var(--theme-500))] focus:ring-ring focus:ring-2 cursor-pointer"
+            />
+            <span>Custom</span>
+          </label>
+        )}
       </div>
 
       {/* Active Filters */}
@@ -420,6 +439,17 @@ export const LocalModelSearchFilters: React.FC<LocalModelSearchFiltersProps> = (
                 <span className="font-bold">{selectedType}</span>
                 <button
                   onClick={() => onTypeChange && onTypeChange('all')}
+                  className="ml-1 hover:text-foreground"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+            {showCustomOnly && (
+              <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-xs">
+                <span className="font-bold">custom</span>
+                <button
+                  onClick={() => onShowCustomOnlyChange && onShowCustomOnlyChange(false)}
                   className="ml-1 hover:text-foreground"
                 >
                   ×

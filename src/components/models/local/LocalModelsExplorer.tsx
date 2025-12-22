@@ -48,6 +48,9 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
   const [showConfiguredOnly, setShowConfiguredOnly] = useState(() => {
     return searchParams.get('configured') === 'true';
   });
+  const [showCustomOnly, setShowCustomOnly] = useState(() => {
+    return searchParams.get('custom') === 'true';
+  });
   const [copiedModel, setCopiedModel] = useState<string | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
@@ -137,6 +140,12 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
       params.delete('configured');
     }
 
+    if (showCustomOnly) {
+      params.set('custom', 'true');
+    } else {
+      params.delete('custom');
+    }
+
     // New filter params
     if (selectedInputFormats.length === 0) {
       params.delete('inputFormats');
@@ -212,6 +221,7 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
     selectedProviders,
     selectedOwners,
     showConfiguredOnly,
+    showCustomOnly,
     selectedInputFormats,
     selectedOutputFormats,
     selectedCapabilities,
@@ -486,6 +496,11 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
           }
         }
 
+        // Custom models filter - when enabled, show only custom models
+        if (showCustomOnly && !model.is_custom) {
+          return false;
+        }
+
         return true;
       })
       .map((model: ModelInfo) => {
@@ -504,7 +519,7 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
         // When "Configured" is OFF, return model as-is (with all endpoints)
         return model;
       });
-  }, [groupedModels, searchTerm, selectedProviders, selectedOwners, selectedType, selectedInputFormats, selectedOutputFormats, selectedCapabilities, minContextSize, maxContextSize, minInputCost, maxInputCost, minOutputCost, maxOutputCost, cachingEnabled, showConfiguredOnly, providerStatusMap]);
+  }, [groupedModels, searchTerm, selectedProviders, selectedOwners, selectedType, selectedInputFormats, selectedOutputFormats, selectedCapabilities, minContextSize, maxContextSize, minInputCost, maxInputCost, minOutputCost, maxOutputCost, cachingEnabled, showConfiguredOnly, showCustomOnly, providerStatusMap]);
 
   // Copy model name function
   const copyModelName = useCallback(async (modelName: string) => {
@@ -532,6 +547,8 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
           totalCount={models.length}
           showConfiguredOnly={showConfiguredOnly}
           onShowConfiguredOnlyChange={setShowConfiguredOnly}
+          showCustomOnly={showCustomOnly}
+          onShowCustomOnlyChange={setShowCustomOnly}
           // New comprehensive filter props
           selectedInputFormats={selectedInputFormats}
           onInputFormatsChange={setSelectedInputFormats}
