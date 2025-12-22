@@ -3,12 +3,14 @@ import { Trash2, AlertCircle, Plus, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { ProviderKeysConsumer } from '@/contexts/ProviderKeysContext';
+import { ProjectModelsConsumer } from '@/contexts/ProjectModelsContext';
 import { ProviderKeysLoader } from './ProviderKeysLoader';
 import { ProviderCredentialModal } from './ProviderCredentialModal';
 import { DeleteProviderDialog } from './DeleteProviderDialog';
 import { CustomProviderDialog } from '@/components/settings/CustomProviderDialog';
 import { AddCustomModelDialog } from '@/components/settings/AddCustomModelDialog';
 import { QuickAddModelDialog } from '@/components/settings/QuickAddModelDialog';
+import { CustomProviderRow } from '@/components/settings/CustomProviderRow';
 
 export const ProviderKeysPage = () => {
     return (
@@ -44,6 +46,8 @@ const ProviderKeysContent = () => {
         refetchProviders,
     } = ProviderKeysConsumer();
 
+    const { models } = ProjectModelsConsumer();
+
     // Custom dialog states
     const [customProviderDialogOpen, setCustomProviderDialogOpen] = useState(false);
     const [quickAddModelDialogOpen, setQuickAddModelDialogOpen] = useState(false);
@@ -56,6 +60,18 @@ const ProviderKeysContent = () => {
         const custom = providers.filter(p => p.is_custom);
         return { predefinedProviders: predefined, customProviders: custom };
     }, [providers]);
+
+    // Count models per provider
+    const modelCountByProvider = useMemo(() => {
+        const counts: Record<string, number> = {};
+        models.forEach(model => {
+            const providerName = model.inference_provider?.provider;
+            if (providerName) {
+                counts[providerName] = (counts[providerName] || 0) + 1;
+            }
+        });
+        return counts;
+    }, [models]);
 
     const configuredPredefined = predefinedProviders.filter(p => p.has_credentials);
     const availablePredefined = predefinedProviders.filter(p => !p.has_credentials);
@@ -236,57 +252,17 @@ const ProviderKeysContent = () => {
                 {customProviders.length > 0 && (
                     <div className="space-y-2">
                         <h3 className="text-sm font-medium text-muted-foreground px-3">
-                            Custom Providers
+                            Custom
                         </h3>
                         <div className="border border-border rounded-lg divide-y divide-border">
                             {customProviders.map((provider) => (
-                                <div
+                                <CustomProviderRow
                                     key={provider.name}
-                                    className="flex items-center justify-between px-4 py-3 hover:bg-accent/50 transition-colors group cursor-pointer"
-                                    onClick={() => handleStartEditing(provider)}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <ProviderIcon provider_name={provider.name} className="w-6 h-6" />
-                                        <div>
-                                            <span className="font-medium">{provider.name}</span>
-                                            {provider.endpoint && (
-                                                <p className="text-xs text-muted-foreground truncate max-w-[300px]">
-                                                    {provider.endpoint}
-                                                </p>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className={`text-xs ${provider.has_credentials ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>
-                                            {provider.has_credentials ? 'Configured' : 'No credentials'}
-                                        </span>
-                                        <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleAddModel(provider.name);
-                                            }}
-                                            className="h-8 px-2 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
-                                            title="Add model"
-                                        >
-                                            <Plus className="h-3 w-3 mr-1" />
-                                            Model
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                startDeleteProvider(provider.name);
-                                            }}
-                                            disabled={saving[provider.name]}
-                                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-opacity"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                </div>
+                                    provider={provider}
+                                    modelCount={modelCountByProvider[provider.name] || 0}
+                                    onEdit={() => handleStartEditing(provider)}
+                                    onAddModel={() => handleAddModel(provider.name)}
+                                />
                             ))}
                         </div>
                     </div>

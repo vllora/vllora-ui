@@ -191,6 +191,12 @@ export function ProviderSelector({
               style={{ maxHeight: '200px', overflowY: 'auto' }}
               onWheel={e => e.stopPropagation()}
             >
+              {filteredProviders.customProviders.length > 0 && (
+                <div className="px-2 py-1.5">
+                  <div className="text-xs font-semibold text-muted-foreground mb-1">Custom Providers</div>
+                  {filteredProviders.customProviders.map(provider => renderProviderItem(provider))}
+                </div>
+              )}
               {filteredProviders.configuredProviders.length > 0 && (
                 <div className="px-2 py-1.5">
                   <div className="text-xs font-semibold text-muted-foreground mb-1">Configured Providers</div>
@@ -205,12 +211,7 @@ export function ProviderSelector({
                 </div>
               )}
 
-              {filteredProviders.customProviders.length > 0 && (
-                <div className="px-2 py-1.5">
-                  <div className="text-xs font-semibold text-muted-foreground mb-1">Custom Providers</div>
-                  {filteredProviders.customProviders.map(provider => renderProviderItem(provider))}
-                </div>
-              )}
+              
 
               {totalFilteredCount === 0 && searchTerm && (
                 <div className="px-4 py-3 text-sm text-muted-foreground text-center">
@@ -239,15 +240,7 @@ export function ProviderSelector({
       {isCreatingNewProvider && (
         <div className="border rounded-xl overflow-hidden bg-gradient-to-b from-muted/50 to-muted/20">
           {/* Header */}
-          <div className="px-4 py-3 border-b bg-muted/30 flex items-center gap-2">
-            <div className="p-1.5 rounded-md bg-primary/10">
-              <Sparkles className="h-4 w-4 text-primary" />
-            </div>
-            <div>
-              <div className="text-sm font-medium">New Provider</div>
-              <div className="text-xs text-muted-foreground">Configure your custom provider</div>
-            </div>
-          </div>
+          
 
           {/* Form Content */}
           <div className="p-4 space-y-4">

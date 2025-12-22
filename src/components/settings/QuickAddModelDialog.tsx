@@ -42,6 +42,7 @@ export function QuickAddModelDialog({
   const [modelId, setModelId] = useState('');
   const [contextSize, setContextSize] = useState<number | undefined>();
   const [capabilities, setCapabilities] = useState<ModelCapability[]>([]);
+  const [modelEndpoint, setModelEndpoint] = useState('');
 
   // Provider selection state
   const [selectedProvider, setSelectedProvider] = useState<string>('');
@@ -61,6 +62,7 @@ export function QuickAddModelDialog({
     setModelId('');
     setContextSize(undefined);
     setCapabilities([]);
+    setModelEndpoint('');
     setSelectedProvider('');
     setIsCreatingNewProvider(false);
     setNewProviderData({
@@ -145,6 +147,7 @@ export function QuickAddModelDialog({
         model_name_in_provider: modelId.trim(),
         context_size: contextSize,
         capabilities: capabilities.length > 0 ? capabilities : undefined,
+        endpoint: modelEndpoint.trim() || undefined,
       }, currentProjectId);
 
       toast.success(`Model "${modelId.trim()}" added to ${providerName}`);
@@ -169,6 +172,7 @@ export function QuickAddModelDialog({
     newProviderData,
     contextSize,
     capabilities,
+    modelEndpoint,
     currentProjectId,
     refetchProviders,
     refetchModels,
@@ -236,6 +240,9 @@ export function QuickAddModelDialog({
             onContextSizeChange={setContextSize}
             capabilities={capabilities}
             onCapabilityToggle={toggleCapability}
+            showEndpoint={true}
+            endpoint={modelEndpoint}
+            onEndpointChange={setModelEndpoint}
           />
         </div>
 
