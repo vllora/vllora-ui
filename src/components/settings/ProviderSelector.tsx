@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Eye, EyeOff, Search, ChevronDown, Check, Server, Key, Globe, Sparkles } from 'lucide-react';
+import { Plus, Eye, EyeOff, Search, ChevronDown, Check, Server, Key, Globe } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -204,7 +204,7 @@ export function ProviderSelector({
                 </div>
               )}
 
-              
+
 
               {totalFilteredCount === 0 && searchTerm && (
                 <div className="px-4 py-3 text-sm text-muted-foreground text-center">
@@ -233,7 +233,7 @@ export function ProviderSelector({
       {isCreatingNewProvider && (
         <div className="border rounded-xl overflow-hidden bg-gradient-to-b from-muted/50 to-muted/20">
           {/* Header */}
-          
+
 
           {/* Form Content */}
           <div className="p-4 space-y-4">
