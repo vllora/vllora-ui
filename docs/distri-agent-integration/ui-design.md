@@ -1,26 +1,13 @@
-# UI Design: Floating Agent Panel
+# UI Design: Agent Panel
 
-The Distri agent appears as a **floating chat panel** in the bottom-right corner of the vLLora UI. This design allows users to interact with the agent while viewing traces, without leaving their current context.
+The Distri agent can appear in two modes, controlled by the `VITE_AGENT_PANEL_MODE` environment variable:
 
-## Current vLLora Layout
+1. **Floating Mode** (default): A draggable, resizable floating panel with a toggle button
+2. **Side Panel Mode**: A sliding panel triggered from the sidebar
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ ┌──────┐ ┌─────────────────────────────────────────────────────┐│
-│ │      │ │                    Header                           ││
-│ │ Side │ ├─────────────────────────────────────────────────────┤│
-│ │ bar  │ │                                                     ││
-│ │      │ │                  Main Content                       ││
-│ │ Home │ │              (Chat, Traces, etc.)                   ││
-│ │ Chat │ │                                                     ││
-│ │      │ │                                                     ││
-│ │──────│ │                                                     ││
-│ │ Sett │ │                                                     ││
-│ └──────┘ └─────────────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────────────────────┘
-```
+## Panel Modes
 
-## With Agent Panel (Expanded)
+### Floating Mode (`VITE_AGENT_PANEL_MODE='floating'`)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -35,11 +22,43 @@ The Distri agent appears as a **floating chat panel** in the bottom-right corner
 │ │──────│ │                                     │ ┌──────────┐ │││
 │ │ Sett │ │                                     │ │  Input   │ │││
 │ └──────┘ └─────────────────────────────────────┴──────────────┴┘│
-│                                                        [Bot]    │
+│                                                        [●]      │
 └─────────────────────────────────────────────────────────────────┘
                                                           ↑
-                                                   Toggle Button
+                                               Draggable Toggle Button
 ```
+
+Features:
+- Toggle button can be dragged anywhere on screen
+- Panel opens near the button position
+- Panel is resizable (drag edges/corners)
+- Panel is draggable (drag header)
+- Both positions persist in localStorage
+
+### Side Panel Mode (`VITE_AGENT_PANEL_MODE='side-panel'`)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ ┌──────┐┌────────────┐┌──────────────────────────────────────────┐│
+│ │      ││            ││                    Header                ││
+│ │ Side ││   Agent    │├──────────────────────────────────────────┤│
+│ │ bar  ││   Panel    ││                                          ││
+│ │      ││            ││                                          ││
+│ │ Home ││ Messages...││              Main Content                ││
+│ │ Chat ││            ││             (Traces View)                ││
+│ │ [AI] ││            ││                                          ││
+│ │──────││ ┌────────┐ ││                                          ││
+│ │ Sett ││ │ Input  │ ││                                          ││
+│ └──────┘└────────────┘└──────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────┘
+     ↑
+  AI button in sidebar triggers panel
+```
+
+Features:
+- AI Assistant button in sidebar (collapsed or expanded)
+- Panel slides in from the left
+- Fixed width, full height
 
 ---
 
@@ -47,282 +66,216 @@ The Distri agent appears as a **floating chat panel** in the bottom-right corner
 
 ```
 src/components/agent/
-├── AgentPanel.tsx           # Main chat panel using @distri/react Chat
-├── AgentToggleButton.tsx    # Floating draggable toggle button
-├── AgentPanelWrapper.tsx    # Manages panel state + draggable button
+├── FloatingAgentPanel.tsx   # Floating panel with integrated toggle button
+├── AgentPanel.tsx           # Side panel component
+├── AgentToggleButton.tsx    # Standalone toggle button (optional use)
+├── SidebarAgentButton.tsx   # AI button for sidebar (side-panel mode only)
+├── AgentPanelWrapper.tsx    # Mode switching wrapper
 ├── index.ts                 # Exports
 └── hooks/
-    └── useDraggable.ts      # Reusable drag hook with edge snapping
+    ├── useDraggable.ts          # Drag hook for toggle button
+    └── useResizableDraggable.ts # Drag + resize hook for panel
 ```
 
 ---
 
-## 1. Toggle Button (Draggable)
+## Environment Variable
 
-The toggle button is **draggable** like iPhone's AssistiveTouch.
+Set the panel mode in your `.env` file:
 
-### Behavior
+```bash
+# Floating mode (default) - draggable button + resizable panel
+VITE_AGENT_PANEL_MODE=floating
+
+# Side panel mode - sidebar button + sliding panel
+VITE_AGENT_PANEL_MODE=side-panel
+```
+
+---
+
+## 1. Floating Mode Components
+
+### FloatingAgentPanel
+
+The main component that handles both the toggle button and panel in floating mode.
 
 | Feature | Description |
 |---------|-------------|
-| **Default Position** | Bottom-right corner (`bottom-4 right-4`) |
-| **Appearance** | Circular button (48x48px) with Bot icon |
-| **Click** | Open/close the panel |
-| **Drag** | Move to any position on screen |
-| **Release** | Snaps to nearest edge (left or right) |
+| **Toggle Button** | Draggable button, can go anywhere on screen |
+| **Panel** | Resizable, draggable floating panel |
+| **Independent Positions** | Button and panel have separate position storage |
+| **Panel Opens Near Button** | When opened, panel positions relative to button |
 
-### States
+### Toggle Button (integrated in FloatingAgentPanel)
 
-| State | Appearance |
-|-------|------------|
-| Closed | Primary color with Bot icon |
-| Open | Muted color with X icon |
-| Activity | Pulsing animation when agent is working |
-| Dragging | Slight scale up, shadow increase |
-
-### Draggable Features
-
-| Feature | Behavior |
-|---------|----------|
-| Edge Snapping | Snaps to left or right edge on release |
-| Boundary Constraints | Stays within viewport (with 16px padding) |
-| Position Persistence | Saves position to localStorage |
-| Touch Support | Works with mouse and touch events |
-| Drag Threshold | 5px movement before drag starts |
-| Smooth Animation | 200ms spring animation on snap |
-
-### Panel Position Adjustment
-
-When the button is on the left side, the panel opens to the right:
-
-```
-Button on RIGHT:          Button on LEFT:
-┌──────────────┐          ┌──────────────┐
-│ Agent Panel  │          │ Agent Panel  │
-│              │          │              │
-└──────────────┘          └──────────────┘
-           [Bot]          [Bot]
-```
-
----
-
-## 2. Agent Panel Structure
-
-```
-┌─────────────────────────────────────┐
-│  Bot vLLora Assistant          [X] │  ← Header
-│  Your AI debugging companion        │
-├─────────────────────────────────────┤
-│                                     │
-│  ┌─────────────────────────────┐   │
-│  │ Find performance bottlenecks │   │  ← Quick Suggestions
-│  └─────────────────────────────┘   │    (shown when empty)
-│  ┌─────────────────────────────┐   │
-│  │ Find errors from today      │   │
-│  └─────────────────────────────┘   │
-│  ┌─────────────────────────────┐   │
-│  │ Analyze costs by model      │   │
-│  └─────────────────────────────┘   │
-│                                     │
-├─────────────────────────────────────┤  ← Messages Area
-│                                     │    (scrollable)
-│  ┌─────────────────────────────┐   │
-│  │ You: Find slow spans today  │   │  ← User Message
-│  └─────────────────────────────┘   │
-│                                     │
-│  ┌─────────────────────────────┐   │
-│  │ Wrench fetch_runs({limit: 10}) │   │  ← Tool Call
-│  └─────────────────────────────┘   │
-│                                     │
-│  ┌─────────────────────────────┐   │
-│  │ Bot Calling data_agent...   │   │  ← Agent Call
-│  └─────────────────────────────┘   │
-│                                     │
-│  ┌─────────────────────────────┐   │
-│  │ I found 3 slow spans:       │   │  ← Response
-│  │ • span_abc (2.3s) - OpenAI  │   │
-│  │ • span_def (1.8s) - Tool    │   │
-│  │ [Highlighted in trace view] │   │
-│  └─────────────────────────────┘   │
-│                                     │
-├─────────────────────────────────────┤
-│  ┌─────────────────────────┐  [>] │  ← Input Area
-│  │ Ask about your traces...│       │
-│  └─────────────────────────┘       │
-└─────────────────────────────────────┘
-```
-
-### Panel Dimensions
-
-| Property | Value |
-|----------|-------|
-| Width | 384px (w-96) |
-| Height | 500px (max 70vh) |
-| Position | Fixed, relative to toggle button |
-| Border Radius | rounded-lg |
-| Shadow | shadow-2xl |
-
-### Section Details
-
-| Section | Description |
+| Feature | Description |
 |---------|-------------|
-| **Header** | Bot icon, title "vLLora Assistant", subtitle, close button (X) |
-| **Quick Suggestions** | Clickable chips shown when no messages. Disappear after first message |
-| **Messages Area** | Scrollable container for conversation history |
-| **Input Area** | Text input + send button. Disabled while processing |
+| **Default Position** | Bottom-right corner |
+| **Drag** | Freely draggable anywhere on screen |
+| **Click** | Opens the panel |
+| **Persistence** | Position saved to `vllora:agent-button-position` |
+| **Size** | 48x48px circular button |
+
+### Panel (when open)
+
+| Feature | Description |
+|---------|-------------|
+| **Default Size** | 400x600px |
+| **Min Size** | 320x400px |
+| **Max Size** | 700x850px |
+| **Resize** | Drag any edge or corner |
+| **Drag** | Drag the header to move |
+| **Persistence** | Bounds saved to `vllora:agent-panel-bounds` |
+| **Minimize** | Click minimize button to collapse to header only |
 
 ---
 
-## 3. Message Types
+## 2. Side Panel Mode Components
 
-| Type | Style | Icon | Example |
-|------|-------|------|---------|
-| **User** | Right-aligned, primary bg | None | "Find errors from yesterday" |
-| **Response** | Left-aligned, muted bg | Bot | "I found 3 errors in thread-xyz..." |
-| **Tool Call** | Left-aligned, amber/yellow bg, monospace | Wrench | `highlight_span({ spanId: "abc" })` |
-| **Agent Call** | Left-aligned, blue bg | Bot | "Calling data_agent to fetch traces..." |
-| **Thinking** | Left-aligned, muted, animated | Loader | "Analyzing trace data..." |
-| **Error** | Left-aligned, red bg | X | "Failed to connect to Distri server" |
+### SidebarAgentButton
 
----
+Button in the sidebar that triggers the panel. Only renders in side-panel mode.
 
-## 4. Interactive Elements
+| Feature | Description |
+|---------|-------------|
+| **Collapsed State** | Icon-only button with tooltip |
+| **Expanded State** | Full button with "AI Assistant" label |
+| **Active State** | Highlighted when panel is open |
 
-1. **Quick Suggestion Chips** - Click to auto-send that query
-2. **Span IDs in responses** - Clickable, triggers `select_span` + scroll
-3. **Run IDs in responses** - Clickable, navigates to that run
-4. **Copy button** - On responses, copies text to clipboard
-5. **Retry button** - On errors, retries the last message
+### AgentPanel (Side Panel)
 
----
-
-## 5. Keyboard Shortcuts
-
-| Shortcut | Action |
-|----------|--------|
-| `Cmd/Ctrl + J` | Toggle agent panel |
-| `Escape` | Close agent panel |
-| `Enter` | Send message |
-| `Shift + Enter` | New line in input |
+| Feature | Description |
+|---------|-------------|
+| **Position** | Fixed, slides from left |
+| **Width** | 400px (sm), 450px (lg) |
+| **Height** | Full viewport height |
+| **Animation** | Slide transition (300ms) |
 
 ---
 
-## 6. useDraggable Hook
+## 3. Hooks
+
+### useDraggable
+
+Hook for the toggle button with free-form dragging.
 
 ```typescript
-// src/components/agent/hooks/useDraggable.ts
-
-export interface Position { x: number; y: number }
-
 export interface UseDraggableOptions {
   storageKey?: string;           // localStorage key for persistence
   defaultPosition: Position;     // Initial position
   snapToEdge?: boolean;          // Snap to left/right edge on release
   edgePadding?: number;          // Padding from viewport edges (default: 16)
   dragThreshold?: number;        // Min pixels before drag starts (default: 5)
-  elementSize?: { width: number; height: number }; // Size for boundary calc
+  elementSize?: { width: number; height: number };
 }
 
 export interface UseDraggableReturn {
   position: Position;            // Current position
-  isDragging: boolean;           // True while actively dragging
-  isOnLeftSide: boolean;         // True if button is on left half of screen
+  isDragging: boolean;           // True while dragging
+  wasDragged: boolean;           // True if drag just completed (prevents click)
+  isOnLeftSide: boolean;         // True if on left half of screen
   handlers: {
     onMouseDown: (e: React.MouseEvent) => void;
     onTouchStart: (e: React.TouchEvent) => void;
   };
 }
+```
 
-export function useDraggable(options: UseDraggableOptions): UseDraggableReturn {
-  // Implementation handles:
-  // 1. Mouse and touch events
-  // 2. Drag threshold to distinguish click vs drag
-  // 3. Edge snapping on release
-  // 4. Viewport boundary constraints
-  // 5. localStorage persistence
-  // 6. Window resize handling
-  // 7. Returns isOnLeftSide for panel positioning
+### useResizableDraggable
+
+Hook for the panel with drag + resize capabilities.
+
+```typescript
+export interface UseResizableDraggableOptions {
+  storageKey?: string;           // localStorage key for persistence
+  defaultBounds: PanelBounds;    // Initial position + size
+  minSize?: Size;                // Minimum dimensions
+  maxSize?: Size;                // Maximum dimensions
+  edgePadding?: number;          // Padding from viewport edges
+}
+
+export interface UseResizableDraggableReturn {
+  bounds: PanelBounds;           // Current position + size
+  isDragging: boolean;           // True while dragging header
+  isResizing: boolean;           // True while resizing
+  resizeDirection: ResizeDirection | null;
+  dragHandlers: { onMouseDown; onTouchStart };
+  getResizeHandlers: (direction: ResizeDirection) => { onMouseDown; onTouchStart };
+  resetBounds: () => void;       // Reset to default bounds
 }
 ```
 
 ---
 
-## 7. AgentPanelWrapper Implementation
+## 4. State Management
+
+### AgentPanelContext
+
+Shared context for panel open/close state across components.
 
 ```typescript
-// src/components/agent/AgentPanelWrapper.tsx
+interface AgentPanelContextType {
+  isOpen: boolean;
+  toggle: () => void;
+  open: () => void;
+  close: () => void;
+}
 
-import { useState, useCallback } from 'react';
-import { AgentPanel } from './AgentPanel';
-import { AgentToggleButton } from './AgentToggleButton';
-import { useDraggable } from './hooks/useDraggable';
-import { useDistriConnection } from '@/providers/DistriProvider';
+// Usage
+const { isOpen, toggle, close } = useAgentPanel();
+```
 
-const getDefaultPosition = () => ({
-  x: typeof window !== 'undefined' ? window.innerWidth - 64 : 0,
-  y: typeof window !== 'undefined' ? window.innerHeight - 80 : 0,
-});
+### localStorage Keys
 
+| Key | Description |
+|-----|-------------|
+| `vllora:agent-button-position` | Toggle button position `{ x, y }` |
+| `vllora:agent-panel-bounds` | Panel bounds `{ position: { x, y }, size: { width, height } }` |
+| `vllora:agentThreadId` | Current chat thread ID |
+
+---
+
+## 5. AgentPanelWrapper
+
+The wrapper component that switches between modes:
+
+```typescript
 export function AgentPanelWrapper() {
-  const [isOpen, setIsOpen] = useState(false);
   const { isInitializing } = useDistriConnection();
+  const { isOpen, toggle, close } = useAgentPanel();
 
-  // Draggable button with edge snapping and persistence
-  const { position, isDragging, isOnLeftSide, handlers } = useDraggable({
-    storageKey: 'vllora:agent-button-position',
-    defaultPosition: getDefaultPosition(),
-    snapToEdge: true,
-    edgePadding: 16,
-    dragThreshold: 5,
-    elementSize: { width: 48, height: 48 },
-  });
+  if (isInitializing) return null;
 
-  const handleToggle = useCallback(() => {
-    if (!isDragging) {
-      setIsOpen(prev => !prev);
-    }
-  }, [isDragging]);
-
-  const handleClose = useCallback(() => {
-    setIsOpen(false);
-  }, []);
-
-  // Don't render anything if still initializing
-  if (isInitializing) {
-    return null;
+  // Floating mode
+  if (PANEL_MODE === 'floating') {
+    return (
+      <FloatingAgentPanel
+        isOpen={isOpen}
+        onToggle={toggle}
+        onClose={close}
+      />
+    );
   }
 
+  // Side panel mode
   return (
-    <>
-      <AgentToggleButton
-        isOpen={isOpen}
-        onClick={handleToggle}
-        hasUnread={false}
-        position={position}
-        isDragging={isDragging}
-        onMouseDown={handlers.onMouseDown}
-        onTouchStart={handlers.onTouchStart}
-      />
-      <AgentPanel
-        isOpen={isOpen}
-        onClose={handleClose}
-        side={isOnLeftSide ? 'right' : 'left'}
-      />
-    </>
+    <AgentPanel
+      isOpen={isOpen}
+      onClose={close}
+      side="left"
+    />
   );
 }
 ```
 
 ---
 
-## 8. Integration in App.tsx
-
-The `AgentPanelWrapper` is added at the App level, inside the `DistriProvider`:
+## 6. Integration in App.tsx
 
 ```typescript
-// src/App.tsx
 import { DistriProvider } from '@/providers/DistriProvider';
 import { AgentPanelWrapper } from '@/components/agent';
+import { AgentPanelProvider } from '@/contexts/AgentPanelContext';
 
 function App() {
   return (
@@ -333,11 +286,13 @@ function App() {
             <Route path="/" element={
               <ProtectedRoute>
                 <DistriProvider>
-                  <ProjectsProvider>
-                    {/* ... other providers ... */}
-                    <Layout />
-                    <AgentPanelWrapper />
-                  </ProjectsProvider>
+                  <AgentPanelProvider>
+                    <ProjectsProvider>
+                      {/* ... other providers ... */}
+                      <Layout />
+                      <AgentPanelWrapper />
+                    </ProjectsProvider>
+                  </AgentPanelProvider>
                 </DistriProvider>
               </ProtectedRoute>
             }>
@@ -352,32 +307,51 @@ function App() {
 ```
 
 **Key points:**
-- `AgentPanelWrapper` is placed **inside** `DistriProvider` to access connection state
-- It's a sibling of `Layout`, rendering as a fixed overlay
-- Available on all protected pages
+- `AgentPanelProvider` provides shared open/close state
+- `AgentPanelWrapper` is placed inside `DistriProvider`
+- In side-panel mode, `SidebarAgentButton` in sidebar uses the same context
 
 ---
 
-## 9. Visual Design
+## 7. Visual Design
 
-| Property | Value |
-|----------|-------|
-| **Colors** | Uses existing theme variables (`--primary`, `--muted`, etc.) |
-| **Border Radius** | `rounded-lg` for panel, `rounded-full` for toggle |
-| **Shadow** | `shadow-2xl` for elevated appearance |
-| **Animation** | `slide-in-from-bottom-5 fade-in` on open |
-| **Drag Animation** | Spring animation (200ms) when snapping to edge |
+| Property | Floating Mode | Side Panel Mode |
+|----------|---------------|-----------------|
+| **Panel Border** | `rounded-lg` | Square (full height) |
+| **Shadow** | `shadow-2xl` | `shadow-xl` |
+| **Z-Index** | 50 | 50 |
+| **Backdrop** | None | Semi-transparent (mobile only) |
+
+### Panel Header
+
+```
+┌─────────────────────────────────────┐
+│  💬 vLLora Assistant    [+] [-] [X] │
+└─────────────────────────────────────┘
+     ↑                     ↑   ↑   ↑
+   Title              New Chat │ Close
+                          Minimize
+```
 
 ---
 
-## State Management
+## 8. Resize Handles (Floating Mode)
 
-The agent panel uses:
-1. **Local state** for UI (open/closed)
-2. **Position state** with localStorage persistence (draggable button via `useDraggable`)
-3. **`useDistriConnection` hook** for connection state (loading, error)
-4. **`@distri/react` Chat component** for agent communication (handles messages, tools)
-5. **Event emitter** for UI tool execution
+The panel has 8 resize handles:
+
+```
+      [N]
+   ┌───────┐
+[NW]       [NE]
+   │       │
+[W]│       │[E]
+   │       │
+[SW]       [SE]
+   └───────┘
+      [S]
+```
+
+Each handle allows resizing in its direction, with min/max size constraints.
 
 ---
 
