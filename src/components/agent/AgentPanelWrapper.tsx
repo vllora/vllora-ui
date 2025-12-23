@@ -1,16 +1,20 @@
 /**
  * AgentPanelWrapper
  *
- * Wrapper component that manages the agent panel open/close state
- * and renders both the toggle button and the panel.
- * The toggle button is draggable with edge snapping.
+ * Wrapper component that manages the agent panel rendering.
+ *
+ * Supports two modes via VITE_AGENT_PANEL_MODE env variable:
+ * - 'floating' (default): Draggable, resizable floating panel with floating toggle button
+ * - 'side-panel': Sliding panel triggered from sidebar
  */
 
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
+import { FloatingAgentPanel } from './FloatingAgentPanel';
 import { AgentPanel } from './AgentPanel';
 import { AgentToggleButton } from './AgentToggleButton';
 import { useDraggable } from './hooks/useDraggable';
 import { useDistriConnection } from '@/providers/DistriProvider';
+import { useAgentPanel, PANEL_MODE } from '@/contexts/AgentPanelContext';
 
 // Default position: bottom-right corner
 const getDefaultPosition = () => ({
@@ -19,11 +23,11 @@ const getDefaultPosition = () => ({
 });
 
 export function AgentPanelWrapper() {
-  const [isOpen, setIsOpen] = useState(false);
   const { isInitializing } = useDistriConnection();
+  const { isOpen, toggle, close } = useAgentPanel();
 
-  // Draggable button with edge snapping and persistence
-  const { position, isDragging, isOnLeftSide, handlers } = useDraggable({
+  // Draggable button with edge snapping and persistence (for floating mode)
+  const { position, isDragging, handlers } = useDraggable({
     storageKey: 'vllora:agent-button-position',
     defaultPosition: getDefaultPosition(),
     snapToEdge: true,
@@ -35,37 +39,46 @@ export function AgentPanelWrapper() {
   const handleToggle = useCallback(() => {
     // Only toggle if not currently dragging
     if (!isDragging) {
-      setIsOpen(prev => !prev);
+      toggle();
     }
-  }, [isDragging]);
-
-  const handleClose = useCallback(() => {
-    setIsOpen(false);
-  }, []);
+  }, [isDragging, toggle]);
 
   // Don't render anything if still initializing
   if (isInitializing) {
     return null;
   }
 
-  // Show toggle button even if not connected (user can see error state in panel)
+  // Floating mode: show toggle button (hidden when panel is open) and floating panel
+  if (PANEL_MODE === 'floating') {
+    return (
+      <>
+        {!isOpen && (
+          <AgentToggleButton
+            isOpen={isOpen}
+            onClick={handleToggle}
+            hasUnread={false}
+            position={position}
+            isDragging={isDragging}
+            onMouseDown={handlers.onMouseDown}
+            onTouchStart={handlers.onTouchStart}
+          />
+        )}
+        <FloatingAgentPanel
+          isOpen={isOpen}
+          onClose={close}
+          buttonPosition={position}
+        />
+      </>
+    );
+  }
+
+  // Side panel mode: panel opens from left (next to sidebar)
   return (
-    <>
-      <AgentToggleButton
-        isOpen={isOpen}
-        onClick={handleToggle}
-        hasUnread={false}
-        position={position}
-        isDragging={isDragging}
-        onMouseDown={handlers.onMouseDown}
-        onTouchStart={handlers.onTouchStart}
-      />
-      <AgentPanel
-        isOpen={isOpen}
-        onClose={handleClose}
-        side={isOnLeftSide ? 'right' : 'left'}
-      />
-    </>
+    <AgentPanel
+      isOpen={isOpen}
+      onClose={close}
+      side="left"
+    />
   );
 }
 

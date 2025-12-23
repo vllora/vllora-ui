@@ -179,13 +179,13 @@ function AgentPanelContainer({ isOpen, onClose, className, children, side = 'lef
           'bg-background shadow-xl',
           'transform transition-transform duration-300 ease-in-out',
           // Position based on side
-          isRightSide ? 'left-0 border-r' : 'right-0 border-l',
+          isRightSide ? 'right-0 border-l' : 'left-0 border-r',
           // Slide animation based on side
           isOpen
             ? 'translate-x-0'
             : isRightSide
-              ? '-translate-x-full'
-              : 'translate-x-full',
+              ? 'translate-x-full'
+              : '-translate-x-full',
           className
         )}
       >
