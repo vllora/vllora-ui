@@ -242,7 +242,7 @@ export const dataTools: DistriFnTool[] = [
     name: 'fetch_runs',
     description: 'Fetch a list of runs with optional filtering by thread, run IDs, model, or time period',
     type: 'function',
-    input_schema: {
+    parameters: {
       type: 'object',
       properties: {
         threadIds: {
@@ -273,7 +273,7 @@ export const dataTools: DistriFnTool[] = [
     name: 'fetch_spans',
     description: 'Fetch spans with optional filtering by thread, run, operation type, or parent span',
     type: 'function',
-    input_schema: {
+    parameters: {
       type: 'object',
       properties: {
         threadIds: {
@@ -308,7 +308,7 @@ export const dataTools: DistriFnTool[] = [
     name: 'get_run_details',
     description: 'Get detailed information about a specific run including all its spans',
     type: 'function',
-    input_schema: {
+    parameters: {
       type: 'object',
       properties: {
         runId: { type: 'string', description: 'The run ID to fetch details for' },
@@ -323,7 +323,7 @@ export const dataTools: DistriFnTool[] = [
     name: 'fetch_groups',
     description: 'Fetch aggregated groups by time, thread, or run',
     type: 'function',
-    input_schema: {
+    parameters: {
       type: 'object',
       properties: {
         groupBy: {

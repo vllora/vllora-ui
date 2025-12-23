@@ -250,7 +250,7 @@ export const uiTools: DistriFnTool[] = [
     name: 'get_current_view',
     description: 'Get information about the current page/view the user is looking at',
     type: 'function',
-    input_schema: { type: 'object', properties: {} },
+    parameters: { type: 'object', properties: {} },
     handler: async () => JSON.stringify(await uiToolHandlers.get_current_view({})),
   } as DistriFnTool,
 
@@ -258,7 +258,7 @@ export const uiTools: DistriFnTool[] = [
     name: 'get_selection_context',
     description: 'Get the currently selected run, span, and detail span IDs',
     type: 'function',
-    input_schema: { type: 'object', properties: {} },
+    parameters: { type: 'object', properties: {} },
     handler: async () => JSON.stringify(await uiToolHandlers.get_selection_context({})),
   } as DistriFnTool,
 
@@ -266,7 +266,7 @@ export const uiTools: DistriFnTool[] = [
     name: 'get_thread_runs',
     description: 'Get the list of runs currently displayed in the UI',
     type: 'function',
-    input_schema: { type: 'object', properties: {} },
+    parameters: { type: 'object', properties: {} },
     handler: async () => JSON.stringify(await uiToolHandlers.get_thread_runs({})),
   } as DistriFnTool,
 
@@ -274,7 +274,7 @@ export const uiTools: DistriFnTool[] = [
     name: 'get_span_details',
     description: 'Get details of a specific span by ID',
     type: 'function',
-    input_schema: {
+    parameters: {
       type: 'object',
       properties: {
         spanId: { type: 'string', description: 'The span ID to get details for' },
@@ -288,7 +288,7 @@ export const uiTools: DistriFnTool[] = [
     name: 'get_collapsed_spans',
     description: 'Get the list of span IDs that are currently collapsed in the trace view',
     type: 'function',
-    input_schema: { type: 'object', properties: {} },
+    parameters: { type: 'object', properties: {} },
     handler: async () => JSON.stringify(await uiToolHandlers.get_collapsed_spans({})),
   } as DistriFnTool,
 
@@ -297,7 +297,7 @@ export const uiTools: DistriFnTool[] = [
     name: 'open_modal',
     description: 'Open a modal dialog in the UI',
     type: 'function',
-    input_schema: {
+    parameters: {
       type: 'object',
       properties: {
         modal: {
@@ -315,7 +315,7 @@ export const uiTools: DistriFnTool[] = [
     name: 'close_modal',
     description: 'Close the currently open modal dialog',
     type: 'function',
-    input_schema: { type: 'object', properties: {} },
+    parameters: { type: 'object', properties: {} },
     handler: async () => JSON.stringify(await uiToolHandlers.close_modal({})),
   } as DistriFnTool,
 
@@ -323,7 +323,7 @@ export const uiTools: DistriFnTool[] = [
     name: 'select_span',
     description: 'Select and highlight a specific span in the trace view',
     type: 'function',
-    input_schema: {
+    parameters: {
       type: 'object',
       properties: {
         spanId: { type: 'string', description: 'The span ID to select' },
@@ -337,7 +337,7 @@ export const uiTools: DistriFnTool[] = [
     name: 'select_run',
     description: 'Select a specific run in the traces view',
     type: 'function',
-    input_schema: {
+    parameters: {
       type: 'object',
       properties: {
         runId: { type: 'string', description: 'The run ID to select' },
@@ -351,7 +351,7 @@ export const uiTools: DistriFnTool[] = [
     name: 'expand_span',
     description: 'Expand a collapsed span to show its children',
     type: 'function',
-    input_schema: {
+    parameters: {
       type: 'object',
       properties: {
         spanId: { type: 'string', description: 'The span ID to expand' },
@@ -365,7 +365,7 @@ export const uiTools: DistriFnTool[] = [
     name: 'collapse_span',
     description: 'Collapse a span to hide its children',
     type: 'function',
-    input_schema: {
+    parameters: {
       type: 'object',
       properties: {
         spanId: { type: 'string', description: 'The span ID to collapse' },
