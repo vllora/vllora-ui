@@ -2,10 +2,11 @@
  * FloatingAgentPanel
  *
  * A floating, draggable, and resizable chat panel for the vLLora AI assistant.
+ * Includes an integrated toggle button that shares the same drag behavior.
  * Can be moved anywhere on screen and resized by dragging edges/corners.
  */
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Chat, useAgent, useChatMessages } from '@distri/react';
 import { uuidv4, DistriFnTool } from '@distri/core';
 import { X, MessageCircle, Plus, Loader2, Minimize2, Maximize2 } from 'lucide-react';
@@ -20,22 +21,17 @@ import {
   PanelBounds,
   ResizeDirection,
 } from './hooks/useResizableDraggable';
+import { useDraggable } from './hooks/useDraggable';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-interface Position {
-  x: number;
-  y: number;
-}
-
 interface FloatingAgentPanelProps {
   isOpen: boolean;
+  onToggle: () => void;
   onClose: () => void;
   className?: string;
-  /** Position of the toggle button - panel will open near this position */
-  buttonPosition?: Position | null;
 }
 
 // ============================================================================
@@ -43,8 +39,17 @@ interface FloatingAgentPanelProps {
 // ============================================================================
 
 const DEFAULT_SIZE = { width: 400, height: 600 };
+const BUTTON_SIZE = 48;
+const EDGE_PADDING = 16;
 
-const getDefaultBounds = (buttonPosition?: Position | null): PanelBounds => {
+// Get default button position (bottom-right corner)
+const getDefaultButtonPosition = () => ({
+  x: typeof window !== 'undefined' ? window.innerWidth - BUTTON_SIZE - EDGE_PADDING : 100,
+  y: typeof window !== 'undefined' ? window.innerHeight - BUTTON_SIZE - EDGE_PADDING : 100,
+});
+
+// Calculate panel bounds from button position
+const getPanelBoundsFromButton = (buttonX: number, buttonY: number): PanelBounds => {
   if (typeof window === 'undefined') {
     return {
       position: { x: 100, y: 100 },
@@ -52,32 +57,19 @@ const getDefaultBounds = (buttonPosition?: Position | null): PanelBounds => {
     };
   }
 
-  // If button position is provided, position panel relative to button
-  if (buttonPosition) {
-    // Position panel so its bottom-right corner is near the button
-    // This creates a natural "expansion" effect from the button
-    const x = Math.max(16, buttonPosition.x - DEFAULT_SIZE.width + 48);
-    const y = Math.max(16, buttonPosition.y - DEFAULT_SIZE.height + 48);
+  // Position panel so its bottom-right corner is near the button
+  let x = buttonX - DEFAULT_SIZE.width + BUTTON_SIZE;
+  let y = buttonY - DEFAULT_SIZE.height + BUTTON_SIZE;
 
-    // Ensure panel stays within viewport
-    const maxX = window.innerWidth - DEFAULT_SIZE.width - 16;
-    const maxY = window.innerHeight - DEFAULT_SIZE.height - 16;
+  // Ensure panel stays within viewport
+  const maxX = window.innerWidth - DEFAULT_SIZE.width - EDGE_PADDING;
+  const maxY = window.innerHeight - DEFAULT_SIZE.height - EDGE_PADDING;
 
-    return {
-      position: {
-        x: Math.min(x, maxX),
-        y: Math.min(y, maxY),
-      },
-      size: DEFAULT_SIZE,
-    };
-  }
+  x = Math.max(EDGE_PADDING, Math.min(x, maxX));
+  y = Math.max(EDGE_PADDING, Math.min(y, maxY));
 
-  // Default: position in bottom-right area
   return {
-    position: {
-      x: window.innerWidth - 420,
-      y: window.innerHeight - 620,
-    },
+    position: { x, y },
     size: DEFAULT_SIZE,
   };
 };
@@ -155,36 +147,61 @@ function ResizeHandle({ direction, onMouseDown, onTouchStart }: ResizeHandleProp
 
 export function FloatingAgentPanel({
   isOpen,
+  onToggle,
   onClose,
   className,
-  buttonPosition,
 }: FloatingAgentPanelProps) {
   const agentName = getMainAgentName();
   const { agent, loading: agentLoading } = useAgent({ agentIdOrDef: agentName });
   const [selectedThreadId, setSelectedThreadId] = useState<string>(getThreadId());
   const [isMinimized, setIsMinimized] = useState(false);
 
-  // Calculate default bounds based on button position
+  // Button uses useDraggable - can go anywhere freely
+  const {
+    position: buttonPosition,
+    isDragging: isButtonDragging,
+    wasDragged,
+    handlers: buttonHandlers,
+  } = useDraggable({
+    storageKey: 'vllora:agent-button-position',
+    defaultPosition: getDefaultButtonPosition(),
+    snapToEdge: false,
+    edgePadding: EDGE_PADDING,
+    dragThreshold: 5,
+    elementSize: { width: BUTTON_SIZE, height: BUTTON_SIZE },
+  });
+
+  // Calculate panel default bounds from button position
   const defaultBounds = useMemo(
-    () => getDefaultBounds(buttonPosition),
+    () => getPanelBoundsFromButton(buttonPosition.x, buttonPosition.y),
     [buttonPosition]
   );
 
-  // Resizable and draggable panel
+  // Panel uses useResizableDraggable - constrained by size
   const {
     bounds,
-    isDragging,
+    isDragging: isPanelDragging,
     isResizing,
-    dragHandlers,
+    dragHandlers: panelDragHandlers,
     getResizeHandlers,
+    resetBounds,
   } = useResizableDraggable({
     storageKey: 'vllora:agent-panel-bounds',
     defaultBounds,
     minSize: MIN_SIZE,
     maxSize: MAX_SIZE,
-    edgePadding: 16,
+    edgePadding: EDGE_PADDING,
   });
 
+  // Reset panel bounds when opening (position relative to button)
+  const prevIsOpenRef = useRef(isOpen);
+  useEffect(() => {
+    if (isOpen && !prevIsOpenRef.current) {
+      // Panel just opened - reset bounds to be near button
+      resetBounds();
+    }
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen, resetBounds]);
 
   // Listen for agent tool events
   useAgentToolListeners();
@@ -217,10 +234,46 @@ export function FloatingAgentPanel({
     setIsMinimized(prev => !prev);
   }, []);
 
+  // Handle button click - only toggle if we didn't drag
+  const handleButtonClick = useCallback(() => {
+    if (!wasDragged) {
+      onToggle();
+    }
+  }, [onToggle, wasDragged]);
+
+  // When closed, render just the toggle button
   if (!isOpen) {
-    return null;
+    const buttonStyle: React.CSSProperties = {
+      position: 'fixed',
+      left: buttonPosition.x,
+      top: buttonPosition.y,
+      zIndex: 50,
+      transition: isButtonDragging ? 'none' : 'left 150ms ease-out, top 150ms ease-out',
+    };
+
+    return (
+      <Button
+        variant="default"
+        size="icon"
+        onClick={handleButtonClick}
+        onMouseDown={buttonHandlers.onMouseDown}
+        onTouchStart={buttonHandlers.onTouchStart}
+        style={buttonStyle}
+        className={cn(
+          'h-12 w-12 rounded-full shadow-lg',
+          !isButtonDragging && 'hover:scale-105 active:scale-95',
+          isButtonDragging && 'scale-110 shadow-2xl cursor-grabbing',
+          !isButtonDragging && 'cursor-grab',
+          className
+        )}
+        aria-label="Open AI Assistant"
+      >
+        <MessageCircle className="h-5 w-5" />
+      </Button>
+    );
   }
 
+  // When open, render the full panel
   const panelStyle: React.CSSProperties = {
     position: 'fixed',
     left: bounds.position.x,
@@ -238,7 +291,7 @@ export function FloatingAgentPanel({
       style={panelStyle}
       className={cn(
         'bg-background border rounded-lg shadow-2xl flex flex-col overflow-hidden',
-        (isDragging || isResizing) && 'select-none',
+        (isPanelDragging || isResizing) && 'select-none',
         'transition-[height] duration-200',
         className
       )}
@@ -263,7 +316,7 @@ export function FloatingAgentPanel({
           'flex items-center justify-between px-3 py-2 border-b bg-muted/50',
           'cursor-move select-none shrink-0'
         )}
-        {...dragHandlers}
+        {...panelDragHandlers}
       >
         <div className="flex items-center gap-2">
           <MessageCircle className="h-4 w-4 text-primary" />
