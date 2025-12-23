@@ -28,6 +28,7 @@ pnpm dev
 
 | Document | Description |
 |----------|-------------|
+| [Implementation Plan](./implementation-plan.md) | Step-by-step implementation phases and testing plan |
 | [Architecture](./architecture.md) | Multi-agent system architecture and diagrams |
 | [Agents](./agents.md) | Agent definitions (Main, UI, Data agents) |
 | [Tools](./tools.md) | Tool handlers for UI and Data operations |
