@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { getMainAgentName } from '@/lib/agent-sync';
 import { uiTools } from '@/lib/distri-ui-tools';
 import { dataTools } from '@/lib/distri-data-tools';
+import { useAgentToolListeners } from '@/hooks/useAgentToolListeners';
 
 // ============================================================================
 // Types
@@ -53,6 +54,10 @@ export function AgentPanel({ isOpen, onClose, className, side = 'left' }: AgentP
   const agentName = getMainAgentName();
   const { agent, loading: agentLoading } = useAgent({ agentIdOrDef: agentName });
   const [selectedThreadId, setSelectedThreadId] = useState<string>(getThreadId());
+
+  // Listen for agent tool events and respond with UI state
+  // This enables tools like get_current_view, get_selection_context, etc.
+  useAgentToolListeners();
 
   // Combine UI and Data tools
   const tools = useMemo<DistriFnTool[]>(() => {
