@@ -104,26 +104,25 @@ const getStateHandlers: Record<string, ToolHandler> = {
     return handler();
   },
 
-  // Get details for a specific span
+  // Get details for a specific span by ID (calls API directly)
   get_span_details: async ({ spanId }) => {
     if (!spanId) {
-      return { error: 'spanId is required' };
+      return { success: false, error: 'spanId is required' };
     }
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        emitter.off('vllora_span_details_response', handler);
-        reject(new Error('Timeout waiting for span details'));
-      }, 5000);
-
-      const handler = (data: unknown) => {
-        clearTimeout(timeout);
-        emitter.off('vllora_span_details_response', handler);
-        resolve(data);
+    try {
+      const { getSpanById } = await import('@/services/spans-api');
+      const span = await getSpanById({ spanId: spanId as string });
+      if (span) {
+        return { success: true, span };
+      } else {
+        return { success: false, error: `Span ${spanId} not found` };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch span details',
       };
-
-      emitter.on('vllora_span_details_response', handler);
-      emitter.emit('vllora_get_span_details', {});
-    });
+    }
   },
 
   // Get list of collapsed span IDs
