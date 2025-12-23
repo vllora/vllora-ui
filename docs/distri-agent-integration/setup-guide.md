@@ -27,6 +27,15 @@ cd /Users/anhthuduong/Documents/GitHub/vllora/ui
 pnpm add @distri/core @distri/react
 ```
 
+> **Note:** The `@distri/core` and `@distri/react` packages must be published from the Distri project first.
+> If they don't exist yet, you'll need to either:
+> 1. Build and publish them from the Distri repo, OR
+> 2. Use local linking: `pnpm link ../distri/packages/core ../distri/packages/react`
+>
+> The packages should export:
+> - `@distri/core`: `DistriClient`, types
+> - `@distri/react`: `DistriProvider`, `useDistriClient`, `useChat`, `useAgent`
+
 ---
 
 ## Step 2: Create Agent Files

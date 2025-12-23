@@ -11,6 +11,42 @@ All tools use `external = ["*"]`, meaning they are handled by the vLLora UI fron
 | UI Tools | `src/lib/distri-ui-tools.ts` | 11 (5 GET STATE + 6 CHANGE UI) |
 | Data Tools | `src/lib/distri-data-tools.ts` | 4 (reuse existing services) |
 
+## Prerequisites
+
+### ModalContext Global Functions
+
+The `open_modal` and `close_modal` tools use global functions from ModalContext. For these to work, the ModalProvider must initialize the global context. Update `src/contexts/ModalContext.tsx`:
+
+```typescript
+// In ModalProvider component, add this effect:
+export function ModalProvider({ children }: ModalProviderProps) {
+  const [currentModal, setCurrentModal] = useState<ModalType>(null);
+  // ... existing state ...
+
+  const contextValue = useMemo(() => ({
+    openModal,
+    closeModal,
+    currentModal,
+    isOpen: currentModal !== null,
+    toolsUsage,
+    setToolsUsage,
+  }), [currentModal, toolsUsage]);
+
+  // ADD THIS: Initialize global functions for external access
+  useEffect(() => {
+    setGlobalModalContext(contextValue);
+  }, [contextValue]);
+
+  return (
+    <ModalContext.Provider value={contextValue}>
+      {children}
+    </ModalContext.Provider>
+  );
+}
+```
+
+---
+
 ## UI Tool Handlers
 
 **File:** `src/lib/distri-ui-tools.ts`
@@ -173,6 +209,7 @@ const getStateHandlers: Record<string, ToolHandler> = {
 
 const changeUiHandlers: Record<string, ToolHandler> = {
   // Open a modal dialog
+  // Note: Requires ModalProvider to call setGlobalModalContext on mount (see prerequisite below)
   open_modal: async ({ modal }) => {
     const validModals = ["tools", "settings", "provider-keys"];
     if (!validModals.includes(modal as string)) {
@@ -275,6 +312,11 @@ These tools reuse existing API services from `@/services/*` to ensure consistenc
 // - @/services/runs-api.ts   -> listRuns, getRunDetails
 // - @/services/spans-api.ts  -> listSpans
 // - @/services/groups-api.ts -> listGroups
+//
+// IMPORTANT: API services use different field naming conventions:
+// - runs-api.ts uses snake_case: thread_ids, run_ids, model_name
+// - spans-api.ts uses camelCase: threadIds, runIds, operationNames
+// - groups-api.ts uses snake_case: thread_ids, group_by, bucket_size
 
 import { listRuns, getRunDetails, ListRunsQuery } from '@/services/runs-api';
 import { listSpans, ListSpansQuery } from '@/services/spans-api';
@@ -294,20 +336,29 @@ function getCurrentProjectId(): string {
   return params.get('project_id') || 'default';
 }
 
+// Helper to convert array to comma-separated string (API format)
+function toCommaSeparated(value: string | string[] | undefined): string | undefined {
+  if (!value) return undefined;
+  return Array.isArray(value) ? value.join(',') : value;
+}
+
 // Data tool handlers - reuse existing services
 export const dataToolHandlers: Record<string, (params: any) => Promise<any>> = {
 
   // Fetch runs with filtering
   // Reuses: @/services/runs-api.ts -> listRuns
+  // Note: runs-api uses snake_case field names (thread_ids, run_ids, model_name)
   fetch_runs: async (params) => {
     const projectId = params.projectId || getCurrentProjectId();
 
     const query: ListRunsQuery = {};
-    if (params.threadIds) query.thread_ids = params.threadIds;
-    if (params.runIds) query.run_ids = params.runIds;
+    // Convert agent params (camelCase) to API params (snake_case for runs-api)
+    if (params.threadIds) query.thread_ids = toCommaSeparated(params.threadIds);
+    if (params.runIds) query.run_ids = toCommaSeparated(params.runIds);
     if (params.modelName) query.model_name = params.modelName;
     if (params.limit) query.limit = params.limit;
     if (params.offset) query.offset = params.offset;
+    if (params.period) query.period = params.period; // e.g., 'last_hour', 'last_day'
 
     const result = await listRuns({ projectId, params: query });
     return {
@@ -319,14 +370,16 @@ export const dataToolHandlers: Record<string, (params: any) => Promise<any>> = {
 
   // Fetch spans with filtering
   // Reuses: @/services/spans-api.ts -> listSpans
+  // Note: spans-api uses camelCase field names (threadIds, runIds, operationNames)
   fetch_spans: async (params) => {
     const projectId = params.projectId || getCurrentProjectId();
 
     const query: ListSpansQuery = {};
-    if (params.threadIds) query.threadIds = params.threadIds;
-    if (params.runIds) query.runIds = params.runIds;
-    if (params.operationNames) query.operationNames = params.operationNames;
-    if (params.parentSpanIds) query.parentSpanIds = params.parentSpanIds;
+    // spans-api already uses camelCase, just pass through
+    if (params.threadIds) query.threadIds = toCommaSeparated(params.threadIds);
+    if (params.runIds) query.runIds = toCommaSeparated(params.runIds);
+    if (params.operationNames) query.operationNames = toCommaSeparated(params.operationNames);
+    if (params.parentSpanIds) query.parentSpanIds = toCommaSeparated(params.parentSpanIds);
     if (params.limit) query.limit = params.limit;
     if (params.offset) query.offset = params.offset;
 
@@ -351,14 +404,16 @@ export const dataToolHandlers: Record<string, (params: any) => Promise<any>> = {
 
   // Fetch aggregated groups
   // Reuses: @/services/groups-api.ts -> listGroups
+  // Note: groups-api uses snake_case field names (thread_ids, group_by, bucket_size)
   fetch_groups: async (params) => {
     const projectId = params.projectId || getCurrentProjectId();
 
     const query: ListGroupsQuery = {};
-    if (params.groupBy) query.group_by = params.groupBy;
-    if (params.threadIds) query.thread_ids = params.threadIds;
+    // Convert agent params (camelCase) to API params (snake_case for groups-api)
+    if (params.groupBy) query.group_by = params.groupBy; // 'time' | 'thread' | 'run'
+    if (params.threadIds) query.thread_ids = toCommaSeparated(params.threadIds);
     if (params.modelName) query.model_name = params.modelName;
-    if (params.bucketSize) query.bucket_size = params.bucketSize;
+    if (params.bucketSize) query.bucket_size = params.bucketSize; // in seconds
     if (params.limit) query.limit = params.limit;
     if (params.offset) query.offset = params.offset;
 

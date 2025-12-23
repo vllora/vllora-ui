@@ -34,6 +34,7 @@ pnpm dev
 | [Frontend Integration](./frontend-integration.md) | React provider, hooks, and event emitter setup |
 | [Setup Guide](./setup-guide.md) | Complete step-by-step setup instructions |
 | [UI Design](./ui-design.md) | Floating agent panel design specifications |
+| [Backend Improvements](./backend-improvements.md) | Suggested vLLora backend API enhancements (optional) |
 
 ## Architecture Overview
 

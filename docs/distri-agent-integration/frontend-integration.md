@@ -436,51 +436,111 @@ function ChatWithAgent() {
 
 ## 7. Event Listeners in Components
 
-Components need to listen for events and respond. Example for selection context:
+Components need to listen for Distri events and respond. The vLLora UI uses `TracesPageContext` for selection state, so event listeners should be added there.
+
+### Add Event Listeners to TracesPageContext
+
+Update `src/contexts/TracesPageContext.tsx` to listen for Distri events. Add this inside `useTracesPageContext` function:
 
 ```typescript
-// In a component that manages selection state
-import { useEffect } from 'react';
 import { emitter } from '@/utils/eventEmitter';
+import { getThemeFromStorage } from '@/themes/themes';
 
-function SelectionProvider({ children }) {
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
+// Add this useEffect inside useTracesPageContext, after existing hooks:
+useEffect(() => {
+  // GET STATE handlers - respond with current context values
+  const handleGetSelectionContext = () => {
+    emitter.emit('vllora_selection_context_response', {
+      selectedRunId,
+      selectedSpanId,
+      detailSpanId,
+      textSelection: window.getSelection()?.toString() || null,
+    });
+  };
 
-  useEffect(() => {
-    // Respond to GET STATE requests
-    const handleGetContext = () => {
-      emitter.emit('vllora_selection_context_response', {
-        selectedRunId,
-        selectedSpanId,
-        detailSpanId: null,
-        textSelection: window.getSelection()?.toString() || null,
-      });
-    };
+  const handleGetCurrentView = () => {
+    emitter.emit('vllora_current_view_response', {
+      page: window.location.pathname,
+      projectId,
+      threadId: searchParams.get('thread_id'),
+      theme: getThemeFromStorage(),
+      modal: null, // Would need ModalContext access
+    });
+  };
 
-    // Handle CHANGE UI commands
-    const handleSelectSpan = ({ spanId }: { spanId: string }) => {
-      setSelectedSpanId(spanId);
-    };
+  const handleGetThreadRuns = () => {
+    emitter.emit('vllora_thread_runs_response', {
+      runs: runs.map(r => ({
+        run_id: r.run_id,
+        status: r.status || 'unknown',
+        model: r.model_name,
+        duration_ms: r.duration_ms,
+      })),
+    });
+  };
 
-    const handleSelectRun = ({ runId }: { runId: string }) => {
-      setSelectedRunId(runId);
-    };
+  const handleGetCollapsedSpans = () => {
+    emitter.emit('vllora_collapsed_spans_response', {
+      collapsedSpanIds: Array.from(collapsedSpans),
+    });
+  };
 
-    emitter.on('vllora_get_selection_context', handleGetContext);
-    emitter.on('vllora_select_span', handleSelectSpan);
-    emitter.on('vllora_select_run', handleSelectRun);
+  // CHANGE UI handlers - update context state
+  const handleSelectSpan = ({ spanId }: { spanId: string }) => {
+    setSelectedSpanId(spanId);
+    // Optional: scroll span into view
+  };
 
-    return () => {
-      emitter.off('vllora_get_selection_context', handleGetContext);
-      emitter.off('vllora_select_span', handleSelectSpan);
-      emitter.off('vllora_select_run', handleSelectRun);
-    };
-  }, [selectedRunId, selectedSpanId]);
+  const handleSelectRun = ({ runId }: { runId: string }) => {
+    setSelectedRunId(runId);
+    fetchSpansByRunId(runId);
+  };
 
-  return <>{children}</>;
-}
+  const handleExpandSpan = ({ spanId }: { spanId: string }) => {
+    setCollapsedSpans(prev => {
+      const next = new Set(prev);
+      next.delete(spanId);
+      return next;
+    });
+  };
+
+  const handleCollapseSpan = ({ spanId }: { spanId: string }) => {
+    setCollapsedSpans(prev => new Set(prev).add(spanId));
+  };
+
+  // Register all event listeners
+  emitter.on('vllora_get_selection_context', handleGetSelectionContext);
+  emitter.on('vllora_get_current_view', handleGetCurrentView);
+  emitter.on('vllora_get_thread_runs', handleGetThreadRuns);
+  emitter.on('vllora_get_collapsed_spans', handleGetCollapsedSpans);
+  emitter.on('vllora_select_span', handleSelectSpan);
+  emitter.on('vllora_select_run', handleSelectRun);
+  emitter.on('vllora_expand_span', handleExpandSpan);
+  emitter.on('vllora_collapse_span', handleCollapseSpan);
+
+  return () => {
+    emitter.off('vllora_get_selection_context', handleGetSelectionContext);
+    emitter.off('vllora_get_current_view', handleGetCurrentView);
+    emitter.off('vllora_get_thread_runs', handleGetThreadRuns);
+    emitter.off('vllora_get_collapsed_spans', handleGetCollapsedSpans);
+    emitter.off('vllora_select_span', handleSelectSpan);
+    emitter.off('vllora_select_run', handleSelectRun);
+    emitter.off('vllora_expand_span', handleExpandSpan);
+    emitter.off('vllora_collapse_span', handleCollapseSpan);
+  };
+}, [
+  selectedRunId, selectedSpanId, detailSpanId, projectId,
+  runs, collapsedSpans, searchParams,
+  setSelectedSpanId, setSelectedRunId, setCollapsedSpans, fetchSpansByRunId
+]);
 ```
+
+### Key Points
+
+1. **TracesPageContext already has the state** we need (`selectedRunId`, `selectedSpanId`, `collapsedSpans`)
+2. `collapsedSpans` is a `Set<string>` - convert to array for event response
+3. `runs` array contains `RunDTO` objects with `run_id`, `status`, `model_name`, `duration_ms`
+4. The event listeners bridge agent tools to existing React state
 
 ---
 

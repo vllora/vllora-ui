@@ -23,6 +23,7 @@ tool_format = "provider"
 
 [tools]
 builtin = ["call_agent"]
+
 [model_settings]
 model = "gpt-4.1"
 temperature = 0.3
