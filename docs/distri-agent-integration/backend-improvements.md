@@ -4,6 +4,38 @@ This document outlines suggested improvements to the vLLora backend APIs that wo
 
 > **Status:** Suggestions only - to be evaluated during Distri integration
 
+## Database Schema Reference
+
+vLLora uses SQLite with a single `traces` table for all span data:
+
+```sql
+CREATE TABLE traces (
+    trace_id TEXT NOT NULL,
+    span_id TEXT NOT NULL,
+    thread_id TEXT,
+    parent_span_id TEXT,
+    operation_name TEXT NOT NULL,  -- "run", "model_call", "openai", "api_invoke", "tools"
+    start_time_us BIGINT NOT NULL,
+    finish_time_us BIGINT NOT NULL,
+    attribute TEXT NOT NULL,       -- JSON with cost, model_name, label, usage, error, etc.
+    run_id TEXT,
+    project_id TEXT,
+    PRIMARY KEY (trace_id, span_id)
+);
+```
+
+**Key `attribute` JSON fields:**
+| Field | Type | Example |
+|-------|------|---------|
+| `label` | string | `"travel_orchestrator"` |
+| `model_name` | string | `"openai/gpt-4o-mini"` |
+| `cost` | number or object | `0.0002` or `{"cost": 0.0002, ...}` |
+| `usage` | object | `{"input_tokens": 1369, "output_tokens": 15, ...}` |
+| `error` | string | Error message if failed |
+| `provider_name` | string | `"openai"` |
+
+---
+
 ## Current API Capabilities
 
 The backend currently provides these endpoints:
@@ -279,30 +311,165 @@ pub struct OperationTime {
 
 #[derive(Deserialize)]
 pub struct TimeSeriesQuery {
-    pub metric: String,      // "cost" | "tokens" | "duration" | "errors" | "runs"
-    pub interval: String,    // "1h" | "6h" | "1d" | "1w"
-    pub period: Option<String>,  // "last_day", "last_week", "last_month"
+    // === METRIC SELECTION ===
+    pub metric: String,           // Required: "cost" | "tokens" | "duration" | "errors" | "runs" | "success_rate"
+
+    // === TIME BUCKETING ===
+    pub interval: String,         // Required: "5m" | "15m" | "1h" | "6h" | "1d" | "1w"
+
+    // === DATE RANGE FILTERS ===
+    // Option 1: Predefined period (convenience)
+    pub period: Option<String>,   // "last_hour" | "last_day" | "last_week" | "last_month" | "last_year"
+
+    // Option 2: Custom date range (more control)
+    pub start_time: Option<i64>,  // Start timestamp (microseconds)
+    pub end_time: Option<i64>,    // End timestamp (microseconds)
+
+    // === DATA FILTERS ===
+    pub model_name: Option<String>,       // Filter by model: "gpt-4", "claude-3-opus", etc.
+    pub thread_ids: Option<String>,       // Comma-separated thread IDs
+    pub run_ids: Option<String>,          // Comma-separated run IDs
+    pub status: Option<String>,           // "completed" | "failed" | "running"
+    pub operation_name: Option<String>,   // Filter by operation: "model_call", "openai", "api_invoke", etc.
+    pub label: Option<String>,            // Filter by label attribute (e.g., "travel_orchestrator", "production")
+
+    // === AGGREGATION OPTIONS ===
+    pub aggregation: Option<String>,      // "sum" | "avg" | "min" | "max" | "count" (default: depends on metric)
+    pub group_by: Option<String>,         // Additional grouping: "model" | "thread" | "operation" | "label" | "run"
 }
 
 #[derive(Serialize)]
 pub struct TimeSeriesResponse {
     pub metric: String,
     pub interval: String,
+    pub start_time: i64,
+    pub end_time: i64,
+    pub filters_applied: FiltersApplied,
     pub data: Vec<TimeSeriesPoint>,
+
+    // Optional: breakdown by group_by dimension
+    pub grouped_data: Option<HashMap<String, Vec<TimeSeriesPoint>>>,
+}
+
+#[derive(Serialize)]
+pub struct FiltersApplied {
+    pub model_name: Option<String>,
+    pub thread_ids: Option<Vec<String>>,
+    pub run_ids: Option<Vec<String>>,
+    pub status: Option<String>,
+    pub operation_name: Option<String>,
+    pub label: Option<String>,
 }
 
 #[derive(Serialize)]
 pub struct TimeSeriesPoint {
-    pub timestamp: i64,      // Bucket start time (microseconds)
-    pub value: f64,          // Metric value for this bucket
-    pub count: i64,          // Number of data points in bucket
+    pub timestamp: i64,           // Bucket start time (microseconds)
+    pub value: f64,               // Metric value for this bucket
+    pub count: i64,               // Number of data points in bucket
+
+    // Optional: additional stats per bucket
+    pub min: Option<f64>,
+    pub max: Option<f64>,
+    pub avg: Option<f64>,
 }
+```
+
+**Example API Calls:**
+
+```bash
+# Cost trend for last week, hourly buckets
+GET /metrics/timeseries?metric=cost&interval=1h&period=last_week
+
+# Token usage by GPT-4 model, last 24 hours
+GET /metrics/timeseries?metric=tokens&interval=1h&period=last_day&model_name=gpt-4
+
+# Error rate for specific thread, custom date range
+GET /metrics/timeseries?metric=errors&interval=15m&start_time=1703000000000000&end_time=1703100000000000&thread_ids=thread-123
+
+# Duration trends grouped by model
+GET /metrics/timeseries?metric=duration&interval=1d&period=last_week&group_by=model
+
+# Success rate for failed runs investigation
+GET /metrics/timeseries?metric=success_rate&interval=1h&period=last_day&status=failed
+
+# Compare cost across models
+GET /metrics/timeseries?metric=cost&interval=1d&period=last_month&group_by=model
+
+# Metrics for specific runs (debugging a set of runs)
+GET /metrics/timeseries?metric=duration&interval=5m&run_ids=run-abc,run-def,run-ghi
+
+# Filter by label (e.g., specific agent/workflow)
+GET /metrics/timeseries?metric=cost&interval=1d&period=last_week&label=travel_orchestrator
+
+# Combine label with model filter
+GET /metrics/timeseries?metric=cost&interval=1h&period=last_day&model_name=gpt-4o-mini&label=production
+
+# Group by label to compare workflows
+GET /metrics/timeseries?metric=errors&interval=1d&period=last_week&group_by=label
+
+# Group by run to compare individual runs
+GET /metrics/timeseries?metric=cost&interval=5m&run_ids=run-abc,run-def&group_by=run
+```
+
+**SQL Example (for cost metric with filters):**
+
+> **Note:** vLLora uses SQLite with a single `traces` table. Data like cost, model, label are stored in the `attribute` JSON column.
+
+```sql
+-- Aggregate cost from traces table (SQLite syntax)
+SELECT
+    (start_time_us / :bucket_size_us) * :bucket_size_us as timestamp,
+    SUM(CAST(json_extract(attribute, '$.cost') AS REAL)) as value,
+    COUNT(*) as count,
+    MIN(CAST(json_extract(attribute, '$.cost') AS REAL)) as min,
+    MAX(CAST(json_extract(attribute, '$.cost') AS REAL)) as max,
+    AVG(CAST(json_extract(attribute, '$.cost') AS REAL)) as avg
+FROM traces
+WHERE project_id = :project_id
+  AND start_time_us >= :start_time
+  AND start_time_us < :end_time
+  AND json_extract(attribute, '$.cost') IS NOT NULL
+  -- Optional filters
+  AND (:model_name IS NULL OR json_extract(attribute, '$.model_name') = :model_name)
+  AND (:thread_id IS NULL OR thread_id = :thread_id)
+  AND (:run_id IS NULL OR run_id = :run_id)
+  AND (:label IS NULL OR json_extract(attribute, '$.label') = :label)
+  AND (:operation_name IS NULL OR operation_name = :operation_name)
+  AND (:status IS NULL OR
+       CASE
+         WHEN :status = 'failed' THEN json_extract(attribute, '$.error') IS NOT NULL
+         WHEN :status = 'completed' THEN finish_time_us > 0 AND json_extract(attribute, '$.error') IS NULL
+         WHEN :status = 'running' THEN finish_time_us = 0
+       END)
+GROUP BY timestamp
+ORDER BY timestamp ASC;
+```
+
+**For token metrics:**
+```sql
+SELECT
+    (start_time_us / :bucket_size_us) * :bucket_size_us as timestamp,
+    SUM(CAST(json_extract(attribute, '$.usage.input_tokens') AS INTEGER)) as input_tokens,
+    SUM(CAST(json_extract(attribute, '$.usage.output_tokens') AS INTEGER)) as output_tokens,
+    COUNT(*) as count
+FROM traces
+WHERE project_id = :project_id
+  AND start_time_us >= :start_time
+  AND json_extract(attribute, '$.usage') IS NOT NULL
+  -- ... same filters as above
+GROUP BY timestamp
+ORDER BY timestamp ASC;
 ```
 
 **Agent benefit:**
 - Trend analysis ("is cost increasing?")
 - Anomaly detection ("errors spiked at 3pm")
 - Performance regression detection
+- Model comparison ("which model is cheapest over time?")
+- Thread-specific analysis ("how is this conversation performing?")
+- Filtered investigations ("show me failed run trends")
+- Run-specific debugging ("compare metrics for these specific runs")
+- Label-based workflow comparison ("travel_orchestrator vs data_analyst costs")
 
 ---
 
