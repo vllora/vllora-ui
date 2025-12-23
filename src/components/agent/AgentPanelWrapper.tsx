@@ -27,7 +27,7 @@ export function AgentPanelWrapper() {
   const { isOpen, toggle, close } = useAgentPanel();
 
   // Draggable button with edge snapping and persistence (for floating mode)
-  const { position, isDragging, handlers } = useDraggable({
+  const { position, isDragging, wasDragged, handlers } = useDraggable({
     storageKey: 'vllora:agent-button-position',
     defaultPosition: getDefaultPosition(),
     snapToEdge: true,
@@ -37,11 +37,11 @@ export function AgentPanelWrapper() {
   });
 
   const handleToggle = useCallback(() => {
-    // Only toggle if not currently dragging
-    if (!isDragging) {
+    // Only toggle if we didn't just finish dragging
+    if (!wasDragged) {
       toggle();
     }
-  }, [isDragging, toggle]);
+  }, [wasDragged, toggle]);
 
   // Don't render anything if still initializing
   if (isInitializing) {

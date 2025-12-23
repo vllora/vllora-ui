@@ -42,7 +42,6 @@ interface FloatingAgentPanelProps {
 // Constants
 // ============================================================================
 
-const STORAGE_KEY = 'vllora:floating-panel-bounds';
 const DEFAULT_SIZE = { width: 400, height: 600 };
 
 const getDefaultBounds = (buttonPosition?: Position | null): PanelBounds => {
@@ -179,12 +178,13 @@ export function FloatingAgentPanel({
     dragHandlers,
     getResizeHandlers,
   } = useResizableDraggable({
-    storageKey: STORAGE_KEY,
+    storageKey: 'vllora:agent-panel-bounds',
     defaultBounds,
     minSize: MIN_SIZE,
     maxSize: MAX_SIZE,
     edgePadding: 16,
   });
+
 
   // Listen for agent tool events
   useAgentToolListeners();

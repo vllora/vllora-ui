@@ -1,12 +1,12 @@
 /**
  * useDraggable Hook
  *
- * Provides drag-and-drop functionality for elements with:
- * - Edge snapping (snaps to left or right edge on release)
+ * Provides smooth drag-and-drop functionality for elements with:
+ * - Optional edge snapping (snaps to left or right edge on release)
  * - Boundary constraints (stays within viewport)
  * - Position persistence (localStorage)
  * - Touch support (works with mouse and touch events)
- * - Drag threshold (distinguishes click from drag)
+ * - Immediate drag response (no threshold delay)
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -21,11 +21,11 @@ export interface UseDraggableOptions {
   storageKey?: string;
   /** Initial position if not found in storage */
   defaultPosition: Position;
-  /** Snap to left/right edge on release (default: true) */
+  /** Snap to left/right edge on release (default: false for smoother feel) */
   snapToEdge?: boolean;
   /** Padding from viewport edges in pixels (default: 16) */
   edgePadding?: number;
-  /** Min pixels of movement before drag starts (default: 5) */
+  /** Min pixels of movement before drag starts (default: 0 for immediate response) */
   dragThreshold?: number;
   /** Element dimensions for boundary calculations */
   elementSize?: { width: number; height: number };
@@ -36,6 +36,8 @@ export interface UseDraggableReturn {
   position: Position;
   /** True while actively dragging */
   isDragging: boolean;
+  /** True if a drag just completed (use to prevent click after drag) */
+  wasDragged: boolean;
   /** True if the button is on the left side of the screen */
   isOnLeftSide: boolean;
   /** Event handlers to attach to the draggable element */
@@ -45,15 +47,13 @@ export interface UseDraggableReturn {
   };
 }
 
-const ANIMATION_DURATION = 200; // ms for snap animation
-
 export function useDraggable(options: UseDraggableOptions): UseDraggableReturn {
   const {
     storageKey,
     defaultPosition,
-    snapToEdge = true,
+    snapToEdge = false,
     edgePadding = 16,
-    dragThreshold = 5,
+    dragThreshold = 0,
     elementSize = { width: 48, height: 48 },
   } = options;
 
@@ -81,7 +81,7 @@ export function useDraggable(options: UseDraggableOptions): UseDraggableReturn {
 
   const [position, setPosition] = useState<Position>(getInitialPosition);
   const [isDragging, setIsDragging] = useState(false);
-  const [isAnimating, setIsAnimating] = useState(false);
+  const [wasDragged, setWasDragged] = useState(false);
 
   // Refs for tracking drag state
   const dragStartPos = useRef<Position | null>(null);
@@ -143,10 +143,12 @@ export function useDraggable(options: UseDraggableOptions): UseDraggableReturn {
       const deltaX = clientX - dragStartMouse.current.x;
       const deltaY = clientY - dragStartMouse.current.y;
 
-      // Check if we've passed the drag threshold
+      // Check if we've passed the drag threshold (0 = immediate)
       if (!hasMoved.current) {
-        const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-        if (distance < dragThreshold) return;
+        if (dragThreshold > 0) {
+          const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+          if (distance < dragThreshold) return;
+        }
         hasMoved.current = true;
         setIsDragging(true);
       }
@@ -164,22 +166,21 @@ export function useDraggable(options: UseDraggableOptions): UseDraggableReturn {
   // Handle drag end
   const handleEnd = useCallback(() => {
     if (hasMoved.current) {
-      // Snap to edge with animation
-      setIsAnimating(true);
-      const snappedPos = snapToNearestEdge(position);
-      setPosition(snappedPos);
-      savePosition(snappedPos);
-
-      setTimeout(() => {
-        setIsAnimating(false);
-      }, ANIMATION_DURATION);
+      // Use functional update to ensure we have the latest position
+      setPosition((currentPos) => {
+        const snappedPos = snapToNearestEdge(currentPos);
+        savePosition(snappedPos);
+        return snappedPos;
+      });
+      // Mark that a drag just completed (to prevent click)
+      setWasDragged(true);
     }
 
     setIsDragging(false);
     dragStartPos.current = null;
     dragStartMouse.current = null;
     hasMoved.current = false;
-  }, [position, snapToNearestEdge, savePosition]);
+  }, [snapToNearestEdge, savePosition]);
 
   // Mouse event handlers
   useEffect(() => {
@@ -253,6 +254,8 @@ export function useDraggable(options: UseDraggableOptions): UseDraggableReturn {
       if (e.button !== 0) return;
 
       e.preventDefault();
+      // Reset wasDragged on new interaction
+      setWasDragged(false);
       dragStartPos.current = position;
       dragStartMouse.current = { x: e.clientX, y: e.clientY };
       hasMoved.current = false;
@@ -264,6 +267,8 @@ export function useDraggable(options: UseDraggableOptions): UseDraggableReturn {
     (e: React.TouchEvent) => {
       if (e.touches.length !== 1) return;
 
+      // Reset wasDragged on new interaction
+      setWasDragged(false);
       dragStartPos.current = position;
       dragStartMouse.current = {
         x: e.touches[0].clientX,
@@ -276,7 +281,8 @@ export function useDraggable(options: UseDraggableOptions): UseDraggableReturn {
 
   return {
     position,
-    isDragging: isDragging || isAnimating,
+    isDragging,
+    wasDragged,
     isOnLeftSide,
     handlers: {
       onMouseDown,
