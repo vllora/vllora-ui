@@ -1,50 +1,23 @@
-# Distri Multi-Agent Integration for vLLora
+# Distri Agent Integration for vLLora
 
-This guide explains how to build a multi-agent system using Distri that helps users analyze traces, identify issues, find bottlenecks, and optimize their LLM products through the vLLora platform.
+This guide explains the Distri agent integration for vLLora - the AI-powered trace analysis assistant.
 
-## System Purpose
+## Overview
 
-vLLora is a real-time debugging platform for AI agents. The multi-agent system helps users:
+vLLora uses a single Distri agent (`vllora_main_agent`) that helps users:
 - **Analyze traces** in real-time and historically
 - **Identify issues** in LLM workflows
 - **Find bottlenecks** in agent execution
 - **Optimize LLM products** based on trace data insights
 
-## Quick Start
-
-```bash
-# 1. Install Distri packages
-cd /Users/anhthuduong/Documents/GitHub/vllora/ui
-pnpm add @distri/core @distri/react
-
-# 2. Push agents to Distri server
-pnpm push-agents
-
-# 3. Start development
-pnpm dev
-```
-
-## Documentation
-
-| Document | Description |
-|----------|-------------|
-| [Implementation Plan](./implementation-plan.md) | Step-by-step implementation phases and testing plan |
-| [Architecture](./architecture.md) | Multi-agent system architecture and diagrams |
-| [Agents](./agents.md) | Agent definitions (Main, UI, Data agents) |
-| [Tools](./tools.md) | Tool handlers for UI and Data operations |
-| [Frontend Integration](./frontend-integration.md) | React provider, hooks, and event emitter setup |
-| [Setup Guide](./setup-guide.md) | Complete step-by-step setup instructions |
-| [UI Design](./ui-design.md) | Floating agent panel design specifications |
-| [Backend Improvements](./backend-improvements.md) | Suggested vLLora backend API enhancements (optional) |
-
-## Architecture Overview
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                              vLLora UI (React)                              │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌─────────────────┐ │
-│  │  ChatInput   │  │   Contexts   │  │  UI Tools    │  │   Data Tools    │ │
-│  │  (@agent)    │──│   (state)    │──│  (frontend)  │  │   (API calls)   │ │
+│  │  AgentPanel  │  │  TracesPage  │  │  UI Tools    │  │   Data Tools    │ │
+│  │  (Chat UI)   │──│  Context     │──│  (11 tools)  │  │   (4 tools)     │ │
 │  └──────────────┘  └──────────────┘  └──────────────┘  └─────────────────┘ │
 │                                                                             │
 │  ┌─────────────────────────────────────────────────────────────────────────┐│
@@ -56,127 +29,119 @@ pnpm dev
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                            Distri Server                                    │
 │  ┌───────────────────────────────────────────────────────────────────────┐ │
-│  │                         MAIN AGENT (Orchestrator)                      │ │
-│  │  Can call: ui_agent, data_agent                                        │ │
+│  │                      vllora_main_agent                                 │ │
+│  │  external = ["*"]  →  All 15 tools handled by frontend                │ │
 │  └───────────────────────────────────────────────────────────────────────┘ │
-│              │                                        │                     │
-│              ▼                                        ▼                     │
-│  ┌─────────────────────┐                ┌─────────────────────┐            │
-│  │   UI AGENT (11)     │                │   DATA AGENT (4)    │            │
-│  │   external = ["*"]  │                │   external = ["*"]  │            │
-│  └─────────────────────┘                └─────────────────────┘            │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Key Design Decisions
 
-### No Distri Modifications Required
+### Single Agent Architecture
 
-All agents use `external = ["*"]`, meaning:
-- **All tool implementations stay in vLLora UI** (no Distri repo changes)
+We use a single agent (`vllora_main_agent`) instead of multiple sub-agents because:
+- **Simpler implementation** - No orchestration complexity
+- **External tools work directly** - Sub-agent delegation doesn't forward external tools
+- **Better context awareness** - Single agent sees full conversation history
+
+### All Tools External
+
+The agent uses `external = ["*"]`, meaning:
+- **All 15 tools are implemented in vLLora UI** (no Distri repo changes needed)
 - Distri server routes tool calls back to frontend
-- Frontend handles both UI tools AND Data tools
+- Frontend executes tools and returns results
 
-### Data Tools Reuse Existing Services
+### Tool Categories
 
-Data agent tools import from existing `@/services/*`:
-- `fetch_runs` → `@/services/runs-api.ts`
-- `fetch_spans` → `@/services/spans-api.ts`
-- `get_run_details` → `@/services/runs-api.ts`
-- `fetch_groups` → `@/services/groups-api.ts`
+| Category | Count | Purpose |
+|----------|-------|---------|
+| **UI Tools** | 11 | Read/control the interface (only work on pages with data) |
+| **Data Tools** | 4 | Query backend API directly (work anywhere) |
 
-### Hybrid Agent Registration
+## Quick Start
 
-- **CLI**: Push agents during dev/CI-CD (`distri agents push`)
-- **Runtime**: Self-healing verification via `agent-sync.ts`
+```bash
+# 1. Ensure @distri packages are installed
+cd /Users/anhthuduong/Documents/GitHub/vllora/ui
+pnpm install
 
-## Agent Summary
+# 2. Start development
+pnpm dev
 
-| Agent | Tools | Description |
-|-------|-------|-------------|
-| **vllora_main_agent** | `call_agent` (builtin) | Orchestrates UI and Data agents |
-| **vllora_ui_agent** | 11 external | 5 GET STATE + 6 CHANGE UI |
-| **vllora_data_agent** | 4 external | Reuses `@/services/*` APIs |
+# Agent is auto-registered on app load via agent-sync.ts
+```
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Architecture](./architecture.md) | System architecture and data flow |
+| [Agents](./agents.md) | Main agent definition and prompt |
+| [Tools](./tools.md) | All 15 tool implementations |
+| [Frontend Integration](./frontend-integration.md) | React hooks and event handling |
 
 ## File Structure
 
-All files are in the **vLLora UI repo** - no modifications to Distri repo needed.
-
 ```
 vllora/ui/
-├── public/agents/                   # Agent definitions (served by Vite, pushed to Distri)
-│   ├── vllora-main-agent.md
-│   ├── vllora-ui-agent.md
-│   └── vllora-data-agent.md
+├── public/agents/
+│   └── vllora-main-agent.md      # Main agent definition (only agent needed)
 ├── src/
-│   ├── components/agent/            # Agent UI components
-│   │   ├── AgentPanel.tsx           # Chat panel using @distri/react Chat
-│   │   ├── AgentToggleButton.tsx    # Floating toggle button
-│   │   ├── AgentPanelWrapper.tsx    # Manages panel state + draggable button
-│   │   ├── index.ts                 # Exports
-│   │   └── hooks/
-│   │       └── useDraggable.ts      # Draggable hook with edge snapping
+│   ├── components/agent/
+│   │   ├── AgentPanel.tsx         # Chat panel using @distri/react Chat
+│   │   ├── AgentToggleButton.tsx  # Floating toggle button
+│   │   └── AgentPanelWrapper.tsx  # Manages panel state
 │   ├── lib/
-│   │   ├── distri-ui-tools.ts       # UI tool handlers (DistriFnTool[])
-│   │   ├── distri-data-tools.ts     # Data tool handlers (DistriFnTool[])
-│   │   └── agent-sync.ts            # Runtime agent verification
-│   ├── providers/
-│   │   └── DistriProvider.tsx       # Distri provider with auto-sync
+│   │   ├── distri-ui-tools.ts     # 11 UI tool handlers
+│   │   ├── distri-data-tools.ts   # 4 Data tool handlers
+│   │   └── agent-sync.ts          # Runtime agent registration
+│   ├── hooks/
+│   │   └── useAgentToolListeners.ts  # Basic event listeners for AgentPanel
 │   ├── contexts/
-│   │   ├── TracesPageContext.tsx    # Extended with event listeners
-│   │   └── ModalContext.tsx         # Extended with global modal functions
+│   │   └── TracesPageContext.tsx  # Extended with full event listeners
 │   └── utils/
-│       └── eventEmitter.ts          # Extended with Distri events
-└── docs/distri-agent-integration/   # This documentation
+│       └── eventEmitter.ts        # Event types for agent tools
+└── docs/distri-agent-integration/ # This documentation
 ```
-
-## Package Dependencies
-
-```bash
-pnpm add @distri/core @distri/react
-```
-
-**Already installed (no action needed):**
-- `mitt` - Event emitter
-- `@microsoft/fetch-event-source` - SSE streaming
 
 ## Usage Examples
 
+### Check Errors for Current Thread
+```
+User: Can you check for errors in this thread?
+
+Agent:
+1. Calls get_current_view → gets threadId
+2. Calls fetch_runs with threadIds=[threadId] → gets runs from API
+3. Analyzes runs for errors
+4. Reports findings with suggestions
+```
+
 ### Analyze Performance
 ```
-User: @agent analyze the performance of my last 10 runs
+User: Why is my agent slow?
 
-Main Agent:
-1. Calls data_agent → fetches runs with timing data
-2. Analyzes durations, finds slow spans
-3. Calls ui_agent → highlights the slowest span
-4. Returns analysis with recommendations
-```
-
-### Investigate Errors
-```
-User: @agent why did my agent fail yesterday?
-
-Main Agent:
-1. Calls data_agent → fetches runs from yesterday with errors
-2. Finds run with error, analyzes the cause
-3. Calls ui_agent → navigates to and highlights failed span
-4. Returns explanation with fix suggestions
+Agent:
+1. Calls get_current_view → gets context
+2. Calls fetch_runs → gets recent runs with timing data
+3. Calls get_run_details for slow runs → sees span breakdown
+4. Reports bottlenecks with percentages
 ```
 
 ### Cost Analysis
 ```
-User: @agent show me which models are costing the most
+User: Show me my costs for today
 
-Main Agent:
-1. Calls data_agent → fetches groups by model
-2. Calculates costs per model
-3. Returns breakdown with optimization suggestions
+Agent:
+1. Calls fetch_groups with groupBy="time" → gets aggregated data
+2. Or fetch_runs with period="last_day"
+3. Calculates costs by model
+4. Reports breakdown with optimization suggestions
 ```
 
-## Next Steps
+## Important Notes
 
-1. Read [Architecture](./architecture.md) to understand the system design
-2. Review [Agents](./agents.md) for agent definitions
-3. Follow [Setup Guide](./setup-guide.md) to implement the integration
-4. Customize [UI Design](./ui-design.md) for the floating panel
+1. **Data Tools for actual analysis** - UI tools like `get_thread_runs` only show visible data
+2. **Use `get_current_view` first** - Get threadId before fetching data
+3. **UI tools only work on Traces page** - `select_span`, etc. won't work on Chat page
+4. **Agent auto-registers on app load** - No manual registration needed

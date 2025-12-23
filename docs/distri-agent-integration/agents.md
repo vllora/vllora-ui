@@ -1,274 +1,143 @@
-# Agent Definitions
+# Agent Definition
 
-This document contains the complete agent definitions for the Distri multi-agent system.
+This document describes the vLLora main agent configuration and prompt.
 
 ## Overview
 
+vLLora uses a single agent that handles all trace analysis tasks directly:
+
 | Agent | Role | Tools | Model |
 |-------|------|-------|-------|
-| **vllora_main_agent** | Orchestrator | `call_agent` (builtin) | gpt-4.1 |
-| **vllora_ui_agent** | UI Control | 11 external | gpt-4.1-mini |
-| **vllora_data_agent** | Data Fetching | 4 external | gpt-4.1-mini |
+| **vllora_main_agent** | Trace analysis assistant | 15 external | gpt-4.1 |
 
-## 1. Main Agent (Orchestrator)
+## Agent Configuration
 
-**File:** `agents/vllora-main-agent.md`
+**File:** `public/agents/vllora-main-agent.md`
 
-```markdown
+```toml
 ---
 name = "vllora_main_agent"
-description = "Main orchestrator for vLLora trace analysis and optimization"
-max_iterations = 10
+description = "AI assistant for vLLora - analyzes traces, debugs errors, and helps optimize LLM applications"
+max_iterations = 20
 tool_format = "provider"
 
 [tools]
-builtin = ["call_agent"]
+external = ["*"]
 
 [model_settings]
 model = "gpt-4.1"
 temperature = 0.3
-max_tokens = 2000
+max_tokens = 4000
 ---
-
-# ROLE
-
-You are the main AI assistant for vLLora, a real-time debugging platform for AI agents.
-Your purpose is to help users:
-- Analyze LLM execution traces to understand system behavior
-- Identify issues, errors, and failures in their AI workflows
-- Find performance bottlenecks (slow spans, expensive calls, high token usage)
-- Optimize their LLM products based on trace data insights
-
-You orchestrate two specialized agents:
-- **ui_agent**: Controls the vLLora UI (navigation, display, highlighting)
-- **data_agent**: Fetches and analyzes trace data from the backend
-
-# CAPABILITIES
-
-## Analysis Tasks
-- Trace analysis: Examine execution flow, timing, and dependencies
-- Error detection: Find failed spans, error messages, and exceptions
-- Performance analysis: Identify slow operations and bottlenecks
-- Cost analysis: Calculate token usage and estimated costs
-- Comparison: Compare runs to identify regressions or improvements
-
-## Orchestration
-- Delegate UI tasks to ui_agent (e.g., "highlight the slow span", "navigate to traces")
-- Delegate data fetching to data_agent (e.g., "get traces for thread X", "find errors")
-- Combine insights from both agents to provide comprehensive analysis
-
-# WORKFLOW PATTERNS
-
-## Pattern 1: Investigate an Issue
-1. Ask data_agent to fetch relevant traces/runs
-2. Analyze the data for errors or anomalies
-3. Ask ui_agent to navigate to and highlight the problematic span
-4. Provide recommendations
-
-## Pattern 2: Performance Analysis
-1. Ask data_agent to fetch runs with timing data
-2. Calculate duration statistics and identify slow spans
-3. Ask ui_agent to display the trace visualization
-4. Highlight bottlenecks and suggest optimizations
-
-## Pattern 3: Cost Optimization
-1. Ask data_agent to fetch token usage and cost data
-2. Identify high-cost operations
-3. Suggest ways to reduce token usage
-
-# RESPONSE FORMAT
-- Be concise and actionable
-- Use data to support your analysis
-- Provide specific recommendations
-- Reference span IDs and trace IDs when discussing specific issues
-
-# TASK
-{{task}}
 ```
 
-## 2. UI Agent
+### Configuration Explained
 
-**File:** `agents/vllora-ui-agent.md`
+| Field | Value | Purpose |
+|-------|-------|---------|
+| `name` | `vllora_main_agent` | Unique agent identifier |
+| `max_iterations` | `20` | Max tool calls per conversation turn |
+| `tool_format` | `provider` | Use provider's native tool format |
+| `external = ["*"]` | All tools | All tools handled by frontend |
+| `model` | `gpt-4.1` | Primary LLM model |
+| `temperature` | `0.3` | Lower for more consistent responses |
+| `max_tokens` | `4000` | Allows detailed analysis responses |
 
-```markdown
----
-name = "vllora_ui_agent"
-description = "Controls vLLora UI display, navigation, and context awareness"
-max_iterations = 5
-tool_format = "provider"
+## Available Tools (15 total)
 
-[tools]
-external = ["*"]
+### UI Tools (11) - Read/Control Interface
 
-[model_settings]
-model = "gpt-4.1-mini"
-temperature = 0.2
-max_tokens = 800
----
+| Tool | Purpose | Works On |
+|------|---------|----------|
+| `get_current_view` | Get page, projectId, threadId, theme | Any page |
+| `get_selection_context` | Get selected run/span IDs | Any page |
+| `get_thread_runs` | Get runs visible in UI | Traces page only |
+| `get_span_details` | Get selected span info | Traces page only |
+| `get_collapsed_spans` | Get collapsed span IDs | Traces page only |
+| `open_modal` | Open tools/settings/provider-keys modal | Any page |
+| `close_modal` | Close current modal | Any page |
+| `select_span` | Highlight a span | Traces page only |
+| `select_run` | Select a run | Traces page only |
+| `expand_span` | Expand collapsed span | Traces page only |
+| `collapse_span` | Collapse a span | Traces page only |
 
-# ROLE
+### Data Tools (4) - Query Backend API
 
-You are the UI control agent for vLLora. You have two responsibilities:
-1. **Read UI state** - Understand what the user is currently viewing
-2. **Change UI** - Manipulate the interface to help users visualize traces
+| Tool | Purpose | Parameters |
+|------|---------|------------|
+| `fetch_runs` | Get runs from API | `threadIds`, `runIds`, `modelName`, `period`, `limit` |
+| `fetch_spans` | Get spans from API | `threadIds`, `runIds`, `operationNames`, `limit` |
+| `get_run_details` | Get full run + spans | `runId` (required) |
+| `fetch_groups` | Get aggregated stats | `groupBy`, `bucketSize`, `limit` |
 
-# AVAILABLE TOOLS (11 total)
+## Agent Prompt Structure
 
-## GET STATE (5 tools) - Read current UI context
+The agent prompt includes:
 
-| Tool | Description | Returns |
-|------|-------------|---------|
-| **get_current_view** | Get current page, project, thread, theme, modal state | `{ page, projectId, threadId, theme, modal }` |
-| **get_selection_context** | Get what user has selected | `{ selectedRunId, selectedSpanId, detailSpanId, textSelection }` |
-| **get_thread_runs** | Get list of runs in current thread | `{ runs: [{ run_id, status, model, duration }] }` |
-| **get_span_details** | Get detailed info about a span | `{ span: { span_id, operation_name, duration, status, attributes } }` |
-| **get_collapsed_spans** | Get list of collapsed span IDs | `{ collapsedSpanIds: string[] }` |
+1. **Role** - Explains the agent's purpose as a trace analysis assistant
+2. **Platform Context** - Describes vLLora concepts (runs, spans, threads, projects)
+3. **Tool Documentation** - Tables explaining all 15 tools
+4. **Workflow Patterns** - Standard analysis flow and common patterns
+5. **Response Guidelines** - How to format responses with examples
+6. **Important Notes** - Key gotchas and best practices
 
-## CHANGE UI (6 tools) - Modify the interface
+## Key Workflow Patterns
 
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| **open_modal** | Open a modal dialog | `modal: "tools" \| "settings" \| "provider-keys"` |
-| **close_modal** | Close the current modal | (none) |
-| **select_span** | Select and highlight a span | `spanId: string` |
-| **select_run** | Select a run to display | `runId: string` |
-| **expand_span** | Expand a collapsed span | `spanId: string` |
-| **collapse_span** | Collapse an expanded span | `spanId: string` |
-
-# WORKFLOW PATTERNS
-
-## Pattern 1: Context-Aware Assistance
-1. Call `get_current_view` to understand where user is
-2. Call `get_selection_context` to see what they're focused on
-3. Take appropriate action based on context
-
-## Pattern 2: Navigate to Specific Span
-1. Call `select_run` to show the run
-2. Call `expand_span` if span is collapsed
-3. Call `select_span` to highlight it
-
-## Pattern 3: Prepare View for Analysis
-1. Call `get_collapsed_spans` to see what's hidden
-2. Expand relevant spans
-3. Call `select_span` on the span of interest
-
-# GUIDELINES
-- Always check context before acting (call GET STATE tools first when needed)
-- Confirm what was changed after each action
-- If an element can't be found, report the span_id clearly
-- For multi-step actions, report each step
-
-# TASK
-{{task}}
+### Standard Analysis Flow
+```
+1. get_current_view → Get projectId, threadId, current page
+2. fetch_runs/fetch_spans → Query actual data from API
+3. Analyze the data for patterns, errors, performance issues
+4. Optionally use UI tools to highlight findings
+5. Respond with clear, actionable insights
 ```
 
-## 3. Data Agent
-
-**File:** `agents/vllora-data-agent.md`
-
-```markdown
----
-name = "vllora_data_agent"
-description = "Fetches and analyzes trace data from vLLora backend"
-max_iterations = 8
-tool_format = "provider"
-
-[tools]
-external = ["*"]
-
-[model_settings]
-model = "gpt-4.1-mini"
-temperature = 0.1
-max_tokens = 1500
----
-
-# ROLE
-
-You are the data agent for vLLora. You fetch, filter, and analyze trace data
-from the backend to support the main agent's analysis tasks.
-
-# AVAILABLE TOOLS (4 total)
-
-All tools are handled by the vLLora UI frontend, which calls the vLLora backend API.
-These tools reuse existing API services from @/services/* for consistency.
-
-| Tool | Description | Key Parameters |
-|------|-------------|----------------|
-| **fetch_runs** | Get execution runs with usage info | threadIds, modelName, limit |
-| **fetch_spans** | Get individual spans | runIds, operationNames, limit |
-| **get_run_details** | Get detailed info about a run | runId (required) |
-| **fetch_groups** | Get aggregated data | groupBy (time/thread/run), limit |
-
-# DATA ANALYSIS CAPABILITIES
-
-When analyzing data, you can:
-- Calculate statistics (avg duration, total cost, token counts)
-- Identify outliers (unusually slow spans, high-cost operations)
-- Find patterns (common error types, frequent operations)
-- Compare data across time periods or runs
-
-# RESPONSE FORMAT
-
-When returning data, structure it clearly:
-- Summarize key findings first
-- Include relevant IDs (trace_id, span_id, run_id)
-- Provide metrics with units (duration in ms, cost in $)
-- Flag any errors or anomalies found
-
-# TASK
-{{task}}
+### Check Errors for Thread
+```
+1. get_current_view → get threadId
+2. fetch_runs with threadIds=[threadId] → get all runs
+3. Look for runs with status="error"
+4. For failed runs, use get_run_details to see spans
+5. Report findings with possible causes
 ```
 
-## Agent File Location
-
-These agent files are located in the vLLora UI repo under `public/` to be served as static assets:
-
+### Performance Analysis
 ```
-vllora/ui/
-├── public/
-│   └── agents/
-│       ├── vllora-main-agent.md
-│       ├── vllora-ui-agent.md
-│       └── vllora-data-agent.md
+1. get_current_view → get context
+2. fetch_runs → get runs with duration info
+3. For slow runs, get_run_details → see span breakdown
+4. Identify slowest spans (usually LLM calls)
+5. Report bottlenecks with % of total time
 ```
 
-## Creating the Agent Files
+## Agent Registration
 
-```bash
-cd /Users/anhthuduong/Documents/GitHub/vllora/ui
+The agent is automatically registered when the app loads via `agent-sync.ts`:
 
-# Create agents directory
-mkdir -p public/agents
-
-# Create each agent file (use content from above)
-# Or use the setup script in setup-guide.md
-```
-
-## Registering Agents with Distri
-
-Push all agents to the Distri server:
-
-```bash
-# Push all agents at once
-distri --base-url http://localhost:8080 agents push ./public/agents --all
-
-# Or push individually
-distri --base-url http://localhost:8080 agents push ./public/agents/vllora-main-agent.md
-```
-
-Add to `package.json` for convenience:
-
-```json
-{
-  "scripts": {
-    "push-agents": "distri --base-url http://localhost:8080 agents push ./public/agents --all",
-    "dev": "pnpm push-agents && vite"
-  }
+```typescript
+// src/lib/agent-sync.ts
+export async function ensureAgentsRegistered(): Promise<void> {
+  // Fetches agent definition from /agents/vllora-main-agent.md
+  // Registers with Distri server at /api/v1/agents
 }
 ```
 
+This is called from `DistriProvider.tsx` on mount.
+
+## Why Single Agent?
+
+We use one agent instead of sub-agents because:
+
+1. **External tools don't forward through sub-agents** - When the main agent calls a sub-agent via `call_agent`, the sub-agent's external tools aren't visible to the frontend. The tool calls would fail.
+
+2. **Simpler implementation** - No orchestration logic needed
+
+3. **Better context** - Single agent sees full conversation history
+
+4. **Faster responses** - No sub-agent coordination overhead
+
 ## Related Documents
 
-- [Architecture](./architecture.md) - How agents interact
-- [Tools](./tools.md) - Tool handler implementations
-- [Setup Guide](./setup-guide.md) - Complete setup instructions
+- [Tools](./tools.md) - Detailed tool implementations
+- [Frontend Integration](./frontend-integration.md) - How tools connect to React
+- [Architecture](./architecture.md) - System overview

@@ -1,549 +1,131 @@
 # Tool Handlers
 
-This document contains the implementation details for UI and Data tool handlers.
+This document describes the implementation of UI and Data tool handlers.
 
 ## Overview
 
-All tools use `external = ["*"]`, meaning they are handled by the vLLora UI frontend:
+All 15 tools use `external = ["*"]`, meaning they are handled by the vLLora UI frontend:
 
-| Category | File | Tools |
-|----------|------|-------|
-| UI Tools | `src/lib/distri-ui-tools.ts` | 11 (5 GET STATE + 6 CHANGE UI) |
-| Data Tools | `src/lib/distri-data-tools.ts` | 4 (reuse existing services) |
+| Category | File | Count | Description |
+|----------|------|-------|-------------|
+| UI Tools | `src/lib/distri-ui-tools.ts` | 11 | 5 GET STATE + 6 CHANGE UI |
+| Data Tools | `src/lib/distri-data-tools.ts` | 4 | Query backend API |
 
-## Prerequisites
+## Tool Format
 
-### ModalContext Global Functions
-
-The `open_modal` and `close_modal` tools use global functions from ModalContext. For these to work, the ModalProvider must initialize the global context. Update `src/contexts/ModalContext.tsx`:
+Tools are exported as `DistriFnTool[]` arrays for use with the `@distri/react` Chat component:
 
 ```typescript
-// In ModalProvider component, add this effect:
-export function ModalProvider({ children }: ModalProviderProps) {
-  const [currentModal, setCurrentModal] = useState<ModalType>(null);
-  // ... existing state ...
-
-  const contextValue = useMemo(() => ({
-    openModal,
-    closeModal,
-    currentModal,
-    isOpen: currentModal !== null,
-    toolsUsage,
-    setToolsUsage,
-  }), [currentModal, toolsUsage]);
-
-  // ADD THIS: Initialize global functions for external access
-  useEffect(() => {
-    setGlobalModalContext(contextValue);
-  }, [contextValue]);
-
-  return (
-    <ModalContext.Provider value={contextValue}>
-      {children}
-    </ModalContext.Provider>
-  );
-}
+// Tools use `parameters` (not `input_schema`)
+{
+  name: 'fetch_runs',
+  description: 'Fetch runs from API',
+  type: 'function',
+  parameters: {
+    type: 'object',
+    properties: { ... },
+    required: ['threadIds'],
+  },
+  handler: async (input) => JSON.stringify(await handler(input)),
+} as DistriFnTool
 ```
+
+**Important:** DistriFnTool expects `parameters` property, not `input_schema`.
 
 ---
 
-## UI Tool Handlers
+## UI Tools (11 total)
 
 **File:** `src/lib/distri-ui-tools.ts`
 
-```typescript
-import { getThemeFromStorage } from "@/themes/themes";
-import { emitter } from "@/utils/eventEmitter";
+### GET STATE Tools (5)
 
-type ToolResult = { success: boolean; message: string; data?: any };
-type ToolHandler = (params: Record<string, unknown>) => Promise<ToolResult>;
+These tools use an event emitter pattern to request data from React components.
 
-// ============================================================================
-// Tool Registry - 11 total (5 GET STATE + 6 CHANGE UI)
-// ============================================================================
-export const UI_TOOL_NAMES = [
-  // GET STATE (5 tools)
-  "get_current_view",
-  "get_selection_context",
-  "get_thread_runs",
-  "get_span_details",
-  "get_collapsed_spans",
-  // CHANGE UI (6 tools)
-  "open_modal",
-  "close_modal",
-  "select_span",
-  "select_run",
-  "expand_span",
-  "collapse_span",
-];
+| Tool | Description | Returns |
+|------|-------------|---------|
+| `get_current_view` | Current page context | `{page, projectId, threadId, theme}` |
+| `get_selection_context` | Selected items | `{selectedRunId, selectedSpanId, detailSpanId}` |
+| `get_thread_runs` | Runs visible in UI | `{runs: [...]}` |
+| `get_span_details` | Span info | `{span: {...}}` |
+| `get_collapsed_spans` | Collapsed spans | `{collapsedSpanIds: [...]}` |
 
-// ============================================================================
-// GET STATE TOOLS (5 tools) - Read current UI context
-// These use request/response events to get data from React context
-// ============================================================================
+#### Event Flow Pattern
 
-const getStateHandlers: Record<string, ToolHandler> = {
-  // Get current page, project, thread, theme, modal state
-  get_current_view: async () => {
-    return new Promise((resolve) => {
-      const handler = (data: any) => {
-        emitter.off("vllora_current_view_response", handler);
-        resolve({ success: true, message: "Current view", data });
-      };
-      emitter.on("vllora_current_view_response", handler);
-      emitter.emit("vllora_get_current_view", {});
-
-      // Timeout fallback - return basic info from window
-      setTimeout(() => {
-        emitter.off("vllora_current_view_response", handler);
-        resolve({
-          success: true,
-          message: "Current view (basic)",
-          data: {
-            page: window.location.pathname,
-            projectId: new URLSearchParams(window.location.search).get("project_id"),
-            threadId: new URLSearchParams(window.location.search).get("thread_id"),
-            theme: getThemeFromStorage(),
-            modal: null, // Unknown without context
-          }
-        });
-      }, 2000);
-    });
-  },
-
-  // Get selected run, span, detail span, text selection
-  get_selection_context: async () => {
-    return new Promise((resolve) => {
-      const handler = (data: any) => {
-        emitter.off("vllora_selection_context_response", handler);
-        resolve({ success: true, message: "Selection context", data });
-      };
-      emitter.on("vllora_selection_context_response", handler);
-      emitter.emit("vllora_get_selection_context", {});
-
-      setTimeout(() => {
-        emitter.off("vllora_selection_context_response", handler);
-        // Also include text selection from window
-        const textSelection = window.getSelection()?.toString() || null;
-        resolve({
-          success: true,
-          message: "Selection context (partial)",
-          data: {
-            selectedRunId: null,
-            selectedSpanId: null,
-            detailSpanId: null,
-            textSelection,
-          }
-        });
-      }, 2000);
-    });
-  },
-
-  // Get list of runs in current thread
-  get_thread_runs: async () => {
-    return new Promise((resolve) => {
-      const handler = (data: { runs: any[] }) => {
-        emitter.off("vllora_thread_runs_response", handler);
-        resolve({ success: true, message: `Found ${data.runs.length} runs`, data });
-      };
-      emitter.on("vllora_thread_runs_response", handler);
-      emitter.emit("vllora_get_thread_runs", {});
-
-      setTimeout(() => {
-        emitter.off("vllora_thread_runs_response", handler);
-        resolve({ success: false, message: "No thread context available" });
-      }, 2000);
-    });
-  },
-
-  // Get detailed info about a specific span
-  get_span_details: async ({ spanId }) => {
-    if (!spanId) {
-      return { success: false, message: "spanId is required" };
-    }
-    return new Promise((resolve) => {
-      const handler = (data: { span: any }) => {
-        emitter.off("vllora_span_details_response", handler);
-        if (data.span) {
-          resolve({ success: true, message: "Span details", data });
-        } else {
-          resolve({ success: false, message: `Span ${spanId} not found` });
-        }
-      };
-      emitter.on("vllora_span_details_response", handler);
-      emitter.emit("vllora_get_span_details", { spanId: spanId as string });
-
-      setTimeout(() => {
-        emitter.off("vllora_span_details_response", handler);
-        resolve({ success: false, message: `Timeout getting span ${spanId}` });
-      }, 2000);
-    });
-  },
-
-  // Get list of collapsed span IDs
-  get_collapsed_spans: async () => {
-    return new Promise((resolve) => {
-      const handler = (data: { collapsedSpanIds: string[] }) => {
-        emitter.off("vllora_collapsed_spans_response", handler);
-        resolve({
-          success: true,
-          message: `${data.collapsedSpanIds.length} spans collapsed`,
-          data
-        });
-      };
-      emitter.on("vllora_collapsed_spans_response", handler);
-      emitter.emit("vllora_get_collapsed_spans", {});
-
-      setTimeout(() => {
-        emitter.off("vllora_collapsed_spans_response", handler);
-        resolve({ success: true, message: "No collapsed spans", data: { collapsedSpanIds: [] } });
-      }, 2000);
-    });
-  },
-};
-
-// ============================================================================
-// CHANGE UI TOOLS (6 tools) - Modify the interface
-// These emit events that are handled by React components
-// ============================================================================
-
-const changeUiHandlers: Record<string, ToolHandler> = {
-  // Open a modal dialog
-  // Note: Requires ModalProvider to call setGlobalModalContext on mount (see prerequisite below)
-  open_modal: async ({ modal }) => {
-    const validModals = ["tools", "settings", "provider-keys"];
-    if (!validModals.includes(modal as string)) {
-      return { success: false, message: `Invalid modal. Valid: ${validModals.join(", ")}` };
-    }
-    const { openModal } = await import("@/contexts/ModalContext");
-    openModal(modal as "tools" | "settings" | "provider-keys");
-    return { success: true, message: `Opened ${modal} modal` };
-  },
-
-  // Close the current modal
-  close_modal: async () => {
-    const { closeModal } = await import("@/contexts/ModalContext");
-    closeModal();
-    return { success: true, message: "Modal closed" };
-  },
-
-  // Select and highlight a span
-  select_span: async ({ spanId }) => {
-    if (!spanId) {
-      return { success: false, message: "spanId is required" };
-    }
-    emitter.emit("vllora_select_span", { spanId: spanId as string });
-    return { success: true, message: `Selected span ${spanId}` };
-  },
-
-  // Select a run to display
-  select_run: async ({ runId }) => {
-    if (!runId) {
-      return { success: false, message: "runId is required" };
-    }
-    emitter.emit("vllora_select_run", { runId: runId as string });
-    return { success: true, message: `Selected run ${runId}` };
-  },
-
-  // Expand a collapsed span
-  expand_span: async ({ spanId }) => {
-    if (!spanId) {
-      return { success: false, message: "spanId is required" };
-    }
-    emitter.emit("vllora_expand_span", { spanId: spanId as string });
-    return { success: true, message: `Expanded span ${spanId}` };
-  },
-
-  // Collapse an expanded span
-  collapse_span: async ({ spanId }) => {
-    if (!spanId) {
-      return { success: false, message: "spanId is required" };
-    }
-    emitter.emit("vllora_collapse_span", { spanId: spanId as string });
-    return { success: true, message: `Collapsed span ${spanId}` };
-  },
-};
-
-// ============================================================================
-// Combined handlers
-// ============================================================================
-
-export const uiToolHandlers: Record<string, ToolHandler> = {
-  ...getStateHandlers,
-  ...changeUiHandlers,
-};
-
-export async function executeUiTool(
-  toolName: string,
-  params: Record<string, unknown>
-): Promise<ToolResult> {
-  const handler = uiToolHandlers[toolName];
-  if (!handler) {
-    return { success: false, message: `Unknown UI tool: ${toolName}` };
-  }
-  try {
-    return await handler(params);
-  } catch (error) {
-    return {
-      success: false,
-      message: `Error: ${error instanceof Error ? error.message : String(error)}`
-    };
-  }
-}
-
-export function isUiTool(toolName: string): boolean {
-  return UI_TOOL_NAMES.includes(toolName);
-}
-
-// ============================================================================
-// DistriFnTool[] format for Chat component
-// NOTE: Uses `input_schema` (not `parameters`) per DistriFnTool type
-// ============================================================================
-
-import { DistriFnTool } from '@distri/core';
-
-export const uiTools: DistriFnTool[] = [
-  {
-    name: 'get_current_view',
-    description: 'Get information about the current page/view the user is looking at',
-    type: 'function',
-    input_schema: { type: 'object', properties: {} },
-    handler: async () => JSON.stringify(await uiToolHandlers.get_current_view({})),
-  } as DistriFnTool,
-
-  {
-    name: 'select_span',
-    description: 'Select and highlight a specific span in the trace view',
-    type: 'function',
-    input_schema: {
-      type: 'object',
-      properties: {
-        spanId: { type: 'string', description: 'The span ID to select' },
-      },
-      required: ['spanId'],
-    },
-    handler: async (input: object) => JSON.stringify(
-      await uiToolHandlers.select_span(input as Record<string, unknown>)
-    ),
-  } as DistriFnTool,
-
-  // ... remaining tools follow same pattern
-];
 ```
+Tool Handler                    React Component (TracesPageContext)
+     │                               │
+     ├─── emit("vllora_get_X") ─────▶│
+     │                               │
+     │◀── emit("vllora_X_response")──┤
+     │                               │
+     └─── resolve(data) ─────────────┘
+```
+
+### CHANGE UI Tools (6)
+
+These tools emit events that are handled by React components.
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `open_modal` | Open a modal | `modal: "tools" \| "settings" \| "provider-keys"` |
+| `close_modal` | Close modal | (none) |
+| `select_span` | Highlight span | `spanId: string` |
+| `select_run` | Select run | `runId: string` |
+| `expand_span` | Expand span | `spanId: string` |
+| `collapse_span` | Collapse span | `spanId: string` |
 
 ---
 
-## Data Tool Handlers
+## Data Tools (4 total)
 
 **File:** `src/lib/distri-data-tools.ts`
 
-These tools reuse existing API services from `@/services/*` to ensure consistency with the UI and avoid code duplication.
+These tools call existing vLLora API services directly.
+
+| Tool | Service | Function | Key Parameters |
+|------|---------|----------|----------------|
+| `fetch_runs` | `runs-api.ts` | `listRuns` | `threadIds`, `period`, `limit` |
+| `fetch_spans` | `spans-api.ts` | `listSpans` | `runIds`, `operationNames` |
+| `get_run_details` | `runs-api.ts` | `getRunDetails` | `runId` (required) |
+| `fetch_groups` | `groups-api.ts` | `listGroups` | `groupBy`, `bucketSize` |
+
+### API Service Reuse
+
+Data tools import from existing services to ensure consistency:
 
 ```typescript
-// Data tool handlers - REUSES existing vLLora API services
-// This ensures consistency with the UI and avoids code duplication
-//
-// Existing services used:
-// - @/services/runs-api.ts   -> listRuns, getRunDetails
-// - @/services/spans-api.ts  -> listSpans
-// - @/services/groups-api.ts -> listGroups
-//
-// IMPORTANT: API services use different field naming conventions:
-// - runs-api.ts uses snake_case: thread_ids, run_ids, model_name
-// - spans-api.ts uses camelCase: threadIds, runIds, operationNames
-// - groups-api.ts uses snake_case: thread_ids, group_by, bucket_size
-
-import { listRuns, getRunDetails, ListRunsQuery } from '@/services/runs-api';
-import { listSpans, ListSpansQuery } from '@/services/spans-api';
-import { listGroups, ListGroupsQuery } from '@/services/groups-api';
-
-// Data tool names (4 tools)
-export const DATA_TOOL_NAMES = [
-  "fetch_runs",
-  "fetch_spans",
-  "get_run_details",
-  "fetch_groups"
-];
-
-// Get current project ID from URL or context
-function getCurrentProjectId(): string {
-  const params = new URLSearchParams(window.location.search);
-  return params.get('project_id') || 'default';
-}
-
-// Helper to convert array to comma-separated string (API format)
-function toCommaSeparated(value: string | string[] | undefined): string | undefined {
-  if (!value) return undefined;
-  return Array.isArray(value) ? value.join(',') : value;
-}
-
-// Data tool handlers - reuse existing services
-export const dataToolHandlers: Record<string, (params: any) => Promise<any>> = {
-
-  // Fetch runs with filtering
-  // Reuses: @/services/runs-api.ts -> listRuns
-  // Note: runs-api uses snake_case field names (thread_ids, run_ids, model_name)
-  fetch_runs: async (params) => {
-    const projectId = params.projectId || getCurrentProjectId();
-
-    const query: ListRunsQuery = {};
-    // Convert agent params (camelCase) to API params (snake_case for runs-api)
-    if (params.threadIds) query.thread_ids = toCommaSeparated(params.threadIds);
-    if (params.runIds) query.run_ids = toCommaSeparated(params.runIds);
-    if (params.modelName) query.model_name = params.modelName;
-    if (params.limit) query.limit = params.limit;
-    if (params.offset) query.offset = params.offset;
-    if (params.period) query.period = params.period; // e.g., 'last_hour', 'last_day'
-
-    const result = await listRuns({ projectId, params: query });
-    return {
-      success: true,
-      data: result.data,
-      pagination: result.pagination
-    };
-  },
-
-  // Fetch spans with filtering
-  // Reuses: @/services/spans-api.ts -> listSpans
-  // Note: spans-api uses camelCase field names (threadIds, runIds, operationNames)
-  fetch_spans: async (params) => {
-    const projectId = params.projectId || getCurrentProjectId();
-
-    const query: ListSpansQuery = {};
-    // spans-api already uses camelCase, just pass through
-    if (params.threadIds) query.threadIds = toCommaSeparated(params.threadIds);
-    if (params.runIds) query.runIds = toCommaSeparated(params.runIds);
-    if (params.operationNames) query.operationNames = toCommaSeparated(params.operationNames);
-    if (params.parentSpanIds) query.parentSpanIds = toCommaSeparated(params.parentSpanIds);
-    if (params.limit) query.limit = params.limit;
-    if (params.offset) query.offset = params.offset;
-
-    const result = await listSpans({ projectId, params: query });
-    return {
-      success: true,
-      data: result.data,
-      pagination: result.pagination
-    };
-  },
-
-  // Get detailed info about a specific run
-  // Reuses: @/services/runs-api.ts -> getRunDetails
-  get_run_details: async (params) => {
-    const { runId } = params;
-    if (!runId) return { success: false, message: "runId is required" };
-
-    const projectId = params.projectId || getCurrentProjectId();
-    const result = await getRunDetails({ runId, projectId });
-    return { success: true, data: result };
-  },
-
-  // Fetch aggregated groups
-  // Reuses: @/services/groups-api.ts -> listGroups
-  // Note: groups-api uses snake_case field names (thread_ids, group_by, bucket_size)
-  fetch_groups: async (params) => {
-    const projectId = params.projectId || getCurrentProjectId();
-
-    const query: ListGroupsQuery = {};
-    // Convert agent params (camelCase) to API params (snake_case for groups-api)
-    if (params.groupBy) query.group_by = params.groupBy; // 'time' | 'thread' | 'run'
-    if (params.threadIds) query.thread_ids = toCommaSeparated(params.threadIds);
-    if (params.modelName) query.model_name = params.modelName;
-    if (params.bucketSize) query.bucket_size = params.bucketSize; // in seconds
-    if (params.limit) query.limit = params.limit;
-    if (params.offset) query.offset = params.offset;
-
-    const result = await listGroups({ projectId, params: query });
-    return {
-      success: true,
-      data: result.data,
-      pagination: result.pagination
-    };
-  },
-};
-
-export async function executeDataTool(
-  toolName: string,
-  params: Record<string, unknown>
-): Promise<any> {
-  const handler = dataToolHandlers[toolName];
-  if (!handler) {
-    return { success: false, message: `Unknown data tool: ${toolName}` };
-  }
-  try {
-    return await handler(params);
-  } catch (error) {
-    return {
-      success: false,
-      message: `Error: ${error instanceof Error ? error.message : String(error)}`
-    };
-  }
-}
-
-export function isDataTool(toolName: string): boolean {
-  return DATA_TOOL_NAMES.includes(toolName);
-}
-
-// ============================================================================
-// DistriFnTool[] format for Chat component
-// NOTE: Uses `input_schema` (not `parameters`) per DistriFnTool type
-// ============================================================================
-
-import { DistriFnTool } from '@distri/core';
-
-export const dataTools: DistriFnTool[] = [
-  {
-    name: 'fetch_runs',
-    description: 'Fetch a list of runs with optional filtering',
-    type: 'function',
-    input_schema: {
-      type: 'object',
-      properties: {
-        threadIds: { type: 'array', items: { type: 'string' } },
-        runIds: { type: 'array', items: { type: 'string' } },
-        modelName: { type: 'string' },
-        limit: { type: 'number' },
-        offset: { type: 'number' },
-        period: { type: 'string', enum: ['last_hour', 'last_day', 'last_week'] },
-      },
-    },
-    handler: async (input: object) => JSON.stringify(
-      await dataToolHandlers.fetch_runs(input as Record<string, unknown>)
-    ),
-  } as DistriFnTool,
-
-  // ... remaining tools follow same pattern
-];
+import { listRuns, getRunDetails } from '@/services/runs-api';
+import { listSpans } from '@/services/spans-api';
+import { listGroups } from '@/services/groups-api';
 ```
 
----
-
-## Service Mapping
-
-Data tools map to existing services:
-
-| Tool | Service File | Function |
-|------|--------------|----------|
-| `fetch_runs` | `@/services/runs-api.ts` | `listRuns` |
-| `fetch_spans` | `@/services/spans-api.ts` | `listSpans` |
-| `get_run_details` | `@/services/runs-api.ts` | `getRunDetails` |
-| `fetch_groups` | `@/services/groups-api.ts` | `listGroups` |
-
-**Benefits of reusing existing services:**
-- Uses the shared `apiClient` from `@/lib/api-client` with proper error handling
-- Includes correct headers (x-project-id, Content-Type, etc.)
-- Has proper TypeScript types for all DTOs (`RunDTO`, `Span`, `GenericGroupDTO`)
+**Benefits:**
+- Uses shared `apiClient` with proper error handling
+- Includes correct headers (x-project-id, etc.)
+- Has TypeScript types for all DTOs
 - Already tested and used by the UI
-- Any API changes only need to be made in one place
+
+### Parameter Naming
+
+Note: Services use different naming conventions:
+
+| Service | Convention | Example |
+|---------|------------|---------|
+| `runs-api.ts` | snake_case | `thread_ids`, `run_ids` |
+| `spans-api.ts` | camelCase | `threadIds`, `runIds` |
+| `groups-api.ts` | snake_case | `group_by`, `bucket_size` |
+
+Tool handlers convert from agent camelCase to API format automatically.
 
 ---
 
-## Event Emitter Events
+## Event Emitter Types
 
-UI tools use events to communicate with React components. **Note:** Response events use `Record<string, unknown>` for flexibility since actual data shapes vary.
+**File:** `src/utils/eventEmitter.ts`
 
 ```typescript
-// GET STATE tool request/response events
-// Using relaxed types for responses since actual data shapes vary
+// GET STATE events
 type DistriGetStateEvents = {
   vllora_get_current_view: Record<string, never>;
   vllora_current_view_response: Record<string, unknown>;
@@ -561,7 +143,7 @@ type DistriGetStateEvents = {
   vllora_collapsed_spans_response: Record<string, unknown>;
 };
 
-// CHANGE UI tool events (fire-and-forget)
+// CHANGE UI events
 type DistriChangeUiEvents = {
   vllora_select_span: { spanId: string };
   vllora_select_run: { runId: string };
@@ -572,32 +154,131 @@ type DistriChangeUiEvents = {
 
 ---
 
-## Tool Patterns
+## Event Listeners
 
-### GET STATE Pattern (Request/Response)
+### TracesPageContext (Full Implementation)
 
-```
-Tool Handler                    React Component
-     │                               │
-     ├─── emit("vllora_get_X") ─────▶│
-     │                               │
-     │◀── emit("vllora_X_response")──┤
-     │                               │
-     └─── resolve(data) ─────────────┘
+**File:** `src/contexts/TracesPageContext.tsx` (lines 704-804)
+
+The TracesPageContext has full event listeners that respond with actual UI state:
+
+```typescript
+useEffect(() => {
+  // GET STATE: Selection context
+  const handleGetSelectionContext = () => {
+    eventEmitter.emit('vllora_selection_context_response', {
+      selectedRunId,
+      selectedSpanId,
+      detailSpanId,
+    });
+  };
+
+  // GET STATE: Thread runs
+  const handleGetThreadRuns = () => {
+    const runsWithSpans = runs.map(run => ({
+      ...run,
+      spans: runMap[run.run_id] || [],
+    }));
+    eventEmitter.emit('vllora_thread_runs_response', {
+      runs: runsWithSpans,
+      groups,
+    });
+  };
+
+  // CHANGE UI: Select span
+  const handleSelectSpan = ({ spanId }) => {
+    setSelectedSpanId(spanId);
+    setDetailSpanId(spanId);
+  };
+
+  // ... more handlers
+
+  eventEmitter.on('vllora_get_selection_context', handleGetSelectionContext);
+  eventEmitter.on('vllora_get_thread_runs', handleGetThreadRuns);
+  eventEmitter.on('vllora_select_span', handleSelectSpan);
+  // ...
+}, [/* dependencies */]);
 ```
 
-### CHANGE UI Pattern (Fire-and-Forget)
+### useAgentToolListeners (Basic Fallback)
 
+**File:** `src/hooks/useAgentToolListeners.ts`
+
+Provides basic listeners for pages without TracesPageContext:
+
+```typescript
+export function useAgentToolListeners(options = {}) {
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const handleGetCurrentView = () => {
+      const page = location.pathname.split('/')[1] || 'home';
+      const projectId = searchParams.get('project_id');
+      const threadId = searchParams.get('thread_id');
+
+      emitter.emit('vllora_current_view_response', {
+        page,
+        projectId,
+        threadId,
+        theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
+      });
+    };
+
+    emitter.on('vllora_get_current_view', handleGetCurrentView);
+    return () => emitter.off('vllora_get_current_view', handleGetCurrentView);
+  }, [location, searchParams]);
+}
 ```
-Tool Handler                    React Component
-     │                               │
-     ├─── emit("vllora_action") ────▶│
-     │                               │
-     └─── resolve({success: true}) ──┘
+
+---
+
+## Tool Registration in AgentPanel
+
+**File:** `src/components/agent/AgentPanel.tsx`
+
+Tools are combined and passed to the Chat component:
+
+```typescript
+import { uiTools } from '@/lib/distri-ui-tools';
+import { dataTools } from '@/lib/distri-data-tools';
+import { useAgentToolListeners } from '@/hooks/useAgentToolListeners';
+
+export function AgentPanel({ ... }) {
+  // Listen for agent tool events
+  useAgentToolListeners();
+
+  // Combine all tools
+  const tools = useMemo(() => [...uiTools, ...dataTools], []);
+
+  return (
+    <Chat
+      threadId={selectedThreadId}
+      agent={agent}
+      externalTools={tools}  // Pass as externalTools prop
+      initialMessages={messages}
+      theme="dark"
+    />
+  );
+}
 ```
+
+---
+
+## Important Notes
+
+1. **Use `parameters` not `input_schema`** - DistriFnTool expects `parameters`
+
+2. **Data tools work anywhere** - They call the API directly
+
+3. **UI tools need context** - GET STATE tools return empty without TracesPageContext
+
+4. **CHANGE UI tools only work on Traces page** - No effect on other pages
+
+5. **Timeout handling** - GET STATE tools have 5-second timeout with fallback
 
 ## Related Documents
 
-- [Agents](./agents.md) - Agent definitions that use these tools
-- [Frontend Integration](./frontend-integration.md) - How tools connect to React
+- [Agents](./agents.md) - Agent definition that uses these tools
+- [Frontend Integration](./frontend-integration.md) - React integration details
 - [Architecture](./architecture.md) - System overview
