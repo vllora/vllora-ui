@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import { McpServerConfig } from '@/services/mcp-api';
 
 export type ModalType = 'tools' | 'settings' | 'provider-keys' | null;
@@ -22,27 +22,35 @@ export function ModalProvider({ children }: ModalProviderProps) {
   const [currentModal, setCurrentModal] = useState<ModalType>(null);
   const [toolsUsage, setToolsUsage] = useState<Map<string, McpServerConfig>>(new Map());
 
-  const openModal = (modalType: ModalType) => {
+  const openModalFn = (modalType: ModalType) => {
     setCurrentModal(modalType);
   };
 
-  const closeModal = () => {
+  const closeModalFn = () => {
     setCurrentModal(null);
   };
 
   const isOpen = currentModal !== null;
 
+  const contextValue = useMemo(
+    () => ({
+      openModal: openModalFn,
+      closeModal: closeModalFn,
+      currentModal,
+      isOpen,
+      toolsUsage,
+      setToolsUsage,
+    }),
+    [currentModal, isOpen, toolsUsage]
+  );
+
+  // Initialize global context for external access (Distri agent tools)
+  useEffect(() => {
+    setGlobalModalContext(contextValue);
+  }, [contextValue]);
+
   return (
-    <ModalContext.Provider
-      value={{
-        openModal,
-        closeModal,
-        currentModal,
-        isOpen,
-        toolsUsage,
-        setToolsUsage,
-      }}
-    >
+    <ModalContext.Provider value={contextValue}>
       {children}
     </ModalContext.Provider>
   );

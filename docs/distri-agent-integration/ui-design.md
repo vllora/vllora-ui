@@ -47,13 +47,12 @@ The Distri agent appears as a **floating chat panel** in the bottom-right corner
 
 ```
 src/components/agent/
-├── AgentPanel.tsx        # Main panel component
-├── AgentToggleButton.tsx # Floating draggable toggle button
-├── AgentWidget.tsx       # Wrapper combining panel + button + state
-├── AgentMessage.tsx      # Individual message component
-├── index.ts              # Exports
+├── AgentPanel.tsx           # Main chat panel using @distri/react Chat
+├── AgentToggleButton.tsx    # Floating draggable toggle button
+├── AgentPanelWrapper.tsx    # Manages panel state + draggable button
+├── index.ts                 # Exports
 └── hooks/
-    └── useDraggable.ts   # Reusable drag hook with edge snapping
+    └── useDraggable.ts      # Reusable drag hook with edge snapping
 ```
 
 ---
@@ -213,19 +212,21 @@ Button on RIGHT:          Button on LEFT:
 ```typescript
 // src/components/agent/hooks/useDraggable.ts
 
-interface Position { x: number; y: number }
+export interface Position { x: number; y: number }
 
-interface UseDraggableOptions {
+export interface UseDraggableOptions {
   storageKey?: string;           // localStorage key for persistence
   defaultPosition: Position;     // Initial position
   snapToEdge?: boolean;          // Snap to left/right edge on release
   edgePadding?: number;          // Padding from viewport edges (default: 16)
   dragThreshold?: number;        // Min pixels before drag starts (default: 5)
+  elementSize?: { width: number; height: number }; // Size for boundary calc
 }
 
-interface UseDraggableReturn {
+export interface UseDraggableReturn {
   position: Position;            // Current position
   isDragging: boolean;           // True while actively dragging
+  isOnLeftSide: boolean;         // True if button is on left half of screen
   handlers: {
     onMouseDown: (e: React.MouseEvent) => void;
     onTouchStart: (e: React.TouchEvent) => void;
@@ -240,59 +241,72 @@ export function useDraggable(options: UseDraggableOptions): UseDraggableReturn {
   // 4. Viewport boundary constraints
   // 5. localStorage persistence
   // 6. Window resize handling
+  // 7. Returns isOnLeftSide for panel positioning
 }
 ```
 
 ---
 
-## 7. AgentWidget Implementation
+## 7. AgentPanelWrapper Implementation
 
 ```typescript
-// src/components/agent/AgentWidget.tsx
+// src/components/agent/AgentPanelWrapper.tsx
 
-function AgentWidget() {
+import { useState, useCallback } from 'react';
+import { AgentPanel } from './AgentPanel';
+import { AgentToggleButton } from './AgentToggleButton';
+import { useDraggable } from './hooks/useDraggable';
+import { useDistriConnection } from '@/providers/DistriProvider';
+
+const getDefaultPosition = () => ({
+  x: typeof window !== 'undefined' ? window.innerWidth - 64 : 0,
+  y: typeof window !== 'undefined' ? window.innerHeight - 80 : 0,
+});
+
+export function AgentPanelWrapper() {
   const [isOpen, setIsOpen] = useState(false);
-  const {
-    sendToAgent,
-    isProcessing,
-    activities,
-    messages
-  } = useVlloraAgent();
+  const { isInitializing } = useDistriConnection();
 
-  // Draggable button with edge snapping
-  const {
-    position,
-    isDragging,
-    handlers
-  } = useDraggable({
-    storageKey: 'agent-button-position',
-    defaultPosition: { x: window.innerWidth - 64, y: window.innerHeight - 80 },
+  // Draggable button with edge snapping and persistence
+  const { position, isDragging, isOnLeftSide, handlers } = useDraggable({
+    storageKey: 'vllora:agent-button-position',
+    defaultPosition: getDefaultPosition(),
     snapToEdge: true,
-    edgePadding: 16
+    edgePadding: 16,
+    dragThreshold: 5,
+    elementSize: { width: 48, height: 48 },
   });
 
-  // Panel opens on opposite side of button
-  const panelSide = position.x < window.innerWidth / 2 ? 'right' : 'left';
+  const handleToggle = useCallback(() => {
+    if (!isDragging) {
+      setIsOpen(prev => !prev);
+    }
+  }, [isDragging]);
+
+  const handleClose = useCallback(() => {
+    setIsOpen(false);
+  }, []);
+
+  // Don't render anything if still initializing
+  if (isInitializing) {
+    return null;
+  }
 
   return (
     <>
+      <AgentToggleButton
+        isOpen={isOpen}
+        onClick={handleToggle}
+        hasUnread={false}
+        position={position}
+        isDragging={isDragging}
+        onMouseDown={handlers.onMouseDown}
+        onTouchStart={handlers.onTouchStart}
+      />
       <AgentPanel
         isOpen={isOpen}
-        side={panelSide}
-        buttonPosition={position}
-        onClose={() => setIsOpen(false)}
-        onSend={sendToAgent}
-        isProcessing={isProcessing}
-        activities={activities}
-        messages={messages}
-      />
-      <AgentToggleButton
-        position={position}
-        isOpen={isOpen}
-        isDragging={isDragging}
-        onClick={() => !isDragging && setIsOpen(!isOpen)}
-        hasActivity={isProcessing}
-        {...handlers}
+        onClose={handleClose}
+        side={isOnLeftSide ? 'right' : 'left'}
       />
     </>
   );
@@ -301,31 +315,46 @@ function AgentWidget() {
 
 ---
 
-## 8. Integration in Layout
+## 8. Integration in App.tsx
 
-Update `src/components/layout.tsx`:
+The `AgentPanelWrapper` is added at the App level, inside the `DistriProvider`:
 
 ```typescript
-import { AgentWidget } from '@/components/agent';
+// src/App.tsx
+import { DistriProvider } from '@/providers/DistriProvider';
+import { AgentPanelWrapper } from '@/components/agent';
 
-export function Layout() {
+function App() {
   return (
-    <div className="flex h-screen overflow-hidden">
-      <AppSidebar ... />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <AppHeader ... />
-        <main className="flex-1 flex overflow-hidden">
-          ...
-          <Outlet />
-        </main>
-      </div>
-
-      {/* Agent floating panel - available on all pages */}
-      <AgentWidget />
-    </div>
-  )
+    <ThemeProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={
+              <ProtectedRoute>
+                <DistriProvider>
+                  <ProjectsProvider>
+                    {/* ... other providers ... */}
+                    <Layout />
+                    <AgentPanelWrapper />
+                  </ProjectsProvider>
+                </DistriProvider>
+              </ProtectedRoute>
+            }>
+              {/* ... routes ... */}
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </ThemeProvider>
+  );
 }
 ```
+
+**Key points:**
+- `AgentPanelWrapper` is placed **inside** `DistriProvider` to access connection state
+- It's a sibling of `Layout`, rendering as a fixed overlay
+- Available on all protected pages
 
 ---
 
@@ -344,10 +373,10 @@ export function Layout() {
 ## State Management
 
 The agent panel uses:
-1. **Local state** for UI (open/closed, input text)
-2. **Position state** with localStorage persistence (draggable button)
-3. **`useVlloraAgent` hook** for agent communication
-4. **`useDraggable` hook** for drag behavior
+1. **Local state** for UI (open/closed)
+2. **Position state** with localStorage persistence (draggable button via `useDraggable`)
+3. **`useDistriConnection` hook** for connection state (loading, error)
+4. **`@distri/react` Chat component** for agent communication (handles messages, tools)
 5. **Event emitter** for UI tool execution
 
 ---

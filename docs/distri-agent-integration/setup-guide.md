@@ -8,11 +8,11 @@ This guide walks you through setting up the entire multi-agent system from scrat
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │   vLLora UI     │────▶│  Distri Server  │────▶│  vLLora Backend │
 │  (React App)    │     │  (Agent Runtime)│     │   (Rust API)    │
-│  localhost:5173 │     │  localhost:8080 │     │  localhost:9090 │
+│  localhost:5173 │     │  localhost:8081 │     │  localhost:9090 │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
       │                        │                        │
       │ @distri/react          │ Agents                 │ /traces, /runs
-      │ useChat, useAgent      │ vllora-main-agent      │ /spans, /groups
+      │ Chat, useAgent         │ vllora-main-agent      │ /spans, /groups
       └────────────────────────┴────────────────────────┘
 ```
 
@@ -43,15 +43,18 @@ pnpm add @distri/core @distri/react
 ### 2.1 Create Directory Structure
 
 ```bash
-mkdir -p agents
-mkdir -p scripts
+# Agents go directly in public/agents/ (served by Vite)
 mkdir -p public/agents
+mkdir -p src/lib
+mkdir -p src/providers
+mkdir -p src/components/agent
+mkdir -p src/components/agent/hooks
 ```
 
 ### 2.2 Create Main Agent
 
 ```bash
-cat > agents/vllora-main-agent.md << 'EOF'
+cat > public/agents/vllora-main-agent.md << 'EOF'
 ---
 name = "vllora_main_agent"
 description = "Main orchestrator for vLLora trace analysis"
@@ -82,7 +85,7 @@ EOF
 ### 2.3 Create UI Agent
 
 ```bash
-cat > agents/vllora-ui-agent.md << 'EOF'
+cat > public/agents/vllora-ui-agent.md << 'EOF'
 ---
 name = "vllora_ui_agent"
 description = "Controls vLLora UI display, navigation, and context awareness"
@@ -124,7 +127,7 @@ EOF
 ### 2.4 Create Data Agent
 
 ```bash
-cat > agents/vllora-data-agent.md << 'EOF'
+cat > public/agents/vllora-data-agent.md << 'EOF'
 ---
 name = "vllora_data_agent"
 description = "Fetches trace data from vLLora backend"
@@ -156,12 +159,6 @@ Tools reuse existing services from @/services/* for consistency.
 EOF
 ```
 
-### 2.5 Copy Agents to Public Folder
-
-```bash
-cp -r agents/ public/agents/
-```
-
 ---
 
 ## Step 3: Create Tool Handler Files
@@ -187,20 +184,23 @@ mkdir -p src/lib
 
 ---
 
-## Step 4: Create Provider and Hook
+## Step 4: Create Provider and UI Components
 
 ### 4.1 Create DistriProvider
 
 ```bash
-mkdir -p src/providers
 # Create src/providers/DistriProvider.tsx (see frontend-integration.md)
 ```
 
-### 4.2 Create useVlloraAgent Hook
+### 4.2 Create Agent UI Components
 
 ```bash
-mkdir -p src/hooks
-# Create src/hooks/useVlloraAgent.ts (see frontend-integration.md)
+# Create src/components/agent/AgentPanel.tsx (uses @distri/react Chat)
+# Create src/components/agent/AgentToggleButton.tsx
+# Create src/components/agent/AgentPanelWrapper.tsx
+# Create src/components/agent/hooks/useDraggable.ts
+# Create src/components/agent/index.ts
+# See ui-design.md for implementation details
 ```
 
 ---
@@ -216,7 +216,7 @@ Add Distri events to `src/utils/eventEmitter.ts` (see tools.md for event types).
 ```bash
 cat > .env.local << 'EOF'
 # Distri Server URL
-VITE_DISTRI_URL=http://localhost:8080
+VITE_DISTRI_URL=http://localhost:8081
 
 # vLLora Backend URL (for reference)
 VITE_API_URL=http://localhost:9090
@@ -230,28 +230,50 @@ EOF
 ```json
 {
   "scripts": {
-    "copy-agents": "cp -r agents/ public/agents/",
-    "push-agents": "distri --base-url http://localhost:8080 agents push ./agents --all",
-    "dev": "pnpm copy-agents && pnpm push-agents && vite",
-    "build": "pnpm copy-agents && pnpm push-agents && vite build"
+    "push-agents": "distri --base-url http://localhost:8081 agents push ./public/agents --all",
+    "dev": "pnpm push-agents && vite",
+    "build": "pnpm push-agents && vite build"
   }
 }
 ```
 
+> **Note:** Agents are now stored directly in `public/agents/` which is served by Vite.
+> The `push-agents` script registers them with the Distri server.
+> At runtime, `agent-sync.ts` will auto-register any missing agents from `/agents/*.md`.
+
 ---
 
-## Step 8: Wrap App with DistriProvider
+## Step 8: Wrap App with DistriProvider and Add AgentPanelWrapper
 
 Update `src/App.tsx`:
 
 ```typescript
 import { DistriProvider } from '@/providers/DistriProvider';
+import { AgentPanelWrapper } from '@/components/agent';
 
 function App() {
   return (
-    <DistriProvider>
-      {/* ... existing app content ... */}
-    </DistriProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={
+              <ProtectedRoute>
+                <DistriProvider>
+                  <ProjectsProvider>
+                    {/* ... other providers ... */}
+                    <Layout />
+                    <AgentPanelWrapper />
+                  </ProjectsProvider>
+                </DistriProvider>
+              </ProtectedRoute>
+            }>
+              {/* ... routes ... */}
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 ```
@@ -273,7 +295,7 @@ With the hybrid approach, you only need **3 terminal windows**:
 │  (cargo run)          (distri serve)       (pnpm dev)                │
 │       │                    │                    │                    │
 │       ▼                    ▼                    ▼                    │
-│  localhost:9090       localhost:8080       localhost:5173            │
+│  localhost:9090       localhost:8081       localhost:5173            │
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -296,10 +318,13 @@ cd /Users/anhthuduong/Documents/GitHub/distri
 export VLLORA_API_URL=http://localhost:9090
 export OPENAI_API_KEY=sk-...  # Required for LLM calls
 
-# Start server
-distri serve
+# Start the server (default port is 8081)
+cargo run -p distri-cli -- serve --headless
 
-# Should see: Server running on http://localhost:8080
+# Or specify host and port explicitly
+cargo run -p distri-cli -- serve --host 0.0.0.0 --port 8081 --headless
+
+# Should see: Server running on http://localhost:8081
 ```
 
 ### Terminal 3: Start vLLora UI
@@ -328,21 +353,21 @@ pnpm dev
 ### Check Distri Server Health
 
 ```bash
-curl http://localhost:8080/health
+curl http://localhost:8081/health
 # Expected: {"status":"ok"}
 ```
 
 ### List Available Agents
 
 ```bash
-curl http://localhost:8080/agents
+curl http://localhost:8081/agents
 # Expected: ["vllora_main_agent", "vllora_ui_agent", "vllora_data_agent"]
 ```
 
 ### Test Agent Call
 
 ```bash
-curl -X POST http://localhost:8080/chat \
+curl -X POST http://localhost:8081/chat \
   -H "Content-Type: application/json" \
   -d '{
     "agent_id": "vllora_main_agent",
@@ -356,14 +381,15 @@ curl -X POST http://localhost:8080/chat \
 
 | Stage | What happens | Where |
 |-------|--------------|-------|
-| `pnpm dev` starts | 1. Copies agents to `public/` | Build time |
-| | 2. Pushes agents via CLI | Build time |
-| | 3. Starts Vite dev server | Build time |
-| App loads in browser | 4. `ensureAgentsRegistered()` runs | Runtime |
-| | 5. Verifies agents exist on server | Runtime |
-| | 6. Re-registers if any missing (self-heal) | Runtime |
+| `pnpm dev` starts | 1. Pushes agents via CLI to Distri server | Build time |
+| | 2. Starts Vite dev server | Build time |
+| App loads in browser | 3. `ensureAgentsRegistered()` runs | Runtime |
+| | 4. Verifies agents exist on server | Runtime |
+| | 5. Re-registers if any missing (self-heal) | Runtime |
 
-**Graceful degradation:** If Distri server is down during `pnpm dev`, the CLI push fails but the app still starts. When the server comes back up, the runtime sync will recover the agents automatically.
+**Why agents are in `public/`:** Vite serves `public/` files statically. The runtime self-healing fetches agent `.md` files via `fetch('/agents/vllora-main-agent.md')` to re-register missing agents.
+
+**Graceful degradation:** If Distri server is down during `pnpm dev`, the CLI push fails but the app still starts. When the server comes back up, the runtime sync will recover the agents automatically from `public/agents/`.
 
 ---
 
@@ -377,18 +403,21 @@ curl -X POST http://localhost:8080/chat \
 | "CORS error" | Distri server may need CORS config for localhost:5173 |
 | "LLM error" | Ensure OPENAI_API_KEY is set for Distri server |
 | "[Agent Sync] Missing agents" | Normal during first load after DB wipe. Agents will auto-register from `public/agents/` |
-| "Agent sync failed" | Check if `public/agents/*.md` files exist. Run `pnpm copy-agents` if missing |
+| "Agent sync failed" | Check if `public/agents/*.md` files exist |
 
-### Enable CORS in Distri (if needed)
+### CORS Configuration
 
-Create `distri.toml` in the Distri project:
+The Distri server handles CORS automatically for localhost origins. If you encounter CORS issues, ensure:
+1. The vLLora UI is running on `localhost:5173`
+2. The Distri server is running on `localhost:8081`
 
-```toml
-[server]
-port = 8080
-host = "0.0.0.0"
-cors_origins = ["http://localhost:5173", "http://localhost:3000"]
+To bind to all interfaces (for network access):
+
+```bash
+cargo run -p distri-cli -- serve --host 0.0.0.0 --port 8081 --headless
 ```
+
+> **Note:** The `distri serve` command supports `--host`, `--port`, `--headless`, and `--disable-plugins` options.
 
 ---
 
@@ -398,7 +427,7 @@ cors_origins = ["http://localhost:5173", "http://localhost:3000"]
 |----------|-------|-------|
 | `VLLORA_API_URL` | Distri Server | `http://localhost:9090` |
 | `OPENAI_API_KEY` | Distri Server | Your OpenAI API key |
-| `VITE_DISTRI_URL` | vLLora UI | `http://localhost:8080` |
+| `VITE_DISTRI_URL` | vLLora UI | `http://localhost:8081` |
 | `VITE_API_URL` | vLLora UI | `http://localhost:9090` |
 
 ---

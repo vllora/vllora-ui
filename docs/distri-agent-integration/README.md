@@ -104,36 +104,30 @@ All files are in the **vLLora UI repo** - no modifications to Distri repo needed
 
 ```
 vllora/ui/
-├── agents/                          # Agent definitions (pushed to Distri)
+├── public/agents/                   # Agent definitions (served by Vite, pushed to Distri)
 │   ├── vllora-main-agent.md
 │   ├── vllora-ui-agent.md
 │   └── vllora-data-agent.md
 ├── src/
 │   ├── components/agent/            # Agent UI components
-│   │   ├── AgentPanel.tsx
-│   │   ├── AgentToggleButton.tsx
-│   │   ├── AgentWidget.tsx
-│   │   └── AgentMessage.tsx
-│   ├── hooks/
-│   │   └── useVlloraAgent.ts        # Agent communication hook
+│   │   ├── AgentPanel.tsx           # Chat panel using @distri/react Chat
+│   │   ├── AgentToggleButton.tsx    # Floating toggle button
+│   │   ├── AgentPanelWrapper.tsx    # Manages panel state + draggable button
+│   │   ├── index.ts                 # Exports
+│   │   └── hooks/
+│   │       └── useDraggable.ts      # Draggable hook with edge snapping
 │   ├── lib/
-│   │   ├── distri-ui-tools.ts       # UI tool handlers
-│   │   ├── distri-data-tools.ts     # Data tool handlers
+│   │   ├── distri-ui-tools.ts       # UI tool handlers (DistriFnTool[])
+│   │   ├── distri-data-tools.ts     # Data tool handlers (DistriFnTool[])
 │   │   └── agent-sync.ts            # Runtime agent verification
 │   ├── providers/
 │   │   └── DistriProvider.tsx       # Distri provider with auto-sync
+│   ├── contexts/
+│   │   ├── TracesPageContext.tsx    # Extended with event listeners
+│   │   └── ModalContext.tsx         # Extended with global modal functions
 │   └── utils/
 │       └── eventEmitter.ts          # Extended with Distri events
-├── public/agents/                   # Bundled agents for self-healing
-│   └── *.md
 └── docs/distri-agent-integration/   # This documentation
-    ├── README.md
-    ├── architecture.md
-    ├── agents.md
-    ├── tools.md
-    ├── frontend-integration.md
-    ├── setup-guide.md
-    └── ui-design.md
 ```
 
 ## Package Dependencies

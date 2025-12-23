@@ -10,6 +10,7 @@ import { fetchGroupSpans, fetchSingleGroup, fetchBatchGroupSpans, GenericGroupDT
 import { toast } from "sonner";
 import { tryParseJson } from "@/utils/modelUtils";
 import { getGroupKey } from "./utils";
+import { eventEmitter } from "@/utils/eventEmitter";
 
 export type TracesPageContextType = ReturnType<typeof useTracesPageContext>;
 
@@ -694,8 +695,113 @@ export function useTracesPageContext(props: { projectId: string }) {
 
 
   useDebugControl({ handleEvent, channel_name: 'debug-traces-timeline-events' });
-  // Trace expansion state
 
+  // ============================================================================
+  // Distri Agent Event Listeners
+  // Bridge agent UI tools to React state
+  // ============================================================================
+
+  useEffect(() => {
+    // GET STATE: Selection context
+    const handleGetSelectionContext = () => {
+      eventEmitter.emit('vllora_selection_context_response', {
+        selectedRunId,
+        selectedSpanId,
+        detailSpanId,
+      });
+    };
+
+    // GET STATE: Thread runs (current runs list)
+    const handleGetThreadRuns = () => {
+      // Return runs with their spans
+      const runsWithSpans = runs.map(run => ({
+        ...run,
+        spans: run.run_id ? runMap[run.run_id] || [] : [],
+      }));
+      eventEmitter.emit('vllora_thread_runs_response', {
+        runs: runsWithSpans,
+        groups: groups,
+      });
+    };
+
+    // GET STATE: Span details
+    const handleGetSpanDetails = () => {
+      eventEmitter.emit('vllora_span_details_response', {
+        span: detailSpan || null,
+      });
+    };
+
+    // GET STATE: Collapsed spans
+    const handleGetCollapsedSpans = () => {
+      eventEmitter.emit('vllora_collapsed_spans_response', {
+        collapsedSpanIds: collapsedSpans,
+      });
+    };
+
+    // CHANGE UI: Select span
+    const handleSelectSpan = ({ spanId }: { spanId: string }) => {
+      setSelectedSpanId(spanId);
+      setDetailSpanId(spanId);
+    };
+
+    // CHANGE UI: Select run
+    const handleSelectRun = ({ runId }: { runId: string }) => {
+      setSelectedRunId(runId);
+      // Open the trace view for the selected run
+      setOpenTraces([{ run_id: runId, tab: 'trace' }]);
+      // Fetch spans for this run if not already loaded
+      if (!runMap[runId]) {
+        fetchSpansByRunId(runId);
+      }
+    };
+
+    // CHANGE UI: Expand span
+    const handleExpandSpan = ({ spanId }: { spanId: string }) => {
+      setCollapsedSpans(prev => prev.filter(id => id !== spanId));
+    };
+
+    // CHANGE UI: Collapse span
+    const handleCollapseSpan = ({ spanId }: { spanId: string }) => {
+      setCollapsedSpans(prev => [...prev, spanId]);
+    };
+
+    // Subscribe to events
+    eventEmitter.on('vllora_get_selection_context', handleGetSelectionContext);
+    eventEmitter.on('vllora_get_thread_runs', handleGetThreadRuns);
+    eventEmitter.on('vllora_get_span_details', handleGetSpanDetails);
+    eventEmitter.on('vllora_get_collapsed_spans', handleGetCollapsedSpans);
+    eventEmitter.on('vllora_select_span', handleSelectSpan);
+    eventEmitter.on('vllora_select_run', handleSelectRun);
+    eventEmitter.on('vllora_expand_span', handleExpandSpan);
+    eventEmitter.on('vllora_collapse_span', handleCollapseSpan);
+
+    // Cleanup
+    return () => {
+      eventEmitter.off('vllora_get_selection_context', handleGetSelectionContext);
+      eventEmitter.off('vllora_get_thread_runs', handleGetThreadRuns);
+      eventEmitter.off('vllora_get_span_details', handleGetSpanDetails);
+      eventEmitter.off('vllora_get_collapsed_spans', handleGetCollapsedSpans);
+      eventEmitter.off('vllora_select_span', handleSelectSpan);
+      eventEmitter.off('vllora_select_run', handleSelectRun);
+      eventEmitter.off('vllora_expand_span', handleExpandSpan);
+      eventEmitter.off('vllora_collapse_span', handleCollapseSpan);
+    };
+  }, [
+    selectedRunId,
+    selectedSpanId,
+    detailSpanId,
+    runs,
+    runMap,
+    groups,
+    detailSpan,
+    collapsedSpans,
+    setSelectedSpanId,
+    setDetailSpanId,
+    setSelectedRunId,
+    setOpenTraces,
+    setCollapsedSpans,
+    fetchSpansByRunId,
+  ]);
 
   return {
     projectId,

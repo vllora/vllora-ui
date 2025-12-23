@@ -294,6 +294,41 @@ export async function executeUiTool(
 export function isUiTool(toolName: string): boolean {
   return UI_TOOL_NAMES.includes(toolName);
 }
+
+// ============================================================================
+// DistriFnTool[] format for Chat component
+// NOTE: Uses `input_schema` (not `parameters`) per DistriFnTool type
+// ============================================================================
+
+import { DistriFnTool } from '@distri/core';
+
+export const uiTools: DistriFnTool[] = [
+  {
+    name: 'get_current_view',
+    description: 'Get information about the current page/view the user is looking at',
+    type: 'function',
+    input_schema: { type: 'object', properties: {} },
+    handler: async () => JSON.stringify(await uiToolHandlers.get_current_view({})),
+  } as DistriFnTool,
+
+  {
+    name: 'select_span',
+    description: 'Select and highlight a specific span in the trace view',
+    type: 'function',
+    input_schema: {
+      type: 'object',
+      properties: {
+        spanId: { type: 'string', description: 'The span ID to select' },
+      },
+      required: ['spanId'],
+    },
+    handler: async (input: object) => JSON.stringify(
+      await uiToolHandlers.select_span(input as Record<string, unknown>)
+    ),
+  } as DistriFnTool,
+
+  // ... remaining tools follow same pattern
+];
 ```
 
 ---
@@ -447,6 +482,37 @@ export async function executeDataTool(
 export function isDataTool(toolName: string): boolean {
   return DATA_TOOL_NAMES.includes(toolName);
 }
+
+// ============================================================================
+// DistriFnTool[] format for Chat component
+// NOTE: Uses `input_schema` (not `parameters`) per DistriFnTool type
+// ============================================================================
+
+import { DistriFnTool } from '@distri/core';
+
+export const dataTools: DistriFnTool[] = [
+  {
+    name: 'fetch_runs',
+    description: 'Fetch a list of runs with optional filtering',
+    type: 'function',
+    input_schema: {
+      type: 'object',
+      properties: {
+        threadIds: { type: 'array', items: { type: 'string' } },
+        runIds: { type: 'array', items: { type: 'string' } },
+        modelName: { type: 'string' },
+        limit: { type: 'number' },
+        offset: { type: 'number' },
+        period: { type: 'string', enum: ['last_hour', 'last_day', 'last_week'] },
+      },
+    },
+    handler: async (input: object) => JSON.stringify(
+      await dataToolHandlers.fetch_runs(input as Record<string, unknown>)
+    ),
+  } as DistriFnTool,
+
+  // ... remaining tools follow same pattern
+];
 ```
 
 ---
@@ -473,59 +539,30 @@ Data tools map to existing services:
 
 ## Event Emitter Events
 
-UI tools use events to communicate with React components. Add these to `src/utils/eventEmitter.ts`:
+UI tools use events to communicate with React components. **Note:** Response events use `Record<string, unknown>` for flexibility since actual data shapes vary.
 
 ```typescript
-type Events = {
-  // ... existing events ...
-
-  // ============================================================================
-  // GET STATE events (5 tools) - Request/Response pattern
-  // ============================================================================
+// GET STATE tool request/response events
+// Using relaxed types for responses since actual data shapes vary
+type DistriGetStateEvents = {
   vllora_get_current_view: Record<string, never>;
-  vllora_current_view_response: {
-    page: string;
-    projectId: string | null;
-    threadId: string | null;
-    theme: string;
-    modal: string | null;
-  };
+  vllora_current_view_response: Record<string, unknown>;
 
   vllora_get_selection_context: Record<string, never>;
-  vllora_selection_context_response: {
-    selectedRunId: string | null;
-    selectedSpanId: string | null;
-    detailSpanId: string | null;
-    textSelection: string | null;
-  };
+  vllora_selection_context_response: Record<string, unknown>;
 
   vllora_get_thread_runs: Record<string, never>;
-  vllora_thread_runs_response: {
-    runs: Array<{
-      run_id: string;
-      status: string;
-      model?: string;
-      duration_ms?: number;
-    }>;
-  };
+  vllora_thread_runs_response: Record<string, unknown>;
 
-  vllora_get_span_details: { spanId: string };
-  vllora_span_details_response: {
-    span: {
-      span_id: string;
-      operation_name: string;
-      duration_ms: number;
-      status: string;
-      attributes: Record<string, any>;
-    } | null;
-  };
+  vllora_get_span_details: Record<string, never>;
+  vllora_span_details_response: Record<string, unknown>;
 
   vllora_get_collapsed_spans: Record<string, never>;
-  vllora_collapsed_spans_response: { collapsedSpanIds: string[] };
+  vllora_collapsed_spans_response: Record<string, unknown>;
+};
 
-  // ============================================================================
-  // CHANGE UI events (6 tools) - Fire-and-forget pattern
-  // ============================================================================
+// CHANGE UI tool events (fire-and-forget)
+type DistriChangeUiEvents = {
   vllora_select_span: { spanId: string };
   vllora_select_run: { runId: string };
   vllora_expand_span: { spanId: string };

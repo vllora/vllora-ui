@@ -221,14 +221,15 @@ When returning data, structure it clearly:
 
 ## Agent File Location
 
-These agent files should be created in the vLLora UI repo:
+These agent files are located in the vLLora UI repo under `public/` to be served as static assets:
 
 ```
 vllora/ui/
-├── agents/
-│   ├── vllora-main-agent.md
-│   ├── vllora-ui-agent.md
-│   └── vllora-data-agent.md
+├── public/
+│   └── agents/
+│       ├── vllora-main-agent.md
+│       ├── vllora-ui-agent.md
+│       └── vllora-data-agent.md
 ```
 
 ## Creating the Agent Files
@@ -237,7 +238,7 @@ vllora/ui/
 cd /Users/anhthuduong/Documents/GitHub/vllora/ui
 
 # Create agents directory
-mkdir -p agents
+mkdir -p public/agents
 
 # Create each agent file (use content from above)
 # Or use the setup script in setup-guide.md
@@ -249,10 +250,10 @@ Push all agents to the Distri server:
 
 ```bash
 # Push all agents at once
-distri --base-url http://localhost:8080 agents push ./agents --all
+distri --base-url http://localhost:8080 agents push ./public/agents --all
 
 # Or push individually
-distri --base-url http://localhost:8080 agents push ./agents/vllora-main-agent.md
+distri --base-url http://localhost:8080 agents push ./public/agents/vllora-main-agent.md
 ```
 
 Add to `package.json` for convenience:
@@ -260,7 +261,7 @@ Add to `package.json` for convenience:
 ```json
 {
   "scripts": {
-    "push-agents": "distri --base-url http://localhost:8080 agents push ./agents --all",
+    "push-agents": "distri --base-url http://localhost:8080 agents push ./public/agents --all",
     "dev": "pnpm push-agents && vite"
   }
 }
