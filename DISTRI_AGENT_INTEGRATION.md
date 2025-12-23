@@ -55,11 +55,11 @@ These packages provide:
 │              ┌───────────┴───────────┐ ┌──────────┴────────────┐           │
 │              ▼                       ▼ ▼                        ▼           │
 │  ┌─────────────────────┐    ┌─────────────────────────────────────────┐    │
-│  │   UI AGENT (11)     │    │              DATA AGENT                 │    │
+│  │   UI AGENT (11)     │    │           DATA AGENT (4)                │    │
 │  │                     │    │                                         │    │
-│  │  GET STATE (5):     │    │  • fetch_traces    • fetch_runs         │    │
-│  │  • get_current_view │    │  • fetch_spans     • get_run_details    │    │
-│  │  • get_selection_   │    │  • fetch_groups                         │    │
+│  │  GET STATE (5):     │    │  • fetch_runs      • get_run_details    │    │
+│  │  • get_current_view │    │  • fetch_spans     • fetch_groups       │    │
+│  │  • get_selection_   │    │                                         │    │
 │  │    context          │    │                                         │    │
 │  │  • get_thread_runs  │    │                                         │    │
 │  │  • get_span_details │    │                                         │    │
@@ -261,15 +261,15 @@ max_tokens = 1500
 You are the data agent for vLLora. You fetch, filter, and analyze trace data
 from the backend to support the main agent's analysis tasks.
 
-# AVAILABLE TOOLS (5 total)
+# AVAILABLE TOOLS (4 total)
 
 All tools are handled by the vLLora UI frontend, which calls the vLLora backend API.
+These tools reuse existing API services from @/services/* for consistency.
 
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
-| **fetch_traces** | Get traces with filtering | runId, threadIds, limit, offset |
 | **fetch_runs** | Get execution runs with usage info | threadIds, modelName, limit |
-| **fetch_spans** | Get individual spans | spanId, runIds, operationNames |
+| **fetch_spans** | Get individual spans | runIds, operationNames, limit |
 | **get_run_details** | Get detailed info about a run | runId (required) |
 | **fetch_groups** | Get aggregated data | groupBy (time/thread/run), limit |
 
@@ -1283,11 +1283,11 @@ max_tokens = 1500
 # ROLE
 You fetch and analyze trace data from the vLLora backend.
 All tools are handled by the frontend which calls the vLLora API.
+Tools reuse existing services from @/services/* for consistency.
 
-## Available tools (5):
-- fetch_traces: Get traces with filtering (runId, threadIds, limit)
+## Available tools (4):
 - fetch_runs: Get execution runs (threadIds, modelName, limit)
-- fetch_spans: Get individual spans (spanId, runIds, operationNames)
+- fetch_spans: Get individual spans (runIds, operationNames, limit)
 - get_run_details: Get details of a specific run (runId)
 - fetch_groups: Get aggregated data (groupBy: time/thread/run)
 
@@ -1753,7 +1753,7 @@ export function useVlloraAgent() {
         return { toolCallId: toolCall.id, result: JSON.stringify(result) };
       }
 
-      // Handle Data tools (5 tools: fetch_traces, fetch_runs, etc.)
+      // Handle Data tools (4 tools: fetch_runs, fetch_spans, get_run_details, fetch_groups)
       if (isDataTool(toolCall.name)) {
         const result = await executeDataTool(toolCall.name, input);
         return { toolCallId: toolCall.id, result: JSON.stringify(result) };
@@ -1976,7 +1976,7 @@ All files are in the **vLLora UI repo** - no modifications to Distri repo needed
 | **Agent Definitions (pushed to Distri via CLI)** ||
 | `agents/vllora-main-agent.md` | Main orchestrator agent definition |
 | `agents/vllora-ui-agent.md` | UI control agent (11 tools: 5 GET STATE + 6 CHANGE UI) |
-| `agents/vllora-data-agent.md` | Data fetching agent (5 tools) |
+| `agents/vllora-data-agent.md` | Data fetching agent (4 tools, reuses @/services/*) |
 | **Tool Handlers (Frontend)** ||
 | `src/lib/distri-ui-tools.ts` | UI tool handlers (modals, span/run selection) |
 | `src/lib/distri-data-tools.ts` | Data tool handlers (API calls to vLLora backend) |
