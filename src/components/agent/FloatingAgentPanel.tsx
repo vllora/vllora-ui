@@ -281,6 +281,12 @@ export function FloatingAgentPanel({
     width: bounds.size.width,
     height: isMinimized ? 48 : bounds.size.height,
     zIndex: 50,
+    border: '1px solid rgba(var(--theme-500), 0.3)',
+    boxShadow: `
+      0 0 20px rgba(var(--theme-500), 0.1),
+      0 0 40px rgba(var(--theme-500), 0.05),
+      0 25px 50px -12px rgba(0, 0, 0, 0.25)
+    `,
   };
 
   // Resize handles
@@ -290,7 +296,7 @@ export function FloatingAgentPanel({
     <div
       style={panelStyle}
       className={cn(
-        'bg-background border rounded-lg shadow-2xl flex flex-col overflow-hidden',
+        'bg-background rounded-lg flex flex-col overflow-hidden',
         (isPanelDragging || isResizing) && 'select-none',
         'transition-[height] duration-200',
         className
