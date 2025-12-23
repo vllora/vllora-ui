@@ -55,6 +55,8 @@
     "@codemirror/state": "^6.5.2",
     "@codemirror/view": "^6.38.8",
     "@dagrejs/dagre": "^1.1.8",
+    "@distri/core": "^0.2.4",
+    "@distri/react": "^0.2.4",
     "@heroicons/react": "^2.2.0",
     "@microsoft/fetch-event-source": "^2.0.1",
     "@monaco-editor/react": "^4.7.0",

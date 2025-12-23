@@ -101,7 +101,7 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                     handleThreadClick(thread.thread_id, thread.input_models);
                 }}
                 className={cn(
-                    "py-3 px-4 transition-all duration-200 flex flex-col gap-2 cursor-pointer rounded-md border border-[#161616] border-r-4 active:bg-sidebar-accent/40",
+                    "py-2 px-2 transition-all duration-200 flex flex-col gap-2 cursor-pointer rounded-md border border-[#161616] border-r-4 active:bg-sidebar-accent/40",
                     isSelected ? '!border-r-4 !border-r-[rgb(var(--theme-500))] bg-secondary shadow-sm' :
                         '!border-r !border-r-[#161616] bg-[#161616] hover:bg-sidebar-accent/50'
                 )}
