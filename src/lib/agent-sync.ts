@@ -16,9 +16,9 @@ const DISTRI_URL = import.meta.env.VITE_DISTRI_URL || 'http://localhost:8081';
 const DISTRI_API_URL = `${DISTRI_URL}/api/v1`;
 
 const AGENT_NAMES = [
-  'vllora_main_agent',
-  'vllora_ui_agent',
-  'vllora_data_agent',
+  'vllora_debug',
+  // 'vllora_ui_agent',
+  // 'vllora_data_agent',
 ] as const;
 
 type AgentName = (typeof AGENT_NAMES)[number];
@@ -163,5 +163,5 @@ export function getDistriUrl(): string {
  * Get the main agent name to use for chat
  */
 export function getMainAgentName(): string {
-  return 'vllora_main_agent';
+  return 'vllora_debug';
 }

@@ -20,7 +20,7 @@ export type GroupByMode = 'run' | 'time' | 'thread';
 export type Duration = 300 | 600 | 1200 | 1800 | 3600 | 7200 | 10800 | 21600 | 43200 | 86400; // 5m, 10m, 20m, 30m, 1h, 2h, 3h, 6h, 12h, 24h
 
 // Allowed query params for traces page
-const ALLOWED_QUERY_PARAMS = ['tab', 'group_by', 'duration', 'page', 'project_id', 'thread_id'] as const;
+const ALLOWED_QUERY_PARAMS = ['tab', 'group_by', 'duration', 'page', 'project_id', 'thread_id', 'detail_span_id'] as const;
 
 
 export function useTracesPageContext(props: { projectId: string }) {
@@ -877,4 +877,9 @@ export function TracesPageConsumer() {
     throw new Error('TracesPageConsumer must be used within a TracesPageProvider');
   }
   return context;
+}
+
+/** Optional consumer that returns null if not inside TracesPageProvider */
+export function useTracesPageOptional() {
+  return useContext(TracesPageContext) ?? null;
 }

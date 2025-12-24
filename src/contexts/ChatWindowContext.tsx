@@ -59,7 +59,6 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     setCollapsedSpans,
   } = useWrapperHook({ projectId, threadId });
 
-
   const { selectedThread, setThreads } = ThreadsConsumer()
 
   const [isChatProcessing, setIsChatProcessing] = useState<boolean>(false);
@@ -368,4 +367,9 @@ export function ChatWindowConsumer() {
     throw new Error('ChatWindowConsumer must be used within a ChatWindowProvider');
   }
   return context;
+}
+
+/** Optional consumer that returns null if not inside ChatWindowProvider */
+export function useChatWindowOptional() {
+  return useContext(ChatWindowContext) ?? null;
 }
