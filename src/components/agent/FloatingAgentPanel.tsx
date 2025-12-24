@@ -350,14 +350,14 @@ export function FloatingAgentPanel({
       onDragStop={handleDragStop}
       onResizeStart={() => setIsResizing(true)}
       onResizeStop={handleResizeStop}
-      style={{ zIndex: 50 }}
+      style={{ zIndex: 50, ...panelStyle }}
       className={cn(
-        'bg-background rounded-lg flex flex-col overflow-hidden',
+        'bg-background rounded-lg flex flex-col flex-1',
         (isDragging || isResizing) && 'select-none',
         className
       )}
     >
-      <div style={panelStyle} className="flex flex-col h-full rounded-lg overflow-hidden">
+      <div className="flex flex-col flex-1 h-full rounded-lg overflow-hidden">
         {/* Header (drag handle) */}
         <div
           className={cn(
@@ -392,7 +392,7 @@ export function FloatingAgentPanel({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden">
           {agentLoading ? (
             <div className="flex items-center justify-center h-full">
               <div className="flex items-center space-x-2">
