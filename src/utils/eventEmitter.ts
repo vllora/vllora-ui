@@ -35,6 +35,7 @@ type DistriChangeUiEvents = {
   vllora_select_run: { runId: string };
   vllora_expand_span: { spanId: string };
   vllora_collapse_span: { spanId: string };
+  vllora_navigate_to_experiment: { spanId: string; url: string };
   // open_modal and close_modal use global ModalContext functions directly
 };
 

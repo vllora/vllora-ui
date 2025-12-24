@@ -125,7 +125,7 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
           <TooltipProvider>
             <Tooltip delayDuration={300}>
               <TooltipTrigger asChild>
-                <h3 className="text-xs font-medium text-white hover:cursor-help min-w-[75px] max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap">
+                <h3 className="text-xs font-medium text-white hover:cursor-help min-w-[65px] max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap">
                   {spanTitle}
                 </h3>
                 

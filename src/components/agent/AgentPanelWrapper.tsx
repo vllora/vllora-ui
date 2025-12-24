@@ -8,14 +8,32 @@
  * - 'side-panel': Sliding panel triggered from sidebar
  */
 
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import { FloatingAgentPanel } from './FloatingAgentPanel';
 import { AgentPanel } from './AgentPanel';
 import { useDistriConnection } from '@/providers/DistriProvider';
 import { useAgentPanel, PANEL_MODE } from '@/contexts/AgentPanelContext';
+import { emitter } from '@/utils/eventEmitter';
 
 export function AgentPanelWrapper() {
   const { isInitializing } = useDistriConnection();
   const { isOpen, toggle, close } = useAgentPanel();
+  const navigate = useNavigate();
+
+  // Listen for navigation events from agent tools
+  useEffect(() => {
+    const handleNavigateToExperiment = ({ url }: { spanId: string; url: string }) => {
+      // Use React Router navigate to avoid full page refresh
+      // This keeps the agent panel mounted and conversation continues
+      navigate(url);
+    };
+
+    emitter.on('vllora_navigate_to_experiment', handleNavigateToExperiment);
+    return () => {
+      emitter.off('vllora_navigate_to_experiment', handleNavigateToExperiment);
+    };
+  }, [navigate]);
 
   // Don't render anything if still initializing
   if (isInitializing) {
