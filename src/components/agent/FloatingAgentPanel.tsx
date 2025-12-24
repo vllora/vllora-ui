@@ -2,26 +2,21 @@
  * FloatingAgentPanel
  *
  * A floating, draggable, and resizable chat panel for the vLLora AI assistant.
- * Includes an integrated toggle button that shares the same drag behavior.
- * Can be moved anywhere on screen and resized by dragging edges/corners.
+ * Uses react-rnd for drag and resize functionality.
+ * Includes an integrated toggle button with drag behavior.
  */
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { Rnd } from 'react-rnd';
 import { Chat, useAgent, useChatMessages } from '@distri/react';
 import { uuidv4, DistriFnTool } from '@distri/core';
-import { X, MessageCircle, Plus, Loader2, Minimize2, Maximize2 } from 'lucide-react';
+import { X, MessageCircle, Plus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { getMainAgentName } from '@/lib/agent-sync';
 import { uiTools } from '@/lib/distri-ui-tools';
 import { dataTools } from '@/lib/distri-data-tools';
 import { useAgentToolListeners } from '@/hooks/useAgentToolListeners';
-import {
-  useResizableDraggable,
-  PanelBounds,
-  ResizeDirection,
-} from './hooks/useResizableDraggable';
-import { useDraggable } from './hooks/useDraggable';
 
 // ============================================================================
 // Types
@@ -34,6 +29,18 @@ interface FloatingAgentPanelProps {
   className?: string;
 }
 
+interface Position {
+  x: number;
+  y: number;
+}
+
+interface PanelBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -41,20 +48,51 @@ interface FloatingAgentPanelProps {
 const DEFAULT_SIZE = { width: 400, height: 600 };
 const BUTTON_SIZE = 48;
 const EDGE_PADDING = 16;
+const PANEL_STORAGE_KEY = 'vllora:agent-panel-bounds';
+const BUTTON_STORAGE_KEY = 'vllora:agent-button-position';
+
+const MIN_SIZE = { width: 320, height: 400 };
+const MAX_SIZE = { width: 700, height: 850 };
 
 // Get default button position (bottom-right corner)
-const getDefaultButtonPosition = () => ({
+const getDefaultButtonPosition = (): Position => ({
   x: typeof window !== 'undefined' ? window.innerWidth - BUTTON_SIZE - EDGE_PADDING : 100,
   y: typeof window !== 'undefined' ? window.innerHeight - BUTTON_SIZE - EDGE_PADDING : 100,
 });
 
+// Load button position from localStorage
+const loadButtonPosition = (): Position => {
+  try {
+    const stored = localStorage.getItem(BUTTON_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      // Validate position is within viewport
+      const maxX = window.innerWidth - BUTTON_SIZE - EDGE_PADDING;
+      const maxY = window.innerHeight - BUTTON_SIZE - EDGE_PADDING;
+      return {
+        x: Math.max(EDGE_PADDING, Math.min(parsed.x, maxX)),
+        y: Math.max(EDGE_PADDING, Math.min(parsed.y, maxY)),
+      };
+    }
+  } catch {
+    // Ignore storage errors
+  }
+  return getDefaultButtonPosition();
+};
+
+// Save button position to localStorage
+const saveButtonPosition = (position: Position) => {
+  try {
+    localStorage.setItem(BUTTON_STORAGE_KEY, JSON.stringify(position));
+  } catch {
+    // Ignore storage errors
+  }
+};
+
 // Calculate panel bounds from button position
 const getPanelBoundsFromButton = (buttonX: number, buttonY: number): PanelBounds => {
   if (typeof window === 'undefined') {
-    return {
-      position: { x: 100, y: 100 },
-      size: DEFAULT_SIZE,
-    };
+    return { x: 100, y: 100, ...DEFAULT_SIZE };
   }
 
   // Position panel so its bottom-right corner is near the button
@@ -68,14 +106,39 @@ const getPanelBoundsFromButton = (buttonX: number, buttonY: number): PanelBounds
   x = Math.max(EDGE_PADDING, Math.min(x, maxX));
   y = Math.max(EDGE_PADDING, Math.min(y, maxY));
 
-  return {
-    position: { x, y },
-    size: DEFAULT_SIZE,
-  };
+  return { x, y, ...DEFAULT_SIZE };
 };
 
-const MIN_SIZE = { width: 320, height: 400 };
-const MAX_SIZE = { width: 700, height: 850 };
+// Load panel bounds from localStorage
+const loadPanelBounds = (buttonX: number, buttonY: number): PanelBounds => {
+  try {
+    const stored = localStorage.getItem(PANEL_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      // Validate bounds are within viewport
+      const maxX = window.innerWidth - parsed.width - EDGE_PADDING;
+      const maxY = window.innerHeight - parsed.height - EDGE_PADDING;
+      return {
+        x: Math.max(EDGE_PADDING, Math.min(parsed.x, maxX)),
+        y: Math.max(EDGE_PADDING, Math.min(parsed.y, maxY)),
+        width: Math.max(MIN_SIZE.width, Math.min(parsed.width, MAX_SIZE.width)),
+        height: Math.max(MIN_SIZE.height, Math.min(parsed.height, MAX_SIZE.height)),
+      };
+    }
+  } catch {
+    // Ignore storage errors
+  }
+  return getPanelBoundsFromButton(buttonX, buttonY);
+};
+
+// Save panel bounds to localStorage
+const savePanelBounds = (bounds: PanelBounds) => {
+  try {
+    localStorage.setItem(PANEL_STORAGE_KEY, JSON.stringify(bounds));
+  } catch {
+    // Ignore storage errors
+  }
+};
 
 // ============================================================================
 // Thread ID Management
@@ -96,52 +159,6 @@ function setThreadId(threadId: string): void {
 }
 
 // ============================================================================
-// Resize Handle Component
-// ============================================================================
-
-interface ResizeHandleProps {
-  direction: ResizeDirection;
-  onMouseDown: (e: React.MouseEvent) => void;
-  onTouchStart: (e: React.TouchEvent) => void;
-}
-
-function ResizeHandle({ direction, onMouseDown, onTouchStart }: ResizeHandleProps) {
-  const cursorMap: Record<ResizeDirection, string> = {
-    n: 'cursor-ns-resize',
-    s: 'cursor-ns-resize',
-    e: 'cursor-ew-resize',
-    w: 'cursor-ew-resize',
-    ne: 'cursor-nesw-resize',
-    nw: 'cursor-nwse-resize',
-    se: 'cursor-nwse-resize',
-    sw: 'cursor-nesw-resize',
-  };
-
-  const positionMap: Record<ResizeDirection, string> = {
-    n: 'top-0 left-2 right-2 h-2 -translate-y-1',
-    s: 'bottom-0 left-2 right-2 h-2 translate-y-1',
-    e: 'right-0 top-2 bottom-2 w-2 translate-x-1',
-    w: 'left-0 top-2 bottom-2 w-2 -translate-x-1',
-    ne: 'top-0 right-0 w-4 h-4 -translate-y-1 translate-x-1',
-    nw: 'top-0 left-0 w-4 h-4 -translate-y-1 -translate-x-1',
-    se: 'bottom-0 right-0 w-4 h-4 translate-y-1 translate-x-1',
-    sw: 'bottom-0 left-0 w-4 h-4 translate-y-1 -translate-x-1',
-  };
-
-  return (
-    <div
-      className={cn(
-        'absolute z-10',
-        cursorMap[direction],
-        positionMap[direction]
-      )}
-      onMouseDown={onMouseDown}
-      onTouchStart={onTouchStart}
-    />
-  );
-}
-
-// ============================================================================
 // Main Component
 // ============================================================================
 
@@ -154,54 +171,35 @@ export function FloatingAgentPanel({
   const agentName = getMainAgentName();
   const { agent, loading: agentLoading } = useAgent({ agentIdOrDef: agentName });
   const [selectedThreadId, setSelectedThreadId] = useState<string>(getThreadId());
-  const [isMinimized, setIsMinimized] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const [isButtonDragging, setIsButtonDragging] = useState(false);
+  const buttonDraggedRef = useRef(false);
+  const rndRef = useRef<Rnd>(null);
+  const buttonRndRef = useRef<Rnd>(null);
 
-  // Button uses useDraggable - can go anywhere freely
-  const {
-    position: buttonPosition,
-    isDragging: isButtonDragging,
-    wasDragged,
-    handlers: buttonHandlers,
-  } = useDraggable({
-    storageKey: 'vllora:agent-button-position',
-    defaultPosition: getDefaultButtonPosition(),
-    snapToEdge: false,
-    edgePadding: EDGE_PADDING,
-    dragThreshold: 5,
-    elementSize: { width: BUTTON_SIZE, height: BUTTON_SIZE },
-  });
+  // Button position state
+  const [buttonPosition, setButtonPosition] = useState<Position>(loadButtonPosition);
 
-  // Calculate panel default bounds from button position
-  const defaultBounds = useMemo(
-    () => getPanelBoundsFromButton(buttonPosition.x, buttonPosition.y),
-    [buttonPosition]
+  // Panel bounds state
+  const [bounds, setBounds] = useState<PanelBounds>(() =>
+    loadPanelBounds(buttonPosition.x, buttonPosition.y)
   );
 
-  // Panel uses useResizableDraggable - constrained by size
-  const {
-    bounds,
-    isDragging: isPanelDragging,
-    isResizing,
-    dragHandlers: panelDragHandlers,
-    getResizeHandlers,
-    resetBounds,
-  } = useResizableDraggable({
-    storageKey: 'vllora:agent-panel-bounds',
-    defaultBounds,
-    minSize: MIN_SIZE,
-    maxSize: MAX_SIZE,
-    edgePadding: EDGE_PADDING,
-  });
-
-  // Reset panel bounds when opening (position relative to button)
+  // Reset panel position when opening (position relative to button)
   const prevIsOpenRef = useRef(isOpen);
   useEffect(() => {
     if (isOpen && !prevIsOpenRef.current) {
-      // Panel just opened - reset bounds to be near button
-      resetBounds();
+      const newBounds = getPanelBoundsFromButton(buttonPosition.x, buttonPosition.y);
+      setBounds(newBounds);
+      // Update Rnd position
+      if (rndRef.current) {
+        rndRef.current.updatePosition({ x: newBounds.x, y: newBounds.y });
+        rndRef.current.updateSize({ width: newBounds.width, height: newBounds.height });
+      }
     }
     prevIsOpenRef.current = isOpen;
-  }, [isOpen, resetBounds]);
+  }, [isOpen, buttonPosition.x, buttonPosition.y]);
 
   // Listen for agent tool events
   useAgentToolListeners();
@@ -229,58 +227,96 @@ export function FloatingAgentPanel({
     setThreadId(newThreadId);
   }, []);
 
-  // Toggle minimize
-  const handleToggleMinimize = useCallback(() => {
-    setIsMinimized(prev => !prev);
-  }, []);
-
   // Handle button click - only toggle if we didn't drag
   const handleButtonClick = useCallback(() => {
-    if (!wasDragged) {
+    if (!buttonDraggedRef.current) {
       onToggle();
     }
-  }, [onToggle, wasDragged]);
+    // Reset the flag after click handling
+    buttonDraggedRef.current = false;
+  }, [onToggle]);
+
+  // Handle button drag events
+  const handleButtonDragStart = useCallback(() => {
+    setIsButtonDragging(true);
+    buttonDraggedRef.current = false;
+  }, []);
+
+  const handleButtonDragStop = useCallback((_e: any, d: { x: number; y: number }) => {
+    setIsButtonDragging(false);
+    const newPosition = { x: d.x, y: d.y };
+
+    // Check if actually moved
+    if (d.x !== buttonPosition.x || d.y !== buttonPosition.y) {
+      buttonDraggedRef.current = true;
+      setButtonPosition(newPosition);
+      saveButtonPosition(newPosition);
+    }
+  }, [buttonPosition]);
+
+  // Handle panel drag/resize events
+  const handleDragStop = useCallback((_e: any, d: { x: number; y: number }) => {
+    setIsDragging(false);
+    const newBounds = { ...bounds, x: d.x, y: d.y };
+    setBounds(newBounds);
+    savePanelBounds(newBounds);
+  }, [bounds]);
+
+  const handleResizeStop = useCallback(
+    (_e: any, _dir: any, ref: HTMLElement, _delta: any, position: { x: number; y: number }) => {
+      setIsResizing(false);
+      const newBounds = {
+        x: position.x,
+        y: position.y,
+        width: parseInt(ref.style.width, 10),
+        height: parseInt(ref.style.height, 10),
+      };
+      setBounds(newBounds);
+      savePanelBounds(newBounds);
+    },
+    []
+  );
 
   // When closed, render just the toggle button
   if (!isOpen) {
-    const buttonStyle: React.CSSProperties = {
-      position: 'fixed',
-      left: buttonPosition.x,
-      top: buttonPosition.y,
-      zIndex: 50,
-      transition: isButtonDragging ? 'none' : 'left 150ms ease-out, top 150ms ease-out',
-    };
-
     return (
-      <Button
-        variant="default"
-        size="icon"
-        onClick={handleButtonClick}
-        onMouseDown={buttonHandlers.onMouseDown}
-        onTouchStart={buttonHandlers.onTouchStart}
-        style={buttonStyle}
-        className={cn(
-          'h-12 w-12 rounded-full shadow-lg',
-          !isButtonDragging && 'hover:scale-105 active:scale-95',
-          isButtonDragging && 'scale-110 shadow-2xl cursor-grabbing',
-          !isButtonDragging && 'cursor-grab',
-          className
-        )}
-        aria-label="Open AI Assistant"
+      <Rnd
+        key={`button-${buttonPosition.x}-${buttonPosition.y}`}
+        ref={buttonRndRef}
+        default={{
+          x: buttonPosition.x,
+          y: buttonPosition.y,
+          width: BUTTON_SIZE,
+          height: BUTTON_SIZE,
+        }}
+        bounds="window"
+        enableResizing={false}
+        onDragStart={handleButtonDragStart}
+        onDragStop={handleButtonDragStop}
+        style={{ zIndex: 50 }}
+        className="rounded-full"
       >
-        <MessageCircle className="h-5 w-5" />
-      </Button>
+        <Button
+          variant="default"
+          size="icon"
+          onClick={handleButtonClick}
+          className={cn(
+            'h-12 w-12 rounded-full shadow-lg',
+            !isButtonDragging && 'hover:scale-105 active:scale-95',
+            isButtonDragging && 'scale-110 shadow-2xl cursor-grabbing',
+            !isButtonDragging && 'cursor-grab',
+            className
+          )}
+          aria-label="Open AI Assistant"
+        >
+          <MessageCircle className="h-5 w-5" />
+        </Button>
+      </Rnd>
     );
   }
 
-  // When open, render the full panel
+  // Panel styling
   const panelStyle: React.CSSProperties = {
-    position: 'fixed',
-    left: bounds.position.x,
-    top: bounds.position.y,
-    width: bounds.size.width,
-    height: isMinimized ? 48 : bounds.size.height,
-    zIndex: 50,
     border: '1px solid rgba(var(--theme-500), 0.3)',
     boxShadow: `
       0 0 20px rgba(var(--theme-500), 0.1),
@@ -289,82 +325,73 @@ export function FloatingAgentPanel({
     `,
   };
 
-  // Resize handles
-  const resizeDirections: ResizeDirection[] = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
-
   return (
-    <div
-      style={panelStyle}
+    <Rnd
+      key={`panel-${bounds.x}-${bounds.y}`}
+      ref={rndRef}
+      default={{
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+      }}
+      size={{
+        width: bounds.width,
+        height: bounds.height,
+      }}
+      minWidth={MIN_SIZE.width}
+      minHeight={MIN_SIZE.height}
+      maxWidth={MAX_SIZE.width}
+      maxHeight={MAX_SIZE.height}
+      bounds="window"
+      dragHandleClassName="drag-handle"
+      enableResizing={true}
+      onDragStart={() => setIsDragging(true)}
+      onDragStop={handleDragStop}
+      onResizeStart={() => setIsResizing(true)}
+      onResizeStop={handleResizeStop}
+      style={{ zIndex: 50 }}
       className={cn(
         'bg-background rounded-lg flex flex-col overflow-hidden',
-        (isPanelDragging || isResizing) && 'select-none',
-        'transition-[height] duration-200',
+        (isDragging || isResizing) && 'select-none',
         className
       )}
     >
-      {/* Resize handles (only when not minimized) */}
-      {!isMinimized &&
-        resizeDirections.map((dir) => {
-          const handlers = getResizeHandlers(dir);
-          return (
-            <ResizeHandle
-              key={dir}
-              direction={dir}
-              onMouseDown={handlers.onMouseDown}
-              onTouchStart={handlers.onTouchStart}
-            />
-          );
-        })}
-
-      {/* Header (drag handle) */}
-      <div
-        className={cn(
-          'flex items-center justify-between px-3 py-2 border-b bg-muted/50',
-          'cursor-move select-none shrink-0'
-        )}
-        {...panelDragHandlers}
-      >
-        <div className="flex items-center gap-2">
-          <MessageCircle className="h-4 w-4 text-primary" />
-          <span className="font-medium text-sm">vLLora Assistant</span>
+      <div style={panelStyle} className="flex flex-col h-full rounded-lg overflow-hidden">
+        {/* Header (drag handle) */}
+        <div
+          className={cn(
+            'drag-handle flex items-center justify-between px-3 py-2 border-b bg-muted/50',
+            'cursor-move select-none shrink-0'
+          )}
+        >
+          <div className="flex items-center gap-2">
+            <MessageCircle className="h-4 w-4 text-primary" />
+            <span className="font-medium text-sm">vLLora Assistant</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={handleNewChat}
+              title="New Chat"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={onClose}
+              title="Close"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={handleNewChat}
-            title="New Chat"
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={handleToggleMinimize}
-            title={isMinimized ? 'Maximize' : 'Minimize'}
-          >
-            {isMinimized ? (
-              <Maximize2 className="h-3.5 w-3.5" />
-            ) : (
-              <Minimize2 className="h-3.5 w-3.5" />
-            )}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={onClose}
-            title="Close"
-          >
-            <X className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      </div>
 
-      {/* Content (hidden when minimized) */}
-      {!isMinimized && (
+        {/* Content */}
         <div className="flex-1 overflow-hidden">
           {agentLoading ? (
             <div className="flex items-center justify-center h-full">
@@ -393,8 +420,8 @@ export function FloatingAgentPanel({
             />
           )}
         </div>
-      )}
-    </div>
+      </div>
+    </Rnd>
   );
 }
 
