@@ -442,7 +442,7 @@ export const uiTools: DistriFnTool[] = [
 
   {
     name: 'get_experiment_data',
-    description: 'Get the current experiment data including messages, model, parameters. Only works on the experiment page.',
+    description: 'Get the current experiment data including messages (system prompt, user messages), model, and parameters. Only works on the experiment page. After calling this, you MUST analyze the data and explain your findings to the user before making any changes.',
     type: 'function',
     parameters: { type: 'object', properties: {} },
     handler: async () => JSON.stringify(await uiToolHandlers.get_experiment_data({})),
@@ -547,14 +547,14 @@ export const uiTools: DistriFnTool[] = [
 
   {
     name: 'apply_experiment_data',
-    description: 'Apply changes to the experiment data (model, messages, parameters). Only works on the experiment page. Pass partial data to update specific fields.',
+    description: 'Apply changes to the experiment data. IMPORTANT: Before using this tool, you MUST first: 1) call get_experiment_data, 2) analyze the messages (especially system prompt) and parameters, 3) respond to the user with your analysis and present optimization options, 4) wait for user to choose. Never call this immediately after get_experiment_data without explaining your analysis first.',
     type: 'function',
     parameters: {
       type: 'object',
       properties: {
         data: {
           type: 'object',
-          description: 'Partial experiment data to apply. Can include: model (string), messages (array), temperature (number), max_tokens (number), etc.',
+          description: 'Partial experiment data to apply. Can include: model (string), messages (array of {role, content}), temperature (number), max_tokens (number), etc.',
         },
       },
       required: ['data'],
