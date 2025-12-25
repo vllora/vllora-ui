@@ -15,10 +15,15 @@ const DISTRI_URL = import.meta.env.VITE_DISTRI_URL || 'http://localhost:8081';
 // API URL with /api/v1 prefix for agent operations
 const DISTRI_API_URL = `${DISTRI_URL}/api/v1`;
 
+// ============================================================================
+// Multi-Agent Architecture
+// The orchestrator routes requests to specialized sub-agents
+// ============================================================================
 const AGENT_NAMES = [
-  'vllora_debug',
-  // 'vllora_ui_agent',
-  // 'vllora_data_agent',
+  'vllora_orchestrator',    // Main entry point - routes to sub-agents
+  'vllora_ui_agent',        // UI interactions, navigation, selection
+  'vllora_data_agent',      // Data fetching and analysis
+  'vllora_experiment_agent', // Experiment page optimization
 ] as const;
 
 type AgentName = (typeof AGENT_NAMES)[number];
@@ -163,5 +168,5 @@ export function getDistriUrl(): string {
  * Get the main agent name to use for chat
  */
 export function getMainAgentName(): string {
-  return 'vllora_debug';
+  return 'vllora_orchestrator';
 }

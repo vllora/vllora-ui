@@ -577,4 +577,25 @@ export const uiTools: DistriFnTool[] = [
     parameters: { type: 'object', properties: {} },
     handler: async () => JSON.stringify(await uiToolHandlers.evaluate_experiment_results({})),
   } as DistriFnTool,
+
+  // ============================================================================
+  // TEST TOOL - For verifying sub-agent external tools propagation
+  // Remove after Phase 0 testing is complete
+  // ============================================================================
+  {
+    name: 'test_tool',
+    description: 'Test tool for verifying sub-agent external tools. Returns SUCCESS with timestamp.',
+    type: 'function',
+    parameters: { type: 'object', properties: {} },
+    handler: async () => {
+      const result = {
+        status: 'SUCCESS',
+        message: 'External tool executed successfully in sub-agent!',
+        timestamp: new Date().toISOString(),
+        source: 'test_tool in distri-ui-tools.ts',
+      };
+      console.log('[TEST_TOOL] Executed:', result);
+      return JSON.stringify(result);
+    },
+  } as DistriFnTool,
 ];

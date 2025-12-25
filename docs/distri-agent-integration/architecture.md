@@ -1,217 +1,133 @@
-# Agent Architecture
+# Multi-Agent Architecture
 
-This document describes the architecture of the Distri agent integration for vLLora.
-
-## System Architecture
+## System Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                              vLLora UI (React)                              │
 │                                                                             │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌─────────────────┐ │
-│  │  AgentPanel  │  │  TracesPage  │  │  UI Tools    │  │   Data Tools    │ │
-│  │  (Chat UI)   │──│  Context     │──│  (11 tools)  │  │   (4 tools)     │ │
-│  └──────────────┘  └──────────────┘  └──────────────┘  └─────────────────┘ │
-│         │                 │                 │                   │          │
-│         │                 │                 └───────────────────┘          │
-│         │                 │                          │                     │
-│         │                 │              ┌───────────┴───────────┐         │
-│         │                 │              │    Event Emitter      │         │
-│         │                 │              │ (request/response)    │         │
-│         │                 │              └───────────────────────┘         │
-│         │                 │                                                │
+│  ┌──────────────┐  ┌─────────────────────────────────────────────────────┐ │
+│  │  AgentPanel  │  │              Tool Handlers                          │ │
+│  │  (Chat UI)   │  │  UI Tools (17)            Data Tools (4)            │ │
+│  └──────────────┘  └─────────────────────────────────────────────────────┘ │
+│         │                          │                                        │
+│         │              ┌───────────┴───────────┐                           │
+│         │              │    Event Emitter      │                           │
+│         │              └───────────────────────┘                           │
+│         │                                                                   │
 │  ┌─────────────────────────────────────────────────────────────────────────┐│
 │  │                    DistriProvider (@distri/react)                       ││
-│  │  - Auto-registers agent on mount (agent-sync.ts)                        ││
-│  │  - Provides useAgent, useChatMessages hooks                             ││
+│  │  - externalTools prop passes all tools                                  ││
+│  │  - Tools propagate to sub-agents automatically                          ││
 │  └─────────────────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────────────────┘
                                         │
-                                        ▼ (A2A Protocol / REST API)
+                                        ▼ (A2A Protocol)
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                            Distri Server                                    │
 │                                                                             │
 │  ┌───────────────────────────────────────────────────────────────────────┐ │
-│  │                      vllora_main_agent                                 │ │
+│  │                      vllora_orchestrator                               │ │
+│  │  sub_agents = [ui_agent, data_agent, experiment_agent]                │ │
 │  │                                                                        │ │
-│  │  external = ["*"]  →  All 15 tools handled by frontend                │ │
-│  │                                                                        │ │
-│  │  ┌─────────────────────────────────────────────────────────────────┐  │ │
-│  │  │  UI Tools (11)              │  Data Tools (4)                   │  │ │
-│  │  │  ─────────────              │  ──────────────                   │  │ │
-│  │  │  get_current_view           │  fetch_runs                       │  │ │
-│  │  │  get_selection_context      │  fetch_spans                      │  │ │
-│  │  │  get_thread_runs            │  get_run_details                  │  │ │
-│  │  │  get_span_details           │  fetch_groups                     │  │ │
-│  │  │  get_collapsed_spans        │                                   │  │ │
-│  │  │  open_modal, close_modal    │                                   │  │ │
-│  │  │  select_span, select_run    │                                   │  │ │
-│  │  │  expand_span, collapse_span │                                   │  │ │
-│  │  └─────────────────────────────────────────────────────────────────┘  │ │
-│  └───────────────────────────────────────────────────────────────────────┘ │
+│  │  Auto-generated tools:                                                │ │
+│  │  - call_vllora_ui_agent                                               │ │
+│  │  - call_vllora_data_agent                                             │ │
+│  │  - call_vllora_experiment_agent                                       │ │
+│  └────────────────────────────────┬──────────────────────────────────────┘ │
+│                                   │                                         │
+│         ┌─────────────────────────┼─────────────────────────┐              │
+│         ▼                         ▼                         ▼              │
+│  ┌──────────────┐          ┌──────────────┐          ┌──────────────┐     │
+│  │vllora_ui_agent│         │vllora_data   │         │vllora_exp    │     │
+│  │              │          │  _agent      │          │  _agent      │     │
+│  │ 12 tools     │          │ 4 tools      │          │ 5 tools      │     │
+│  │ external=*   │          │ external=*   │          │ external=*   │     │
+│  └──────────────┘          └──────────────┘          └──────────────┘     │
 └─────────────────────────────────────────────────────────────────────────────┘
                                         │
-                                        ▼ (Data Tools call API directly)
+                                        ▼ (Data Tools)
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           vLLora Backend (Rust)                             │
-│                                                                             │
-│  /api/runs     - List runs, get run details                                │
-│  /api/spans    - List spans                                                │
-│  /api/groups   - Aggregated statistics                                     │
+│  /api/runs, /api/spans, /api/groups                                        │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## How External Tools Work
+## Agent Responsibilities
 
-The agent uses `external = ["*"]`, meaning all tool calls are routed back to the frontend:
+| Agent | Purpose | Tools |
+|-------|---------|-------|
+| **vllora_orchestrator** | Routes requests to sub-agents | `call_vllora_*` (auto-generated) |
+| **vllora_ui_agent** | UI: select, expand, navigate, modals | 12 external |
+| **vllora_data_agent** | Data: runs, spans, metrics | 4 external |
+| **vllora_experiment_agent** | Experiment page optimization | 5 external |
+
+## External Tool Flow
+
+All tools execute in the frontend:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                     External Tool Execution Flow                             │
-│                                                                              │
-│  vLLora UI                    Distri Server                                  │
-│  ─────────                    ─────────────                                  │
-│                                                                              │
-│  1. User sends message ───────▶ 2. Agent processes with LLM                 │
-│                                    (gpt-4.1)                                 │
-│                                │                                             │
-│                                ▼                                             │
-│                               3. Agent decides to call tool                  │
-│                                  e.g., fetch_runs({threadIds: ["abc"]})     │
-│                                │                                             │
-│  4. Frontend receives ◀─────── │  (external tool returned via SSE)          │
-│     tool call                  │                                             │
-│     │                          │                                             │
-│     ▼                          │                                             │
-│  5. Execute handler            │                                             │
-│     - UI tools: emit event     │                                             │
-│     - Data tools: call API     │                                             │
-│     │                          │                                             │
-│     ▼                          │                                             │
-│  6. Send result back ──────────▶ 7. Agent continues with tool result        │
-│                                │                                             │
-│                                ▼                                             │
-│                               8. Agent generates response                    │
-│                                │                                             │
-│  9. Display response ◀─────────                                              │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+User Message
+     │
+     ▼
+Orchestrator (Distri)
+     │
+     ├─── call_vllora_ui_agent("select span X")
+     │         │
+     │         ▼
+     │    UI Agent calls select_span({spanId: "X"})
+     │         │
+     │         ▼ (external tool via SSE)
+     │    Frontend emits: vllora_select_span
+     │         │
+     │         ▼
+     │    TracesPageContext updates selection
+     │         │
+     │         ▼
+     │    Returns {success: true}
+     │
+     ▼
+Orchestrator: "Selected span X"
 ```
 
-## Data Flow: UI Tools vs Data Tools
+## UI Tools vs Data Tools
 
 ### UI Tools (Event-Based)
 
 ```
-AgentPanel                 Tool Handler              TracesPageContext
-    │                          │                           │
-    │  externalTools prop      │                           │
-    │─────────────────────────▶│                           │
-    │                          │                           │
-    │                          │  emit("vllora_get_X")     │
-    │                          │──────────────────────────▶│
-    │                          │                           │
-    │                          │  emit("vllora_X_response")│
-    │                          │◀──────────────────────────│
-    │                          │                           │
-    │  result via SSE          │                           │
-    │◀─────────────────────────│                           │
+Tool Handler              TracesPageContext
+     │                           │
+     │  emit("vllora_get_X")     │
+     │──────────────────────────▶│
+     │                           │
+     │  emit("vllora_X_response")│
+     │◀──────────────────────────│
 ```
 
 ### Data Tools (API-Based)
 
 ```
-AgentPanel                 Tool Handler              vLLora Backend
-    │                          │                           │
-    │  externalTools prop      │                           │
-    │─────────────────────────▶│                           │
-    │                          │                           │
-    │                          │  listRuns({...})          │
-    │                          │──────────────────────────▶│
-    │                          │                           │
-    │                          │  { data: [...] }          │
-    │                          │◀──────────────────────────│
-    │                          │                           │
-    │  result via SSE          │                           │
-    │◀─────────────────────────│                           │
+Tool Handler              vLLora Backend
+     │                           │
+     │  listRuns({...})          │
+     │──────────────────────────▶│
+     │                           │
+     │  { data: [...] }          │
+     │◀──────────────────────────│
 ```
 
-## Why Single Agent?
+## Why Multi-Agent?
 
-We use a single agent instead of multiple sub-agents because:
-
-### 1. External Tools Don't Forward Through Sub-Agents
-
-When using sub-agents with `call_agent`:
-```
-Main Agent (builtin = ["call_agent"])
-    │
-    └──▶ call_agent("ui_agent", "select span abc")
-              │
-              └──▶ UI Agent (external = ["*"])
-                        │
-                        └──▶ select_span({spanId: "abc"})
-                                    ↑
-                                    │
-                          This tool call is NOT visible
-                          to the frontend! It's internal
-                          to the Distri server.
-```
-
-The external tool calls from sub-agents are not routed back to the frontend.
-
-### 2. Single Agent Benefits
-
-- **Simpler** - No orchestration logic needed
-- **Faster** - No sub-agent coordination overhead
-- **Better context** - Single agent sees full conversation
-- **Easier debugging** - One agent to monitor
+1. **Focused prompts** - Each sub-agent has fewer tools (4-12 vs 21)
+2. **Better tool selection** - LLM chooses from smaller set
+3. **Separation of concerns** - Clear responsibilities
+4. **Context-based routing** - Experiment agent only on `/experiment` page
 
 ## Service Stack
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │   vLLora UI     │────▶│  Distri Server  │────▶│  vLLora Backend │
-│  (React App)    │     │  (Agent Runtime)│     │   (Rust API)    │
-│  localhost:5173 │     │  localhost:8080 │     │  localhost:9090 │
+│  localhost:5173 │     │  localhost:8081 │     │  localhost:9090 │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
-      │                        │                        │
-      │ @distri/react          │ Agent                  │ /api/runs
-      │ useAgent, Chat         │ vllora_main_agent      │ /api/spans
-      │                        │                        │ /api/groups
-      └────────────────────────┴────────────────────────┘
 ```
-
-## Workflow Example: Checking Errors
-
-```
-User: "Can you check for errors in this thread?"
-
-1. Agent calls get_current_view
-   └──▶ Frontend emits event
-   └──▶ Hook responds: {page: "chat", threadId: "abc123", projectId: "default"}
-
-2. Agent calls fetch_runs({threadIds: ["abc123"]})
-   └──▶ Frontend calls listRuns API
-   └──▶ Backend returns: [{run_id: "run1", status: "error", ...}]
-
-3. Agent analyzes the data
-   └──▶ Finds run with status="error"
-
-4. Agent calls get_run_details({runId: "run1"})
-   └──▶ Frontend calls getRunDetails API
-   └──▶ Backend returns: {run: {...}, spans: [...]}
-
-5. Agent identifies the failed span
-   └──▶ Sees span with error message
-
-6. Agent responds:
-   "Found 1 failed run. Run run1 failed with error 'Rate limit exceeded'
-    in the OpenAI API call span. This typically happens when..."
-```
-
-## Related Documents
-
-- [Agents](./agents.md) - Agent definition and prompt
-- [Tools](./tools.md) - Tool handler implementations
-- [Frontend Integration](./frontend-integration.md) - React integration details

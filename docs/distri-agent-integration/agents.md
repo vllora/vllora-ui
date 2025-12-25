@@ -1,143 +1,123 @@
-# Agent Definition
-
-This document describes the vLLora main agent configuration and prompt.
+# Agent Definitions
 
 ## Overview
 
-vLLora uses a single agent that handles all trace analysis tasks directly:
+vLLora uses a multi-agent architecture with one orchestrator and three specialized sub-agents:
 
-| Agent | Role | Tools | Model |
-|-------|------|-------|-------|
-| **vllora_main_agent** | Trace analysis assistant | 15 external | gpt-4.1 |
+| Agent | File | Purpose |
+|-------|------|---------|
+| **vllora_orchestrator** | `vllora-orchestrator.md` | Routes to sub-agents |
+| **vllora_ui_agent** | `vllora-ui-agent.md` | UI interactions |
+| **vllora_data_agent** | `vllora-data-agent.md` | Data analysis |
+| **vllora_experiment_agent** | `vllora-experiment-agent.md` | Experiment optimization |
 
-## Agent Configuration
+## 1. vllora_orchestrator
 
-**File:** `public/agents/vllora-main-agent.md`
+**Location:** `public/agents/vllora-orchestrator.md`
 
 ```toml
----
-name = "vllora_main_agent"
-description = "AI assistant for vLLora - analyzes traces, debugs errors, and helps optimize LLM applications"
-max_iterations = 20
-tool_format = "provider"
+name = "vllora_orchestrator"
+sub_agents = ["vllora_ui_agent", "vllora_data_agent", "vllora_experiment_agent"]
+max_iterations = 15
+```
 
+**Auto-generated tools:**
+- `call_vllora_ui_agent` - Delegate UI tasks
+- `call_vllora_data_agent` - Delegate data queries
+- `call_vllora_experiment_agent` - Delegate optimization
+
+**Routing logic:**
+- UI actions → `call_vllora_ui_agent`
+- Data queries → `call_vllora_data_agent`
+- Optimization (on `/experiment` page) → `call_vllora_experiment_agent`
+
+## 2. vllora_ui_agent
+
+**Location:** `public/agents/vllora-ui-agent.md`
+
+```toml
+name = "vllora_ui_agent"
+max_iterations = 8
 [tools]
 external = ["*"]
-
-[model_settings]
-model = "gpt-4.1"
-temperature = 0.3
-max_tokens = 4000
----
 ```
 
-### Configuration Explained
+**Tools (12):**
 
-| Field | Value | Purpose |
-|-------|-------|---------|
-| `name` | `vllora_main_agent` | Unique agent identifier |
-| `max_iterations` | `20` | Max tool calls per conversation turn |
-| `tool_format` | `provider` | Use provider's native tool format |
-| `external = ["*"]` | All tools | All tools handled by frontend |
-| `model` | `gpt-4.1` | Primary LLM model |
-| `temperature` | `0.3` | Lower for more consistent responses |
-| `max_tokens` | `4000` | Allows detailed analysis responses |
+| Category | Tools |
+|----------|-------|
+| Selection | `select_span`, `select_run` |
+| Visibility | `expand_span`, `collapse_span`, `get_collapsed_spans` |
+| Modals | `open_modal`, `close_modal` |
+| Navigation | `navigate_to_experiment`, `is_valid_for_optimize` |
+| State | `get_selection_context`, `get_thread_runs`, `get_span_details` |
 
-## Available Tools (15 total)
+## 3. vllora_data_agent
 
-### UI Tools (11) - Read/Control Interface
+**Location:** `public/agents/vllora-data-agent.md`
 
-| Tool | Purpose | Works On |
-|------|---------|----------|
-| `get_current_view` | Get page, projectId, threadId, theme | Any page |
-| `get_selection_context` | Get selected run/span IDs | Any page |
-| `get_thread_runs` | Get runs visible in UI | Traces page only |
-| `get_span_details` | Get selected span info | Traces page only |
-| `get_collapsed_spans` | Get collapsed span IDs | Traces page only |
-| `open_modal` | Open tools/settings/provider-keys modal | Any page |
-| `close_modal` | Close current modal | Any page |
-| `select_span` | Highlight a span | Traces page only |
-| `select_run` | Select a run | Traces page only |
-| `expand_span` | Expand collapsed span | Traces page only |
-| `collapse_span` | Collapse a span | Traces page only |
-
-### Data Tools (4) - Query Backend API
-
-| Tool | Purpose | Parameters |
-|------|---------|------------|
-| `fetch_runs` | Get runs from API | `threadIds`, `runIds`, `modelName`, `period`, `limit` |
-| `fetch_spans` | Get spans from API | `threadIds`, `runIds`, `operationNames`, `limit` |
-| `get_run_details` | Get full run + spans | `runId` (required) |
-| `fetch_groups` | Get aggregated stats | `groupBy`, `bucketSize`, `limit` |
-
-## Agent Prompt Structure
-
-The agent prompt includes:
-
-1. **Role** - Explains the agent's purpose as a trace analysis assistant
-2. **Platform Context** - Describes vLLora concepts (runs, spans, threads, projects)
-3. **Tool Documentation** - Tables explaining all 15 tools
-4. **Workflow Patterns** - Standard analysis flow and common patterns
-5. **Response Guidelines** - How to format responses with examples
-6. **Important Notes** - Key gotchas and best practices
-
-## Key Workflow Patterns
-
-### Standard Analysis Flow
-```
-1. get_current_view → Get projectId, threadId, current page
-2. fetch_runs/fetch_spans → Query actual data from API
-3. Analyze the data for patterns, errors, performance issues
-4. Optionally use UI tools to highlight findings
-5. Respond with clear, actionable insights
+```toml
+name = "vllora_data_agent"
+max_iterations = 10
+[tools]
+external = ["*"]
 ```
 
-### Check Errors for Thread
-```
-1. get_current_view → get threadId
-2. fetch_runs with threadIds=[threadId] → get all runs
-3. Look for runs with status="error"
-4. For failed runs, use get_run_details to see spans
-5. Report findings with possible causes
+**Tools (4):**
+
+| Tool | Purpose |
+|------|---------|
+| `fetch_runs` | Get runs with filters |
+| `fetch_spans` | Get spans with filters |
+| `get_run_details` | Get run + all spans |
+| `fetch_groups` | Get aggregated metrics |
+
+**Analysis patterns:**
+- Error analysis: `fetch_runs` → `get_run_details` → report
+- Performance: `fetch_runs` → identify slow → `get_run_details` → bottlenecks
+- Cost: `fetch_groups` → breakdown by model
+
+## 4. vllora_experiment_agent
+
+**Location:** `public/agents/vllora-experiment-agent.md`
+
+```toml
+name = "vllora_experiment_agent"
+max_iterations = 8
+[tools]
+external = ["*"]
 ```
 
-### Performance Analysis
+**Tools (5):**
+
+| Tool | Purpose |
+|------|---------|
+| `is_valid_for_optimize` | Check if span can be optimized |
+| `get_experiment_data` | Get current state |
+| `apply_experiment_data` | Make changes (one at a time) |
+| `run_experiment` | Execute (60s timeout) |
+| `evaluate_experiment_results` | Compare original vs new |
+
+**Workflow:**
 ```
-1. get_current_view → get context
-2. fetch_runs → get runs with duration info
-3. For slow runs, get_run_details → see span breakdown
-4. Identify slowest spans (usually LLM calls)
-5. Report bottlenecks with % of total time
+1. get_experiment_data     → See current state
+2. apply_experiment_data   → ONE change
+3. run_experiment          → Execute
+4. evaluate_experiment_results → Compare metrics
+5. Report with specific numbers
 ```
 
 ## Agent Registration
 
-The agent is automatically registered when the app loads via `agent-sync.ts`:
+Agents auto-register on app load via `agent-sync.ts`:
 
 ```typescript
-// src/lib/agent-sync.ts
-export async function ensureAgentsRegistered(): Promise<void> {
-  // Fetches agent definition from /agents/vllora-main-agent.md
-  // Registers with Distri server at /api/v1/agents
-}
+const AGENT_NAMES = [
+  'vllora_orchestrator',
+  'vllora_ui_agent',
+  'vllora_data_agent',
+  'vllora_experiment_agent',
+] as const;
 ```
 
-This is called from `DistriProvider.tsx` on mount.
-
-## Why Single Agent?
-
-We use one agent instead of sub-agents because:
-
-1. **External tools don't forward through sub-agents** - When the main agent calls a sub-agent via `call_agent`, the sub-agent's external tools aren't visible to the frontend. The tool calls would fail.
-
-2. **Simpler implementation** - No orchestration logic needed
-
-3. **Better context** - Single agent sees full conversation history
-
-4. **Faster responses** - No sub-agent coordination overhead
-
-## Related Documents
-
-- [Tools](./tools.md) - Detailed tool implementations
-- [Frontend Integration](./frontend-integration.md) - How tools connect to React
-- [Architecture](./architecture.md) - System overview
+The main agent is `vllora_orchestrator` - all user messages go there first.
