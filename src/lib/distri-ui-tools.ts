@@ -18,14 +18,16 @@ type ToolHandler = (params: Record<string, unknown>) => Promise<unknown>;
 
 // UI tool names
 export const UI_TOOL_NAMES = [
-  // GET STATE (6)
+  // GET STATE (8)
   'get_current_view',
   'get_selection_context',
   'get_thread_runs',
   'get_span_details',
   'get_collapsed_spans',
   'is_valid_for_optimize',
-  // CHANGE UI (7)
+  'get_experiment_data',
+  'evaluate_experiment_results',
+  // CHANGE UI (9)
   'open_modal',
   'close_modal',
   'select_span',
@@ -33,6 +35,8 @@ export const UI_TOOL_NAMES = [
   'expand_span',
   'collapse_span',
   'navigate_to_experiment',
+  'apply_experiment_data',
+  'run_experiment',
 ] as const;
 
 export type UiToolName = (typeof UI_TOOL_NAMES)[number];
@@ -163,6 +167,47 @@ const getStateHandlers: Record<string, ToolHandler> = {
       };
     }
   },
+
+  // Get current experiment data (experiment page only)
+  get_experiment_data: async () => {
+    const handler = createGetStateHandler<{
+      experimentData: Record<string, unknown>;
+      originalExperimentData: Record<string, unknown> | null;
+      result: unknown;
+      running: boolean;
+    }>('vllora_get_experiment_data', 'vllora_experiment_data_response');
+    return handler();
+  },
+
+  // Evaluate experiment results - compare original vs new (experiment page only)
+  evaluate_experiment_results: async () => {
+    const handler = createGetStateHandler<{
+      hasResults: boolean;
+      original: {
+        output: unknown;
+        model: string | null;
+        cost: number | null;
+        total_tokens: number | null;
+        input_tokens: number | null;
+        output_tokens: number | null;
+      };
+      new: {
+        output: unknown;
+        model: string | null;
+        cost: number | null;
+        total_tokens: number | null;
+        input_tokens: number | null;
+        output_tokens: number | null;
+      };
+      comparison: {
+        cost_change_percent: number | null;
+        total_tokens_change_percent: number | null;
+        input_tokens_change_percent: number | null;
+        output_tokens_change_percent: number | null;
+      };
+    }>('vllora_evaluate_experiment_results', 'vllora_evaluate_experiment_results_response');
+    return handler();
+  },
 };
 
 // ============================================================================
@@ -249,8 +294,50 @@ const changeUiHandlers: Record<string, ToolHandler> = {
     return {
       success: true,
       url,
-      message: `Navigating to experiment page. The agent will continue on the experiment page.`,
+      navigated: true,
+      message: `Navigation complete. The user is now on the experiment page. DO NOT call navigate_to_experiment again. Proceed to provide your optimization suggestions.`,
     };
+  },
+
+  // Apply changes to experiment data (experiment page only)
+  apply_experiment_data: async ({ data }) => {
+    if (!data) {
+      return { success: false, error: 'data is required' };
+    }
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        emitter.off('vllora_apply_experiment_data_response', handler);
+        reject(new Error('Timeout waiting for apply_experiment_data response. Make sure you are on the experiment page.'));
+      }, 5000);
+
+      const handler = (response: { success: boolean; error?: string }) => {
+        clearTimeout(timeout);
+        emitter.off('vllora_apply_experiment_data_response', handler);
+        resolve(response);
+      };
+
+      emitter.on('vllora_apply_experiment_data_response', handler);
+      emitter.emit('vllora_apply_experiment_data', { data: data as Record<string, unknown> });
+    });
+  },
+
+  // Run the experiment (experiment page only)
+  run_experiment: async () => {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        emitter.off('vllora_run_experiment_response', handler);
+        reject(new Error('Timeout waiting for run_experiment response. Make sure you are on the experiment page.'));
+      }, 60000); // 60s timeout for experiment run
+
+      const handler = (response: { success: boolean; result?: unknown; error?: string }) => {
+        clearTimeout(timeout);
+        emitter.off('vllora_run_experiment_response', handler);
+        resolve(response);
+      };
+
+      emitter.on('vllora_run_experiment_response', handler);
+      emitter.emit('vllora_run_experiment', {});
+    });
   },
 };
 
@@ -353,6 +440,14 @@ export const uiTools: DistriFnTool[] = [
     handler: async (input: object) => JSON.stringify(await uiToolHandlers.is_valid_for_optimize(input as Record<string, unknown>)),
   } as DistriFnTool,
 
+  {
+    name: 'get_experiment_data',
+    description: 'Get the current experiment data including messages, model, parameters. Only works on the experiment page.',
+    type: 'function',
+    parameters: { type: 'object', properties: {} },
+    handler: async () => JSON.stringify(await uiToolHandlers.get_experiment_data({})),
+  } as DistriFnTool,
+
   // CHANGE UI TOOLS
   {
     name: 'open_modal',
@@ -448,5 +543,38 @@ export const uiTools: DistriFnTool[] = [
       required: ['spanId'],
     },
     handler: async (input: object) => JSON.stringify(await uiToolHandlers.navigate_to_experiment(input as Record<string, unknown>)),
+  } as DistriFnTool,
+
+  {
+    name: 'apply_experiment_data',
+    description: 'Apply changes to the experiment data (model, messages, parameters). Only works on the experiment page. Pass partial data to update specific fields.',
+    type: 'function',
+    parameters: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'object',
+          description: 'Partial experiment data to apply. Can include: model (string), messages (array), temperature (number), max_tokens (number), etc.',
+        },
+      },
+      required: ['data'],
+    },
+    handler: async (input: object) => JSON.stringify(await uiToolHandlers.apply_experiment_data(input as Record<string, unknown>)),
+  } as DistriFnTool,
+
+  {
+    name: 'run_experiment',
+    description: 'Run the experiment with current data. Only works on the experiment page. Returns the result after completion.',
+    type: 'function',
+    parameters: { type: 'object', properties: {} },
+    handler: async () => JSON.stringify(await uiToolHandlers.run_experiment({})),
+  } as DistriFnTool,
+
+  {
+    name: 'evaluate_experiment_results',
+    description: 'Compare original vs new experiment results. Returns both outputs side-by-side with calculated metrics (cost, tokens) and percentage changes. Use after run_experiment to analyze improvements.',
+    type: 'function',
+    parameters: { type: 'object', properties: {} },
+    handler: async () => JSON.stringify(await uiToolHandlers.evaluate_experiment_results({})),
   } as DistriFnTool,
 ];

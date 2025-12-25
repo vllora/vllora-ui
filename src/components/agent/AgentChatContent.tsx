@@ -91,7 +91,7 @@ export function AgentChatContent({
   const handleBeforeSendMessage = useCallback(
     async (message: DistriMessage): Promise<DistriMessage> => {
       const currentParams = new URLSearchParams(window.location.search);
-      const detailSpanId = currentParams.get('detail_span_id');
+      const detailSpanId = currentParams.get('detail_span_id') || currentParams.get('span_id');
 
       const ctx = getViewContextFromURL(
         window.location.pathname,

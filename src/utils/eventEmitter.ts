@@ -27,6 +27,14 @@ type DistriGetStateEvents = {
   // get_collapsed_spans
   vllora_get_collapsed_spans: Record<string, never>;
   vllora_collapsed_spans_response: Record<string, unknown>;
+
+  // get_experiment_data (experiment page only)
+  vllora_get_experiment_data: Record<string, never>;
+  vllora_experiment_data_response: Record<string, unknown>;
+
+  // evaluate_experiment_results (experiment page only)
+  vllora_evaluate_experiment_results: Record<string, never>;
+  vllora_evaluate_experiment_results_response: Record<string, unknown>;
 };
 
 // CHANGE UI tool events (fire-and-forget)
@@ -37,6 +45,12 @@ type DistriChangeUiEvents = {
   vllora_collapse_span: { spanId: string };
   vllora_navigate_to_experiment: { spanId: string; url: string };
   // open_modal and close_modal use global ModalContext functions directly
+
+  // Experiment page tools
+  vllora_apply_experiment_data: { data: Record<string, unknown> };
+  vllora_apply_experiment_data_response: { success: boolean; error?: string };
+  vllora_run_experiment: Record<string, never>;
+  vllora_run_experiment_response: { success: boolean; result?: unknown; error?: string };
 };
 
 // ============================================================================
