@@ -55,7 +55,7 @@ function getCurrentDistriUrl(): string {
 
 // API URL with /api/v1 prefix for agent operations (computed dynamically)
 function getDistriApiUrl(): string {
-  return `${getCurrentDistriUrl()}/api/v1`;
+  return `${getCurrentDistriUrl()}/v1`;
 }
 
 // ============================================================================

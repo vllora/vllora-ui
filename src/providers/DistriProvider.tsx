@@ -113,7 +113,7 @@ export function DistriProvider({ children }: DistriProviderProps) {
   // Config for DistriProvider (matches @distri/react API)
   // @distri/react expects baseUrl to include /api/v1 prefix
   const config = useMemo(() => ({
-    baseUrl: `${distriUrl}/api/v1`,
+    baseUrl: `${distriUrl}/v1`,
     debug: import.meta.env.DEV,
   }), [distriUrl]);
 

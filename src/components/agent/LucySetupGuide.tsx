@@ -46,9 +46,9 @@ export function LucySetupGuide({ onConnected, className }: LucySetupGuideProps) 
 
   const [copied, setCopied] = useState(false);
 
-  // The extracted folder contains distri-server binary in server/ subdirectory
+  // Combined extract and run command - copy distri-server to same dir so distri serve works
   const extractedFolder = `${platform.os}-${platform.arch}`;
-  const runCommand = `./${extractedFolder}/server/distri-server`;
+  const runCommand = `tar -xzf ${platform.binary} && cd ${extractedFolder} && cp server/distri-server . && ./distri serve`;
 
   // Copy command to clipboard
   const handleCopyCommand = useCallback(async () => {
@@ -99,15 +99,8 @@ export function LucySetupGuide({ onConnected, className }: LucySetupGuideProps) 
           <PlatformDownload platform={platform} allPlatforms={allPlatforms} />
         </StepSection>
 
-        {/* Step 2: Extract */}
-        <StepSection number={2} title="Extract the file">
-          <p className="text-xs text-muted-foreground">
-            Double-click the downloaded <code className="bg-muted px-1 rounded">.tar.gz</code> file to extract it.
-          </p>
-        </StepSection>
-
-        {/* Step 3: Run */}
-        <StepSection number={3} title="Run in terminal">
+        {/* Step 2: Extract & Run */}
+        <StepSection number={2} title="Extract & Run">
           <div className="relative">
             <div className="bg-muted rounded-md p-2.5 pr-10 font-mono text-xs overflow-x-auto">
               <code className="whitespace-nowrap">{runCommand}</code>
@@ -125,12 +118,12 @@ export function LucySetupGuide({ onConnected, className }: LucySetupGuideProps) 
             </button>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            Run this in the folder where you extracted. Keep terminal open.
+            Run in terminal where you downloaded. Keep it open.
           </p>
         </StepSection>
 
-        {/* Step 4: Connect */}
-        <StepSection number={4} title="Connect">
+        {/* Step 3: Connect */}
+        <StepSection number={3} title="Connect">
           <div className="space-y-3">
             {/* Server URL input */}
             <div>
