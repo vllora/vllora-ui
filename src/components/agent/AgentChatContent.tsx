@@ -8,9 +8,10 @@
 import { useCallback } from 'react';
 import { Chat } from '@distri/react';
 import { DistriFnTool, DistriMessage } from '@distri/core';
-import { X, MessageCircle, Plus, Loader2 } from 'lucide-react';
+import { X, Plus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { LucyAvatar } from './LucyAvatar';
 
 // ============================================================================
 // Utilities
@@ -120,8 +121,8 @@ export function AgentChatContent({
         )}
       >
         <div className="flex items-center gap-2">
-          <MessageCircle className="h-4 w-4 text-primary" />
-          <span className="font-medium text-sm">vLLora Assistant</span>
+          <LucyAvatar size="sm" />
+          <span className="font-medium text-sm">Lucy</span>
         </div>
         <div className="flex items-center gap-1">
           <Button
@@ -158,8 +159,8 @@ export function AgentChatContent({
           </div>
         ) : !agent ? (
           <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-            <MessageCircle className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="font-semibold mb-2">Agent Not Available</h3>
+            <LucyAvatar size="lg" className="mb-4 opacity-50" />
+            <h3 className="font-semibold mb-2">Lucy Not Available</h3>
             <p className="text-sm text-muted-foreground">
               The Distri backend server may not be running.
             </p>

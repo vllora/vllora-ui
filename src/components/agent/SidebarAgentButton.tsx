@@ -1,11 +1,10 @@
 /**
  * SidebarAgentButton
  *
- * AI Assistant button for the sidebar, used in side-panel mode.
+ * Lucy AI assistant button for the sidebar, used in side-panel mode.
  * Triggers the agent panel open/close.
  */
 
-import { Bot } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAgentPanel, PANEL_MODE } from "@/contexts/AgentPanelContext"
 import {
@@ -13,6 +12,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { LucyAvatar } from "./LucyAvatar"
 
 interface SidebarAgentButtonProps {
   isCollapsed: boolean
@@ -41,11 +41,11 @@ export function SidebarAgentButton({ isCollapsed }: SidebarAgentButtonProps) {
                 "justify-center p-2 w-10 h-10"
               )}
             >
-              <Bot className="h-5 w-5 flex-shrink-0" />
+              <LucyAvatar size="sm" />
             </button>
           </TooltipTrigger>
           <TooltipContent side="right">
-            <p>AI Assistant</p>
+            <p>Chat with Lucy</p>
           </TooltipContent>
         </Tooltip>
       </li>
@@ -64,8 +64,8 @@ export function SidebarAgentButton({ isCollapsed }: SidebarAgentButtonProps) {
           "gap-3 px-3 py-2"
         )}
       >
-        <Bot className="h-5 w-5 flex-shrink-0" />
-        <span className="truncate">AI Assistant</span>
+        <LucyAvatar size="sm" />
+        <span className="truncate">Lucy</span>
       </button>
     </li>
   )

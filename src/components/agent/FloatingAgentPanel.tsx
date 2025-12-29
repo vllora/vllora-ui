@@ -1,18 +1,17 @@
 /**
  * FloatingAgentPanel
  *
- * A floating, draggable, and resizable chat panel for the vLLora AI assistant.
+ * A floating, draggable, and resizable chat panel for Lucy, the vLLora AI assistant.
  * Uses react-rnd for drag and resize functionality.
- * Includes an integrated toggle button with drag behavior.
+ * Includes an integrated toggle button with Lucy's avatar and drag behavior.
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Rnd } from 'react-rnd';
-import { MessageCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAgentChat } from './useAgentChat';
 import { AgentChatContent } from './AgentChatContent';
+import { LucyAvatar } from './LucyAvatar';
 
 // ============================================================================
 // Types
@@ -256,21 +255,20 @@ export function FloatingAgentPanel({
         style={{ zIndex: 50 }}
         className="rounded-full"
       >
-        <Button
-          variant="default"
-          size="icon"
+        <button
           onClick={handleButtonClick}
           className={cn(
-            'h-12 w-12 rounded-full shadow-lg',
-            !isButtonDragging && 'hover:scale-105 active:scale-95',
+            'h-12 w-12 rounded-full shadow-lg transition-transform duration-200',
+            'ring-2 ring-[rgba(var(--theme-500),0.3)] ring-offset-2 ring-offset-background',
+            !isButtonDragging && 'hover:scale-105 hover:shadow-xl active:scale-95',
             isButtonDragging && 'scale-110 shadow-2xl cursor-grabbing',
             !isButtonDragging && 'cursor-grab',
             className
           )}
-          aria-label="Open AI Assistant"
+          aria-label="Chat with Lucy"
         >
-          <MessageCircle className="h-5 w-5" />
-        </Button>
+          <LucyAvatar size="lg" className="w-full h-full" />
+        </button>
       </Rnd>
     );
   }
