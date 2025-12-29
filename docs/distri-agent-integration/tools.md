@@ -4,12 +4,14 @@ This document describes the implementation of UI and Data tool handlers.
 
 ## Overview
 
-All 15 tools use `external = ["*"]`, meaning they are handled by the vLLora UI frontend:
+All tools use `external = ["*"]`, meaning they are handled by the vLLora UI frontend:
 
 | Category | File | Count | Description |
 |----------|------|-------|-------------|
-| UI Tools | `src/lib/distri-ui-tools.ts` | 11 | 5 GET STATE + 6 CHANGE UI |
-| Data Tools | `src/lib/distri-data-tools.ts` | 4 | Query backend API |
+| UI Tools | `src/lib/distri-ui-tools.ts` | 17 | 8 GET STATE + 9 CHANGE UI |
+| Data Tools | `src/lib/distri-data-tools.ts` | 6 | 4 basic + 2 two-phase analysis |
+
+**Total: 23 tools**
 
 ## Tool Format
 
@@ -34,37 +36,24 @@ Tools are exported as `DistriFnTool[]` arrays for use with the `@distri/react` C
 
 ---
 
-## UI Tools (11 total)
+## UI Tools (17 total)
 
 **File:** `src/lib/distri-ui-tools.ts`
 
-### GET STATE Tools (5)
-
-These tools use an event emitter pattern to request data from React components.
+### GET STATE Tools (8)
 
 | Tool | Description | Returns |
 |------|-------------|---------|
 | `get_current_view` | Current page context | `{page, projectId, threadId, theme}` |
 | `get_selection_context` | Selected items | `{selectedRunId, selectedSpanId, detailSpanId}` |
 | `get_thread_runs` | Runs visible in UI | `{runs: [...]}` |
-| `get_span_details` | Span info | `{span: {...}}` |
+| `get_span_details` | Span info by ID | `{span: {...}}` |
 | `get_collapsed_spans` | Collapsed spans | `{collapsedSpanIds: [...]}` |
+| `is_valid_for_optimize` | Check if span can be optimized (CACHED) | `{valid, reason, _cached?}` |
+| `get_experiment_data` | Get experiment state | `{experimentData, running}` |
+| `evaluate_experiment_results` | Compare original vs new | `{original, new, comparison}` |
 
-#### Event Flow Pattern
-
-```
-Tool Handler                    React Component (TracesPageContext)
-     │                               │
-     ├─── emit("vllora_get_X") ─────▶│
-     │                               │
-     │◀── emit("vllora_X_response")──┤
-     │                               │
-     └─── resolve(data) ─────────────┘
-```
-
-### CHANGE UI Tools (6)
-
-These tools emit events that are handled by React components.
+### CHANGE UI Tools (9)
 
 | Tool | Description | Parameters |
 |------|-------------|------------|
@@ -74,49 +63,168 @@ These tools emit events that are handled by React components.
 | `select_run` | Select run | `runId: string` |
 | `expand_span` | Expand span | `spanId: string` |
 | `collapse_span` | Collapse span | `spanId: string` |
+| `navigate_to_experiment` | Navigate to /experiment | `spanId: string` |
+| `apply_experiment_data` | Apply changes | `data: {...}` |
+| `run_experiment` | Execute experiment (60s timeout) | (none) |
+
+### Validation Cache
+
+**File:** `src/lib/distri-ui-tools.ts` (lines 19-55)
+
+The `is_valid_for_optimize` tool uses a cache to prevent duplicate API calls:
+
+```typescript
+// Cache validation results for 5 minutes
+const VALIDATION_CACHE_TTL_MS = 5 * 60 * 1000;
+const validationCache: Map<string, ValidationResult> = new Map();
+
+// Check cache before API call
+const cached = getCachedValidation(spanIdStr);
+if (cached) {
+  return {
+    valid: cached.valid,
+    spanId: cached.spanId,
+    reason: cached.reason,
+    _cached: true,
+    _note: 'Result retrieved from cache. No duplicate API call made.',
+  };
+}
+```
+
+**Why caching?** Agents sometimes call the same tool multiple times. Caching ensures:
+- No duplicate API calls
+- Instant response for repeated calls
+- Agent sees `_cached: true` to know result is from cache
 
 ---
 
-## Data Tools (4 total)
+## Data Tools (6 total)
 
 **File:** `src/lib/distri-data-tools.ts`
 
-These tools call existing vLLora API services directly.
+### Basic Tools (4)
 
-| Tool | Service | Function | Key Parameters |
-|------|---------|----------|----------------|
-| `fetch_runs` | `runs-api.ts` | `listRuns` | `threadIds`, `period`, `limit` |
-| `fetch_spans` | `spans-api.ts` | `listSpans` | `runIds`, `operationNames` |
-| `get_run_details` | `runs-api.ts` | `getRunDetails` | `runId` (required) |
-| `fetch_groups` | `groups-api.ts` | `listGroups` | `groupBy`, `bucketSize` |
+| Tool | Service | Description |
+|------|---------|-------------|
+| `fetch_runs` | `runs-api.ts` | Get runs with filters (threadIds, period, limit) |
+| `fetch_spans` | `spans-api.ts` | Get spans with filters (max 10 by default) |
+| `get_run_details` | `runs-api.ts` | Get run + all its spans |
+| `fetch_groups` | `groups-api.ts` | Get aggregated metrics (groupBy: time/model/thread) |
 
-### API Service Reuse
+### Two-Phase Analysis Tools (2)
 
-Data tools import from existing services to ensure consistency:
+These tools solve the LLM context overflow problem:
+
+| Tool | Description |
+|------|-------------|
+| `fetch_spans_summary` | Fetch ALL spans, store in memory, return lightweight summary |
+| `get_span_content` | Perform client-side analysis on specific spans (max 5) |
+
+#### fetch_spans_summary
+
+Fetches all spans for a thread and stores them in browser memory:
 
 ```typescript
-import { listRuns, getRunDetails } from '@/services/runs-api';
-import { listSpans } from '@/services/spans-api';
-import { listGroups } from '@/services/groups-api';
+// 1. Fetch ALL spans with parallel pagination
+const batchSize = 100;
+const firstResult = await listSpans({...});
+const allSpans = [...firstResult.data];
+
+// Parallel fetch remaining batches
+if (total > batchSize) {
+  const batchPromises = [];
+  for (let i = 1; i <= remainingBatches; i++) {
+    batchPromises.push(listSpans({offset: i * batchSize}));
+  }
+  const results = await Promise.all(batchPromises);
+}
+
+// 2. Store in memory
+spanStorage.clear();
+for (const span of allSpans) {
+  spanStorage.set(span.span_id, span);
+}
+
+// 3. Return lightweight summary
+return {
+  summary: {
+    total_spans,
+    by_operation,
+    by_status,
+    total_cost,
+    models_used,
+  },
+  error_spans: [...],           // Explicit errors
+  semantic_error_spans: [...],  // Detected patterns
+  slowest_spans: [...],         // Top 5
+  expensive_spans: [...],       // Top 5
+};
 ```
 
-**Benefits:**
-- Uses shared `apiClient` with proper error handling
-- Includes correct headers (x-project-id, etc.)
-- Has TypeScript types for all DTOs
-- Already tested and used by the UI
+#### get_span_content
 
-### Parameter Naming
+Performs client-side analysis on specific spans:
 
-Note: Services use different naming conventions:
+```typescript
+// Returns analysis RESULTS, not raw span data
+return {
+  data: spans.map(span => ({
+    span_id,
+    operation_name,
+    duration_ms,
+    explicit_error,
+    semantic_issues: [
+      { pattern: "not found", context: "...", severity: "medium" }
+    ],
+    content_stats: {
+      input_length,
+      output_length,
+      has_tool_calls,
+    },
+    assessment: "Found 2 potential issues: 0 high, 2 medium severity.",
+  })),
+};
+```
 
-| Service | Convention | Example |
-|---------|------------|---------|
-| `runs-api.ts` | snake_case | `thread_ids`, `run_ids` |
-| `spans-api.ts` | camelCase | `threadIds`, `runIds` |
-| `groups-api.ts` | snake_case | `group_by`, `bucket_size` |
+### Semantic Error Detection
 
-Tool handlers convert from agent camelCase to API format automatically.
+**File:** `src/lib/distri-data-tools.ts` (lines 49-67)
+
+Detects error patterns in response content (not just status codes):
+
+```typescript
+const ERROR_PATTERNS = [
+  /not found/i,
+  /does not exist/i,
+  /cannot be found/i,
+  /no .* found/i,
+  /failed to/i,
+  /error:/i,
+  /exception/i,
+  /timeout/i,
+  /rate limit/i,
+  /unauthorized/i,
+  /forbidden/i,
+  /invalid/i,
+  /missing/i,
+  /null pointer/i,
+  /undefined/i,
+  /connection refused/i,
+  /network error/i,
+];
+```
+
+Severity levels:
+- **High:** error, exception, failed to, unauthorized, forbidden
+- **Medium:** not found, does not exist, timeout, rate limit
+- **Low:** invalid, missing, undefined, null
+
+### Span Storage
+
+```typescript
+// In-memory storage for spans (cleared when page refreshes)
+const spanStorage: Map<string, Span> = new Map();
+```
 
 ---
 
@@ -133,102 +241,20 @@ type DistriGetStateEvents = {
   vllora_get_selection_context: Record<string, never>;
   vllora_selection_context_response: Record<string, unknown>;
 
-  vllora_get_thread_runs: Record<string, never>;
-  vllora_thread_runs_response: Record<string, unknown>;
-
-  vllora_get_span_details: Record<string, never>;
-  vllora_span_details_response: Record<string, unknown>;
-
-  vllora_get_collapsed_spans: Record<string, never>;
-  vllora_collapsed_spans_response: Record<string, unknown>;
+  vllora_get_experiment_data: Record<string, never>;
+  vllora_experiment_data_response: Record<string, unknown>;
+  // ... more
 };
 
 // CHANGE UI events
 type DistriChangeUiEvents = {
   vllora_select_span: { spanId: string };
   vllora_select_run: { runId: string };
-  vllora_expand_span: { spanId: string };
-  vllora_collapse_span: { spanId: string };
+  vllora_navigate_to_experiment: { spanId: string; url: string };
+  vllora_apply_experiment_data: { data: Record<string, unknown> };
+  vllora_run_experiment: {};
+  // ... more
 };
-```
-
----
-
-## Event Listeners
-
-### TracesPageContext (Full Implementation)
-
-**File:** `src/contexts/TracesPageContext.tsx` (lines 704-804)
-
-The TracesPageContext has full event listeners that respond with actual UI state:
-
-```typescript
-useEffect(() => {
-  // GET STATE: Selection context
-  const handleGetSelectionContext = () => {
-    eventEmitter.emit('vllora_selection_context_response', {
-      selectedRunId,
-      selectedSpanId,
-      detailSpanId,
-    });
-  };
-
-  // GET STATE: Thread runs
-  const handleGetThreadRuns = () => {
-    const runsWithSpans = runs.map(run => ({
-      ...run,
-      spans: runMap[run.run_id] || [],
-    }));
-    eventEmitter.emit('vllora_thread_runs_response', {
-      runs: runsWithSpans,
-      groups,
-    });
-  };
-
-  // CHANGE UI: Select span
-  const handleSelectSpan = ({ spanId }) => {
-    setSelectedSpanId(spanId);
-    setDetailSpanId(spanId);
-  };
-
-  // ... more handlers
-
-  eventEmitter.on('vllora_get_selection_context', handleGetSelectionContext);
-  eventEmitter.on('vllora_get_thread_runs', handleGetThreadRuns);
-  eventEmitter.on('vllora_select_span', handleSelectSpan);
-  // ...
-}, [/* dependencies */]);
-```
-
-### useAgentToolListeners (Basic Fallback)
-
-**File:** `src/hooks/useAgentToolListeners.ts`
-
-Provides basic listeners for pages without TracesPageContext:
-
-```typescript
-export function useAgentToolListeners(options = {}) {
-  const location = useLocation();
-  const [searchParams] = useSearchParams();
-
-  useEffect(() => {
-    const handleGetCurrentView = () => {
-      const page = location.pathname.split('/')[1] || 'home';
-      const projectId = searchParams.get('project_id');
-      const threadId = searchParams.get('thread_id');
-
-      emitter.emit('vllora_current_view_response', {
-        page,
-        projectId,
-        threadId,
-        theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
-      });
-    };
-
-    emitter.on('vllora_get_current_view', handleGetCurrentView);
-    return () => emitter.off('vllora_get_current_view', handleGetCurrentView);
-  }, [location, searchParams]);
-}
 ```
 
 ---
@@ -269,16 +295,20 @@ export function AgentPanel({ ... }) {
 
 1. **Use `parameters` not `input_schema`** - DistriFnTool expects `parameters`
 
-2. **Data tools work anywhere** - They call the API directly
+2. **Validation cache** - `is_valid_for_optimize` uses 5-minute TTL cache
 
-3. **UI tools need context** - GET STATE tools return empty without TracesPageContext
+3. **Two-phase analysis** - Use `fetch_spans_summary` for large datasets
 
-4. **CHANGE UI tools only work on Traces page** - No effect on other pages
+4. **Default limit 10** - `fetch_spans` returns max 10 spans by default
 
-5. **Timeout handling** - GET STATE tools have 5-second timeout with fallback
+5. **Parallel fetching** - `fetch_spans_summary` uses `Promise.all()` for speed
+
+6. **Client-side analysis** - `get_span_content` returns analysis results, not raw data
+
+7. **Semantic errors** - Detect "not found", "failed", etc. in response content
 
 ## Related Documents
 
-- [Agents](./agents.md) - Agent definition that uses these tools
+- [Agents](./agents.md) - Agent definitions that use these tools
 - [Frontend Integration](./frontend-integration.md) - React integration details
 - [Architecture](./architecture.md) - System overview
