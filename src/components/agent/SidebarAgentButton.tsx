@@ -19,12 +19,7 @@ interface SidebarAgentButtonProps {
 }
 
 export function SidebarAgentButton({ isCollapsed }: SidebarAgentButtonProps) {
-  const { toggle: toggleAgentPanel, isOpen: isAgentPanelOpen, mode } = useAgentPanel()
-
-  // Only render in side-panel mode
-  if (mode !== 'side-panel') {
-    return null
-  }
+  const { toggle: toggleAgentPanel, isOpen: isAgentPanelOpen } = useAgentPanel()
 
   if (isCollapsed) {
     return (

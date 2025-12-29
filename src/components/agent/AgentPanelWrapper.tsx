@@ -18,7 +18,7 @@ import { emitter } from '@/utils/eventEmitter';
 
 export function AgentPanelWrapper() {
   const { isInitializing } = useDistriConnection();
-  const { isOpen, toggle, close, mode } = useAgentPanel();
+  const { isOpen, close, mode } = useAgentPanel();
   const navigate = useNavigate();
 
   // Listen for navigation events from agent tools
@@ -40,12 +40,11 @@ export function AgentPanelWrapper() {
     return null;
   }
 
-  // Floating mode: FloatingAgentPanel handles both button and panel
+  // Floating mode: panel only renders when open, sidebar button handles toggle
   if (mode === 'floating') {
     return (
       <FloatingAgentPanel
         isOpen={isOpen}
-        onToggle={toggle}
         onClose={close}
       />
     );

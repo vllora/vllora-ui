@@ -40,7 +40,33 @@ interface AgentPanelContextType {
 const AgentPanelContext = createContext<AgentPanelContextType | undefined>(undefined);
 
 const MODE_STORAGE_KEY = 'vllora:agent-panel-mode';
+const PANEL_STORAGE_KEY = 'vllora:agent-panel-bounds';
 const DEFAULT_MODE: AgentPanelMode = 'side-panel';
+
+// Side panel dimensions (must match AgentPanel.tsx)
+const SIDE_PANEL_WIDTH = 384;
+const EDGE_PADDING = 16;
+
+// Set floating panel bounds to match side panel position (full height)
+const setFloatingBoundsFromSidePanel = () => {
+  try {
+    // Match side panel's full height (h-full) minus small padding
+    const height = typeof window !== 'undefined'
+      ? window.innerHeight
+      : 600;
+
+    const bounds = {
+      x: EDGE_PADDING,
+      y: EDGE_PADDING,
+      width: SIDE_PANEL_WIDTH,
+      height,
+    };
+    localStorage.setItem(PANEL_STORAGE_KEY, JSON.stringify(bounds));
+  } catch {
+    // Ignore storage errors
+  }
+};
+
 
 // Load mode from localStorage or use default
 const loadMode = (): AgentPanelMode => {
@@ -86,6 +112,14 @@ export function AgentPanelProvider({ children }: AgentPanelProviderProps) {
     setModeState((prev) => {
       const newMode = prev === 'floating' ? 'side-panel' : 'floating';
       saveMode(newMode);
+
+      if (newMode === 'floating') {
+        // Switching from side-panel to floating:
+        // Position floating panel to match where side panel was
+        setFloatingBoundsFromSidePanel();
+      }
+
+      setFloatingPosition(null);
       return newMode;
     });
   }, []);
@@ -120,5 +154,8 @@ export function useAgentPanel(): AgentPanelContextType {
   }
   return context;
 }
+
+// Export storage key for use by FloatingAgentPanel
+export { PANEL_STORAGE_KEY };
 
 export type { AgentPanelMode, Position };
