@@ -16,6 +16,44 @@ import { isActualModelCall } from '@/utils/span-to-message';
 // Tool handler type
 type ToolHandler = (params: Record<string, unknown>) => Promise<unknown>;
 
+// ============================================================================
+// Validation Cache - Prevents duplicate is_valid_for_optimize calls
+// ============================================================================
+interface ValidationResult {
+  valid: boolean;
+  spanId: string;
+  operation_name?: string;
+  reason: string;
+  error?: string;
+  cachedAt: number;
+}
+
+// Cache validation results for 5 minutes (span validity doesn't change frequently)
+const VALIDATION_CACHE_TTL_MS = 5 * 60 * 1000;
+const validationCache: Map<string, ValidationResult> = new Map();
+
+/**
+ * Get cached validation result if still valid
+ */
+function getCachedValidation(spanId: string): ValidationResult | null {
+  const cached = validationCache.get(spanId);
+  if (cached && Date.now() - cached.cachedAt < VALIDATION_CACHE_TTL_MS) {
+    return cached;
+  }
+  // Expired or not found
+  if (cached) {
+    validationCache.delete(spanId);
+  }
+  return null;
+}
+
+/**
+ * Clear validation cache (useful when navigating away or on page refresh)
+ */
+export function clearValidationCache(): void {
+  validationCache.clear();
+}
+
 // UI tool names
 export const UI_TOOL_NAMES = [
   // GET STATE (8)
@@ -141,28 +179,68 @@ const getStateHandlers: Record<string, ToolHandler> = {
   },
 
   // Check if a span is valid for optimization (actual model call)
+  // Uses cache to prevent duplicate API calls for the same span
   is_valid_for_optimize: async ({ spanId }) => {
     if (!spanId) {
       return { valid: false, error: 'spanId is required' };
     }
+
+    const spanIdStr = spanId as string;
+
+    // Check cache first
+    const cached = getCachedValidation(spanIdStr);
+    if (cached) {
+      console.log(`[is_valid_for_optimize] Returning cached result for span ${spanIdStr}`);
+      return {
+        valid: cached.valid,
+        spanId: cached.spanId,
+        operation_name: cached.operation_name,
+        reason: cached.reason,
+        _cached: true,
+        _note: 'Result retrieved from cache. No duplicate API call made.',
+      };
+    }
+
     try {
       const { getSpanById } = await import('@/services/spans-api');
-      const span = await getSpanById({ spanId: spanId as string });
+      const span = await getSpanById({ spanId: spanIdStr });
       if (!span) {
-        return { valid: false, error: `Span ${spanId} not found` };
+        const result: ValidationResult = {
+          valid: false,
+          spanId: spanIdStr,
+          reason: `Span ${spanIdStr} not found`,
+          error: `Span ${spanIdStr} not found`,
+          cachedAt: Date.now(),
+        };
+        validationCache.set(spanIdStr, result);
+        return { valid: false, spanId: spanIdStr, error: result.error };
       }
+
       const isValid = isActualModelCall(span) || span.operation_name === 'api_invoke';
-      return {
+      const result: ValidationResult = {
         valid: isValid,
-        spanId,
+        spanId: spanIdStr,
         operation_name: span.operation_name,
         reason: isValid
           ? 'This span is an actual model call and can be optimized'
           : 'This span is not available for optimization. Only actual model call spans (where operation_name is the model name) can be optimized.',
+        cachedAt: Date.now(),
+      };
+
+      // Store in cache
+      validationCache.set(spanIdStr, result);
+      console.log(`[is_valid_for_optimize] Cached validation result for span ${spanIdStr}: valid=${isValid}`);
+
+      return {
+        valid: result.valid,
+        spanId: result.spanId,
+        operation_name: result.operation_name,
+        reason: result.reason,
       };
     } catch (error) {
       return {
         valid: false,
+        spanId: spanIdStr,
         error: error instanceof Error ? error.message : 'Failed to check span',
       };
     }
@@ -450,7 +528,7 @@ export const uiTools: DistriFnTool[] = [
 
   {
     name: 'is_valid_for_optimize',
-    description: 'Check if a span can be optimized on the experiment page. Call this before navigate_to_experiment to verify the span is valid.',
+    description: 'Check if a span can be optimized on the experiment page. Results are CACHED per span_id - calling multiple times with the same spanId returns the cached result instantly without making duplicate API calls.',
     type: 'function',
     parameters: {
       type: 'object',

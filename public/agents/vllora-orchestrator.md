@@ -78,15 +78,18 @@ When user specifically asks about costs:
 2. final: Report cost breakdown with optimization suggestions
 ```
 
-## 5. OPTIMIZE A SPAN (on traces page)
-When user asks to optimize and page is "traces":
+## 5. OPTIMIZE A SPAN (when NOT on experiment page)
+When user asks to optimize/improve a span and page is NOT "experiment":
 ```
 Step 1: call_vllora_ui_agent: "Check if span {spanId} is valid for optimization"
 Step 2: If valid → call_vllora_ui_agent: "Navigate to experiment page for span {spanId}"
         If NOT valid → call final: "Cannot optimize this span: {reason}"
-Step 3: After navigation succeeds → call final: "Navigated to experiment page. What would you like to optimize?"
+Step 3: After navigation succeeds → call_vllora_experiment_agent: "Analyze experiment data and suggest optimizations for span {spanId}"
+Step 4: After experiment analysis → call final: Pass through the optimization suggestions
 ```
-IMPORTANT: After Step 2 navigation succeeds, IMMEDIATELY call final (Step 3). Do NOT go back to Step 1.
+IMPORTANT: This is a 4-step workflow. After Step 2 navigation succeeds, proceed to Step 3 (experiment analysis). Do NOT go back to Step 1 or call final early.
+
+NOTE: This workflow applies to page="traces", page="chat", or any page that is NOT "experiment". Always navigate to experiment page first, then analyze.
 
 ## 6. ANALYZE EXPERIMENT (on experiment page)
 When page is "experiment" and user asks to optimize/analyze:
@@ -123,11 +126,19 @@ When user greets or asks for help:
 
 The sub-agent just returned. Now you must either:
 - Call the NEXT step in the workflow (a DIFFERENT sub-agent call)
-- OR call `final` if workflow is complete
+- OR call `final` if workflow is complete or if sub-agent returned an error
+
+## CRITICAL: Handle Sub-Agent Errors
+If a sub-agent returns an error message (like "step limit reached", "failed", "unable to", "error"):
+→ IMMEDIATELY call `final` with the error message
+→ DO NOT retry the workflow or go back to previous steps
+→ DO NOT call any more sub-agents
 
 ## CRITICAL: Avoid Infinite Loops
 - DO NOT call the same sub-agent with the same request again
 - DO NOT repeat a step that already succeeded
 - If you already checked validity → proceed to navigate or final
-- If you already navigated → call final immediately
-- Track your progress: Step 1 done → Step 2 → Step 3 (final)
+- If you already navigated → proceed to experiment analysis (NOT final early!)
+- If you already got experiment analysis → call final with results
+- If ANY step fails or returns error → call final immediately with error
+- Track your progress: Step 1 → Step 2 → Step 3 → Step 4 (final)

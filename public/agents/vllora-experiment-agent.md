@@ -1,7 +1,7 @@
 ---
 name = "vllora_experiment_agent"
 description = "Executes experiment operations - analyze, apply, run, evaluate"
-max_iterations = 6
+max_iterations = 10
 tool_format = "provider"
 
 [tools]
