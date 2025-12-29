@@ -9,11 +9,54 @@
  * if the Distri server is temporarily unavailable.
  */
 
-// Base URL for Distri server (without /api/v1 prefix)
-const DISTRI_URL = import.meta.env.VITE_DISTRI_URL || 'http://localhost:8081';
+// Storage key for custom Distri URL
+const DISTRI_URL_KEY = 'vllora:distri-url';
+const DEFAULT_DISTRI_URL = 'http://localhost:8081';
 
-// API URL with /api/v1 prefix for agent operations
-const DISTRI_API_URL = `${DISTRI_URL}/api/v1`;
+/**
+ * Get the Distri server URL from localStorage or environment
+ */
+export function getDistriUrl(): string {
+  try {
+    const stored = localStorage.getItem(DISTRI_URL_KEY);
+    if (stored) return stored;
+  } catch {
+    // Ignore storage errors
+  }
+  return import.meta.env.VITE_DISTRI_URL || DEFAULT_DISTRI_URL;
+}
+
+/**
+ * Save custom Distri URL to localStorage
+ */
+export function saveDistriUrl(url: string): void {
+  try {
+    localStorage.setItem(DISTRI_URL_KEY, url);
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+/**
+ * Reset Distri URL to default (remove from localStorage)
+ */
+export function resetDistriUrl(): void {
+  try {
+    localStorage.removeItem(DISTRI_URL_KEY);
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+// Get current URL for API calls
+function getCurrentDistriUrl(): string {
+  return getDistriUrl();
+}
+
+// API URL with /api/v1 prefix for agent operations (computed dynamically)
+function getDistriApiUrl(): string {
+  return `${getCurrentDistriUrl()}/api/v1`;
+}
 
 // ============================================================================
 // Multi-Agent Architecture
@@ -41,7 +84,7 @@ interface FetchAgentsResult {
  */
 async function fetchRegisteredAgents(): Promise<FetchAgentsResult> {
   try {
-    const response = await fetch(`${DISTRI_API_URL}/agents`, {
+    const response = await fetch(`${getDistriApiUrl()}/agents`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -88,7 +131,7 @@ async function fetchAgentDefinition(agentName: AgentName): Promise<string | null
  */
 async function registerAgent(_agentName: AgentName, definition: string): Promise<boolean> {
   try {
-    const response = await fetch(`${DISTRI_API_URL}/agents`, {
+    const response = await fetch(`${getDistriApiUrl()}/agents`, {
       method: 'POST',
       headers: { 'Content-Type': 'text/markdown' },
       body: definition,
@@ -143,25 +186,20 @@ export async function ensureAgentsRegistered(): Promise<boolean> {
 
 /**
  * Check if Distri server is available
+ * @param url Optional URL to check (defaults to current Distri URL)
  */
-export async function checkDistriHealth(): Promise<boolean> {
+export async function checkDistriHealth(url?: string): Promise<boolean> {
+  const distriUrl = url || getCurrentDistriUrl();
   try {
     // Health endpoint is at root level, not under /api/v1
-    const response = await fetch(`${DISTRI_URL}/health`, {
+    const response = await fetch(`${distriUrl}/health`, {
       method: 'GET',
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(3000),
     });
     return response.ok;
   } catch {
     return false;
   }
-}
-
-/**
- * Get the Distri server URL
- */
-export function getDistriUrl(): string {
-  return DISTRI_URL;
 }
 
 /**

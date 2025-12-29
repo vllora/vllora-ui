@@ -12,6 +12,7 @@ import { X, Plus, Loader2, Pin, PinOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { LucyAvatar } from './LucyAvatar';
+import { LucySetupGuide } from './LucySetupGuide';
 import { useAgentPanel } from '@/contexts/AgentPanelContext';
 
 // ============================================================================
@@ -57,6 +58,10 @@ interface AgentChatContentProps {
   agent: any;
   /** Whether the agent is loading */
   agentLoading: boolean;
+  /** Whether connected to Distri server */
+  isConnected: boolean;
+  /** Callback when connection is established (from setup guide) */
+  onConnected: () => void;
   /** The current thread ID */
   threadId: string;
   /** External tools for the chat */
@@ -80,6 +85,8 @@ interface AgentChatContentProps {
 export function AgentChatContent({
   agent,
   agentLoading,
+  isConnected,
+  onConnected,
   threadId,
   tools,
   messages,
@@ -164,7 +171,9 @@ export function AgentChatContent({
 
       {/* Content */}
       <div className="flex-1 flex flex-col justify-end overflow-hidden">
-        {agentLoading ? (
+        {!isConnected ? (
+          <LucySetupGuide onConnected={onConnected} />
+        ) : agentLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="flex items-center space-x-2">
               <Loader2 className="h-5 w-5 animate-spin" />
@@ -178,7 +187,7 @@ export function AgentChatContent({
             <LucyAvatar size="lg" className="mb-4 opacity-50" />
             <h3 className="font-semibold mb-2">Lucy Not Available</h3>
             <p className="text-sm text-muted-foreground">
-              The Distri backend server may not be running.
+              Could not load agent. Please try again.
             </p>
           </div>
         ) : (

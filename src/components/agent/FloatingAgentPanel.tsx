@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import { useAgentChat } from './useAgentChat';
 import { AgentChatContent } from './AgentChatContent';
 import { PANEL_STORAGE_KEY } from '@/contexts/AgentPanelContext';
+import { useDistriConnection } from '@/providers/DistriProvider';
 
 // ============================================================================
 // Types
@@ -89,6 +90,7 @@ export function FloatingAgentPanel({
   onClose,
   className,
 }: FloatingAgentPanelProps) {
+  const { isConnected, reconnect } = useDistriConnection();
   // Use shared agent chat hook
   const {
     agent,
@@ -181,6 +183,8 @@ export function FloatingAgentPanel({
         <AgentChatContent
           agent={agent}
           agentLoading={agentLoading}
+          isConnected={isConnected}
+          onConnected={reconnect}
           threadId={selectedThreadId}
           tools={tools}
           messages={messages}

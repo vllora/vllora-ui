@@ -8,6 +8,7 @@
 import { cn } from '@/lib/utils';
 import { useAgentChat } from './useAgentChat';
 import { AgentChatContent } from './AgentChatContent';
+import { useDistriConnection } from '@/providers/DistriProvider';
 
 // ============================================================================
 // Types
@@ -26,6 +27,7 @@ interface AgentPanelProps {
 // ============================================================================
 
 export function AgentPanel({ isOpen, onClose, className, side = 'left' }: AgentPanelProps) {
+  const { isConnected, reconnect } = useDistriConnection();
   const {
     agent,
     agentLoading,
@@ -69,6 +71,8 @@ export function AgentPanel({ isOpen, onClose, className, side = 'left' }: AgentP
           <AgentChatContent
             agent={agent}
             agentLoading={agentLoading}
+            isConnected={isConnected}
+            onConnected={reconnect}
             threadId={selectedThreadId}
             tools={tools}
             messages={messages}
