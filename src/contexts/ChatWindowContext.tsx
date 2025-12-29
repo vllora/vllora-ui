@@ -10,6 +10,7 @@ import { useWrapperHook } from '@/hooks/useWrapperHook';
 import { useUserProviderOfSelectedModelConfig } from '@/hooks/userProviderOfSelectedModelConfig';
 import { ThreadsConsumer } from './ThreadsContext';
 import { tryParseJson } from '@/utils/modelUtils';
+import { useLabelFilter } from '@/hooks/useLabelFilter';
 
 export type ChatWindowContextType = ReturnType<typeof useChatWindow>;
 
@@ -222,6 +223,13 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
 
   const providerOfSelectedModel = useUserProviderOfSelectedModelConfig({ selectedModel });
 
+  // Label filter state
+  const labelFilter = useLabelFilter({
+    projectId,
+    threadId,
+    autoFetch: true,
+  });
+
   // Wrap refreshRuns to also reset UI state
   const handleRefreshRuns = useCallback(() => {
     setSelectedSpanId(null);
@@ -355,6 +363,8 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     setCollapsedSpans,
     ...providerOfSelectedModel,
     threadId,
+    // Label filter
+    labelFilter,
   };
 }
 export function ChatWindowProvider({ children, threadId, projectId, selectedModel }: { children: ReactNode, threadId: string, projectId: string, selectedModel: string }) {

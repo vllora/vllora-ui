@@ -48,6 +48,7 @@ export interface TimelineRowProps {
     hoverSpanId?: string;
     onHoverSpanChange?: (spanId: string | undefined) => void;
     showHighlightButton?: boolean;
+    selectedLabels?: string[];
 }
 
 // Main TimelineRow component that uses the sub-components
@@ -71,7 +72,8 @@ export const TimelineRow = (props: TimelineRowProps) => {
         hoverSpanId,
         onHoverSpanChange,
         isInSidebar = true,
-        showHighlightButton = false
+        showHighlightButton = false,
+        selectedLabels = []
     } = props;
     const { continueBreakpoint, breakpoints } = BreakpointsConsumer();
 
@@ -170,6 +172,14 @@ export const TimelineRow = (props: TimelineRowProps) => {
 
     const isCurrentlyHighlighted = hoverSpanId === span.span_id;
 
+    // Determine if this span should be dimmed based on label filtering
+    const isDimmed = useMemo(() => {
+        if (selectedLabels.length === 0) return false;
+        const spanLabel = (span.attribute as Record<string, unknown> | undefined)?.label as string | undefined;
+        if (!spanLabel) return true; // Dim spans without labels when filtering
+        return !selectedLabels.includes(spanLabel);
+    }, [span.attribute, selectedLabels]);
+
     const handleEyeClick = (e: React.MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
@@ -186,7 +196,8 @@ export const TimelineRow = (props: TimelineRowProps) => {
             data-span-id={span.span_id}
             className={cn(
                 "w-full group hover:cursor-pointer transition-all duration-300 ease-out",
-                classNameOfCurrentSpan
+                classNameOfCurrentSpan,
+                isDimmed && "opacity-40"
             )}
             onClick={(e) => {
                 e.stopPropagation();

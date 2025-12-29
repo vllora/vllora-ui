@@ -63,6 +63,7 @@ export interface ListGroupsQuery {
   trace_ids?: string; // Comma-separated
   model_name?: string;
   type_filter?: 'model' | 'mcp';
+  labels?: string; // Comma-separated labels to filter by (attribute.label)
 
   // Time range
   start_time_min?: number; // In microseconds
@@ -196,8 +197,9 @@ export const fetchBatchGroupSpans = async (props: {
   projectId: string;
   groups: GroupIdentifier[];
   spansPerGroup?: number;
+  labels?: string[]; // Filter spans by labels (attribute.label)
 }): Promise<BatchGroupSpansResponse> => {
-  const { projectId, groups, spansPerGroup = 100 } = props;
+  const { projectId, groups, spansPerGroup = 100, labels } = props;
 
   const endpoint = '/group/batch-spans';
 
@@ -210,6 +212,8 @@ export const fetchBatchGroupSpans = async (props: {
     body: JSON.stringify({
       groups,
       spansPerGroup,
+      // Convert labels array to comma-separated string for backend
+      labels: labels && labels.length > 0 ? labels.join(',') : undefined,
     }),
   });
 

@@ -21,6 +21,7 @@ interface TraceContentProps {
 }[];
 app_mode: 'langdb' | 'vllora';
 available_api_keys: AvailableApiKey[];
+selectedLabels?: string[];
 }
 
 const TraceContentImpl: React.FC<TraceContentProps> = ({
@@ -32,7 +33,8 @@ const TraceContentImpl: React.FC<TraceContentProps> = ({
   observerTarget,
   openTraces,
   app_mode,
-  available_api_keys
+  available_api_keys,
+  selectedLabels,
 }) => {   
 
    const currentRunId: string = useMemo(()=> {
@@ -60,6 +62,7 @@ const TraceContentImpl: React.FC<TraceContentProps> = ({
             loadMoreRuns={loadMoreRuns}
             loadingMore={loadingMore}
             observerTarget={observerTarget}
+            selectedLabels={selectedLabels}
           />
         ) : (
           <TraceCodeView runId={currentRunId} />

@@ -1,5 +1,6 @@
 import { createContext, useContext, ReactNode, useCallback, useState, useRef, useEffect, useMemo } from "react";
 import { useSearchParams, useNavigate, useLocation } from "react-router";
+import { useLatest } from "ahooks";
 import { useDebugControl } from "@/hooks/events/useDebugControl";
 import { ProjectEventUnion } from "./project-events/dto";
 import { processEvent, updatedRunWithSpans } from "@/hooks/events/utilities";
@@ -11,6 +12,7 @@ import { toast } from "sonner";
 import { tryParseJson } from "@/utils/modelUtils";
 import { getGroupKey } from "./utils";
 import { eventEmitter } from "@/utils/eventEmitter";
+import { useLabelFilter } from "@/hooks/useLabelFilter";
 
 export type TracesPageContextType = ReturnType<typeof useTracesPageContext>;
 
@@ -20,7 +22,7 @@ export type GroupByMode = 'run' | 'time' | 'thread';
 export type Duration = 300 | 600 | 1200 | 1800 | 3600 | 7200 | 10800 | 21600 | 43200 | 86400; // 5m, 10m, 20m, 30m, 1h, 2h, 3h, 6h, 12h, 24h
 
 // Allowed query params for traces page
-const ALLOWED_QUERY_PARAMS = ['tab', 'group_by', 'duration', 'page', 'project_id', 'thread_id', 'detail_span_id'] as const;
+const ALLOWED_QUERY_PARAMS = ['tab', 'group_by', 'duration', 'page', 'project_id', 'thread_id', 'detail_span_id', 'labels'] as const;
 
 
 export function useTracesPageContext(props: { projectId: string }) {
@@ -111,6 +113,52 @@ export function useTracesPageContext(props: { projectId: string }) {
     loadingGroupsRef.current = loadingGroups;
   }, [loadingGroups]);
 
+  // Label filter state - defined early so it can be used in useGroupsPagination
+  const threadIdFromUrl = searchParams.get('thread_id') || undefined;
+
+  // Parse initial labels from URL (comma-separated)
+  const initialLabelsFromUrl = useMemo(() => {
+    const labelsParam = searchParams.get('labels');
+    if (!labelsParam) return [];
+    return labelsParam.split(',').map(l => l.trim()).filter(l => l.length > 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only read on initial mount to avoid loops
+
+  const labelFilter = useLabelFilter({
+    projectId,
+    threadId: threadIdFromUrl,
+    initialLabels: initialLabelsFromUrl,
+    autoFetch: true,
+  });
+
+  // Sync labels to URL when they change (one-directional to avoid loops)
+  const prevLabelsRef = useRef<string[]>(initialLabelsFromUrl);
+  useEffect(() => {
+    // Skip if labels haven't actually changed (prevents loops)
+    const currentLabels = labelFilter.selectedLabels;
+    const prevLabels = prevLabelsRef.current;
+    if (
+      currentLabels.length === prevLabels.length &&
+      currentLabels.every((l, i) => l === prevLabels[i])
+    ) {
+      return;
+    }
+    prevLabelsRef.current = currentLabels;
+
+    // Update URL with new labels
+    const currentParams = new URLSearchParams(window.location.search);
+    if (currentLabels.length > 0) {
+      currentParams.set('labels', currentLabels.join(','));
+    } else {
+      currentParams.delete('labels');
+    }
+    navigate(`${location.pathname}?${currentParams.toString()}`, { replace: true });
+  }, [labelFilter.selectedLabels, navigate, location.pathname]);
+
+  // Use useLatest to always have the current labels value in async callbacks
+  // (useLatest updates synchronously, unlike useEffect which runs after render)
+  const selectedLabelsRef = useLatest(labelFilter.selectedLabels);
+
   // Use the runs pagination hook (no threadId filter for traces page)
   const {
     runs,
@@ -186,6 +234,7 @@ export function useTracesPageContext(props: { projectId: string }) {
     threadId: searchParams.get('thread_id') || undefined,
     bucketSize: duration, // Map duration to bucketSize for API
     groupBy: groupByMode === 'time' ? 'time' : groupByMode === 'thread' ? 'thread' : groupByMode === 'run' ? 'run' : 'time',
+    labels: labelFilter.selectedLabels, // Pass labels filter
     initialPage,
     onGroupsLoaded: async (groups) => {
       // Single batched request for all groups - cleaner and more efficient
@@ -232,6 +281,7 @@ export function useTracesPageContext(props: { projectId: string }) {
             projectId,
             groups: groupIdentifiers,
             spansPerGroup: 100,
+            labels: selectedLabelsRef.current, // Pass labels filter
           });
 
           // Flatten all spans from response
@@ -861,6 +911,8 @@ export function useTracesPageContext(props: { projectId: string }) {
     spansOfSelectedRun,
     collapsedSpans,
     setCollapsedSpans,
+    // Label filter
+    labelFilter,
 
   }
 }

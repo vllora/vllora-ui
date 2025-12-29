@@ -19,6 +19,9 @@ export interface ListSpansQuery {
   operationNames?: string; // Filter by operation names or null/"!null"
   parentSpanIds?: string;  // Filter by parent span IDs or null/"!null"
 
+  // Label filter - comma-separated labels (e.g., "flight_search,budget_agent")
+  labels?: string;         // Filter by labels from attribute.label
+
   // Time range filters
   startTime?: number;      // Filter spans that started after this timestamp (microseconds)
   endTime?: number;        // Filter spans that started before this timestamp (microseconds)

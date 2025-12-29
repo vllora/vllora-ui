@@ -10,8 +10,9 @@ import { LoadingState } from "./LoadingState";
 import { ProjectsConsumer } from "@/contexts/ProjectContext";
 
 // Main component that uses the above components
-export const DetailedRunView: React.FC<{run: RunDTO}> = ({
-    run
+export const DetailedRunView: React.FC<{run: RunDTO; selectedLabels?: string[]}> = ({
+    run,
+    selectedLabels,
 }) => {
     const {runMap, isLoadingSpans, loadingSpansById, selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, hoverSpanId, setHoverSpanId, collapsedSpans, setCollapsedSpans} = ChatWindowConsumer()
     const {currentProjectId} = ProjectsConsumer()
@@ -60,6 +61,7 @@ export const DetailedRunView: React.FC<{run: RunDTO}> = ({
                                         }
                                     }}
                                     showHighlightButton={true}
+                                    selectedLabels={selectedLabels}
                                     />
                             </ErrorBoundary>
                         </div>

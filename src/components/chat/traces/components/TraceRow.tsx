@@ -10,10 +10,11 @@ interface TraceRowProps {
   run: RunDTO;
   index?: number;
   isInSidebar?: boolean;
+  selectedLabels?: string[];
 }
 
 // Component implementation
-const TraceRowImpl = ({ run, index = 0, isInSidebar = false }: TraceRowProps) => {
+const TraceRowImpl = ({ run, index = 0, isInSidebar = false, selectedLabels }: TraceRowProps) => {
   const { openTraces, setOpenTraces, fetchSpansByRunId, setSelectedSpanId } = ChatWindowConsumer();
   const traceOrRunId = run.run_id || '';
   const isOpen = openTraces.some(t => t.run_id === traceOrRunId);
@@ -65,7 +66,7 @@ const TraceRowImpl = ({ run, index = 0, isInSidebar = false }: TraceRowProps) =>
           <div className={cn(
             "overflow-auto custom-scrollbar",
           )}>
-            <DetailedRunView run={run} />
+            <DetailedRunView run={run} selectedLabels={selectedLabels} />
           </div>
         </motion.div>
       )}
