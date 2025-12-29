@@ -18,8 +18,15 @@ interface SidebarAgentButtonProps {
   isCollapsed: boolean
 }
 
+const isLucyEnabled = import.meta.env.VITE_LUCY_ENABLED === 'true'
+
 export function SidebarAgentButton({ isCollapsed }: SidebarAgentButtonProps) {
   const { toggle: toggleAgentPanel, isOpen: isAgentPanelOpen } = useAgentPanel()
+
+  // Don't render if Lucy is disabled via feature flag
+  if (!isLucyEnabled) {
+    return null
+  }
 
   if (isCollapsed) {
     return (

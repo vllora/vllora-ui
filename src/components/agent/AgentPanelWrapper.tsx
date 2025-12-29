@@ -16,6 +16,8 @@ import { useDistriConnection } from '@/providers/DistriProvider';
 import { useAgentPanel } from '@/contexts/AgentPanelContext';
 import { emitter } from '@/utils/eventEmitter';
 
+const isLucyEnabled = import.meta.env.VITE_LUCY_ENABLED === 'true';
+
 export function AgentPanelWrapper() {
   const { isInitializing } = useDistriConnection();
   const { isOpen, close, mode } = useAgentPanel();
@@ -35,8 +37,8 @@ export function AgentPanelWrapper() {
     };
   }, [navigate]);
 
-  // Don't render anything if still initializing
-  if (isInitializing) {
+  // Don't render if Lucy is disabled or still initializing
+  if (!isLucyEnabled || isInitializing) {
     return null;
   }
 
