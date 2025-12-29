@@ -8,10 +8,11 @@
 import { useCallback } from 'react';
 import { Chat } from '@distri/react';
 import { DistriFnTool, DistriMessage } from '@distri/core';
-import { X, Plus, Loader2 } from 'lucide-react';
+import { X, Plus, Loader2, Pin, PinOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { LucyAvatar } from './LucyAvatar';
+import { useAgentPanel } from '@/contexts/AgentPanelContext';
 
 // ============================================================================
 // Utilities
@@ -87,6 +88,8 @@ export function AgentChatContent({
   headerClassName,
   isDragHandle = false,
 }: AgentChatContentProps) {
+  const { isPinned, toggleMode } = useAgentPanel();
+
   // Attach current view context to messages before sending
   // Read from window.location at send time to get latest URL state
   const handleBeforeSendMessage = useCallback(
@@ -133,6 +136,19 @@ export function AgentChatContent({
             title="New Chat"
           >
             <Plus className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={toggleMode}
+            title={isPinned ? "Unpin (floating mode)" : "Pin (side panel)"}
+          >
+            {isPinned ? (
+              <PinOff className="h-3.5 w-3.5" />
+            ) : (
+              <Pin className="h-3.5 w-3.5" />
+            )}
           </Button>
           <Button
             variant="ghost"

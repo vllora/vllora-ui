@@ -6,7 +6,7 @@
  */
 
 import { cn } from "@/lib/utils"
-import { useAgentPanel, PANEL_MODE } from "@/contexts/AgentPanelContext"
+import { useAgentPanel } from "@/contexts/AgentPanelContext"
 import {
   Tooltip,
   TooltipContent,
@@ -19,10 +19,10 @@ interface SidebarAgentButtonProps {
 }
 
 export function SidebarAgentButton({ isCollapsed }: SidebarAgentButtonProps) {
-  const { toggle: toggleAgentPanel, isOpen: isAgentPanelOpen } = useAgentPanel()
+  const { toggle: toggleAgentPanel, isOpen: isAgentPanelOpen, mode } = useAgentPanel()
 
   // Only render in side-panel mode
-  if (PANEL_MODE !== 'side-panel') {
+  if (mode !== 'side-panel') {
     return null
   }
 

@@ -3,9 +3,9 @@
  *
  * Wrapper component that manages the agent panel rendering.
  *
- * Supports two modes via VITE_AGENT_PANEL_MODE env variable:
- * - 'floating' (default): Draggable, resizable floating panel with integrated toggle button
- * - 'side-panel': Sliding panel triggered from sidebar
+ * Supports two modes that can be toggled dynamically:
+ * - 'side-panel' (default): Sliding panel triggered from sidebar (pinned)
+ * - 'floating': Draggable, resizable floating panel (unpinned)
  */
 
 import { useEffect } from 'react';
@@ -13,12 +13,12 @@ import { useNavigate } from 'react-router';
 import { FloatingAgentPanel } from './FloatingAgentPanel';
 import { AgentPanel } from './AgentPanel';
 import { useDistriConnection } from '@/providers/DistriProvider';
-import { useAgentPanel, PANEL_MODE } from '@/contexts/AgentPanelContext';
+import { useAgentPanel } from '@/contexts/AgentPanelContext';
 import { emitter } from '@/utils/eventEmitter';
 
 export function AgentPanelWrapper() {
   const { isInitializing } = useDistriConnection();
-  const { isOpen, toggle, close } = useAgentPanel();
+  const { isOpen, toggle, close, mode } = useAgentPanel();
   const navigate = useNavigate();
 
   // Listen for navigation events from agent tools
@@ -41,7 +41,7 @@ export function AgentPanelWrapper() {
   }
 
   // Floating mode: FloatingAgentPanel handles both button and panel
-  if (PANEL_MODE === 'floating') {
+  if (mode === 'floating') {
     return (
       <FloatingAgentPanel
         isOpen={isOpen}
