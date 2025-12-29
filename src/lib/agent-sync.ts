@@ -9,6 +9,8 @@
  * if the Distri server is temporarily unavailable.
  */
 
+import { AgentDefinition } from "@distri/core";
+
 // Storage key for custom Distri URL
 const DISTRI_URL_KEY = 'vllora:distri-url';
 const DEFAULT_DISTRI_URL = 'http://localhost:8081';
@@ -75,7 +77,7 @@ type AgentName = (typeof AGENT_NAMES)[number];
  * Result of fetching registered agents
  */
 interface FetchAgentsResult {
-  agents: string[];
+  agents: AgentDefinition[];
   serverReachable: boolean;
 }
 
@@ -160,7 +162,7 @@ export async function ensureAgentsRegistered(): Promise<boolean> {
 
   // Find missing agents
   const missingAgents = AGENT_NAMES.filter(
-    (name) => !registeredAgents.includes(name)
+    (name) => !registeredAgents.map((agent) => agent.name).includes(name)
   );
 
   if (missingAgents.length === 0) {
