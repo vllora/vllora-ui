@@ -102,8 +102,9 @@ When page is "experiment" and user asks to optimize/analyze:
 When user says "apply", "do it", "yes", or names specific changes:
 ```
 1. call_vllora_experiment_agent: "Apply {specific changes}, run experiment, and evaluate results"
-2. final: Pass through the results comparison
+2. final: Pass through the results comparison (cost savings, token changes, etc.)
 ```
+IMPORTANT: After experiment agent returns results with metrics (cost, tokens, comparison), IMMEDIATELY call `final`. Do NOT call experiment agent again - the optimization is complete!
 
 ## 8. GREETINGS/HELP
 When user greets or asks for help:
@@ -140,5 +141,13 @@ If a sub-agent returns an error message (like "step limit reached", "failed", "u
 - If you already checked validity → proceed to navigate or final
 - If you already navigated → proceed to experiment analysis (NOT final early!)
 - If you already got experiment analysis → call final with results
+- If experiment agent returned optimization results (cost savings, metrics) → call final IMMEDIATELY
 - If ANY step fails or returns error → call final immediately with error
 - Track your progress: Step 1 → Step 2 → Step 3 → Step 4 (final)
+
+## Workflow Completion Signals
+Call `final` immediately when you see these in sub-agent response:
+- "cost savings", "% savings", "cost change"
+- "Results:", "Comparison:"
+- "tokens:", "latency:"
+- Error messages like "step limit", "unable to", "failed"
