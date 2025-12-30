@@ -27,8 +27,9 @@ import { DistriFnTool } from '@distri/core';
 import { listRuns, getRunDetails, type ListRunsQuery } from '@/services/runs-api';
 import { listSpans, type ListSpansQuery, type Span } from '@/services/spans-api';
 import { listGroups, type ListGroupsQuery } from '@/services/groups-api';
+import { listLabels } from '@/services/labels-api';
 
-// Data tool names (6 tools - 4 original + 2 new for two-phase analysis)
+// Data tool names (7 tools - 4 original + 2 two-phase analysis + 1 label discovery)
 export const DATA_TOOL_NAMES = [
   'fetch_runs',
   'fetch_spans',
@@ -36,6 +37,7 @@ export const DATA_TOOL_NAMES = [
   'fetch_groups',
   'fetch_spans_summary',
   'get_span_content',
+  'list_labels',
 ] as const;
 
 // ============================================================================
@@ -329,6 +331,7 @@ export const dataToolHandlers: Record<string, (params: Record<string, unknown>) 
    * @param runIds - Filter by run IDs (string or array)
    * @param operationNames - Filter by operation types (string or array)
    * @param parentSpanIds - Filter by parent span IDs (string or array)
+   * @param labels - Filter by labels (string or array) - filters by attribute.label
    * @param limit - Max results (default: 10, to prevent context overflow)
    * @param offset - Pagination offset
    * @param projectId - Project ID (defaults to current)
@@ -344,6 +347,7 @@ export const dataToolHandlers: Record<string, (params: Record<string, unknown>) 
       if (params.runIds) query.runIds = toCommaSeparated(params.runIds as string | string[]);
       if (params.operationNames) query.operationNames = toCommaSeparated(params.operationNames as string | string[]);
       if (params.parentSpanIds) query.parentSpanIds = toCommaSeparated(params.parentSpanIds as string | string[]);
+      if (params.labels) query.labels = toCommaSeparated(params.labels as string | string[]);
       // Default limit to 10 to prevent context overflow (spans can contain large payloads ~9KB each)
       query.limit = (params.limit as number) || 10;
       if (params.offset) query.offset = params.offset as number;
@@ -452,6 +456,7 @@ export const dataToolHandlers: Record<string, (params: Record<string, unknown>) 
    *
    * @param threadIds - Filter by thread IDs (required)
    * @param runIds - Filter by run IDs (optional)
+   * @param labels - Filter by labels (optional) - filters by attribute.label
    * @param projectId - Project ID (defaults to current)
    */
   fetch_spans_summary: async (params) => {
@@ -466,6 +471,7 @@ export const dataToolHandlers: Record<string, (params: Record<string, unknown>) 
       const query: ListSpansQuery = {};
       if (params.threadIds) query.threadIds = toCommaSeparated(params.threadIds as string | string[]);
       if (params.runIds) query.runIds = toCommaSeparated(params.runIds as string | string[]);
+      if (params.labels) query.labels = toCommaSeparated(params.labels as string | string[]);
 
       // Fetch ALL spans with PARALLEL pagination (internal, not exposed to LLM)
       const batchSize = 100;
@@ -663,10 +669,50 @@ export const dataToolHandlers: Record<string, (params: Record<string, unknown>) 
       };
     }
   },
+
+  // ============================================================================
+  // LABEL DATA TOOLS
+  // ============================================================================
+
+  /**
+   * List available labels with counts
+   * Reuses: @/services/labels-api.ts -> listLabels
+   *
+   * @param threadId - Filter to labels within a specific thread (optional)
+   * @param limit - Maximum number of labels to return (default: 100)
+   * @param projectId - Project ID (defaults to current)
+   */
+  list_labels: async (params) => {
+    try {
+      const projectId = (params.projectId as string) || await getCurrentProjectId();
+
+      const result = await listLabels({
+        projectId,
+        params: {
+          threadId: params.threadId as string | undefined,
+          limit: (params.limit as number) || 100,
+        },
+      });
+
+      return {
+        success: true,
+        data: result.labels,
+        total: result.labels.length,
+        _note: params.threadId
+          ? `Labels found in thread ${params.threadId}`
+          : 'Labels found across entire project',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to list labels',
+      };
+    }
+  },
 };
 
 /**
- * Check if a tool name is a Data tool
+ * Check if a tool name is a Data tool (fetches/analyzes data)
  */
 export function isDataTool(toolName: string): toolName is DataToolName {
   return DATA_TOOL_NAMES.includes(toolName as DataToolName);
@@ -727,7 +773,7 @@ export const dataTools: DistriFnTool[] = [
 
   {
     name: 'fetch_spans',
-    description: 'Fetch spans with optional filtering by thread, run, operation type, or parent span. Returns max 10 spans by default.',
+    description: 'Fetch spans with optional filtering by thread, run, operation type, parent span, or labels. Returns max 10 spans by default.',
     type: 'function',
     parameters: {
       type: 'object',
@@ -751,6 +797,11 @@ export const dataTools: DistriFnTool[] = [
           type: 'array',
           items: { type: 'string' },
           description: 'Filter by parent span IDs',
+        },
+        labels: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Filter by labels (attribute.label). E.g., ["flight_search", "budget_agent"]',
         },
         limit: { type: 'number', description: 'Maximum number of results (default: 10)' },
         offset: { type: 'number', description: 'Pagination offset' },
@@ -808,7 +859,7 @@ export const dataTools: DistriFnTool[] = [
 
   {
     name: 'fetch_spans_summary',
-    description: 'Fetch ALL spans for a thread, analyze them, and return a lightweight summary. Full span data is stored in memory for later retrieval with get_span_content. Use this instead of fetch_spans when you need to analyze many spans.',
+    description: 'Fetch ALL spans for a thread, analyze them, and return a lightweight summary. Full span data is stored in memory for later retrieval with get_span_content. Use this instead of fetch_spans when you need to analyze many spans. Supports label filtering.',
     type: 'function',
     parameters: {
       type: 'object',
@@ -822,6 +873,11 @@ export const dataTools: DistriFnTool[] = [
           type: 'array',
           items: { type: 'string' },
           description: 'Filter by run IDs (required if threadIds not provided)',
+        },
+        labels: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Filter by labels (attribute.label). E.g., ["flight_search", "budget_agent"]',
         },
         projectId: { type: 'string', description: 'Project ID (defaults to current)' },
       },
@@ -845,5 +901,30 @@ export const dataTools: DistriFnTool[] = [
       required: ['spanIds'],
     },
     handler: async (input: object) => JSON.stringify(await dataToolHandlers.get_span_content(input as Record<string, unknown>)),
+  } as DistriFnTool,
+
+  // ============================================================================
+  // LABEL DATA TOOLS (fetch label information)
+  // ============================================================================
+
+  {
+    name: 'list_labels',
+    description: 'List available labels with their counts. Use this to discover what labels exist in the project or a specific thread before filtering.',
+    type: 'function',
+    parameters: {
+      type: 'object',
+      properties: {
+        threadId: {
+          type: 'string',
+          description: 'Filter to labels within a specific thread (optional). If not provided, returns all labels in the project.',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of labels to return (default: 100)',
+        },
+        projectId: { type: 'string', description: 'Project ID (defaults to current)' },
+      },
+    },
+    handler: async (input: object) => JSON.stringify(await dataToolHandlers.list_labels(input as Record<string, unknown>)),
   } as DistriFnTool,
 ];

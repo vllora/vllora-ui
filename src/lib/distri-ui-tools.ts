@@ -65,7 +65,7 @@ export const UI_TOOL_NAMES = [
   'is_valid_for_optimize',
   'get_experiment_data',
   'evaluate_experiment_results',
-  // CHANGE UI (9)
+  // CHANGE UI (10)
   'open_modal',
   'close_modal',
   'select_span',
@@ -75,6 +75,7 @@ export const UI_TOOL_NAMES = [
   'navigate_to_experiment',
   'apply_experiment_data',
   'run_experiment',
+  'apply_label_filter',
 ] as const;
 
 export type UiToolName = (typeof UI_TOOL_NAMES)[number];
@@ -439,6 +440,43 @@ const changeUiHandlers: Record<string, ToolHandler> = {
       _next_step: "Now call 'evaluate_experiment_results' to compare original vs new results. This step is REQUIRED.",
     };
   },
+
+  // Apply label filter to the UI (updates label filter dropdown)
+  apply_label_filter: async ({ labels, action, view }) => {
+    try {
+      const labelArray = labels as string[] | undefined;
+      const actionStr = (action as string) || 'set';
+
+      // Dispatch custom event that the UI contexts will listen for
+      const event = new CustomEvent('lucy:apply-label-filter', {
+        detail: {
+          labels: labelArray || [],
+          action: actionStr,
+          view: view as string | undefined,
+        },
+      });
+      window.dispatchEvent(event);
+
+      if (actionStr === 'clear') {
+        return {
+          success: true,
+          message: 'Label filter cleared',
+        };
+      }
+
+      return {
+        success: true,
+        message: `Label filter applied: ${labelArray?.join(', ') || 'none'}`,
+        applied_labels: labelArray,
+        action: actionStr,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to apply label filter',
+      };
+    }
+  },
 };
 
 // ============================================================================
@@ -678,24 +716,30 @@ export const uiTools: DistriFnTool[] = [
     handler: async () => JSON.stringify(await uiToolHandlers.evaluate_experiment_results({})),
   } as DistriFnTool,
 
-  // ============================================================================
-  // TEST TOOL - For verifying sub-agent external tools propagation
-  // Remove after Phase 0 testing is complete
-  // ============================================================================
   {
-    name: 'test_tool',
-    description: 'Test tool for verifying sub-agent external tools. Returns SUCCESS with timestamp.',
+    name: 'apply_label_filter',
+    description: 'Apply a label filter to the UI. Updates the label filter dropdown in the Traces or Threads view so the user sees filtered results. Does NOT fetch data - only updates UI state.',
     type: 'function',
-    parameters: { type: 'object', properties: {} },
-    handler: async () => {
-      const result = {
-        status: 'SUCCESS',
-        message: 'External tool executed successfully in sub-agent!',
-        timestamp: new Date().toISOString(),
-        source: 'test_tool in distri-ui-tools.ts',
-      };
-      console.log('[TEST_TOOL] Executed:', result);
-      return JSON.stringify(result);
+    parameters: {
+      type: 'object',
+      properties: {
+        labels: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Labels to filter by. E.g., ["flight_search", "budget_agent"]',
+        },
+        action: {
+          type: 'string',
+          enum: ['set', 'add', 'clear'],
+          description: 'Action: "set" replaces current filter, "add" adds to current filter, "clear" removes all filters (default: "set")',
+        },
+        view: {
+          type: 'string',
+          enum: ['threads', 'traces'],
+          description: 'Which view to apply the filter to (default: current view)',
+        },
+      },
     },
+    handler: async (input: object) => JSON.stringify(await uiToolHandlers.apply_label_filter(input as Record<string, unknown>)),
   } as DistriFnTool,
 ];
