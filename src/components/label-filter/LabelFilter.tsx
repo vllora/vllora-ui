@@ -1,12 +1,12 @@
 import { useState, useMemo } from 'react';
-import { Tag, Search, X, ChevronDown, Loader2 } from 'lucide-react';
+import { Tag, Search, ChevronDown, Loader2 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { LabelInfo } from '@/services/labels-api';
+import { LabelBadge } from './LabelBadge';
 
 export interface LabelFilterProps {
   /** Selected labels */
@@ -114,9 +114,10 @@ export function LabelFilter({
         </PopoverTrigger>
 
         <PopoverContent
-          className="w-64 p-0"
+          className="p-0"
           align="start"
           sideOffset={4}
+          style={{ width: 'var(--radix-popover-trigger-width)' }}
         >
           {/* Search Input */}
           <div className="p-2 border-b">
@@ -203,20 +204,17 @@ export function LabelFilter({
       {hasSelection && (
         <div className="flex flex-wrap gap-1">
           {selectedLabels.map((label) => (
-            <Badge
+            <LabelBadge
               key={label}
-              variant="secondary"
-              className="h-5 px-1.5 text-[10px] gap-1 cursor-pointer hover:bg-secondary/60"
-              onClick={() => removeLabel(label)}
-            >
-              <span className="truncate max-w-[100px]">{label}</span>
-              <X className="h-2.5 w-2.5 shrink-0" />
-            </Badge>
+              label={label}
+              onRemove={removeLabel}
+              size="sm"
+            />
           ))}
           <Button
             variant="ghost"
             size="sm"
-            className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+            className="h-4 px-1 text-[10px] text-muted-foreground hover:text-foreground"
             onClick={clearLabels}
           >
             Clear all

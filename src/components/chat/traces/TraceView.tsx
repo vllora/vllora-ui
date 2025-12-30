@@ -127,7 +127,7 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
             size="sm"
           />
           {labelFilter.hasSelection && (
-            <div className="mt-1 text-[10px] text-muted-foreground">
+            <div className="mt-1 text-[10px] text-muted-foreground text-right">
               Showing {matchingRuns} of {totalRuns} runs
             </div>
           )}
