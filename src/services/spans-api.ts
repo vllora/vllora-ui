@@ -14,6 +14,7 @@ export type { Pagination, Span };
  */
 export interface ListSpansQuery {
   // ID filters - comma-separated or special values "null"/"!null"
+  spanIds?: string;        // Filter by span IDs (comma-separated, e.g., "span-1,span-2")
   threadIds?: string;      // Filter by thread IDs or null/"!null"
   runIds?: string;         // Filter by run IDs or null/"!null"
   operationNames?: string; // Filter by operation names or null/"!null"
@@ -224,13 +225,43 @@ export const getSpansByOperation = async (props: {
  */
 export const getSpanById = async (props: {
   spanId: string;
+  projectId?: string;
 }): Promise<Span | null> => {
-  const response = await apiClient(`/spans?span_id=${props.spanId}`, {
+  const headers: Record<string, string> = {};
+  if (props.projectId) {
+    headers['x-project-id'] = props.projectId;
+  }
+
+  const response = await apiClient(`/spans?spanIds=${props.spanId}`, {
     method: 'GET',
+    headers,
   });
 
   const data = await handleApiResponse<PaginatedSpansResponse>(response);
   return data.data.length > 0 ? data.data[0] : null;
+};
+
+/**
+ * Get multiple spans by IDs
+ */
+export const getSpansByIds = async (props: {
+  spanIds: string[];
+  projectId?: string;
+}): Promise<Span[]> => {
+  if (props.spanIds.length === 0) return [];
+
+  const headers: Record<string, string> = {};
+  if (props.projectId) {
+    headers['x-project-id'] = props.projectId;
+  }
+
+  const response = await apiClient(`/spans?spanIds=${props.spanIds.join(',')}`, {
+    method: 'GET',
+    headers,
+  });
+
+  const data = await handleApiResponse<PaginatedSpansResponse>(response);
+  return data.data;
 };
 
 /**

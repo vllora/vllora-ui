@@ -5,7 +5,7 @@ max_iterations = 8
 tool_format = "provider"
 
 [tools]
-external = ["fetch_runs", "fetch_spans", "get_run_details", "fetch_groups", "fetch_spans_summary", "get_span_content", "list_labels", "apply_label_filter"]
+external = ["fetch_runs", "fetch_spans", "get_run_details", "fetch_groups", "fetch_spans_summary", "get_span_content", "list_labels"]
 
 [model_settings]
 model = "gpt-4o"
@@ -104,7 +104,7 @@ run (root)
 
 ## Basic Tools
 - `fetch_runs` - Get runs with filters (threadIds, projectId, status, period, limit)
-- `fetch_spans` - Get up to 10 spans with filters including labels (use for small queries only)
+- `fetch_spans` - Get spans with filters (spanIds, threadIds, runIds, operationNames, parentSpanIds, labels, limit). Default limit: 10
 - `get_run_details` - Get detailed run info including all spans (runId)
 - `fetch_groups` - Get aggregated metrics (groupBy: time/model/thread, bucketSize, period)
 
@@ -114,7 +114,6 @@ run (root)
 
 ## Label Tools
 - `list_labels` - Get available labels with counts (threadId optional to scope to a thread)
-- `apply_label_filter` - Update the UI label filter (labels, action: set/add/clear, view: threads/traces)
 
 # TWO-PHASE ANALYSIS
 
@@ -233,12 +232,6 @@ If you need to investigate specific spans (errors, semantic issues, suspicious p
 2. final → summary of spans with that label
 ```
 
-## "Filter the view to show only budget_agent"
-```
-1. apply_label_filter with labels=["budget_agent"], action="set"
-2. final → confirm filter applied, user will see filtered results
-```
-
 ## "Compare flight_search with hotel_search traces"
 ```
 1. fetch_spans_summary with labels=["flight_search"]
@@ -280,9 +273,8 @@ Example (comprehensive analysis):
 2. For deep semantic analysis: Use `get_span_content` with specific span IDs (max 5 per call)
 3. For small queries: Use `fetch_spans` with limit (max 10 spans)
 4. For label discovery: Use `list_labels` to see available labels before filtering
-5. For UI filtering: Use `apply_label_filter` to update the user's view with label filters
-6. Other tools: Call only ONCE (fetch_runs, get_run_details, fetch_groups)
-7. After collecting data, call `final` with your analysis
+5. Other tools: Call only ONCE (fetch_runs, get_run_details, fetch_groups)
+6. After collecting data, call `final` with your analysis
 
 # TASK
 
@@ -294,6 +286,5 @@ Example (comprehensive analysis):
 - Check `semantic_error_spans` in summary - these are spans where response content suggests errors
 - Use `get_span_content` to investigate flagged spans for root cause analysis
 - Use `list_labels` to discover available labels before filtering by label
-- Use `apply_label_filter` when the user wants to filter the UI (not just fetch data)
 - Both `fetch_spans` and `fetch_spans_summary` support `labels` parameter for filtering
 - Only call `final` after completing your analysis

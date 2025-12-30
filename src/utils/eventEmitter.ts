@@ -8,22 +8,6 @@ import mitt, { Emitter } from 'mitt';
 // GET STATE tool request/response events
 // Using relaxed types for responses since actual data shapes vary
 type DistriGetStateEvents = {
-  // get_current_view
-  vllora_get_current_view: Record<string, never>;
-  vllora_current_view_response: Record<string, unknown>;
-
-  // get_selection_context
-  vllora_get_selection_context: Record<string, never>;
-  vllora_selection_context_response: Record<string, unknown>;
-
-  // get_thread_runs
-  vllora_get_thread_runs: Record<string, never>;
-  vllora_thread_runs_response: Record<string, unknown>;
-
-  // get_span_details
-  vllora_get_span_details: Record<string, never>;
-  vllora_span_details_response: Record<string, unknown>;
-
   // get_collapsed_spans
   vllora_get_collapsed_spans: Record<string, never>;
   vllora_collapsed_spans_response: Record<string, unknown>;
@@ -39,10 +23,6 @@ type DistriGetStateEvents = {
 
 // CHANGE UI tool events (fire-and-forget)
 type DistriChangeUiEvents = {
-  vllora_select_span: { spanId: string };
-  vllora_select_run: { runId: string };
-  vllora_expand_span: { spanId: string };
-  vllora_collapse_span: { spanId: string };
   vllora_navigate_to_experiment: { spanId: string; url: string };
 
   // Experiment page tools

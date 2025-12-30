@@ -327,6 +327,7 @@ export const dataToolHandlers: Record<string, (params: Record<string, unknown>) 
    * Fetch spans with filtering
    * Reuses: @/services/spans-api.ts -> listSpans
    *
+   * @param spanIds - Filter by span IDs (string or array) - use to fetch specific spans by ID
    * @param threadIds - Filter by thread IDs (string or array)
    * @param runIds - Filter by run IDs (string or array)
    * @param operationNames - Filter by operation types (string or array)
@@ -343,6 +344,7 @@ export const dataToolHandlers: Record<string, (params: Record<string, unknown>) 
       const query: ListSpansQuery = {};
 
       // spans-api uses camelCase, just pass through with conversion
+      if (params.spanIds) query.spanIds = toCommaSeparated(params.spanIds as string | string[]);
       if (params.threadIds) query.threadIds = toCommaSeparated(params.threadIds as string | string[]);
       if (params.runIds) query.runIds = toCommaSeparated(params.runIds as string | string[]);
       if (params.operationNames) query.operationNames = toCommaSeparated(params.operationNames as string | string[]);
@@ -773,11 +775,16 @@ export const dataTools: DistriFnTool[] = [
 
   {
     name: 'fetch_spans',
-    description: 'Fetch spans with optional filtering by thread, run, operation type, parent span, or labels. Returns max 10 spans by default.',
+    description: 'Fetch spans with optional filtering by span IDs, thread, run, operation type, parent span, or labels. Returns max 10 spans by default. Use spanIds to fetch specific spans by ID.',
     type: 'function',
     parameters: {
       type: 'object',
       properties: {
+        spanIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Filter by span IDs. Use this to fetch specific spans by their IDs.',
+        },
         threadIds: {
           type: 'array',
           items: { type: 'string' },

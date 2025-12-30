@@ -56,20 +56,12 @@ export function clearValidationCache(): void {
 
 // UI tool names
 export const UI_TOOL_NAMES = [
-  // GET STATE (8)
-  'get_current_view',
-  'get_selection_context',
-  'get_thread_runs',
-  'get_span_details',
+  // GET STATE (4)
   'get_collapsed_spans',
   'is_valid_for_optimize',
   'get_experiment_data',
   'evaluate_experiment_results',
-  // CHANGE UI (8)
-  'select_span',
-  'select_run',
-  'expand_span',
-  'collapse_span',
+  // CHANGE UI (4)
   'navigate_to_experiment',
   'apply_experiment_data',
   'run_experiment',
@@ -79,7 +71,7 @@ export const UI_TOOL_NAMES = [
 export type UiToolName = (typeof UI_TOOL_NAMES)[number];
 
 // ============================================================================
-// GET STATE TOOLS (5 tools) - Request/response pattern
+// GET STATE TOOLS (6 tools) - Request/response pattern
 // These emit a request event and wait for a response event
 // ============================================================================
 
@@ -112,63 +104,6 @@ function createGetStateHandler<T>(
 }
 
 const getStateHandlers: Record<string, ToolHandler> = {
-  // Get current view state (page, project, thread, theme, modal)
-  get_current_view: async () => {
-    const handler = createGetStateHandler<{
-      page: string;
-      projectId: string | null;
-      threadId: string | null;
-      theme: string;
-      modal: string | null;
-    }>('vllora_get_current_view', 'vllora_current_view_response');
-    return handler();
-  },
-
-  // Get current selection (selected run, span, text selection)
-  get_selection_context: async () => {
-    const handler = createGetStateHandler<{
-      selectedRunId: string | null;
-      selectedSpanId: string | null;
-      detailSpanId: string | null;
-      textSelection: string | null;
-    }>('vllora_get_selection_context', 'vllora_selection_context_response');
-    return handler();
-  },
-
-  // Get runs in current thread
-  get_thread_runs: async () => {
-    const handler = createGetStateHandler<{
-      runs: Array<{
-        run_id: string;
-        status: string;
-        model: string | null;
-        duration_ms: number | null;
-      }>;
-    }>('vllora_get_thread_runs', 'vllora_thread_runs_response');
-    return handler();
-  },
-
-  // Get details for a specific span by ID (calls API directly)
-  get_span_details: async ({ spanId }) => {
-    if (!spanId) {
-      return { success: false, error: 'spanId is required' };
-    }
-    try {
-      const { getSpanById } = await import('@/services/spans-api');
-      const span = await getSpanById({ spanId: spanId as string });
-      if (span) {
-        return { success: true, span };
-      } else {
-        return { success: false, error: `Span ${spanId} not found` };
-      }
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to fetch span details',
-      };
-    }
-  },
-
   // Get list of collapsed span IDs
   get_collapsed_spans: async () => {
     const handler = createGetStateHandler<{
@@ -300,47 +235,11 @@ const getStateHandlers: Record<string, ToolHandler> = {
 };
 
 // ============================================================================
-// CHANGE UI TOOLS (8 tools) - Fire-and-forget pattern
+// CHANGE UI TOOLS (4 tools) - Fire-and-forget pattern
 // These emit events that are handled by React components
 // ============================================================================
 
 const changeUiHandlers: Record<string, ToolHandler> = {
-  // Select and highlight a span
-  select_span: async ({ spanId }) => {
-    if (!spanId) {
-      return { success: false, error: 'spanId is required' };
-    }
-    emitter.emit('vllora_select_span', { spanId: spanId as string });
-    return { success: true, message: `Selected span: ${spanId}` };
-  },
-
-  // Select a run and load its spans
-  select_run: async ({ runId }) => {
-    if (!runId) {
-      return { success: false, error: 'runId is required' };
-    }
-    emitter.emit('vllora_select_run', { runId: runId as string });
-    return { success: true, message: `Selected run: ${runId}` };
-  },
-
-  // Expand a collapsed span
-  expand_span: async ({ spanId }) => {
-    if (!spanId) {
-      return { success: false, error: 'spanId is required' };
-    }
-    emitter.emit('vllora_expand_span', { spanId: spanId as string });
-    return { success: true, message: `Expanded span: ${spanId}` };
-  },
-
-  // Collapse an expanded span
-  collapse_span: async ({ spanId }) => {
-    if (!spanId) {
-      return { success: false, error: 'spanId is required' };
-    }
-    emitter.emit('vllora_collapse_span', { spanId: spanId as string });
-    return { success: true, message: `Collapsed span: ${spanId}` };
-  },
-
   // Navigate to experiment page (saves agent state to localStorage for continuity)
   navigate_to_experiment: async ({ spanId }) => {
     if (!spanId) {
@@ -477,44 +376,6 @@ export async function executeUiTool(
 export const uiTools: DistriFnTool[] = [
   // GET STATE TOOLS
   {
-    name: 'get_current_view',
-    description: 'Get information about the current page/view the user is looking at',
-    type: 'function',
-    parameters: { type: 'object', properties: {} },
-    handler: async () => JSON.stringify(await uiToolHandlers.get_current_view({})),
-  } as DistriFnTool,
-
-  {
-    name: 'get_selection_context',
-    description: 'Get the currently selected run, span, and detail span IDs',
-    type: 'function',
-    parameters: { type: 'object', properties: {} },
-    handler: async () => JSON.stringify(await uiToolHandlers.get_selection_context({})),
-  } as DistriFnTool,
-
-  {
-    name: 'get_thread_runs',
-    description: 'Get the list of runs currently displayed in the UI',
-    type: 'function',
-    parameters: { type: 'object', properties: {} },
-    handler: async () => JSON.stringify(await uiToolHandlers.get_thread_runs({})),
-  } as DistriFnTool,
-
-  {
-    name: 'get_span_details',
-    description: 'Get details of a specific span by ID',
-    type: 'function',
-    parameters: {
-      type: 'object',
-      properties: {
-        spanId: { type: 'string', description: 'The span ID to get details for' },
-      },
-      required: ['spanId'],
-    },
-    handler: async (input: object) => JSON.stringify(await uiToolHandlers.get_span_details(input as Record<string, unknown>)),
-  } as DistriFnTool,
-
-  {
     name: 'get_collapsed_spans',
     description: 'Get the list of span IDs that are currently collapsed in the trace view',
     type: 'function',
@@ -545,62 +406,6 @@ export const uiTools: DistriFnTool[] = [
   } as DistriFnTool,
 
   // CHANGE UI TOOLS
-  {
-    name: 'select_span',
-    description: 'Select and highlight a specific span in the trace view',
-    type: 'function',
-    parameters: {
-      type: 'object',
-      properties: {
-        spanId: { type: 'string', description: 'The span ID to select' },
-      },
-      required: ['spanId'],
-    },
-    handler: async (input: object) => JSON.stringify(await uiToolHandlers.select_span(input as Record<string, unknown>)),
-  } as DistriFnTool,
-
-  {
-    name: 'select_run',
-    description: 'Select a specific run in the traces view',
-    type: 'function',
-    parameters: {
-      type: 'object',
-      properties: {
-        runId: { type: 'string', description: 'The run ID to select' },
-      },
-      required: ['runId'],
-    },
-    handler: async (input: object) => JSON.stringify(await uiToolHandlers.select_run(input as Record<string, unknown>)),
-  } as DistriFnTool,
-
-  {
-    name: 'expand_span',
-    description: 'Expand a collapsed span to show its children',
-    type: 'function',
-    parameters: {
-      type: 'object',
-      properties: {
-        spanId: { type: 'string', description: 'The span ID to expand' },
-      },
-      required: ['spanId'],
-    },
-    handler: async (input: object) => JSON.stringify(await uiToolHandlers.expand_span(input as Record<string, unknown>)),
-  } as DistriFnTool,
-
-  {
-    name: 'collapse_span',
-    description: 'Collapse a span to hide its children',
-    type: 'function',
-    parameters: {
-      type: 'object',
-      properties: {
-        spanId: { type: 'string', description: 'The span ID to collapse' },
-      },
-      required: ['spanId'],
-    },
-    handler: async (input: object) => JSON.stringify(await uiToolHandlers.collapse_span(input as Record<string, unknown>)),
-  } as DistriFnTool,
-
   {
     name: 'navigate_to_experiment',
     description: 'Navigate to the experiment page for a span. The agent panel stays open so you can continue providing optimization suggestions after navigation. Call is_valid_for_optimize first to verify the span is valid.',

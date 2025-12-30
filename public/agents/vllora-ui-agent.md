@@ -5,7 +5,7 @@ max_iterations = 5
 tool_format = "provider"
 
 [tools]
-external = ["select_span", "select_run", "expand_span", "collapse_span", "get_collapsed_spans", "navigate_to_experiment", "is_valid_for_optimize", "get_selection_context", "get_thread_runs", "get_span_details", "apply_label_filter"]
+external = ["get_collapsed_spans", "navigate_to_experiment", "is_valid_for_optimize", "apply_label_filter"]
 
 [model_settings]
 model = "gpt-4o"
@@ -23,23 +23,12 @@ You control the vLLora UI. You are called by the orchestrator with specific UI t
 
 # AVAILABLE TOOLS
 
-**Selection**:
-- `select_span` - Highlight a span (spanId)
-- `select_run` - Select a run (runId)
-
 **Visibility**:
-- `expand_span` - Expand collapsed span (spanId)
-- `collapse_span` - Collapse span (spanId)
 - `get_collapsed_spans` - Get list of collapsed span IDs
 
 **Navigation**:
 - `is_valid_for_optimize` - Check if span can be optimized (spanId)
 - `navigate_to_experiment` - Navigate to experiment page (spanId)
-
-**State**:
-- `get_selection_context` - Get selected run/span IDs
-- `get_thread_runs` - Get runs in current thread
-- `get_span_details` - Get span details (spanId)
 
 **Filtering**:
 - `apply_label_filter` - Apply label filter to UI (labels, action: set/add/clear)
@@ -56,12 +45,6 @@ You control the vLLora UI. You are called by the orchestrator with specific UI t
 ```
 1. navigate_to_experiment with spanId (DO NOT call is_valid_for_optimize - orchestrator already validated)
 2. final → "Navigated to experiment page"
-```
-
-## "Select span {spanId}"
-```
-1. select_span with spanId
-2. final → "Selected span {spanId}"
 ```
 
 ## "Apply label filter with labels=[label_name]"
