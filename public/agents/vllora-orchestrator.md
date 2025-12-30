@@ -43,9 +43,16 @@ Every message includes context:
   "page": "experiment",
   "projectId": "default",
   "threadId": "abc123",
-  "current_view_detail_of_span_id": "span-456"
+  "current_view_detail_of_span_id": "span-456",
+  "labels": ["flight_search"]
 }
 ```
+
+- **page**: Current UI page (`traces`, `chat`, `experiment`, etc.)
+- **projectId**: The project scope for all queries
+- **threadId**: The conversation/session ID the user is viewing - use this for data queries
+- **current_view_detail_of_span_id**: The span currently expanded in detail view (if any)
+- **labels**: Currently active label filters (empty array if no filter applied)
 
 # SUB-AGENTS
 

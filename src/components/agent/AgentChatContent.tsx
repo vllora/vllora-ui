@@ -25,6 +25,7 @@ interface ViewContext {
   projectId?: string;
   threadId?: string;
   current_view_detail_of_span_id?: string;
+  labels?: string[];
 }
 
 function getViewContextFromURL(
@@ -45,6 +46,9 @@ function getViewContextFromURL(
   if (threadId) ctx.threadId = threadId;
 
   if (detailSpanId) ctx.current_view_detail_of_span_id = detailSpanId;
+
+  const labels = searchParams.get('labels');
+  if (labels) ctx.labels = labels.split(',');
 
   return ctx;
 }
