@@ -16,7 +16,7 @@ AI assistant for vLLora trace analysis using Distri's multi-agent architecture.
          ▼              ▼              ▼
    ┌───────────┐  ┌───────────┐  ┌───────────────┐
    │ ui_agent  │  │data_agent │  │experiment_agent│
-   │ (17 tools)│  │ (6 tools) │  │   (4 tools)   │
+   │ (4 tools) │  │ (7 tools) │  │   (4 tools)   │
    └───────────┘  └───────────┘  └───────────────┘
 ```
 
@@ -24,9 +24,9 @@ AI assistant for vLLora trace analysis using Distri's multi-agent architecture.
 
 | Agent | Purpose | Tools |
 |-------|---------|-------|
-| **vllora_orchestrator** | Routes requests, manages workflows (8 workflow types) | `call_vllora_*` (auto-generated) |
-| **vllora_ui_agent** | UI interactions: select, expand, navigate, modals, validation | 17 external |
-| **vllora_data_agent** | Data fetching with two-phase analysis | 6 external |
+| **vllora_orchestrator** | Routes requests, manages workflows (12 workflow types) | `call_vllora_*` (auto-generated) |
+| **vllora_ui_agent** | UI interactions: navigate, visibility, label filtering | 4 external |
+| **vllora_data_agent** | Data fetching with two-phase analysis + label discovery | 7 external |
 | **vllora_experiment_agent** | Experiment page optimization | 4 external |
 
 ## Key Features
@@ -44,6 +44,11 @@ AI assistant for vLLora trace analysis using Distri's multi-agent architecture.
 - Detects error patterns in response content (not just status codes)
 - Patterns: "not found", "failed to", "timeout", "rate limit", etc.
 
+### Label Filtering
+- `list_labels` - Discover available labels with counts
+- `fetch_spans` and `fetch_spans_summary` support `labels` parameter
+- `apply_label_filter` - Update UI label filter
+
 ## Quick Start
 
 ```bash
@@ -58,21 +63,21 @@ cd vllora/ui && pnpm dev
 ```
 ui/
 ├── public/agents/                 # Agent definitions
-│   ├── vllora-orchestrator.md    # Main entry point (8 workflows)
-│   ├── vllora-ui-agent.md        # UI interactions
-│   ├── vllora-data-agent.md      # Data analysis (two-phase)
-│   └── vllora-experiment-agent.md # Experiment optimization
+│   ├── vllora-orchestrator.md    # Main entry point (12 workflows)
+│   ├── vllora-ui-agent.md        # UI interactions (4 tools)
+│   ├── vllora-data-agent.md      # Data analysis (7 tools)
+│   └── vllora-experiment-agent.md # Experiment optimization (4 tools)
 ├── src/lib/
 │   ├── agent-sync.ts             # Auto-registers agents
-│   ├── distri-ui-tools.ts        # UI tools (17) + validation cache
-│   └── distri-data-tools.ts      # Data tools (6) + span storage
+│   ├── distri-ui-tools.ts        # UI tools (8) + validation cache
+│   └── distri-data-tools.ts      # Data tools (7) + span storage
 └── src/components/agent/          # Chat panel UI
 ```
 
 ## How It Works
 
 1. **User sends message** → Orchestrator receives it with page context
-2. **Orchestrator identifies workflow** → Matches against 8 workflow types
+2. **Orchestrator identifies workflow** → Matches against 12 workflow types
 3. **Orchestrator routes to sub-agent** → Calls `call_vllora_*` with specific task
 4. **Sub-agent executes** → Uses external tools (handled by frontend)
 5. **Result returned** → Orchestrator continues workflow or calls `final`
@@ -89,6 +94,10 @@ ui/
 | 6 | Analyze Experiment | "optimize" (on experiment page) |
 | 7 | Apply Optimization | "apply", "do it", "yes" |
 | 8 | Greetings/Help | "hello", "help" |
+| 9 | Label Discovery | "what labels exist?", "show me labels" |
+| 10 | Label Filtering (data) | "show me flight_search traces" |
+| 11 | Label Filtering (UI) | "filter by label", "apply label filter" |
+| 12 | Label Comparison | "compare flight_search with hotel_search" |
 
 ## Documentation
 

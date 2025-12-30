@@ -27,7 +27,7 @@ max_iterations = 10
 - `call_vllora_data_agent` - Delegate data queries
 - `call_vllora_experiment_agent` - Delegate optimization
 
-### Workflows (8 total)
+### Workflows (12 total)
 
 | # | Workflow | Trigger | Steps |
 |---|----------|---------|-------|
@@ -39,6 +39,10 @@ max_iterations = 10
 | 6 | Analyze Experiment | "optimize" (on experiment page) | experiment_agent → final |
 | 7 | Apply Optimization | "apply", "do it", "yes" | experiment_agent → final |
 | 8 | Greetings/Help | "hello", "help" | final (direct response) |
+| 9 | Label Discovery | "what labels exist?" | data_agent (list_labels) → final |
+| 10 | Label Filtering (data) | "show me flight_search traces" | data_agent (fetch_spans_summary with labels) → final |
+| 11 | Label Filtering (UI) | "filter by label" | ui_agent (apply_label_filter) → final |
+| 12 | Label Comparison | "compare flight_search with hotel_search" | data_agent → final |
 
 ### Workflow 5: Optimize Span (4 steps)
 
@@ -81,21 +85,17 @@ name = "vllora_ui_agent"
 description = "Controls vLLora UI - selection, navigation, visibility"
 max_iterations = 5
 [tools]
-external = ["select_span", "select_run", "expand_span", "collapse_span",
-            "get_collapsed_spans", "open_modal", "close_modal",
-            "navigate_to_experiment", "is_valid_for_optimize",
-            "get_selection_context", "get_thread_runs", "get_span_details"]
+external = ["get_collapsed_spans", "navigate_to_experiment",
+            "is_valid_for_optimize", "apply_label_filter"]
 ```
 
-**Tools (12):**
+**Tools (4):**
 
 | Category | Tools |
 |----------|-------|
-| Selection | `select_span`, `select_run` |
-| Visibility | `expand_span`, `collapse_span`, `get_collapsed_spans` |
-| Modals | `open_modal`, `close_modal` |
+| Visibility | `get_collapsed_spans` |
 | Navigation | `navigate_to_experiment`, `is_valid_for_optimize` |
-| State | `get_selection_context`, `get_thread_runs`, `get_span_details` |
+| Filtering | `apply_label_filter` |
 
 ### Task Types
 
@@ -108,9 +108,13 @@ external = ["select_span", "select_run", "expand_span", "collapse_span",
 1. navigate_to_experiment with spanId (DO NOT call is_valid_for_optimize)
 2. final → "Navigated to experiment page"
 
-## "Select span {spanId}"
-1. select_span with spanId
-2. final → "Selected span {spanId}"
+## "Apply label filter with labels=[label_name]"
+1. apply_label_filter with labels and action
+2. final → "Label filter applied: {labels}"
+
+## "Clear label filter"
+1. apply_label_filter with action="clear"
+2. final → "Label filter cleared"
 ```
 
 ### Rules
@@ -142,19 +146,20 @@ description = "Fetches and analyzes trace data from vLLora backend"
 max_iterations = 8
 [tools]
 external = ["fetch_runs", "fetch_spans", "get_run_details", "fetch_groups",
-            "fetch_spans_summary", "get_span_content"]
+            "fetch_spans_summary", "get_span_content", "list_labels"]
 ```
 
-**Tools (6):**
+**Tools (7):**
 
 | Tool | Purpose |
 |------|---------|
 | `fetch_runs` | Get runs with filters |
-| `fetch_spans` | Get spans with filters (max 10) |
+| `fetch_spans` | Get spans with filters (spanIds, threadIds, runIds, operationNames, parentSpanIds, labels). Default limit: 10 |
 | `get_run_details` | Get run + all spans |
 | `fetch_groups` | Get aggregated metrics |
-| `fetch_spans_summary` | Two-phase: fetch all, return summary |
+| `fetch_spans_summary` | Two-phase: fetch all, return summary. Supports label filtering. |
 | `get_span_content` | Two-phase: analyze specific spans |
+| `list_labels` | Get available labels with counts |
 
 ### Two-Phase Analysis
 
@@ -196,6 +201,14 @@ If you need to investigate specific spans:
 2. Review error_spans and semantic_error_spans
 3. If semantic errors found, use get_span_content to verify
 4. final → list of errors OR "no errors found"
+
+## "What labels are available?"
+1. list_labels (no params for project-wide, or threadId for thread-specific)
+2. final → list of labels with counts, sorted by usage
+
+## "Show me all flight_search traces"
+1. fetch_spans_summary with labels=["flight_search"]
+2. final → summary of spans with that label
 ```
 
 ### Data Model
