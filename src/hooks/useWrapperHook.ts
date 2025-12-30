@@ -5,21 +5,28 @@ import { fetchAllSpansByRunId } from "@/utils/traces";
 import { toast } from "sonner";
 import { Span } from "@/types/common-type";
 import { listSpans } from "@/services/spans-api";
-import { useRequest } from "ahooks";
+import { useRequest, useLatest } from "ahooks";
 import { RunDTO } from "@/types/common-type";
 
 export const useWrapperHook = (props: {
   threadId?: string;
   projectId: string;
+  labels?: string[];
   onRunsLoaded?: (runs: RunDTO[]) => void;
 }) => {
-  const { threadId, projectId, onRunsLoaded } = props;
+  const { threadId, projectId, labels, onRunsLoaded } = props;
+
+  // Use refs for latest values in async callbacks
+  const projectIdRef = useLatest(projectId);
+  const threadIdRef = useLatest(threadId);
+  const labelsRef = useLatest(labels);
+
   // Use the runs pagination hook
   let runsPaginationState = useRunsPagination({
     projectId,
     threadId,
+    labels,
     onRunsLoaded,
-    
   });
   // Use the span details hook
   let spanDetailState = useSpanDetails();
@@ -49,6 +56,7 @@ export const useWrapperHook = (props: {
     return selectedRunId ? runMap[selectedRunId] : [];
   }, [selectedRunId, runMap]);
 
+
   const detailSpan = useMemo(() => {
     let result = detailSpanId
       ? flattenSpans.find((span) => span.span_id === detailSpanId)
@@ -62,13 +70,18 @@ export const useWrapperHook = (props: {
     run: refreshSpans,
   } = useRequest(
     async () => {
-      if (!threadId || !projectId) {
+      const currentThreadId = threadIdRef.current;
+      const currentProjectId = projectIdRef.current;
+      const currentLabels = labelsRef.current;
+
+      if (!currentThreadId || !currentProjectId) {
         return [];
       }
       const response = await listSpans({
-        projectId,
+        projectId: currentProjectId,
         params: {
-          threadIds: threadId,
+          threadIds: currentThreadId,
+          ...(currentLabels && currentLabels.length > 0 ? { labels: currentLabels.join(',') } : {}),
           limit: 1000, // Fetch all spans for this thread
           offset: 0,
         },
