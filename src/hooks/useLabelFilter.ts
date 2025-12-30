@@ -1,6 +1,7 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useRequest } from 'ahooks';
 import { listLabels, LabelInfo } from '@/services/labels-api';
+import { emitter } from '@/utils/eventEmitter';
 
 export interface UseLabelFilterOptions {
   projectId: string;
@@ -141,6 +142,35 @@ export function useLabelFilter({
     if (selectedLabels.length === 0) return undefined;
     return selectedLabels.join(',');
   }, [selectedLabels]);
+
+  // Listen for Lucy agent label filter events
+  useEffect(() => {
+    const handleLabelFilter = (event: { labels: string[]; action: string; view?: string }) => {
+      const { labels, action } = event;
+
+      switch (action) {
+        case 'set':
+          setSelectedLabels(labels);
+          break;
+        case 'add':
+          setSelectedLabels(prev => {
+            const newLabels = labels.filter(l => !prev.includes(l));
+            return [...prev, ...newLabels];
+          });
+          break;
+        case 'clear':
+          setSelectedLabels([]);
+          break;
+        default:
+          setSelectedLabels(labels);
+      }
+    };
+
+    emitter.on('vllora_apply_label_filter', handleLabelFilter);
+    return () => {
+      emitter.off('vllora_apply_label_filter', handleLabelFilter);
+    };
+  }, []);
 
   return {
     // State

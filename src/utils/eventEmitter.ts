@@ -44,13 +44,15 @@ type DistriChangeUiEvents = {
   vllora_expand_span: { spanId: string };
   vllora_collapse_span: { spanId: string };
   vllora_navigate_to_experiment: { spanId: string; url: string };
-  // open_modal and close_modal use global ModalContext functions directly
 
   // Experiment page tools
   vllora_apply_experiment_data: { data: Record<string, unknown> };
   vllora_apply_experiment_data_response: { success: boolean; error?: string };
   vllora_run_experiment: Record<string, never>;
   vllora_run_experiment_response: { success: boolean; result?: unknown; error?: string };
+
+  // Label filter tool
+  vllora_apply_label_filter: { labels: string[]; action: string; view?: string };
 };
 
 // ============================================================================

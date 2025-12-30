@@ -65,9 +65,7 @@ export const UI_TOOL_NAMES = [
   'is_valid_for_optimize',
   'get_experiment_data',
   'evaluate_experiment_results',
-  // CHANGE UI (10)
-  'open_modal',
-  'close_modal',
+  // CHANGE UI (8)
   'select_span',
   'select_run',
   'expand_span',
@@ -302,40 +300,11 @@ const getStateHandlers: Record<string, ToolHandler> = {
 };
 
 // ============================================================================
-// CHANGE UI TOOLS (6 tools) - Fire-and-forget pattern
+// CHANGE UI TOOLS (8 tools) - Fire-and-forget pattern
 // These emit events that are handled by React components
 // ============================================================================
 
 const changeUiHandlers: Record<string, ToolHandler> = {
-  // Open a modal dialog
-  open_modal: async ({ modal }) => {
-    const validModals = ['tools', 'settings', 'provider-keys'];
-    if (!validModals.includes(modal as string)) {
-      return {
-        success: false,
-        error: `Invalid modal. Valid options: ${validModals.join(', ')}`,
-      };
-    }
-    try {
-      const { openModal } = await import('@/contexts/ModalContext');
-      openModal(modal as 'tools' | 'settings' | 'provider-keys');
-      return { success: true, message: `Opened ${modal} modal` };
-    } catch (error) {
-      return { success: false, error: 'Failed to open modal' };
-    }
-  },
-
-  // Close current modal
-  close_modal: async () => {
-    try {
-      const { closeModal } = await import('@/contexts/ModalContext');
-      closeModal();
-      return { success: true, message: 'Modal closed' };
-    } catch (error) {
-      return { success: false, error: 'Failed to close modal' };
-    }
-  },
-
   // Select and highlight a span
   select_span: async ({ spanId }) => {
     if (!spanId) {
@@ -443,39 +412,28 @@ const changeUiHandlers: Record<string, ToolHandler> = {
 
   // Apply label filter to the UI (updates label filter dropdown)
   apply_label_filter: async ({ labels, action, view }) => {
-    try {
-      const labelArray = labels as string[] | undefined;
-      const actionStr = (action as string) || 'set';
+    const labelArray = labels as string[] | undefined;
+    const actionStr = (action as string) || 'set';
 
-      // Dispatch custom event that the UI contexts will listen for
-      const event = new CustomEvent('lucy:apply-label-filter', {
-        detail: {
-          labels: labelArray || [],
-          action: actionStr,
-          view: view as string | undefined,
-        },
-      });
-      window.dispatchEvent(event);
+    emitter.emit('vllora_apply_label_filter', {
+      labels: labelArray || [],
+      action: actionStr,
+      view: view as string | undefined,
+    });
 
-      if (actionStr === 'clear') {
-        return {
-          success: true,
-          message: 'Label filter cleared',
-        };
-      }
-
+    if (actionStr === 'clear') {
       return {
         success: true,
-        message: `Label filter applied: ${labelArray?.join(', ') || 'none'}`,
-        applied_labels: labelArray,
-        action: actionStr,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to apply label filter',
+        message: 'Label filter cleared',
       };
     }
+
+    return {
+      success: true,
+      message: `Label filter applied: ${labelArray?.join(', ') || 'none'}`,
+      applied_labels: labelArray,
+      action: actionStr,
+    };
   },
 };
 
@@ -587,32 +545,6 @@ export const uiTools: DistriFnTool[] = [
   } as DistriFnTool,
 
   // CHANGE UI TOOLS
-  {
-    name: 'open_modal',
-    description: 'Open a modal dialog in the UI',
-    type: 'function',
-    parameters: {
-      type: 'object',
-      properties: {
-        modal: {
-          type: 'string',
-          enum: ['tools', 'settings', 'provider-keys'],
-          description: 'The type of modal to open',
-        },
-      },
-      required: ['modal'],
-    },
-    handler: async (input: object) => JSON.stringify(await uiToolHandlers.open_modal(input as Record<string, unknown>)),
-  } as DistriFnTool,
-
-  {
-    name: 'close_modal',
-    description: 'Close the currently open modal dialog',
-    type: 'function',
-    parameters: { type: 'object', properties: {} },
-    handler: async () => JSON.stringify(await uiToolHandlers.close_modal({})),
-  } as DistriFnTool,
-
   {
     name: 'select_span',
     description: 'Select and highlight a specific span in the trace view',

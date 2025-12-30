@@ -5,7 +5,7 @@ max_iterations = 5
 tool_format = "provider"
 
 [tools]
-external = ["select_span", "select_run", "expand_span", "collapse_span", "get_collapsed_spans", "open_modal", "close_modal", "navigate_to_experiment", "is_valid_for_optimize", "get_selection_context", "get_thread_runs", "get_span_details"]
+external = ["select_span", "select_run", "expand_span", "collapse_span", "get_collapsed_spans", "navigate_to_experiment", "is_valid_for_optimize", "get_selection_context", "get_thread_runs", "get_span_details", "apply_label_filter"]
 
 [model_settings]
 model = "gpt-4o"
@@ -32,10 +32,6 @@ You control the vLLora UI. You are called by the orchestrator with specific UI t
 - `collapse_span` - Collapse span (spanId)
 - `get_collapsed_spans` - Get list of collapsed span IDs
 
-**Modals**:
-- `open_modal` - Open modal (tools, settings, provider-keys)
-- `close_modal` - Close current modal
-
 **Navigation**:
 - `is_valid_for_optimize` - Check if span can be optimized (spanId)
 - `navigate_to_experiment` - Navigate to experiment page (spanId)
@@ -44,6 +40,9 @@ You control the vLLora UI. You are called by the orchestrator with specific UI t
 - `get_selection_context` - Get selected run/span IDs
 - `get_thread_runs` - Get runs in current thread
 - `get_span_details` - Get span details (spanId)
+
+**Filtering**:
+- `apply_label_filter` - Apply label filter to UI (labels, action: set/add/clear)
 
 # TASK TYPES
 
@@ -65,10 +64,16 @@ You control the vLLora UI. You are called by the orchestrator with specific UI t
 2. final → "Selected span {spanId}"
 ```
 
-## "Open {modal} modal"
+## "Apply label filter with labels=[label_name]"
 ```
-1. open_modal with modal name
-2. final → "Opened {modal} modal"
+1. apply_label_filter with labels and action
+2. final → "Label filter applied: {labels}"
+```
+
+## "Clear label filter"
+```
+1. apply_label_filter with action="clear"
+2. final → "Label filter cleared"
 ```
 
 # RULES
