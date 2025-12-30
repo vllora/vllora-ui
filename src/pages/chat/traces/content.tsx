@@ -8,6 +8,7 @@ import { ProjectsConsumer } from "@/lib";
 import { useSearchParams, useNavigate, useLocation } from "react-router";
 import { X } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { LabelFilter } from "@/components/label-filter";
 
 export function TracesPageContent() {
   const {
@@ -19,6 +20,7 @@ export function TracesPageContent() {
     setGroupByMode,
     duration,
     setDuration,
+    labelFilter,
   } = TracesPageConsumer();
 
   const { currentProjectId } = ProjectsConsumer();
@@ -36,7 +38,7 @@ export function TracesPageContent() {
 
   useEffect(() => {
     refreshGroups();
-  }, [groupByMode, duration, currentProjectId, threadId]);
+  }, [groupByMode, duration, currentProjectId, threadId, labelFilter.selectedLabels]);
 
   const threadFilterBadge = threadId ? (
     <div className="inline-flex items-center gap-2 h-6 px-2.5 bg-[#151515] rounded-lg border border-border text-xs">
@@ -63,13 +65,25 @@ export function TracesPageContent() {
   return <div className="flex flex-col flex-1 h-full overflow-hidden">
     {/* Grouping Controls */}
     <div className="px-6 py-3 border-b border-border">
-      <GroupingSelector
-        groupByMode={groupByMode}
-        onGroupByModeChange={setGroupByMode}
-        duration={duration}
-        onDurationChange={setDuration}
-        filterBadge={threadFilterBadge}
-      />
+      <div className="flex items-center gap-4">
+        <GroupingSelector
+          groupByMode={groupByMode}
+          onGroupByModeChange={setGroupByMode}
+          duration={duration}
+          onDurationChange={setDuration}
+          filterBadge={threadFilterBadge}
+        />
+        <div className="w-64">
+          <LabelFilter
+            selectedLabels={labelFilter.selectedLabels}
+            onLabelsChange={labelFilter.setLabels}
+            availableLabels={labelFilter.availableLabels}
+            isLoading={labelFilter.isLoading}
+            placeholder="Filter labels..."
+            size="sm"
+          />
+        </div>
+      </div>
     </div>
 
     {/* Main Content */}

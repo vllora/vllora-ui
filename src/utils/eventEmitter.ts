@@ -1,7 +1,63 @@
 import { McpServerConfig } from '@/services/mcp-api';
 import mitt, { Emitter } from 'mitt';
 
-type Events = {
+// ============================================================================
+// Distri Agent Event Types
+// ============================================================================
+
+// GET STATE tool request/response events
+// Using relaxed types for responses since actual data shapes vary
+type DistriGetStateEvents = {
+  // get_current_view
+  vllora_get_current_view: Record<string, never>;
+  vllora_current_view_response: Record<string, unknown>;
+
+  // get_selection_context
+  vllora_get_selection_context: Record<string, never>;
+  vllora_selection_context_response: Record<string, unknown>;
+
+  // get_thread_runs
+  vllora_get_thread_runs: Record<string, never>;
+  vllora_thread_runs_response: Record<string, unknown>;
+
+  // get_span_details
+  vllora_get_span_details: Record<string, never>;
+  vllora_span_details_response: Record<string, unknown>;
+
+  // get_collapsed_spans
+  vllora_get_collapsed_spans: Record<string, never>;
+  vllora_collapsed_spans_response: Record<string, unknown>;
+
+  // get_experiment_data (experiment page only)
+  vllora_get_experiment_data: Record<string, never>;
+  vllora_experiment_data_response: Record<string, unknown>;
+
+  // evaluate_experiment_results (experiment page only)
+  vllora_evaluate_experiment_results: Record<string, never>;
+  vllora_evaluate_experiment_results_response: Record<string, unknown>;
+};
+
+// CHANGE UI tool events (fire-and-forget)
+type DistriChangeUiEvents = {
+  vllora_select_span: { spanId: string };
+  vllora_select_run: { runId: string };
+  vllora_expand_span: { spanId: string };
+  vllora_collapse_span: { spanId: string };
+  vllora_navigate_to_experiment: { spanId: string; url: string };
+  // open_modal and close_modal use global ModalContext functions directly
+
+  // Experiment page tools
+  vllora_apply_experiment_data: { data: Record<string, unknown> };
+  vllora_apply_experiment_data_response: { success: boolean; error?: string };
+  vllora_run_experiment: Record<string, never>;
+  vllora_run_experiment_response: { success: boolean; result?: unknown; error?: string };
+};
+
+// ============================================================================
+// Existing vLLora Events
+// ============================================================================
+
+type VlloraEvents = {
   vllora_input_fileAdded: { files: any[] };
   vllora_input_chatSubmit: {
     inputText: string;
@@ -27,4 +83,16 @@ type Events = {
   vllora_input_speechRecognitionEnd: Record<string, never>;
 };
 
+// ============================================================================
+// Combined Events Type
+// ============================================================================
+
+type Events = VlloraEvents & DistriGetStateEvents & DistriChangeUiEvents;
+
 export const emitter: Emitter<Events> = mitt<Events>();
+
+// Alias for consistency with distri tools
+export const eventEmitter = emitter;
+
+// Export types for use in tool handlers
+export type { DistriGetStateEvents, DistriChangeUiEvents };

@@ -1,4 +1,5 @@
-import { createContext, useContext, ReactNode, useCallback, useState, useMemo } from 'react';
+import { createContext, useContext, ReactNode, useCallback, useState, useMemo, useRef, useEffect } from 'react';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { Span } from '@/types/common-type';
 import { CustomBreakpointEventType, CustomSpanStartEventType, ProjectEventUnion } from './project-events/dto';
 import { buildSpanHierarchy } from '@/utils/span-hierarchy';
@@ -10,6 +11,7 @@ import { useWrapperHook } from '@/hooks/useWrapperHook';
 import { useUserProviderOfSelectedModelConfig } from '@/hooks/userProviderOfSelectedModelConfig';
 import { ThreadsConsumer } from './ThreadsContext';
 import { tryParseJson } from '@/utils/modelUtils';
+import { useLabelFilter } from '@/hooks/useLabelFilter';
 
 export type ChatWindowContextType = ReturnType<typeof useChatWindow>;
 
@@ -22,6 +24,25 @@ interface ChatWindowProviderProps {
 }
 
 export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindowProviderProps) {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Parse initial labels from URL (comma-separated)
+  const initialLabelsFromUrl = useMemo(() => {
+    const labelsParam = searchParams.get('labels');
+    if (!labelsParam) return [];
+    return labelsParam.split(',').map(l => l.trim()).filter(l => l.length > 0);
+  }, []); // Only read on initial mount to avoid loops
+
+  // Label filter state - defined before useWrapperHook so we can pass labels
+  const labelFilter = useLabelFilter({
+    projectId,
+    threadId,
+    initialLabels: initialLabelsFromUrl,
+    autoFetch: true,
+  });
+
   // Use the runs pagination hook
   const {
     runs: rawRuns,
@@ -57,8 +78,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     setHoverSpanId,
     collapsedSpans,
     setCollapsedSpans,
-  } = useWrapperHook({ projectId, threadId });
-
+  } = useWrapperHook({ projectId, threadId, labels: labelFilter.selectedLabels });
 
   const { selectedThread, setThreads } = ThreadsConsumer()
 
@@ -199,7 +219,6 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
 
 
   useDebugControl({ handleEvent, channel_name: 'debug-thread-trace-timeline-events' });
-
   // should the the run be expanded
   // hovered run id (for highlighting related traces when hovering messages)
   // Conversation spans state (for span-based message rendering)
@@ -222,6 +241,41 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
   const [usageInfo, setUsageInfo] = useState<any[]>([]);
 
   const providerOfSelectedModel = useUserProviderOfSelectedModelConfig({ selectedModel });
+
+  // Sync labels to URL when they change (one-directional to avoid loops)
+  const prevLabelsRef = useRef<string[]>(initialLabelsFromUrl);
+  useEffect(() => {
+    const currentLabels = labelFilter.selectedLabels;
+    const prevLabels = prevLabelsRef.current;
+
+    // Check if labels actually changed
+    if (
+      currentLabels.length === prevLabels.length &&
+      currentLabels.every((l, i) => l === prevLabels[i])
+    ) {
+      return;
+    }
+    prevLabelsRef.current = currentLabels;
+
+    // Update URL with new labels
+    const currentParams = new URLSearchParams(window.location.search);
+    if (currentLabels.length > 0) {
+      currentParams.set('labels', currentLabels.join(','));
+    } else {
+      currentParams.delete('labels');
+    }
+    navigate(`${location.pathname}?${currentParams.toString()}`, { replace: true });
+  }, [labelFilter.selectedLabels, navigate, location.pathname]);
+
+  // Refresh runs when labels change
+  useEffect(() => {
+    // Only refresh if we have a thread and it's not from local (has real data)
+    if (threadId) {
+      refreshRuns();
+      refreshSpans();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [labelFilter.selectedLabels, refreshSpans, refreshRuns]); // Only trigger on labels change, not on refreshRuns change
 
   // Wrap refreshRuns to also reset UI state
   const handleRefreshRuns = useCallback(() => {
@@ -356,6 +410,8 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     setCollapsedSpans,
     ...providerOfSelectedModel,
     threadId,
+    // Label filter
+    labelFilter,
   };
 }
 export function ChatWindowProvider({ children, threadId, projectId, selectedModel }: { children: ReactNode, threadId: string, projectId: string, selectedModel: string }) {
@@ -368,4 +424,9 @@ export function ChatWindowConsumer() {
     throw new Error('ChatWindowConsumer must be used within a ChatWindowProvider');
   }
   return context;
+}
+
+/** Optional consumer that returns null if not inside ChatWindowProvider */
+export function useChatWindowOptional() {
+  return useContext(ChatWindowContext) ?? null;
 }

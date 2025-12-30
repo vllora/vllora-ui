@@ -17,6 +17,7 @@ interface TimelineContentProps {
   collapsedSpans: string[];
   onToggle?: (spanId: string) => void;
   showHighlightButton?: boolean;
+  selectedLabels?: string[];
 }
 
 export const TimelineContent: React.FC<TimelineContentProps> = memo(({
@@ -31,7 +32,8 @@ export const TimelineContent: React.FC<TimelineContentProps> = memo(({
   onHoverSpanChange,
   collapsedSpans,
   onToggle,
-  showHighlightButton
+  showHighlightButton,
+  selectedLabels,
 }) => {
 
   // For grouped views (like time buckets), spans can belong to multiple runs
@@ -65,6 +67,7 @@ export const TimelineContent: React.FC<TimelineContentProps> = memo(({
             collapsedSpans={collapsedSpans}
             onToggle={onToggle}
             showHighlightButton={showHighlightButton}
+            selectedLabels={selectedLabels}
           />
         </div>
       </div>
@@ -85,9 +88,10 @@ const TimelineContentInner = memo((props: {
   collapsedSpans: string[];
   onToggle?: (spanId: string) => void;
   showHighlightButton?: boolean;
+  selectedLabels?: string[];
 }) => {
   const { hierarchies, runId } = RunDetailConsumer()
-  const { selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, isInSidebar = true, hoverSpanId, onHoverSpanChange, collapsedSpans, onToggle, showHighlightButton } = props
+  const { selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, isInSidebar = true, hoverSpanId, onHoverSpanChange, collapsedSpans, onToggle, showHighlightButton, selectedLabels } = props
 
   if (!hierarchies || hierarchies.length === 0) {
     return <div className="flex items-center justify-center p-4 text-sm text-gray-400">
@@ -109,6 +113,7 @@ const TimelineContentInner = memo((props: {
         collapsedSpans={collapsedSpans}
         onToggle={onToggle}
         showHighlightButton={showHighlightButton}
+        selectedLabels={selectedLabels}
         onSpanSelect={(spanId, runId) => {
           if (runId) {
             setSelectedSpanId(spanId);

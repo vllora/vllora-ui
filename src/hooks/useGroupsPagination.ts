@@ -16,6 +16,7 @@ interface UseGroupsPaginationParams {
   bucketSize: number; // In seconds (e.g., 3600 for 1 hour)
   groupBy?: 'time' | 'thread' | 'run'; // Grouping mode (default: 'time')
   threadId?: string; // Optional - for filtering by thread
+  labels?: string[]; // Optional - for filtering by labels (attribute.label)
   onGroupsLoaded?: (groups: GenericGroupDTO[]) => void;
   initialPage?: number; // Optional initial page from URL
 }
@@ -25,6 +26,7 @@ export function useGroupsPagination({
   bucketSize,
   groupBy = 'time',
   threadId,
+  labels,
   onGroupsLoaded,
   initialPage = 1,
 }: UseGroupsPaginationParams) {
@@ -40,6 +42,7 @@ export function useGroupsPagination({
   const threadIdRef = useLatest(threadId);
   const bucketSizeRef = useLatest(bucketSize);
   const groupByRef = useLatest(groupBy);
+  const labelsRef = useLatest(labels);
 
   // Use ahooks useRequest for fetching groups (initial load)
   const {
@@ -48,15 +51,23 @@ export function useGroupsPagination({
     run: triggerRefreshGroups,
   } = useRequest(
     async () => {
-      if (!projectId) {
+      // Use refs to get latest values when called
+      const currentProjectId = projectIdRef.current;
+      const currentGroupBy = groupByRef.current;
+      const currentThreadId = threadIdRef.current;
+      const currentBucketSize = bucketSizeRef.current;
+      const currentLabels = labelsRef.current;
+
+      if (!currentProjectId) {
         return { data: [], pagination: { offset: 0, limit: 0, total: 0 } };
       }
       const response = await listGroups({
-        projectId,
+        projectId: currentProjectId,
         params: {
-          group_by: groupBy,
-          ...(threadId ? { thread_ids: threadId } : {}),
-          ...(groupBy === 'time' ? { bucket_size: bucketSize } : {}),
+          group_by: currentGroupBy,
+          ...(currentThreadId ? { thread_ids: currentThreadId } : {}),
+          ...(currentGroupBy === 'time' ? { bucket_size: currentBucketSize } : {}),
+          ...(currentLabels && currentLabels.length > 0 ? { labels: currentLabels.join(',') } : {}),
           limit: LIMIT_LOADING_GROUPS,
           offset: 0,
         },
@@ -113,6 +124,7 @@ export function useGroupsPagination({
           group_by: groupByRef.current,
           ...(threadIdRef.current ? { thread_ids: threadIdRef.current } : {}),
           ...(groupByRef.current === 'time' ? { bucket_size: bucketSizeRef.current } : {}),
+          ...(labelsRef.current && labelsRef.current.length > 0 ? { labels: labelsRef.current.join(',') } : {}),
           limit: LIMIT_LOADING_GROUPS,
           offset: groupsOffset,
         },
@@ -149,6 +161,7 @@ export function useGroupsPagination({
     projectIdRef,
     bucketSizeRef,
     groupByRef,
+    labelsRef,
   ]);
 
   // Refresh groups function (reset and reload from beginning)
@@ -181,6 +194,7 @@ export function useGroupsPagination({
           group_by: groupByRef.current,
           ...(threadIdRef.current ? { thread_ids: threadIdRef.current } : {}),
           ...(groupByRef.current === 'time' ? { bucket_size: bucketSizeRef.current } : {}),
+          ...(labelsRef.current && labelsRef.current.length > 0 ? { labels: labelsRef.current.join(',') } : {}),
           limit: LIMIT_LOADING_GROUPS,
           offset: targetOffset,
         },
@@ -219,6 +233,7 @@ export function useGroupsPagination({
     groupByRef,
     threadIdRef,
     bucketSizeRef,
+    labelsRef,
     refreshGroups,
     onGroupsLoaded,
   ]);

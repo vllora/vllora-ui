@@ -18,6 +18,7 @@ interface TraceMainContentProps {
   }[];
   app_mode: 'langdb' | 'vllora',
   available_api_keys: AvailableApiKey[];
+  selectedLabels?: string[];
 }
 
 // Component implementation
@@ -30,7 +31,8 @@ const TraceMainContentImpl: React.FC<TraceMainContentProps> = ({
   threadId,
   openTraces,
   app_mode,
-  available_api_keys
+  available_api_keys,
+  selectedLabels,
 }) => {
   const observerTarget = useRef<HTMLDivElement>(null);
 
@@ -49,6 +51,7 @@ const TraceMainContentImpl: React.FC<TraceMainContentProps> = ({
           openTraces={openTraces}
           app_mode={app_mode}
           available_api_keys={available_api_keys}
+          selectedLabels={selectedLabels}
         />
       </div>
     </div>

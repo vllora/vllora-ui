@@ -10,6 +10,7 @@ interface TraceListProps {
   loadMoreRuns: () => Promise<void>;
   loadingMore: boolean;
   observerTarget: React.RefObject<HTMLDivElement | null>;
+  selectedLabels?: string[];
 }
 
 export const TraceList: React.FC<TraceListProps> = ({
@@ -17,6 +18,7 @@ export const TraceList: React.FC<TraceListProps> = ({
   hasMore,
   loadMoreRuns,
   loadingMore,
+  selectedLabels,
 }) => {
   const { hoverSpanId, runHighlighted } = ChatWindowConsumer();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -76,7 +78,7 @@ export const TraceList: React.FC<TraceListProps> = ({
   return (
     <div ref={containerRef} className="space-y-2">
       {runs.filter(run => run != null).map((run) => (
-        <TraceRow key={`run-${run.run_id}`} run={run} isInSidebar={true} />
+        <TraceRow key={`run-${run.run_id}`} run={run} isInSidebar={true} selectedLabels={selectedLabels} />
       ))}
 
       {/* Load More Button */}

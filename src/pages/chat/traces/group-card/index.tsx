@@ -35,6 +35,7 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
     projectId,
     collapsedSpans,
     setCollapsedSpans,
+    labelFilter,
   } = TracesPageConsumer();
 
   // Get the appropriate key based on group type
@@ -67,7 +68,7 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
   }, [hideGroups, groupKey]);
 
   // Get spans based on group type
-  const allSpans = useMemo(() => {
+  const rawSpans = useMemo(() => {
     if (isTimeGroup(group)) {
       return groupSpansMap[timeBucket] || [];
     } else if (isThreadGroup(group)) {
@@ -77,6 +78,18 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
     }
     return [];
   }, [group, groupSpansMap, threadSpansMap, runSpansMap, timeBucket]);
+
+  // Filter spans by selected labels (UI-level filtering)
+  const allSpans = useMemo(() => {
+    const selectedLabels = labelFilter.selectedLabels;
+    if (!selectedLabels || selectedLabels.length === 0) {
+      return rawSpans;
+    }
+    return rawSpans.filter(span => {
+      const spanLabel = span.attribute?.label;
+      return spanLabel && selectedLabels.includes(spanLabel);
+    });
+  }, [rawSpans, labelFilter.selectedLabels]);
 
   // Check if this specific group is loading
   const isLoadingSpans = useMemo(() => {
@@ -295,6 +308,7 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
                       }}
                       isInSidebar={false}
                       collapsedSpans={collapsedSpans}
+                      selectedLabels={labelFilter.selectedLabels}
                     />
                   </ErrorBoundary>
                 </div>
