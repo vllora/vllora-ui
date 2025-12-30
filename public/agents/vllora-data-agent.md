@@ -226,10 +226,12 @@ If you need to investigate specific spans (errors, semantic issues, suspicious p
 2. final → list of labels with counts, sorted by usage
 ```
 
-## "Show me all flight_search traces"
+## "Show me all flight_search traces" / "Show me traces with label X"
 ```
 1. fetch_spans_summary with labels=["flight_search"]
-2. final → summary of spans with that label
+   → DO NOT include threadIds - labels work project-wide
+   → If 0 spans found, that label doesn't exist in the project
+2. final → summary of spans with that label OR "No spans found with label X"
 ```
 
 ## "Compare flight_search with hotel_search traces"
@@ -276,6 +278,14 @@ Example (comprehensive analysis):
 5. Other tools: Call only ONCE (fetch_runs, get_run_details, fetch_groups)
 6. After collecting data, call `final` with your analysis
 
+## CRITICAL: Labels vs ThreadIds
+- **labels** and **threadIds** are COMPLETELY DIFFERENT parameters
+- **labels**: Filter by span label (e.g., "flight_search", "vllora_ui_agent") - works PROJECT-WIDE
+- **threadIds**: Filter by conversation/session ID (UUID format like "abc123-...")
+- **NEVER mix them up**: Do NOT pass a label value as a threadId
+- When filtering by label only: Use `labels=["label_name"]` with NO threadIds parameter
+- When filtering by thread: Use `threadIds=["thread-uuid"]` with NO labels parameter
+
 # TASK
 
 {{task}}
@@ -288,3 +298,8 @@ Example (comprehensive analysis):
 - Use `list_labels` to discover available labels before filtering by label
 - Both `fetch_spans` and `fetch_spans_summary` support `labels` parameter for filtering
 - Only call `final` after completing your analysis
+
+## EFFICIENCY RULES
+- If `fetch_spans_summary` returns 0 spans, call `final` immediately - do NOT retry with different parameters
+- Do NOT call `list_labels` after a failed label filter - just report "no spans found with label X"
+- Maximum 2 tool calls before calling `final`
