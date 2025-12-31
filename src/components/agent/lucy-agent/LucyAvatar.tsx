@@ -22,9 +22,15 @@ const sizeClasses = {
 };
 
 const borderClasses = {
-  sm: 'ring-2',
-  md: 'ring-2',
-  lg: 'ring-[3px]',
+  sm: 'ring-[0.5px]',
+  md: 'ring-1',
+  lg: 'ring-[1.5px]',
+};
+
+const auraClasses = {
+  sm: 'shadow-[0_0_8px_2px_rgba(16,185,129,0.4)]',
+  md: 'shadow-[0_0_12px_3px_rgba(16,185,129,0.4)]',
+  lg: 'shadow-[0_0_20px_5px_rgba(16,185,129,0.35)]',
 };
 
 const badgeSizeClasses = {
@@ -47,6 +53,7 @@ export function LucyAvatar({ size = 'md', className, animated = false, showBadge
           'rounded-full overflow-hidden ring-emerald-500 bg-zinc-900',
           sizeClasses[size],
           borderClasses[size],
+          auraClasses[size],
           animated && 'animate-pulse'
         )}
       >

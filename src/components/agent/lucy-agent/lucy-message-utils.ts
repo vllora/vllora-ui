@@ -83,6 +83,8 @@ export function getFriendlyToolMessage(toolName: string, input: any): string {
       return 'Getting span details...';
     case 'filter_spans':
       return 'Filtering spans...';
+    case 'fetch_spans_summary':
+      return 'Fetching spans summary...';
     default:
       return `Running ${toolName}...`;
   }

@@ -36,17 +36,13 @@ export function LucyAssistantMessage({ message }: LucyAssistantMessageProps) {
   if (!content.text && content.imageParts.length === 0) return null;
 
   return (
-    <div className="flex flex-col items-start gap-1">
+    <div className="flex flex-col items-start gap-2">
       {/* Header */}
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="flex items-center gap-2">
         <LucyAvatar size="sm" />
-        <span className="font-medium text-foreground">Lucy</span>
-        {timestamp && (
-          <>
-            <span>-</span>
-            <span>{timestamp}</span>
-          </>
-        )}
+        <span className="text-xs text-muted-foreground">
+          Lucy {timestamp && <span>• {timestamp}</span>}
+        </span>
       </div>
 
       {/* Message content */}
@@ -56,7 +52,7 @@ export function LucyAssistantMessage({ message }: LucyAssistantMessageProps) {
 
         {/* Text content */}
         {content.text && (
-          <div className="bg-muted/50 border border-border rounded-2xl rounded-tl-sm px-4 py-3">
+          <div className="bg-zinc-900/80 border border-zinc-700/50 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
             <LucyTextRenderer text={content.text} isStreaming={isStreaming} />
           </div>
         )}
