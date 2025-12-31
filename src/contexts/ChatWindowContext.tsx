@@ -12,6 +12,7 @@ import { useUserProviderOfSelectedModelConfig } from '@/hooks/userProviderOfSele
 import { ThreadsConsumer } from './ThreadsContext';
 import { tryParseJson } from '@/utils/modelUtils';
 import { useLabelFilter } from '@/hooks/useLabelFilter';
+import { eventEmitter } from '@/utils/eventEmitter';
 
 export type ChatWindowContextType = ReturnType<typeof useChatWindow>;
 
@@ -343,6 +344,22 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     }
 
   }, []);
+
+  // Emit openTraces changes for agent panel
+  useEffect(() => {
+    eventEmitter.emit('vllora_open_traces_changed', {
+      openTraces,
+      source: 'threads',
+    });
+  }, [openTraces]);
+
+  // Emit hoverSpanId changes for agent panel
+  useEffect(() => {
+    eventEmitter.emit('vllora_hover_span_changed', {
+      hoverSpanId,
+      source: 'threads',
+    });
+  }, [hoverSpanId]);
 
   return {
     spansOfSelectedRun,

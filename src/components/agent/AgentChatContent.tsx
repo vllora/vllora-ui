@@ -5,7 +5,7 @@
  * Includes header and chat/loading/error states.
  */
 
-import { useCallback, useState, useMemo } from 'react';
+import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import { DistriFnTool, DistriMessage } from '@distri/core';
 import { X, Plus, Loader2, Pin, PinOff, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ import {
   LucyDefaultToolRenderer,
 } from './lucy-agent';
 import { useAgentPanel } from '@/contexts/AgentPanelContext';
+import { eventEmitter, OpenTrace } from '@/utils/eventEmitter';
 
 // ============================================================================
 // Utilities
@@ -105,6 +106,29 @@ export function AgentChatContent({
   const { isPinned, toggleMode } = useAgentPanel();
   const [showSettings, setShowSettings] = useState(false);
 
+  // Store openTraces from event emitter (works across context boundaries)
+  const openTracesRef = useRef<{ openTraces: OpenTrace[]; source: 'threads' | 'traces' } | null>(null);
+  const hoverSpanIdRef = useRef<{ hoverSpanId: string | undefined; source: 'threads' | 'traces' } | null>(null);
+
+  // Listen for openTraces changes from ChatWindowContext and TracesPageContext
+  useEffect(() => {
+    const handleOpenTracesChanged = (data: { openTraces: OpenTrace[]; source: 'threads' | 'traces' }) => {
+      openTracesRef.current = data;
+    };
+
+    const handleHoverSpanChanged = (data: { hoverSpanId: string | undefined; source: 'threads' | 'traces' }) => {
+      hoverSpanIdRef.current = data;
+    };
+
+    eventEmitter.on('vllora_open_traces_changed', handleOpenTracesChanged);
+    eventEmitter.on('vllora_hover_span_changed', handleHoverSpanChanged);
+
+    return () => {
+      eventEmitter.off('vllora_open_traces_changed', handleOpenTracesChanged);
+      eventEmitter.off('vllora_hover_span_changed', handleHoverSpanChanged);
+    };
+  }, []);
+
   // Create tool renderers with Lucy styling
   const toolRenderers = useMemo(
     () => ({
@@ -127,7 +151,41 @@ export function AgentChatContent({
         currentParams,
         detailSpanId
       );
-      const contextText = `Context:\n\`\`\`json\n${JSON.stringify(ctx, null, 2)}\n\`\`\``;
+
+      // Get openTraces from event emitter ref (matches current tab)
+      let openTraces: OpenTrace[] | undefined;
+      let hoverSpanId: string | undefined;
+      const tracesData = openTracesRef.current;
+      const hoverData = hoverSpanIdRef.current;
+
+      if (tracesData) {
+        // Only include if source matches current tab
+        if (ctx.page === 'chat' && ctx.tab === 'threads' && tracesData.source === 'threads') {
+          openTraces = tracesData.openTraces;
+        } else if (ctx.page === 'chat' && ctx.tab === 'traces' && tracesData.source === 'traces') {
+          openTraces = tracesData.openTraces;
+        }
+      }
+
+      if (hoverData) {
+        // Only include if source matches current tab
+        if (ctx.page === 'chat' && ctx.tab === 'threads' && hoverData.source === 'threads') {
+          hoverSpanId = hoverData.hoverSpanId;
+        } else if (ctx.page === 'chat' && ctx.tab === 'traces' && hoverData.source === 'traces') {
+          hoverSpanId = hoverData.hoverSpanId;
+        }
+      }
+
+      // Build extended context with openTraces and hoverSpanId if available
+      let extendedCtx: ViewContext & { open_run_ids?: string[]; hover_span_id?: string } = { ...ctx };
+      if (openTraces && openTraces.length > 0) {
+        extendedCtx.open_run_ids = openTraces.map(trace => trace.run_id);
+      }
+      if (hoverSpanId) {
+        extendedCtx.hover_span_id = hoverSpanId;
+      }
+
+      const contextText = `Context:\n\`\`\`json\n${JSON.stringify(extendedCtx, null, 2)}\n\`\`\``;
 
       // Add context as a separate part at the beginning
       const contextPart = { part_type: 'text' as const, data: contextText };

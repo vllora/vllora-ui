@@ -189,7 +189,9 @@ export function useTracesPageContext(props: { projectId: string }) {
     runMap,
     collapsedSpans,
     setCollapsedSpans,
-    updateBySpansArray
+    updateBySpansArray,
+    hoverSpanId,
+    setHoverSpanId,
   } = useWrapperHook({
     projectId,
     onRunsLoaded: (runs) => {
@@ -768,6 +770,22 @@ export function useTracesPageContext(props: { projectId: string }) {
     };
   }, [collapsedSpans]);
 
+  // Emit openTraces changes for agent panel
+  useEffect(() => {
+    eventEmitter.emit('vllora_open_traces_changed', {
+      openTraces,
+      source: 'traces',
+    });
+  }, [openTraces]);
+
+  // Emit hoverSpanId changes for agent panel
+  useEffect(() => {
+    eventEmitter.emit('vllora_hover_span_changed', {
+      hoverSpanId,
+      source: 'traces',
+    });
+  }, [hoverSpanId]);
+
   return {
     projectId,
     // Grouping mode
@@ -828,7 +846,9 @@ export function useTracesPageContext(props: { projectId: string }) {
     setCollapsedSpans,
     // Label filter
     labelFilter,
-
+    // Hover state
+    hoverSpanId,
+    setHoverSpanId,
   }
 }
 

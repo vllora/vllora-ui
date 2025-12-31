@@ -36,6 +36,19 @@ type DistriChangeUiEvents = {
 };
 
 // ============================================================================
+// Open Traces State Events (for agent panel)
+// ============================================================================
+
+export type OpenTrace = { run_id: string; tab: string };
+
+type OpenTracesEvents = {
+  // Emitted by ChatWindowContext and TracesPageContext when openTraces changes
+  vllora_open_traces_changed: { openTraces: OpenTrace[]; source: 'threads' | 'traces' };
+  // Emitted when hoverSpanId changes
+  vllora_hover_span_changed: { hoverSpanId: string | undefined; source: 'threads' | 'traces' };
+};
+
+// ============================================================================
 // Existing vLLora Events
 // ============================================================================
 
@@ -69,7 +82,7 @@ type VlloraEvents = {
 // Combined Events Type
 // ============================================================================
 
-type Events = VlloraEvents & DistriGetStateEvents & DistriChangeUiEvents;
+type Events = VlloraEvents & DistriGetStateEvents & DistriChangeUiEvents & OpenTracesEvents;
 
 export const emitter: Emitter<Events> = mitt<Events>();
 

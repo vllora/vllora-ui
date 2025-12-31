@@ -48,8 +48,14 @@ export const DetailedRunView: React.FC<{run: RunDTO; selectedLabels?: string[]}>
                                     projectId={currentProjectId || ''}
                                     selectedSpanId={selectedSpanId}
                                     hoverSpanId={hoverSpanId}
-                                    onHoverSpanChange={setHoverSpanId}
-                                    setSelectedSpanId={setSelectedSpanId}
+                                    onHoverSpanChange={(spanId) => {
+                                        setSelectedSpanId(spanId || null);
+                                        setHoverSpanId(spanId || undefined);
+                                    }}
+                                    setSelectedSpanId={(spanId) => {
+                                        setSelectedSpanId(spanId || null);
+                                        setHoverSpanId(spanId || undefined);
+                                    }}
                                     setSelectedRunId={setSelectedRunId}
                                     setDetailSpanId={setDetailSpanId}
                                     collapsedSpans={collapsedSpans}
