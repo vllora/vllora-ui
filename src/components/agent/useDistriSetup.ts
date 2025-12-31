@@ -16,10 +16,12 @@ import {
 } from '@/lib/agent-sync';
 import {
   registerAgents,
+  getLucyConfig,
   RegistrationResult,
   AgentRegistrationStatus,
   ProviderConfig,
   ModelSettingsConfig,
+  LucyConfig,
 } from '@/services/agents-api';
 
 // ============================================================================
@@ -60,6 +62,10 @@ export interface UseDistriSetupReturn {
   connect: () => Promise<boolean>;
   testConnection: () => Promise<boolean>;
   resetUrl: () => void;
+  loadConfig: () => Promise<LucyConfig | null>;
+
+  // Config loading state
+  configLoading: boolean;
 
   // Platform info
   platform: PlatformInfo;
@@ -185,6 +191,7 @@ export function useDistriSetup(initialStatus: ConnectionStatus = 'idle'): UseDis
   const [distriUrl, setDistriUrlState] = useState<string>(() => getDistriUrl());
   const [registrationResult, setRegistrationResult] = useState<RegistrationResult | null>(null);
   const [modelSettings, setModelSettingsState] = useState<ModelSettingsConfig>(DEFAULT_MODEL_SETTINGS);
+  const [configLoading, setConfigLoading] = useState(false);
 
   // Validate URL
   const isValidUrl = useMemo(() => validateUrl(distriUrl), [distriUrl]);
@@ -214,6 +221,31 @@ export function useDistriSetup(initialStatus: ConnectionStatus = 'idle'): UseDis
     setDistriUrlState(defaultUrl);
     setErrorMessage(null);
     setConnectionStatus('idle');
+  }, []);
+
+  // Load saved config from BE
+  const loadConfig = useCallback(async (): Promise<LucyConfig | null> => {
+    setConfigLoading(true);
+    try {
+      const config = await getLucyConfig();
+      // Apply loaded config
+      if (config.distri_url) {
+        setDistriUrlState(config.distri_url);
+      }
+      if (config.model_settings) {
+        setModelSettingsState(config.model_settings);
+      }
+      // If we have a saved config, mark as ready (already configured)
+      if (config.distri_url) {
+        setConnectionStatus('ready');
+      }
+      return config;
+    } catch {
+      // Config not found or error - use defaults
+      return null;
+    } finally {
+      setConfigLoading(false);
+    }
   }, []);
 
   // Test connection only (no registration)
@@ -319,6 +351,8 @@ export function useDistriSetup(initialStatus: ConnectionStatus = 'idle'): UseDis
     connect,
     testConnection,
     resetUrl,
+    loadConfig,
+    configLoading,
     platform,
     allPlatforms,
   };

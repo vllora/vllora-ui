@@ -7,7 +7,7 @@
  * Design: Option B (Inline Panel) from lucy-setup-flow.md
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { Copy, Check, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -55,11 +55,20 @@ export function LucySetupGuide({ mode = 'setup', initialStatus, onConnected, cla
     setModelSettings,
     connect,
     testConnection,
+    loadConfig,
+    configLoading,
     platform,
     allPlatforms,
   } = useDistriSetup(initialStatus);
 
   const isSettingsMode = mode === 'settings';
+
+  // Load saved config when opening settings mode
+  useEffect(() => {
+    if (isSettingsMode) {
+      loadConfig();
+    }
+  }, [isSettingsMode, loadConfig]);
 
   const [copied, setCopied] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(isSettingsMode); // Expanded by default in settings mode
@@ -159,7 +168,7 @@ export function LucySetupGuide({ mode = 'setup', initialStatus, onConnected, cla
   const isConnecting = connectionStatus === 'connecting';
   const isRegistering = connectionStatus === 'registering';
   const isReady = connectionStatus === 'ready';
-  const isInProgress = isConnecting || isRegistering;
+  const isInProgress = isConnecting || isRegistering || configLoading;
 
   return (
     <div className={cn('flex flex-col h-full p-4 overflow-y-auto', className)}>

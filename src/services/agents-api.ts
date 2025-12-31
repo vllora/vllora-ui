@@ -58,6 +58,15 @@ export interface RegisterAgentsRequest {
 }
 
 /**
+ * Response from GET /agents/config
+ * Contains saved Lucy configuration from lucy.json
+ */
+export interface LucyConfig {
+  distri_url?: string;
+  model_settings?: ModelSettingsConfig;
+}
+
+/**
  * Register all agents with the Distri server via vLLora BE
  *
  * The BE has embedded agent definitions and will register them
@@ -81,4 +90,17 @@ export const registerAgents = async (
   });
 
   return handleApiResponse<RegistrationResult>(response);
+};
+
+/**
+ * Get saved Lucy configuration from BE
+ *
+ * Returns the saved distri_url and model_settings from lucy.json
+ */
+export const getLucyConfig = async (): Promise<LucyConfig> => {
+  const response = await apiClient('/agents/config', {
+    method: 'GET',
+  });
+
+  return handleApiResponse<LucyConfig>(response);
 };
