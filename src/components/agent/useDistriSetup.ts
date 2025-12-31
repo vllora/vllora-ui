@@ -179,12 +179,12 @@ const DEFAULT_MODEL_SETTINGS: ModelSettingsConfig = {
   },
 };
 
-export function useDistriSetup(): UseDistriSetupReturn {
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
+export function useDistriSetup(initialStatus: ConnectionStatus = 'idle'): UseDistriSetupReturn {
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(initialStatus);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [distriUrl, setDistriUrlState] = useState<string>(() => getDistriUrl());
   const [registrationResult, setRegistrationResult] = useState<RegistrationResult | null>(null);
-  const [modelSettings, setModelSettings] = useState<ModelSettingsConfig>(DEFAULT_MODEL_SETTINGS);
+  const [modelSettings, setModelSettingsState] = useState<ModelSettingsConfig>(DEFAULT_MODEL_SETTINGS);
 
   // Validate URL
   const isValidUrl = useMemo(() => validateUrl(distriUrl), [distriUrl]);
@@ -198,6 +198,13 @@ export function useDistriSetup(): UseDistriSetupReturn {
     setDistriUrlState(url);
     // Clear error when URL changes
     setErrorMessage(null);
+    setConnectionStatus('idle');
+  }, []);
+
+  // Set model settings (resets status to allow re-saving)
+  const setModelSettings = useCallback((config: ModelSettingsConfig) => {
+    setModelSettingsState(config);
+    // Reset status when settings change so user can save again
     setConnectionStatus('idle');
   }, []);
 

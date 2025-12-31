@@ -7,17 +7,15 @@
 
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import { DistriFnTool, DistriMessage } from '@distri/core';
-import { X, Plus, Loader2, Pin, PinOff, Settings } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { Loader2 } from 'lucide-react';
 import {
-  LucyAvatar,
   LucySetupGuide,
   LucyChat,
   LucyDefaultToolRenderer,
 } from './lucy-agent';
 import { useAgentPanel } from '@/contexts/AgentPanelContext';
 import { eventEmitter, OpenTrace } from '@/utils/eventEmitter';
+import { LucyAgentChatHeader } from './LucyAgentChatHeader';
 
 // ============================================================================
 // Utilities
@@ -197,62 +195,16 @@ export function AgentChatContent({
 
   return (
     <>
-      {/* Header */}
-      <div
-        className={cn(
-          'flex items-center justify-between px-3 py-2 border-b shrink-0',
-          isDragHandle && 'cursor-move select-none bg-muted/50',
-          isDragHandle && 'drag-handle',
-          headerClassName
-        )}
-      >
-        <div className="flex items-center gap-2">
-          <LucyAvatar size="sm" />
-          <span className="font-medium text-sm">Lucy</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={onNewChat}
-            title="New Chat"
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn('h-7 w-7', showSettings && 'bg-accent')}
-            onClick={() => setShowSettings(!showSettings)}
-            title={showSettings ? 'Back to Chat' : 'Settings'}
-          >
-            <Settings className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={toggleMode}
-            title={isPinned ? "Unpin (floating mode)" : "Pin (side panel)"}
-          >
-            {isPinned ? (
-              <PinOff className="h-3.5 w-3.5" />
-            ) : (
-              <Pin className="h-3.5 w-3.5" />
-            )}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={onClose}
-            title="Close"
-          >
-            <X className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      </div>
+      <LucyAgentChatHeader
+        isPinned={isPinned}
+        showSettings={showSettings}
+        onToggleSettings={() => setShowSettings(!showSettings)}
+        onToggleMode={toggleMode}
+        onNewChat={onNewChat}
+        onClose={onClose}
+        className={headerClassName}
+        isDragHandle={isDragHandle}
+      />
 
       {/* Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -268,6 +220,7 @@ export function AgentChatContent({
         ) : showSettings || !isConnected || !agent ? (
           <LucySetupGuide
             mode={showSettings && isConnected && agent ? 'settings' : 'setup'}
+            initialStatus={showSettings && isConnected && agent ? 'ready' : undefined}
             onConnected={() => {
               setShowSettings(false);
               onConnected();

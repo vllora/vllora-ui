@@ -22,7 +22,7 @@ import { cn } from '@/lib/utils';
 import { LucyAvatar } from './LucyAvatar';
 import { PlatformDownload } from '../PlatformDownload';
 import { ConnectionStatus } from '../ConnectionStatus';
-import { useDistriSetup, ProviderConfig, ModelSettingsConfig } from '../useDistriSetup';
+import { useDistriSetup, ProviderConfig, ModelSettingsConfig, ConnectionStatus as ConnectionStatusType } from '../useDistriSetup';
 
 // ============================================================================
 // Types
@@ -31,6 +31,8 @@ import { useDistriSetup, ProviderConfig, ModelSettingsConfig } from '../useDistr
 interface LucySetupGuideProps {
   /** Mode: 'setup' for first-time users, 'settings' for returning users adjusting config */
   mode?: 'setup' | 'settings';
+  /** Initial connection status (useful when opening settings while already connected) */
+  initialStatus?: ConnectionStatusType;
   /** Callback when connection is successful */
   onConnected: () => void;
   /** Optional className */
@@ -41,7 +43,7 @@ interface LucySetupGuideProps {
 // Component
 // ============================================================================
 
-export function LucySetupGuide({ mode = 'setup', onConnected, className }: LucySetupGuideProps) {
+export function LucySetupGuide({ mode = 'setup', initialStatus, onConnected, className }: LucySetupGuideProps) {
   const {
     connectionStatus,
     errorMessage,
@@ -55,7 +57,7 @@ export function LucySetupGuide({ mode = 'setup', onConnected, className }: LucyS
     testConnection,
     platform,
     allPlatforms,
-  } = useDistriSetup();
+  } = useDistriSetup(initialStatus);
 
   const isSettingsMode = mode === 'settings';
 
@@ -225,7 +227,7 @@ export function LucySetupGuide({ mode = 'setup', onConnected, className }: LucyS
                   'h-8 text-sm font-mono',
                   !isValidUrl && distriUrl && 'border-red-500 focus-visible:ring-red-500'
                 )}
-                disabled={isInProgress || isReady}
+                disabled={isInProgress}
               />
               {!isValidUrl && distriUrl && (
                 <p className="text-xs text-red-500 mt-1">Invalid URL format</p>
@@ -237,7 +239,7 @@ export function LucySetupGuide({ mode = 'setup', onConnected, className }: LucyS
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
               className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              disabled={isInProgress || isReady}
+              disabled={isInProgress}
             >
               {showAdvanced ? (
                 <ChevronDown className="h-3 w-3" />
@@ -261,7 +263,7 @@ export function LucySetupGuide({ mode = 'setup', onConnected, className }: LucyS
                     onChange={(e) => updateModelField('model', e.target.value || undefined)}
                     placeholder="gpt-4o (uses agent default)"
                     className="h-8 text-sm font-mono"
-                    disabled={isInProgress || isReady}
+                    disabled={isInProgress}
                   />
                 </div>
 
@@ -280,7 +282,7 @@ export function LucySetupGuide({ mode = 'setup', onConnected, className }: LucyS
                       onChange={(e) => updateModelField('temperature', e.target.value ? parseFloat(e.target.value) : undefined)}
                       placeholder="0.7"
                       className="h-8 text-sm font-mono"
-                      disabled={isInProgress || isReady}
+                      disabled={isInProgress}
                     />
                   </div>
                   <div>
@@ -295,7 +297,7 @@ export function LucySetupGuide({ mode = 'setup', onConnected, className }: LucyS
                       onChange={(e) => updateModelField('max_tokens', e.target.value ? parseInt(e.target.value, 10) : undefined)}
                       placeholder="4096"
                       className="h-8 text-sm font-mono"
-                      disabled={isInProgress || isReady}
+                      disabled={isInProgress}
                     />
                   </div>
                 </div>
@@ -310,7 +312,7 @@ export function LucySetupGuide({ mode = 'setup', onConnected, className }: LucyS
                     onValueChange={(value: 'openai' | 'openai_compat' | 'vllora') =>
                       updateProviderField('name', value)
                     }
-                    disabled={isInProgress || isReady}
+                    disabled={isInProgress}
                   >
                     <SelectTrigger className="h-8 text-sm">
                       <SelectValue placeholder="Select provider" />
@@ -344,7 +346,7 @@ export function LucySetupGuide({ mode = 'setup', onConnected, className }: LucyS
                           : 'Enter API endpoint'
                       }
                       className="h-8 text-sm font-mono"
-                      disabled={isInProgress || isReady}
+                      disabled={isInProgress}
                     />
                   </div>
                 )}
@@ -361,7 +363,7 @@ export function LucySetupGuide({ mode = 'setup', onConnected, className }: LucyS
                       onChange={(e) => updateProviderField('api_key', e.target.value)}
                       placeholder="sk-..."
                       className="h-8 text-sm font-mono"
-                      disabled={isInProgress || isReady}
+                      disabled={isInProgress}
                     />
                   </div>
                 )}
@@ -378,7 +380,7 @@ export function LucySetupGuide({ mode = 'setup', onConnected, className }: LucyS
                       onChange={(e) => updateProviderField('project_id', e.target.value)}
                       placeholder="Optional project ID"
                       className="h-8 text-sm font-mono"
-                      disabled={isInProgress || isReady}
+                      disabled={isInProgress}
                     />
                   </div>
                 )}
