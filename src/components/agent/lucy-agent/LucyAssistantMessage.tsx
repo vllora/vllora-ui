@@ -52,7 +52,7 @@ export function LucyAssistantMessage({ message }: LucyAssistantMessageProps) {
 
         {/* Text content */}
         {content.text && (
-          <div className="bg-zinc-900/80 border border-zinc-700/50 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+          <div className="bg-zinc-900/80 border border-zinc-700/50 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm overflow-hidden">
             <LucyTextRenderer text={content.text} isStreaming={isStreaming} />
           </div>
         )}

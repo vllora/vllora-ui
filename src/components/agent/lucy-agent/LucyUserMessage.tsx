@@ -40,7 +40,7 @@ export function LucyUserMessage({ message }: LucyUserMessageProps) {
       </div>
 
       {/* Message bubble */}
-      <div className="max-w-[85%] bg-zinc-900/80 border border-emerald-600/30 rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm">
+      <div className="max-w-[85%] bg-zinc-900/80 border border-emerald-600/30 rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm overflow-hidden">
         {content.text && <LucyTextRenderer text={content.text} />}
         <LucyImageRenderer imageParts={content.imageParts} />
       </div>

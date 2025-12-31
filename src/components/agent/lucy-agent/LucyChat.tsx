@@ -28,7 +28,7 @@ import {
   DistriPart,
   ToolExecutionOptions,
 } from '@distri/core';
-import { LucyChatInput } from './LucyChatInput';
+import { LucyChatInput, AttachedImage } from './LucyChatInput';
 import { LucyWelcome, QuickAction } from './LucyWelcome';
 import { LucyToolCalls } from './LucyToolCalls';
 import { LucyPendingMessage } from './LucyPendingMessage';
@@ -114,6 +114,11 @@ export function LucyChat({
   // Pending message state - accumulates parts when streaming
   const [pendingMessage, setPendingMessage] = useState<DistriPart[] | null>(null);
 
+  // Image attachments state
+  const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([]);
+
+  // Voice input state
+  const [isStreamingVoice, setIsStreamingVoice] = useState(false);
   const {
     messages,
     isStreaming,
@@ -204,6 +209,10 @@ export function LucyChat({
 
       setInput('');
 
+      // Clear attached images after sending
+      attachedImages.forEach((img) => URL.revokeObjectURL(img.preview));
+      setAttachedImages([]);
+
       // If streaming, add to pending message parts instead of sending immediately
       if (isStreaming) {
         const newParts = contentToParts(content);
@@ -212,7 +221,7 @@ export function LucyChat({
         await sendMessage(content);
       }
     },
-    [sendMessage, isStreaming, contentToParts]
+    [sendMessage, isStreaming, contentToParts, attachedImages]
   );
 
   // Handle stop streaming
@@ -229,6 +238,96 @@ export function LucyChat({
     },
     [handleSend]
   );
+
+  // Helper to read file as base64
+  const readFileAsBase64 = useCallback((file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        // Remove the data URL prefix (e.g., "data:image/png;base64,")
+        const base64 = result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }, []);
+
+  // Handle adding images
+  const handleAddImages = useCallback(async (files: FileList | File[]) => {
+    const imageFiles = Array.from(files).filter((file) => file.type.startsWith('image/'));
+    for (const file of imageFiles) {
+      const id = Date.now().toString() + Math.random().toString(36).substring(2, 11);
+      const preview = URL.createObjectURL(file);
+      const base64 = await readFileAsBase64(file);
+      const newImage: AttachedImage = {
+        id,
+        file,
+        preview,
+        base64,
+        mimeType: file.type || 'image/png',
+        name: file.name,
+      };
+      setAttachedImages((prev) => [...prev, newImage]);
+    }
+  }, [readFileAsBase64]);
+
+  // Handle removing an image
+  const handleRemoveImage = useCallback((id: string) => {
+    setAttachedImages((prev) => {
+      const image = prev.find((img) => img.id === id);
+      if (image) {
+        URL.revokeObjectURL(image.preview);
+      }
+      return prev.filter((img) => img.id !== id);
+    });
+  }, []);
+
+  // Start browser's Web Speech API
+  const startBrowserSpeechRecognition = useCallback(() => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      console.error('Speech recognition not supported in this browser');
+      setIsStreamingVoice(false);
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      if (transcript.trim()) {
+        setInput(transcript.trim());
+      }
+      setIsStreamingVoice(false);
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error('Speech recognition error:', event.error);
+      setIsStreamingVoice(false);
+    };
+
+    recognition.onend = () => {
+      setIsStreamingVoice(false);
+    };
+
+    recognition.start();
+  }, []);
+
+  // Handle starting streaming voice input
+  // Uses browser's Web Speech API directly (more reliable than WebSocket-based API)
+  const handleStartStreamingVoice = useCallback(() => {
+    if (isStreamingVoice) return;
+
+    setIsStreamingVoice(true);
+    startBrowserSpeechRecognition();
+  }, [isStreamingVoice, startBrowserSpeechRecognition]);
 
   // Toggle tool expansion
   const toggleToolExpansion = useCallback((toolId: string) => {
@@ -301,6 +400,14 @@ export function LucyChat({
             placeholder={
               isStreaming ? 'Message will be queued...' : 'Ask Lucy to analyze traces or optimize...'
             }
+            // Image attachments
+            attachedImages={attachedImages}
+            onRemoveImage={handleRemoveImage}
+            onAddImages={handleAddImages}
+            // Voice input (always enabled - uses browser fallback if no speechToText API)
+            voiceEnabled={true}
+            onStartStreamingVoice={handleStartStreamingVoice}
+            isStreamingVoice={isStreamingVoice}
           />
         </div>
       </div>
