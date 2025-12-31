@@ -5,14 +5,17 @@
  * Includes header and chat/loading/error states.
  */
 
-import { useCallback, useState } from 'react';
-import { Chat } from '@distri/react';
+import { useCallback, useState, useMemo } from 'react';
 import { DistriFnTool, DistriMessage } from '@distri/core';
 import { X, Plus, Loader2, Pin, PinOff, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { LucyAvatar } from './LucyAvatar';
-import { LucySetupGuide } from './LucySetupGuide';
+import {
+  LucyAvatar,
+  LucySetupGuide,
+  LucyChat,
+  LucyDefaultToolRenderer,
+} from './lucy-agent';
 import { useAgentPanel } from '@/contexts/AgentPanelContext';
 
 // ============================================================================
@@ -102,6 +105,16 @@ export function AgentChatContent({
   const { isPinned, toggleMode } = useAgentPanel();
   const [showSettings, setShowSettings] = useState(false);
 
+  // Create tool renderers with Lucy styling
+  const toolRenderers = useMemo(
+    () => ({
+      // Use LucyDefaultToolRenderer for all tools
+      // Add specific tool overrides here if needed
+      default: LucyDefaultToolRenderer,
+    }),
+    []
+  );
+
   // Attach current view context to messages before sending
   // Read from window.location at send time to get latest URL state
   const handleBeforeSendMessage = useCallback(
@@ -184,7 +197,7 @@ export function AgentChatContent({
       </div>
 
       {/* Content */}
-      <div className="flex-1 flex flex-col justify-end overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden">
         {agentLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="flex items-center space-x-2">
@@ -196,19 +209,20 @@ export function AgentChatContent({
           </div>
         ) : showSettings || !isConnected || !agent ? (
           <LucySetupGuide
+            mode={showSettings && isConnected && agent ? 'settings' : 'setup'}
             onConnected={() => {
               setShowSettings(false);
               onConnected();
             }}
           />
         ) : (
-          <Chat
+          <LucyChat
             threadId={threadId}
             agent={agent}
             externalTools={tools}
             initialMessages={messages}
-            theme="dark"
             beforeSendMessage={handleBeforeSendMessage}
+            toolRenderers={toolRenderers}
           />
         )}
       </div>

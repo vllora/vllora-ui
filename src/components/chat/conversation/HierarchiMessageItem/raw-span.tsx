@@ -89,7 +89,7 @@ const InnerRawSpanMessage = React.memo(({ currentMessageStructure, flattenSpans 
 
     return (
         <div className={cn("flex flex-col")}>
-            {labelAttribute && <div className="w-full flex justify-end py-4"><LabelTag label={labelAttribute} /></div>}
+            {labelAttribute && <div className="w-full flex justify-end py-4"><LabelTag label={labelAttribute} maxWidth={400} /></div>}
             <div className="flex flex-col gap-3" style={labelStyle}>
                 {messages.map((message) => (
                     <MessageItem key={message.id} message={message} />

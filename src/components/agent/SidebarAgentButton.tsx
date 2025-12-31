@@ -12,7 +12,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { LucyAvatar } from "./LucyAvatar"
+import { LucyAvatar } from "./lucy-agent"
 
 interface SidebarAgentButtonProps {
   isCollapsed: boolean

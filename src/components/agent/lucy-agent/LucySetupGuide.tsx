@@ -20,15 +20,17 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { LucyAvatar } from './LucyAvatar';
-import { PlatformDownload } from './PlatformDownload';
-import { ConnectionStatus } from './ConnectionStatus';
-import { useDistriSetup, ProviderConfig, ModelSettingsConfig } from './useDistriSetup';
+import { PlatformDownload } from '../PlatformDownload';
+import { ConnectionStatus } from '../ConnectionStatus';
+import { useDistriSetup, ProviderConfig, ModelSettingsConfig } from '../useDistriSetup';
 
 // ============================================================================
 // Types
 // ============================================================================
 
 interface LucySetupGuideProps {
+  /** Mode: 'setup' for first-time users, 'settings' for returning users adjusting config */
+  mode?: 'setup' | 'settings';
   /** Callback when connection is successful */
   onConnected: () => void;
   /** Optional className */
@@ -39,7 +41,7 @@ interface LucySetupGuideProps {
 // Component
 // ============================================================================
 
-export function LucySetupGuide({ onConnected, className }: LucySetupGuideProps) {
+export function LucySetupGuide({ mode = 'setup', onConnected, className }: LucySetupGuideProps) {
   const {
     connectionStatus,
     errorMessage,
@@ -50,12 +52,15 @@ export function LucySetupGuide({ onConnected, className }: LucySetupGuideProps) 
     modelSettings,
     setModelSettings,
     connect,
+    testConnection,
     platform,
     allPlatforms,
   } = useDistriSetup();
 
+  const isSettingsMode = mode === 'settings';
+
   const [copied, setCopied] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(isSettingsMode); // Expanded by default in settings mode
 
   // Helper to get current provider config (with defaults)
   const providerConfig = modelSettings.provider || { name: 'vllora' as const };
@@ -144,6 +149,11 @@ export function LucySetupGuide({ onConnected, className }: LucySetupGuideProps) 
     }
   }, [connect, onConnected]);
 
+  // Handle test connection button click (settings mode only)
+  const handleTestConnection = useCallback(async () => {
+    await testConnection();
+  }, [testConnection]);
+
   const isConnecting = connectionStatus === 'connecting';
   const isRegistering = connectionStatus === 'registering';
   const isReady = connectionStatus === 'ready';
@@ -154,44 +164,52 @@ export function LucySetupGuide({ onConnected, className }: LucySetupGuideProps) 
       {/* Header */}
       <div className="flex flex-col items-center mb-6">
         <LucyAvatar size="lg" className="mb-3" />
-        <h2 className="text-base font-semibold">Set Up Lucy</h2>
+        <h2 className="text-base font-semibold">
+          {isSettingsMode ? 'Lucy Settings' : 'Set Up Lucy'}
+        </h2>
         <p className="text-xs text-muted-foreground text-center mt-1">
-          Lucy needs the Distri server to work.
+          {isSettingsMode
+            ? 'Configure your Distri server connection and model settings.'
+            : 'Lucy needs the Distri server to work.'}
         </p>
       </div>
 
       {/* Steps */}
       <div className="space-y-5 flex-1">
-        {/* Step 1: Download */}
-        <StepSection number={1} title="Download Distri">
-          <PlatformDownload platform={platform} allPlatforms={allPlatforms} />
-        </StepSection>
+        {/* Step 1: Download (setup mode only) */}
+        {!isSettingsMode && (
+          <StepSection number={1} title="Download Distri">
+            <PlatformDownload platform={platform} allPlatforms={allPlatforms} />
+          </StepSection>
+        )}
 
-        {/* Step 2: Extract & Run */}
-        <StepSection number={2} title="Extract & Run">
-          <div className="relative">
-            <div className="bg-muted rounded-md p-2.5 pr-10 font-mono text-xs overflow-x-auto">
-              <code className="whitespace-nowrap">{runCommand}</code>
+        {/* Step 2: Extract & Run (setup mode only) */}
+        {!isSettingsMode && (
+          <StepSection number={2} title="Extract & Run">
+            <div className="relative">
+              <div className="bg-muted rounded-md p-2.5 pr-10 font-mono text-xs overflow-x-auto">
+                <code className="whitespace-nowrap">{runCommand}</code>
+              </div>
+              <button
+                onClick={handleCopyCommand}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-background/50 rounded transition-colors"
+                title={copied ? 'Copied!' : 'Copy command'}
+              >
+                {copied ? (
+                  <Check className="h-3.5 w-3.5 text-green-500" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                )}
+              </button>
             </div>
-            <button
-              onClick={handleCopyCommand}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-background/50 rounded transition-colors"
-              title={copied ? 'Copied!' : 'Copy command'}
-            >
-              {copied ? (
-                <Check className="h-3.5 w-3.5 text-green-500" />
-              ) : (
-                <Copy className="h-3.5 w-3.5 text-muted-foreground" />
-              )}
-            </button>
-          </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            Run in terminal where you downloaded. Keep it open.
-          </p>
-        </StepSection>
+            <p className="text-xs text-muted-foreground mt-2">
+              Run in terminal where you downloaded. Keep it open.
+            </p>
+          </StepSection>
+        )}
 
-        {/* Step 3: Connect */}
-        <StepSection number={3} title="Connect">
+        {/* Step 3: Connect (or just "Connection" in settings mode) */}
+        <StepSection number={isSettingsMode ? undefined : 3} title={isSettingsMode ? 'Connection' : 'Connect'}>
           <div className="space-y-3">
             {/* Server URL input */}
             <div>
@@ -370,34 +388,64 @@ export function LucySetupGuide({ onConnected, className }: LucySetupGuideProps) 
             {/* Connection status */}
             <ConnectionStatus status={connectionStatus} errorMessage={errorMessage} />
 
-            {/* Connect button */}
-            <Button
-              onClick={handleConnect}
-              disabled={!isValidUrl || isInProgress || isReady}
-              className="w-full"
-              size="sm"
-            >
-              {isConnecting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Connecting to Distri...
-                </>
-              ) : isRegistering ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Registering agents...
-                </>
-              ) : isReady ? (
-                <>
-                  <Check className="h-4 w-4 mr-2" />
-                  Ready!
-                </>
-              ) : connectionStatus === 'failed' ? (
-                'Retry'
-              ) : (
-                'Connect to Lucy'
+            {/* Buttons */}
+            <div className={isSettingsMode ? 'flex gap-2' : ''}>
+              {/* Test Connection button (settings mode only) */}
+              {isSettingsMode && (
+                <Button
+                  onClick={handleTestConnection}
+                  disabled={!isValidUrl || isInProgress}
+                  variant="outline"
+                  className="flex-1"
+                  size="sm"
+                >
+                  {isConnecting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Testing...
+                    </>
+                  ) : connectionStatus === 'connected' ? (
+                    <>
+                      <Check className="h-4 w-4 mr-2" />
+                      Connected
+                    </>
+                  ) : (
+                    'Test Connection'
+                  )}
+                </Button>
               )}
-            </Button>
+
+              {/* Connect/Save button */}
+              <Button
+                onClick={handleConnect}
+                disabled={!isValidUrl || isInProgress || isReady}
+                className={isSettingsMode ? 'flex-1' : 'w-full'}
+                size="sm"
+              >
+                {isConnecting && !isSettingsMode ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Connecting to Distri...
+                  </>
+                ) : isRegistering ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Registering agents...
+                  </>
+                ) : isReady ? (
+                  <>
+                    <Check className="h-4 w-4 mr-2" />
+                    {isSettingsMode ? 'Saved!' : 'Ready!'}
+                  </>
+                ) : connectionStatus === 'failed' ? (
+                  'Retry'
+                ) : isSettingsMode ? (
+                  'Save & Register'
+                ) : (
+                  'Connect to Lucy'
+                )}
+              </Button>
+            </div>
 
             {/* Show registration result */}
             {registrationResult && registrationResult.agents.length > 0 && (
@@ -429,7 +477,7 @@ export function LucySetupGuide({ onConnected, className }: LucySetupGuideProps) 
 // ============================================================================
 
 interface StepSectionProps {
-  number: number;
+  number?: number;
   title: string;
   children: React.ReactNode;
 }
@@ -438,12 +486,14 @@ function StepSection({ number, title, children }: StepSectionProps) {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-medium">
-          {number}
-        </span>
+        {number !== undefined && (
+          <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-medium">
+            {number}
+          </span>
+        )}
         <h3 className="text-sm font-medium">{title}</h3>
       </div>
-      <div className="pl-7">{children}</div>
+      <div className={number !== undefined ? 'pl-7' : ''}>{children}</div>
     </div>
   );
 }

@@ -58,6 +58,7 @@ export interface UseDistriSetupReturn {
 
   // Actions
   connect: () => Promise<boolean>;
+  testConnection: () => Promise<boolean>;
   resetUrl: () => void;
 
   // Platform info
@@ -208,6 +209,30 @@ export function useDistriSetup(): UseDistriSetupReturn {
     setConnectionStatus('idle');
   }, []);
 
+  // Test connection only (no registration)
+  const testConnection = useCallback(async (): Promise<boolean> => {
+    if (!isValidUrl) {
+      setErrorMessage('Invalid URL format');
+      setConnectionStatus('failed');
+      return false;
+    }
+
+    setConnectionStatus('connecting');
+    setErrorMessage(null);
+
+    const isConnected = await checkDistriHealth(distriUrl);
+
+    if (isConnected) {
+      saveDistriUrl(distriUrl);
+      setConnectionStatus('connected');
+      return true;
+    } else {
+      setConnectionStatus('failed');
+      setErrorMessage('Could not connect. Make sure the Distri server is running.');
+      return false;
+    }
+  }, [distriUrl, isValidUrl]);
+
   // Connect with retry logic, then register agents via BE
   const connect = useCallback(async (): Promise<boolean> => {
     if (!isValidUrl) {
@@ -285,6 +310,7 @@ export function useDistriSetup(): UseDistriSetupReturn {
     modelSettings,
     setModelSettings,
     connect,
+    testConnection,
     resetUrl,
     platform,
     allPlatforms,
