@@ -5,10 +5,10 @@
  * Includes header and chat/loading/error states.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { Chat } from '@distri/react';
 import { DistriFnTool, DistriMessage } from '@distri/core';
-import { X, Plus, Loader2, Pin, PinOff } from 'lucide-react';
+import { X, Plus, Loader2, Pin, PinOff, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { LucyAvatar } from './LucyAvatar';
@@ -100,6 +100,7 @@ export function AgentChatContent({
   isDragHandle = false,
 }: AgentChatContentProps) {
   const { isPinned, toggleMode } = useAgentPanel();
+  const [showSettings, setShowSettings] = useState(false);
 
   // Attach current view context to messages before sending
   // Read from window.location at send time to get latest URL state
@@ -151,6 +152,15 @@ export function AgentChatContent({
           <Button
             variant="ghost"
             size="icon"
+            className={cn('h-7 w-7', showSettings && 'bg-accent')}
+            onClick={() => setShowSettings(!showSettings)}
+            title={showSettings ? 'Back to Chat' : 'Settings'}
+          >
+            <Settings className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             className="h-7 w-7"
             onClick={toggleMode}
             title={isPinned ? "Unpin (floating mode)" : "Pin (side panel)"}
@@ -175,9 +185,7 @@ export function AgentChatContent({
 
       {/* Content */}
       <div className="flex-1 flex flex-col justify-end overflow-hidden">
-        {!isConnected ? (
-          <LucySetupGuide onConnected={onConnected} />
-        ) : agentLoading ? (
+        {agentLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="flex items-center space-x-2">
               <Loader2 className="h-5 w-5 animate-spin" />
@@ -186,14 +194,13 @@ export function AgentChatContent({
               </span>
             </div>
           </div>
-        ) : !agent ? (
-          <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-            <LucyAvatar size="lg" className="mb-4 opacity-50" />
-            <h3 className="font-semibold mb-2">Lucy Not Available</h3>
-            <p className="text-sm text-muted-foreground">
-              Could not load agent. Please try again.
-            </p>
-          </div>
+        ) : showSettings || !isConnected || !agent ? (
+          <LucySetupGuide
+            onConnected={() => {
+              setShowSettings(false);
+              onConnected();
+            }}
+          />
         ) : (
           <Chat
             threadId={threadId}

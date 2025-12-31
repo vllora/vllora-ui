@@ -2,7 +2,7 @@
  * ConnectionStatus
  *
  * Visual indicator for Distri server connection status.
- * Shows different states: idle, connecting, connected, failed.
+ * Shows different states: idle, connecting, connected, registering, ready, failed.
  */
 
 import { Loader2 } from 'lucide-react';
@@ -42,13 +42,17 @@ export function ConnectionStatus({
           'text-xs',
           status === 'idle' && 'text-muted-foreground',
           status === 'connecting' && 'text-blue-500',
-          status === 'connected' && 'text-green-500',
+          status === 'connected' && 'text-blue-500',
+          status === 'registering' && 'text-blue-500',
+          status === 'ready' && 'text-green-500',
           status === 'failed' && 'text-red-500'
         )}
       >
         {status === 'idle' && 'Not connected'}
-        {status === 'connecting' && 'Connecting...'}
-        {status === 'connected' && 'Connected!'}
+        {status === 'connecting' && 'Connecting to Distri...'}
+        {status === 'connected' && 'Connected to Distri'}
+        {status === 'registering' && 'Registering agents...'}
+        {status === 'ready' && 'Ready!'}
         {status === 'failed' && (errorMessage || 'Connection failed')}
       </span>
     </div>
@@ -60,7 +64,7 @@ export function ConnectionStatus({
 // ============================================================================
 
 function StatusDot({ status }: { status: ConnectionStatusType }) {
-  if (status === 'connecting') {
+  if (status === 'connecting' || status === 'registering') {
     return <Loader2 className="h-3 w-3 animate-spin text-blue-500" />;
   }
 
@@ -69,7 +73,8 @@ function StatusDot({ status }: { status: ConnectionStatusType }) {
       className={cn(
         'h-2 w-2 rounded-full',
         status === 'idle' && 'bg-muted-foreground animate-pulse',
-        status === 'connected' && 'bg-green-500',
+        status === 'connected' && 'bg-blue-500',
+        status === 'ready' && 'bg-green-500',
         status === 'failed' && 'bg-red-500'
       )}
     />

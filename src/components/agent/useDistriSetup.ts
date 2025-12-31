@@ -5,7 +5,7 @@
  * - Connection status checking
  * - URL management (get/save/validate)
  * - Platform detection
- * - Retry logic
+ * - Agent registration via vLLora BE
  */
 
 import { useState, useCallback, useMemo } from 'react';
@@ -14,12 +14,19 @@ import {
   saveDistriUrl,
   checkDistriHealth,
 } from '@/lib/agent-sync';
+import {
+  registerAgents,
+  RegistrationResult,
+  AgentRegistrationStatus,
+  ProviderConfig,
+  ModelSettingsConfig,
+} from '@/services/agents-api';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-export type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'failed';
+export type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'registering' | 'ready' | 'failed';
 
 export interface PlatformInfo {
   os: 'darwin' | 'linux';
@@ -29,15 +36,25 @@ export interface PlatformInfo {
   downloadUrl: string;
 }
 
+// Re-export types from service for convenience
+export type { RegistrationResult, AgentRegistrationStatus, ProviderConfig, ModelSettingsConfig };
+
 export interface UseDistriSetupReturn {
   // Connection state
   connectionStatus: ConnectionStatus;
   errorMessage: string | null;
 
+  // Agent registration state
+  registrationResult: RegistrationResult | null;
+
   // URL management
   distriUrl: string;
   setDistriUrl: (url: string) => void;
   isValidUrl: boolean;
+
+  // Model settings configuration (includes provider)
+  modelSettings: ModelSettingsConfig;
+  setModelSettings: (config: ModelSettingsConfig) => void;
 
   // Actions
   connect: () => Promise<boolean>;
@@ -153,10 +170,20 @@ function validateUrl(url: string): boolean {
 // Hook
 // ============================================================================
 
+// Default model settings with vllora provider pointing to local BE
+const DEFAULT_MODEL_SETTINGS: ModelSettingsConfig = {
+  provider: {
+    name: 'vllora',
+    base_url: 'http://localhost:9093/v1',
+  },
+};
+
 export function useDistriSetup(): UseDistriSetupReturn {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [distriUrl, setDistriUrlState] = useState<string>(() => getDistriUrl());
+  const [registrationResult, setRegistrationResult] = useState<RegistrationResult | null>(null);
+  const [modelSettings, setModelSettings] = useState<ModelSettingsConfig>(DEFAULT_MODEL_SETTINGS);
 
   // Validate URL
   const isValidUrl = useMemo(() => validateUrl(distriUrl), [distriUrl]);
@@ -181,7 +208,7 @@ export function useDistriSetup(): UseDistriSetupReturn {
     setConnectionStatus('idle');
   }, []);
 
-  // Connect with retry logic
+  // Connect with retry logic, then register agents via BE
   const connect = useCallback(async (): Promise<boolean> => {
     if (!isValidUrl) {
       setErrorMessage('Invalid URL format');
@@ -191,6 +218,7 @@ export function useDistriSetup(): UseDistriSetupReturn {
 
     setConnectionStatus('connecting');
     setErrorMessage(null);
+    setRegistrationResult(null);
 
     // Retry logic: try every 1 second for up to 5 seconds
     const maxAttempts = 5;
@@ -203,7 +231,36 @@ export function useDistriSetup(): UseDistriSetupReturn {
         // Save the URL on successful connection
         saveDistriUrl(distriUrl);
         setConnectionStatus('connected');
-        return true;
+
+        // Now register agents via vLLora BE
+        setConnectionStatus('registering');
+        try {
+          const result = await registerAgents({
+            distri_url: distriUrl,
+            model_settings: modelSettings,
+          });
+          setRegistrationResult(result);
+
+          const allSuccess = result.agents.every((a: AgentRegistrationStatus) => a.success);
+          if (allSuccess && result.agents.length > 0) {
+            setConnectionStatus('ready');
+            return true;
+          } else if (result.agents.length === 0) {
+            setErrorMessage('No agents found to register');
+            setConnectionStatus('failed');
+            return false;
+          } else {
+            // Some agents failed
+            const failedAgents = result.agents.filter((a: AgentRegistrationStatus) => !a.success);
+            setErrorMessage(`Failed to register ${failedAgents.length} agent(s)`);
+            setConnectionStatus('failed');
+            return false;
+          }
+        } catch {
+          setErrorMessage('Failed to register agents with vLLora server');
+          setConnectionStatus('failed');
+          return false;
+        }
       }
 
       // Don't wait after the last attempt
@@ -216,14 +273,17 @@ export function useDistriSetup(): UseDistriSetupReturn {
     setConnectionStatus('failed');
     setErrorMessage('Could not connect. Make sure the Distri server is running.');
     return false;
-  }, [distriUrl, isValidUrl]);
+  }, [distriUrl, isValidUrl, modelSettings]);
 
   return {
     connectionStatus,
     errorMessage,
+    registrationResult,
     distriUrl,
     setDistriUrl,
     isValidUrl,
+    modelSettings,
+    setModelSettings,
     connect,
     resetUrl,
     platform,

@@ -3,16 +3,15 @@
  *
  * Wraps the application with Distri client context and:
  * 1. Initializes the Distri client with config
- * 2. Runs agent sync on mount to ensure agents are registered
- * 3. Provides connection state context to child components
+ * 2. Provides connection state context to child components
  *
- * Note: Tool handlers are passed via `externalTools` prop in the Chat component,
- * so we don't need to manually register them here.
+ * Note: Agent registration is handled by LucySetupGuide via POST /agents/register
+ * Tool handlers are passed via `externalTools` prop in the Chat component.
  */
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { DistriProvider as BaseDistriProvider } from '@distri/react';
-import { ensureAgentsRegistered, checkDistriHealth, getDistriUrl } from '@/lib/agent-sync';
+import { checkDistriHealth, getDistriUrl } from '@/lib/agent-sync';
 
 // ============================================================================
 // Types
@@ -41,7 +40,7 @@ function DistriProviderInner({ children }: { children: React.ReactNode }) {
   const [isInitializing, setIsInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Initialize connection and sync agents
+  // Initialize connection check
   const initialize = useCallback(async () => {
     setIsInitializing(true);
     setError(null);
@@ -55,17 +54,12 @@ function DistriProviderInner({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Ensure agents are registered
-      const agentsOk = await ensureAgentsRegistered();
-      if (!agentsOk) {
-        console.warn('[DistriProvider] Some agents may be missing');
-      }
-
+      // Agent registration is handled by LucySetupGuide via POST /agents/register
       setIsConnected(true);
-      console.log('[DistriProvider] Initialized successfully');
+      console.log('[DistriProvider] Connected to Distri server');
     } catch (err) {
-      console.error('[DistriProvider] Initialization failed:', err);
-      setError(err instanceof Error ? err.message : 'Failed to initialize');
+      console.error('[DistriProvider] Connection check failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to connect');
       setIsConnected(false);
     } finally {
       setIsInitializing(false);

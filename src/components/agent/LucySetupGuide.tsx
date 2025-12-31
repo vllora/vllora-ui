@@ -8,14 +8,21 @@
  */
 
 import { useCallback, useState } from 'react';
-import { Copy, Check, Loader2 } from 'lucide-react';
+import { Copy, Check, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { LucyAvatar } from './LucyAvatar';
 import { PlatformDownload } from './PlatformDownload';
 import { ConnectionStatus } from './ConnectionStatus';
-import { useDistriSetup } from './useDistriSetup';
+import { useDistriSetup, ProviderConfig, ModelSettingsConfig } from './useDistriSetup';
 
 // ============================================================================
 // Types
@@ -36,15 +43,74 @@ export function LucySetupGuide({ onConnected, className }: LucySetupGuideProps) 
   const {
     connectionStatus,
     errorMessage,
+    registrationResult,
     distriUrl,
     setDistriUrl,
     isValidUrl,
+    modelSettings,
+    setModelSettings,
     connect,
     platform,
     allPlatforms,
   } = useDistriSetup();
 
   const [copied, setCopied] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Helper to get current provider config (with defaults)
+  const providerConfig = modelSettings.provider || { name: 'vllora' as const };
+
+  // Default URLs for each provider
+  const PROVIDER_DEFAULT_URLS: Record<ProviderConfig['name'], string> = {
+    vllora: 'http://localhost:9093/v1',
+    openai: 'https://api.openai.com/v1',
+    openai_compat: '',
+  };
+
+  // Update model settings field (top-level: model, temperature, max_tokens)
+  const updateModelField = (field: keyof ModelSettingsConfig, value: string | number | undefined) => {
+    setModelSettings({
+      ...modelSettings,
+      [field]: value,
+    });
+  };
+
+  // Update provider config field (nested under modelSettings.provider)
+  // Different providers have different valid fields:
+  // - openai: NO additional fields
+  // - openai_compat: base_url, api_key, project_id
+  // - vllora: base_url only
+  const updateProviderField = (field: keyof ProviderConfig, value: string) => {
+    if (field === 'name') {
+      const newName = value as ProviderConfig['name'];
+      // Set appropriate fields based on provider type
+      const newProvider: ProviderConfig = { name: newName };
+
+      if (newName === 'vllora') {
+        // vllora only has base_url
+        newProvider.base_url = PROVIDER_DEFAULT_URLS.vllora;
+      } else if (newName === 'openai_compat') {
+        // openai_compat has base_url, api_key, project_id
+        newProvider.base_url = providerConfig.base_url || '';
+        newProvider.api_key = providerConfig.api_key;
+        newProvider.project_id = providerConfig.project_id;
+      }
+      // openai has no additional fields
+
+      setModelSettings({
+        ...modelSettings,
+        provider: newProvider,
+      });
+    } else {
+      setModelSettings({
+        ...modelSettings,
+        provider: {
+          ...providerConfig,
+          [field]: value || undefined,
+        },
+      });
+    }
+  };
 
   // Combined extract and run command - copy distri-server to same dir so distri serve works
   const extractedFolder = `${platform.os}-${platform.arch}`;
@@ -79,7 +145,9 @@ export function LucySetupGuide({ onConnected, className }: LucySetupGuideProps) 
   }, [connect, onConnected]);
 
   const isConnecting = connectionStatus === 'connecting';
-  const isConnected = connectionStatus === 'connected';
+  const isRegistering = connectionStatus === 'registering';
+  const isReady = connectionStatus === 'ready';
+  const isInProgress = isConnecting || isRegistering;
 
   return (
     <div className={cn('flex flex-col h-full p-4 overflow-y-auto', className)}>
@@ -128,7 +196,7 @@ export function LucySetupGuide({ onConnected, className }: LucySetupGuideProps) 
             {/* Server URL input */}
             <div>
               <label className="text-xs text-muted-foreground block mb-1.5">
-                Server URL
+                Distri Server URL
               </label>
               <Input
                 type="text"
@@ -139,12 +207,165 @@ export function LucySetupGuide({ onConnected, className }: LucySetupGuideProps) 
                   'h-8 text-sm font-mono',
                   !isValidUrl && distriUrl && 'border-red-500 focus-visible:ring-red-500'
                 )}
-                disabled={isConnecting || isConnected}
+                disabled={isInProgress || isReady}
               />
               {!isValidUrl && distriUrl && (
                 <p className="text-xs text-red-500 mt-1">Invalid URL format</p>
               )}
             </div>
+
+            {/* Advanced Settings Toggle */}
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              disabled={isInProgress || isReady}
+            >
+              {showAdvanced ? (
+                <ChevronDown className="h-3 w-3" />
+              ) : (
+                <ChevronRight className="h-3 w-3" />
+              )}
+              Model Settings
+            </button>
+
+            {/* Advanced Settings Panel */}
+            {showAdvanced && (
+              <div className="space-y-3 p-3 bg-muted/50 rounded-md border">
+                {/* Model Name */}
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1.5">
+                    Model
+                  </label>
+                  <Input
+                    type="text"
+                    value={modelSettings.model || ''}
+                    onChange={(e) => updateModelField('model', e.target.value || undefined)}
+                    placeholder="gpt-4o (uses agent default)"
+                    className="h-8 text-sm font-mono"
+                    disabled={isInProgress || isReady}
+                  />
+                </div>
+
+                {/* Temperature & Max Tokens in a row */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1.5">
+                      Temperature
+                    </label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="2"
+                      value={modelSettings.temperature ?? ''}
+                      onChange={(e) => updateModelField('temperature', e.target.value ? parseFloat(e.target.value) : undefined)}
+                      placeholder="0.7"
+                      className="h-8 text-sm font-mono"
+                      disabled={isInProgress || isReady}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1.5">
+                      Max Tokens
+                    </label>
+                    <Input
+                      type="number"
+                      step="100"
+                      min="1"
+                      value={modelSettings.max_tokens ?? ''}
+                      onChange={(e) => updateModelField('max_tokens', e.target.value ? parseInt(e.target.value, 10) : undefined)}
+                      placeholder="4096"
+                      className="h-8 text-sm font-mono"
+                      disabled={isInProgress || isReady}
+                    />
+                  </div>
+                </div>
+
+                {/* Provider Type */}
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1.5">
+                    Provider
+                  </label>
+                  <Select
+                    value={providerConfig.name}
+                    onValueChange={(value: 'openai' | 'openai_compat' | 'vllora') =>
+                      updateProviderField('name', value)
+                    }
+                    disabled={isInProgress || isReady}
+                  >
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue placeholder="Select provider" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="vllora">vLLora (Default)</SelectItem>
+                      <SelectItem value="openai">OpenAI</SelectItem>
+                      <SelectItem value="openai_compat">OpenAI Compatible</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {providerConfig.name === 'vllora' && 'Routes through vLLora for observability'}
+                    {providerConfig.name === 'openai' && 'Direct OpenAI API (uses OPENAI_API_KEY)'}
+                    {providerConfig.name === 'openai_compat' && 'OpenAI-compatible endpoint'}
+                  </p>
+                </div>
+
+                {/* Base URL (for vllora and openai_compat only - openai has no fields) */}
+                {(providerConfig.name === 'vllora' || providerConfig.name === 'openai_compat') && (
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1.5">
+                      Base URL
+                    </label>
+                    <Input
+                      type="text"
+                      value={providerConfig.base_url || ''}
+                      onChange={(e) => updateProviderField('base_url', e.target.value)}
+                      placeholder={
+                        providerConfig.name === 'vllora'
+                          ? 'http://localhost:9093/v1'
+                          : 'Enter API endpoint'
+                      }
+                      className="h-8 text-sm font-mono"
+                      disabled={isInProgress || isReady}
+                    />
+                  </div>
+                )}
+
+                {/* API Key (for openai_compat only - openai uses env var) */}
+                {providerConfig.name === 'openai_compat' && (
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1.5">
+                      API Key
+                    </label>
+                    <Input
+                      type="password"
+                      value={providerConfig.api_key || ''}
+                      onChange={(e) => updateProviderField('api_key', e.target.value)}
+                      placeholder="sk-..."
+                      className="h-8 text-sm font-mono"
+                      disabled={isInProgress || isReady}
+                    />
+                  </div>
+                )}
+
+                {/* Project ID (for openai_compat only) */}
+                {providerConfig.name === 'openai_compat' && (
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1.5">
+                      Project ID
+                    </label>
+                    <Input
+                      type="text"
+                      value={providerConfig.project_id || ''}
+                      onChange={(e) => updateProviderField('project_id', e.target.value)}
+                      placeholder="Optional project ID"
+                      className="h-8 text-sm font-mono"
+                      disabled={isInProgress || isReady}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Connection status */}
             <ConnectionStatus status={connectionStatus} errorMessage={errorMessage} />
@@ -152,19 +373,24 @@ export function LucySetupGuide({ onConnected, className }: LucySetupGuideProps) 
             {/* Connect button */}
             <Button
               onClick={handleConnect}
-              disabled={!isValidUrl || isConnecting || isConnected}
+              disabled={!isValidUrl || isInProgress || isReady}
               className="w-full"
               size="sm"
             >
               {isConnecting ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Connecting...
+                  Connecting to Distri...
                 </>
-              ) : isConnected ? (
+              ) : isRegistering ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Registering agents...
+                </>
+              ) : isReady ? (
                 <>
                   <Check className="h-4 w-4 mr-2" />
-                  Connected!
+                  Ready!
                 </>
               ) : connectionStatus === 'failed' ? (
                 'Retry'
@@ -172,6 +398,25 @@ export function LucySetupGuide({ onConnected, className }: LucySetupGuideProps) 
                 'Connect to Lucy'
               )}
             </Button>
+
+            {/* Show registration result */}
+            {registrationResult && registrationResult.agents.length > 0 && (
+              <div className="text-xs text-muted-foreground mt-2">
+                <p className="font-medium mb-1">Agents registered:</p>
+                <ul className="space-y-0.5">
+                  {registrationResult.agents.map((agent) => (
+                    <li key={agent.name} className="flex items-center gap-1">
+                      {agent.success ? (
+                        <Check className="h-3 w-3 text-green-500" />
+                      ) : (
+                        <span className="h-3 w-3 text-red-500">✗</span>
+                      )}
+                      <span>{agent.name}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </StepSection>
       </div>
