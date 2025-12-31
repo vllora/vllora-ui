@@ -62,7 +62,7 @@ export function LucySetupGuide({ onConnected, className }: LucySetupGuideProps) 
 
   // Default URLs for each provider
   const PROVIDER_DEFAULT_URLS: Record<ProviderConfig['name'], string> = {
-    vllora: 'http://localhost:9093/v1',
+    vllora: 'http://localhost:9090/v1',
     openai: 'https://api.openai.com/v1',
     openai_compat: '',
   };
@@ -322,7 +322,7 @@ export function LucySetupGuide({ onConnected, className }: LucySetupGuideProps) 
                       onChange={(e) => updateProviderField('base_url', e.target.value)}
                       placeholder={
                         providerConfig.name === 'vllora'
-                          ? 'http://localhost:9093/v1'
+                          ? 'http://localhost:9090/v1'
                           : 'Enter API endpoint'
                       }
                       className="h-8 text-sm font-mono"
