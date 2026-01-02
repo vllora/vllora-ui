@@ -210,6 +210,7 @@ const getStateHandlers: Record<string, ToolHandler> = {
         total_tokens: number | null;
         input_tokens: number | null;
         output_tokens: number | null;
+        duration_seconds: number | null;
       };
       new: {
         output: unknown;
@@ -218,12 +219,14 @@ const getStateHandlers: Record<string, ToolHandler> = {
         total_tokens: number | null;
         input_tokens: number | null;
         output_tokens: number | null;
+        duration_seconds: number | null;
       };
       comparison: {
         cost_change_percent: number | null;
         total_tokens_change_percent: number | null;
         input_tokens_change_percent: number | null;
         output_tokens_change_percent: number | null;
+        duration_change_percent: number | null;
       };
     }>('vllora_evaluate_experiment_results', 'vllora_evaluate_experiment_results_response');
     const result = await handler();

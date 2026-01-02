@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import { useExperiment } from "@/hooks/useExperiment";
 import { emitter } from "@/utils/eventEmitter";
+import { tryParseJson } from "@/utils/modelUtils";
+import type { Span } from "@/types/common-type";
 
 // Context type: useExperiment return type + UI state
 type ExperimentContextType = ReturnType<typeof useExperimentWrapper>
@@ -37,7 +39,7 @@ export function useExperimentWrapper({ spanId, projectId }: ExperimentProviderPr
   // Listen for agent tool events
   useEffect(() => {
     // Handle get_experiment_data request
-    const handleGetExperimentData = () => {
+    const   handleGetExperimentData = () => {
       emitter.emit('vllora_experiment_data_response', {
         experimentData: experimentHook.experimentData,
         originalExperimentData: experimentHook.originalExperimentData,
@@ -77,11 +79,30 @@ export function useExperimentWrapper({ spanId, projectId }: ExperimentProviderPr
       const originalInfo = experimentHook.originalInfo;
       const resultInfo = experimentHook.resultInfo;
       const result = experimentHook.result;
+      const span = experimentHook.span;
+      const traceSpans = experimentHook.traceSpans;
+
+      // Helper to parse usage from string or object (like span-converter.tsx pattern)
+      const parseUsage = (usage: unknown): Record<string, unknown> | null => {
+        if (!usage) return null;
+        // If it's already an object, return it
+        if (typeof usage === 'object' && !Array.isArray(usage)) {
+          return usage as Record<string, unknown>;
+        }
+        // If it's a string, try to parse it as JSON
+        if (typeof usage === 'string') {
+          const parsed = tryParseJson(usage);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            return parsed as Record<string, unknown>;
+          }
+        }
+        return null;
+      };
 
       // Helper to extract numeric values from usage objects
-      const getUsageValue = (usage: unknown, key: string): number | null => {
-        if (!usage || typeof usage !== 'object') return null;
-        const value = (usage as Record<string, unknown>)[key];
+      const getUsageValue = (usage: Record<string, unknown> | null, key: string): number | null => {
+        if (!usage) return null;
+        const value = usage[key];
         return typeof value === 'number' ? value : null;
       };
 
@@ -101,21 +122,43 @@ export function useExperimentWrapper({ spanId, projectId }: ExperimentProviderPr
         return ((current - original) / original) * 100;
       };
 
-      // Extract metrics
-      const originalUsage = originalInfo?.usage;
-      const newUsage = resultInfo?.usage;
+      // Helper to calculate duration in seconds (3 decimal places)
+      const calculateDuration = (startUs: number | undefined, finishUs: number | undefined): number | null => {
+        if (!startUs || !finishUs) return null;
+        const durationSeconds = (finishUs - startUs) / 1_000_000;
+        return parseFloat(durationSeconds.toFixed(3));
+      };
 
-      const originalCost = parseCost(originalInfo?.cost) ?? parseCost(getUsageValue(originalUsage, 'cost'));
-      const newCost = parseCost(resultInfo?.cost) ?? parseCost(getUsageValue(newUsage, 'cost'));
+      // Parse usage objects (handle JSON strings)
+      const originalUsageParsed = parseUsage(originalInfo?.usage);
+      const newUsageParsed = parseUsage(resultInfo?.usage);
 
-      const originalTotalTokens = getUsageValue(originalUsage, 'total_tokens');
-      const newTotalTokens = getUsageValue(newUsage, 'total_tokens');
+      // Extract metrics from parsed usage
+      const originalCost = parseCost(originalInfo?.cost) ?? parseCost(getUsageValue(originalUsageParsed, 'cost'));
+      const newCost = parseCost(resultInfo?.cost) ?? parseCost(getUsageValue(newUsageParsed, 'cost'));
 
-      const originalInputTokens = getUsageValue(originalUsage, 'prompt_tokens') ?? getUsageValue(originalUsage, 'input_tokens');
-      const newInputTokens = getUsageValue(newUsage, 'prompt_tokens') ?? getUsageValue(newUsage, 'input_tokens');
+      const originalTotalTokens = getUsageValue(originalUsageParsed, 'total_tokens');
+      const newTotalTokens = getUsageValue(newUsageParsed, 'total_tokens');
 
-      const originalOutputTokens = getUsageValue(originalUsage, 'completion_tokens') ?? getUsageValue(originalUsage, 'output_tokens');
-      const newOutputTokens = getUsageValue(newUsage, 'completion_tokens') ?? getUsageValue(newUsage, 'output_tokens');
+      const originalInputTokens = getUsageValue(originalUsageParsed, 'prompt_tokens') ?? getUsageValue(originalUsageParsed, 'input_tokens');
+      const newInputTokens = getUsageValue(newUsageParsed, 'prompt_tokens') ?? getUsageValue(newUsageParsed, 'input_tokens');
+
+      const originalOutputTokens = getUsageValue(originalUsageParsed, 'completion_tokens') ?? getUsageValue(originalUsageParsed, 'output_tokens');
+      const newOutputTokens = getUsageValue(newUsageParsed, 'completion_tokens') ?? getUsageValue(newUsageParsed, 'output_tokens');
+
+      // Calculate duration for original (from span)
+      const originalDuration = calculateDuration(span?.start_time_us, span?.finish_time_us);
+
+      // Calculate duration for new experiment (from traceSpans - find api_invoke span)
+      let newDuration: number | null = null;
+      if (traceSpans && traceSpans.length > 0) {
+        const newApiInvokeSpan = traceSpans.find(
+          (s: Span) => s.operation_name === "api_invoke"
+        );
+        if (newApiInvokeSpan) {
+          newDuration = calculateDuration(newApiInvokeSpan.start_time_us, newApiInvokeSpan.finish_time_us);
+        }
+      }
 
       emitter.emit('vllora_evaluate_experiment_results_response', {
         hasResults: !!result && !!originalInfo,
@@ -126,6 +169,7 @@ export function useExperimentWrapper({ spanId, projectId }: ExperimentProviderPr
           total_tokens: originalTotalTokens,
           input_tokens: originalInputTokens,
           output_tokens: originalOutputTokens,
+          duration_seconds: originalDuration,
         },
         new: {
           output: result || null,
@@ -134,12 +178,14 @@ export function useExperimentWrapper({ spanId, projectId }: ExperimentProviderPr
           total_tokens: newTotalTokens,
           input_tokens: newInputTokens,
           output_tokens: newOutputTokens,
+          duration_seconds: newDuration,
         },
         comparison: {
           cost_change_percent: calcPercentChange(originalCost, newCost),
           total_tokens_change_percent: calcPercentChange(originalTotalTokens, newTotalTokens),
           input_tokens_change_percent: calcPercentChange(originalInputTokens, newInputTokens),
           output_tokens_change_percent: calcPercentChange(originalOutputTokens, newOutputTokens),
+          duration_change_percent: calcPercentChange(originalDuration, newDuration),
         },
       });
     };
