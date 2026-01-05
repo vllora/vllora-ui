@@ -775,7 +775,7 @@ export const dataTools: DistriFnTool[] = [
 
   {
     name: 'fetch_spans',
-    description: 'Fetch spans with optional filtering by span IDs, thread, run, operation type, parent span, or labels. Returns max 10 spans by default. Use spanIds to fetch specific spans by ID.',
+    description: 'Fetch RAW span data. Use ONLY for metadata queries on 1-3 specific spans (e.g., "what model was used?"). WARNING: Returns full span objects - causes context overflow if used for content analysis. For analyzing span content, use fetch_spans_summary + get_span_content instead.',
     type: 'function',
     parameters: {
       type: 'object',
@@ -866,7 +866,7 @@ export const dataTools: DistriFnTool[] = [
 
   {
     name: 'fetch_spans_summary',
-    description: 'Fetch ALL spans for a thread, analyze them, and return a lightweight summary. Full span data is stored in memory for later retrieval with get_span_content. Use this instead of fetch_spans when you need to analyze many spans. Supports label filtering.',
+    description: 'PREFERRED for analysis. Phase 1: Fetches ALL spans via API, stores in browser memory, returns lightweight summary only (stats, errors, slowest, expensive). Use with get_span_content (Phase 2) for deep analysis. Context-efficient - never causes overflow.',
     type: 'function',
     parameters: {
       type: 'object',
@@ -894,7 +894,7 @@ export const dataTools: DistriFnTool[] = [
 
   {
     name: 'get_span_content',
-    description: 'Perform deep client-side analysis on specific spans and return ANALYSIS RESULTS (not raw data). Must call fetch_spans_summary first. Returns: semantic_issues (pattern, context, severity), content_stats, and assessment for each span.',
+    description: 'Phase 2: Analyzes CACHED spans from memory (requires fetch_spans_summary first). Returns ANALYSIS RESULTS only - semantic_issues, content_stats, assessment. NOT raw span data. Max 5 spans per call. Context-efficient.',
     type: 'function',
     parameters: {
       type: 'object',
