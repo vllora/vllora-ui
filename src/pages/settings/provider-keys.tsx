@@ -3,9 +3,9 @@ import { Trash2, AlertCircle, Plus, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { ProviderKeysConsumer } from '@/contexts/ProviderKeysContext';
+import { useProviderModal } from '@/contexts/ProviderModalContext';
 import { ProjectModelsConsumer } from '@/contexts/ProjectModelsContext';
 import { ProviderKeysLoader } from './ProviderKeysLoader';
-import { ProviderCredentialModal } from './ProviderCredentialModal';
 import { DeleteProviderDialog } from './DeleteProviderDialog';
 import { CustomProviderDialog } from '@/components/settings/CustomProviderDialog';
 import { AddCustomModelDialog } from '@/components/settings/AddCustomModelDialog';
@@ -27,25 +27,16 @@ const ProviderKeysContent = () => {
         providers,
         loading,
         error,
-        editingProvider,
-        modalOpen,
         deleteDialogOpen,
         providerToDelete,
-        credentialValues,
         saving,
-        saveProvider,
         startDeleteProvider,
         confirmDeleteProvider,
         cancelDeleteProvider,
-        toggleShowKeyField,
-        getShowKeyField,
-        startEditing,
-        cancelEditing,
-        updateCredentialValues,
-        setModalOpen,
         refetchProviders,
     } = ProviderKeysConsumer();
 
+    const { openProviderModal } = useProviderModal();
     const { models } = ProjectModelsConsumer();
 
     // Custom dialog states
@@ -76,26 +67,14 @@ const ProviderKeysContent = () => {
     const configuredPredefined = predefinedProviders.filter(p => p.has_credentials);
     const availablePredefined = predefinedProviders.filter(p => !p.has_credentials);
 
-    const editingProviderData = providers.find(p => p.name === editingProvider);
-
     if (loading) {
         return <ProviderKeysLoader />;
     }
 
-    const handleStartEditing = (provider: typeof providers[0]) => {
-        startEditing(provider.name);
-        setModalOpen(true);
-    };
-
-    const handleCloseModal = () => {
-        setModalOpen(false);
-        cancelEditing();
-    };
-
-    const handleSaveModal = () => {
-        if (editingProvider) {
-            saveProvider(editingProvider);
-        }
+    const handleProviderClick = (providerName: string) => {
+        openProviderModal(providerName, () => {
+            refetchProviders();
+        });
     };
 
     const handleAddModel = (providerName: string) => {
@@ -105,29 +84,6 @@ const ProviderKeysContent = () => {
 
     return (
         <>
-            {/* Credential Configuration Modal */}
-            <ProviderCredentialModal
-                open={modalOpen}
-                provider={editingProviderData || null}
-                values={credentialValues[editingProvider || ''] || {}}
-                showKeys={
-                    editingProvider
-                        ? Object.fromEntries(
-                              Object.keys(credentialValues[editingProvider] || {}).map((field) => [
-                                  field,
-                                  getShowKeyField(editingProvider, field),
-                              ])
-                          )
-                        : {}
-                }
-                saving={saving[editingProvider || ''] || false}
-                onOpenChange={handleCloseModal}
-                onChange={(values) => editingProvider && updateCredentialValues(editingProvider, values)}
-                onToggleShow={(field) => editingProvider && toggleShowKeyField(editingProvider, field)}
-                onSave={handleSaveModal}
-                onRefresh={refetchProviders}
-            />
-
             {/* Delete Confirmation Dialog */}
             <DeleteProviderDialog
                 open={deleteDialogOpen}
@@ -205,7 +161,7 @@ const ProviderKeysContent = () => {
                                 <div
                                     key={provider.name}
                                     className="flex items-center justify-between px-4 py-3 hover:bg-accent/50 transition-colors group cursor-pointer"
-                                    onClick={() => handleStartEditing(provider)}
+                                    onClick={() => handleProviderClick(provider.name)}
                                 >
                                     <div className="flex items-center gap-3">
                                         <ProviderIcon provider_name={provider.name} className="w-6 h-6" />
@@ -260,7 +216,7 @@ const ProviderKeysContent = () => {
                                     key={provider.name}
                                     provider={provider}
                                     modelCount={modelCountByProvider[provider.name] || 0}
-                                    onEdit={() => handleStartEditing(provider)}
+                                    onEdit={() => handleProviderClick(provider.name)}
                                     onAddModel={() => handleAddModel(provider.name)}
                                 />
                             ))}
@@ -279,7 +235,7 @@ const ProviderKeysContent = () => {
                                 <div
                                     key={provider.name}
                                     className="flex items-center justify-between px-4 py-3 hover:bg-accent/50 transition-colors group cursor-pointer"
-                                    onClick={() => handleStartEditing(provider)}
+                                    onClick={() => handleProviderClick(provider.name)}
                                 >
                                     <div className="flex items-center gap-3">
                                         <ProviderIcon provider_name={provider.name} className="w-6 h-6" />

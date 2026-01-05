@@ -14,6 +14,7 @@ import { Toaster } from "sonner"
 import { useEffect, lazy, Suspense } from "react"
 import { applyTheme, getThemeFromStorage } from "./themes/themes"
 import { ProviderKeysProvider } from "./contexts/ProviderKeysContext"
+import { ProviderModalProvider } from "./contexts/ProviderModalContext"
 import { AuthProvider } from "./contexts/AuthContext"
 import { ProtectedRoute } from "./components/ProtectedRoute"
 import { LocalModelsSkeletonLoader } from "./components/models/local/LocalModelsSkeletonLoader"
@@ -52,8 +53,10 @@ function App() {
                         <AvailableApiKeysProvider available_api_keys={[]}>
                           <ProjectModelsProvider>
                             <ProviderKeysProvider>
-                              <Layout />
-                              <AgentPanelWrapper />
+                              <ProviderModalProvider>
+                                <Layout />
+                                <AgentPanelWrapper />
+                              </ProviderModalProvider>
                             </ProviderKeysProvider>
                           </ProjectModelsProvider>
                         </AvailableApiKeysProvider>

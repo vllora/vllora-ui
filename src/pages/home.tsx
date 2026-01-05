@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { ProviderKeysConsumer } from '@/contexts/ProviderKeysContext';
-import { ProviderCredentialModal } from '@/pages/settings/ProviderCredentialModal';
+import { useProviderModal } from '@/contexts/ProviderModalContext';
 import { CustomProviderDialog } from '@/components/settings/CustomProviderDialog';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { useNavigate } from "react-router";
@@ -241,23 +241,8 @@ export function HomePage() {
 }
 
 function ProviderSetupSection() {
-  const {
-    providers,
-    loading: providersLoading,
-    editingProvider,
-    modalOpen,
-    credentialValues,
-    saving,
-    startEditing,
-    setModalOpen,
-    updateCredentialValues,
-    toggleShowKeyField,
-    getShowKeyField,
-    saveProvider,
-    refetchProviders,
-    cancelEditing,
-  } = ProviderKeysConsumer();
-
+  const { providers, loading: providersLoading, refetchProviders } = ProviderKeysConsumer();
+  const { openProviderModal } = useProviderModal();
   const navigate = useNavigate();
   const [customProviderDialogOpen, setCustomProviderDialogOpen] = useState(false);
 
@@ -289,49 +274,14 @@ function ProviderSetupSection() {
     ...otherProviders
   ].filter((p): p is typeof providers[0] => p !== undefined).slice(0, 5); // Show 5 to leave room for Add Custom
 
-  const handleStartEditing = (provider: typeof providers[0]) => {
-    startEditing(provider.name);
-    setModalOpen(true);
+  const handleProviderClick = (providerName: string) => {
+    openProviderModal(providerName, () => {
+      refetchProviders();
+    });
   };
-
-  const handleCloseModal = () => {
-    setModalOpen(false);
-    cancelEditing();
-  };
-
-  const handleSaveModal = () => {
-    if (editingProvider) {
-      saveProvider(editingProvider);
-    }
-  };
-
-  const editingProviderData = providers.find(p => p.name === editingProvider);
 
   return (
     <>
-      {/* Provider Configuration Modal */}
-      <ProviderCredentialModal
-        open={modalOpen}
-        provider={editingProviderData || null}
-        values={credentialValues[editingProvider || ''] || {}}
-        showKeys={
-          editingProvider
-            ? Object.fromEntries(
-              Object.keys(credentialValues[editingProvider] || {}).map((field) => [
-                field,
-                getShowKeyField(editingProvider, field),
-              ])
-            )
-            : {}
-        }
-        saving={saving[editingProvider || ''] || false}
-        onOpenChange={handleCloseModal}
-        onChange={(values) => editingProvider && updateCredentialValues(editingProvider, values)}
-        onToggleShow={(field) => editingProvider && toggleShowKeyField(editingProvider, field)}
-        onSave={handleSaveModal}
-        onRefresh={refetchProviders}
-      />
-
       {/* Custom Provider Dialog */}
       <CustomProviderDialog
         open={customProviderDialogOpen}
@@ -357,7 +307,7 @@ function ProviderSetupSection() {
             <div
               key={provider.name}
               className="border border-border rounded-lg p-3 hover:bg-accent/50 transition-colors cursor-pointer group"
-              onClick={() => handleStartEditing(provider)}
+              onClick={() => handleProviderClick(provider.name)}
             >
               <div className="flex items-center gap-3">
                 <ProviderIcon provider_name={provider.name} className="w-5 h-5" />

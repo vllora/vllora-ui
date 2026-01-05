@@ -2,10 +2,10 @@
  * LucyAgentChatHeader
  *
  * Header component for Lucy agent chat panels.
- * Includes avatar, title, and action buttons (new chat, settings, pin, close).
+ * Includes avatar, title, and action buttons (new chat, pin, close).
  */
 
-import { X, Plus, Pin, PinOff, Settings, MessageSquare } from 'lucide-react';
+import { X, Plus, Pin, PinOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Tooltip,
@@ -23,10 +23,6 @@ import { LucyAvatar } from './lucy-agent';
 export interface LucyAgentChatHeaderProps {
   /** Whether the panel is pinned (side panel mode) */
   isPinned: boolean;
-  /** Whether settings are currently shown */
-  showSettings: boolean;
-  /** Callback to toggle settings view */
-  onToggleSettings: () => void;
   /** Callback to toggle pin/floating mode */
   onToggleMode: () => void;
   /** Callback when new chat is requested */
@@ -45,8 +41,6 @@ export interface LucyAgentChatHeaderProps {
 
 export function LucyAgentChatHeader({
   isPinned,
-  showSettings,
-  onToggleSettings,
   onToggleMode,
   onNewChat,
   onClose,
@@ -83,26 +77,6 @@ export function LucyAgentChatHeader({
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">New Chat</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn('h-7 w-7', showSettings && 'bg-accent')}
-                onClick={onToggleSettings}
-              >
-                {showSettings ? (
-                  <MessageSquare className="h-3.5 w-3.5" />
-                ) : (
-                  <Settings className="h-3.5 w-3.5" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              {showSettings ? 'Back to Chat' : 'Settings'}
-            </TooltipContent>
           </Tooltip>
 
           <Tooltip>

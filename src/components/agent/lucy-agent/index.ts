@@ -10,6 +10,7 @@ export * from './LucyChat';
 export * from './LucyChatInput';
 export * from './LucyWelcome';
 export * from './LucySetupGuide';
+export * from './LucyProviderCheck';
 
 // Message rendering components
 export * from './LucyMessage';

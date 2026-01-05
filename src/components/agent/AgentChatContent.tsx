@@ -5,15 +5,16 @@
  * Includes header and chat/loading/error states.
  */
 
-import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
+import { useCallback, useMemo, useEffect, useRef } from 'react';
 import { DistriFnTool, DistriMessage } from '@distri/core';
 import { Loader2 } from 'lucide-react';
 import {
-  LucySetupGuide,
+  LucyProviderCheck,
   LucyChat,
   LucyDefaultToolRenderer,
 } from './lucy-agent';
 import { useAgentPanel } from '@/contexts/AgentPanelContext';
+import { ProviderKeysConsumer } from '@/contexts/ProviderKeysContext';
 import { eventEmitter, OpenTrace } from '@/utils/eventEmitter';
 import { LucyAgentChatHeader } from './LucyAgentChatHeader';
 
@@ -102,7 +103,13 @@ export function AgentChatContent({
   isDragHandle = false,
 }: AgentChatContentProps) {
   const { isPinned, toggleMode } = useAgentPanel();
-  const [showSettings, setShowSettings] = useState(false);
+  const { providers, loading: providersLoading } = ProviderKeysConsumer();
+
+  // Derive provider ready state from providers context
+  const isOpenAIConfigured = useMemo(() => {
+    const openaiProvider = providers.find(p => p.name.toLowerCase() === 'openai');
+    return openaiProvider?.has_credentials ?? false;
+  }, [providers]);
 
   // Store openTraces from event emitter (works across context boundaries)
   const openTracesRef = useRef<{ openTraces: OpenTrace[]; source: 'threads' | 'traces' } | null>(null);
@@ -197,8 +204,6 @@ export function AgentChatContent({
     <>
       <LucyAgentChatHeader
         isPinned={isPinned}
-        showSettings={showSettings}
-        onToggleSettings={() => setShowSettings(!showSettings)}
         onToggleMode={toggleMode}
         onNewChat={onNewChat}
         onClose={onClose}
@@ -208,7 +213,21 @@ export function AgentChatContent({
 
       {/* Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {agentLoading ? (
+        {providersLoading ? (
+          // Loading providers
+          <div className="flex items-center justify-center h-full">
+            <div className="flex items-center space-x-2">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-sm text-muted-foreground">
+                Checking configuration...
+              </span>
+            </div>
+          </div>
+        ) : !isOpenAIConfigured ? (
+          // OpenAI provider not configured, show setup UI
+          <LucyProviderCheck onReady={onConnected} />
+        ) : agentLoading ? (
+          // Provider ready, loading agent/Distri connection
           <div className="flex items-center justify-center h-full">
             <div className="flex items-center space-x-2">
               <Loader2 className="h-5 w-5 animate-spin" />
@@ -217,16 +236,8 @@ export function AgentChatContent({
               </span>
             </div>
           </div>
-        ) : showSettings || !isConnected || !agent ? (
-          <LucySetupGuide
-            mode={showSettings && isConnected && agent ? 'settings' : 'setup'}
-            initialStatus={showSettings && isConnected && agent ? 'ready' : undefined}
-            onConnected={() => {
-              setShowSettings(false);
-              onConnected();
-            }}
-          />
-        ) : (
+        ) : isConnected && agent ? (
+          // Connected and agent ready, show chat
           <LucyChat
             threadId={threadId}
             agent={agent}
@@ -235,6 +246,16 @@ export function AgentChatContent({
             beforeSendMessage={handleBeforeSendMessage}
             toolRenderers={toolRenderers}
           />
+        ) : (
+          // Provider ready but connection failed
+          <div className="flex items-center justify-center h-full">
+            <div className="flex items-center space-x-2">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-sm text-muted-foreground">
+                Connecting to assistant...
+              </span>
+            </div>
+          </div>
         )}
       </div>
     </>
