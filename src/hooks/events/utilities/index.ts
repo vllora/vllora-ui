@@ -84,6 +84,7 @@ export const updatedRunWithSpans = ({
   processRun.errors = [];
   spans
     .sort((a, b) => a.start_time_us - b.start_time_us)
+    .filter(s => s.operation_name === 'api_invoke')
     .forEach((span) => {
       let { cost, inputTokens, outputTokens, errors } = getDataFromSpan(span);
       processRun.cost += cost;
@@ -251,6 +252,8 @@ export const processEvent = (
       if (eventType.type === "ping") {
         return currentSpans;
       }
+
+      
 
       // Unknown custom event type - log warning but don't crash
       console.warn(
