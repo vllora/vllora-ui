@@ -11,6 +11,7 @@ import { CustomProviderDialog } from '@/components/settings/CustomProviderDialog
 import { AddCustomModelDialog } from '@/components/settings/AddCustomModelDialog';
 import { QuickAddModelDialog } from '@/components/settings/QuickAddModelDialog';
 import { CustomProviderRow } from '@/components/settings/CustomProviderRow';
+import { CurrentAppConsumer } from '@/lib';
 
 export const ProviderKeysPage = () => {
     return (
@@ -38,6 +39,7 @@ const ProviderKeysContent = () => {
 
     const { openProviderModal } = useProviderModal();
     const { models } = ProjectModelsConsumer();
+    const { app_mode } = CurrentAppConsumer();
 
     // Custom dialog states
     const [customProviderDialogOpen, setCustomProviderDialogOpen] = useState(false);
@@ -169,7 +171,7 @@ const ProviderKeysContent = () => {
                                     </div>
                                     <div className="flex items-center gap-2">
                                        
-                                        <Button
+                                        {app_mode  === 'vllora' &&<Button
                                             size="sm"
                                             variant="ghost"
                                             onClick={(e) => {
@@ -181,7 +183,7 @@ const ProviderKeysContent = () => {
                                         >
                                             <Plus className="h-3 w-3 mr-1" />
                                             Model
-                                        </Button>
+                                        </Button>}
                                         <Button
                                             size="sm"
                                             variant="ghost"
