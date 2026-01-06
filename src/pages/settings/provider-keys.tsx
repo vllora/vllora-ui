@@ -8,7 +8,7 @@ import { DeleteProviderDialog } from './DeleteProviderDialog';
 
 export const ProviderKeysPage = () => {
     return (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 overflow-scroll">
             <div className="flex flex-1 flex-col gap-6 overflow-scroll">
                 <ProviderKeysContent />
             </div>
@@ -96,7 +96,7 @@ const ProviderKeysContent = () => {
                 onConfirm={confirmDeleteProvider}
             />
 
-            <div className="space-y-6">
+            <div className="space-y-6 overflow-scroll">
                 <div>
                     <h2 className="text-2xl font-semibold">Provider Keys</h2>
                     <p className="text-sm text-muted-foreground mt-1">
