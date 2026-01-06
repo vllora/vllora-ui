@@ -4,13 +4,19 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Loader2, Save, AlertCircle, Eye } from 'lucide-react';
 import { useMCPConfigs } from '@/services/mcp-api';
-import { getBackendUrl } from '@/config/api';
+import { api, handleApiResponse } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
-export function McpConfigPage() {
-  const { data: mcpData, loading, error, run: refetchConfigs } = useMCPConfigs();
+export function McpConfigPage({
+  projectId,
+  readOnly = false,
+}: {
+  projectId?: string;
+  readOnly?: boolean;
+}) {
+  const { data: mcpData, loading, error, run: refetchConfigs } = useMCPConfigs(projectId);
   const [configJson, setConfigJson] = useState<any>(null);
   const [rawJson, setRawJson] = useState<string>('');
   const [jsonTab, setJsonTab] = useState<'editor' | 'raw'>('editor');
@@ -55,6 +61,10 @@ export function McpConfigPage() {
   };
 
   const handleRawJsonChange = (value: string) => {
+    if (readOnly) {
+      return;
+    }
+
     setRawJson(value);
     // Try to parse and update configJson in real-time
     try {
@@ -74,28 +84,26 @@ export function McpConfigPage() {
     setPreviewingTools(true);
     setPreviewedTools(null);
     try {
-      const response = await fetch(`${getBackendUrl()}/mcp-configs/tools`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      const response = await api.post(
+        '/mcp-configs/tools',
+        {
           mcpServers: configJson.mcpServers,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to preview tools: ${response.statusText}`);
-      }
-
-      const tools = await response.json();
-      console.log('Previewed tools:', tools);
-      setPreviewedTools(tools);
-      
-      const totalTools = Object.values(tools).reduce((sum: number, serverTools: any) => 
-        sum + (Array.isArray(serverTools) ? serverTools.length : 0), 0
+        },
+        {
+          headers: {
+            ...(projectId ? { 'x-project-id': projectId } : {}),
+          },
+        }
       );
-      
+
+      const tools = await handleApiResponse<Record<string, any[]>>(response);
+      setPreviewedTools(tools);
+
+      const totalTools = Object.values(tools).reduce(
+        (sum: number, serverTools: any) => sum + (Array.isArray(serverTools) ? serverTools.length : 0),
+        0
+      );
+
       toast.success('Tools preview loaded', {
         description: `Found ${totalTools} tool(s) across ${Object.keys(tools).length} server(s)`,
       });
@@ -110,6 +118,12 @@ export function McpConfigPage() {
   };
 
   const handleSave = async () => {
+    if (readOnly) {
+      toast.error('Read-only mode', {
+        description: "You don't have permission to save MCP configuration.",
+      });
+      return;
+    }
     if (!configJson) return;
 
     setSaving(true);
@@ -117,32 +131,32 @@ export function McpConfigPage() {
       let response;
       
       if (mcpData?.configs?.[0]?.id) {
-        // Update existing config
-        response = await fetch(`${getBackendUrl()}/mcp-configs/${mcpData.configs[0].id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
+        response = await api.put(
+          `/mcp-configs/${mcpData.configs[0].id}`,
+          {
             config: configJson,
-          }),
-        });
+          },
+          {
+            headers: {
+              ...(projectId ? { 'x-project-id': projectId } : {}),
+            },
+          }
+        );
       } else {
-        // Create new config
-        response = await fetch(`${getBackendUrl()}/mcp-configs`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
+        response = await api.post(
+          '/mcp-configs',
+          {
             config: configJson,
-          }),
-        });
+          },
+          {
+            headers: {
+              ...(projectId ? { 'x-project-id': projectId } : {}),
+            },
+          }
+        );
       }
 
-      if (!response.ok) {
-        throw new Error(`Failed to save config: ${response.statusText}`);
-      }
+      await handleApiResponse(response);
 
       toast.success('MCP configuration saved successfully');
       setPreviewedTools(null); // Clear preview after save
@@ -206,12 +220,13 @@ export function McpConfigPage() {
               </>
             )}
           </Button>
-          <Button
-            size="sm"
-            onClick={handleSave}
-            disabled={saving || previewingTools}
-            className="bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-700))]"
-          >
+           <Button
+             size="sm"
+             onClick={handleSave}
+             disabled={readOnly || saving || previewingTools}
+             title={readOnly ? "Read-only: you don't have permission to save MCP configuration" : undefined}
+             className="bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-700))]"
+           >
             {saving ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />
@@ -277,54 +292,74 @@ export function McpConfigPage() {
           </div>
 
           <TabsContent value="editor" className="p-4 bg-card m-0">
-            {configJson && (
-              <ReactJson
-                src={configJson}
-                theme="monokai"
-                iconStyle="triangle"
-                displayDataTypes={false}
-                displayObjectSize={false}
-                enableClipboard={true}
-                onEdit={(edit) => {
-                  setConfigJson(edit.updated_src);
-                  setRawJson(JSON.stringify(edit.updated_src, null, 2));
-                  return true;
-                }}
-                onAdd={(add) => {
-                  setConfigJson(add.updated_src);
-                  setRawJson(JSON.stringify(add.updated_src, null, 2));
-                  return true;
-                }}
-                onDelete={(del) => {
-                  setConfigJson(del.updated_src);
-                  setRawJson(JSON.stringify(del.updated_src, null, 2));
-                  return true;
-                }}
-                style={{
-                  backgroundColor: 'transparent',
-                  fontSize: '13px',
-                }}
-              />
-            )}
+             {configJson && (
+               <ReactJson
+                 src={configJson}
+                 theme="monokai"
+                 iconStyle="triangle"
+                 displayDataTypes={false}
+                 displayObjectSize={false}
+                 enableClipboard={true}
+                 onEdit={
+                   readOnly
+                     ? undefined
+                     : (edit) => {
+                         setConfigJson(edit.updated_src);
+                         setRawJson(JSON.stringify(edit.updated_src, null, 2));
+                         return true;
+                       }
+                 }
+                 onAdd={
+                   readOnly
+                     ? undefined
+                     : (add) => {
+                         setConfigJson(add.updated_src);
+                         setRawJson(JSON.stringify(add.updated_src, null, 2));
+                         return true;
+                       }
+                 }
+                 onDelete={
+                   readOnly
+                     ? undefined
+                     : (del) => {
+                         setConfigJson(del.updated_src);
+                         setRawJson(JSON.stringify(del.updated_src, null, 2));
+                         return true;
+                       }
+                 }
+                 style={{
+                   backgroundColor: 'transparent',
+                   fontSize: '13px',
+                 }}
+               />
+             )}
           </TabsContent>
 
           <TabsContent value="raw" className="p-0 bg-card m-0">
             <div className="relative bg-[#1e1e1e] rounded-b-lg overflow-hidden">
-              <textarea
-                ref={textareaRef}
-                value={rawJson}
-                onChange={(e) => handleRawJsonChange(e.target.value)}
-                className="absolute top-0 left-0 w-full h-96 p-4 font-mono text-sm bg-transparent text-transparent caret-white resize-none focus:outline-none focus:ring-2 focus:ring-[rgb(var(--theme-600))] z-10 leading-6"
-                style={{
-                  caretColor: 'white',
-                  WebkitTextFillColor: 'transparent',
-                  lineHeight: '1.5rem',
-                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                  tabSize: 2 as unknown as string,
-                }}
-                spellCheck={false}
-                placeholder='{\n  "mcpServers": {\n    ...\n  }\n}'
-              />
+               <textarea
+                 ref={textareaRef}
+                 value={rawJson}
+                 readOnly={readOnly}
+                 onChange={(e) => {
+                   if (readOnly) return;
+                   handleRawJsonChange(e.target.value);
+                 }}
+                 className="absolute top-0 left-0 w-full h-96 p-4 font-mono text-sm bg-transparent text-transparent caret-white resize-none focus:outline-none focus:ring-2 focus:ring-[rgb(var(--theme-600))] z-10 leading-6"
+                 style={{
+                   caretColor: 'white',
+                   WebkitTextFillColor: 'transparent',
+                   lineHeight: '1.5rem',
+                   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                   tabSize: 2 as unknown as string,
+                 }}
+                 spellCheck={false}
+                 placeholder='{
+  "mcpServers": {
+    ...
+  }
+}'
+               />
               <div className="pointer-events-none">
                 <SyntaxHighlighter
                   language="json"
