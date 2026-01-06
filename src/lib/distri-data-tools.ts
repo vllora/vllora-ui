@@ -28,8 +28,9 @@ import { listRuns, getRunDetails, type ListRunsQuery } from '@/services/runs-api
 import { listSpans, type ListSpansQuery, type Span } from '@/services/spans-api';
 import { listGroups, type ListGroupsQuery } from '@/services/groups-api';
 import { listLabels } from '@/services/labels-api';
+import { analyzeWithLLM } from '@/lib/analyze-with-llm';
 
-// Data tool names (7 tools - 4 original + 2 two-phase analysis + 1 label discovery)
+// Data tool names (8 tools - 4 original + 2 two-phase analysis + 1 label discovery + 1 hybrid LLM)
 export const DATA_TOOL_NAMES = [
   'fetch_runs',
   'fetch_spans',
@@ -38,6 +39,7 @@ export const DATA_TOOL_NAMES = [
   'fetch_spans_summary',
   'get_span_content',
   'list_labels',
+  'analyze_with_llm',
 ] as const;
 
 // ============================================================================
@@ -988,6 +990,26 @@ export const dataToolHandlers: Record<string, (params: Record<string, unknown>) 
       };
     }
   },
+
+  // ============================================================================
+  // HYBRID LLM ANALYSIS TOOL
+  // Uses LLM for deep semantic analysis beyond regex patterns
+  // ============================================================================
+
+  /**
+   * Analyze flagged spans with LLM for deeper semantic understanding
+   * This is Phase 3 of the hybrid analysis approach:
+   * 1. fetch_spans_summary (fast regex scan) → flags suspicious spans
+   * 2. get_span_content (client-side analysis) → extracts patterns
+   * 3. analyze_with_llm (LLM deep analysis) → understands context, correlates issues
+   *
+   * @param spanIds - Array of span IDs to analyze (max 5)
+   * @param focus - Optional focus area: 'errors', 'performance', 'semantic', 'all' (default: 'all')
+   * @param context - Optional additional context about what to look for
+   */
+  analyze_with_llm: async (params) => {
+    return analyzeWithLLM(params, spanStorage);
+  },
 };
 
 /**
@@ -1210,5 +1232,36 @@ export const dataTools: DistriFnTool[] = [
       },
     },
     handler: async (input: object) => JSON.stringify(await dataToolHandlers.list_labels(input as Record<string, unknown>)),
+  } as DistriFnTool,
+
+  // ============================================================================
+  // HYBRID LLM ANALYSIS TOOL
+  // ============================================================================
+
+  {
+    name: 'analyze_with_llm',
+    description: 'Phase 3 (optional): Deep LLM analysis of flagged spans. Use AFTER fetch_spans_summary + get_span_content when you need deeper semantic understanding. The LLM analyzes span content to: (1) verify if regex-flagged issues are real problems, (2) identify complex issues regex cannot detect, (3) correlate issues across spans, (4) provide root cause analysis. Max 5 spans per call.',
+    type: 'function',
+    parameters: {
+      type: 'object',
+      properties: {
+        spanIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Span IDs to analyze with LLM (max 5 at a time). Should be spans flagged by fetch_spans_summary.',
+        },
+        focus: {
+          type: 'string',
+          enum: ['errors', 'performance', 'semantic', 'all'],
+          description: 'Focus area for analysis. "errors" for failures/issues, "performance" for bottlenecks, "semantic" for prompt/logic issues, "all" for comprehensive. Default: "all"',
+        },
+        context: {
+          type: 'string',
+          description: 'Optional additional context about what to look for (e.g., "user reported slow responses", "tool calls seem to fail silently")',
+        },
+      },
+      required: ['spanIds'],
+    },
+    handler: async (input: object) => JSON.stringify(await dataToolHandlers.analyze_with_llm(input as Record<string, unknown>)),
   } as DistriFnTool,
 ];
