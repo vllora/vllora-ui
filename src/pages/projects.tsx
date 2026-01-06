@@ -22,13 +22,34 @@ import { ProjectCard } from './ProjectCard';
 import { CurrentAppConsumer } from '@/lib';
 import { useState } from 'react';
 
-export function ProjectsPage() {
+interface ProjectsPageProps {
+  onMarkDefault?: (projectId: string) => Promise<void>;
+}
+
+export function ProjectsPage({ onMarkDefault }: ProjectsPageProps = {}) {
   const { projects, loading, refetchProjects, isDefaultProject} = ProjectsConsumer();
   const { app_mode } = CurrentAppConsumer();
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
 
   const handleDeleteProject = async (projectId: string) => {
     setProjectToDelete(projectId);
+  };
+
+  const handleMarkDefault = async (projectId: string) => {
+    if (!onMarkDefault) return;
+
+    try {
+      await onMarkDefault(projectId);
+      refetchProjects();
+      toast.success('Default project updated', {
+        description: 'The project has been set as default',
+      });
+    } catch (error) {
+      toast.error('Failed to set default project', {
+        description: error instanceof Error ? error.message : 'An error occurred',
+      });
+      console.error('Failed to set default project:', error);
+    }
   };
 
   const confirmDelete = async () => {
@@ -147,6 +168,7 @@ export function ProjectsPage() {
                   isDefaultProject={isDefaultProject}
                   formatDate={formatDate}
                   onDelete={handleDeleteProject}
+                  onMarkDefault={onMarkDefault ? handleMarkDefault : undefined}
                 />
               ))}
             </div>

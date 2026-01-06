@@ -1,4 +1,4 @@
-import { FolderOpen, Trash2 } from 'lucide-react';
+import { FolderOpen, Trash2, Pin } from 'lucide-react';
 import { useNavigate } from "react-router";
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +9,12 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface Project {
   id: string;
@@ -24,12 +30,14 @@ interface ProjectCardProps {
   isDefaultProject: (projectId: string) => boolean;
   formatDate: (dateString: string) => string;
   onDelete: (projectId: string) => void;
+  onMarkDefault?: (projectId: string) => void;
 }
 
 export function ProjectCard({
   project,
   formatDate,
   onDelete,
+  onMarkDefault,
 }: ProjectCardProps) {
   const navigate = useNavigate();
 
@@ -63,17 +71,41 @@ export function ProjectCard({
               </CardDescription>
             )}
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(project.id);
-            }}
-            className="opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10 flex-shrink-0"
-          >
-            <Trash2 className="h-4 w-4 text-destructive" />
-          </Button>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {!project.is_default && onMarkDefault && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onMarkDefault(project.id);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary/10 flex-shrink-0"
+                    >
+                      <Pin className="h-4 w-4 text-primary" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Set as default</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(project.id);
+              }}
+              className="opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10 flex-shrink-0"
+            >
+              <Trash2 className="h-4 w-4 text-destructive" />
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="relative">
