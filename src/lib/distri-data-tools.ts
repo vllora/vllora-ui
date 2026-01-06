@@ -66,6 +66,11 @@ const ERROR_PATTERNS = [
   /undefined/i,
   /connection refused/i,
   /network error/i,
+  // Tool execution errors
+  /unknown tool/i,
+  /tool .* not found/i,
+  /unrecognized function/i,
+  /function .* does not exist/i,
 ];
 
 /**
@@ -87,6 +92,15 @@ function containsErrorPattern(text: string | undefined | null): string | null {
   return null;
 }
 
+// Contradictory instruction patterns to detect in system prompts
+const CONTRADICTION_PAIRS = [
+  { a: /must use tools/i, b: /answer directly|from your knowledge/i, desc: '"MUST use tools" vs "answer directly"' },
+  { a: /at least \d+ times/i, b: /minimize.*calls|be efficient/i, desc: '"at least N times" vs "minimize calls"' },
+  { a: /always/i, b: /never/i, desc: '"always" vs "never" directives' },
+  { a: /json object/i, b: /plain text/i, desc: '"JSON object" vs "plain text" format' },
+  { a: /include citations/i, b: /without citations|brief/i, desc: '"include citations" vs "without citations"' },
+];
+
 /**
  * Perform deep semantic analysis on a span (client-side)
  * Returns analysis results, NOT raw span data
@@ -102,6 +116,11 @@ function analyzeSpanDeep(span: Span): {
     pattern: string;
     context: string;  // 200 chars around the match
     severity: 'high' | 'medium' | 'low';
+    source?: 'output' | 'input' | 'system_prompt';
+  }>;
+  prompt_issues: Array<{
+    issue: string;
+    severity: 'high' | 'medium';
   }>;
   content_stats: {
     input_length: number;
@@ -121,45 +140,83 @@ function analyzeSpanDeep(span: Span): {
     (typeof attr.response === 'string' ? attr.response : JSON.stringify(attr.output || attr.response || ''));
 
   // Detect semantic issues with severity
-  const semanticIssues: Array<{ pattern: string; context: string; severity: 'high' | 'medium' | 'low' }> = [];
+  const semanticIssues: Array<{ pattern: string; context: string; severity: 'high' | 'medium' | 'low'; source?: 'output' | 'input' | 'system_prompt' }> = [];
+  const promptIssues: Array<{ issue: string; severity: 'high' | 'medium' }> = [];
 
-  const highSeverityPatterns = [/error:/i, /exception/i, /failed to/i, /unauthorized/i, /forbidden/i];
+  // High severity: tool execution errors, explicit errors
+  const highSeverityPatterns = [
+    /error:/i, /exception/i, /failed to/i, /unauthorized/i, /forbidden/i,
+    /unknown tool/i, /tool .* not found/i, /unrecognized function/i,
+  ];
+  // Medium severity: not found, timeouts
   const mediumSeverityPatterns = [/not found/i, /does not exist/i, /cannot be found/i, /timeout/i, /rate limit/i];
+  // Low severity: validation issues
   const lowSeverityPatterns = [/invalid/i, /missing/i, /undefined/i, /null/i];
 
-  const checkPatterns = (patterns: RegExp[], severity: 'high' | 'medium' | 'low') => {
+  const checkPatterns = (text: string, patterns: RegExp[], severity: 'high' | 'medium' | 'low', source: 'output' | 'input') => {
     for (const pattern of patterns) {
-      const match = outputStr.match(pattern);
+      const match = text.match(pattern);
       if (match) {
-        const idx = outputStr.toLowerCase().indexOf(match[0].toLowerCase());
+        const idx = text.toLowerCase().indexOf(match[0].toLowerCase());
         const start = Math.max(0, idx - 100);
-        const end = Math.min(outputStr.length, idx + match[0].length + 100);
+        const end = Math.min(text.length, idx + match[0].length + 100);
         semanticIssues.push({
           pattern: match[0],
-          context: outputStr.slice(start, end),
+          context: text.slice(start, end),
           severity,
+          source,
         });
       }
     }
   };
 
-  checkPatterns(highSeverityPatterns, 'high');
-  checkPatterns(mediumSeverityPatterns, 'medium');
-  checkPatterns(lowSeverityPatterns, 'low');
+  // Check output for errors
+  checkPatterns(outputStr, highSeverityPatterns, 'high', 'output');
+  checkPatterns(outputStr, mediumSeverityPatterns, 'medium', 'output');
+  checkPatterns(outputStr, lowSeverityPatterns, 'low', 'output');
+
+  // Check input for errors (tool results with errors)
+  checkPatterns(inputStr, highSeverityPatterns, 'high', 'input');
+
+  // Check for contradictory instructions in system prompts
+  // System prompt is usually in input as first message with role="system"
+  const systemPromptMatch = inputStr.match(/"role"\s*:\s*"system"[^}]*"content"\s*:\s*"([^"]+)"/i);
+  if (systemPromptMatch) {
+    const systemPrompt = systemPromptMatch[1];
+    for (const pair of CONTRADICTION_PAIRS) {
+      if (pair.a.test(systemPrompt) && pair.b.test(systemPrompt)) {
+        promptIssues.push({
+          issue: `Contradictory instructions: ${pair.desc}`,
+          severity: 'high',
+        });
+      }
+    }
+  }
 
   // Check for tool calls
   const hasToolCalls = !!(attr.tool_calls || attr.function_call);
 
   // Generate client-side assessment
   let assessment = 'No issues detected.';
+  const issues: string[] = [];
+
   if (attr.error) {
-    assessment = `Explicit error: ${attr.error}`;
-  } else if (semanticIssues.length > 0) {
+    issues.push(`Explicit error: ${attr.error}`);
+  }
+  if (semanticIssues.length > 0) {
     const highCount = semanticIssues.filter(i => i.severity === 'high').length;
     const mediumCount = semanticIssues.filter(i => i.severity === 'medium').length;
-    assessment = `Found ${semanticIssues.length} potential issues: ${highCount} high, ${mediumCount} medium severity.`;
-  } else if (outputStr.length === 0) {
-    assessment = 'Warning: Empty output response.';
+    issues.push(`${semanticIssues.length} semantic issues (${highCount} high, ${mediumCount} medium)`);
+  }
+  if (promptIssues.length > 0) {
+    issues.push(`${promptIssues.length} prompt issues (contradictory instructions)`);
+  }
+  if (outputStr.length === 0) {
+    issues.push('Empty output response');
+  }
+
+  if (issues.length > 0) {
+    assessment = issues.join('; ');
   }
 
   return {
@@ -169,6 +226,7 @@ function analyzeSpanDeep(span: Span): {
     model: (attr.model_name || attr.model?.name) as string | undefined,
     explicit_error: attr.error as string | undefined,
     semantic_issues: semanticIssues,
+    prompt_issues: promptIssues,
     content_stats: {
       input_length: inputStr.length,
       output_length: outputStr.length,
@@ -190,6 +248,7 @@ function extractSpanSummary(span: Span): {
   has_error: boolean;
   error_message?: string;
   semantic_error?: string;
+  semantic_error_source?: 'input' | 'output';
   model?: string;
   cost?: number;
   input_tokens?: number;
@@ -205,9 +264,21 @@ function extractSpanSummary(span: Span): {
   const hasError = !!(attr.error || attr.status_code >= 400 || attr.status === 'error');
   const errorMessage = attr.error as string | undefined;
 
-  // Check for semantic errors in output/response
-  const output = attr.output || attr.response || attr.content;
-  const semanticError = containsErrorPattern(output as string);
+  // Check for semantic errors in BOTH input and output
+  // Input contains tool results (where "Unknown tool" errors appear)
+  // Output contains LLM response
+  const inputStr = typeof attr.input === 'string' ? attr.input : JSON.stringify(attr.input || '');
+  const outputStr = attr.output || attr.response || attr.content;
+
+  // Check input first (tool results with errors)
+  let semanticError = containsErrorPattern(inputStr);
+  let semanticErrorSource: 'input' | 'output' | undefined = semanticError ? 'input' : undefined;
+
+  // If no error in input, check output
+  if (!semanticError) {
+    semanticError = containsErrorPattern(outputStr as string);
+    semanticErrorSource = semanticError ? 'output' : undefined;
+  }
 
   return {
     id: span.span_id,
@@ -217,6 +288,7 @@ function extractSpanSummary(span: Span): {
     has_error: hasError,
     error_message: errorMessage,
     semantic_error: semanticError || undefined,
+    semantic_error_source: semanticErrorSource,
     model: (attr.model_name || attr.model || attr.model?.name) as string | undefined,
     cost: attr.cost as number | undefined,
     input_tokens: (attr.usage?.input_tokens || attr.input_tokens) as number | undefined,
@@ -244,10 +316,6 @@ async function getCurrentProjectId(): Promise<string> {
   const params = new URLSearchParams(window.location.search);
   const urlProjectId = params.get('project_id') || params.get('projectId');
   if (urlProjectId) return urlProjectId;
-
-  // Then try localStorage (set by ProjectDropdown when user selects a project)
-  const storedProjectId = localStorage.getItem('currentProjectId');
-  if (storedProjectId) return storedProjectId;
 
   // Use cached default if available
   if (cachedDefaultProjectId) return cachedDefaultProjectId;
@@ -590,6 +658,7 @@ export const dataToolHandlers: Record<string, (params: Record<string, unknown>) 
           span_id: s.id,
           operation: s.operation,
           detected_pattern: s.semantic_error,
+          source: s.semantic_error_source, // 'input' (tool results) or 'output' (LLM response)
         })),
         slowest_spans: slowestSpans.map(s => ({
           span_id: s.id,
