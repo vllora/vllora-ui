@@ -21,6 +21,7 @@ import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { ProjectCard } from './ProjectCard';
 import { CurrentAppConsumer } from '@/lib';
 import { useState } from 'react';
+import { CreateProjectDialog } from './CreateProjectDialog';
 
 interface ProjectsPageProps {
   onMarkDefault?: (projectId: string) => Promise<void>;
@@ -30,6 +31,7 @@ export function ProjectsPage({ onMarkDefault }: ProjectsPageProps = {}) {
   const { projects, loading, refetchProjects, isDefaultProject} = ProjectsConsumer();
   const { app_mode } = CurrentAppConsumer();
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
   const handleDeleteProject = async (projectId: string) => {
     setProjectToDelete(projectId);
@@ -121,6 +123,7 @@ export function ProjectsPage({ onMarkDefault }: ProjectsPageProps = {}) {
             </div>
             <Button
               disabled={app_mode === 'vllora'}
+              onClick={() => setIsCreateDialogOpen(true)}
               className="bg-gradient-to-r from-[rgb(var(--theme-400))] to-[rgb(var(--theme-600))] hover:from-[rgb(var(--theme-500))] hover:to-[rgb(var(--theme-700))] text-white shadow-lg"
             >
               <Plus className="h-4 w-4 mr-2" />
@@ -193,6 +196,13 @@ export function ProjectsPage({ onMarkDefault }: ProjectsPageProps = {}) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Create Project Dialog */}
+      <CreateProjectDialog
+        isOpen={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
+        onProjectCreated={() => refetchProjects()}
+      />
     </div>
   );
 }
