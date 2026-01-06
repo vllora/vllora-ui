@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { listProviders, updateProvider, ProviderInfo, Credentials } from '@/services/providers-api';
 import { ProviderCredentialModal } from '@/pages/settings/ProviderCredentialModal';
 import type { CredentialFormValues } from '@/pages/settings/ProviderCredentialForm';
+import { ProjectsConsumer } from './ProjectContext';
 
 // ============================================================================
 // Types
@@ -27,7 +28,7 @@ interface ProviderModalContextValue {
 // ============================================================================
 
 const ProviderModalContext = createContext<ProviderModalContextValue>({
-  openProviderModal: async () => {},
+  openProviderModal: async () => { },
   isOpen: false,
 });
 
@@ -54,6 +55,7 @@ export function ProviderModalProvider({ children }: ProviderModalProviderProps) 
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [onSuccessCallback, setOnSuccessCallback] = useState<(() => void) | undefined>();
+  const { currentProjectId } = ProjectsConsumer();
 
   const handleCloseModal = useCallback(() => {
     setModalOpen(false);
@@ -116,7 +118,7 @@ export function ProviderModalProvider({ children }: ProviderModalProviderProps) 
     setSaving(true);
     try {
       const credentials = buildCredentials(provider, credentialValues);
-      await updateProvider(provider.name, { credentials });
+      await updateProvider(provider.name, { credentials }, currentProjectId);
       toast.success(`${provider.name} credentials saved`);
       handleCloseModal();
       onSuccessCallback?.();
@@ -127,7 +129,7 @@ export function ProviderModalProvider({ children }: ProviderModalProviderProps) 
     } finally {
       setSaving(false);
     }
-  }, [provider, credentialValues, buildCredentials, handleCloseModal, onSuccessCallback]);
+  }, [provider, credentialValues, buildCredentials, handleCloseModal, onSuccessCallback, currentProjectId]);
 
   const openProviderModal = useCallback(async (providerName: string, onSuccess?: () => void) => {
     try {
