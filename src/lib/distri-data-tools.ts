@@ -71,6 +71,25 @@ const ERROR_PATTERNS = [
   /tool .* not found/i,
   /unrecognized function/i,
   /function .* does not exist/i,
+  // Hidden/subtle errors (for silent failures)
+  /could not find/i,
+  /could not locate/i,
+  /could not retrieve/i,
+  /empty results/i,
+  /no results/i,
+  /service unavailable/i,
+  /checksum mismatch/i,
+  /may be corrupted/i,
+  /may be outdated/i,
+  /cached fallback/i,
+  /stale cache/i,
+  /degraded/i,
+  /truncated/i,
+  /partial.success/i,
+  /quality.*(low|poor)/i,
+  /confidence.*(low|below)/i,
+  /cannot be verified/i,
+  /unverified/i,
 ];
 
 /**
@@ -237,6 +256,41 @@ function analyzeSpanDeep(span: Span): {
 }
 
 /**
+ * Extract tool call info from span attributes
+ */
+function extractToolCalls(attr: Record<string, any>): Array<{ name: string; id?: string }> {
+  const toolCalls: Array<{ name: string; id?: string }> = [];
+
+  // Check tool_calls field (OpenAI format)
+  if (attr.tool_calls) {
+    try {
+      const calls = typeof attr.tool_calls === 'string' ? JSON.parse(attr.tool_calls) : attr.tool_calls;
+      if (Array.isArray(calls)) {
+        for (const call of calls) {
+          if (call.function?.name) {
+            toolCalls.push({ name: call.function.name, id: call.id });
+          }
+        }
+      }
+    } catch {
+      // Ignore parse errors
+    }
+  }
+
+  // Check function_call field (legacy format)
+  if (attr.function_call?.name) {
+    toolCalls.push({ name: attr.function_call.name });
+  }
+
+  // Check tool.name attribute (vLLora format)
+  if (attr['tool.name']) {
+    toolCalls.push({ name: attr['tool.name'] });
+  }
+
+  return toolCalls;
+}
+
+/**
  * Extract key info from a span for summary
  * Uses 'any' type for attribute access since spans have dynamic fields
  */
@@ -250,9 +304,14 @@ function extractSpanSummary(span: Span): {
   semantic_error?: string;
   semantic_error_source?: 'input' | 'output';
   model?: string;
+  provider?: string;
   cost?: number;
   input_tokens?: number;
   output_tokens?: number;
+  cached_tokens?: number;
+  ttft_ms?: number;
+  tool_calls?: Array<{ name: string; id?: string }>;
+  label?: string;
 } {
   // Cast to any for dynamic field access (spans have varying attribute structures)
   const attr = (span.attribute || {}) as Record<string, any>;
@@ -280,6 +339,25 @@ function extractSpanSummary(span: Span): {
     semanticErrorSource = semanticError ? 'output' : undefined;
   }
 
+  // Extract TTFT (time to first token) - convert from microseconds if needed
+  let ttft_ms: number | undefined;
+  if (attr.ttft) {
+    const ttft = typeof attr.ttft === 'string' ? parseInt(attr.ttft, 10) : attr.ttft;
+    // If ttft > 1000000, assume it's in nanoseconds or microseconds
+    ttft_ms = ttft > 1000000 ? Math.round(ttft / 1000) : ttft;
+  }
+
+  // Extract cached tokens
+  const cachedTokens = attr.usage?.prompt_tokens_details?.cached_tokens
+    || attr.usage?.cached_tokens
+    || attr.cached_tokens;
+
+  // Extract tool calls
+  const toolCalls = extractToolCalls(attr);
+
+  // Extract provider name
+  const provider = attr.provider_name || attr.provider;
+
   return {
     id: span.span_id,
     operation: span.operation_name,
@@ -289,10 +367,15 @@ function extractSpanSummary(span: Span): {
     error_message: errorMessage,
     semantic_error: semanticError || undefined,
     semantic_error_source: semanticErrorSource,
-    model: (attr.model_name || attr.model || attr.model?.name) as string | undefined,
-    cost: attr.cost as number | undefined,
+    model: (attr.model_name || attr.model?.name || attr.model) as string | undefined,
+    provider: provider as string | undefined,
+    cost: typeof attr.cost === 'string' ? parseFloat(attr.cost) : attr.cost as number | undefined,
     input_tokens: (attr.usage?.input_tokens || attr.input_tokens) as number | undefined,
     output_tokens: (attr.usage?.output_tokens || attr.output_tokens) as number | undefined,
+    cached_tokens: cachedTokens as number | undefined,
+    ttft_ms,
+    tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
+    label: attr.label as string | undefined,
   };
 }
 
@@ -591,11 +674,18 @@ export const dataToolHandlers: Record<string, (params: Record<string, unknown>) 
         total: allSpans.length,
         by_operation: {} as Record<string, number>,
         by_status: { success: 0, error: 0 },
+        by_provider: {} as Record<string, { count: number; cost: number; tokens: number }>,
+        by_model: {} as Record<string, { count: number; cost: number; input_tokens: number; output_tokens: number }>,
         total_duration_ms: 0,
         total_cost: 0,
         total_input_tokens: 0,
         total_output_tokens: 0,
+        total_cached_tokens: 0,
         models_used: new Set<string>(),
+        tool_call_counts: {} as Record<string, number>,
+        labels_found: new Set<string>(),
+        durations: [] as number[],
+        ttfts: [] as number[],
       };
 
       for (const summary of spanSummaries) {
@@ -614,11 +704,60 @@ export const dataToolHandlers: Record<string, (params: Record<string, unknown>) 
         stats.total_cost += summary.cost || 0;
         stats.total_input_tokens += summary.input_tokens || 0;
         stats.total_output_tokens += summary.output_tokens || 0;
+        stats.total_cached_tokens += summary.cached_tokens || 0;
 
+        // Track durations for percentiles
+        if (summary.duration_ms > 0) {
+          stats.durations.push(summary.duration_ms);
+        }
+
+        // Track TTFTs for percentiles
+        if (summary.ttft_ms && summary.ttft_ms > 0) {
+          stats.ttfts.push(summary.ttft_ms);
+        }
+
+        // Group by model
         if (summary.model) {
           stats.models_used.add(summary.model);
+          if (!stats.by_model[summary.model]) {
+            stats.by_model[summary.model] = { count: 0, cost: 0, input_tokens: 0, output_tokens: 0 };
+          }
+          stats.by_model[summary.model].count++;
+          stats.by_model[summary.model].cost += summary.cost || 0;
+          stats.by_model[summary.model].input_tokens += summary.input_tokens || 0;
+          stats.by_model[summary.model].output_tokens += summary.output_tokens || 0;
+        }
+
+        // Group by provider
+        if (summary.provider) {
+          if (!stats.by_provider[summary.provider]) {
+            stats.by_provider[summary.provider] = { count: 0, cost: 0, tokens: 0 };
+          }
+          stats.by_provider[summary.provider].count++;
+          stats.by_provider[summary.provider].cost += summary.cost || 0;
+          stats.by_provider[summary.provider].tokens += (summary.input_tokens || 0) + (summary.output_tokens || 0);
+        }
+
+        // Count tool calls
+        if (summary.tool_calls) {
+          for (const tool of summary.tool_calls) {
+            stats.tool_call_counts[tool.name] = (stats.tool_call_counts[tool.name] || 0) + 1;
+          }
+        }
+
+        // Track labels
+        if (summary.label) {
+          stats.labels_found.add(summary.label);
         }
       }
+
+      // Calculate percentiles helper
+      const percentile = (arr: number[], p: number): number => {
+        if (arr.length === 0) return 0;
+        const sorted = [...arr].sort((a, b) => a - b);
+        const idx = Math.ceil((p / 100) * sorted.length) - 1;
+        return sorted[Math.max(0, idx)];
+      };
 
       // Find error spans (explicit errors)
       const errorSpans = spanSummaries.filter(s => s.has_error);
@@ -637,6 +776,46 @@ export const dataToolHandlers: Record<string, (params: Record<string, unknown>) 
         .sort((a, b) => (b.cost || 0) - (a.cost || 0))
         .slice(0, 5);
 
+      // Detect repeated failures (same tool/operation failing multiple times)
+      const repeatedFailures: Array<{ name: string; count: number; type: 'tool' | 'operation' }> = [];
+
+      // Check for tools that appear in semantic errors multiple times
+      const toolErrorCounts: Record<string, number> = {};
+      for (const span of semanticErrorSpans) {
+        if (span.semantic_error?.toLowerCase().includes('unknown tool')) {
+          // Extract tool name from error pattern
+          const match = span.semantic_error.match(/unknown tool[:\s]+(\w+)/i);
+          if (match) {
+            toolErrorCounts[match[1]] = (toolErrorCounts[match[1]] || 0) + 1;
+          }
+        }
+      }
+      for (const [name, count] of Object.entries(toolErrorCounts)) {
+        if (count >= 2) {
+          repeatedFailures.push({ name, count, type: 'tool' });
+        }
+      }
+
+      // Check for operations that fail repeatedly
+      const operationErrorCounts: Record<string, number> = {};
+      for (const span of errorSpans) {
+        operationErrorCounts[span.operation] = (operationErrorCounts[span.operation] || 0) + 1;
+      }
+      for (const [name, count] of Object.entries(operationErrorCounts)) {
+        if (count >= 2) {
+          repeatedFailures.push({ name, count, type: 'operation' });
+        }
+      }
+
+      // Format model breakdown for response
+      const modelBreakdown = Object.entries(stats.by_model).map(([model, data]) => ({
+        model,
+        count: data.count,
+        cost: Math.round(data.cost * 10000) / 10000,
+        input_tokens: data.input_tokens,
+        output_tokens: data.output_tokens,
+      })).sort((a, b) => b.cost - a.cost);
+
       return {
         success: true,
         summary: {
@@ -647,8 +826,36 @@ export const dataToolHandlers: Record<string, (params: Record<string, unknown>) 
           total_cost: Math.round(stats.total_cost * 10000) / 10000, // Round to 4 decimals
           total_input_tokens: stats.total_input_tokens,
           total_output_tokens: stats.total_output_tokens,
+          total_cached_tokens: stats.total_cached_tokens,
+          cache_hit_rate: stats.total_input_tokens > 0
+            ? Math.round((stats.total_cached_tokens / stats.total_input_tokens) * 100)
+            : 0,
           models_used: Array.from(stats.models_used),
+          labels_found: Array.from(stats.labels_found),
         },
+        // New: Latency percentiles
+        latency: {
+          p50_ms: percentile(stats.durations, 50),
+          p95_ms: percentile(stats.durations, 95),
+          p99_ms: percentile(stats.durations, 99),
+          max_ms: Math.max(...stats.durations, 0),
+        },
+        // New: TTFT percentiles (if available)
+        ttft: stats.ttfts.length > 0 ? {
+          p50_ms: percentile(stats.ttfts, 50),
+          p95_ms: percentile(stats.ttfts, 95),
+          avg_ms: Math.round(stats.ttfts.reduce((a, b) => a + b, 0) / stats.ttfts.length),
+        } : undefined,
+        // New: Model breakdown with costs
+        model_breakdown: modelBreakdown.length > 0 ? modelBreakdown : undefined,
+        // New: Tool call frequency
+        tool_usage: Object.keys(stats.tool_call_counts).length > 0
+          ? Object.entries(stats.tool_call_counts)
+              .map(([name, count]) => ({ name, count }))
+              .sort((a, b) => b.count - a.count)
+          : undefined,
+        // New: Repeated failures detection
+        repeated_failures: repeatedFailures.length > 0 ? repeatedFailures : undefined,
         error_spans: errorSpans.map(s => ({
           span_id: s.id,
           operation: s.operation,
@@ -664,6 +871,7 @@ export const dataToolHandlers: Record<string, (params: Record<string, unknown>) 
           span_id: s.id,
           operation: s.operation,
           duration_ms: s.duration_ms,
+          ttft_ms: s.ttft_ms,
         })),
         expensive_spans: expensiveSpans.map(s => ({
           span_id: s.id,
