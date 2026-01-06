@@ -61,7 +61,7 @@ export function ModelsPage(props: {
     const map = new Map<string, boolean>();
     providers.forEach(p => {
       if (p?.name) {
-        map.set(p.name.toLowerCase(), p.has_credentials);
+        map.set(p.name.toLowerCase(), p.is_custom ? true : p.has_credentials);
       }
     });
     return map;

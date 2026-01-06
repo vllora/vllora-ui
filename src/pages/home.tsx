@@ -1,4 +1,5 @@
-import { AlertCircle, RefreshCw, MessageSquare, BookOpen, ExternalLink, ChevronRight, ArrowRight, Activity } from 'lucide-react';
+import { useState } from 'react';
+import { AlertCircle, RefreshCw, MessageSquare, BookOpen, ExternalLink, ChevronRight, ArrowRight, Activity, Plus } from 'lucide-react';
 import { useMemo } from 'react';
 import { LocalModelCard } from '@/components/models/local/LocalModelCard';
 import { LocalModelsSkeletonLoader } from '@/components/models/local/LocalModelsSkeletonLoader';
@@ -7,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ProjectsConsumer } from '@/contexts/ProjectContext';
 import { ProviderKeysConsumer } from '@/contexts/ProviderKeysContext';
-import { ProviderCredentialModal } from '@/pages/settings/ProviderCredentialModal';
+import { useProviderModal } from '@/contexts/ProviderModalContext';
+import { CustomProviderDialog } from '@/components/settings/CustomProviderDialog';
 import { ProviderIcon } from '@/components/Icons/ProviderIcons';
 import { useNavigate } from "react-router";
 import { ModelInfo } from '@/types/models';
@@ -239,24 +241,10 @@ export function HomePage() {
 }
 
 function ProviderSetupSection() {
-  const {
-    providers,
-    loading: providersLoading,
-    editingProvider,
-    modalOpen,
-    credentialValues,
-    saving,
-    startEditing,
-    setModalOpen,
-    updateCredentialValues,
-    toggleShowKeyField,
-    getShowKeyField,
-    saveProvider,
-    refetchProviders,
-    cancelEditing,
-  } = ProviderKeysConsumer();
-
+  const { providers, loading: providersLoading, refetchProviders } = ProviderKeysConsumer();
+  const { openProviderModal } = useProviderModal();
   const navigate = useNavigate();
+  const [customProviderDialogOpen, setCustomProviderDialogOpen] = useState(false);
 
   if (providersLoading) {
     return (
@@ -270,10 +258,13 @@ function ProviderSetupSection() {
     );
   }
 
+  // Filter out custom providers for the main list, show only predefined
+  const predefinedProviders = providers.filter(p => !p.is_custom);
+
   // Order providers: OpenAI first, then LangDB, then rest
-  const openaiProvider = providers.find(p => p?.name?.toLowerCase() === 'openai');
-  const langdbProvider = providers.find(p => p?.name?.toLowerCase() === 'langdb');
-  const otherProviders = providers.filter(p =>
+  const openaiProvider = predefinedProviders.find(p => p?.name?.toLowerCase() === 'openai');
+  const langdbProvider = predefinedProviders.find(p => p?.name?.toLowerCase() === 'langdb');
+  const otherProviders = predefinedProviders.filter(p =>
     p?.name && p.name.toLowerCase() !== 'openai' && p.name.toLowerCase() !== 'langdb'
   );
 
@@ -281,49 +272,21 @@ function ProviderSetupSection() {
     openaiProvider,
     langdbProvider,
     ...otherProviders
-  ].filter((p): p is typeof providers[0] => p !== undefined).slice(0, 6);
+  ].filter((p): p is typeof providers[0] => p !== undefined).slice(0, 5); // Show 5 to leave room for Add Custom
 
-  const handleStartEditing = (provider: typeof providers[0]) => {
-    startEditing(provider.name);
-    setModalOpen(true);
+  const handleProviderClick = (providerName: string) => {
+    openProviderModal(providerName, () => {
+      refetchProviders();
+    });
   };
-
-  const handleCloseModal = () => {
-    setModalOpen(false);
-    cancelEditing();
-  };
-
-  const handleSaveModal = () => {
-    if (editingProvider) {
-      saveProvider(editingProvider);
-    }
-  };
-
-  const editingProviderData = providers.find(p => p.name === editingProvider);
 
   return (
     <>
-      {/* Provider Configuration Modal */}
-      <ProviderCredentialModal
-        open={modalOpen}
-        provider={editingProviderData || null}
-        values={credentialValues[editingProvider || ''] || {}}
-        showKeys={
-          editingProvider
-            ? Object.fromEntries(
-              Object.keys(credentialValues[editingProvider] || {}).map((field) => [
-                field,
-                getShowKeyField(editingProvider, field),
-              ])
-            )
-            : {}
-        }
-        saving={saving[editingProvider || ''] || false}
-        onOpenChange={handleCloseModal}
-        onChange={(values) => editingProvider && updateCredentialValues(editingProvider, values)}
-        onToggleShow={(field) => editingProvider && toggleShowKeyField(editingProvider, field)}
-        onSave={handleSaveModal}
-        onRefresh={refetchProviders}
+      {/* Custom Provider Dialog */}
+      <CustomProviderDialog
+        open={customProviderDialogOpen}
+        onOpenChange={setCustomProviderDialogOpen}
+        onSuccess={refetchProviders}
       />
 
       <div>
@@ -344,7 +307,7 @@ function ProviderSetupSection() {
             <div
               key={provider.name}
               className="border border-border rounded-lg p-3 hover:bg-accent/50 transition-colors cursor-pointer group"
-              onClick={() => handleStartEditing(provider)}
+              onClick={() => handleProviderClick(provider.name)}
             >
               <div className="flex items-center gap-3">
                 <ProviderIcon provider_name={provider.name} className="w-5 h-5" />
@@ -360,6 +323,23 @@ function ProviderSetupSection() {
               </div>
             </div>
           ))}
+          {/* Add Custom Provider Card */}
+          <div
+            className="border border-dashed border-border rounded-lg p-3 hover:bg-accent/50 hover:border-solid transition-colors cursor-pointer group"
+            onClick={() => setCustomProviderDialogOpen(true)}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center">
+                <Plus className="w-3 h-3 text-muted-foreground" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm text-muted-foreground group-hover:text-foreground transition-colors">Add Custom</p>
+                <span className="text-xs text-muted-foreground">
+                  Custom endpoint
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </>

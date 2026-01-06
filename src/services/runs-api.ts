@@ -18,6 +18,8 @@ export interface ListRunsQuery {
   model_name?: string;
   type_filter?: string; // This is the display_type parameter
   include_mcp_templates?: boolean;
+  // Label filter - comma-separated labels (e.g., "flight_search,budget_agent")
+  labels?: string; // Filter runs by spans that have these labels (attribute.label)
   // Pagination
   offset?: number;
   limit?: number;
@@ -113,4 +115,22 @@ export const fetchRunSpans = async (props: {
   });
 
   return handleApiResponse<{ data: Span[]; pagination: Pagination }>(response);
+};
+
+export const getRunDetails = async (props: {
+  runId: string;
+  projectId: string;
+}): Promise<RunDTO> => {
+  const { runId, projectId } = props;
+
+  const endpoint = `/runs/${runId}/details`;
+
+  const response = await apiClient(endpoint, {
+    method: 'GET',
+    headers: {
+      'x-project-id': projectId,
+    },
+  });
+
+  return handleApiResponse<RunDTO>(response);
 };

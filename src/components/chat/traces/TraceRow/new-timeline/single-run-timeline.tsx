@@ -12,12 +12,15 @@ export interface SingleRunTimelineViewProps {
     onSpanSelect?: (spanId: string, runId?: string) => void;
     level: number;
     hoverSpanId?: string;
+    onHoverSpanChange?: (spanId: string | undefined) => void;
     collapsedSpans?: string[];
     onToggle?: (spanId: string) => void;
+    showHighlightButton?: boolean;
+    selectedLabels?: string[];
 }
 
 export const SingleRunTimelineView = (props: SingleRunTimelineViewProps) => {
-    const { isInSidebar = true, selectedSpanId, onSpanSelect, currentSpanHierarchy, level, index, hoverSpanId, collapsedSpans, onToggle } = props;
+    const { isInSidebar = true, selectedSpanId, onSpanSelect, currentSpanHierarchy, level, index, hoverSpanId, onHoverSpanChange, collapsedSpans, onToggle, showHighlightButton, selectedLabels } = props;
     const { spansByRunId, startTime, totalDuration } = RunDetailConsumer();
     // Dynamic title width based on display mode - wider when not in sidebar
     const titleWidth: string | number = useMemo(() => isInSidebar ? `${TIMELINE_DYNAMIC_TITLE_WIDTH_IN_SIDEBAR}px` : `${TIMELINE_DYNAMIC_TITLE_WIDTH_FULL_SIZE}px`, [isInSidebar]);
@@ -36,16 +39,16 @@ export const SingleRunTimelineView = (props: SingleRunTimelineViewProps) => {
                                 {/* Time markers */}
                                 <div className="absolute left-0 bottom-1 text-[10px] text-white font-semibold whitespace-nowrap">0.0s</div>
                                 <div className="absolute left-1/4 bottom-1 -translate-x-1/2 text-[10px] font-semibold text-white whitespace-nowrap">
-                                    {(totalDuration * 0.25 / 1000000).toFixed(1)}s
+                                    { totalDuration === -Infinity ? 0 : (totalDuration * 0.25 / 1000000).toFixed(1)}s
                                 </div>
                                 <div className="absolute left-1/2 bottom-1 -translate-x-1/2 text-[10px] font-semibold text-white whitespace-nowrap">
-                                    {(totalDuration * 0.5 / 1000000).toFixed(1)}s
+                                    {totalDuration === -Infinity ? 0 :  (totalDuration * 0.5 / 1000000).toFixed(1)}s
                                 </div>
                                 <div className="absolute left-3/4 bottom-1 -translate-x-1/2 text-[10px] font-semibold text-white whitespace-nowrap">
-                                    {(totalDuration * 0.75 / 1000000).toFixed(1)}s
+                                    {totalDuration === -Infinity ? 0 : (totalDuration * 0.75 / 1000000).toFixed(1)}s
                                 </div>
                                 <div className="absolute right-0 bottom-1 text-right text-[10px] font-semibold text-white whitespace-nowrap">
-                                    {(totalDuration / 1000000).toFixed(1)}s
+                                    {totalDuration === -Infinity ? 0 : (totalDuration / 1000000).toFixed(1)}s
                                 </div>
                             </div>
                         </div>
@@ -67,8 +70,11 @@ export const SingleRunTimelineView = (props: SingleRunTimelineViewProps) => {
                     onSpanSelect={onSpanSelect}
                     isInSidebar={isInSidebar}
                     hoverSpanId={hoverSpanId}
+                    onHoverSpanChange={onHoverSpanChange}
                     collapsedSpans={collapsedSpans}
                     onToggle={onToggle}
+                    showHighlightButton={showHighlightButton}
+                    selectedLabels={selectedLabels}
                 />
             </div>
         </div>

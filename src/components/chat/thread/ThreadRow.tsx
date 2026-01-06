@@ -9,7 +9,6 @@ import { cn } from "@/lib/utils";
 import { useClickAway } from "ahooks";
 import { Card } from "../../ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../ui/tooltip";
-import { motion } from "framer-motion";
 import { ThreadTimeDisplay } from './ThreadTimeDisplay';
 import { ListProviders } from "./ListProviders";
 import { formatCost } from "@/utils/formatCost";
@@ -93,12 +92,7 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
     // No need to calculate model count as we're not displaying it
 
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
-        >
-            <Card
+        <Card
                 id={`thread-row-${thread.thread_id}`}
                 key={thread.thread_id}
                 onClick={(e) => {
@@ -107,7 +101,7 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                     handleThreadClick(thread.thread_id, thread.input_models);
                 }}
                 className={cn(
-                    "py-3 px-4 transition-all duration-200 flex flex-col gap-2 cursor-pointer rounded-md border border-[#161616] border-r-4 active:bg-sidebar-accent/40",
+                    "py-2 px-2 transition-all duration-200 flex flex-col gap-2 cursor-pointer rounded-md border border-[#161616] border-r-4 active:bg-sidebar-accent/40",
                     isSelected ? '!border-r-4 !border-r-[rgb(var(--theme-500))] bg-secondary shadow-sm' :
                         '!border-r !border-r-[#161616] bg-[#161616] hover:bg-sidebar-accent/50'
                 )}
@@ -227,8 +221,22 @@ export const ThreadRow = React.memo(({ thread }: { thread: Thread }) => {
                             <TrashIcon className="w-3.5 h-3.5" />
                         </button>
                     )}
+                    {!thread.is_from_local && thread.is_debug && (
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <span className="relative flex h-2 w-2">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                                    </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">
+                                    Debug session
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    )}
                 </div>
-            </Card>
-        </motion.div>
+        </Card>
     );
 });

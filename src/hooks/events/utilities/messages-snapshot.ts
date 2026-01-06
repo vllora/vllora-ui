@@ -26,7 +26,7 @@ export const handleMessagesSnapshotEvent = (
     const newSpan: Span = {
       span_id: event.span_id,
       parent_span_id: event.parent_span_id,
-      operation_name: "span",
+      operation_name: "snapshot_span",
       thread_id: event.thread_id || "",
       run_id: event.run_id || "",
       trace_id: "",

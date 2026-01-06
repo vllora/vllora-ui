@@ -53,6 +53,9 @@ export interface ProviderInfo {
   terms_of_service_url?: string;
   provider_type: string;
   has_credentials: boolean;
+  custom_endpoint?: string;
+  is_custom?: boolean;
+  custom_inference_api_type?: 'openai' | 'anthropic' | 'bedrock' | 'gemini';
 }
 
 export interface ListProvidersResponse {

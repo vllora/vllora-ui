@@ -14,6 +14,7 @@ import {
 import { AlertTriangle } from "lucide-react";
 import { SingleMessage } from "./single-message";
 import { useLocalStorageState } from "ahooks";
+import { extractResponseMessage, hasExtractableResponse } from "@/utils/extractResponseMessage";
 
 // Helper function to get finish reason styling and information
 const getFinishReasonInfo = (finishReason: string) => {
@@ -80,36 +81,15 @@ const ResponseUIView = ({ response, otherLevelMessages }: { response: any, other
         defaultValue: false,
     });
 
-    // Extract common parameters for UI view
-    const { tool_calls: responseToolCalls } = response || {};
+    // Extract response data using utility function
+    const { messages, finish_reason, tool_calls: responseToolCalls } = extractResponseMessage({
+        responseObject: response,
+        otherLevelMessages,
+    });
+
     const keys = response && Object.keys(response);
-    let messages = response && response.messages as any[];
-    let finish_reason = response && response.finish_reason;
     const tool_calls = responseToolCalls && responseToolCalls.length > 0;
     const choices: any[] = response && response.choices as any[];
-    const candidates = response && response.candidates as any[];
-
-    if (!finish_reason && choices && choices.length === 1) {
-        finish_reason = choices[0].finish_reason;
-    }
-    if (!finish_reason && candidates && candidates.length === 1) {
-        finish_reason = candidates[0].finishReason;
-    }
-    if (!finish_reason && response && response.stop_reason) {
-        finish_reason = response.stop_reason;
-    }
-    if (!messages && choices && choices.length === 1) {
-        messages = [choices[0].message];
-    }
-    if (!messages && candidates && candidates.length === 1) {
-        messages = [candidates[0].content];
-    }
-    if (otherLevelMessages && !messages) {
-        messages = otherLevelMessages.map((message: string) => ({ content: message, role: 'assistant' }));
-    }
-    if ((!messages || messages.length === 0) && response && response.content) {
-        messages = [{ content: response.content, role: response.role || 'assistant' }];
-    }
 
     const hideChoices = choices && choices.length === 1;
     let extraDataKeys = keys?.filter((key: string) => key !== 'finish_reason' && key !== 'tool_calls' && key !== 'messages' && key !== 'usage');
@@ -157,7 +137,7 @@ const ResponseUIView = ({ response, otherLevelMessages }: { response: any, other
                 />
             )}
             {/* Tool calls */}
-            {tool_calls && responseToolCalls && responseToolCalls.length > 0 && (
+            {tool_calls && responseToolCalls && responseToolCalls.length > 0 && messages.length !== responseToolCalls.length && (
                 <ToolDefinitionsViewer
                     toolCalls={responseToolCalls}
                     collapsed={toolCallsCollapsed}
@@ -185,9 +165,10 @@ const ResponseUIView = ({ response, otherLevelMessages }: { response: any, other
 export const ResponseViewer = (props: {
     response: any,
     otherLevelMessages?: string[],
-    viewMode?: 'ui' | 'raw'
+    viewMode?: 'ui' | 'raw',
+    hideTitleOutput?: boolean,
 }) => {
-    const { response, otherLevelMessages, viewMode = 'ui' } = props;
+    const { response, otherLevelMessages, viewMode = 'ui', hideTitleOutput = false } = props;
     if (typeof response === 'string') {
         return <SingleMessage role="assistant" content={response} />;
     }
@@ -198,17 +179,21 @@ export const ResponseViewer = (props: {
             </div>
         );
     }
-    if (!response || (!response.messages && !response.tool_calls && !response.choices && !response.candidates)) {
+    if (!hasExtractableResponse(response)) {
         return null;
     }
-    return (<div className="relative flex flex-col gap-4 rounded-lg border border-border p-4 pt-6 bg-black">
-        <div className="absolute -top-[10px] left-0 right-0 flex justify-center items-center gap-2">
-            <span className="px-2 rounded bg-border text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-                Output
-            </span>
+    return (
+        <div className="relative flex flex-col gap-4 rounded-lg border border-border p-4 pt-6 bg-black">
+            {!hideTitleOutput && (
+                <div className="absolute -top-[10px] left-0 right-0 flex justify-center items-center gap-2">
+                    <span className="px-2 rounded bg-border text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                        Output
+                    </span>
+                </div>
+            )}
+            <div className="flex flex-col gap-6 overflow-y-auto text-xs">
+                <ResponseUIView response={response} otherLevelMessages={otherLevelMessages} />
+            </div>
         </div>
-        <div className="flex flex-col gap-6 overflow-y-auto text-xs">
-            <ResponseUIView response={response} otherLevelMessages={otherLevelMessages} />
-        </div>
-    </div>);
+    );
 }

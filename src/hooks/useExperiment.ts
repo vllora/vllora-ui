@@ -60,23 +60,24 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
   const [traceSpans, setTraceSpans] = useState<Span[]>([]);
   const [loadingTraceSpans, setLoadingTraceSpans] = useState(false);
 
-
-  useEffect(()=> {
-    if(traceSpans && traceSpans.length > 0) {
-      const newApiInvokeSpan = traceSpans.find((span) => span.operation_name === 'api_invoke');
-      if(newApiInvokeSpan && newApiInvokeSpan.attribute) {
-         let apiAtt = newApiInvokeSpan.attribute as any;
-        apiAtt && setResultInfo(prev => {
-          return {
-            ...prev,
-            usage: apiAtt.usage || '',
-            cost: apiAtt.cost || ''
-          }
-         })
-        
+  useEffect(() => {
+    if (traceSpans && traceSpans.length > 0) {
+      const newApiInvokeSpan = traceSpans.find(
+        (span) => span.operation_name === "api_invoke"
+      );
+      if (newApiInvokeSpan && newApiInvokeSpan.attribute) {
+        let apiAtt = newApiInvokeSpan.attribute as any;
+        apiAtt &&
+          setResultInfo((prev) => {
+            return {
+              ...prev,
+              usage: apiAtt.usage || "",
+              cost: apiAtt.cost || "",
+            };
+          });
       }
     }
-  }, [traceSpans])
+  }, [traceSpans]);
 
   // Fetch span data
   const {
@@ -102,7 +103,6 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
   );
 
   const originalInfo = useMemo(() => extractOriginalInfo(span), [span]);
-
   // Initialize experiment data and original output when span loads
   useEffect(() => {
     if (span) {
@@ -117,7 +117,7 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
 
   const refreshSpansByRunId = useCallback(
     async (runId: string) => {
-      if(!projectId) return;
+      if (!projectId) return;
       const spansResponse = await fetchRunSpans({
         runId: runId,
         projectId,
@@ -125,11 +125,13 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
         limit: 1000,
       });
       let newSpans = spansResponse.data;
-      setTraceSpans(prev => {
+      setTraceSpans((prev) => {
         // for each newSpans, check if it is in prev, if not, add it, if exist, update it
         let updatedSpans = [...prev];
         for (const span of newSpans) {
-          const index = updatedSpans.findIndex((s) => s.span_id === span.span_id);
+          const index = updatedSpans.findIndex(
+            (s) => s.span_id === span.span_id
+          );
           if (index === -1) {
             updatedSpans.push(span);
           } else {
@@ -185,7 +187,10 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
   );
 
   // Run experiment with the current experiment data
-  const handleRunExperiment = async () => {
+  const handleRunExperiment = async (props: {
+    beforeRunExperiment?: () => void;
+  }) => {
+    const { beforeRunExperiment } = props;
     setRunning(true);
     setResult(""); // Clear previous result
     setResultInfo({
@@ -257,7 +262,9 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
       // Extract thread_id from span if available
       const threadId = span?.thread_id;
       const isStreaming = experimentData.stream ?? true;
-
+      if (beforeRunExperiment) {
+        beforeRunExperiment();
+      }
       const response = await api.post("/v1/chat/completions", payload, {
         headers: {
           "Content-Type": "application/json",
@@ -429,7 +436,10 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
     setExperimentData({ ...experimentData, messages: newMessages });
   };
 
-  const updateMessageToolCalls = (index: number, toolCalls: import("@/types/experiment").ToolCall[]) => {
+  const updateMessageToolCalls = (
+    index: number,
+    toolCalls: import("@/types/experiment").ToolCall[]
+  ) => {
     const newMessages = [...experimentData.messages];
     if (toolCalls.length > 0) {
       newMessages[index].tool_calls = toolCalls;
@@ -492,9 +502,10 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
       // Update traceSpans with the new event
       setTraceSpans((prevSpans) => processEvent(prevSpans, event));
       if (event.type === "RunFinished" && event.run_id) {
-       event.run_id && setTimeout(() => {
-          refreshSpansByRunId(event.run_id || '');
-        }, 1500);
+        event.run_id &&
+          setTimeout(() => {
+            refreshSpansByRunId(event.run_id || "");
+          }, 1500);
       }
     },
     [span?.thread_id, projectId]

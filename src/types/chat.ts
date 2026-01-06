@@ -25,7 +25,7 @@ export interface ToolCall {
   type: string;
   function: {
     name: string;
-    arguments: string;
+    arguments: string | object;
   };
 }
 
@@ -50,8 +50,8 @@ export interface MessageMetrics {
 export interface Message {
   id: string;
   type: string;
-  role?: 'user' | 'assistant' | 'system';
-  content: string;
+  role?: 'user' | 'assistant' | 'system' | 'tool';
+  content: string | any[];
   timestamp: number;
   content_type?: string;
   thread_id?: string;
@@ -84,6 +84,7 @@ export interface Thread {
   // UI-specific fields (derived or fetched separately)
   title?: string; // Fetched from threads table or generated
   is_from_local?: boolean; // For draft threads
+  is_debug?: boolean;
 }
 
 export interface CreateThreadRequest {

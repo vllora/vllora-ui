@@ -19,8 +19,11 @@ export interface ModelParameterConfig {
 }
 
 export interface ModelInfo {
+  id?: string;
+  virtual_model_id?: string;
   model: string;
   model_provider: string;
+  is_custom?: boolean;
   inference_provider: {
     provider: string;
     model_name: string;

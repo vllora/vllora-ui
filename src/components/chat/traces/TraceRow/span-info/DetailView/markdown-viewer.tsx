@@ -112,16 +112,20 @@ export const MarkdownViewer: React.FC<{ message: string }> = ({ message }) => {
           return <a className="text-blue-500 hover:underline hover:text-blue-600" {...props}>{children}</a>
         },
         table({ children, ...props }) {
-          return <table className="table-auto my-1 mx-1" {...props}>{children}</table>
+          return (
+            <div className="overflow-x-auto my-2">
+              <table className="table-auto min-w-full text-sm" {...props}>{children}</table>
+            </div>
+          );
         },
         tr({ children, ...props }) {
           return <tr className="table-row" {...props}>{children}</tr>
         },
         td({ children, ...props }) {
-          return <td className="table-cell border border-border px-2 py-1" {...props}>{children}</td>
+          return <td className="table-cell border border-border px-2 py-1 whitespace-nowrap" {...props}>{children}</td>
         },
         th({ children, ...props }) {
-          return <th className="table-cell border border-border font-semibold text-blue-500 px-2 py-1" {...props}>{children}</th>
+          return <th className="table-cell border border-border font-semibold text-blue-500 px-2 py-1 whitespace-nowrap bg-muted/50" {...props}>{children}</th>
         },
         img({ children, ...props }) {
           if (props.src && props.width && props.height) {

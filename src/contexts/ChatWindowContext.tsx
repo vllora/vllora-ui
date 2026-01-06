@@ -1,6 +1,7 @@
-import { createContext, useContext, ReactNode, useCallback, useState, useMemo } from 'react';
+import { createContext, useContext, ReactNode, useCallback, useState, useMemo, useRef, useEffect } from 'react';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { Span } from '@/types/common-type';
-import { ProjectEventUnion } from './project-events/dto';
+import { CustomBreakpointEventType, CustomSpanStartEventType, ProjectEventUnion } from './project-events/dto';
 import { buildSpanHierarchy } from '@/utils/span-hierarchy';
 import { buildMessageHierarchyFromSpan, MessageStructure } from '@/utils/message-structure-from-span';
 import { useStableMessageHierarchies } from '@/hooks/useStableMessageHierarchies';
@@ -9,6 +10,10 @@ import { processEvent, updatedRunWithSpans } from '@/hooks/events/utilities';
 import { useWrapperHook } from '@/hooks/useWrapperHook';
 import { useUserProviderOfSelectedModelConfig } from '@/hooks/userProviderOfSelectedModelConfig';
 import { ThreadsConsumer } from './ThreadsContext';
+import { tryParseJson } from '@/utils/modelUtils';
+import { useLabelFilter } from '@/hooks/useLabelFilter';
+import { eventEmitter } from '@/utils/eventEmitter';
+import { CurrentAppConsumer } from './CurrentAppContext';
 
 export type ChatWindowContextType = ReturnType<typeof useChatWindow>;
 
@@ -21,6 +26,26 @@ interface ChatWindowProviderProps {
 }
 
 export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindowProviderProps) {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { app_mode } = CurrentAppConsumer()
+
+  // Parse initial labels from URL (comma-separated)
+  const initialLabelsFromUrl = useMemo(() => {
+    const labelsParam = searchParams.get('labels');
+    if (!labelsParam) return [];
+    return labelsParam.split(',').map(l => l.trim()).filter(l => l.length > 0);
+  }, []); // Only read on initial mount to avoid loops
+
+  // Label filter state - defined before useWrapperHook so we can pass labels
+  const labelFilter = useLabelFilter({
+    projectId,
+    threadId,
+    initialLabels: initialLabelsFromUrl,
+    autoFetch: app_mode === 'vllora',
+  });
+
   // Use the runs pagination hook
   const {
     runs: rawRuns,
@@ -56,15 +81,79 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     setHoverSpanId,
     collapsedSpans,
     setCollapsedSpans,
-  } = useWrapperHook({ projectId, threadId });
+  } = useWrapperHook({ projectId, threadId, labels: labelFilter.selectedLabels });
 
-
-  const { selectedThread } = ThreadsConsumer()
-
-
+  const { selectedThread, setThreads } = ThreadsConsumer()
 
   const [isChatProcessing, setIsChatProcessing] = useState<boolean>(false);
   const [runHighlighted, setRunHighlighted] = useState<string | null>(null);
+
+  // Thread update helper functions
+  const handleGlobalBreakpointDisabled = useCallback(() => {
+    setThreads(prevThreads => {
+      const newThreads = prevThreads.map(t => ({ ...t, is_debug: false }));
+      return [...newThreads].sort((a, b) => a.finish_time_us - b.finish_time_us);
+    });
+  }, [setThreads]);
+
+  const handleBreakpointResume = useCallback((threadIdToResume: string) => {
+    setThreads(prevThreads => {
+      const idx = prevThreads.findIndex(t => t.thread_id === threadIdToResume);
+      if (idx !== -1) {
+        prevThreads[idx].is_debug = false;
+      }
+      return [...prevThreads].sort((a, b) => a.finish_time_us - b.finish_time_us);
+    });
+  }, [setThreads]);
+
+  const handleThreadUpdate = useCallback((event: ProjectEventUnion) => {
+    if (!event.thread_id) return;
+
+    setThreads(prev => {
+      let threadById = prev?.find(t => t.thread_id === event.thread_id);
+
+      // Create new thread if not found
+      if (!threadById) {
+        const timestampInMicroseconds = event.timestamp * 1000;
+        threadById = {
+          thread_id: event.thread_id || '',
+          start_time_us: timestampInMicroseconds,
+          finish_time_us: timestampInMicroseconds,
+          run_ids: event.run_id ? [event.run_id] : [],
+          input_models: [],
+          cost: 0,
+        };
+      }
+
+      // Update finish time
+      threadById.finish_time_us = event.timestamp * 1000;
+
+      // Handle breakpoint event - mark thread as debug and add model
+      if (event.type === 'Custom' && event.event.type === 'breakpoint') {
+        const breakpointEvent = event.event as CustomBreakpointEventType;
+        const modelName = breakpointEvent.request?.model;
+        threadById.is_debug = true;
+        if (modelName && !threadById.input_models.includes(modelName)) {
+          threadById.input_models.push(modelName);
+        }
+      }
+
+      // Handle api_invocation span_start event - add model to thread
+      if (event.type === 'Custom' && event.event.type === 'span_start' && event.event.operation_name === 'api_invocation') {
+        const apiInvokeEvent = event.event as CustomSpanStartEventType;
+        const requestString = apiInvokeEvent.attributes?.request;
+        const requestJson = tryParseJson(requestString);
+        const modelName = requestJson?.model;
+        if (modelName && !threadById.input_models.includes(modelName)) {
+          threadById.input_models.push(modelName);
+        }
+      }
+
+      const threadsWithoutCurrent = prev.filter(t => t.thread_id !== event.thread_id);
+      return [...threadsWithoutCurrent, { ...threadById, finish_time_us: event.timestamp * 1000 }]
+        .sort((a, b) => b.finish_time_us - a.finish_time_us);
+    });
+  }, [setThreads]);
 
   const updateRunMetrics = useCallback((run_id: string, updatedSpans: Span[]) => {
     setRuns(prevRuns => {
@@ -81,36 +170,58 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
         run_id,
         prevRun: runById
       })
-      return prevRuns.map(r => r.run_id === run_id ? updatedRun : r)
+      return [...prevRuns.map(r => r.run_id === run_id ? updatedRun : r)]
     })
   }, []);
+
+  const [typing, setTyping] = useState(false);
+
   const handleEvent = useCallback((event: ProjectEventUnion) => {
-    if (event.run_id && event.thread_id === threadId) {
+
+    // Handle typing state for the current thread
+    if (event.thread_id === threadId) {
+      if (event.type === "TextMessageContent") {
+        setTyping(true);
+      } else if (event.type === "TextMessageEnd") {
+        setTyping(false);
+      }
+    }
+    // Handle run events for the current thread
+    if (event.run_id) {
       setTimeout(() => {
         setFlattenSpans(prevSpans => {
-          let newFlattenSpans = processEvent(prevSpans, event)
-
-          // Update run metrics with the new spans
+          const newFlattenSpans = processEvent(prevSpans, event);
           event.run_id && updateRunMetrics(event.run_id, newFlattenSpans);
-
-          return newFlattenSpans
+          return newFlattenSpans;
         });
-
         event.run_id && setSelectedRunId(event.run_id);
         event.run_id && setOpenTraces([{ run_id: event.run_id, tab: 'trace' }]);
-      }, 0)
+      }, 0);
       if ((event.type === 'RunFinished' || event.type === 'RunError') && event.run_id) {
         setTimeout(() => {
           event.run_id && fetchSpansByRunId(event.run_id);
-        }, 100)
+        }, 100);
       }
-
     }
-  }, [threadId, updateRunMetrics]);
+
+    // Handle global breakpoint disabled
+    if (event.type === 'Custom' && event.event?.type === 'global_breakpoint' && !event.event.intercept_all) {
+      handleGlobalBreakpointDisabled();
+    }
+
+    // Handle breakpoint resume for specific thread
+    if ((event.type === 'Custom' && event.event?.type === 'breakpoint_resume' && event.thread_id)) {
+      handleBreakpointResume(event.thread_id);
+    }
+
+    // Handle general thread updates
+    if (event.thread_id) {
+      setTimeout(() => handleThreadUpdate(event), 0);
+    }
+  }, [updateRunMetrics, handleGlobalBreakpointDisabled, handleBreakpointResume, handleThreadUpdate, setFlattenSpans]);
 
 
   useDebugControl({ handleEvent, channel_name: 'debug-thread-trace-timeline-events' });
-
   // should the the run be expanded
   // hovered run id (for highlighting related traces when hovering messages)
   // Conversation spans state (for span-based message rendering)
@@ -126,19 +237,51 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
 
   // Stabilize messageHierarchies to prevent unnecessary re-renders
   const messageHierarchies = useStableMessageHierarchies(unstableMessageHierarchies);
-
   // UI state
   const [currentInput, setCurrentInput] = useState<string>('');
-  const [typing, setTyping] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [traceId, setTraceId] = useState<string | undefined>();
   const [usageInfo, setUsageInfo] = useState<any[]>([]);
 
   const providerOfSelectedModel = useUserProviderOfSelectedModelConfig({ selectedModel });
 
+  // Sync labels to URL when they change (one-directional to avoid loops)
+  const prevLabelsRef = useRef<string[]>(initialLabelsFromUrl);
+  useEffect(() => {
+    const currentLabels = labelFilter.selectedLabels;
+    const prevLabels = prevLabelsRef.current;
+
+    // Check if labels actually changed
+    if (
+      currentLabels.length === prevLabels.length &&
+      currentLabels.every((l, i) => l === prevLabels[i])
+    ) {
+      return;
+    }
+    prevLabelsRef.current = currentLabels;
+
+    // Update URL with new labels
+    const currentParams = new URLSearchParams(window.location.search);
+    if (currentLabels.length > 0) {
+      currentParams.set('labels', currentLabels.join(','));
+    } else {
+      currentParams.delete('labels');
+    }
+    navigate(`${location.pathname}?${currentParams.toString()}`, { replace: true });
+  }, [labelFilter.selectedLabels, navigate, location.pathname]);
+
+  // Refresh runs when labels change
+  useEffect(() => {
+    // Only refresh if we have a thread and it's not from local (has real data)
+    if (threadId) {
+      refreshRuns();
+      refreshSpans();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [labelFilter.selectedLabels, refreshSpans, refreshRuns]); // Only trigger on labels change, not on refreshRuns change
+
   // Wrap refreshRuns to also reset UI state
   const handleRefreshRuns = useCallback(() => {
-    setFlattenSpans([]);
     setSelectedSpanId(null);
     setSelectedRunId(null);
     setOpenTraces([]);
@@ -159,20 +302,22 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
   }, []);
 
   const selectedRun = useMemo(() => {
-    return selectedRunId ? runs.find(r => r.run_id === selectedRunId) : undefined;
+    return selectedRunId ? runs?.find(r => r && r.run_id === selectedRunId) : undefined;
   }, [selectedRunId, runs]);
 
 
 
   const selectedSpan = useMemo(() => {
-    return selectedSpanId ? spansOfSelectedRun.find((s: Span) => s.span_id === selectedSpanId) : undefined;
+    return selectedSpanId && spansOfSelectedRun ? spansOfSelectedRun.find((s: Span) => s.span_id === selectedSpanId) : undefined;
   }, [selectedSpanId, spansOfSelectedRun]);
 
   const clearAll = useCallback(() => {
+    setFlattenSpans([]);
+
     setSelectedRunId(null);
     setSelectedSpanId(null);
     setDetailSpanId(null);
-    setFlattenSpans([]);
+
     setCollapsedSpans([]);
     setRunHighlighted(null);
     setHoverSpanId(undefined);
@@ -180,6 +325,15 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     setError(undefined);
     setRuns([]);
   }, []);
+
+  const clearSelectPrevThread = useCallback(() => {
+    setSelectedRunId(null);
+    setSelectedSpanId(null);
+    setDetailSpanId(null);
+    setRunHighlighted(null);
+    setHoverSpanId(undefined);
+    setError(undefined);
+  }, [])
 
   // Calculate sum of all message metrics from displayMessages
   const conversationMetrics = useMemo(() => {
@@ -192,6 +346,22 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     }
 
   }, []);
+
+  // Emit openTraces changes for agent panel
+  useEffect(() => {
+    eventEmitter.emit('vllora_open_traces_changed', {
+      openTraces,
+      source: 'threads',
+    });
+  }, [openTraces]);
+
+  // Emit hoverSpanId changes for agent panel
+  useEffect(() => {
+    eventEmitter.emit('vllora_hover_span_changed', {
+      hoverSpanId,
+      source: 'threads',
+    });
+  }, [hoverSpanId]);
 
   return {
     spansOfSelectedRun,
@@ -243,7 +413,9 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     usageInfo,
     appendUsage,
     clearAll,
+    clearSelectPrevThread,
     setFlattenSpans,
+    setRuns,
 
     detailSpanId,
     setDetailSpanId,
@@ -257,6 +429,8 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     setCollapsedSpans,
     ...providerOfSelectedModel,
     threadId,
+    // Label filter
+    labelFilter,
   };
 }
 export function ChatWindowProvider({ children, threadId, projectId, selectedModel }: { children: ReactNode, threadId: string, projectId: string, selectedModel: string }) {
@@ -269,4 +443,9 @@ export function ChatWindowConsumer() {
     throw new Error('ChatWindowConsumer must be used within a ChatWindowProvider');
   }
   return context;
+}
+
+/** Optional consumer that returns null if not inside ChatWindowProvider */
+export function useChatWindowOptional() {
+  return useContext(ChatWindowContext) ?? null;
 }

@@ -1,9 +1,8 @@
-
 import { TimelineContentBaseProps } from ".";
-import { classNames } from "@/utils/modelUtils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { getOperationTitle, getLabelOfSpan, getModelName, getTotalUsage } from "../utils";
-import { DatabaseIcon, ChevronRight, ChevronDown, TriangleAlertIcon } from "lucide-react";
+import { getOperationTitle, getLabelOfSpan, getModelName, getTotalUsage, getCost } from "../utils";
+import { DatabaseIcon, ChevronRight, ChevronDown, TriangleAlertIcon, PlayIcon } from "lucide-react";
+import { BreakpointsConsumer } from "@/contexts/breakpoints";
 import { getClientSDKName, isAgentSpan, isPromptCachingApplied } from "@/utils/graph-utils";
 import { ClientSdkIcon } from "@/components/client-sdk-icon";
 import { getTimelineTitleWidth, TIMELINE_INDENTATION } from "@/utils/constant";
@@ -29,17 +28,30 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
         onToggle,
         isInSidebar = true
     } = props;
+    const { continueBreakpoint } = BreakpointsConsumer();
     const sdkName = span && getClientSDKName(span);
     const agentSpan = span && isAgentSpan(span);
     const isPromptCached = span && isPromptCachingApplied(span);
     const labelOfSpan = span && getLabelOfSpan({ span });
     const modelName = span && getModelName({ span });
     const totalUsage = span && getTotalUsage({ span }) || 0;
+    const cost = span && getCost({ span }) || 0;
     const error = span && span.attribute?.error;
+    // Get the stored request from span attribute
+
+    // Continue with original request
+    const handleContinueOriginal = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (span?.span_id) {
+            continueBreakpoint(span.span_id, null);
+        }
+    };
+
+
     return (
         <div
             style={{ width: titleWidth }}
-            className="flex-shrink-0 pl-0 pr-1 py-1"
+            className={`flex-shrink-0 pl-0 pr-1 py-1 ${span?.isInDebug ? "bg-yellow-500/20 border-l-2 border-l-yellow-500" : ""}`}
         >
             <div className="flex items-center w-full ">
                 {/* Fake indentation by adding left padding - smaller in sidebar */}
@@ -68,34 +80,41 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                 <div className="flex justify-between items-center w-full gap-1 h-full">
                     <div className="flex items-center min-w-0 flex-1 truncate h-full">
                         {operationIcon && (
-                            <TooltipProvider>
+                            <TooltipProvider delayDuration={100}>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                        <div className={`mr-1 flex-shrink-0`}>
+                                        <div className={`mr-1 flex-shrink-0 cursor-pointer`}>
                                             {/* Icon display with potential cache indicator */}
-                                            <div className="relative">
-                                                <div className={classNames("p-1 rounded-full ", operationIconColor)}>
-                                                    {operationIcon}
-                                                </div>
-                                                {sdkName && !agentSpan && (
+                                            <div className="relative flex">
+                                                {span?.isInDebug ? (
+                                                    <button
+                                                        onClick={handleContinueOriginal}
+                                                        className={`p-1 rounded-full h-full transition-all hover:bg-green-500/20 hover:scale-110 active:scale-95`}
+                                                    >
+                                                        <PlayIcon className="w-3.5 h-3.5 text-green-500 transition-colors" />
+                                                    </button>) :
+                                                    (<div className={`p-1 rounded-full ${operationIconColor}`}>
+                                                        {operationIcon}
+                                                    </div>)}
+                                                {sdkName && !agentSpan && !span?.isInDebug && (
                                                     <div className="absolute -bottom-0 -right-1  bg-gray-800 rounded-full p-0.5 border border-gray-700 shadow-sm">
                                                         <ClientSdkIcon client_name={sdkName} className="w-2.5 h-2.5" />
                                                     </div>
                                                 )}
                                                 {/* Cache indicator as subscript icon */}
-                                                {operation_name === 'cache' && (
+                                                {operation_name === 'cache' && !span?.isInDebug && (
                                                     <div className="absolute -bottom-0 -right-1 bg-gray-800 rounded-full p-0.5 border border-gray-700 shadow-sm">
                                                         <DatabaseIcon className="w-2.5 h-2.5 text-blue-400" />
                                                     </div>
                                                 )}
                                                 {/* Prompt caching indicator as subscript icon */}
-                                                {isPromptCached && (
+                                                {isPromptCached && !span?.isInDebug && (
                                                     <div className="absolute -bottom-0 -right-1 bg-gray-800 rounded-full p-0.5 border border-gray-700 shadow-sm">
                                                         <DatabaseIcon className="w-2.5 h-2.5 text-amber-400" />
                                                     </div>
                                                 )}
                                                 {/* Error indicator as subscript icon */}
-                                                {error && (
+                                                {error && !span?.isInDebug && (
                                                     <div className="absolute -bottom-0 -right-1 p-0.5">
                                                         <TriangleAlertIcon className="w-2.5 h-2.5 text-amber-400" />
                                                     </div>
@@ -104,7 +123,7 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                                         </div>
                                     </TooltipTrigger>
                                     <TooltipContent side="bottom" className="text-xs">
-                                        {getOperationTitle({ operation_name, span })}
+                                        { span?.isInDebug ? "Click to continue": getOperationTitle({ operation_name, span })}
                                     </TooltipContent>
                                 </Tooltip>
                             </TooltipProvider>
@@ -135,7 +154,7 @@ export const SidebarTimelineContent = (props: SidebarTimelineContentProps) => {
                                         {labelOfSpan && <span className="opacity-70">{labelOfSpan}</span>}
                                     </div>
                                     {modelName && totalUsage > 0 && (
-                                        <ModelContextViewer model_name={modelName} usage_tokens={totalUsage} expandMode={true} />
+                                        <ModelContextViewer model_name={modelName} usage_tokens={totalUsage} cost={cost} expandMode={true} />
                                     )}
                                 </TooltipContent>
                             </Tooltip>

@@ -1,305 +1,86 @@
-import React from 'react';
-import ReactMarkdown from 'react-markdown';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import rehypeExternalLinks from 'rehype-external-links';
-import rehypeRaw from 'rehype-raw';
-import rehypeSanitize from 'rehype-sanitize';
-import behead from 'remark-behead';
-import remarkGfm from 'remark-gfm';
-import remarkFlexibleParagraphs from 'remark-flexible-paragraphs';
-import { sanitizeSchema } from '@/utils/sanitizeSchema';
-import { JsonViewer } from './traces/TraceRow/span-info/JsonViewer';
+import React, { useMemo, memo, lazy, Suspense } from 'react';
+
+// Lazy load heavy markdown dependencies - only loaded when markdown content is detected
+const LazyMarkdownRenderer = lazy(() => import('./LazyMarkdownRenderer'));
+const LazyJsonViewer = lazy(() =>
+  import('./traces/TraceRow/span-info/JsonViewer').then(mod => ({ default: mod.JsonViewer }))
+);
+
+// Regex to detect if content needs markdown parsing (has markdown syntax)
+// This allows us to skip expensive parsing for plain text
+// Made specific to avoid false positives (e.g., don't match standalone - or _)
+const MARKDOWN_SYNTAX_REGEX = /\*\*|__|``|#{1,6}\s|^\s*[-*+]\s+\S|^\s*\d+\.\s+\S|\[.+\]\(.+\)|!\[|```|<[a-z][a-z0-9]*[\s>]|^\s*>/im;
 
 interface MessageDisplayProps {
-  message: string;
+  message: string | any[];
 }
 
-const tryParseJson = (str: string) => {
+// Fast check to avoid expensive JSON.parse on obvious non-JSON strings
+const looksLikeJson = (str: string): boolean => {
+  const firstChar = str.trimStart()[0];
+  return firstChar === '{' || firstChar === '[';
+};
+
+const tryParseJson = (str: string): object | undefined => {
+  // Skip JSON parsing for strings that clearly aren't JSON
+  if (!looksLikeJson(str)) return undefined;
   try {
-    return JSON.parse(str);
-  } catch (e) {
+    const result = JSON.parse(str);
+    return typeof result === 'object' ? result : undefined;
+  } catch {
     return undefined;
   }
 };
 
-export const MessageDisplay: React.FC<MessageDisplayProps> = ({ message }) => {  
+// Simple loading placeholder for markdown content
+const MarkdownLoadingFallback = memo(({ content }: { content: string }) => (
+  <p className="whitespace-pre-wrap my-1 text-muted-foreground">{content.slice(0, 200)}{content.length > 200 ? '...' : ''}</p>
+));
+
+// Simple loading placeholder for JSON content
+const JsonLoadingFallback = memo(() => (
+  <div className="animate-pulse bg-secondary/30 rounded h-20 w-full" />
+));
+
+export const MessageDisplay: React.FC<MessageDisplayProps> = memo(({ message }) => {
   return <BaseMessageDisplay message={message} />;
-};
+});
 
-const BaseMessageDisplay: React.FC<{ message: string }> = ({ message }) => {
+const BaseMessageDisplay: React.FC<{ message: string | any[] }> = memo(({ message }) => {
+  // Memoize all computed values together for better performance
+  const { parsedJsonMessage, markdownContent, needsMarkdown } = useMemo(() => {
+    if (typeof message === 'string') {
+      const parsedJson = tryParseJson(message);
+      if (parsedJson) {
+        return { parsedJsonMessage: parsedJson, markdownContent: '', needsMarkdown: false };
+      }
+      // Check if content has markdown syntax - skip expensive parsing for plain text
+      const hasMarkdown = MARKDOWN_SYNTAX_REGEX.test(message);
+      return { parsedJsonMessage: undefined, markdownContent: message, needsMarkdown: hasMarkdown };
+    }
+    const stringified = JSON.stringify(message);
+    return { parsedJsonMessage: undefined, markdownContent: stringified, needsMarkdown: true };
+  }, [message]);
+
+  // Fast path: render JSON directly with lazy loading
+  if (parsedJsonMessage) {
+    return (
+      <Suspense fallback={<JsonLoadingFallback />}>
+        <LazyJsonViewer data={parsedJsonMessage} collapsed={3} />
+      </Suspense>
+    );
+  }
+
+  // Fast path: plain text without markdown syntax - skip ReactMarkdown entirely
+  // This renders IMMEDIATELY without any lazy loading
+  if (!needsMarkdown) {
+    return <p className="whitespace-pre-wrap my-1">{markdownContent}</p>;
+  }
+
+  // Full markdown rendering - lazy loaded for content with markdown syntax
   return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm, behead, remarkFlexibleParagraphs]}
-      rehypePlugins={[
-        rehypeRaw,
-        [rehypeSanitize, sanitizeSchema], // Sanitize after rehypeRaw to remove unknown tags
-        [rehypeExternalLinks, { target: '_blank' }]
-      ]}
-      components={{
-        code({ className, children, ref, ...props }) {
-          const match = /language-(\w+)/.exec(className || '');
-          let tempParsedJson = match &&
-                match.length > 0 &&
-                match[1].toLowerCase().includes('json') ? ( tryParseJson(String(children).replace(/\n$/, '')) || {}) : undefined
-          let isValidJson = match &&
-                match.length > 0 &&
-                match[1].toLowerCase().includes('json') && tempParsedJson && typeof tempParsedJson === 'object'
-          return match ? (
-            <div className="relative my-2">
-              <div
-                style={{
-                  maxHeight:
-                    match &&
-                    match.length > 0 &&
-                    match[1].toLowerCase().includes('json')
-                      ? 'auto'
-                      : '400px',
-                  overflow: 'auto',
-                  overflowX: 'auto',
-                }}
-              >
-                {isValidJson ? (
-                  <div className="px-3 py-2">
-
-                    <JsonViewer data={tempParsedJson} collapsed={10} />
-                    {/* <ReactJson
-                      name={false}
-                      collapsed={2}
-                      displayDataTypes={false}
-                      displayObjectSize={false}
-                      enableClipboard={false}
-                      theme={{
-                        base00: 'transparent',
-                        base01: '#ffffff20',
-                        base02: '#ffffff30',
-                        base03: '#ffffff40',
-                        base04: '#ffffff60',
-                        base05: '#ffffff80',
-                        base06: '#ffffffa0',
-                        base07: 'rgb(156, 220, 254)',
-                        base08: '#ff8c8c',
-                        base09: 'rgb(206, 145, 120)',
-                        base0A: '#ffeb3b',
-                        base0B: '#4caf50',
-                        base0C: '#00bcd4',
-                        base0D: '#2196f3',
-                        base0E: '#9c27b0',
-                        base0F: '#ff9800',
-                      }}
-                      style={{
-                        wordWrap: 'break-word',
-                        whiteSpace: 'pre-wrap',
-                        borderRadius: '10px',
-                        fontSize: '13px',
-                        fontFamily:
-                          'ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace',
-                        backgroundColor: 'rgba(30,30,30)',
-                      }}
-                      src={
-                        tryParseJson(String(children).replace(/\n$/, '')) || {}
-                      }
-                    /> */}
-                  </div>
-                ) : (
-                  <SyntaxHighlighter
-                    style={vscDarkPlus as any}
-                    language={match[1]}
-                    PreTag="div"
-                    customStyle={{
-                      wordWrap: 'break-word',
-                      whiteSpace: 'pre-wrap',
-                      margin: 0,
-                    }}
-                  >
-                    {String(children).replace(/\n$/, '')}
-                  </SyntaxHighlighter>
-                )}
-              </div>
-            </div>
-          ) : (
-            <code
-              className="bg-secondary/50 px-1 py-0.5 rounded text-xs font-mono"
-              {...props}
-            >
-              {children}
-            </code>
-          );
-        },
-        pre({ children, ...props }) {
-          return (
-            <pre
-              {...props}
-              className={`py-0 px-0 mx-0 my-0 whitespace-pre-wrap overflow-auto ${props.className || ''}`}
-            >
-              {children}
-            </pre>
-          );
-        },
-        blockquote({ children, ...props }) {
-          return (
-            <blockquote
-              className="border-l-4 border-muted-foreground pl-4 italic text-muted-foreground my-2"
-              {...props}
-            >
-              {children}
-            </blockquote>
-          );
-        },
-        h1({ children, ...props }) {
-          return (
-            <h1
-              className="font-bold text-2xl pb-2 border-b border-border my-3"
-              {...props}
-            >
-              {children}
-            </h1>
-          );
-        },
-        h2({ children, ...props }) {
-          return (
-            <h2
-              className="font-bold text-xl pb-2 border-b border-border my-2"
-              {...props}
-            >
-              {children}
-            </h2>
-          );
-        },
-        h3({ children, ...props }) {
-          return (
-            <h3 className="font-bold text-lg my-2" {...props}>
-              {children}
-            </h3>
-          );
-        },
-        h4({ children, ...props }) {
-          return (
-            <h4 className="font-bold text-base my-1" {...props}>
-              {children}
-            </h4>
-          );
-        },
-        h5({ children, ...props }) {
-          return (
-            <h5 className="font-semibold text-sm my-1" {...props}>
-              {children}
-            </h5>
-          );
-        },
-        h6({ children, ...props }) {
-          return (
-            <h6 className="font-semibold text-xs my-1" {...props}>
-              {children}
-            </h6>
-          );
-        },
-        ul({ children, ...props }) {
-          return (
-            <ul
-              {...props}
-              className={`list-disc list-inside my-2 space-y-1 ${props.className || ''}`}
-            >
-              {children}
-            </ul>
-          );
-        },
-        ol({ children, ...props }) {
-          return (
-            <ol
-              {...props}
-              className={`list-decimal list-inside my-2 space-y-1 ${props.className || ''}`}
-            >
-              {children}
-            </ol>
-          );
-        },
-        li({ children, ...props }) {
-          return (
-            <li {...props} className={`my-0.5 ${props.className || ''}`}>
-              {children}
-            </li>
-          );
-        },
-        a({ children, ...props }) {
-          return (
-            <a
-              className="text-blue-500 hover:underline hover:text-blue-600"
-              {...props}
-            >
-              {children}
-            </a>
-          );
-        },
-        table({ children, ...props }) {
-          return (
-            <div className="overflow-x-auto my-2">
-              <table className="min-w-full border-collapse" {...props}>
-                {children}
-              </table>
-            </div>
-          );
-        },
-        thead({ children, ...props }) {
-          return (
-            <thead className="bg-secondary" {...props}>
-              {children}
-            </thead>
-          );
-        },
-        tbody({ children, ...props }) {
-          return <tbody {...props}>{children}</tbody>;
-        },
-        tr({ children, ...props }) {
-          return (
-            <tr className="border-b border-border" {...props}>
-              {children}
-            </tr>
-          );
-        },
-        td({ children, ...props }) {
-          return (
-            <td className="px-3 py-2 border border-border" {...props}>
-              {children}
-            </td>
-          );
-        },
-        th({ children, ...props }) {
-          return (
-            <th
-              className="px-3 py-2 border border-border font-semibold text-left"
-              {...props}
-            >
-              {children}
-            </th>
-          );
-        },
-        img({ ...props }) {
-          if (!props.src) {
-            return <></>;
-          }
-          return <img className="max-w-full rounded-lg my-2" {...props} />;
-        },
-        p({ children, ...props }) {
-          if (typeof children === 'string') {
-            const jsonObject = tryParseJson(children) || {};
-            if (jsonObject && Object.keys(jsonObject).length > 0) {
-              return (
-                <BaseMessageDisplay
-                  message={`\`\`\`json\n${JSON.stringify(jsonObject, null, 2)}`}
-                />
-              );
-            }
-          }
-          return (
-            <p className="whitespace-pre-wrap my-1" {...props}>
-              {children}
-            </p>
-          );
-        },
-      }}
-    >
-      {message}
-    </ReactMarkdown>
+    <Suspense fallback={<MarkdownLoadingFallback content={markdownContent} />}>
+      <LazyMarkdownRenderer content={markdownContent} />
+    </Suspense>
   );
-};
+});

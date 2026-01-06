@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import { queryThreads } from "@/services/threads-api";
 import {  ThreadChangesState } from "./types";
@@ -12,7 +12,6 @@ export function useThreadPagination(
   const { setThreads } = threadState;
   const { setThreadsHaveChanges } = threadChangesState;
 
-  const [offset, setOffset] = useState<number>(0);
   const [total, setTotal] = useState<number>(0);
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(true);
@@ -20,9 +19,13 @@ export function useThreadPagination(
   const [loadingThreadsError, setLoadingThreadsError] = useState<string | null>(
     null
   );
+  // Use ref for offset to ensure we always have the current value synchronously
+  const offsetRef = useRef<number>(0);
+  // Ref for synchronous guard against concurrent loadMoreThreads calls
+  const isLoadingMoreRef = useRef(false);
   const refreshThreads = useCallback(async () => {
     setLoading(true);
-    setOffset(0);
+    offsetRef.current = 0;
     setHasMore(true);
     try {
       const response = await queryThreads(projectId, {
@@ -35,7 +38,7 @@ export function useThreadPagination(
       setThreads(newThreads);
       setThreadsHaveChanges({});
       setTotal(pagination.total);
-      setOffset(pagination.offset + newThreads.length);
+      offsetRef.current = pagination.offset + newThreads.length;
       setHasMore(pagination.limit + pagination.offset < pagination.total);
       setLoadingThreadsError(null);
     } catch (e: any) {
@@ -48,58 +51,35 @@ export function useThreadPagination(
   }, [projectId, setThreads, setThreadsHaveChanges]);
 
   const loadMoreThreads = useCallback(async () => {
-    setLoadingMore((currentLoadingMore) => {
-      if (currentLoadingMore) return true;
+    // Synchronous guard - prevents concurrent calls
+    if (isLoadingMoreRef.current) return;
+    isLoadingMoreRef.current = true;
+    setLoadingMore(true);
 
-      // Use functional updates to get current values
-      setLoading((currentLoading) => {
-        if (currentLoading) {
-          setLoadingMore(false);
-          return currentLoading;
-        }
+    const currentOffset = offsetRef.current;
 
-        setHasMore((currentHasMore) => {
-          if (!currentHasMore) {
-            setLoadingMore(false);
-            return currentHasMore;
-          }
-
-          // Proceed with loading
-          setOffset((currentOffset) => {
-            queryThreads(projectId, {
-              order_by: [["updated_at", "desc"]],
-              limit: 100,
-              offset: currentOffset,
-            })
-              .then((response) => {
-                const pagination = response.pagination;
-                setThreads((prev) => [...prev, ...response.data]);
-                setOffset((prev) => prev + response.data.length);
-                setTotal((prev) => prev + response.data.length);
-                setHasMore(response.data.length === pagination.limit);
-                setLoadingMore(false);
-              })
-              .catch((e: any) => {
-                const errorMessage = e.message || "Failed to load more threads";
-                setLoadingThreadsError(errorMessage);
-                setLoadingMore(false);
-              });
-
-            return currentOffset;
-          });
-
-          return currentHasMore;
-        });
-
-        return currentLoading;
+    try {
+      const response = await queryThreads(projectId, {
+        order_by: [["updated_at", "desc"]],
+        limit: 100,
+        offset: currentOffset,
       });
-
-      return true;
-    });
+      const pagination = response.pagination;
+      setThreads((prev) => [...prev, ...response.data]);
+      offsetRef.current = currentOffset + response.data.length;
+      setTotal(pagination.total);
+      setHasMore(response.data.length === pagination.limit);
+    } catch (e: any) {
+      const errorMessage = e.message || "Failed to load more threads";
+      setLoadingThreadsError(errorMessage);
+    } finally {
+      setLoadingMore(false);
+      isLoadingMoreRef.current = false;
+    }
   }, [projectId, setThreads]);
 
   return {
-    offset,
+    offset: offsetRef.current,
     total,
     hasMore,
     loading,

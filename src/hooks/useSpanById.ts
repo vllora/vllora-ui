@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import { Span } from "@/types/common-type";
-import { extractMessagesFromSpan } from "@/utils/span-to-message";
 import { Message } from "@/types/chat";
-import { getParentApiInvoke } from "@/components/chat/traces/TraceRow/span-info/DetailView";
+import { extractMessagesFromSpanById, ExtractMessagesFromSpanByIdOptions } from "@/utils/span-to-message";
+import { findSpanById, findSpansByRunId } from "@/utils/span-hierarchy";
 
 /**
  * Hook that returns a specific span by span_id from the flattenSpans array.
@@ -28,16 +28,16 @@ export function useSpanById(
 ): Span | undefined {
   // Find the span and memoize based on its actual data, not the array reference
   const span = useMemo(() => {
-    return flattenSpans.find((s) => s.span_id === spanId);
+    return findSpanById(flattenSpans, spanId);
   }, [flattenSpans, spanId]);
 
   // Return a memoized span that only changes when the span's data actually changes
   // This prevents unnecessary re-renders when other spans in the array change
+  // Cast attribute to Record for dynamic property access
+  const attr = span?.attribute as Record<string, unknown> | undefined;
+
   return useMemo(() => {
     if (!span) return undefined;
-
-    // Create a stable reference based on span's serialized data
-    // This will only trigger re-render when this specific span's data changes
     return span;
   }, [
     span?.span_id,
@@ -45,8 +45,13 @@ export function useSpanById(
     span?.start_time_us,
     span?.finish_time_us,
     span?.isInProgress,
-    // Serialize attribute to detect content changes
-    span?.attribute ? JSON.stringify(span.attribute) : undefined,
+    // Use specific attribute keys instead of JSON.stringify for performance
+    attr?.content,
+    attr?.error,
+    attr?.label,
+    attr?.request,
+    attr?.response,
+    attr?.usage,
   ]);
 }
 
@@ -55,7 +60,7 @@ export const useSpansInSameRun = (
   runId: string
 ): Span[] => {
   return useMemo(() => {
-    return flattenSpans.filter((s) => s.run_id === runId);
+    return findSpansByRunId(flattenSpans, runId);
   }, [flattenSpans, runId]);
 };
 
@@ -77,26 +82,18 @@ export const errorFromApiInvokeSpansInSameRun = (props: {
   const { flattenSpans, runId } = props;
   const apiInvokeSpans = useApiInvokeSpanInSameRun({ flattenSpans, runId });
   return useMemo(() => {
-    return apiInvokeSpans.map((s) => s.attribute?.error).filter((e) => e) as string[];
+    return apiInvokeSpans
+      .map((s) => s.attribute?.error)
+      .filter((e) => e) as string[];
   }, [apiInvokeSpans]);
 };
 
 export const useMessageExtractSpanById = (
   flattenSpans: Span[],
-  spanId: string
+  spanId: string,
+  options: ExtractMessagesFromSpanByIdOptions = {}
 ): Message[] => {
-  const span = useSpanById(flattenSpans, spanId);
   return useMemo(() => {
-    if (!span) return [];
-    if(span.operation_name === 'cache') {
-      // get api invoke span
-      const apiInvokeSpan = getParentApiInvoke(flattenSpans, span.span_id);
-      if(apiInvokeSpan) {
-        return extractMessagesFromSpan(apiInvokeSpan);
-      }
-      return [];
-    }
-    let messages = extractMessagesFromSpan(span);
-    return messages;
-  }, [span]);
+    return extractMessagesFromSpanById(flattenSpans, spanId, options);
+  }, [flattenSpans, spanId, options]);
 };

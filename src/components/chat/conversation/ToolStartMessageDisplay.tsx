@@ -6,6 +6,8 @@ import { getToolCallMessage } from '@/components/chat/traces/TraceRow/new-timeli
 import { tryParseFloat, tryParseJson } from '@/utils/modelUtils';
 import { Message } from '@/types/chat';
 import { AiMessage } from '../messages/AiMessage';
+import { getColorFromLabel } from '../traces/TraceRow/new-timeline/timeline-row/label-tag';
+import { cn } from '@/lib/utils';
 
 export const ToolStartMessageDisplay = (props: {
   spanId: string;
@@ -14,6 +16,9 @@ export const ToolStartMessageDisplay = (props: {
   const { flattenSpans } = ChatWindowConsumer();
 
   const span = useSpanById(flattenSpans, spanId);
+  const attributes = span?.attribute;
+  const labelAttribute = attributes?.['label'];
+  const colorLabel = labelAttribute && getColorFromLabel(labelAttribute);
   const parentSpan = span?.parent_span_id ? useSpanById(flattenSpans, span?.parent_span_id) : null;
 
   let parrentAttr = parentSpan?.attribute as any || {};
@@ -27,7 +32,7 @@ export const ToolStartMessageDisplay = (props: {
   let providerName = parentSpan?.operation_name
   let modelName = requestJson?.model || '';
   let metrics = {
-    usage: usageJson ,
+    usage: usageJson,
     cost: cost,
     ttft: parrentAttr?.['ttft'] || undefined,
   }
@@ -47,11 +52,13 @@ export const ToolStartMessageDisplay = (props: {
     span_id: spanId,
     span: span,
     model_name: providerName && modelName ? `${providerName}/${modelName}` : '',
-    
-  }
-  return <AiMessage message={displayMessage} />
-  // return <>{
-  //   toolCallsJson.length > 0 &&  <ToolCallList toolCalls={toolCallsJson} />
-  // }</>
 
+  }
+  return <div className={cn("flex flex-col")}>
+    <div className={`flex flex-col space-y-2 pt-3`} style={labelAttribute ?
+      {
+        borderLeftColor: colorLabel?.background, borderLeftWidth: '1px',
+        paddingLeft: '5px'
+      } : {}}><AiMessage message={displayMessage} />
+    </div></div>
 }

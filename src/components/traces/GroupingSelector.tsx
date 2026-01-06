@@ -1,11 +1,13 @@
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { GroupByMode, Duration } from "@/contexts/TracesPageContext";
+import { ReactNode } from "react";
 
 interface GroupingSelectorProps {
   groupByMode: GroupByMode;
   onGroupByModeChange: (mode: GroupByMode) => void;
   duration: Duration;
   onDurationChange: (size: Duration) => void;
+  filterBadge?: ReactNode;
 }
 
 const BUCKET_OPTIONS = [
@@ -21,6 +23,7 @@ export function GroupingSelector({
   onGroupByModeChange,
   duration,
   onDurationChange,
+  filterBadge,
 }: GroupingSelectorProps) {
   const handleModeChange = (value: string) => {
     if (!value) return;
@@ -34,39 +37,40 @@ export function GroupingSelector({
 
   return (
     <div className="flex flex-1 justify-between items-center gap-6">
-      {/* View Mode Section */}
-      <div className="inline-flex items-center gap-3">
-        <span className="text-sm font-medium text-muted-foreground">View:</span>
-
-        <ToggleGroup
-          type="single"
-          value={groupByMode}
-          onValueChange={handleModeChange}
-          className="inline-flex items-center gap-1 bg-[#151515] rounded-lg border border-border p-1 shadow-sm"
-        >
-          <ToggleGroupItem
-            value="thread"
-            aria-label="Group by thread"
-            className="px-3 py-0.5 text-xs h-6 font-medium rounded-md data-[state=on]:bg-[rgb(var(--theme-500))] data-[state=on]:text-white data-[state=on]:shadow-md data-[state=on]:shadow-[rgb(var(--theme-500))]/20 data-[state=off]:text-muted-foreground data-[state=off]:hover:text-foreground data-[state=off]:hover:bg-muted/20"
+      {/* Left side: View Mode + Filter Badge */}
+      <div className="flex items-center gap-4">
+        <div className="inline-flex items-center gap-3">
+          <span className="text-sm font-medium text-muted-foreground">View:</span>
+          <ToggleGroup
+            type="single"
+            value={groupByMode}
+            onValueChange={handleModeChange}
+            className="inline-flex items-center gap-1 bg-[#151515] rounded-lg border border-border p-1 shadow-sm"
           >
-            Thread
-          </ToggleGroupItem>
-          <ToggleGroupItem
-            value="run"
-            aria-label="Group by run"
-            className="px-3 py-0.5 text-xs h-6 font-medium rounded-md data-[state=on]:bg-[rgb(var(--theme-500))] data-[state=on]:text-white data-[state=on]:shadow-md data-[state=on]:shadow-[rgb(var(--theme-500))]/20 data-[state=off]:text-muted-foreground data-[state=off]:hover:text-foreground data-[state=off]:hover:bg-muted/20"
-          >
-            Run
-          </ToggleGroupItem>
-          <ToggleGroupItem
-            value="time"
-            aria-label="Group by time"
-            className="px-3 py-0.5 text-xs h-6 font-medium rounded-md data-[state=on]:bg-[rgb(var(--theme-500))] data-[state=on]:text-white data-[state=on]:shadow-md data-[state=on]:shadow-[rgb(var(--theme-500))]/20 data-[state=off]:text-muted-foreground data-[state=off]:hover:text-foreground data-[state=off]:hover:bg-muted/20"
-          >
-            Time
-          </ToggleGroupItem>
-
-        </ToggleGroup>
+            <ToggleGroupItem
+              value="thread"
+              aria-label="Group by thread"
+              className="px-3 py-0.5 text-xs h-6 font-medium rounded-md data-[state=on]:bg-[rgb(var(--theme-500))] data-[state=on]:text-white data-[state=on]:shadow-md data-[state=on]:shadow-[rgb(var(--theme-500))]/20 data-[state=off]:text-muted-foreground data-[state=off]:hover:text-foreground data-[state=off]:hover:bg-muted/20"
+            >
+              Thread
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="run"
+              aria-label="Group by run"
+              className="px-3 py-0.5 text-xs h-6 font-medium rounded-md data-[state=on]:bg-[rgb(var(--theme-500))] data-[state=on]:text-white data-[state=on]:shadow-md data-[state=on]:shadow-[rgb(var(--theme-500))]/20 data-[state=off]:text-muted-foreground data-[state=off]:hover:text-foreground data-[state=off]:hover:bg-muted/20"
+            >
+              Run
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="time"
+              aria-label="Group by time"
+              className="px-3 py-0.5 text-xs h-6 font-medium rounded-md data-[state=on]:bg-[rgb(var(--theme-500))] data-[state=on]:text-white data-[state=on]:shadow-md data-[state=on]:shadow-[rgb(var(--theme-500))]/20 data-[state=off]:text-muted-foreground data-[state=off]:hover:text-foreground data-[state=off]:hover:bg-muted/20"
+            >
+              Time
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+        {filterBadge}
       </div>
 
       {/* Duration Section - Only show when time mode is selected */}

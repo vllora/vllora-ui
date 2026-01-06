@@ -17,7 +17,7 @@ export const TimelineVisualization = (props: TimelineVisualizationProps) => {
         <div className="flex-grow h0 ">
             <div className="relative w-full h-full">
                 {/* Full span background */}
-                <div className="absolute inset-0 flex items-center">
+                <div className={cn("absolute inset-0 flex items-center", span.isInDebug ? 'bg-yellow-500/20' : '')}>
                     <div
                         className={cn(
                             "h-[10px] w-full rounded-sm relative overflow-hidden transition-colors duration-300",

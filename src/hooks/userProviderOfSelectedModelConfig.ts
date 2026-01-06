@@ -69,6 +69,11 @@ export const useUserProviderOfSelectedModelConfig = (props: {
   }, [selectedModelInfo]);
 
   const isSelectedProviderConfigured = useMemo(() => {
+    // Custom models are always considered configured
+    if ((selectedModelInfo as ModelInfo)?.is_custom) {
+      return true;
+    }
+
     // If no provider is selected (simple format), check if any provider is configured
     if (!selectedModel.includes("/")) {
       return !isNoProviderConfigured;
@@ -78,10 +83,9 @@ export const useUserProviderOfSelectedModelConfig = (props: {
     if (selectedProvider) {
       return selectedProvider.available;
     }
-  
 
     return true;
-  }, [selectedModel, selectedProvider, isNoProviderConfigured]);
+  }, [selectedModel, selectedModelInfo, selectedProvider, isNoProviderConfigured]);
 
   const handleWarningClick = useCallback(() => {
     if (!selectedModelInfo || !(selectedModelInfo as ModelInfo)) return;

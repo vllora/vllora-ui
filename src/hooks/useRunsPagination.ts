@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { useRequest, useLatest } from "ahooks";
 import { toast } from "sonner";
-import { listRuns } from "@/services/runs-api";
+import { listRuns, getRunDetails as getRunDetailsApi } from "@/services/runs-api";
 import { RunDTO } from "@/types/common-type";
 
 const LIMIT_LOADING_RUNS = 20;
@@ -9,12 +9,14 @@ const LIMIT_LOADING_RUNS = 20;
 interface UseRunsPaginationParams {
   projectId: string;
   threadId?: string; // Optional - for filtering by thread
+  labels?: string[]; // Optional - for filtering by labels (attribute.label)
   onRunsLoaded?: (runs: RunDTO[]) => void;
 }
 
 export function useRunsPagination({
   projectId,
   threadId,
+  labels,
   onRunsLoaded,
 }: UseRunsPaginationParams) {
   // Pagination state for runs
@@ -28,6 +30,7 @@ export function useRunsPagination({
   >([]);
   const projectIdRef = useLatest(projectId);
   const threadIdRef = useLatest(threadId);
+  const labelsRef = useLatest(labels);
 
   // Use ahooks useRequest for fetching runs (initial load)
   const {
@@ -36,13 +39,19 @@ export function useRunsPagination({
     run: triggerRefreshRuns,
   } = useRequest(
     async () => {
-      if (!projectId) {
+      // Use refs to get latest values when called
+      const currentProjectId = projectIdRef.current;
+      const currentThreadId = threadIdRef.current;
+      const currentLabels = labelsRef.current;
+
+      if (!currentProjectId) {
         return { data: [], pagination: { offset: 0, limit: 0, total: 0 } };
       }
       const response = await listRuns({
-        projectId,
+        projectId: currentProjectId,
         params: {
-          ...(threadId ? { thread_ids: threadId } : {}),
+          ...(currentThreadId ? { thread_ids: currentThreadId } : {}),
+          ...(currentLabels && currentLabels.length > 0 ? { labels: currentLabels.join(',') } : {}),
           limit: LIMIT_LOADING_RUNS,
           offset: 0,
         },
@@ -97,6 +106,7 @@ export function useRunsPagination({
         projectId: projectIdRef.current,
         params: {
           ...(threadIdRef.current ? { thread_ids: threadIdRef.current } : {}),
+          ...(labelsRef.current && labelsRef.current.length > 0 ? { labels: labelsRef.current.join(',') } : {}),
           limit: LIMIT_LOADING_RUNS,
           offset: runsOffset,
         },
@@ -131,6 +141,7 @@ export function useRunsPagination({
     runsOffset,
     threadIdRef,
     projectIdRef,
+    labelsRef,
   ]);
 
   // Refresh runs function (reset and reload from beginning)
@@ -140,6 +151,30 @@ export function useRunsPagination({
     setHasMoreRuns(false);
     triggerRefreshRuns();
   }, [triggerRefreshRuns]);
+
+  // Get run details and update rawRuns by run_id
+  const getRunDetails = useCallback(
+    async (runId: string) => {
+      try {
+        const runDetails = await getRunDetailsApi({
+          runId,
+          projectId: projectIdRef.current,
+        });
+
+        setRawRuns((prev) =>
+          prev.map((run) => (run.run_id === runId ? runDetails : run))
+        );
+
+        return runDetails;
+      } catch (err: any) {
+        toast.error("Failed to get run details", {
+          description: err.message || "An error occurred while fetching run details",
+        });
+        throw err;
+      }
+    },
+    [projectIdRef]
+  );
 
   return {
     runs: rawRuns,
@@ -153,5 +188,6 @@ export function useRunsPagination({
     loadingMoreRuns,
     openTraces,
     setOpenTraces,
+    getRunDetails,
   };
 }

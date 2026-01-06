@@ -11,7 +11,9 @@ export interface MessageStructure {
 
 const skipSpanNotRelatedToMessage = (span: Span) => {
   if(span.operation_name === 'tool') return false;
+  if(span.operation_name === 'api_invoke') return false;
   if (skipThisSpan(span)) return true;
+  if(['cost', 'text_message', 'raw', 'llm_stop', 'task'].includes(span.operation_name)) return true;
   if(span.operation_name === 'run' && !isClientSDK(span)) return true;
   if(span.operation_name === 'api_invoke' && span.attribute && span.attribute['error']) return false;
   // if(span.operation_name === 'run') return true;
@@ -37,38 +39,38 @@ const findNonSkippedParent = (
 export function buildMessageHierarchyFromSpan(
   flattenSpans: Span[]
 ): MessageStructure[] {
+  // Early return for empty array
+  if (flattenSpans.length === 0) return [];
 
   const spanMap = new Map<string, Span>();
   const messageMap = new Map<string, MessageStructure>();
 
-  // Sort spans by start time
-  const sortedSpans = flattenSpans.sort(
+  // Sort spans by start time - use slice() to avoid mutating input
+  const sortedSpans = flattenSpans.slice().sort(
     (a, b) => a.start_time_us - b.start_time_us
   );
 
-  // Create span lookup map
-  sortedSpans.forEach((span) => {
+  // Single pass: Create span lookup map and MessageStructure for non-skipped spans
+  for (const span of sortedSpans) {
     spanMap.set(span.span_id, span);
-  });
 
-  // First pass: Create MessageStructure for non-skipped spans
-  sortedSpans.forEach((span) => {
-    if (skipSpanNotRelatedToMessage(span)) return;
+    if (!skipSpanNotRelatedToMessage(span)) {
+      messageMap.set(span.span_id, {
+        span_id: span.span_id,
+        type: span.operation_name,
+        run_id: span.run_id,
+        children: [],
+      });
+    }
+  }
 
-    const message: MessageStructure = {
-      span_id: span.span_id,
-      type: span.operation_name,
-      run_id: span.run_id,
-      children: [],
-    };
-    messageMap.set(span.span_id, message);
-  });
-
-  // Second pass: Build hierarchy, connecting to nearest non-skipped parent
+  // Build hierarchy, connecting to nearest non-skipped parent
   const result: MessageStructure[] = [];
+  // Group by run_id for O(1) lookup instead of O(n) filter
+  const messagesByRunId = new Map<string, MessageStructure[]>();
 
-  sortedSpans.forEach((span) => {
-    if (skipSpanNotRelatedToMessage(span)) return;
+  for (const span of sortedSpans) {
+    if (skipSpanNotRelatedToMessage(span)) continue;
 
     const message = messageMap.get(span.span_id)!;
     const nonSkippedParentId = findNonSkippedParent(span, spanMap);
@@ -76,6 +78,13 @@ export function buildMessageHierarchyFromSpan(
     if (!nonSkippedParentId) {
       // Root message (no parent or all ancestors skipped)
       result.push(message);
+      // Track by run_id for efficient grouping later
+      const runMessages = messagesByRunId.get(message.run_id);
+      if (runMessages) {
+        runMessages.push(message);
+      } else {
+        messagesByRunId.set(message.run_id, [message]);
+      }
     } else {
       // Child message - add to nearest non-skipped parent
       const parent = messageMap.get(nonSkippedParentId);
@@ -84,34 +93,37 @@ export function buildMessageHierarchyFromSpan(
       } else {
         // Parent not found in message map, treat as root
         result.push(message);
+        const runMessages = messagesByRunId.get(message.run_id);
+        if (runMessages) {
+          runMessages.push(message);
+        } else {
+          messagesByRunId.set(message.run_id, [message]);
+        }
       }
     }
-  });
-  if(result.length > 0){
-    if(result.length === 1 && result[0].type === 'run' ){
-      let runById = spanMap.get(result[0].span_id);
-      if(runById && isClientSDK(runById)) return result;
+  }
+
+  if (result.length === 0) return result;
+
+  // Check if single run from client SDK
+  if (result.length === 1 && result[0].type === 'run') {
+    const runById = spanMap.get(result[0].span_id);
+    if (runById && isClientSDK(runById)) return result;
+  }
+
+  // Wrap roots by run_id using pre-computed map (O(1) instead of O(n) filter)
+  // Original behavior: wrap all roots except single client SDK run (which returned above)
+  if (messagesByRunId.size > 0) {
+    const newResult: MessageStructure[] = [];
+    for (const [runId, messages] of messagesByRunId) {
+      newResult.push({
+        span_id: runId,
+        type: 'run_wrapper',
+        run_id: runId,
+        children: messages,
+      });
     }
-     // mean there are multiple root spans
-     let runIds: string[] = []
-     result.forEach((message) => {
-       if(!runIds.includes(message.run_id)){
-         runIds.push(message.run_id)
-       }
-     })
-     if(runIds.length > 0){
-      let newResult: MessageStructure[] = [];
-      runIds.forEach((runId) => {
-        let runMessage: MessageStructure = {
-          span_id: runId,
-          type: 'run_wrapper',
-          run_id: runId,
-          children: result.filter((message) => message.run_id === runId),
-        };
-        newResult.push(runMessage);
-      })
-      return newResult;
-     }
+    return newResult;
   }
 
   return result;

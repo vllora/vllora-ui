@@ -1,9 +1,5 @@
-import React, { useState } from "react";
-import {
-  CogIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
-} from "@heroicons/react/24/solid";
+import React, { useState, useCallback } from "react";
+import { CogIcon } from "@heroicons/react/24/solid";
 import {
   ClipboardDocumentIcon,
   CheckIcon,
@@ -16,40 +12,35 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { MessageDisplay } from "../MessageDisplay";
 import { ContentArrayDisplay } from "./ContentArrayDisplay";
+import { TextContent } from "./content-items";
 import { Message } from "@/types/chat";
 import { useRelativeTime } from "@/hooks/useRelativeTime";
+import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 
 export const SystemMessage: React.FC<{ msg: Message }> = ({ msg }) => {
-  const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const messageRef = React.useRef<HTMLDivElement>(null);
+  const { setHoverSpanId } = ChatWindowConsumer();
+
   useRelativeTime(messageRef, msg.created_at);
 
+  const handleMouseEnter = useCallback(() => {
+    if (msg?.span_id) {
+      setHoverSpanId(msg.span_id);
+    }
+  }, [msg?.span_id, setHoverSpanId]);
 
-  // Function to count lines in a string
-  const countLines = (text: string): number => {
-    return text ? text.split("\n").length : 0;
-  };
-
-  // Function to get first N lines of text
-  const getFirstNLines = (text: string, n: number): string => {
-    if (!text) return "";
-    const lines = text.split("\n");
-    return lines.slice(0, n).join("\n");
-  };
-
-  const messageContent = msg.content || "";
-  const lineCount = countLines(messageContent);
-  const hasMoreLines = lineCount > 5;
-  const displayMessage =
-    expanded || !hasMoreLines ? messageContent : getFirstNLines(messageContent, 5);
+  const handleMouseLeave = useCallback(() => {
+    setHoverSpanId(undefined);
+  }, [setHoverSpanId]);
 
   return (
     <div
       className="flex flex-col gap-3 group"
       ref={messageRef}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       {/* Header with Avatar and Metadata */}
       <div className="flex items-center gap-3">
@@ -98,7 +89,7 @@ export const SystemMessage: React.FC<{ msg: Message }> = ({ msg }) => {
                   }
                   if (msg.content) {
                     navigator.clipboard
-                      .writeText(msg.content)
+                      .writeText(msg.content as string)
                       .then(() => {
                         setCopied(true);
                         setTimeout(() => setCopied(false), 2000);
@@ -128,31 +119,11 @@ export const SystemMessage: React.FC<{ msg: Message }> = ({ msg }) => {
           <div className="px-4 py-3">
             <ContentArrayDisplay contentArray={msg.content_array} />
           </div>
-        ) : (
+        ) : msg.content ? (
           <div className="px-4 py-3">
-            <div className="whitespace-normal text-neutral-200 break-words overflow-wrap break-all leading-relaxed text-sm">
-              <MessageDisplay message={displayMessage} />
-            </div>
-            {hasMoreLines && (
-              <button
-                onClick={() => setExpanded(!expanded)}
-                className="inline-flex items-center gap-1.5 mt-3 px-2.5 py-1 rounded text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50 transition-all font-medium text-xs"
-              >
-                {expanded ? (
-                  <>
-                    <ChevronUpIcon className="h-3.5 w-3.5" />
-                    Show less
-                  </>
-                ) : (
-                  <>
-                    <ChevronDownIcon className="h-3.5 w-3.5" />
-                    Show {lineCount - 5} more line{lineCount - 5 !== 1 ? 's' : ''}
-                  </>
-                )}
-              </button>
-            )}
+            <TextContent content={msg.content as string} />
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

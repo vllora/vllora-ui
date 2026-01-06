@@ -99,7 +99,7 @@ export function ThreadsPageContent() {
 
       {/* Main Chat Area and Right Sidebar */}
       {selectedThreadId && currentProjectId ? (
-        <ChatWindowProvider threadId={selectedThreadId} projectId={currentProjectId} selectedModel={selectedModel}>
+        <ChatWindowProvider key={selectedThreadId} threadId={selectedThreadId} projectId={currentProjectId} selectedModel={selectedModel}>
           <ConversationAndTraces />
         </ChatWindowProvider>
       ) : (

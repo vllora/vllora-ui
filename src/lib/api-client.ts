@@ -1,4 +1,5 @@
 import { getBackendUrl } from '@/config/api';
+import { tryParseJson } from '@/utils/modelUtils';
 
 /**
  * Type for the token provider function
@@ -127,8 +128,9 @@ export const api = {
 export async function handleApiResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(error || `API request failed with status ${response.status}`);
+    const errorJson = tryParseJson(error)
+    throw new Error(errorJson?.error || errorJson.message || error || `API request failed with status ${response.status}`);
   }
-
-  return response.json();
+  let jsonResp = await response.json();
+  return jsonResp;
 }

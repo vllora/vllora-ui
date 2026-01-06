@@ -68,11 +68,13 @@ const findParentApiInvoke = (spans: Span[], parent_span_id: string) => {
 
 const getParentWithOperationName = (spans: Span[], currentSpanId: string, operationName: string) => {
   let currentSpan = spans.find(s => s.span_id === currentSpanId);
+
   if(!currentSpan) return undefined;
   if(currentSpan.parent_span_id === '0' || !currentSpan.parent_span_id) {
     return undefined;
   }
   let parentSpan = spans.find(s => s.span_id === currentSpan?.parent_span_id);
+
   if(parentSpan && parentSpan.operation_name === operationName) {
     return parentSpan;
   }

@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, Wrench } from "lucide-react";
 import { CheckIcon, ClipboardDocumentIcon } from "@heroicons/react/24/outline";
 import ReactJson from "react-json-view";
 import type { Message } from "@/types/chat";
+import { tryParseJson } from "@/utils/modelUtils";
 
 type ToolCall = NonNullable<Message["tool_calls"]>[number];
 
@@ -15,7 +16,7 @@ const formatFunctionName = (name?: string) => {
     .replace(/^./, (str) => str.toUpperCase());
 };
 
-export const ToolCallList = ({ toolCalls }: { toolCalls: ToolCall[] }) => {
+export const ToolCallList = ({ toolCalls, hideTitle }: { toolCalls: ToolCall[], hideTitle?: boolean }) => {
   const [expandedToolCalls, setExpandedToolCalls] = useState<
     Record<string, boolean>
   >({});
@@ -66,7 +67,7 @@ export const ToolCallList = ({ toolCalls }: { toolCalls: ToolCall[] }) => {
 
   return (
     <div className="mb-3 overflow-hidden rounded-lg border border-border">
-      <div className="flex items-center justify-between border-b border-border  px-3 py-2">
+      {!hideTitle && <div className="flex items-center justify-between border-b border-border  px-3 py-2">
         <div className="flex items-center gap-2">
           <Wrench className="h-3.5 w-3.5 text-neutral-400" />
           <span className="text-xs font-medium text-neutral-300">Tool Calls</span>
@@ -74,7 +75,7 @@ export const ToolCallList = ({ toolCalls }: { toolCalls: ToolCall[] }) => {
             {toolCalls.length} {toolCalls.length === 1 ? "call" : "calls"}
           </span>
         </div>
-      </div>
+      </div>}
       <div className="divide-y divide-border">
         {toolCalls.map((toolCall, index) => {
           if (!toolCall?.function) {
@@ -82,6 +83,11 @@ export const ToolCallList = ({ toolCalls }: { toolCalls: ToolCall[] }) => {
           }
           const functionName = formatFunctionName(toolCall.function?.name);
           const functionDisplay = toolCall.function;
+          let arguments_value = functionDisplay.arguments;
+          if (typeof arguments_value === 'string') {
+            arguments_value = tryParseJson(arguments_value) || arguments_value;
+            functionDisplay.arguments = arguments_value;
+          }
           const toolId = toolCall.id ?? `tool-call-${index}`;
           const isExpanded = toolCallLookup[toolId] ?? true;
           const isToolCopied = toolCopiedStates[toolId] || false;

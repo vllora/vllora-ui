@@ -16,6 +16,7 @@ export const convertCustomSpanEndToSpan = (
     finish_time_us: spanEnd.finish_time_unix_nano / 1000,
     attribute: spanEnd.attributes || {},
     isInProgress: false,
+    isInDebug: false
   };
 };
 

@@ -51,7 +51,11 @@ export function useProviderKeys() {
 
     switch (providerType) {
       case 'api_key':
-        return { api_key: values.api_key };
+        if (values.endpoint) {
+          return { api_key: values.api_key, endpoint: values.endpoint };
+        } else {
+          return { api_key: values.api_key };
+        }
 
       case 'api_key_with_endpoint':
         return { api_key: values.api_key, endpoint: values.endpoint };
@@ -199,6 +203,13 @@ export function useProviderKeys() {
 
   const startEditing = (providerName: string) => {
     setEditingProvider(providerName);
+    let provider = providers.find(p => p.name === providerName);
+    if (provider?.custom_endpoint) {
+      setCredentialValues({ ...credentialValues, [providerName]: {
+        ...credentialValues[providerName],
+        endpoint: provider.custom_endpoint,
+     }});
+    }
     setLocalError(null);
   };
 

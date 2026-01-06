@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { cn } from "@/lib/utils";
 import { TraceHeader } from "./components/header";
@@ -9,6 +9,7 @@ import { SpanDetailsOverlay } from "./components/SpanDetailsOverlay";
 import { ExclamationCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
 import { CurrentAppConsumer } from "@/contexts/CurrentAppContext";
 import { AvailableApiKeysConsumer } from "@/contexts/AvailableApiKeys";
+import { LabelFilter } from "@/components/label-filter";
 
 interface TraceViewProps {
   threadId: string;
@@ -24,7 +25,9 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
     hasMoreRuns,
     loadingMoreRuns,
     detailSpanId,
-    openTraces
+    openTraces,
+    runMap,
+    labelFilter,
   } = ChatWindowConsumer();
   const { app_mode } = CurrentAppConsumer();
   const { available_api_keys } = AvailableApiKeysConsumer();
@@ -38,6 +41,28 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
 
   const errorMessage = runsError?.message || null;
 
+  // Filter runs based on selected labels
+  const { filteredRuns, totalRuns, matchingRuns } = useMemo(() => {
+    const sortedRuns = [...runs].sort((a, b) => a.start_time_us - b.start_time_us);
+    const total = sortedRuns.length;
+
+    if (!labelFilter.hasSelection) {
+      return { filteredRuns: sortedRuns, totalRuns: total, matchingRuns: total };
+    }
+
+    // Filter runs that contain at least one span with a matching label
+    const filtered = sortedRuns.filter((run) => {
+      if (!run.run_id) return false;
+      const spans = runMap[run.run_id] || [];
+      return spans.some((span) => {
+        const label = (span.attribute as Record<string, unknown> | undefined)?.label as string | undefined;
+        return label && labelFilter.selectedLabels.includes(label);
+      });
+    });
+
+    return { filteredRuns: filtered, totalRuns: total, matchingRuns: filtered.length };
+  }, [runs, runMap, labelFilter.selectedLabels, labelFilter.hasSelection]);
+
   return (
     <div className="relative h-full w-full">
       {/* Main Trace View */}
@@ -48,7 +73,7 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
         )}
       >
         {/* Header with actions */}
-        <TraceHeader />
+        <TraceHeader threadId={threadId} />
 
         {/* Error display - positioned between header and filters */}
         {errorMessage && (
@@ -91,17 +116,35 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
           </div>
         )}
 
+        {/* Label Filter */}
+        {app_mode === "vllora" && <div className="px-2 py-2 border-b border-border/50">
+          <LabelFilter
+            selectedLabels={labelFilter.selectedLabels}
+            onLabelsChange={labelFilter.setLabels}
+            availableLabels={labelFilter.availableLabels}
+            isLoading={labelFilter.isLoading}
+            placeholder="Filter labels..."
+            size="sm"
+          />
+          {labelFilter.hasSelection && (
+            <div className="mt-1 text-[10px] text-muted-foreground text-right">
+              Showing {matchingRuns} of {totalRuns} runs
+            </div>
+          )}
+        </div>}
+
         {/* Main content area */}
         <TraceMainContent
           app_mode={app_mode}
           loadingSpans={runsLoading}
-          runs={runs.sort((a, b) => a.start_time_us - b.start_time_us)}
+          runs={filteredRuns}
           hasMore={hasMoreRuns}
           loadMoreRuns={loadMoreRuns}
           loadingMore={loadingMoreRuns}
           threadId={threadId}
           openTraces={openTraces}
           available_api_keys={available_api_keys}
+          selectedLabels={labelFilter.selectedLabels}
         />
       </div>
 

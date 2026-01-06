@@ -10,10 +10,11 @@ import { LoadingState } from "./LoadingState";
 import { ProjectsConsumer } from "@/contexts/ProjectContext";
 
 // Main component that uses the above components
-export const DetailedRunView: React.FC<{run: RunDTO}> = ({
-    run
+export const DetailedRunView: React.FC<{run: RunDTO; selectedLabels?: string[]}> = ({
+    run,
+    selectedLabels,
 }) => {
-    const {runMap, isLoadingSpans, loadingSpansById, selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, hoverSpanId, collapsedSpans, setCollapsedSpans} = ChatWindowConsumer()
+    const {runMap, isLoadingSpans, loadingSpansById, selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, hoverSpanId, setHoverSpanId, collapsedSpans, setCollapsedSpans} = ChatWindowConsumer()
     const {currentProjectId} = ProjectsConsumer()
     const spansByRunId: Span[] = run.run_id ? runMap[run.run_id] || [] : []
 
@@ -23,7 +24,7 @@ export const DetailedRunView: React.FC<{run: RunDTO}> = ({
     const detailViewRef = useRef<HTMLDivElement>(null);
 
     // Show loading state while deferred value is catching up
-    const isDeferred = deferredSpans !== spansByRunId;
+    // const isDeferred = deferredSpans !== spansByRunId;
 
     if (spansByRunId?.length > 0) {
 
@@ -39,7 +40,7 @@ export const DetailedRunView: React.FC<{run: RunDTO}> = ({
                     <div className="overflow-hidden">
                         <div className={cn(
                             "overflow-hidden relative transition-opacity duration-150",
-                            isDeferred && "opacity-50"
+                            // isDeferred && "opacity-50"
                         )}>
                             <ErrorBoundary FallbackComponent={CustomErrorFallback}>
                                 <TimelineContent
@@ -47,7 +48,14 @@ export const DetailedRunView: React.FC<{run: RunDTO}> = ({
                                     projectId={currentProjectId || ''}
                                     selectedSpanId={selectedSpanId}
                                     hoverSpanId={hoverSpanId}
-                                    setSelectedSpanId={setSelectedSpanId}
+                                    onHoverSpanChange={(spanId) => {
+                                        setSelectedSpanId(spanId || null);
+                                        setHoverSpanId(spanId || undefined);
+                                    }}
+                                    setSelectedSpanId={(spanId) => {
+                                        setSelectedSpanId(spanId || null);
+                                        setHoverSpanId(spanId || undefined);
+                                    }}
                                     setSelectedRunId={setSelectedRunId}
                                     setDetailSpanId={setDetailSpanId}
                                     collapsedSpans={collapsedSpans}
@@ -58,6 +66,8 @@ export const DetailedRunView: React.FC<{run: RunDTO}> = ({
                                             setCollapsedSpans([...collapsedSpans, spanId]);
                                         }
                                     }}
+                                    showHighlightButton={true}
+                                    selectedLabels={selectedLabels}
                                     />
                             </ErrorBoundary>
                         </div>

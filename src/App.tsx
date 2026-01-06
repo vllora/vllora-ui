@@ -14,11 +14,15 @@ import { Toaster } from "sonner"
 import { useEffect, lazy, Suspense } from "react"
 import { applyTheme, getThemeFromStorage } from "./themes/themes"
 import { ProviderKeysProvider } from "./contexts/ProviderKeysContext"
+import { ProviderModalProvider } from "./contexts/ProviderModalContext"
 import { AuthProvider } from "./contexts/AuthContext"
 import { ProtectedRoute } from "./components/ProtectedRoute"
 import { LocalModelsSkeletonLoader } from "./components/models/local/LocalModelsSkeletonLoader"
 import { AvailableApiKeysProvider, CurrentAppProvider, VirtualModelsProvider } from "./lib"
 import { ThreadAndTracesPageProvider } from "./contexts/ThreadAndTracesPageContext"
+import { DistriProvider } from "./providers/DistriProvider"
+import { AgentPanelWrapper } from "./components/agent"
+import { AgentPanelProvider } from "./contexts/AgentPanelContext"
 
 // Lazy load the models page
 const ModelsPage = lazy(() => import("./pages/models").then(module => ({ default: module.ModelsPage })))
@@ -42,17 +46,24 @@ function App() {
 
               {/* Protected routes */}
               <Route path="/" element={<ProtectedRoute>
-                <ProjectsProvider project_id_from="query_string">
-                   <VirtualModelsProvider>
-                  <AvailableApiKeysProvider available_api_keys={[]}>
-                    <ProjectModelsProvider>
-                      <ProviderKeysProvider>
-                          <Layout />
-                      </ProviderKeysProvider>
-                    </ProjectModelsProvider>
-                  </AvailableApiKeysProvider>
-                </VirtualModelsProvider>
-                </ProjectsProvider>
+                <DistriProvider>
+                  <AgentPanelProvider>
+                    <ProjectsProvider project_id_from="query_string">
+                      <VirtualModelsProvider>
+                        <AvailableApiKeysProvider available_api_keys={[]}>
+                          <ProjectModelsProvider>
+                            <ProviderKeysProvider>
+                              <ProviderModalProvider>
+                                <Layout />
+                                <AgentPanelWrapper />
+                              </ProviderModalProvider>
+                            </ProviderKeysProvider>
+                          </ProjectModelsProvider>
+                        </AvailableApiKeysProvider>
+                      </VirtualModelsProvider>
+                    </ProjectsProvider>
+                  </AgentPanelProvider>
+                </DistriProvider>
               </ProtectedRoute>}>
                 {/* Project-scoped routes (now using query string ?project_id=...) */}
                 <Route index element={<HomePage />} />

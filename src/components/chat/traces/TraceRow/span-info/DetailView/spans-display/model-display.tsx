@@ -13,6 +13,8 @@ import {
     TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useCallback } from "react";
+import { FlowDialog } from "../MessageFlow";
+import { getDuration } from "../../SpanHeader";
 
 interface ModelInvokeUIDetailsDisplayProps {
     span: Span;
@@ -46,10 +48,11 @@ export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelIn
     const costInfo = cost_str ? tryParseJson(cost_str) : null;
     const usageInfo = usage_str ? tryParseJson(usage_str) : null;
     const ttf_str = modelCallAttribute?.ttft;
-
-
     const headersStr = apiCloudInvokeAttribute?.['http.request.header'];
     const headers = headersStr ? tryParseJson(headersStr) : undefined;
+    const startTime = span.start_time_us;
+    const endTime = span.finish_time_us;
+    const duration = endTime && startTime ? getDuration(startTime, endTime) : undefined;
 
     const handleExperiment = useCallback(() => {
         if (apiInvokeSpan?.span_id) {
@@ -59,30 +62,40 @@ export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelIn
         }
     }, [apiInvokeSpan, span]);
 
-    const experimentButton = (
-        <TooltipProvider>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <button
-                        onClick={handleExperiment}
-                        className="px-2 py-1 text-[rgb(var(--theme-500))] transition-all duration-300 hover:scale-110 hover:text-[rgb(var(--theme-500))]"
-                    >
-                        <Layers2Icon className="w-3.5 h-3.5" />
-                    </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="px-3 py-2.5 max-w-[220px]">
-                    <div className="flex gap-2">
-                        <Layers2Icon className="w-3.5 h-3.5 text-[rgb(var(--theme-500))] flex-shrink-0 mt-0.5" />
-                        <div className="flex flex-col gap-0.5">
-                            <span className="font-medium text-xs">Clone request</span>
-                            <span className="text-[10px] text-muted-foreground leading-tight">
-                                Clone this request to experiment with various prompts, models, or parameters
-                            </span>
+    const headerActions = (
+        <div className="flex items-center gap-1">
+            <FlowDialog
+                rawRequest={raw_request_json}
+                rawResponse={raw_response_json}
+                costInfo={costInfo}
+                duration={duration}
+                headers={headers}
+                operation_name={span.operation_name}
+            />
+            <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <button
+                            onClick={handleExperiment}
+                            className="px-2 py-1 text-[rgb(var(--theme-500))] transition-all duration-300 hover:scale-110 hover:text-[rgb(var(--theme-500))]"
+                        >
+                            <Layers2Icon className="w-3.5 h-3.5" />
+                        </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="px-3 py-2.5 max-w-[220px]">
+                        <div className="flex gap-2">
+                            <Layers2Icon className="w-3.5 h-3.5 text-[rgb(var(--theme-500))] flex-shrink-0 mt-0.5" />
+                            <div className="flex flex-col gap-0.5">
+                                <span className="font-medium text-xs">Clone request</span>
+                                <span className="text-[10px] text-muted-foreground leading-tight">
+                                    Clone this request to experiment with various prompts, models, or parameters
+                                </span>
+                            </div>
                         </div>
-                    </div>
-                </TooltipContent>
-            </Tooltip>
-        </TooltipProvider>
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+        </div>
     );
 
     return (
@@ -91,7 +104,7 @@ export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelIn
                 <InputViewer
                     jsonRequest={raw_request_json}
                     headers={headers}
-                    headerAction={experimentButton}
+                    headerAction={headerActions}
                 />
                 <ResponseViewer response={raw_response_json} />
                 <UsageViewer
@@ -103,3 +116,4 @@ export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelIn
         </BaseSpanUIDetailsDisplay>
     );
 };
+

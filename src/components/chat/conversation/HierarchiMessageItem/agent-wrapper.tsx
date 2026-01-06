@@ -14,7 +14,7 @@ export const AgentSpanMessage = memo((props: {
 }) => {
     const { span_id, run_id, messages, level = 0 } = props;
     // const [isCollapsed, setIsCollapsed] = useState(false);
-    const { setHoverSpanId, setRunHighlighted, setCollapsedSpans, collapsedSpans } = ChatWindowConsumer();
+    const { setHoverSpanId, setSelectedSpanId, setRunHighlighted, setCollapsedSpans, collapsedSpans } = ChatWindowConsumer();
 
     const isCollapsed = useMemo(() => collapsedSpans.includes(span_id), [collapsedSpans, span_id]);
     // Memoize the toggle callback to prevent child re-renders
@@ -54,9 +54,11 @@ export const AgentSpanMessage = memo((props: {
                 }) => {
                     if(isHovering) {
                         setHoverSpanId(spanId);
+                        setSelectedSpanId(spanId);
                         setRunHighlighted(runId);
                     } else {
                         setHoverSpanId(prev => prev === spanId ? '' : prev);
+                        setSelectedSpanId(prev => prev === spanId ? null : prev);
                         setRunHighlighted(prev => prev === runId ? '' : prev);
                     }
                 }}
