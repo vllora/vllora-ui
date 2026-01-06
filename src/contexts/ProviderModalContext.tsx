@@ -133,7 +133,7 @@ export function ProviderModalProvider({ children }: ProviderModalProviderProps) 
 
   const openProviderModal = useCallback(async (providerName: string, onSuccess?: () => void) => {
     try {
-      const providers = await listProviders();
+      const providers = await listProviders(currentProjectId);
       const found = providers.find((p) => p.name.toLowerCase() === providerName.toLowerCase());
 
       if (!found) {
@@ -151,7 +151,7 @@ export function ProviderModalProvider({ children }: ProviderModalProviderProps) 
         description: err instanceof Error ? err.message : 'An error occurred',
       });
     }
-  }, []);
+  }, [currentProjectId]);
 
   const value: ProviderModalContextValue = {
     openProviderModal,
