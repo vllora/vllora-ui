@@ -119,6 +119,7 @@ export function extractMessagesFromSpan(
     extractResponseContent(outputJson, attribute) || attribute?.response;
   // Calculate metrics for this span
   const spanMetrics = calculateSpanMetrics(span);
+
   let requestModel = requestJson?.model;
   if (!requestModel) {
     if (outputJson && outputJson.modelVersion) {
@@ -416,7 +417,10 @@ export function extractMessagesFromSpanById(
   if (!span) return [];
 
   // Get api invoke span to extract input messages
-  const apiInvokeSpan = span.operation_name === 'api_invoke' ? span : getParentApiInvoke(flattenSpans, span.span_id);
+  const apiInvokeSpan =
+    span.operation_name === "api_invoke"
+      ? span
+      : getParentApiInvoke(flattenSpans, span.span_id);
   let result: Message[] = [];
 
   if (apiInvokeSpan) {
@@ -425,28 +429,40 @@ export function extractMessagesFromSpanById(
       excludeResponseToolInvokeMessage: excludeToolInvokeMessage,
       excludeResponseMessage: false,
     });
-    inputMessageFromApiInvokeSpan = inputMessageFromApiInvokeSpan.map((m) => {
+    inputMessageFromApiInvokeSpan = inputMessageFromApiInvokeSpan.map((m, idx) => {
       return {
         ...m,
         span,
         span_id: span.span_id,
+        metrics: idx === inputMessageFromApiInvokeSpan.length - 1 ? [calculateSpanMetrics(span)] : undefined,
       };
     });
     result = inputMessageFromApiInvokeSpan;
   }
-  if(result.length === 0 && !apiInvokeSpan && span.operation_name !== 'api_invoke' && span.attribute && (span.attribute  as any).content) {
-    result = [{
-      id: `${span.span_id}_response`,
-      type: "assistant",
-      role: "assistant",
-      content: (span.attribute  as any).content,
-      timestamp: span.finish_time_us ? span.finish_time_us / 1000 : Date.now(),
-      thread_id: span.thread_id,
-      trace_id: span.trace_id,
-      span_id: span.span_id,
-      span,
-      model_name:span.operation_name,
-    }]
+  if (
+    result.length === 0 &&
+    !apiInvokeSpan &&
+    span.operation_name !== "api_invoke" &&
+    span.attribute &&
+    (span.attribute as any).content
+  ) {
+    result = [
+      {
+        id: `${span.span_id}_response`,
+        type: "assistant",
+        role: "assistant",
+        content: (span.attribute as any).content,
+        timestamp: span.finish_time_us
+          ? span.finish_time_us / 1000
+          : Date.now(),
+        thread_id: span.thread_id,
+        trace_id: span.trace_id,
+        span_id: span.span_id,
+        span,
+        model_name: span.operation_name,
+        metrics: [calculateSpanMetrics(span)],
+      },
+    ];
   }
 
   return result;
@@ -498,27 +514,31 @@ export const extractMessageFromApiInvokeSpan = (props: {
     });
   }
   let outputJson = tryParseJson(outputStr);
-  if(outputStr && !outputJson ) {
-    if(excludeResponseMessage) {
-      return messages
-    }else {
+  if (outputStr && !outputJson) {
+    if (excludeResponseMessage) {
+      return messages;
+    } else {
       let responseMessage: Message = {
         id: `${span.span_id}_response`,
         type: "assistant",
         role: "assistant",
         content: outputStr,
-        timestamp: span.finish_time_us ? span.finish_time_us / 1000 : Date.now(),
+        timestamp: span.finish_time_us
+          ? span.finish_time_us / 1000
+          : Date.now(),
         thread_id: span.thread_id,
         trace_id: span.trace_id,
         span_id: span.span_id,
         span,
-        model_name:requestJson?.model ||`${span.operation_name}/${requestJson?.model}` || span.operation_name,
-      }
-      messages.push(responseMessage)
-      return messages
+        model_name:
+          requestJson?.model ||
+          `${span.operation_name}/${requestJson?.model}` ||
+          span.operation_name,
+      };
+      messages.push(responseMessage);
+      return messages;
     }
   }
-
 
   const responseContent = extractResponseContent(
     outputJson,
