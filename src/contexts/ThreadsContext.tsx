@@ -74,7 +74,7 @@ export function useThreads({ projectId }: ThreadsProviderProps) {
     // Preserve only allowed params from current URL (except threadId, projectId, model which we'll set)
     ALLOWED_QUERY_PARAMS.forEach(param => {
       const value = searchParams.get(param);
-      if (value && param !== 'thread_id' && param !== 'project_id' && param !== 'model') {
+      if (value && param !== 'thread_id' && param !== 'project_id' && param !== 'model' && param !== 'detail_span_id') {
         params.set(param, value);
       }
     });

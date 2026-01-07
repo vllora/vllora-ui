@@ -250,8 +250,13 @@ export const ConversationWindow: React.FC<ChatWindowProps> = ({
     }
   }, [breakpoints, setThreads, isLoadingThreads]);
 
+  const prevThreadIdRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    clearSelectPrevThread()
+    // Only clear on actual thread changes, not on initial mount
+    if (prevThreadIdRef.current !== undefined && prevThreadIdRef.current !== threadId) {
+      clearSelectPrevThread()
+    }
+    prevThreadIdRef.current = threadId;
   }, [threadId])
 
 
