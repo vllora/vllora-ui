@@ -168,7 +168,7 @@ function buildAnalysisPrompt(
   focus: string,
   userContext: string
 ): string {
-  return `You are an expert at analyzing LLM agent traces. Analyze the following span data and provide a detailed assessment.
+  return `You are a trace analyzer. Find hidden issues and explain them from a data flow perspective.
 
 ## Focus Area
 ${FOCUS_INSTRUCTIONS[focus] || FOCUS_INSTRUCTIONS.all}
@@ -178,42 +178,32 @@ ${userContext ? `## Additional Context\n${userContext}\n` : ''}
 ## Span Data to Analyze
 ${JSON.stringify(spansToAnalyze, null, 2)}
 
-## Your Analysis Task
-For each span, identify:
-1. **Issues**: Any errors, failures, or problems (with severity: high/medium/low)
-2. **Root Cause**: What likely caused the issue
-3. **Impact**: How this affects the overall agent behavior
-4. **Correlations**: How issues in different spans might be related
+## CRITICAL: Extract Actual Data Snippets
 
-Respond in JSON format:
+For each issue, extract the **actual JSON or text** from the trace that shows the problem.
+
+**GOOD** (shows actual data):
 {
-  "overall_assessment": "Brief summary of findings",
-  "issue_count": { "high": 0, "medium": 0, "low": 0 },
-  "span_analyses": [
-    {
-      "span_id": "...",
-      "issues": [
-        {
-          "type": "error|performance|semantic|other",
-          "description": "What the issue is",
-          "severity": "high|medium|low",
-          "evidence": "Specific text/pattern that shows the issue",
-          "root_cause": "Likely cause",
-          "recommendation": "How to fix"
-        }
-      ],
-      "assessment": "Overall assessment of this span"
-    }
-  ],
-  "correlations": [
-    {
-      "spans": ["span_id_1", "span_id_2"],
-      "relationship": "How these spans are related",
-      "combined_impact": "What the combined impact is"
-    }
-  ],
-  "recommendations": ["List of actionable recommendations"]
-}`;
+  "evidence": "{\\"status\\": \\"success\\", \\"results\\": [], \\"message\\": \\"could not find any relevant results\\"}",
+  "explanation": "Status says success but results array is empty. Human would see 'success' and miss the failure."
+}
+
+**BAD** (generic - DO NOT DO THIS):
+{
+  "evidence": "Response lacks comprehensive synthesis",
+  "explanation": "The agent did not provide complete information"
+}
+
+## Issue Types to Detect
+
+1. **Silent Failures**: status="success" but results empty or message says failure
+2. **Buried Warnings**: "WARNING", "INTERNAL NOTE", "fallback", "cached from 20XX" hidden in long text
+3. **Rate Limiting**: "rate limit", "429", "retry after", "too many requests"
+4. **Stale Data**: "cached", "outdated", "last verified on", old dates
+5. **Truncated/Partial**: "truncated", "partial", "maximum exceeded"
+6. **Tool Errors**: "Unknown tool:", "error", explicit error fields
+
+Analyze the spans and return your findings.`;
 }
 
 /**
@@ -294,6 +284,111 @@ function buildChatCompletionsUrl(provider?: ProviderConfig): string {
 }
 
 /**
+ * JSON Schema for structured output response
+ */
+const ANALYSIS_RESPONSE_SCHEMA = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'trace_analysis',
+    strict: true,
+    schema: {
+      type: 'object',
+      properties: {
+        overall_assessment: {
+          type: 'string',
+          description: 'Brief summary: X issues found, main problem is Y',
+        },
+        issue_count: {
+          type: 'object',
+          properties: {
+            high: { type: 'number' },
+            medium: { type: 'number' },
+            low: { type: 'number' },
+          },
+          required: ['high', 'medium', 'low'],
+          additionalProperties: false,
+        },
+        span_analyses: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              span_id: { type: 'string' },
+              issue_title: {
+                type: 'string',
+                description:
+                  'Short title like "Silent Search Failure" or "Buried Warning"',
+              },
+              issues: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    type: {
+                      type: 'string',
+                      enum: ['error', 'performance', 'semantic', 'other'],
+                    },
+                    severity: {
+                      type: 'string',
+                      enum: ['high', 'medium', 'low'],
+                    },
+                    data_snippet: {
+                      type: 'string',
+                      description:
+                        'ACTUAL JSON or text from the trace showing the problem',
+                    },
+                    explanation: {
+                      type: 'string',
+                      description:
+                        'Why this is a problem from data flow perspective',
+                    },
+                  },
+                  required: ['type', 'severity', 'data_snippet', 'explanation'],
+                  additionalProperties: false,
+                },
+              },
+            },
+            required: ['span_id', 'issue_title', 'issues'],
+            additionalProperties: false,
+          },
+        },
+        correlations: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              spans: {
+                type: 'array',
+                items: { type: 'string' },
+              },
+              pattern: {
+                type: 'string',
+                description: 'Pattern name like "Gradual Degradation"',
+              },
+              description: { type: 'string' },
+            },
+            required: ['spans', 'pattern', 'description'],
+            additionalProperties: false,
+          },
+        },
+        recommendations: {
+          type: 'array',
+          items: { type: 'string' },
+        },
+      },
+      required: [
+        'overall_assessment',
+        'issue_count',
+        'span_analyses',
+        'correlations',
+        'recommendations',
+      ],
+      additionalProperties: false,
+    },
+  },
+};
+
+/**
  * Call the LLM API for analysis using Lucy config settings
  */
 async function callLLMForAnalysis(prompt: string): Promise<string> {
@@ -314,6 +409,7 @@ async function callLLMForAnalysis(prompt: string): Promise<string> {
   // Build headers
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'x-label': 'analyze_with_llm',
   };
 
   // Add Authorization if api_key is provided
@@ -336,7 +432,7 @@ async function callLLMForAnalysis(prompt: string): Promise<string> {
         {
           role: 'system',
           content:
-            'You are an expert trace analyzer. Always respond with valid JSON only, no markdown formatting.',
+            'You are an expert trace analyzer. Find hidden issues in AI agent traces and explain them from a data flow perspective. Extract ACTUAL data snippets from traces, not generic descriptions.',
         },
         {
           role: 'user',
@@ -345,6 +441,7 @@ async function callLLMForAnalysis(prompt: string): Promise<string> {
       ],
       temperature,
       max_tokens: maxTokens,
+      response_format: ANALYSIS_RESPONSE_SCHEMA,
     }),
   });
 

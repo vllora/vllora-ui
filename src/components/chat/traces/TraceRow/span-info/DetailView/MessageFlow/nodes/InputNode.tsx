@@ -56,9 +56,6 @@ export const InputNode = ({ id, data }: { id: string; data: Record<string, unkno
   const nodeWidth = data.nodeWidth as number | undefined;
   const expandedHeight = data.expandedHeight as number | undefined;
   const onToggleExpand = data.onToggleExpand as ((nodeId: string) => void) | undefined;
-
-  rawMessage?.tool_calls && rawMessage.tool_calls && console.log('=== rawMessage', rawMessage)
-
   // Get preview text
   const getPreviewText = () => {
     if (toolInfo) {
