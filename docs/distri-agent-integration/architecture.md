@@ -8,7 +8,7 @@
 │                                                                             │
 │  ┌──────────────┐  ┌─────────────────────────────────────────────────────┐ │
 │  │  AgentPanel  │  │              Tool Handlers                          │ │
-│  │  (Chat UI)   │  │  UI Tools (17)            Data Tools (6)            │ │
+│  │  (Chat UI)   │  │  UI Tools (4)             Data Tools (8)            │ │
 │  └──────────────┘  │  + Validation Cache       + Span Storage            │ │
 │         │          └─────────────────────────────────────────────────────┘ │
 │         │                          │                                        │
@@ -31,6 +31,7 @@
 │  │                      vllora_orchestrator                               │ │
 │  │  sub_agents = [ui_agent, data_agent, experiment_agent]                │ │
 │  │  max_iterations = 10                                                  │ │
+│  │  model = "gpt-4.1"                                                    │ │
 │  │                                                                        │ │
 │  │  Auto-generated tools:                                                │ │
 │  │  - call_vllora_ui_agent                                               │ │
@@ -43,7 +44,7 @@
 │  ┌──────────────┐          ┌──────────────┐          ┌──────────────┐     │
 │  │vllora_ui_agent│         │vllora_data   │         │vllora_exp    │     │
 │  │              │          │  _agent      │          │  _agent      │     │
-│  │ 17 tools     │          │ 6 tools      │          │ 4 tools      │     │
+│  │ 4 tools      │          │ 8 tools      │          │ 4 tools      │     │
 │  │ max_iter=5   │          │ max_iter=8   │          │ max_iter=10  │     │
 │  └──────────────┘          └──────────────┘          └──────────────┘     │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -51,7 +52,7 @@
                                         ▼ (Data Tools)
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           vLLora Backend (Rust)                             │
-│  /api/runs, /api/spans, /api/groups                                        │
+│  /api/runs, /api/spans, /api/groups, /api/labels                           │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -59,9 +60,9 @@
 
 | Agent | Purpose | Tools | Max Iterations |
 |-------|---------|-------|----------------|
-| **vllora_orchestrator** | Routes requests, manages 8 workflows | `call_vllora_*` (auto) | 10 |
-| **vllora_ui_agent** | UI: select, expand, navigate, modals, validation | 17 external | 5 |
-| **vllora_data_agent** | Data: runs, spans, two-phase analysis | 6 external | 8 |
+| **vllora_orchestrator** | Routes requests, manages 14 workflows | `call_vllora_*` (auto) | 10 |
+| **vllora_ui_agent** | UI: navigate, expand/collapse, validation | 4 external | 5 |
+| **vllora_data_agent** | Data: runs, spans, three-phase analysis | 8 external | 8 |
 | **vllora_experiment_agent** | Experiment: analyze, apply, run, evaluate | 4 external | 10 |
 
 ## Orchestrator Workflows
@@ -69,22 +70,23 @@
 ```
 User Message → Orchestrator identifies workflow → Executes steps → Returns result
 
-Workflow 1: COMPREHENSIVE ANALYSIS (default)
+Workflow 3: COMPREHENSIVE ANALYSIS (default)
   └─ call_vllora_data_agent("Fetch all spans with full analysis")
   └─ final: comprehensive report
 
-Workflow 5: OPTIMIZE SPAN (not on experiment page)
+Workflow 7: EXPERIMENT/OPTIMIZE (not on experiment page)
+  └─ Step 0: Resolve target spanId
   └─ Step 1: call_vllora_ui_agent("Check if span is valid")
   └─ Step 2: call_vllora_ui_agent("Navigate to experiment page")
   └─ Step 3: call_vllora_experiment_agent("Analyze and suggest")
   └─ Step 4: final: optimization suggestions
 
-Workflow 7: APPLY OPTIMIZATION (on experiment page)
+Workflow 9: APPLY OPTIMIZATION (on experiment page)
   └─ call_vllora_experiment_agent("Apply changes, run, evaluate")
   └─ final: results comparison
 ```
 
-## Two-Phase Analysis Flow
+## Three-Phase Analysis Flow
 
 Prevents LLM context overflow when analyzing many spans:
 
@@ -94,19 +96,37 @@ Phase 1: fetch_spans_summary
      ├─── Fetch ALL spans (parallel pagination)
      ├─── Store in browser memory (spanStorage Map)
      └─── Return lightweight summary:
-            - Aggregate stats
-            - Error spans (explicit + semantic)
+            - Aggregate stats (total, by operation, by status)
+            - Error spans (explicit + semantic via regex)
             - Slowest spans (top 5)
             - Expensive spans (top 5)
+            - Flagged spans for LLM analysis
 
-Phase 2: get_span_content (if needed)
+Phase 2: get_span_content (optional - for pattern details)
      │
      ├─── Retrieve specific spans from storage
-     ├─── Perform client-side semantic analysis
-     └─── Return analysis RESULTS (not raw data):
-            - semantic_issues with severity
-            - content_stats
-            - assessment
+     └─── Return span data for inspection (max 5 spans)
+
+Phase 3: analyze_with_llm (for semantic errors)
+     │
+     ├─── Take flagged span IDs from Phase 1
+     ├─── Call LLM API with structured output schema
+     └─── Return deep semantic analysis:
+            - Issue types (silent failures, buried warnings, etc.)
+            - Actual data snippets from trace
+            - Root cause + recommendations
+```
+
+## Data Agent Workflow
+
+```markdown
+# vllora_data_agent workflow (from agent prompt)
+
+1. Call `fetch_spans_summary(threadIds=["<thread-id>"])`
+2. If `semantic_error_spans` is non-empty → call `analyze_with_llm(spanIds=[...], focus="semantic")`
+3. Call `final()` with your report - TRANSLATE the JSON into markdown format:
+   - `data_snippet` → **What happened**: section
+   - `explanation` → **Why this is a problem**: section
 ```
 
 ## Validation Cache Flow
@@ -134,19 +154,19 @@ User Message
      ▼
 Orchestrator (Distri)
      │
-     ├─── call_vllora_ui_agent("select span X")
+     ├─── call_vllora_data_agent("Fetch spans for thread X")
      │         │
      │         ▼
-     │    UI Agent calls select_span({spanId: "X"})
+     │    Data Agent calls fetch_spans_summary({threadIds: ["X"]})
      │         │
      │         ▼ (external tool via SSE)
-     │    Frontend emits: vllora_select_span
+     │    Frontend: Fetch from backend API
      │         │
      │         ▼
-     │    TracesPageContext updates selection
+     │    Store spans in spanStorage Map
      │         │
      │         ▼
-     │    Returns {success: true}
+     │    Returns {summary: {...}, semantic_error_spans: [...]}
      │
      ▼
 Orchestrator continues workflow or calls final
@@ -178,9 +198,22 @@ Tool Handler              vLLora Backend
      │◀──────────────────────────│
 ```
 
+### LLM Analysis (Hybrid)
+
+```
+Tool Handler              OpenAI API (via provider config)
+     │                           │
+     │  POST /chat/completions   │
+     │  (structured output)      │
+     │──────────────────────────▶│
+     │                           │
+     │  { issues: [...] }        │
+     │◀──────────────────────────│
+```
+
 ## Why Multi-Agent?
 
-1. **Focused prompts** - Each sub-agent has fewer tools (4-17 vs all 27)
+1. **Focused prompts** - Each sub-agent has fewer tools (4-8 vs all 16)
 2. **Better tool selection** - LLM chooses from smaller set
 3. **Separation of concerns** - Clear responsibilities
 4. **Context-based routing** - Experiment agent only on `/experiment` page
@@ -192,7 +225,7 @@ The orchestrator includes explicit loop prevention:
 
 1. **Workflow completion signals** - Recognize when results contain "cost savings", "Results:", etc.
 2. **Error handling** - Call `final` immediately when sub-agent returns error
-3. **Step tracking** - Explicit "Step 1 → Step 2 → Step 3 → Step 4 (final)"
+3. **Step tracking** - Explicit "Step 0 → Step 1 → Step 2 → Step 3 → Step 4 (final)"
 4. **Caching** - Validation results cached to prevent duplicate calls
 
 ## Service Stack

@@ -8,10 +8,10 @@ All tools use `external = ["*"]`, meaning they are handled by the vLLora UI fron
 
 | Category | File | Count | Description |
 |----------|------|-------|-------------|
-| UI Tools | `src/lib/distri-ui-tools.ts` | 8 | 4 GET STATE + 4 CHANGE UI |
-| Data Tools | `src/lib/distri-data-tools.ts` | 7 | 4 basic + 2 two-phase analysis + 1 label discovery |
+| UI Tools | `src/lib/distri-ui-tools.ts` | 4 | visibility, navigation, filtering |
+| Data Tools | `src/lib/distri-data-tools/` | 8 | 4 basic + 3 three-phase analysis + 1 label discovery |
 
-**Total: 15 tools**
+**Total: 12 tools**
 
 ## Tool Format
 
@@ -36,31 +36,20 @@ Tools are exported as `DistriFnTool[]` arrays for use with the `@distri/react` C
 
 ---
 
-## UI Tools (8 total)
+## UI Tools (4 total)
 
 **File:** `src/lib/distri-ui-tools.ts`
-
-### GET STATE Tools (4)
 
 | Tool | Description | Returns |
 |------|-------------|---------|
 | `get_collapsed_spans` | Collapsed spans in trace view | `{collapsedSpanIds: [...]}` |
 | `is_valid_for_optimize` | Check if span can be optimized (CACHED) | `{valid, reason, _cached?}` |
-| `get_experiment_data` | Get experiment state (experiment page only) | `{experimentData, running}` |
-| `evaluate_experiment_results` | Compare original vs new (experiment page only) | `{original, new, comparison}` |
-
-### CHANGE UI Tools (4)
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `navigate_to_experiment` | Navigate to /experiment | `spanId: string` |
-| `apply_experiment_data` | Apply changes to experiment | `data: {...}` |
-| `run_experiment` | Execute experiment (60s timeout) | (none) |
-| `apply_label_filter` | Apply label filter to UI | `labels: string[], action: "set"\|"add"\|"clear"` |
+| `navigate_to_experiment` | Navigate to /experiment page | `{success, url}` |
+| `apply_label_filter` | Apply label filter to UI | `{success}` |
 
 ### Validation Cache
 
-**File:** `src/lib/distri-ui-tools.ts` (lines 19-55)
+**File:** `src/lib/distri-ui-tools.ts`
 
 The `is_valid_for_optimize` tool uses a cache to prevent duplicate API calls:
 
@@ -89,35 +78,58 @@ if (cached) {
 
 ---
 
-## Data Tools (7 total)
+## Data Tools (8 total)
 
-**File:** `src/lib/distri-data-tools.ts`
+**Directory:** `src/lib/distri-data-tools/`
+
+### File Structure
+
+```
+distri-data-tools/
+├── index.ts               # Entry point, exports all tools
+├── helpers.ts             # Shared utilities (getCurrentProjectId, toCommaSeparated)
+├── fetch-runs.ts          # Fetch runs
+├── fetch-spans.ts         # Fetch spans
+├── get-run-details.ts     # Get run details
+├── fetch-groups.ts        # Fetch aggregated groups
+├── fetch-spans-summary.ts # Phase 1: fetch + store + summarize
+├── get-span-content.ts    # Phase 2: retrieve specific spans
+├── list-labels.ts         # List available labels
+└── analyze-with-llm.ts    # Phase 3: LLM semantic analysis
+```
 
 ### Basic Tools (4)
 
-| Tool | Service | Description |
-|------|---------|-------------|
-| `fetch_runs` | `runs-api.ts` | Get runs with filters (threadIds, period, limit) |
-| `fetch_spans` | `spans-api.ts` | Get spans with filters (spanIds, threadIds, runIds, operationNames, parentSpanIds, labels). Default limit: 10 |
-| `get_run_details` | `runs-api.ts` | Get run + all its spans |
-| `fetch_groups` | `groups-api.ts` | Get aggregated metrics (groupBy: time/model/thread) |
+| Tool | File | Service | Description |
+|------|------|---------|-------------|
+| `fetch_runs` | `fetch-runs.ts` | `runs-api.ts` | Get runs with filters |
+| `fetch_spans` | `fetch-spans.ts` | `spans-api.ts` | Get spans with filters (default limit: 10) |
+| `get_run_details` | `get-run-details.ts` | `runs-api.ts` | Get run + all its spans |
+| `fetch_groups` | `fetch-groups.ts` | `groups-api.ts` | Get aggregated metrics |
 
-### Two-Phase Analysis Tools (2)
+### Three-Phase Analysis Tools (3)
 
 These tools solve the LLM context overflow problem:
 
-| Tool | Description |
-|------|-------------|
-| `fetch_spans_summary` | Fetch ALL spans, store in memory, return lightweight summary. Supports label filtering. |
-| `get_span_content` | Perform client-side analysis on specific spans (max 5) |
+| Tool | File | Description |
+|------|------|-------------|
+| `fetch_spans_summary` | `fetch-spans-summary.ts` | Phase 1: Fetch ALL spans, store in memory, return summary |
+| `get_span_content` | `get-span-content.ts` | Phase 2: Retrieve specific spans (max 5) |
+| `analyze_with_llm` | `analyze-with-llm.ts` | Phase 3: Deep LLM semantic analysis (max 5) |
 
 ### Label Discovery Tool (1)
 
-| Tool | Description |
-|------|-------------|
-| `list_labels` | Get available labels with counts. Optionally scoped to a threadId. |
+| Tool | File | Description |
+|------|------|-------------|
+| `list_labels` | `list-labels.ts` | Get available labels with counts |
 
-#### fetch_spans_summary
+---
+
+## Three-Phase Analysis Deep Dive
+
+### Phase 1: fetch_spans_summary
+
+**File:** `fetch-spans-summary.ts`
 
 Fetches all spans for a thread and stores them in browser memory:
 
@@ -150,44 +162,83 @@ return {
     by_status,
     total_cost,
     models_used,
+    latency_percentiles: { p50, p95, p99 },
   },
   error_spans: [...],           // Explicit errors
-  semantic_error_spans: [...],  // Detected patterns
+  semantic_error_spans: [...],  // Detected patterns via regex
   slowest_spans: [...],         // Top 5
   expensive_spans: [...],       // Top 5
 };
 ```
 
-#### get_span_content
+### Phase 2: get_span_content
 
-Performs client-side analysis on specific spans:
+**File:** `get-span-content.ts`
+
+Retrieves specific spans from memory:
 
 ```typescript
-// Returns analysis RESULTS, not raw span data
+// Returns span data with excerpts
 return {
   data: spans.map(span => ({
     span_id,
     operation_name,
     duration_ms,
-    explicit_error,
-    semantic_issues: [
-      { pattern: "not found", context: "...", severity: "medium" }
-    ],
-    content_stats: {
-      input_length,
-      output_length,
-      has_tool_calls,
-    },
-    assessment: "Found 2 potential issues: 0 high, 2 medium severity.",
+    input_excerpt,
+    output_excerpt,
+    error,
+    model,
   })),
 };
 ```
 
-### Semantic Error Detection
+### Phase 3: analyze_with_llm
 
-**File:** `src/lib/distri-data-tools.ts`
+**File:** `analyze-with-llm.ts`
 
-Detects error patterns in response content (not just status codes):
+Performs deep semantic analysis using LLM with structured output:
+
+```typescript
+// Uses OpenAI structured output (JSON schema)
+const ANALYSIS_RESPONSE_SCHEMA = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'trace_analysis',
+    strict: true,
+    schema: {
+      type: 'object',
+      properties: {
+        overall_assessment: { type: 'string' },
+        issue_count: { ... },
+        span_analyses: [{
+          span_id: { type: 'string' },
+          issue_title: { type: 'string' },
+          issues: [{
+            type: { enum: ['error', 'performance', 'semantic', 'other'] },
+            severity: { enum: ['high', 'medium', 'low'] },
+            data_snippet: { type: 'string' },  // Actual JSON from trace
+            explanation: { type: 'string' },   // Why it's a problem
+          }],
+        }],
+        correlations: [...],
+        recommendations: [...],
+      },
+    },
+  },
+};
+```
+
+**Issue types detected:**
+1. **Silent Failures** - status="success" but results empty
+2. **Buried Warnings** - warnings hidden in long responses
+3. **Gradual Degradation** - responses getting worse over time
+4. **Tool Errors** - tool name mismatches, invalid calls
+
+### Semantic Error Detection (Regex)
+
+**File:** `fetch-spans-summary.ts`
+
+Detects error patterns in response content (fast regex scan):
 
 ```typescript
 const ERROR_PATTERNS = [
@@ -220,8 +271,24 @@ Severity levels:
 
 ```typescript
 // In-memory storage for spans (cleared when page refreshes)
-const spanStorage: Map<string, Span> = new Map();
+// Exported from fetch-spans-summary.ts, shared with get-span-content.ts and analyze-with-llm.ts
+export const spanStorage: Map<string, Span> = new Map();
 ```
+
+---
+
+## Experiment Tools (in UI Tools)
+
+**File:** `src/lib/distri-ui-tools.ts`
+
+These 4 tools are experiment-specific:
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `get_experiment_data` | Get experiment state | (none) |
+| `apply_experiment_data` | Apply changes (patch semantics) | `data: {...}` |
+| `run_experiment` | Execute (60s timeout) | (none) |
+| `evaluate_experiment_results` | Compare original vs new | (none) |
 
 ---
 
@@ -293,17 +360,19 @@ export function AgentPanel({ ... }) {
 
 2. **Validation cache** - `is_valid_for_optimize` uses 5-minute TTL cache
 
-3. **Two-phase analysis** - Use `fetch_spans_summary` for large datasets
+3. **Three-phase analysis** - Use `fetch_spans_summary` → `analyze_with_llm` for large datasets
 
-4. **Default limit 10** - `fetch_spans` returns max 10 spans by default (adjustable via limit param)
+4. **Default limit 10** - `fetch_spans` returns max 10 spans by default
 
 5. **Parallel fetching** - `fetch_spans_summary` uses `Promise.all()` for speed
 
-6. **Client-side analysis** - `get_span_content` returns analysis results, not raw data
+6. **Structured output** - `analyze_with_llm` uses OpenAI JSON schema for consistent results
 
-7. **Semantic errors** - Detect "not found", "failed", etc. in response content
+7. **Shared storage** - `spanStorage` Map is shared between Phase 1, 2, and 3 tools
 
 8. **Label filtering** - Both `fetch_spans` and `fetch_spans_summary` support `labels` parameter
+
+9. **LLM headers** - `analyze_with_llm` adds `x-label: analyze_with_llm` for tracing
 
 ## Related Documents
 

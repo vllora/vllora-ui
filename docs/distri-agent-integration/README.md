@@ -1,6 +1,6 @@
 # Distri Agent Integration for vLLora
 
-AI assistant for vLLora trace analysis using Distri's multi-agent architecture.
+AI assistant (Lucy) for vLLora trace analysis using Distri's multi-agent architecture.
 
 ## Architecture
 
@@ -16,7 +16,7 @@ AI assistant for vLLora trace analysis using Distri's multi-agent architecture.
          ▼              ▼              ▼
    ┌───────────┐  ┌───────────┐  ┌───────────────┐
    │ ui_agent  │  │data_agent │  │experiment_agent│
-   │ (4 tools) │  │ (7 tools) │  │   (4 tools)   │
+   │ (4 tools) │  │ (8 tools) │  │   (4 tools)   │
    └───────────┘  └───────────┘  └───────────────┘
 ```
 
@@ -24,25 +24,26 @@ AI assistant for vLLora trace analysis using Distri's multi-agent architecture.
 
 | Agent | Purpose | Tools |
 |-------|---------|-------|
-| **vllora_orchestrator** | Routes requests, manages workflows (12 workflow types) | `call_vllora_*` (auto-generated) |
+| **vllora_orchestrator** | Routes requests, manages workflows (14 workflow types) | `call_vllora_*` (auto-generated) |
 | **vllora_ui_agent** | UI interactions: navigate, visibility, label filtering | 4 external |
-| **vllora_data_agent** | Data fetching with two-phase analysis + label discovery | 7 external |
+| **vllora_data_agent** | Data fetching with three-phase analysis + label discovery | 8 external |
 | **vllora_experiment_agent** | Experiment page optimization | 4 external |
 
 ## Key Features
 
-### Two-Phase Analysis (Context Overflow Prevention)
-- `fetch_spans_summary` - Fetches ALL spans, stores in browser memory, returns lightweight summary
-- `get_span_content` - Performs client-side semantic analysis, returns results (not raw data)
-- Reduces context from ~194K tokens to ~5K tokens
+### Three-Phase Analysis (Context Overflow Prevention)
+1. `fetch_spans_summary` - Fetches ALL spans, stores in browser memory, returns lightweight summary with flagged spans
+2. `get_span_content` - Retrieves specific spans by ID for pattern matching
+3. `analyze_with_llm` - Deep LLM semantic analysis of flagged spans (structured output)
+
+### Semantic Error Detection
+- `fetch_spans_summary` detects error patterns via regex (fast, initial scan)
+- `analyze_with_llm` performs deep semantic analysis with LLM (slow, accurate)
+- Patterns: silent failures, buried warnings, gradual degradation, tool errors
 
 ### Validation Caching
 - `is_valid_for_optimize` results are cached per span_id (5-minute TTL)
 - Prevents duplicate API calls when agents retry
-
-### Semantic Error Detection
-- Detects error patterns in response content (not just status codes)
-- Patterns: "not found", "failed to", "timeout", "rate limit", etc.
 
 ### Label Filtering
 - `list_labels` - Discover available labels with counts
@@ -52,6 +53,9 @@ AI assistant for vLLora trace analysis using Distri's multi-agent architecture.
 ## Quick Start
 
 ```bash
+# Start vLLora backend
+cd vllora/gateway && cargo run
+
 # Start vLLora UI
 cd vllora/ui && pnpm dev
 
@@ -61,23 +65,35 @@ cd vllora/ui && pnpm dev
 ## Key Files
 
 ```
-ui/
-├── public/agents/                 # Agent definitions
-│   ├── vllora-orchestrator.md    # Main entry point (12 workflows)
+gateway/
+├── agents/                        # Agent definitions
+│   ├── vllora-orchestrator.md    # Main entry point (14 workflows)
 │   ├── vllora-ui-agent.md        # UI interactions (4 tools)
-│   ├── vllora-data-agent.md      # Data analysis (7 tools)
+│   ├── vllora-data-agent.md      # Data analysis (8 tools)
 │   └── vllora-experiment-agent.md # Experiment optimization (4 tools)
+
+ui/
 ├── src/lib/
-│   ├── agent-sync.ts             # Auto-registers agents
-│   ├── distri-ui-tools.ts        # UI tools (8) + validation cache
-│   └── distri-data-tools.ts      # Data tools (7) + span storage
+│   ├── agent-sync.ts              # Auto-registers agents
+│   └── distri-data-tools/         # Data tools (modular)
+│       ├── index.ts               # Entry point, exports all tools
+│       ├── helpers.ts             # Shared utilities
+│       ├── fetch-runs.ts          # Fetch runs
+│       ├── fetch-spans.ts         # Fetch spans
+│       ├── get-run-details.ts     # Get run details
+│       ├── fetch-groups.ts        # Fetch aggregated groups
+│       ├── fetch-spans-summary.ts # Three-phase: fetch + store + summarize
+│       ├── get-span-content.ts    # Three-phase: retrieve specific spans
+│       ├── list-labels.ts         # List available labels
+│       └── analyze-with-llm.ts    # Three-phase: LLM semantic analysis
+├── src/lib/distri-ui-tools.ts     # UI tools (4) + validation cache
 └── src/components/agent/          # Chat panel UI
 ```
 
 ## How It Works
 
 1. **User sends message** → Orchestrator receives it with page context
-2. **Orchestrator identifies workflow** → Matches against 12 workflow types
+2. **Orchestrator identifies workflow** → Matches against 14 workflow types
 3. **Orchestrator routes to sub-agent** → Calls `call_vllora_*` with specific task
 4. **Sub-agent executes** → Uses external tools (handled by frontend)
 5. **Result returned** → Orchestrator continues workflow or calls `final`
@@ -86,18 +102,20 @@ ui/
 
 | # | Workflow | Trigger |
 |---|----------|---------|
-| 1 | Comprehensive Analysis | Generic questions ("what's wrong?", "analyze this") |
-| 2 | Error Analysis | "check for errors" |
-| 3 | Performance Analysis | "performance", "latency", "slow" |
-| 4 | Cost Analysis | "cost", "tokens", "expensive" |
-| 5 | Optimize Span | "optimize", "improve" (not on experiment page) |
-| 6 | Analyze Experiment | "optimize" (on experiment page) |
-| 7 | Apply Optimization | "apply", "do it", "yes" |
-| 8 | Greetings/Help | "hello", "help" |
-| 9 | Label Discovery | "what labels exist?", "show me labels" |
-| 10 | Label Filtering (data) | "show me flight_search traces" |
-| 11 | Label Filtering (UI) | "filter by label", "apply label filter" |
-| 12 | Label Comparison | "compare flight_search with hotel_search" |
+| 1 | Run Analysis | Questions about a run/workflow |
+| 2 | Span Analysis | Questions about a specific span |
+| 3 | Comprehensive Analysis | Generic questions ("what's wrong?", "analyze this") |
+| 4 | Error Analysis | "check for errors" |
+| 5 | Performance Analysis | "performance", "latency", "slow" |
+| 6 | Cost Analysis | "cost", "tokens", "expensive" |
+| 7 | Experiment/Optimize | "optimize", "improve" (not on experiment page) |
+| 8 | Analyze Experiment | "optimize" (on experiment page, no explicit change) |
+| 9 | Apply Optimization | "apply", "switch to {model}" |
+| 10 | Greetings/Help | "hello", "help" |
+| 11 | Label Discovery | "what labels exist?", "show me labels" |
+| 12 | Label Filtering (data) | "show me flight_search traces" |
+| 13 | Label Filtering (UI) | "filter by label", "apply label filter" |
+| 14 | Label Comparison | "compare flight_search with hotel_search" |
 
 ## Documentation
 
