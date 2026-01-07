@@ -13,6 +13,7 @@ import { ThreadsConsumer } from './ThreadsContext';
 import { tryParseJson } from '@/utils/modelUtils';
 import { useLabelFilter } from '@/hooks/useLabelFilter';
 import { eventEmitter } from '@/utils/eventEmitter';
+import { CurrentAppConsumer } from './CurrentAppContext';
 
 export type ChatWindowContextType = ReturnType<typeof useChatWindow>;
 
@@ -28,6 +29,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const { app_mode } = CurrentAppConsumer()
 
   // Parse initial labels from URL (comma-separated)
   const initialLabelsFromUrl = useMemo(() => {
@@ -41,7 +43,7 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     projectId,
     threadId,
     initialLabels: initialLabelsFromUrl,
-    autoFetch: true,
+    autoFetch: app_mode === 'vllora',
   });
 
   // Use the runs pagination hook

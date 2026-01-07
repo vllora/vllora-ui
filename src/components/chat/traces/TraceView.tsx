@@ -117,7 +117,7 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
         )}
 
         {/* Label Filter */}
-        <div className="px-2 py-2 border-b border-border/50">
+        {app_mode === "vllora" && <div className="px-2 py-2 border-b border-border/50">
           <LabelFilter
             selectedLabels={labelFilter.selectedLabels}
             onLabelsChange={labelFilter.setLabels}
@@ -131,7 +131,7 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
               Showing {matchingRuns} of {totalRuns} runs
             </div>
           )}
-        </div>
+        </div>}
 
         {/* Main content area */}
         <TraceMainContent

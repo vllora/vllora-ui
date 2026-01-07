@@ -9,6 +9,7 @@ import { useSearchParams, useNavigate, useLocation } from "react-router";
 import { X } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { LabelFilter } from "@/components/label-filter";
+import { CurrentAppConsumer } from "@/contexts/CurrentAppContext";
 
 export function TracesPageContent() {
   const {
@@ -24,6 +25,7 @@ export function TracesPageContent() {
   } = TracesPageConsumer();
 
   const { currentProjectId } = ProjectsConsumer();
+  const { app_mode } = CurrentAppConsumer();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -73,7 +75,7 @@ export function TracesPageContent() {
           onDurationChange={setDuration}
           filterBadge={threadFilterBadge}
         />
-        <div className="w-64">
+        {app_mode === "vllora" && <div className="w-64">
           <LabelFilter
             selectedLabels={labelFilter.selectedLabels}
             onLabelsChange={labelFilter.setLabels}
@@ -82,7 +84,7 @@ export function TracesPageContent() {
             placeholder="Filter labels..."
             size="sm"
           />
-        </div>
+        </div>}
       </div>
     </div>
 

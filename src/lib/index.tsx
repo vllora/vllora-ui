@@ -33,6 +33,7 @@ export { ProviderKeysPage } from '../pages/settings/provider-keys';
 // Provider form components (API-agnostic UI)
 export { ProviderCredentialForm } from '../pages/settings/ProviderCredentialForm';
 export { ProviderCredentialModal } from '../pages/settings/ProviderCredentialModal';
+export { ProviderModalProvider } from '../contexts/ProviderModalContext';
 export { DeleteProviderDialog } from '../pages/settings/DeleteProviderDialog';
 export { ProviderKeysLoader } from '../pages/settings/ProviderKeysLoader';
 export type { CredentialFormValues } from '../pages/settings/ProviderCredentialForm';

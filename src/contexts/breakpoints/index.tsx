@@ -26,6 +26,7 @@ export const useBreakpointsState = (projectId: string) => {
 
   const fetchBreakpoints = useCallback(async () => {
     try {
+      if (app_mode === 'langdb') return;
       const response = await api.get('/debug/breakpoints');
       const data = await handleApiResponse<BreakpointsResponse>(response);
 
@@ -52,7 +53,7 @@ export const useBreakpointsState = (projectId: string) => {
         }));
       }
     }
-  }, []);
+  }, [app_mode]);
   const continueAllBreakpoints = useCallback(async () => {
     try {
       const response = await api.post('/debug/continue/all');

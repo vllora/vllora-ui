@@ -42,8 +42,12 @@ export interface MCPConfigsResponse {
   configs: MCPConfig[];
 }
 
-export async function listMCPConfigs(): Promise<MCPConfigsResponse> {
-  const response = await api.get('/mcp-configs');
+export async function listMCPConfigs(projectId?: string): Promise<MCPConfigsResponse> {
+  const response = await api.get('/mcp-configs', {
+    headers: {
+      ...(projectId ? { 'x-project-id': projectId } : {}),
+    },
+  });
   return handleApiResponse<MCPConfigsResponse>(response);
 }
 
@@ -57,6 +61,8 @@ export async function fetchMCPTools(configId: string): Promise<Record<string, MC
   return data;
 }
 
-export function useMCPConfigs() {
-  return useRequest(listMCPConfigs);
+export function useMCPConfigs(projectId?: string) {
+  return useRequest(() => listMCPConfigs(projectId), {
+    refreshDeps: [projectId],
+  });
 }

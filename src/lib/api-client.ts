@@ -131,6 +131,17 @@ export async function handleApiResponse<T>(response: Response): Promise<T> {
     const errorJson = tryParseJson(error)
     throw new Error(errorJson?.error || errorJson.message || error || `API request failed with status ${response.status}`);
   }
-  let jsonResp = await response.json();
-  return jsonResp;
+
+  // Handle empty responses (e.g., 204 No Content or empty body)
+  const contentLength = response.headers.get('content-length');
+  if (response.status === 204 || contentLength === '0') {
+    return undefined as T;
+  }
+
+  const text = await response.text();
+  if (!text) {
+    return undefined as T;
+  }
+
+  return JSON.parse(text);
 }

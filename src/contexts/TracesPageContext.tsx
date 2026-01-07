@@ -13,6 +13,7 @@ import { tryParseJson } from "@/utils/modelUtils";
 import { getGroupKey } from "./utils";
 import { eventEmitter } from "@/utils/eventEmitter";
 import { useLabelFilter } from "@/hooks/useLabelFilter";
+import { CurrentAppConsumer } from "./CurrentAppContext";
 
 export type TracesPageContextType = ReturnType<typeof useTracesPageContext>;
 
@@ -30,6 +31,7 @@ export function useTracesPageContext(props: { projectId: string }) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const { app_mode } = CurrentAppConsumer()
 
   // Initialize from URL first, then localStorage, then default
   const [groupByMode, setGroupByMode] = useState<GroupByMode>(() => {
@@ -128,7 +130,7 @@ export function useTracesPageContext(props: { projectId: string }) {
     projectId,
     threadId: threadIdFromUrl,
     initialLabels: initialLabelsFromUrl,
-    autoFetch: true,
+    autoFetch: app_mode === 'vllora',
   });
 
   // Sync labels to URL when they change (one-directional to avoid loops)
