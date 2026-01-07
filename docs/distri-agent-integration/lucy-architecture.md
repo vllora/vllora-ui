@@ -116,20 +116,47 @@ The data agent formats its response using data from BOTH tools:
 
 | Metric | Value |
 |--------|-------|
-| Spans | [total] total ([success] success, [error] errors) |
-| Cost | $[cost] ([input] in / [output] out tokens) |
-| Latency | p50=[X]ms, p95=[Y]ms, p99=[Z]ms |
+| Spans | [total] total ([success] success, [error] errors, [semantic] semantic issues) |
+| Operations | [by_operation as "run: X, tools: Y"] *(if multiple operation types)* |
+| Duration | [total_duration_ms]ms total |
+| Cost | $[cost] *(add token breakdown only if > 0)* |
+| Latency | p50=[X]ms, p95=[Y]ms, p99=[Z]ms, max=[max]ms |
 | Models | [models_used] |
+| Labels | [labels_found] *(if non-empty)* |
+| Cache Hit | [%] ([cached] tokens) *(if > 0)* |
+| TTFT | p50=[X]ms, p95=[Y]ms, avg=[avg]ms *(if available)* |
+| Slowest | `[span_id]` ([operation]) - [duration]ms |
+| Most Expensive | `[span_id]` ([operation]) - $[cost] |
 
-## Hidden Issues Found
+### Model Breakdown *(if multiple models)*
+
+| Model | Calls | Cost | Tokens |
+|-------|-------|------|--------|
+| ... | ... | ... | ... |
+
+### Tool Usage *(if tools called)*
+
+| Tool | Calls |
+|------|-------|
+| ... | ... |
+
+### Repeated Failures *(if patterns detected)*
+
+| Name | Count | Type |
+|------|-------|------|
+| ... | ... | tool/operation |
+
+## Issues Detected *(only if issues found)*
 
 | # | Issue | Span | Severity | What Happened | Why It's a Problem |
 |---|-------|------|----------|---------------|-------------------|
 | 1 | [issue_title] | `[span_id]` | High | [Brief + data: `{"results": []}`] | [explanation] |
 | 2 | [issue_title] | `[span_id]` | Medium | [Brief + data snippet] | [explanation] |
 
-## Recommendations
+## Recommendations *(only if issues found)*
 - [from analyze_with_llm recommendations array]
+
+*Note: If no issues detected, skip both sections. Report ends after Stats.*
 ```
 
 ## Orchestrator Behavior

@@ -274,19 +274,46 @@ The data agent formats its response in markdown:
 
 | Metric | Value |
 |--------|-------|
-| Spans | 15 total (12 success, 3 errors) |
-| Cost | $0.0037 (1500 in / 800 out tokens) |
-| Latency | p50=245ms, p95=1200ms, p99=2100ms |
+| Spans | 15 total (12 success, 3 errors, 2 semantic issues) |
+| Operations | run: 5, tools: 10 |
+| Duration | 2500ms total |
+| Cost | $0.0037 (1500 in / 800 out tokens) *(omit if 0)* |
+| Latency | p50=245ms, p95=1200ms, p99=2100ms, max=2500ms |
 | Models | gpt-4o-mini, gpt-4 |
+| Labels | flight_search, hotel_search |
+| Cache Hit | 45% (675 cached tokens) |
+| TTFT | p50=150ms, p95=350ms, avg=200ms |
+| Slowest | `abc123` (search_flights) - 2500ms |
+| Most Expensive | `def456` (gpt-4 call) - $0.0012 |
 
-## Hidden Issues Found
+### Model Breakdown
+
+| Model | Calls | Cost | Tokens (in/out) |
+|-------|-------|------|-----------------|
+| gpt-4o-mini | 10 | $0.002 | 1000/500 |
+| gpt-4 | 5 | $0.0017 | 500/300 |
+
+### Tool Usage
+
+| Tool | Calls |
+|------|-------|
+| search_flights | 3 |
+| book_hotel | 2 |
+
+### Repeated Failures *(if patterns detected)*
+
+| Name | Count | Type |
+|------|-------|------|
+| search_web | 3 | tool |
+
+## Issues Detected *(only shown if issues found)*
 
 | # | Issue | Span | Severity | What Happened | Why It's a Problem |
 |---|-------|------|----------|---------------|-------------------|
 | 1 | Silent Search Failure | `abc123` | High | Results empty: `{"results": []}` | Status says success but no data returned |
 | 2 | Truncated Response | `def456` | Medium | Content cut off: `"...overview of t..."` | User misses important information |
 
-## Recommendations
+## Recommendations *(only shown if issues found)*
 - Add checks for empty results
 ```
 

@@ -152,19 +152,36 @@ sqlite3 "/Users/anhthuduong/.vllora/vllora.db" \
 
 | Metric | Value |
 |--------|-------|
-| Spans | 15 total (12 success, 3 errors) |
-| Cost | $0.0037 (1500 in / 800 out tokens) |
-| Latency | p50=245ms, p95=1200ms, p99=2100ms |
+| Spans | 15 total (12 success, 3 errors, 2 semantic issues) |
+| Operations | run: 5, tools: 10 |
+| Duration | 2500ms total |
+| Cost | $0.0037 (1500 in / 800 out tokens) *(omit token breakdown if 0)* |
+| Latency | p50=245ms, p95=1200ms, p99=2100ms, max=2500ms |
 | Models | gpt-4o-mini, gpt-4 |
+| Labels | flight_search, hotel_search |
+| Slowest | `abc123` (search_flights) - 2500ms |
+| Most Expensive | `def456` (gpt-4 call) - $0.0012 |
 
-## Hidden Issues Found
+### Model Breakdown
+
+| Model | Calls | Cost | Tokens (in/out) |
+|-------|-------|------|-----------------|
+| gpt-4o-mini | 10 | $0.002 | 1000/500 |
+
+### Repeated Failures *(only if patterns detected)*
+
+| Name | Count | Type |
+|------|-------|------|
+| search_web | 3 | tool |
+
+## Issues Detected *(only if issues found)*
 
 | # | Issue | Span | Severity | What Happened | Why It's a Problem |
 |---|-------|------|----------|---------------|-------------------|
 | 1 | Silent Failure | `abc123` | High | Results empty: `{"results": []}` | Status says success but no data returned |
 | 2 | Truncated Response | `def456` | Medium | Content cut off: `"...text..."` | User misses important information |
 
-## Recommendations
+## Recommendations *(only if issues found)*
 - Add checks for empty results
 - ...
 ```
@@ -193,7 +210,8 @@ Same as data agent's response above.
 - [ ] `fetch_spans_summary` was called and returned data
 - [ ] `analyze_with_llm` was called if semantic errors existed
 - [ ] Data agent's final has `## Stats` table (Metric | Value format)
-- [ ] Data agent's final has `## Hidden Issues Found` table (# | Issue | Span | Severity | What Happened | Why It's a Problem)
+- [ ] Data agent's final has `## Issues Detected` table if issues found (# | Issue | Span | Severity | What Happened | Why It's a Problem)
+- [ ] If no issues: "Issues Detected" and "Recommendations" sections are skipped
 - [ ] Orchestrator's final matches data agent's final (VERBATIM)
 - [ ] No tables added by orchestrator (Errors & Issues, Performance, Latency)
 
