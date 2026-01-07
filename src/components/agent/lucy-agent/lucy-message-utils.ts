@@ -38,7 +38,7 @@ export function extractContent(message: DistriMessage | DistriEvent): ExtractedC
   }>;
 
   return {
-    text: textParts.join('\n').trim(),
+    text: textParts.join('').trim(),
     imageParts,
   };
 }
