@@ -15,7 +15,7 @@ export type ThreadsContextType = ReturnType<typeof useThreads>;
 const ThreadsContext = createContext<ThreadsContextType | undefined>(undefined);
 
 // Allowed query params for threads/chat page
-const ALLOWED_QUERY_PARAMS = ['tab', 'thread_id', 'project_id', 'model', 'labels'] as const;
+const ALLOWED_QUERY_PARAMS = ['tab', 'thread_id', 'project_id', 'model', 'labels', 'detail_span_id'] as const;
 
 interface ThreadsProviderProps {
   projectId: string;
