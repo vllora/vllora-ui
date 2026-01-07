@@ -29,8 +29,9 @@ import { listSpans, type ListSpansQuery, type Span } from '@/services/spans-api'
 import { listGroups, type ListGroupsQuery } from '@/services/groups-api';
 import { listLabels } from '@/services/labels-api';
 import { analyzeWithLLM } from '@/lib/analyze-with-llm';
+import { generateFlowDiagram } from '@/lib/generate-flow-diagram';
 
-// Data tool names (8 tools - 4 original + 2 two-phase analysis + 1 label discovery + 1 hybrid LLM)
+// Data tool names (9 tools - 4 original + 2 two-phase analysis + 1 label discovery + 1 hybrid LLM + 1 visualization)
 export const DATA_TOOL_NAMES = [
   'fetch_runs',
   'fetch_spans',
@@ -40,6 +41,7 @@ export const DATA_TOOL_NAMES = [
   'get_span_content',
   'list_labels',
   'analyze_with_llm',
+  'generate_flow_diagram',
 ] as const;
 
 // ============================================================================
@@ -1010,6 +1012,34 @@ export const dataToolHandlers: Record<string, (params: Record<string, unknown>) 
   analyze_with_llm: async (params) => {
     return analyzeWithLLM(params, spanStorage);
   },
+
+  // ============================================================================
+  // VISUALIZATION TOOL (Client-side Mermaid generation)
+  // ============================================================================
+
+  /**
+   * Generate a user-centric Mermaid diagram showing logical data flow
+   * Shows WHAT the agent is doing, not technical span hierarchy
+   *
+   * @param diagramType - 'flowchart' (default) | 'sequence'
+   * @param maxSteps - Maximum steps to show (default: 12)
+   */
+  generate_flow_diagram: async (params) => {
+    // Check if storage has data
+    if (spanStorage.size === 0) {
+      return {
+        success: false,
+        error: 'No spans in memory. Call fetch_spans_summary first to load spans.',
+      };
+    }
+
+    // Get all spans from storage and delegate to the extracted function
+    const allSpans = Array.from(spanStorage.values());
+    return generateFlowDiagram(allSpans, {
+      diagramType: params.diagramType as 'flowchart' | 'sequence',
+      maxSteps: params.maxSteps as number,
+    });
+  },
 };
 
 /**
@@ -1263,5 +1293,30 @@ export const dataTools: DistriFnTool[] = [
       required: ['spanIds'],
     },
     handler: async (input: object) => JSON.stringify(await dataToolHandlers.analyze_with_llm(input as Record<string, unknown>)),
+  } as DistriFnTool,
+
+  // ============================================================================
+  // VISUALIZATION TOOL
+  // ============================================================================
+
+  {
+    name: 'generate_flow_diagram',
+    description: 'Generate a user-centric Mermaid diagram showing the logical data flow (what the agent is doing, not technical span hierarchy). Shows: User question → Agent thinking → Tool calls with inputs → Results → Agent response. Requires fetch_spans_summary first. Runs client-side, handles any number of spans.',
+    type: 'function',
+    parameters: {
+      type: 'object',
+      properties: {
+        diagramType: {
+          type: 'string',
+          enum: ['flowchart', 'sequence'],
+          description: 'Type of diagram. "flowchart" shows visual flow with shapes (user input, decisions, tool calls, results), "sequence" shows interaction timeline between User, Agent, and Tools. Default: flowchart',
+        },
+        maxSteps: {
+          type: 'number',
+          description: 'Maximum steps to show in diagram (default: 12). Each tool call + result counts as 2 steps.',
+        },
+      },
+    },
+    handler: async (input: object) => JSON.stringify(await dataToolHandlers.generate_flow_diagram(input as Record<string, unknown>)),
   } as DistriFnTool,
 ];

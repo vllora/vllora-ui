@@ -13,6 +13,7 @@ import { useCallback, useState } from "react";
 import { JsonViewer } from '../JsonViewer';
 import { tryParseJson } from '@/utils/modelUtils';
 import { sanitizeSchema } from '@/utils/sanitizeSchema';
+import { MermaidRenderer } from '@/components/shared/MermaidRenderer';
 
 export const CopyToClipboard: React.FC<{ content: string } & React.HTMLAttributes<HTMLDivElement>> = ({ content, className, ...restProps }) => {
   const [copied, setCopied] = useState(false);
@@ -46,9 +47,20 @@ export const MarkdownViewer: React.FC<{ message: string }> = ({ message }) => {
       components={{
         code({ node, className, children, ...props }) {
           const match = /language-(\w+)/.exec(className || '');
+          const codeContent = String(children).replace(/\n$/, '');
+
+          // Handle mermaid diagrams specially
+          if (match && match[1] === 'mermaid') {
+            return (
+              <div className="my-2">
+                <MermaidRenderer chart={codeContent} />
+              </div>
+            );
+          }
+
           return match ? (
             <div className="relative">
-              <CopyToClipboard content={String(children).replace(/\n$/, '')} className="absolute top-0 right-0 m-2 p-1 rounded text-xs" />
+              <CopyToClipboard content={codeContent} className="absolute top-0 right-0 m-2 p-1 rounded text-xs" />
               <div style={{ maxHeight: '400px', overflow: 'auto', overflowX: 'auto' }}>
                 <SyntaxHighlighter
                   style={vscDarkPlus as any}
@@ -57,7 +69,7 @@ export const MarkdownViewer: React.FC<{ message: string }> = ({ message }) => {
                   {...props}
                   ref={props.ref as React.LegacyRef<SyntaxHighlighter>}
                 >
-                  {String(children).replace(/\n$/, '')}
+                  {codeContent}
                 </SyntaxHighlighter>
               </div>
             </div>
