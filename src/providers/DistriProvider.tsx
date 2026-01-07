@@ -11,7 +11,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { DistriProvider as BaseDistriProvider } from '@distri/react';
-import { checkDistriHealth, getDistriUrl } from '@/lib/agent-sync';
+import { checkDistriHealth, fetchLucyConfig, LucyConfig, DEFAULT_DISTRI_URL } from '@/lib/agent-sync';
 
 // ============================================================================
 // Types
@@ -35,7 +35,12 @@ const DistriContext = createContext<DistriContextValue>({
 // Inner Provider (handles initialization)
 // ============================================================================
 
-function DistriProviderInner({ children }: { children: React.ReactNode }) {
+interface DistriProviderInnerProps {
+  children: React.ReactNode;
+  distriUrl: string;
+}
+
+function DistriProviderInner({ children, distriUrl }: DistriProviderInnerProps) {
   const [isConnected, setIsConnected] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +52,7 @@ function DistriProviderInner({ children }: { children: React.ReactNode }) {
 
     try {
       // Check server health
-      const isHealthy = await checkDistriHealth();
+      const isHealthy = await checkDistriHealth(distriUrl);
       if (!isHealthy) {
         setError('Distri server is not available');
         setIsConnected(false);
@@ -64,7 +69,7 @@ function DistriProviderInner({ children }: { children: React.ReactNode }) {
     } finally {
       setIsInitializing(false);
     }
-  }, []);
+  }, [distriUrl]);
 
   // Reconnect function
   const reconnect = useCallback(async () => {
@@ -102,7 +107,36 @@ interface DistriProviderProps {
 }
 
 export function DistriProvider({ children }: DistriProviderProps) {
-  const distriUrl = getDistriUrl();
+  const [lucyConfig, setLucyConfig] = useState<LucyConfig | null>(null);
+  const [isLoadingConfig, setIsLoadingConfig] = useState(true);
+
+  // Fetch config from backend API on mount
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadConfig() {
+      try {
+        const config = await fetchLucyConfig();
+        if (mounted) {
+          setLucyConfig(config);
+        }
+      } catch (err) {
+        console.warn('[DistriProvider] Failed to fetch config from API, using defaults:', err);
+        if (mounted) {
+          setLucyConfig({});
+        }
+      } finally {
+        if (mounted) {
+          setIsLoadingConfig(false);
+        }
+      }
+    }
+
+    loadConfig();
+    return () => { mounted = false; };
+  }, []);
+
+  const distriUrl = lucyConfig?.distri_url || DEFAULT_DISTRI_URL;
 
   // Config for DistriProvider (matches @distri/react API)
   // @distri/react expects baseUrl to include /api/v1 prefix
@@ -111,9 +145,14 @@ export function DistriProvider({ children }: DistriProviderProps) {
     debug: import.meta.env.DEV,
   }), [distriUrl]);
 
+  // Show loading state while fetching config
+  if (isLoadingConfig) {
+    return null;
+  }
+
   return (
     <BaseDistriProvider config={config}>
-      <DistriProviderInner>{children}</DistriProviderInner>
+      <DistriProviderInner distriUrl={distriUrl}>{children}</DistriProviderInner>
     </BaseDistriProvider>
   );
 }

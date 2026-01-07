@@ -10,8 +10,7 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import {
-  getDistriUrl,
-  saveDistriUrl,
+  DEFAULT_DISTRI_URL,
   checkDistriHealth,
 } from '@/lib/agent-sync';
 import {
@@ -188,7 +187,7 @@ const DEFAULT_MODEL_SETTINGS: ModelSettingsConfig = {
 export function useDistriSetup(initialStatus: ConnectionStatus = 'idle'): UseDistriSetupReturn {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(initialStatus);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [distriUrl, setDistriUrlState] = useState<string>(() => getDistriUrl());
+  const [distriUrl, setDistriUrlState] = useState<string>(DEFAULT_DISTRI_URL);
   const [registrationResult, setRegistrationResult] = useState<RegistrationResult | null>(null);
   const [modelSettings, setModelSettingsState] = useState<ModelSettingsConfig>(DEFAULT_MODEL_SETTINGS);
   const [configLoading, setConfigLoading] = useState(false);
@@ -217,8 +216,7 @@ export function useDistriSetup(initialStatus: ConnectionStatus = 'idle'): UseDis
 
   // Reset URL to default
   const resetUrl = useCallback(() => {
-    const defaultUrl = import.meta.env.VITE_DISTRI_URL || 'http://localhost:8081';
-    setDistriUrlState(defaultUrl);
+    setDistriUrlState(DEFAULT_DISTRI_URL);
     setErrorMessage(null);
     setConnectionStatus('idle');
   }, []);
@@ -262,7 +260,6 @@ export function useDistriSetup(initialStatus: ConnectionStatus = 'idle'): UseDis
     const isConnected = await checkDistriHealth(distriUrl);
 
     if (isConnected) {
-      saveDistriUrl(distriUrl);
       setConnectionStatus('connected');
       return true;
     } else {
@@ -292,8 +289,6 @@ export function useDistriSetup(initialStatus: ConnectionStatus = 'idle'): UseDis
       const isConnected = await checkDistriHealth(distriUrl);
 
       if (isConnected) {
-        // Save the URL on successful connection
-        saveDistriUrl(distriUrl);
         setConnectionStatus('connected');
 
         // Now register agents via vLLora BE

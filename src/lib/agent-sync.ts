@@ -2,58 +2,47 @@
  * Agent Sync Utility
  *
  * Manages Distri server connection:
- * - URL storage (localStorage)
+ * - Config fetching from BE API
  * - Health checks
  *
  * Note: Agent registration is now handled by vLLora BE via POST /agents/register
  * The BE embeds agents and registers them with Distri server.
  */
 
-// Storage key for custom Distri URL
-const DISTRI_URL_KEY = 'vllora:distri-url';
-const DEFAULT_DISTRI_URL = 'http://localhost:8081';
+export const DEFAULT_DISTRI_URL = 'http://localhost:8081';
 
-/**
- * Get the Distri server URL from localStorage or environment
- */
-export function getDistriUrl(): string {
-  try {
-    const stored = localStorage.getItem(DISTRI_URL_KEY);
-    if (stored) return stored;
-  } catch {
-    // Ignore storage errors
-  }
-  return import.meta.env.VITE_DISTRI_URL || DEFAULT_DISTRI_URL;
+// ============================================================================
+// Types
+// ============================================================================
+
+export interface LucyConfig {
+  distri_url?: string;
+  model_settings?: {
+    model?: string;
+    temperature?: number;
+    max_tokens?: number;
+  };
 }
 
-/**
- * Save custom Distri URL to localStorage
- */
-export function saveDistriUrl(url: string): void {
-  try {
-    localStorage.setItem(DISTRI_URL_KEY, url);
-  } catch {
-    // Ignore storage errors
-  }
-}
+// ============================================================================
+// API Functions
+// ============================================================================
 
 /**
- * Reset Distri URL to default (remove from localStorage)
+ * Fetch Lucy config from the backend API
  */
-export function resetDistriUrl(): void {
-  try {
-    localStorage.removeItem(DISTRI_URL_KEY);
-  } catch {
-    // Ignore storage errors
-  }
+export async function fetchLucyConfig(): Promise<LucyConfig> {
+  const { api, handleApiResponse } = await import('@/lib/api-client');
+  const response = await api.get('/agents/config');
+  return handleApiResponse<LucyConfig>(response);
 }
 
 /**
  * Check if Distri server is available
- * @param url Optional URL to check (defaults to current Distri URL)
+ * @param url URL to check
  */
-export async function checkDistriHealth(url?: string): Promise<boolean> {
-  const distriUrl = url || getDistriUrl();
+export async function checkDistriHealth(url: string): Promise<boolean> {
+  const distriUrl = url;
   try {
     // Health endpoint is at root level
     const response = await fetch(`${distriUrl}/health`, {
