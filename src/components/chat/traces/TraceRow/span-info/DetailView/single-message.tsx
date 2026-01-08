@@ -8,7 +8,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { tryParseJson } from "@/utils/modelUtils";
+import { parseJsonWithNestedResult } from "@/utils/modelUtils";
 import { ToolCallList } from "@/components/chat/messages/ToolCallList";
 
 const ExpandCollapseButton = ({ isExpanded, onClick }: { isExpanded: boolean; onClick: () => void }) => (
@@ -121,7 +121,7 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
     const roleStyle = getRoleStyle();
     const RoleIcon = roleStyle.icon;
 
-    const parsedContent = typeof content === 'string' ? tryParseJson(content) : undefined;
+    const parsedContent = typeof content === 'string' ? parseJsonWithNestedResult(content) : undefined;
 
     const partsArray = Array.isArray(parts) ? parts : [];
     const textSegments: string[] = [];

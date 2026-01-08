@@ -10,6 +10,34 @@ export const tryParseJson = (str: string) => {
   }
 }
 
+/**
+ * Parse JSON content and handle nested result parsing.
+ * If the parsed content has { result: string, success: boolean } structure,
+ * attempts to parse the result string as JSON.
+ */
+export const parseJsonWithNestedResult = (content: string | undefined): any => {
+  if (typeof content !== 'string') return undefined;
+
+  const parsed = tryParseJson(content);
+  if (!parsed) return undefined;
+
+  // Handle case where parsed content has { result: string, success: boolean }
+  if (
+    typeof parsed === 'object' &&
+    parsed !== null &&
+    'result' in parsed &&
+    'success' in parsed &&
+    typeof parsed.result === 'string'
+  ) {
+    const nestedParsed = tryParseJson(parsed.result);
+    if (nestedParsed !== undefined) {
+      return { ...parsed, result: nestedParsed };
+    }
+  }
+
+  return parsed;
+}
+
 export const tryParseFloat = (str: string) => {
   try {
     return parseFloat(str);

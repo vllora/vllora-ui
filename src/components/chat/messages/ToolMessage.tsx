@@ -16,7 +16,7 @@ import { ChatWindowConsumer } from '@/contexts/ChatWindowContext';
 import { ThreadsConsumer } from '@/contexts/ThreadsContext';
 import { useRelativeTime } from '@/hooks/useRelativeTime';
 import { ToolCallList } from './ToolCallList';
-import { tryParseJson } from '@/utils/modelUtils';
+import { parseJsonWithNestedResult } from '@/utils/modelUtils';
 import { JsonViewer } from '../traces/TraceRow/span-info/JsonViewer';
 
 export const ToolMessage: React.FC<{
@@ -25,7 +25,10 @@ export const ToolMessage: React.FC<{
 }> = ({ message: msg, isTyping }) => {
     const { setOpenTraces, fetchSpansByRunId, setHoveredRunId } = ChatWindowConsumer();
     const { setIsRightSidebarCollapsed } = ThreadsConsumer();
-    const parsedContent = typeof msg?.content === 'string' ? tryParseJson(msg?.content) : undefined;
+    const parsedContent = useMemo(
+        () => typeof msg?.content === 'string' ? parseJsonWithNestedResult(msg.content) : undefined,
+        [msg?.content]
+    );
     const messageRef = React.useRef<HTMLDivElement>(null);
 
     // Only update relative time when message is visible and less than 60 seconds old
