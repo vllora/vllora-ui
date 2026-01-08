@@ -66,8 +66,13 @@ const TRACES_QUICK_ACTIONS: QuickAction[] = [
   },
 ];
 
-/** Default quick actions for other contexts */
-const DEFAULT_QUICK_ACTIONS: QuickAction[] = [
+/** Quick actions for non-chat pages (guide user to /chat) */
+const NON_CHAT_QUICK_ACTIONS: QuickAction[] = [
+  {
+    id: 'go-to-traces',
+    icon: '📊',
+    label: 'Show me my traces',
+  },
   {
     id: 'help',
     icon: '💡',
@@ -76,17 +81,13 @@ const DEFAULT_QUICK_ACTIONS: QuickAction[] = [
   {
     id: 'analyze-errors',
     icon: '🔍',
-    label: 'Analyze latest error traces',
-  },
-  {
-    id: 'optimize-prompt',
-    icon: '⚡',
-    label: 'Optimize system prompt',
+    label: 'Find errors in my traces',
   },
 ];
 
 /** Get quick actions based on current route context */
 function getQuickActionsForContext(page: string, tab?: string): QuickAction[] {
+  // Lucy works best on /chat - show relevant actions there
   if (page === 'chat') {
     if (tab === 'threads') {
       return THREAD_QUICK_ACTIONS;
@@ -95,7 +96,8 @@ function getQuickActionsForContext(page: string, tab?: string): QuickAction[] {
       return TRACES_QUICK_ACTIONS;
     }
   }
-  return DEFAULT_QUICK_ACTIONS;
+  // On other pages, guide user toward trace analysis
+  return NON_CHAT_QUICK_ACTIONS;
 }
 
 // ============================================================================
@@ -193,7 +195,7 @@ export function AgentChatContent({
 
   // Compute context-aware quick actions based on current URL
   const quickActions = useMemo(() => {
-    if (typeof window === 'undefined') return DEFAULT_QUICK_ACTIONS;
+    if (typeof window === 'undefined') return NON_CHAT_QUICK_ACTIONS;
     const pathname = window.location.pathname;
     const searchParams = new URLSearchParams(window.location.search);
     const page = pathname.split('/')[1] || 'home';

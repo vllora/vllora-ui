@@ -8,10 +8,10 @@ All tools use `external = ["*"]`, meaning they are handled by the vLLora UI fron
 
 | Category | File | Count | Description |
 |----------|------|-------|-------------|
-| UI Tools | `src/lib/distri-ui-tools.ts` | 4 | visibility, navigation, filtering |
+| UI Tools | `src/lib/distri-ui-tools.ts` | 5 | visibility, navigation, filtering |
 | Data Tools | `src/lib/distri-data-tools/` | 8 | 4 basic + 3 three-phase analysis + 1 label discovery |
 
-**Total: 12 tools**
+**Total: 13 tools**
 
 ## Tool Format
 
@@ -36,7 +36,7 @@ Tools are exported as `DistriFnTool[]` arrays for use with the `@distri/react` C
 
 ---
 
-## UI Tools (4 total)
+## UI Tools (5 total)
 
 **File:** `src/lib/distri-ui-tools.ts`
 
@@ -44,6 +44,7 @@ Tools are exported as `DistriFnTool[]` arrays for use with the `@distri/react` C
 |------|-------------|---------|
 | `get_collapsed_spans` | Collapsed spans in trace view | `{collapsedSpanIds: [...]}` |
 | `is_valid_for_optimize` | Check if span can be optimized (CACHED) | `{valid, reason, _cached?}` |
+| `navigate_to` | Navigate to any page in vLLora (url param) | `{success, url}` |
 | `navigate_to_experiment` | Navigate to /experiment page | `{success, url}` |
 | `apply_label_filter` | Apply label filter to UI | `{success}` |
 
@@ -311,6 +312,7 @@ type DistriGetStateEvents = {
 
 // CHANGE UI events
 type DistriChangeUiEvents = {
+  vllora_navigate_to: { url: string };
   vllora_navigate_to_experiment: { spanId: string; url: string };
   vllora_apply_experiment_data: { data: Record<string, unknown> };
   vllora_apply_experiment_data_response: { success: boolean; error?: string };

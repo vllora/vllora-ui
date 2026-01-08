@@ -35,17 +35,16 @@ export const ParameterItem = ({
     valueInput === undefined
       ? undefined
       : typeof valueInput === "string"
-      ? valueInput
-      : JSON.stringify(valueInput, null, 2);
+        ? valueInput
+        : JSON.stringify(valueInput, null, 2);
 
   return (
     <div className="rounded-lg px-1 py-1">
       <button
         type="button"
         onClick={() => isExpandable && setIsOpen((prev) => !prev)}
-        className={`flex w-full items-center justify-between gap-2 text-left text-xs text-zinc-100 ${
-          isExpandable ? "hover:text-white" : "cursor-default"
-        }`}
+        className={`flex w-full items-center justify-between gap-2 text-left text-xs text-zinc-100 ${isExpandable ? "hover:text-white" : "cursor-default"
+          }`}
       >
         <div className="flex items-center gap-2">
           <span className="font-medium">{name}</span>
@@ -61,9 +60,8 @@ export const ParameterItem = ({
           </span>
           {isExpandable && (
             <ChevronDown
-              className={`h-3 w-3 transition-transform ${
-                isOpen ? "rotate-180" : ""
-              }`}
+              className={`h-3 w-3 transition-transform ${isOpen ? "rotate-180" : ""
+                }`}
             />
           )}
         </div>
@@ -76,8 +74,8 @@ export const ParameterItem = ({
       )}
 
       {isExpandable && isOpen && (
-        <div className="mt-2 space-y-2 text-[11px] leading-relaxed text-zinc-400">
-          {description && <p>{description}</p>}
+        <div className="space-y-2 text-[11px] leading-relaxed text-zinc-400">
+          {description && <p className="leading-relaxed text-zinc-400 text-[10px] italic">{description}</p>}
 
           {hasEnum && (
             <div className="flex flex-wrap gap-1">
@@ -181,15 +179,14 @@ export const ToolCallItem = ({
         <div className="flex items-center gap-2 text-[11px] text-zinc-500">
           {meta.length > 0 && <span>{meta.join(" • ")}</span>}
           <ChevronDown
-            className={`h-3 w-3 transition-transform ${
-              isExpanded ? "rotate-180" : ""
-            }`}
+            className={`h-3 w-3 transition-transform ${isExpanded ? "rotate-180" : ""
+              }`}
           />
         </div>
       </button>}
 
       {isExpanded && (
-        <div className="mt-3 space-y-3 text-xs text-zinc-300">
+        <div className="mt-1 space-y text-xs text-zinc-300">
           {id && (
             <div className="flex items-center gap-2 text-[11px] text-zinc-500">
               <FingerPrintIcon className="h-3 w-3 text-zinc-500" />
@@ -198,26 +195,21 @@ export const ToolCallItem = ({
           )}
 
           {description && (
-            <p className="leading-relaxed text-zinc-400">{description}</p>
+            <p className="leading-relaxed text-zinc-400 text-[10px] italic">{description}</p>
           )}
 
           {paramCount > 0 && (
-            <div className="space-y-2">
-              <span className="text-[11px] uppercase tracking-wide text-zinc-500">
-                Parameters
-              </span>
-              <div className="space-y-1">
-                {Object.entries(parametersProps).map(
-                  ([paramName, paramSchema]: [string, any]) => (
-                    <ParameterItem
-                      key={paramName}
-                      name={paramName}
-                      schema={paramSchema}
-                      required={requiredParams.includes(paramName)}
-                    />
-                  )
-                )}
-              </div>
+            <div className="space-y-1">
+              {Object.entries(parametersProps).map(
+                ([paramName, paramSchema]: [string, any]) => (
+                  <ParameterItem
+                    key={paramName}
+                    name={paramName}
+                    schema={paramSchema}
+                    required={requiredParams.includes(paramName)}
+                  />
+                )
+              )}
             </div>
           )}
 

@@ -113,8 +113,9 @@ export async function fetchSpansSummary(
   try {
     const projectId = (params.projectId as string) || await getCurrentProjectId();
 
-    if (!params.threadIds && !params.runIds) {
-      return { success: false, error: 'threadIds or runIds is required' };
+    // Allow fetching by threadIds, runIds, OR labels (for label comparison)
+    if (!params.threadIds && !params.runIds && !params.labels) {
+      return { success: false, error: 'threadIds, runIds, or labels is required' };
     }
 
     const query: ListSpansQuery = {};

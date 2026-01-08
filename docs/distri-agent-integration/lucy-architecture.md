@@ -13,7 +13,7 @@ Lucy is vLLora's AI assistant built on Distri's multi-agent framework. This docu
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                          vllora_orchestrator                                │
 │  - Routes requests to specialized sub-agents                                │
-│  - Manages 11 workflow types                                                │
+│  - Manages 12 workflow types                                                │
 │  - Passes through sub-agent responses (does NOT reformat)                   │
 │                                                                             │
 │  Auto-generated tools:                                                      │
@@ -25,7 +25,7 @@ Lucy is vLLora's AI assistant built on Distri's multi-agent framework. This docu
           ┌─────────────────┐     ┌─────────────────┐
           │ vllora_ui_agent │     │vllora_data_agent│
           │                 │     │                 │
-          │ 4 tools         │     │ 8 tools         │
+          │ 5 tools         │     │ 8 tools         │
           │ max_iter=5      │     │ max_iter=8      │
           └─────────────────┘     └─────────────────┘
 ```
@@ -208,12 +208,13 @@ DO:
 | `list_labels` | `list-labels.ts` | Get available labels with counts |
 | `analyze_with_llm` | `analyze-with-llm.ts` | Phase 3: LLM semantic analysis |
 
-### UI Agent Tools (4)
+### UI Agent Tools (5)
 
 | Tool | Purpose |
 |------|---------|
 | `get_collapsed_spans` | Get collapsed span IDs |
 | `is_valid_for_optimize` | Check if span can be optimized (cached) |
+| `navigate_to` | Navigate to any page in vLLora |
 | `navigate_to_experiment` | Navigate to /experiment page |
 | `apply_label_filter` | Apply label filter to UI |
 

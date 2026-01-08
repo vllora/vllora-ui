@@ -30,18 +30,18 @@ User Message
 ┌─────────────────────────────────────┐
 │       vllora_orchestrator           │
 │  - Routes to specialized agents     │
-│  - Manages 11 workflow types        │
+│  - Manages 12 workflow types        │
 └─────────────────────────────────────┘
          │                   │
          ↓                   ↓
    ┌──────────┐       ┌──────────┐
    │ UI Agent │       │Data Agent│
-   │ 4 tools  │       │ 8 tools  │
+   │ 5 tools  │       │ 8 tools  │
    └──────────┘       └──────────┘
 ```
 
 **Key Design Decisions:**
-- **Multi-agent** - Each agent has focused tools (4-8 instead of 16)
+- **Multi-agent** - Each agent has focused tools (5-8 instead of 16)
 - **Three-phase analysis** - Prevents LLM context overflow with large traces
 - **Pass-through formatting** - Data agent formats response, orchestrator passes verbatim
 - **Structured output** - JSON schema ensures consistent LLM analysis results

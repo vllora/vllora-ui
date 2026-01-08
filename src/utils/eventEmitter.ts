@@ -23,6 +23,7 @@ type DistriGetStateEvents = {
 
 // CHANGE UI tool events (fire-and-forget)
 type DistriChangeUiEvents = {
+  vllora_navigate_to: { url: string };
   vllora_navigate_to_experiment: { spanId: string; url: string };
 
   // Experiment page tools

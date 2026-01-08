@@ -61,7 +61,8 @@ export const UI_TOOL_NAMES = [
   'is_valid_for_optimize',
   'get_experiment_data',
   'evaluate_experiment_results',
-  // CHANGE UI (4)
+  // CHANGE UI (5)
+  'navigate_to',
   'navigate_to_experiment',
   'apply_experiment_data',
   'run_experiment',
@@ -243,6 +244,30 @@ const getStateHandlers: Record<string, ToolHandler> = {
 // ============================================================================
 
 const changeUiHandlers: Record<string, ToolHandler> = {
+  // Navigate to a URL (general navigation)
+  navigate_to: async ({ url }) => {
+    if (!url) {
+      return { success: false, error: 'url is required' };
+    }
+
+    const urlStr = url as string;
+
+    // Validate URL - must be a relative path starting with /
+    if (!urlStr.startsWith('/')) {
+      return { success: false, error: 'url must be a relative path starting with /' };
+    }
+
+    // Emit navigation event - component will handle navigating
+    emitter.emit('vllora_navigate_to', { url: urlStr });
+
+    return {
+      success: true,
+      url: urlStr,
+      navigated: true,
+      message: `Navigation complete. The user is now at ${urlStr}.`,
+    };
+  },
+
   // Navigate to experiment page (saves agent state to localStorage for continuity)
   navigate_to_experiment: async ({ spanId }) => {
     if (!spanId) {
@@ -409,6 +434,20 @@ export const uiTools: DistriFnTool[] = [
   } as DistriFnTool,
 
   // CHANGE UI TOOLS
+  {
+    name: 'navigate_to',
+    description: 'Navigate to a URL within vLLora. Use this to help users navigate to different pages like /chat, /chat?tab=traces, /settings, etc.',
+    type: 'function',
+    parameters: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'The relative URL to navigate to (must start with /). Examples: "/chat", "/chat?tab=traces", "/settings"' },
+      },
+      required: ['url'],
+    },
+    handler: async (input: object) => JSON.stringify(await uiToolHandlers.navigate_to(input as Record<string, unknown>)),
+  } as DistriFnTool,
+
   {
     name: 'navigate_to_experiment',
     description: 'Navigate to the experiment page for a span. The agent panel stays open so you can continue providing optimization suggestions after navigation. Call is_valid_for_optimize first to verify the span is valid.',

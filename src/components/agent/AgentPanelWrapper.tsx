@@ -25,14 +25,22 @@ export function AgentPanelWrapper() {
 
   // Listen for navigation events from agent tools
   useEffect(() => {
+    const handleNavigateTo = ({ url }: { url: string }) => {
+      // Use React Router navigate to avoid full page refresh
+      // This keeps the agent panel mounted and conversation continues
+      navigate(url);
+    };
+
     const handleNavigateToExperiment = ({ url }: { spanId: string; url: string }) => {
       // Use React Router navigate to avoid full page refresh
       // This keeps the agent panel mounted and conversation continues
       navigate(url);
     };
 
+    emitter.on('vllora_navigate_to', handleNavigateTo);
     emitter.on('vllora_navigate_to_experiment', handleNavigateToExperiment);
     return () => {
+      emitter.off('vllora_navigate_to', handleNavigateTo);
       emitter.off('vllora_navigate_to_experiment', handleNavigateToExperiment);
     };
   }, [navigate]);
