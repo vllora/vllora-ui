@@ -8,9 +8,9 @@ import { DistriMessage } from '@distri/core';
 import { useChatStateStore } from '@distri/react';
 import { LucyAvatar } from './LucyAvatar';
 import { LucyStepIndicator } from './LucyStepIndicator';
-import { LucyTextRenderer } from './LucyTextRenderer';
 import { LucyImageRenderer } from './LucyImageRenderer';
 import { extractContent, formatTimestamp } from './lucy-message-utils';
+import { LucyTextRenderer } from './LucyTextRenderer';
 
 // ============================================================================
 // Types
