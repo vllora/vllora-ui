@@ -388,8 +388,7 @@ export function LucyChat({
       </div>
 
       {/* Input Area */}
-      <div className="border-t border-border bg-background/80 backdrop-blur">
-        <div className="max-w-3xl mx-auto px-4 py-3">
+      <div className="bg-background/80 backdrop-blur">
           <LucyChatInput
             value={input}
             onChange={setInput}
@@ -409,7 +408,6 @@ export function LucyChat({
             onStartStreamingVoice={handleStartStreamingVoice}
             isStreamingVoice={isStreamingVoice}
           />
-        </div>
       </div>
     </div>
   );

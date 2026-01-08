@@ -171,26 +171,29 @@ export function LucyChatInput({
   const canSend = (value.trim().length > 0 || attachedImages.length > 0) && !disabled;
 
   return (
-    <div className={cn('space-y-2', className)}>
+    <div className={cn('border-t border-border p-4 bg-card', className)}>
       {/* Attached images preview */}
       {attachedImages.length > 0 && (
-        <div className="flex flex-wrap gap-2 px-3">
+        <div className="mb-3 flex flex-wrap gap-2">
           {attachedImages.map((img) => (
             <div
               key={img.id}
-              className="relative group w-16 h-16 rounded-lg overflow-hidden border border-border"
+              className="relative group bg-secondary rounded-lg p-2 flex items-center gap-2 border border-border"
             >
               <img
                 src={img.preview}
                 alt={img.name}
-                className="w-full h-full object-cover"
+                className="w-12 h-12 object-cover rounded"
               />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-foreground truncate">{img.name}</p>
+              </div>
               {onRemoveImage && (
                 <button
                   onClick={() => onRemoveImage(img.id)}
-                  className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="text-muted-foreground hover:text-foreground"
                 >
-                  <X className="w-3 h-3" />
+                  <X className="w-4 h-4" />
                 </button>
               )}
             </div>
@@ -198,44 +201,18 @@ export function LucyChatInput({
         </div>
       )}
 
-      {/* Input container */}
-      <div className="relative flex items-end gap-2 bg-muted/50 rounded-xl border border-border p-3">
-        {/* Textarea */}
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          disabled={disabled || isStreaming}
-          rows={1}
-          className={cn(
-            'flex-1 bg-transparent resize-none outline-none text-sm',
-            'placeholder:text-muted-foreground',
-            'min-h-[24px] max-h-[200px]',
-            'disabled:opacity-50'
-          )}
-        />
-
-        {/* Send/Stop button */}
-        <Button
-          size="icon"
-          onClick={handleSend}
-          disabled={!canSend && !isStreaming}
-          className={cn(
-            'h-8 w-8 rounded-full shrink-0',
-            isStreaming
-              ? 'bg-destructive hover:bg-destructive/90'
-              : 'bg-emerald-600 hover:bg-emerald-700'
-          )}
-        >
-          {isStreaming ? (
-            <Square className="h-3.5 w-3.5 fill-current" />
-          ) : (
-            <Send className="h-3.5 w-3.5" />
-          )}
-        </Button>
-      </div>
+      {/* Voice listening indicator */}
+      {isStreamingVoice && (
+        <div className="animate-pulse text-xs mb-2 text-muted-foreground flex items-center gap-2">
+          <span>Listening...</span>
+          <div className="flex items-end gap-0.5 h-4">
+            <span className="w-0.5 h-2 bg-[rgb(var(--theme-500))] rounded-full animate-audio-wave" style={{ animationDelay: '0ms' }} />
+            <span className="w-0.5 h-3 bg-[rgb(var(--theme-500))] rounded-full animate-audio-wave" style={{ animationDelay: '150ms' }} />
+            <span className="w-0.5 h-4 bg-[rgb(var(--theme-500))] rounded-full animate-audio-wave" style={{ animationDelay: '300ms' }} />
+            <span className="w-0.5 h-2.5 bg-[rgb(var(--theme-500))] rounded-full animate-audio-wave" style={{ animationDelay: '450ms' }} />
+          </div>
+        </div>
+      )}
 
       {/* Hidden file input */}
       <input
@@ -247,48 +224,72 @@ export function LucyChatInput({
         className="hidden"
       />
 
-      {/* Bottom toolbar */}
-      <div className="flex items-center justify-between text-muted-foreground">
-        <div className="flex items-center gap-1">
-          {/* Attachment button */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            disabled={disabled || isStreaming || !onAddImages}
-            onClick={handleAttachClick}
-            title="Attach image"
-          >
-            <Paperclip className="h-4 w-4" />
-          </Button>
+      {/* Input container with focus ring */}
+      <div className="bg-secondary rounded-xl border border-input focus-within:border-[rgb(var(--theme-500))] focus-within:shadow-[0_0_0_3px_rgba(var(--theme-rgb),0.1)] transition-all">
+        {/* Textarea */}
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          disabled={disabled || isStreaming}
+          rows={1}
+          className="w-full bg-transparent text-secondary-foreground placeholder-muted-foreground resize-none
+            focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed
+            max-h-[200px] overflow-y-auto px-4 pt-3 pb-2"
+        />
 
-          {/* Voice button with wave indicator */}
-          {voiceEnabled && (
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  'h-7 w-7 transition-all duration-300',
-                  isStreamingVoice && 'text-emerald-500 bg-emerald-500/15 shadow-[0_0_10px_2px_rgba(16,185,129,0.4)]'
-                )}
+        {/* Bottom toolbar inside input */}
+        <div className="flex items-center justify-between gap-2 px-3 pb-2">
+          <div className="flex items-center gap-1">
+            {/* Attachment button */}
+            <button
+              type="button"
+              onClick={handleAttachClick}
+              disabled={disabled || isStreaming || !onAddImages}
+              className="flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors disabled:opacity-50"
+              title="Attach image"
+            >
+              <Paperclip className="h-4 w-4 text-muted-foreground" />
+            </button>
+
+            {/* Voice button */}
+            {voiceEnabled && (
+              <button
+                type="button"
                 disabled={disabled || isStreaming || !onStartStreamingVoice}
                 onClick={handleVoiceClick}
+                className="flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors disabled:opacity-50"
                 title={isStreamingVoice ? 'Listening...' : 'Voice input'}
               >
-                <Mic className="h-4 w-4" />
-              </Button>
-              {/* Audio wave animation */}
-              {isStreamingVoice && (
-                <div className="flex items-end gap-0.5 h-4 ml-1">
-                  <span className="w-0.5 h-2 bg-emerald-500 rounded-full animate-audio-wave" style={{ animationDelay: '0ms' }} />
-                  <span className="w-0.5 h-3 bg-emerald-500 rounded-full animate-audio-wave" style={{ animationDelay: '150ms' }} />
-                  <span className="w-0.5 h-4 bg-emerald-500 rounded-full animate-audio-wave" style={{ animationDelay: '300ms' }} />
-                  <span className="w-0.5 h-2.5 bg-emerald-500 rounded-full animate-audio-wave" style={{ animationDelay: '450ms' }} />
-                </div>
-              )}
-            </div>
-          )}
+                <Mic className={cn(
+                  'h-4 w-4',
+                  isStreamingVoice ? 'text-[rgb(var(--theme-500))] animate-pulse' : 'text-muted-foreground'
+                )} />
+              </button>
+            )}
+          </div>
+
+          {/* Send/Stop button */}
+          <Button
+            onClick={handleSend}
+            disabled={!canSend && !isStreaming}
+            size="icon"
+            className={cn(
+              'h-8 w-8 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg',
+              isStreaming
+                ? 'bg-destructive hover:bg-destructive/90 text-white'
+                : 'bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-700))] text-white dark:bg-[rgb(var(--theme-600))] dark:hover:bg-[rgb(var(--theme-700))]'
+            )}
+            title={isStreaming ? 'Stop' : 'Send message'}
+          >
+            {isStreaming ? (
+              <Square className="w-4 h-4 fill-current" />
+            ) : (
+              <Send className="w-4 h-4" />
+            )}
+          </Button>
         </div>
       </div>
     </div>
