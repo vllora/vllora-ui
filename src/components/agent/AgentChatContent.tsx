@@ -13,10 +13,90 @@ import {
   LucyChat,
   LucyDefaultToolRenderer,
 } from './lucy-agent';
+import type { QuickAction } from './lucy-agent/LucyWelcome';
 import { useAgentPanel } from '@/contexts/AgentPanelContext';
 import { ProviderKeysConsumer } from '@/contexts/ProviderKeysContext';
 import { eventEmitter, OpenTrace } from '@/utils/eventEmitter';
 import { LucyAgentChatHeader } from './LucyAgentChatHeader';
+
+// ============================================================================
+// Quick Actions by Context
+// ============================================================================
+
+/** Quick actions for /chat?tab=threads (viewing a specific thread) */
+const THREAD_QUICK_ACTIONS: QuickAction[] = [
+  {
+    id: 'analyze-thread',
+    icon: '🔍',
+    label: 'Analyze this thread for issues',
+  },
+  {
+    id: 'check-errors',
+    icon: '❌',
+    label: 'Check for errors in this thread',
+  },
+  {
+    id: 'performance',
+    icon: '⏱',
+    label: 'Show me the slowest operations',
+  },
+  {
+    id: 'cost',
+    icon: '💰',
+    label: "What's the total cost?",
+  },
+];
+
+/** Quick actions for /chat?tab=traces (traces list view) */
+const TRACES_QUICK_ACTIONS: QuickAction[] = [
+  {
+    id: 'analyze-errors',
+    icon: '🔍',
+    label: 'Analyze latest error traces',
+  },
+  {
+    id: 'filter-slow',
+    icon: '⏱',
+    label: 'Filter slow requests (>2s)',
+  },
+  {
+    id: 'show-labels',
+    icon: '🏷',
+    label: 'What labels exist?',
+  },
+];
+
+/** Default quick actions for other contexts */
+const DEFAULT_QUICK_ACTIONS: QuickAction[] = [
+  {
+    id: 'help',
+    icon: '💡',
+    label: 'What can you help me with?',
+  },
+  {
+    id: 'analyze-errors',
+    icon: '🔍',
+    label: 'Analyze latest error traces',
+  },
+  {
+    id: 'optimize-prompt',
+    icon: '⚡',
+    label: 'Optimize system prompt',
+  },
+];
+
+/** Get quick actions based on current route context */
+function getQuickActionsForContext(page: string, tab?: string): QuickAction[] {
+  if (page === 'chat') {
+    if (tab === 'threads') {
+      return THREAD_QUICK_ACTIONS;
+    }
+    if (tab === 'traces') {
+      return TRACES_QUICK_ACTIONS;
+    }
+  }
+  return DEFAULT_QUICK_ACTIONS;
+}
 
 // ============================================================================
 // Utilities
@@ -110,6 +190,16 @@ export function AgentChatContent({
     const openaiProvider = providers.find(p => p.name.toLowerCase() === 'openai');
     return openaiProvider?.has_credentials ?? false;
   }, [providers]);
+
+  // Compute context-aware quick actions based on current URL
+  const quickActions = useMemo(() => {
+    if (typeof window === 'undefined') return DEFAULT_QUICK_ACTIONS;
+    const pathname = window.location.pathname;
+    const searchParams = new URLSearchParams(window.location.search);
+    const page = pathname.split('/')[1] || 'home';
+    const tab = searchParams.get('tab') || undefined;
+    return getQuickActionsForContext(page, tab);
+  }, []);
 
   // Store openTraces from event emitter (works across context boundaries)
   const openTracesRef = useRef<{ openTraces: OpenTrace[]; source: 'threads' | 'traces' } | null>(null);
@@ -245,6 +335,7 @@ export function AgentChatContent({
             initialMessages={messages}
             beforeSendMessage={handleBeforeSendMessage}
             toolRenderers={toolRenderers}
+            quickActions={quickActions}
           />
         ) : (
           // Provider ready but connection failed
