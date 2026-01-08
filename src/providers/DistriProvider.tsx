@@ -11,7 +11,8 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { DistriProvider as BaseDistriProvider } from '@distri/react';
-import { checkDistriHealth, fetchLucyConfig, LucyConfig, DEFAULT_DISTRI_URL } from '@/lib/agent-sync';
+import { checkDistriHealth, fetchLucyConfig, LucyConfig } from '@/lib/agent-sync';
+import { getDistriUrl } from '@/config/api';
 
 // ============================================================================
 // Types
@@ -136,7 +137,7 @@ export function DistriProvider({ children }: DistriProviderProps) {
     return () => { mounted = false; };
   }, []);
 
-  const distriUrl = lucyConfig?.distri_url || DEFAULT_DISTRI_URL;
+  const distriUrl = lucyConfig?.distri_url || getDistriUrl();
 
   // Config for DistriProvider (matches @distri/react API)
   // @distri/react expects baseUrl to include /api/v1 prefix

@@ -1,16 +1,3 @@
-/**
- * Agent Sync Utility
- *
- * Manages Distri server connection:
- * - Config fetching from BE API
- * - Health checks
- *
- * Note: Agent registration is now handled by vLLora BE via POST /agents/register
- * The BE embeds agents and registers them with Distri server.
- */
-
-export const DEFAULT_DISTRI_URL = 'http://localhost:8081';
-
 // ============================================================================
 // Types
 // ============================================================================
