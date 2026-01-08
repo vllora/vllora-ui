@@ -7,7 +7,7 @@
  * Panel bounds (position and size) are persisted to localStorage.
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Rnd } from 'react-rnd';
 import { cn } from '@/lib/utils';
 import { useAgentChat } from './useAgentChat';
@@ -40,7 +40,12 @@ const DEFAULT_SIZE = { width: 400, height: 600 };
 const EDGE_PADDING = 16;
 
 const MIN_SIZE = { width: 320, height: 400 };
-const MAX_SIZE = { width: 700, height: 850 };
+
+// Get max size based on viewport dimensions
+const getMaxSize = () => ({
+  width: typeof window !== 'undefined' ? window.innerWidth - EDGE_PADDING * 2 : 700,
+  height: typeof window !== 'undefined' ? window.innerHeight - EDGE_PADDING * 2 : 850,
+});
 
 // Get default panel bounds (left side, full height like side panel)
 const getDefaultPanelBounds = (): PanelBounds => ({
@@ -56,14 +61,15 @@ const loadPanelBounds = (): PanelBounds => {
     const stored = localStorage.getItem(PANEL_STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
+      const maxSize = getMaxSize();
       // Validate bounds are within viewport
       const maxX = window.innerWidth - parsed.width - EDGE_PADDING;
       const maxY = window.innerHeight - parsed.height - EDGE_PADDING;
       return {
         x: Math.max(EDGE_PADDING, Math.min(parsed.x, maxX)),
         y: Math.max(EDGE_PADDING, Math.min(parsed.y, maxY)),
-        width: Math.max(MIN_SIZE.width, Math.min(parsed.width, MAX_SIZE.width)),
-        height: Math.max(MIN_SIZE.height, Math.min(parsed.height, MAX_SIZE.height)),
+        width: Math.max(MIN_SIZE.width, Math.min(parsed.width, maxSize.width)),
+        height: Math.max(MIN_SIZE.height, Math.min(parsed.height, maxSize.height)),
       };
     }
   } catch {
@@ -108,6 +114,18 @@ export function FloatingAgentPanel({
 
   // Panel bounds state
   const [bounds, setBounds] = useState<PanelBounds>(loadPanelBounds);
+
+  // Max size based on viewport
+  const [maxSize, setMaxSize] = useState(getMaxSize);
+
+  // Update max size on window resize
+  useEffect(() => {
+    const handleResize = () => {
+      setMaxSize(getMaxSize());
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Handle panel drag/resize events
   const handleDragStop = useCallback((_e: any, d: { x: number; y: number }) => {
@@ -163,8 +181,8 @@ export function FloatingAgentPanel({
       }}
       minWidth={MIN_SIZE.width}
       minHeight={MIN_SIZE.height}
-      maxWidth={MAX_SIZE.width}
-      maxHeight={MAX_SIZE.height}
+      maxWidth={maxSize.width}
+      maxHeight={maxSize.height}
       bounds="window"
       dragHandleClassName="drag-handle"
       enableResizing={true}

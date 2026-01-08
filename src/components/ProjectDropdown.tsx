@@ -13,6 +13,7 @@ import { Link, useNavigate, useLocation } from "react-router";
 import { useCallback } from 'react';
 import { CurrentAppConsumer } from '@/lib';
 import { CreateProjectDialog } from '@/pages/CreateProjectDialog';
+import { LUCY_PROJECT_ID } from '@/utils/constant';
 
 interface ProjectDropdownProps {
   onProjectChange?: (projectId: string) => void;
@@ -77,7 +78,7 @@ export function ProjectDropdown({ onProjectChange }: ProjectDropdownProps) {
 
         {/* Recent Projects */}
         <div className="max-h-[400px] overflow-y-auto py-1">
-          {projects.map((project) => {
+          {projects.filter((project) => project.id !== LUCY_PROJECT_ID).map((project) => {
             const isSelected = project.id === currentProjectId;
             return (
               <DropdownMenuItem
