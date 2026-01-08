@@ -1,9 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Wrench } from "lucide-react";
-import { CheckIcon, ClipboardDocumentIcon } from "@heroicons/react/24/outline";
+import { ChevronDown, ChevronRight, Copy, Wrench } from "lucide-react";
+import { CheckIcon } from "@heroicons/react/24/outline";
 import ReactJson from "react-json-view";
 import type { Message } from "@/types/chat";
 import { tryParseJson } from "@/utils/modelUtils";
+import { CopyableToolCallId } from "../traces/TraceRow/span-info/DetailView/CopyableToolCallId";
 
 type ToolCall = NonNullable<Message["tool_calls"]>[number];
 
@@ -116,28 +117,27 @@ export const ToolCallList = ({ toolCalls, hideTitle }: { toolCalls: ToolCall[], 
                     <span className="truncate text-sm font-medium text-neutral-200">
                       {functionName}
                     </span>
-                    {toolCall.id && (
-                      <span className="truncate font-mono text-xs text-neutral-500">
-                        {toolCall.id}
-                      </span>
-                    )}
                   </div>
+                  {toolCall.id && (
+                <div className="justify-end flex"><CopyableToolCallId className="text-[10px]" toolCallId={toolCall.id} /></div>
+              )}
                   <button
                     onClick={(event) => {
                       event.stopPropagation();
                       handleCopyToolCall(toolCall);
                     }}
-                    className="ml-2 rounded p-0.5 text-neutral-500 transition-colors hover:bg-neutral-700/30 hover:text-neutral-300"
+                    className="ml-1 rounded p-0.5 text-zinc-400 transition-colors hover:bg-zinc-700/30 hover:text-zinc-300"
                     title={isToolCopied ? "Copied!" : "Copy function"}
                   >
                     {isToolCopied ? (
-                      <CheckIcon className="h-3.5 w-3.5 text-green-400" />
+                      <CheckIcon className="h-3 w-3 text-green-400" />
                     ) : (
-                      <ClipboardDocumentIcon className="h-3.5 w-3.5" />
+                      <Copy className="h-3 w-3" />
                     )}
                   </button>
                 </div>
               </div>
+              
               {isExpanded && (
                 <div className="max-w-full overflow-x-auto px-3 pb-2">
                   <div className="rounded p-2">

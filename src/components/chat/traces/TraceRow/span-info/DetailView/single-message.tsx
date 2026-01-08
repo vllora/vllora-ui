@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { MarkdownViewer } from "./markdown-viewer";
 import { JsonViewer } from "../JsonViewer";
+import { CopyableToolCallId } from "./CopyableToolCallId";
 import { DatabaseIcon, ChevronDown, ChevronUp, User, Bot, Settings, Wrench, Brain, Cpu, Copy, Check, Eye, EyeOff } from "lucide-react";
 import {
     Tooltip,
@@ -31,7 +32,7 @@ const ExpandCollapseButton = ({ isExpanded, onClick }: { isExpanded: boolean; on
 );
 
 export const SingleMessage = (props: { role: string, content?: string, objectContent?: any, toolCalls?: any[], isFirst?: boolean, isLast?: boolean, parts?: any, tool_call_id?: string }) => {
-    const { role, content, objectContent, toolCalls, parts } = props;
+    const { role, content, objectContent, toolCalls, parts, tool_call_id } = props;
 
     const [isExpanded, setIsExpanded] = useState(false);
     const contentRef = useRef<HTMLDivElement>(null);
@@ -185,7 +186,7 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
     //         label: Array.isArray(structuredContent) ? 'Structured parts' : tool_call_id ?`Tool Call ID: ${tool_call_id}` :  'JSON payload'
     //     });
     // }
-    if (toolCalls && toolCalls.length > 0) {
+    if (toolCalls && toolCalls.length > 1) {
         metaChips.push({
             key: 'tool-calls',
             label: `${toolCalls.length} ${toolCalls.length === 1 ? 'tool call' : 'tool calls'}`
@@ -194,17 +195,24 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
 
     const metaSummary = metaChips.map((chip) => chip.label).join(' • ');
 
-    const handleCopy = async () => {
-        let textToCopy = displayText;
-        if (!textToCopy && structuredContent) {
-            textToCopy = JSON.stringify(structuredContent, null, 2);
+    const handleCopy = useCallback(async () => {
+        try {
+            let textToCopy = displayText;
+            if (!textToCopy && structuredContent) {
+                textToCopy = JSON.stringify(structuredContent, null, 2);
+            }
+            if (!textToCopy && toolCalls) {
+                textToCopy = JSON.stringify(toolCalls, null, 2);
+            }
+            if (textToCopy) {
+                await navigator.clipboard.writeText(textToCopy);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            }
+        } catch (error) {
         }
-        if (textToCopy) {
-            await navigator.clipboard.writeText(textToCopy);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        }
-    };
+
+    }, [displayText, structuredContent]);
 
     return (
         <div className={`flex flex-col gap-3 py-3 px-2  transition-colors`}>
@@ -215,16 +223,19 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
                         {roleLabel}
                     </span>
                 </div>
-                <div className="flex items-center gap-2">
+
+                <div className="flex items-center gap-1">
                     {metaSummary && (
                         <span className="text-[11px] text-zinc-500">{metaSummary}</span>
                     )}
+                    {tool_call_id && <CopyableToolCallId toolCallId={tool_call_id} />}
+
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <button
                                     onClick={() => setRawMode(!rawMode)}
-                                    className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 hover:text-zinc-300  hover:bg-zinc-700 rounded transition-colors"
+                                    className="flex items-center gap-1 px-1 py-0.5 text-[10px] font-medium text-zinc-400 hover:text-zinc-300  hover:bg-zinc-700 rounded transition-colors"
                                 >
                                     {rawMode ? (
                                         <EyeOff className="w-3 h-3" />
@@ -238,16 +249,25 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
                             </TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
-                    <button
-                        onClick={handleCopy}
-                        className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 hover:text-zinc-300  hover:bg-zinc-700 rounded transition-colors"
-                    >
-                        {copied ? (
-                            <Check className="w-3 h-3 text-green-500" />
-                        ) : (
-                            <Copy className="w-3 h-3" />
-                        )}
-                    </button>
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <button
+                                    onClick={handleCopy}
+                                    className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 hover:text-zinc-300  hover:bg-zinc-700 rounded transition-colors"
+                                >
+                                    {copied ? (
+                                        <Check className="w-3 h-3 text-green-500" />
+                                    ) : (
+                                        <Copy className="w-3 h-3" />
+                                    )}
+                                </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="bg-zinc-900 text-zinc-100 border-zinc-800">
+                                <p>{copied ? 'Copied!' : 'Copy content'}</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
                 </div>
             </div>
 
@@ -292,8 +312,10 @@ export const SingleMessage = (props: { role: string, content?: string, objectCon
 
             {showStructuredBlock && (
                 <div className="rounded-lg py-2 overflow-hidden">
-                    <div className="pb-1 text-[10px] text-wrap font-semibold uppercase tracking-wide text-zinc-500">
-                        Structured Content
+                    <div className="pb-1 flex items-center gap-3">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                            Structured Content
+                        </span>
                     </div>
                     <div className="max-w-full overflow-x-auto">
                         {rawMode ? (
