@@ -200,8 +200,8 @@ export function AgentChatContent({
     const searchParams = new URLSearchParams(window.location.search);
     const page = pathname.split('/')[1] || 'home';
     const tab = searchParams.get('tab') || undefined;
-    return getQuickActionsForContext(page, tab);
-  }, []);
+    return getQuickActionsForContext(page, page === 'chat' ? (tab || 'threads') : undefined);
+  }, [window?.location?.pathname]);
 
   // Store openTraces from event emitter (works across context boundaries)
   const openTracesRef = useRef<{ openTraces: OpenTrace[]; source: 'threads' | 'traces' } | null>(null);

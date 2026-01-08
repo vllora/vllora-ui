@@ -243,6 +243,85 @@ const getStateHandlers: Record<string, ToolHandler> = {
 // These emit events that are handled by React components
 // ============================================================================
 
+/**
+ * Validate if a URL is a valid relative path for navigation.
+ * Since Lucy operates within vLLora, we just ensure it's a relative path.
+ * Invalid routes will show a 404 page (handled by React Router).
+ */
+function isValidRelativePath(url: string): { valid: boolean; error?: string } {
+  // Must start with /
+  if (!url.startsWith('/')) {
+    return { valid: false, error: 'URL must be a relative path starting with /' };
+  }
+
+  // Block obvious external/dangerous patterns
+  if (url.startsWith('//') || url.includes('://')) {
+    return { valid: false, error: 'External URLs are not allowed' };
+  }
+
+  // Block javascript: and data: schemes
+  const lowerUrl = url.toLowerCase();
+  if (lowerUrl.includes('javascript:') || lowerUrl.includes('data:')) {
+    return { valid: false, error: 'Invalid URL scheme' };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Wait for URL to stabilize after navigation.
+ * Polls the URL until expected params appear or timeout.
+ */
+async function waitForUrlStabilization(
+  targetPath: string,
+  waitForParams: string[] = [],
+  timeoutMs: number = 3000,
+  pollIntervalMs: number = 100
+): Promise<{ finalUrl: string; params: Record<string, string> }> {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeoutMs) {
+    const currentUrl = window.location.pathname + window.location.search;
+    const searchParams = new URLSearchParams(window.location.search);
+
+    // Check if we're on the target path
+    if (window.location.pathname === targetPath || window.location.pathname.startsWith(targetPath)) {
+      // If no specific params to wait for, return immediately
+      if (waitForParams.length === 0) {
+        const params: Record<string, string> = {};
+        searchParams.forEach((value, key) => {
+          params[key] = value;
+        });
+        return { finalUrl: currentUrl, params };
+      }
+
+      // Check if all expected params are present
+      const allParamsPresent = waitForParams.every(param => searchParams.has(param));
+      if (allParamsPresent) {
+        const params: Record<string, string> = {};
+        searchParams.forEach((value, key) => {
+          params[key] = value;
+        });
+        return { finalUrl: currentUrl, params };
+      }
+    }
+
+    // Wait before next poll
+    await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+  }
+
+  // Timeout reached - return current state
+  const searchParams = new URLSearchParams(window.location.search);
+  const params: Record<string, string> = {};
+  searchParams.forEach((value, key) => {
+    params[key] = value;
+  });
+  return {
+    finalUrl: window.location.pathname + window.location.search,
+    params,
+  };
+}
+
 const changeUiHandlers: Record<string, ToolHandler> = {
   // Navigate to a URL (general navigation)
   navigate_to: async ({ url }) => {
@@ -257,14 +336,42 @@ const changeUiHandlers: Record<string, ToolHandler> = {
       return { success: false, error: 'url must be a relative path starting with /' };
     }
 
+    // Validate URL is a valid relative path
+    const validation = isValidRelativePath(urlStr);
+    if (!validation.valid) {
+      return { success: false, error: validation.error };
+    }
+
     // Emit navigation event - component will handle navigating
     emitter.emit('vllora_navigate_to', { url: urlStr });
 
+    // Parse target URL to determine what params to wait for
+    const targetUrl = new URL(urlStr, window.location.origin);
+    const targetPath = targetUrl.pathname;
+    const targetParams = new URLSearchParams(targetUrl.search);
+
+    // Determine what params to wait for based on the target
+    let waitForParams: string[] = [];
+    if (targetPath === '/chat' || targetPath.startsWith('/chat')) {
+      const tab = targetParams.get('tab');
+      // For /chat?tab=threads, wait for thread_id to be auto-populated
+      if (tab === 'threads' || !tab) {
+        waitForParams = ['thread_id'];
+      }
+    }
+
+    // Wait for URL to stabilize (especially for auto-populated params like thread_id)
+    const { finalUrl, params } = await waitForUrlStabilization(targetPath, waitForParams, 3000);
+
     return {
       success: true,
-      url: urlStr,
+      url: finalUrl,
       navigated: true,
-      message: `Navigation complete. The user is now at ${urlStr}.`,
+      context: {
+        page: targetPath.split('/')[1] || 'home',
+        ...params,
+      },
+      message: `Navigation complete. The user is now at ${finalUrl}.`,
     };
   },
 
@@ -436,12 +543,12 @@ export const uiTools: DistriFnTool[] = [
   // CHANGE UI TOOLS
   {
     name: 'navigate_to',
-    description: 'Navigate to a URL within vLLora. Use this to help users navigate to different pages like /chat, /chat?tab=traces, /settings, etc.',
+    description: 'Navigate to a page within vLLora. Waits for URL to stabilize and returns updated context with auto-populated params (e.g., thread_id). Common routes: /chat, /chat?tab=threads, /settings, /analytics, /models, /projects.',
     type: 'function',
     parameters: {
       type: 'object',
       properties: {
-        url: { type: 'string', description: 'The relative URL to navigate to (must start with /). Examples: "/chat", "/chat?tab=traces", "/settings"' },
+        url: { type: 'string', description: 'The relative URL to navigate to (must start with /). Examples: "/chat", "/chat?tab=threads", "/settings"' },
       },
       required: ['url'],
     },

@@ -3,7 +3,7 @@
  */
 
 import type { Span } from '@/services/spans-api';
-import { tryParseJson } from '@/utils/modelUtils';
+import { tryParseFloat, tryParseJson } from '@/utils/modelUtils';
 
 /**
  * Span summary for lightweight response
@@ -170,6 +170,24 @@ export function extractSpanSummary(span: Span): SpanSummary {
     || usage?.cached_tokens
     || attr.cached_tokens;
 
+   let costAtt = attr.cost;
+   let cost : number | undefined = undefined;
+   if (typeof costAtt === 'string') {
+    let costAsFloat = tryParseFloat(costAtt);
+
+    if (costAsFloat) {
+      cost = costAsFloat;
+    }
+    else {
+      let jsonCost = tryParseJson(costAtt);
+      if (jsonCost && jsonCost.cost) {
+        cost = jsonCost.cost;
+      }
+    }
+   } else {
+    cost = attr.cost as number | undefined;
+   }
+
   const toolCalls = extractToolCalls(attr);
   const provider = attr.provider_name || attr.provider;
 
@@ -184,7 +202,7 @@ export function extractSpanSummary(span: Span): SpanSummary {
     semantic_error_source: semanticErrorSource,
     model: (attr.model_name || (attr.model as Record<string, unknown>)?.name || attr.model) as string | undefined,
     provider: provider as string | undefined,
-    cost: typeof attr.cost === 'string' ? parseFloat(attr.cost) : attr.cost as number | undefined,
+    cost,
     input_tokens: (usage?.input_tokens || attr.input_tokens) as number | undefined,
     output_tokens: (usage?.output_tokens || attr.output_tokens) as number | undefined,
     cached_tokens: cachedTokens as number | undefined,
