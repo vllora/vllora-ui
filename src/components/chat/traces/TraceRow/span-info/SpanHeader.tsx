@@ -1,7 +1,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
-import { CheckCircleIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 import { ArrowLeft, ClockFadingIcon, DatabaseIcon, X } from "lucide-react";
+import { StatusBadge } from "./StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Span } from "@/types/common-type";
@@ -53,7 +53,6 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
   closePosition = 'left',
   ttf_str,
 }) => {
-  const isSuccessStatus = status && ['200', 200].includes(status);
   const ttftMicroseconds = ttf_str ? tryParseInt(ttf_str) : undefined;
   const ttftMilliseconds = ttftMicroseconds ? ttftMicroseconds / 1000 : undefined;
   const ttftSeconds = ttftMilliseconds ? (ttftMilliseconds / 1000).toFixed(2) : undefined;
@@ -146,20 +145,11 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
           {modelName && totalUsage > 0 && <ModelContextViewer cost={costUsage} usage_tokens={totalUsage} model_name={modelName} />}
         </div>
       </div>
-      <div className="flex items-center gap-1 flex-shrink-0 pr-2">
+      <div className="flex items-center gap-2 flex-shrink-0">
         {labelOfSpan && (
           <LabelTag label={labelOfSpan} maxWidth={75} />
         )}
-        {status && (
-          <div className={cn(`flex items-center py-1 rounded-md text-xs ${isSuccessStatus ? ' text-green-500' : 'text-red-500'}`)}>
-            {isSuccessStatus ? (
-              <CheckCircleIcon className="w-3 h-3 mr-1" />
-            ) : (
-              <ExclamationTriangleIcon className="w-3 h-3 mr-1" />
-            )}
-            {isSuccessStatus ? 'Success' : 'Failed'}
-          </div>
-        )}
+        {status && <StatusBadge status={status} />}
         {/* {span && <BasicSpanInfo span={span} />} */}
 
         {onClose && closePosition === 'right' && <Button
