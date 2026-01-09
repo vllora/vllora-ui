@@ -71,13 +71,7 @@ export const SpanDetailsDisplay = () => {
 
         {/* Scrollable content container */}
         <div className="flex-1 overflow-y-auto">
-          {/* Tabs content */}
-          {/* <TabsContent value="json" className="p-2 h-full">
-            <JsonViewer data={currentSpan} style={{ fontSize: '10px' }} />
-          </TabsContent> */}
-          <div className="p-2 h-full">
             <SpanUIDetailsDisplay span={currentSpan} />
-          </div>
         </div>
       </Tabs>
     </div>

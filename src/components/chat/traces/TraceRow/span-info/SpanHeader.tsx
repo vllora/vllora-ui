@@ -1,11 +1,10 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { CheckCircleIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
-import { ArrowLeft, ClockFadingIcon, DatabaseIcon, Timer, X } from "lucide-react";
+import { ArrowLeft, ClockFadingIcon, DatabaseIcon, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Span } from "@/types/common-type";
-import { BasicSpanInfo } from "./DetailView/basic-span-info-section";
 import { ClientSdkIcon } from "@/components/client-sdk-icon";
 import { tryParseInt } from "@/utils/modelUtils";
 import { getCost, getLabelOfSpan, getModelName, getTotalUsage } from "../new-timeline/utils";
@@ -21,20 +20,6 @@ export const getDuration = (startTime?: number, endTime?: number): string | null
     return '<0.01';
   }
   return secondsWith2Decimals;
-};
-
-const formatTimestamp = (timestamp: number): string => {
-  // Convert microseconds to milliseconds
-  const date = new Date(timestamp / 1000);
-  return date.toLocaleString('en-US', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false
-  });
 };
 
 interface SpanHeaderProps {
@@ -64,14 +49,11 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
   isPromptCached,
   status,
   onClose,
-  startTime,
-  endTime,
   span,
   closePosition = 'left',
   ttf_str,
 }) => {
   const isSuccessStatus = status && ['200', 200].includes(status);
-  const duration = getDuration(startTime, endTime);
   const ttftMicroseconds = ttf_str ? tryParseInt(ttf_str) : undefined;
   const ttftMilliseconds = ttftMicroseconds ? ttftMicroseconds / 1000 : undefined;
   const ttftSeconds = ttftMilliseconds ? (ttftMilliseconds / 1000).toFixed(2) : undefined;
@@ -140,35 +122,6 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          {duration && startTime && endTime && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1 px-0 py-0.5 rounded-md bg-[#1a1a1a] text-teal-500 cursor-help flex-shrink-0">
-                    <Timer className="h-3 w-3" />
-                    <span className="text-xs font-mono">{duration}s</span>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent className="flex flex-col gap-2 p-3 max-w-xs bg-background border border-border rounded-md shadow-md">
-                 
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs text-muted-foreground">Start time:</span>
-                      <span className="text-xs font-mono">{formatTimestamp(startTime)}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs text-muted-foreground">End time:</span>
-                      <span className="text-xs font-mono">{formatTimestamp(endTime)}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-border">
-                      <span className="text-xs font-medium">Duration:</span>
-                      <span className="text-xs font-mono">{duration}s ({((endTime - startTime) / 1000).toFixed(0)} ms)</span>
-                    </div>
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
           {ttftSeconds && (
             <TooltipProvider>
               <Tooltip>
@@ -193,7 +146,7 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
           {modelName && totalUsage > 0 && <ModelContextViewer cost={costUsage} usage_tokens={totalUsage} model_name={modelName} />}
         </div>
       </div>
-      <div className="flex items-center gap-1 flex-shrink-0">
+      <div className="flex items-center gap-1 flex-shrink-0 pr-2">
         {labelOfSpan && (
           <LabelTag label={labelOfSpan} maxWidth={75} />
         )}
@@ -207,7 +160,7 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
             {isSuccessStatus ? 'Success' : 'Failed'}
           </div>
         )}
-        {span && <BasicSpanInfo span={span} />}
+        {/* {span && <BasicSpanInfo span={span} />} */}
 
         {onClose && closePosition === 'right' && <Button
           variant="ghost"

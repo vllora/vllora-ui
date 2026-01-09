@@ -1,9 +1,8 @@
 import { Span } from "@/types/common-type";
 import { tryParseJson } from "@/utils/modelUtils";
 import { BaseSpanUIDetailsDisplay } from "../..";
-import { InputViewer } from "../../input_viewer";
+import { RequestResponseViewer } from "../../request-response-viewer";
 import { OtherPropertyViewer } from "../../other-property-viewer";
-import { ResponseViewer } from "../../response-viewer";
 
 interface ClientActivityUIDisplayProps {
     span: Span;
@@ -44,8 +43,7 @@ export const ClientActivityUIDetailsDisplay = ({ span }: ClientActivityUIDisplay
     return (
         <BaseSpanUIDetailsDisplay>
             <div className="flex flex-col gap-6 pb-4 divide-y divide-border/40">
-                <InputViewer jsonRequest={requestJson} />
-                <ResponseViewer response={responseJson} />
+                <RequestResponseViewer jsonRequest={requestJson} response={responseJson} span={span} />
                 { otherPropsKeys && otherPropsKeys.length > 0 && <>
                     <OtherPropertyViewer attributes={otherProps} label="Properties" />
                 </>}

@@ -2,8 +2,7 @@ import { Span } from "@/types/common-type";
 import { BaseSpanUIDetailsDisplay } from ".."
 import { ErrorViewer } from "../error-viewer";
 import { tryParseJson } from "@/utils/modelUtils";
-import { InputViewer } from "../input_viewer";
-import { ResponseViewer } from "../response-viewer";
+import { RequestResponseViewer } from "../request-response-viewer";
 import { OtherPropertyViewer } from "../other-property-viewer";
 
 interface CloudApiInvokeUIDetailsDisplayProps {
@@ -34,8 +33,7 @@ export const CloudApiInvokeUIDetailsDisplay = ({ span }: CloudApiInvokeUIDetails
                 {error && (
                     <ErrorViewer error={error} />
                 )}
-                <InputViewer jsonRequest={inputInfo} headers={headers} />
-                <ResponseViewer response={output} />
+                <RequestResponseViewer jsonRequest={inputInfo} response={output} headers={headers} span={span} />
                 {otherPropsKeys && otherPropsKeys.length > 0 && <>
                     <OtherPropertyViewer  attributes={otherProps} label="Properties" />
                 </>}

@@ -1,8 +1,7 @@
 import { BaseSpanUIDetailsDisplay, getParentCloudApiInvoke } from ".."
 import { ErrorViewer } from "../error-viewer";
 import { UsageViewer } from "../usage-viewer";
-import { ResponseViewer } from "../response-viewer";
-import { InputViewer } from "../input_viewer";
+import { RequestResponseViewer } from "../request-response-viewer";
 import { tryParseJson } from "@/utils/modelUtils";
 import { Span } from "@/types/common-type";
 
@@ -51,13 +50,13 @@ export const ApiInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ApiInvoke
                     <ErrorViewer error={error} />
                 )}
 
-                {/* Request section with UI/Raw toggle */}
-                {raw_request_json && (
-                    <InputViewer jsonRequest={raw_request_json} headers={headers} />
-                )}
-                {raw_response_json && (
-                    <ResponseViewer response={raw_response_json} />
-                )}
+                {/* Request/Response section with tabs */}
+                <RequestResponseViewer
+                    jsonRequest={raw_request_json}
+                    response={raw_response_json}
+                    headers={headers}
+                    span={span}
+                />
 
                 {/* Usage section */}
                 <UsageViewer

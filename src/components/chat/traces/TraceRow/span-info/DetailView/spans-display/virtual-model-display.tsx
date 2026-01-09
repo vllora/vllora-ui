@@ -1,9 +1,8 @@
 import { BaseSpanUIDetailsDisplay, getParentApiInvoke, getParentCloudApiInvoke } from ".."
-import { UsageViewer } from "../usage-viewer";
-import { InputViewer } from "../input_viewer";
-import { ResponseViewer } from "../response-viewer";
+import { RequestResponseViewer } from "../request-response-viewer";
 import { Span } from "@/types/common-type";
 import { tryParseJson } from "@/utils/modelUtils";
+import { getDuration } from "../../SpanHeader";
 
 interface VirtualModelCallUIDetailsDisplayProps {
     span: Span;
@@ -25,7 +24,6 @@ export const VirtualModelCallUIDetailsDisplay = ({ span, relatedSpans = [] }: Vi
     const raw_response_string = output;
     const raw_response_json = raw_response_string ? tryParseJson(raw_response_string) : null;
     const cost_str = apiInvokeAttribute?.cost;
-    const ttf_str = modelCallAttribute?.ttft;
 
     const raw_request_string = currentAttribute?.request || apiInvokeAttribute?.request;
     const raw_request_json = raw_request_string ? tryParseJson(raw_request_string) : null;
@@ -33,15 +31,23 @@ export const VirtualModelCallUIDetailsDisplay = ({ span, relatedSpans = [] }: Vi
     const usage_str = currentAttribute?.usage;
     const costInfo = cost_str ? tryParseJson(cost_str) : null;
     const usageInfo = usage_str ? tryParseJson(usage_str) : null;
+    const startTime = span.start_time_us;
+    const endTime = span.finish_time_us;
+    const duration = endTime && startTime ? getDuration(startTime, endTime) : undefined;
+
     return (
         <BaseSpanUIDetailsDisplay>
             <div className="flex flex-col gap-6 pb-4">
-                <InputViewer jsonRequest={raw_request_json} headers={headers} />
-                <ResponseViewer response={raw_response_json} />
-                <UsageViewer
-                    cost={costInfo || undefined}
-                    ttft={ttf_str || undefined}
-                    usage={usageInfo || undefined}
+                <RequestResponseViewer
+                    jsonRequest={raw_request_json}
+                    response={raw_response_json}
+                    headers={headers}
+                    span={span}
+                    latency={duration ?? undefined}
+                    startTime={startTime}
+                    endTime={endTime}
+                    usage={usageInfo}
+                    costInfo={costInfo}
                 />
             </div>
         </BaseSpanUIDetailsDisplay>);
