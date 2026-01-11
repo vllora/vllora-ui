@@ -170,7 +170,7 @@ export const dataTools: DistriFnTool[] = [
 
   {
     name: 'get_span_content',
-    description: 'Phase 2: Analyzes CACHED spans from memory (requires fetch_spans_summary first). Returns analysis results, not raw data. Max 5 spans per call.',
+    description: 'Phase 2: Fetches RAW cached spans from memory (requires fetch_spans_summary first). Returns raw span objects. Max 5 spans per call.',
     type: 'function',
     parameters: {
       type: 'object',
@@ -199,12 +199,12 @@ export const dataTools: DistriFnTool[] = [
 
   {
     name: 'analyze_with_llm',
-    description: 'Phase 3: Deep LLM analysis of flagged spans. Use after fetch_spans_summary + get_span_content for semantic understanding. Max 5 spans per call.',
+    description: 'Phase 3: Deep LLM analysis of flagged spans. Auto-batches spanIds (5 per batch, capped) to avoid context overflow.',
     type: 'function',
     parameters: {
       type: 'object',
       properties: {
-        spanIds: { type: 'array', items: { type: 'string' }, description: 'Span IDs to analyze (max 5)' },
+        spanIds: { type: 'array', items: { type: 'string' }, description: 'Span IDs to analyze (auto-batched; caps apply)' },
         focus: { type: 'string', enum: ['errors', 'performance', 'semantic', 'all'], description: 'Focus area (default: all)' },
         context: { type: 'string', description: 'Additional context about what to look for' },
       },
