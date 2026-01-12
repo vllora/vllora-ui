@@ -4,6 +4,7 @@ import { UsageViewer } from "../usage-viewer";
 import { RequestResponseViewer } from "../request-response-viewer";
 import { tryParseJson } from "@/utils/modelUtils";
 import { Span } from "@/types/common-type";
+import { getDuration } from "../../SpanHeader";
 
 interface ApiInvokeUIDetailsDisplayProps {
     span: Span;
@@ -40,11 +41,14 @@ export const ApiInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ApiInvoke
     const usage_str = currentAttribute?.usage;
     const costInfo = cost_str ? tryParseJson(cost_str) : null;
     const usageInfo = usage_str ? tryParseJson(usage_str) : null;
+    const startTime = span.start_time_us;
+    const endTime = span.finish_time_us;
+    const duration = endTime && startTime ? getDuration(startTime, endTime) : undefined;
     return (
         <BaseSpanUIDetailsDisplay
         >
             <div className="flex flex-col gap-4 mt-4">
-              
+
                 {/* Error section - only shown when there's an error */}
                 {error && (
                     <ErrorViewer error={error} />
@@ -56,14 +60,19 @@ export const ApiInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ApiInvoke
                     response={raw_response_json}
                     headers={headers}
                     span={span}
+                    latency={duration ?? undefined}
+                    startTime={startTime}
+                    endTime={endTime}
+                    usage={usageInfo}
+                    costInfo={costInfo}
                 />
 
                 {/* Usage section */}
-                <UsageViewer
+                {/* <UsageViewer
                     cost={costInfo || undefined}
                     ttft={ttf_str || undefined}
                     usage={usageInfo || undefined}
-                />
+                /> */}
             </div>
 
         </BaseSpanUIDetailsDisplay>

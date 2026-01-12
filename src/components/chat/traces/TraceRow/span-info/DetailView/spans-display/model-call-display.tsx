@@ -8,6 +8,7 @@ import { RequestResponseViewer } from "../request-response-viewer";
 import { useState } from "react";
 import { tryParseJson } from "@/utils/modelUtils";
 import { getDuration } from "../../SpanHeader";
+import { OtherPropertyViewer } from "../other-property-viewer";
 
 interface ModelCallUIDetailsDisplayProps {
     span: Span;
@@ -38,11 +39,6 @@ export const ModelCallUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelCall
     const usage_str = currentAttribute?.usage;
     const modelJsonStr = apiInvokeAttribute?.model || modelCallAttribute?.model;
     const modelJson = modelJsonStr ? tryParseJson(modelJsonStr) : null;
-    const modelName = modelJson?.name;
-
-    const entityByName = undefined;
-
-
     const costInfo = cost_str ? tryParseJson(cost_str) : null;
     const usageInfo = usage_str ? tryParseJson(usage_str) : null;
     const startTime = span.start_time_us;
@@ -55,59 +51,56 @@ export const ModelCallUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelCall
             value={openAccordionItems}
             onValueChange={setOpenAccordionItems}
         >
-            {/* Header section with model info and status */}
-            <div className="flex flex-col gap-2 p-3 border-b border-border rounded-t-md">
-                <div className="flex items-center justify-between">
-                    {modelName && !entityByName && (
-                        <div className="flex items-center gap-2">
-                            <CpuChipIcon className="w-4 h-4 text-teal-500" />
-                            <span className="text-sm font-medium text-white">{modelName}</span>
-                        </div>
-                    )}
-                    
-                    {status && (
-                        <div className={`flex items-center px-2 py-1 rounded-md text-xs ${status === '200' ? 'bg-[#1a2e1a] text-green-500 border border-green-800' : 'bg-[#2e1a1a] text-red-500 border border-red-800'}`}>
-                            {status === '200' ? (
-                                <CheckCircleIcon className="w-3 h-3 mr-1" />
-                            ) : (
-                                <ExclamationTriangleIcon className="w-3 h-3 mr-1" />
-                            )}
-                            {status}
-                        </div>
-                    )}
+            <div className="flex flex-col gap-1 px-2">
+                {/* Header section with model info and status */}
+                <div className="flex flex-col gap-2 p-3 rounded-t-md">
+                    <div className="flex items-center justify-between">
+
+
+                        {status && (
+                            <div className={`flex items-center px-2 py-1 rounded-md text-xs ${status === '200' ? 'bg-[#1a2e1a] text-green-500 border border-green-800' : 'bg-[#2e1a1a] text-red-500 border border-red-800'}`}>
+                                {status === '200' ? (
+                                    <CheckCircleIcon className="w-3 h-3 mr-1" />
+                                ) : (
+                                    <ExclamationTriangleIcon className="w-3 h-3 mr-1" />
+                                )}
+                                {status}
+                            </div>
+                        )}
+
+                    </div>
 
                 </div>
 
+                {/* Error section - only shown when there's an error */}
+                {error && (
+                    <AccordionItem value="error">
+                        <AccordionTrigger className={triggerClassName}>
+                            <div className="flex items-center gap-2">
+                                <ExclamationTriangleIcon className="w-4 h-4 text-yellow-500" />
+                                <span className="font-medium text-xs text-white">Error</span>
+                            </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="bg-[#0a0a0a] border-t border-border p-2">
+                            <ErrorViewer error={error} />
+                        </AccordionContent>
+                    </AccordionItem>
+                )}
+                {/* Request/Response section with tabs */}
+                <RequestResponseViewer
+                    jsonRequest={raw_request_json}
+                    response={raw_response_json}
+                    headers={headers}
+                    span={span}
+                    latency={duration ?? undefined}
+                    startTime={startTime}
+                    endTime={endTime}
+                    usage={usageInfo}
+                    costInfo={costInfo}
+                />
+                {modelJson && <OtherPropertyViewer attributes={modelJson} label="Model" />}
+
             </div>
-
-            {/* Error section - only shown when there's an error */}
-            {error && (
-                <AccordionItem value="error">
-                    <AccordionTrigger className={triggerClassName}>
-                        <div className="flex items-center gap-2">
-                            <ExclamationTriangleIcon className="w-4 h-4 text-yellow-500" />
-                            <span className="font-medium text-xs text-white">Error</span>
-                        </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="bg-[#0a0a0a] border-t border-border p-2">
-                        <ErrorViewer error={error} />
-                    </AccordionContent>
-                </AccordionItem>
-            )}
-            {/* Request/Response section with tabs */}
-            <RequestResponseViewer
-                jsonRequest={raw_request_json}
-                response={raw_response_json}
-                headers={headers}
-                span={span}
-                latency={duration ?? undefined}
-                startTime={startTime}
-                endTime={endTime}
-                usage={usageInfo}
-                costInfo={costInfo}
-            />
-
-
         </BaseSpanUIDetailsDisplay>
     );
 }
