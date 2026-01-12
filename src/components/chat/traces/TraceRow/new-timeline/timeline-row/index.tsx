@@ -161,9 +161,9 @@ export const TimelineRow = (props: TimelineRowProps) => {
         if (isSelected && isHovered) {
             return "bg-amber-500/5 border border-amber-500/40 !border-l-4 !border-l-amber-500 shadow-md shadow-amber-500/10";
         }
-        // if (isSelected) {
-        //     return "border border-transparent !border-l-4 !border-l-[rgb(var(--theme-500))]";
-        // }
+        if (isSelected) {
+            return "border border-transparent !border-l-4 !border-l-[rgb(var(--theme-500))]";
+        }
         if (isHovered) {
             return "bg-amber-500/5 border border-amber-500/40 !border-l-4 !border-l-amber-500 shadow-md shadow-amber-500/10";
         }
