@@ -7,6 +7,7 @@ import { getOperationIcon, getOperationIconColor, getSpanTitle } from "../new-ti
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { getClientSDKName, isPromptCachingApplied } from "@/utils/graph-utils";
 import { SpanHeader } from "./SpanHeader";
+import { SpanFooter } from "./SpanFooter";
 
 export const SpanDetailsDisplay = () => {
   const [currentTab, setCurrentTab] = useState<string>("details");
@@ -71,14 +72,10 @@ export const SpanDetailsDisplay = () => {
 
         {/* Scrollable content container */}
         <div className="flex-1 overflow-y-auto">
-          {/* Tabs content */}
-          {/* <TabsContent value="json" className="p-2 h-full">
-            <JsonViewer data={currentSpan} style={{ fontSize: '10px' }} />
-          </TabsContent> */}
-          <div className="p-2 h-full">
             <SpanUIDetailsDisplay span={currentSpan} />
-          </div>
         </div>
+        {/* Sticky Footer section */}
+        {/* <SpanFooter /> */}
       </Tabs>
     </div>
   );

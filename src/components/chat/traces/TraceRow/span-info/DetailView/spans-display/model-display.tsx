@@ -1,9 +1,7 @@
 import { BaseSpanUIDetailsDisplay, getApiInvokeSpans, getModelCallSpans, getApiCloudInvokeSpans } from "..";
-import { ResponseViewer } from "../response-viewer";
+import { RequestResponseViewer } from "../request-response-viewer";
 import { tryParseJson } from "@/utils/modelUtils";
 import { Span } from "@/types/common-type";
-import { InputViewer } from "../input_viewer";
-import { UsageViewer } from "../usage-viewer";
 import { Layers2Icon } from "lucide-react";
 import { useNavigate } from "react-router";
 import {
@@ -49,7 +47,6 @@ export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelIn
     const usage_str = currentAttribute?.usage;
     const costInfo = cost_str ? tryParseJson(cost_str) : null;
     const usageInfo = usage_str ? tryParseJson(usage_str) : null;
-    const ttf_str = modelCallAttribute?.ttft;
     const headersStr = apiCloudInvokeAttribute?.['http.request.header'];
     const headers = headersStr ? tryParseJson(headersStr) : undefined;
     const startTime = span.start_time_us;
@@ -102,19 +99,18 @@ export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelIn
 
     return (
         <BaseSpanUIDetailsDisplay>
-            <div className="flex flex-col gap-6 pb-4">
-                <InputViewer
-                    jsonRequest={raw_request_json}
-                    headers={headers}
-                    headerAction={headerActions}
-                />
-                <ResponseViewer response={raw_response_json} />
-                <UsageViewer
-                    cost={costInfo || undefined}
-                    ttft={ttf_str || undefined}
-                    usage={usageInfo || undefined}
-                />
-            </div>
+            <RequestResponseViewer
+                jsonRequest={raw_request_json}
+                response={raw_response_json}
+                headers={headers}
+                headerAction={headerActions}
+                span={span}
+                latency={duration ?? undefined}
+                startTime={startTime}
+                endTime={endTime}
+                usage={usageInfo}
+                costInfo={costInfo}
+            />
         </BaseSpanUIDetailsDisplay>
     );
 };

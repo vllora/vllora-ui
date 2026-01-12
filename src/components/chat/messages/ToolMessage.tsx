@@ -166,13 +166,6 @@ export const ToolMessage: React.FC<{
 
             </div>
 
-            {/* Footer with Metrics */}
-            {/* {msg && (
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <MessageMetrics message={msg} />
-                </div>
-            )} */}
-
             {isTyping && (
                 <div className="rounded bg-neutral-800/20 px-2 py-1.5 flex items-center gap-2 mt-2 border border-neutral-800/30">
                     <Pencil className="h-3.5 w-3.5 text-neutral-400 animate-pulse" />
