@@ -145,7 +145,7 @@ export const RequestResponseViewer = (props: RequestResponseViewerProps) => {
             </div>
 
             {/* Content */}
-            <div className="flex flex-col gap-6 p-4 overflow-y-auto text-xs">
+            <div className="flex flex-col gap-2 p-4 overflow-y-auto text-xs">
                 {activeTab === 'input' && hasRequest && (
                     <InputTabContentWrapper
                         jsonRequest={jsonRequest}
