@@ -1,6 +1,7 @@
 import { JsonViewer } from "../JsonViewer";
 import { InputTabContent } from "./InputTabContent";
 import { ViewModeToggle, ViewMode } from "./view-mode-toggle";
+import { TraceCodeView } from "@/components/chat/traces/components/TraceCodeView";
 
 interface InputTabContentWrapperProps {
     jsonRequest: any;
@@ -24,6 +25,8 @@ interface InputTabContentWrapperProps {
     extraDataDisplay?: any;
     extraFieldsCollapsed?: boolean;
     onExtraFieldsCollapsedChange?: (collapsed: boolean) => void;
+    runId?: string;
+    showCodeOption?: boolean;
 }
 
 export const InputTabContentWrapper = ({
@@ -48,13 +51,25 @@ export const InputTabContentWrapper = ({
     extraDataDisplay,
     extraFieldsCollapsed,
     onExtraFieldsCollapsedChange,
+    runId,
+    showCodeOption = false,
 }: InputTabContentWrapperProps) => {
     return (
         <>
-            <ViewModeToggle viewMode={viewMode} onViewModeChange={onViewModeChange} onCopy={onCopy} copied={copied} />
-            {viewMode === 'raw' ? (
+            <ViewModeToggle
+                viewMode={viewMode}
+                onViewModeChange={onViewModeChange}
+                onCopy={onCopy}
+                copied={copied}
+                showCodeOption={showCodeOption}
+            />
+            {viewMode === 'raw' && (
                 <JsonViewer data={jsonRequest} collapsed={10} />
-            ) : (
+            )}
+            {viewMode === 'code' && (
+                runId ? <TraceCodeView runId={runId} /> : <div className="text-zinc-500 text-sm p-4">No run ID available</div>
+            )}
+            {viewMode === 'ui' && (
                 <InputTabContent
                     headers={headers}
                     showAllHeaders={showAllHeaders}

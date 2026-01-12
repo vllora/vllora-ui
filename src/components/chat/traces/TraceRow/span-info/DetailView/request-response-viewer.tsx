@@ -169,6 +169,8 @@ export const RequestResponseViewer = (props: RequestResponseViewerProps) => {
                         extraDataDisplay={extraDataDisplay}
                         extraFieldsCollapsed={extraFieldsCollapsed}
                         onExtraFieldsCollapsedChange={setExtraFieldsCollapsed}
+                        runId={span?.run_id}
+                        showCodeOption={!!span?.run_id}
                     />
                 )}
                 {activeTab === 'output' && hasResponse && (
