@@ -105,6 +105,16 @@ export function useDatasets() {
     return await datasetsDB.spanExistsInDataset(datasetId, spanId);
   }, []);
 
+  // Get all datasets that contain a specific span
+  const getDatasetsBySpanId = useCallback(async (spanId: string): Promise<Dataset[]> => {
+    try {
+      return await datasetsDB.getDatasetsBySpanId(spanId);
+    } catch (err) {
+      console.error('Failed to get datasets by span id:', err);
+      return [];
+    }
+  }, []);
+
   // Load on mount
   useEffect(() => {
     loadDatasets();
@@ -124,5 +134,6 @@ export function useDatasets() {
     updateRecordTopic,
     renameDataset,
     spanExistsInDataset,
+    getDatasetsBySpanId,
   };
 }

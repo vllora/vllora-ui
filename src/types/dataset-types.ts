@@ -1,5 +1,3 @@
-import { Span } from './common-type';
-
 export interface DatasetEvaluation {
   score?: number;
   feedback?: string;
@@ -10,11 +8,25 @@ export interface DatasetEvaluation {
 export interface DatasetRecord {
   id: string;
   datasetId: string;           // Foreign key to dataset
-  data: Span;
+  data: unknown;               // Flexible data - can be Span, generated data, or any structured object
   spanId?: string;             // For duplicate detection (optional - undefined for generated data)
   topic?: string;
   evaluation?: DatasetEvaluation;
   createdAt: number;
+}
+
+export interface DataInfo {
+  input: {
+    messages: any[]
+    tools?: any[]
+    tool_choice?: string
+    metadata?: any
+  }
+  output: {
+    messages: any[]
+    tool_calls?: any[]
+    metadata?: any
+  }
 }
 
 // Stored in 'datasets' object store (metadata only, no records array)

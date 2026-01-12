@@ -293,3 +293,51 @@ export async function spanExistsInDataset(datasetId: string, spanId: string): Pr
     request.onerror = () => reject(request.error);
   });
 }
+
+// Get all datasets that contain a specific spanId
+export async function getDatasetsBySpanId(spanId: string): Promise<Dataset[]> {
+  const db = await getDB();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(['records', 'datasets'], 'readonly');
+    const recordsStore = tx.objectStore('records');
+    const datasetsStore = tx.objectStore('datasets');
+    const index = recordsStore.index('spanId');
+    const request = index.getAll(spanId);
+
+    request.onsuccess = () => {
+      const records = request.result;
+      // Get unique datasetIds
+      const datasetIds = [...new Set(records.map(r => r.datasetId))];
+
+      // Fetch dataset metadata for each datasetId
+      const datasets: Dataset[] = [];
+      let completed = 0;
+
+      if (datasetIds.length === 0) {
+        resolve([]);
+        return;
+      }
+
+      datasetIds.forEach(datasetId => {
+        const getDatasetRequest = datasetsStore.get(datasetId);
+        getDatasetRequest.onsuccess = () => {
+          if (getDatasetRequest.result) {
+            datasets.push(getDatasetRequest.result);
+          }
+          completed++;
+          if (completed === datasetIds.length) {
+            resolve(datasets);
+          }
+        };
+        getDatasetRequest.onerror = () => {
+          completed++;
+          if (completed === datasetIds.length) {
+            resolve(datasets);
+          }
+        };
+      });
+    };
+    request.onerror = () => reject(request.error);
+  });
+}

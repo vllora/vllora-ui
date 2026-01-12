@@ -1,6 +1,5 @@
 import { BaseSpanUIDetailsDisplay, getParentCloudApiInvoke } from ".."
 import { ErrorViewer } from "../error-viewer";
-import { UsageViewer } from "../usage-viewer";
 import { RequestResponseViewer } from "../request-response-viewer";
 import { tryParseJson } from "@/utils/modelUtils";
 import { Span } from "@/types/common-type";
@@ -37,7 +36,6 @@ export const ApiInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ApiInvoke
     const error = modelCallAttribute?.error || apiInvokeAttribute?.error || currentAttribute?.error;
 
     const cost_str = apiInvokeAttribute?.cost;
-    const ttf_str = modelCallAttribute?.ttft;
     const usage_str = currentAttribute?.usage;
     const costInfo = cost_str ? tryParseJson(cost_str) : null;
     const usageInfo = usage_str ? tryParseJson(usage_str) : null;
