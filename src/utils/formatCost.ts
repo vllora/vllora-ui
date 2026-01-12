@@ -1,4 +1,5 @@
 export const formatCost = (cost: number, decimals: number = 4): string => {
+  if (isNaN(cost)) return '$0.00';
   // Handle zero cost
   if (cost === 0) return '$0.00';
 
