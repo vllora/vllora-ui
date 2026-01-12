@@ -10,6 +10,7 @@ import { ExclamationCircleIcon, XCircleIcon } from "@heroicons/react/24/outline"
 import { CurrentAppConsumer } from "@/contexts/CurrentAppContext";
 import { AvailableApiKeysConsumer } from "@/contexts/AvailableApiKeys";
 import { LabelFilter } from "@/components/label-filter";
+import { FloatingActionBar } from "./components/FloatingActionBar";
 
 interface TraceViewProps {
   threadId: string;
@@ -28,6 +29,9 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
     openTraces,
     runMap,
     labelFilter,
+    isSpanSelectModeEnabled,
+    selectedSpanIdsForActions,
+    clearSpanSelection,
   } = ChatWindowConsumer();
   const { app_mode } = CurrentAppConsumer();
   const { available_api_keys } = AvailableApiKeysConsumer();
@@ -153,6 +157,17 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
         <SpanDetailsOverlay
         />
       )}
+
+      {/* Floating Action Bar for selected spans */}
+      <FloatingActionBar
+        selectedCount={selectedSpanIdsForActions.length}
+        onClearSelection={clearSpanSelection}
+        onAddToDataset={() => {
+          // TODO: Implement add to dataset functionality
+          console.log('Add to dataset:', selectedSpanIdsForActions);
+        }}
+        isVisible={isSpanSelectModeEnabled}
+      />
     </div>
   );
 });

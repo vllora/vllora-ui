@@ -18,6 +18,10 @@ interface TimelineContentProps {
   onToggle?: (spanId: string) => void;
   showHighlightButton?: boolean;
   selectedLabels?: string[];
+  // Multi-select props
+  isSelectModeEnabled?: boolean;
+  selectedSpanIdsForActions?: string[];
+  onToggleSelection?: (spanId: string) => void;
 }
 
 export const TimelineContent: React.FC<TimelineContentProps> = memo(({
@@ -34,6 +38,9 @@ export const TimelineContent: React.FC<TimelineContentProps> = memo(({
   onToggle,
   showHighlightButton,
   selectedLabels,
+  isSelectModeEnabled,
+  selectedSpanIdsForActions,
+  onToggleSelection,
 }) => {
 
   // For grouped views (like time buckets), spans can belong to multiple runs
@@ -68,6 +75,9 @@ export const TimelineContent: React.FC<TimelineContentProps> = memo(({
             onToggle={onToggle}
             showHighlightButton={showHighlightButton}
             selectedLabels={selectedLabels}
+            isSelectModeEnabled={isSelectModeEnabled}
+            selectedSpanIdsForActions={selectedSpanIdsForActions}
+            onToggleSelection={onToggleSelection}
           />
         </div>
       </div>
@@ -89,9 +99,13 @@ const TimelineContentInner = memo((props: {
   onToggle?: (spanId: string) => void;
   showHighlightButton?: boolean;
   selectedLabels?: string[];
+  // Multi-select props
+  isSelectModeEnabled?: boolean;
+  selectedSpanIdsForActions?: string[];
+  onToggleSelection?: (spanId: string) => void;
 }) => {
   const { hierarchies, runId } = RunDetailConsumer()
-  const { selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, isInSidebar = true, hoverSpanId, onHoverSpanChange, collapsedSpans, onToggle, showHighlightButton, selectedLabels } = props
+  const { selectedSpanId, setSelectedSpanId, setSelectedRunId, setDetailSpanId, isInSidebar = true, hoverSpanId, onHoverSpanChange, collapsedSpans, onToggle, showHighlightButton, selectedLabels, isSelectModeEnabled, selectedSpanIdsForActions, onToggleSelection } = props
 
   if (!hierarchies || hierarchies.length === 0) {
     return <div className="flex items-center justify-center p-4 text-sm text-gray-400">
@@ -114,6 +128,9 @@ const TimelineContentInner = memo((props: {
         onToggle={onToggle}
         showHighlightButton={showHighlightButton}
         selectedLabels={selectedLabels}
+        isSelectModeEnabled={isSelectModeEnabled}
+        selectedSpanIdsForActions={selectedSpanIdsForActions}
+        onToggleSelection={onToggleSelection}
         onSpanSelect={(spanId, runId) => {
           if (runId) {
             setSelectedSpanId(spanId);

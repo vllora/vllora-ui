@@ -36,6 +36,29 @@ export const useWrapperHook = (props: {
   const [hoveredRunId, setHoveredRunId] = useState<string | null>(null);
   const [hoverSpanId, setHoverSpanId] = useState<string | undefined>(undefined);
   const [collapsedSpans, setCollapsedSpans] = useState<string[]>([]);
+  const [isSpanSelectModeEnabled, setIsSpanSelectModeEnabled] = useState(false);
+  const [selectedSpanIdsForActions, setSelectedSpanIdsForActions] = useState<string[]>([]);
+
+  // Helper function to toggle a span's selection
+  const toggleSpanSelection = useCallback((spanId: string) => {
+    setSelectedSpanIdsForActions(prev => {
+      if (prev.includes(spanId)) {
+        return prev.filter(id => id !== spanId);
+      }
+      return [...prev, spanId];
+    });
+  }, []);
+
+  // Helper function to clear all selections
+  const clearSpanSelection = useCallback(() => {
+    setSelectedSpanIdsForActions([]);
+    setIsSpanSelectModeEnabled(false);
+  }, []);
+
+  // Helper function to select multiple spans at once
+  const selectAllSpans = useCallback((spanIds: string[]) => {
+    setSelectedSpanIdsForActions(spanIds);
+  }, []);
 
   const updateBySpansOfAThread = useCallback((spans: Span[]) => {
     setFlattenSpans(spans);
@@ -180,5 +203,12 @@ export const useWrapperHook = (props: {
     setHoverSpanId,
     collapsedSpans,
     setCollapsedSpans,
+    isSpanSelectModeEnabled,
+    setIsSpanSelectModeEnabled,
+    selectedSpanIdsForActions,
+    setSelectedSpanIdsForActions,
+    toggleSpanSelection,
+    clearSpanSelection,
+    selectAllSpans,
   };
 };

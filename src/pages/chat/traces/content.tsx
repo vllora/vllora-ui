@@ -10,6 +10,8 @@ import { X } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { LabelFilter } from "@/components/label-filter";
 import { CurrentAppConsumer } from "@/contexts/CurrentAppContext";
+import { FloatingActionBar } from "@/components/chat/traces/components/FloatingActionBar";
+import { SelectModeToggle } from "@/components/chat/traces/components/SelectModeToggle";
 
 export function TracesPageContent() {
   const {
@@ -22,6 +24,10 @@ export function TracesPageContent() {
     duration,
     setDuration,
     labelFilter,
+    isSpanSelectModeEnabled,
+    setIsSpanSelectModeEnabled,
+    selectedSpanIdsForActions,
+    clearSpanSelection,
   } = TracesPageConsumer();
 
   const { currentProjectId } = ProjectsConsumer();
@@ -64,27 +70,43 @@ export function TracesPageContent() {
     </div>
   ) : undefined;
 
-  return <div className="flex flex-col flex-1 h-full overflow-hidden">
+  const handleToggleSelectMode = () => {
+    if (isSpanSelectModeEnabled) {
+      clearSpanSelection();
+    } else {
+      setIsSpanSelectModeEnabled(true);
+    }
+  };
+
+  return <div className="flex flex-col flex-1 h-full overflow-hidden relative">
     {/* Grouping Controls */}
     <div className="px-6 py-3 border-b border-border">
-      <div className="flex items-center gap-4">
-        <GroupingSelector
-          groupByMode={groupByMode}
-          onGroupByModeChange={setGroupByMode}
-          duration={duration}
-          onDurationChange={setDuration}
-          filterBadge={threadFilterBadge}
-        />
-        {app_mode === "vllora" && <div className="w-64">
-          <LabelFilter
-            selectedLabels={labelFilter.selectedLabels}
-            onLabelsChange={labelFilter.setLabels}
-            availableLabels={labelFilter.availableLabels}
-            isLoading={labelFilter.isLoading}
-            placeholder="Filter labels..."
-            size="sm"
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <GroupingSelector
+            groupByMode={groupByMode}
+            onGroupByModeChange={setGroupByMode}
+            duration={duration}
+            onDurationChange={setDuration}
+            filterBadge={threadFilterBadge}
           />
-        </div>}
+          {app_mode === "vllora" && <div className="w-64">
+            <LabelFilter
+              selectedLabels={labelFilter.selectedLabels}
+              onLabelsChange={labelFilter.setLabels}
+              availableLabels={labelFilter.availableLabels}
+              isLoading={labelFilter.isLoading}
+              placeholder="Filter labels..."
+              size="sm"
+            />
+          </div>}
+        </div>
+        {/* Select mode toggle button */}
+        <SelectModeToggle
+          isEnabled={isSpanSelectModeEnabled}
+          onToggle={handleToggleSelectMode}
+          selectedCount={selectedSpanIdsForActions.length}
+        />
       </div>
     </div>
 
@@ -105,6 +127,17 @@ export function TracesPageContent() {
         </div>
       )}
     </div>
+
+    {/* Floating Action Bar for selected spans */}
+    <FloatingActionBar
+      selectedCount={selectedSpanIdsForActions.length}
+      onClearSelection={clearSpanSelection}
+      onAddToDataset={() => {
+        // TODO: Implement add to dataset functionality
+        console.log('Add to dataset:', selectedSpanIdsForActions);
+      }}
+      isVisible={isSpanSelectModeEnabled}
+    />
   </div>;
 }
 
