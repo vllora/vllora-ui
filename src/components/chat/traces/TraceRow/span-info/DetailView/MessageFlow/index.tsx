@@ -7,8 +7,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import { GitBranch } from "lucide-react";
+import { GitBranch, Workflow } from "lucide-react";
 import {
   ReactFlow,
   Node,
@@ -299,17 +305,25 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
   }
 
   return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-muted-foreground hover:text-foreground"
-        >
-          <GitBranch className="w-3.5 h-3.5 mr-1" />
-          <span className="text-xs">Visual</span>
-        </Button>
-      </DialogTrigger>
+    <TooltipProvider>
+      <Dialog>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DialogTrigger asChild>
+              <button
+                className="flex items-center justify-center w-7 h-7 text-zinc-400 hover:text-zinc-200 bg-zinc-900/80 hover:bg-zinc-800/80 border border-zinc-700/50 hover:border-zinc-600/50 rounded-lg backdrop-blur-sm transition-all duration-200"
+              >
+                <Workflow className="w-3.5 h-3.5" />
+              </button>
+            </DialogTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="px-3 py-2 max-w-[180px]">
+            <div className="flex gap-2 items-center">
+              <Workflow className="w-3.5 h-3.5 text-zinc-400 flex-shrink-0" />
+              <span className="font-medium text-xs">Visual flow diagram</span>
+            </div>
+          </TooltipContent>
+        </Tooltip>
       <DialogContent className="max-w-[90vw] w-[90vw] h-[90vh] p-0 overflow-hidden flex flex-col">
         <style>{flowStyles}</style>
         <DialogHeader className="px-5 pt-4 pb-3 border-b border-border">
@@ -343,6 +357,7 @@ const FlowDialogContent: React.FC<FlowDialogProps> = ({
         </div>
       </DialogContent>
     </Dialog>
+    </TooltipProvider>
   );
 };
 

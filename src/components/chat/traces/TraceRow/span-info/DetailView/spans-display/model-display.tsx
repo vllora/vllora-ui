@@ -62,7 +62,7 @@ export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelIn
     }, [apiInvokeSpan, span, navigate, currentProjectId]);
 
     const headerActions = (
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
             <FlowDialog
                 rawRequest={raw_request_json}
                 rawResponse={raw_response_json}
@@ -76,7 +76,7 @@ export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelIn
                     <TooltipTrigger asChild>
                         <button
                             onClick={handleExperiment}
-                            className="px-2 py-1 text-[rgb(var(--theme-500))] transition-all duration-300 hover:scale-110 hover:text-[rgb(var(--theme-500))]"
+                            className="flex items-center justify-center w-7 h-7 text-zinc-400 hover:text-zinc-200 bg-zinc-900/80 hover:bg-zinc-800/80 border border-zinc-700/50 hover:border-zinc-600/50 rounded-lg backdrop-blur-sm transition-all duration-200"
                         >
                             <Layers2Icon className="w-3.5 h-3.5" />
                         </button>
