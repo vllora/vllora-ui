@@ -11,6 +11,7 @@ import { CurrentAppConsumer } from "@/contexts/CurrentAppContext";
 import { AvailableApiKeysConsumer } from "@/contexts/AvailableApiKeys";
 import { LabelFilter } from "@/components/label-filter";
 import { FloatingActionBar } from "./components/FloatingActionBar";
+import { AddToDatasetDialog } from "@/components/datasets/AddToDatasetDialog";
 
 interface TraceViewProps {
   threadId: string;
@@ -32,10 +33,17 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
     isSpanSelectModeEnabled,
     selectedSpanIdsForActions,
     clearSpanSelection,
+    flattenSpans,
   } = ChatWindowConsumer();
   const { app_mode } = CurrentAppConsumer();
   const { available_api_keys } = AvailableApiKeysConsumer();
   const [_, setShowErrorDialog] = useState(false);
+  const [showAddToDatasetDialog, setShowAddToDatasetDialog] = useState(false);
+
+  // Resolve selected span IDs to full Span objects
+  const selectedSpans = useMemo(() => {
+    return flattenSpans.filter(span => selectedSpanIdsForActions.includes(span.span_id));
+  }, [flattenSpans, selectedSpanIdsForActions]);
 
   // Helper function to truncate error message for display
   const truncateError = (error: string, maxLength: number = 80) => {
@@ -162,11 +170,16 @@ export const TraceView: React.FC<TraceViewProps> = React.memo(({ threadId }) => 
       <FloatingActionBar
         selectedCount={selectedSpanIdsForActions.length}
         onClearSelection={clearSpanSelection}
-        onAddToDataset={() => {
-          // TODO: Implement add to dataset functionality
-          console.log('Add to dataset:', selectedSpanIdsForActions);
-        }}
+        onAddToDataset={() => setShowAddToDatasetDialog(true)}
         isVisible={isSpanSelectModeEnabled}
+      />
+
+      {/* Add to Dataset Dialog */}
+      <AddToDatasetDialog
+        open={showAddToDatasetDialog}
+        onOpenChange={setShowAddToDatasetDialog}
+        spans={selectedSpans}
+        onSuccess={clearSpanSelection}
       />
     </div>
   );

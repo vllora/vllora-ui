@@ -845,6 +845,7 @@ export function useTracesPageContext(props: { projectId: string }) {
     setHoveredRunId,
     // Span data
     runMap,
+    flattenSpans,
     fetchSpansByRunId,
     loadingSpansById,
     detailSpanId,

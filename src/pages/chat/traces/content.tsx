@@ -3,7 +3,7 @@ import { SpanDetailPanel } from "@/components/debug/SpanDetailPanel";
 import { RunTable } from "./run-table";
 import { TracesPageConsumer } from "@/contexts/TracesPageContext";
 import { GroupingSelector } from "@/components/traces/GroupingSelector";
-import { useEffect } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { ProjectsConsumer } from "@/lib";
 import { useSearchParams, useNavigate, useLocation } from "react-router";
 import { X } from "lucide-react";
@@ -12,6 +12,7 @@ import { LabelFilter } from "@/components/label-filter";
 import { CurrentAppConsumer } from "@/contexts/CurrentAppContext";
 import { FloatingActionBar } from "@/components/chat/traces/components/FloatingActionBar";
 import { SelectModeToggle } from "@/components/chat/traces/components/SelectModeToggle";
+import { AddToDatasetDialog } from "@/components/datasets/AddToDatasetDialog";
 
 export function TracesPageContent() {
   const {
@@ -28,7 +29,15 @@ export function TracesPageContent() {
     setIsSpanSelectModeEnabled,
     selectedSpanIdsForActions,
     clearSpanSelection,
+    flattenSpans,
   } = TracesPageConsumer();
+
+  const [showAddToDatasetDialog, setShowAddToDatasetDialog] = useState(false);
+
+  // Resolve selected span IDs to full Span objects
+  const selectedSpans = useMemo(() => {
+    return flattenSpans.filter(span => selectedSpanIdsForActions.includes(span.span_id));
+  }, [flattenSpans, selectedSpanIdsForActions]);
 
   const { currentProjectId } = ProjectsConsumer();
   const { app_mode } = CurrentAppConsumer();
@@ -132,11 +141,16 @@ export function TracesPageContent() {
     <FloatingActionBar
       selectedCount={selectedSpanIdsForActions.length}
       onClearSelection={clearSpanSelection}
-      onAddToDataset={() => {
-        // TODO: Implement add to dataset functionality
-        console.log('Add to dataset:', selectedSpanIdsForActions);
-      }}
+      onAddToDataset={() => setShowAddToDatasetDialog(true)}
       isVisible={isSpanSelectModeEnabled}
+    />
+
+    {/* Add to Dataset Dialog */}
+    <AddToDatasetDialog
+      open={showAddToDatasetDialog}
+      onOpenChange={setShowAddToDatasetDialog}
+      spans={selectedSpans}
+      onSuccess={clearSpanSelection}
     />
   </div>;
 }
