@@ -19,6 +19,7 @@ import type {
   MessageContentPart,
   Tool,
 } from "@/types/experiment";
+import { ProjectsConsumer } from "@/lib";
 
 // Re-export types for backward compatibility
 export type {
@@ -59,6 +60,7 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
   const [traceId, setTraceId] = useState<string | null>(null);
   const [traceSpans, setTraceSpans] = useState<Span[]>([]);
   const [loadingTraceSpans, setLoadingTraceSpans] = useState(false);
+  const { currentProjectId } = ProjectsConsumer();
 
   useEffect(() => {
     if (traceSpans && traceSpans.length > 0) {
@@ -89,7 +91,7 @@ export function useExperiment(spanId: string | null, projectId: string | null) {
       if (!spanId) {
         throw new Error("No span ID provided");
       }
-      return getSpanById({ spanId });
+      return getSpanById({ spanId, projectId: currentProjectId });
     },
     {
       ready: !!spanId,

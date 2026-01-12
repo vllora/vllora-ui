@@ -96,6 +96,7 @@ export interface FetchSpansSummaryResult {
   repeated_failures?: Array<{ name: string; count: number; type: 'tool' | 'operation' }>;
   error_spans?: Array<{ span_id: string; operation: string; error_message?: string }>;
   semantic_error_spans?: Array<{ span_id: string; operation: string; detected_pattern?: string; source?: string }>;
+  tool_call_errors?: Array<{ span_id: string; operation: string; tool_name?: string; message: string }>;
   slowest_spans?: Array<{ span_id: string; operation: string; duration_ms: number; ttft_ms?: number }>;
   expensive_spans?: Array<{ span_id: string; operation: string; cost?: number; model?: string }>;
   _note?: string;
@@ -248,7 +249,48 @@ export async function fetchSpansSummary(
     };
 
     const errorSpans = spanSummaries.filter(s => s.has_error);
-    const semanticErrorSpans = spanSummaries.filter(s => s.semantic_error);
+
+    // Sort semantic errors so real tool failures show up first.
+    const semanticSeverityScore = (semanticError: string | undefined): number => {
+      if (!semanticError) return 0;
+      const s = semanticError.toLowerCase();
+      if (
+        s.includes('unexpected keyword argument') ||
+        s.includes('got an unexpected keyword argument') ||
+        s.includes('unknown tool') ||
+        s.includes('unrecognized function') ||
+        s.includes('function not found') ||
+        s.includes('error:') ||
+        s.includes('exception') ||
+        s.includes('failed:') ||
+        semanticError.includes('❌')
+      ) {
+        return 100;
+      }
+      if (s.includes('timeout') || s.includes('rate limit') || s.includes('unauthorized') || s.includes('forbidden')) {
+        return 80;
+      }
+      if (s.includes('invalid') || s.includes('missing') || s.includes('undefined') || s.includes('null')) {
+        return 60;
+      }
+      return 10;
+    };
+
+    const semanticErrorSpans = [...spanSummaries]
+      .filter(s => s.semantic_error)
+      .sort((a, b) => semanticSeverityScore(b.semantic_error) - semanticSeverityScore(a.semantic_error));
+
+    const toolCallErrors = spanSummaries
+      .filter(s => s.operation === 'api_invoke' && s.tool_call_errors && s.tool_call_errors.length > 0)
+      .flatMap(s =>
+        (s.tool_call_errors || []).map(e => ({
+          span_id: s.id,
+          operation: s.operation,
+          tool_name: e.tool_name,
+          message: e.message,
+        }))
+      );
+
     const slowestSpans = [...spanSummaries]
       .sort((a, b) => b.duration_ms - a.duration_ms)
       .slice(0, 5);
@@ -262,13 +304,27 @@ export async function fetchSpansSummary(
 
     const toolErrorCounts: Record<string, number> = {};
     for (const span of semanticErrorSpans) {
-      if (span.semantic_error?.toLowerCase().includes('unknown tool')) {
-        const match = span.semantic_error.match(/unknown tool[:\s]+(\w+)/i);
+      const semanticError = span.semantic_error;
+      if (!semanticError) continue;
+
+      const lower = semanticError.toLowerCase();
+
+      // Detect repeated "unknown tool" failures
+      if (lower.includes('unknown tool')) {
+        const match = semanticError.match(/unknown tool[:\s]+(\w+)/i);
         if (match) {
           toolErrorCounts[match[1]] = (toolErrorCounts[match[1]] || 0) + 1;
         }
       }
+
+      // Detect repeated tool execution failures like: "❌ research_flights failed: ..."
+      const failedToolMatch = semanticError.match(/❌\s*([a-zA-Z0-9_\-]+)\s*failed\b/i);
+      if (failedToolMatch) {
+        const toolName = failedToolMatch[1];
+        toolErrorCounts[toolName] = (toolErrorCounts[toolName] || 0) + 1;
+      }
     }
+
     for (const [name, count] of Object.entries(toolErrorCounts)) {
       if (count >= 2) {
         repeatedFailures.push({ name, count, type: 'tool' });
@@ -339,6 +395,7 @@ export async function fetchSpansSummary(
         detected_pattern: s.semantic_error,
         source: s.semantic_error_source,
       })),
+      tool_call_errors: toolCallErrors.length > 0 ? toolCallErrors : undefined,
       slowest_spans: slowestSpans.map(s => ({
         span_id: s.id,
         operation: s.operation,
@@ -351,7 +408,8 @@ export async function fetchSpansSummary(
         cost: s.cost,
         model: s.model,
       })),
-      _note: 'Full span data stored in memory. Use get_span_content with span_ids to retrieve specific spans for deep analysis.',
+      _note:
+        'Full span data stored in memory. `tool_call_errors` is extracted from `api_invoke.attribute.request.messages` where `role=tool`. Use get_span_content with span_ids to retrieve specific spans for deep analysis.',
     };
   } catch (error) {
     return {

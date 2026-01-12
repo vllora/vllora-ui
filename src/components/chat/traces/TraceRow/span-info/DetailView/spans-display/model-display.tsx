@@ -13,6 +13,7 @@ import {
 import { useCallback } from "react";
 import { FlowDialog } from "../MessageFlow";
 import { getDuration } from "../../SpanHeader";
+import { ProjectsConsumer } from "@/lib";
 
 interface ModelInvokeUIDetailsDisplayProps {
     span: Span;
@@ -28,6 +29,7 @@ export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelIn
     const modelCallAttribute = modelCallSpan?.attribute as any;
     const apiInvokeAttribute = apiInvokeSpan?.attribute as any;
     const apiCloudInvokeAttribute = apiCloudInvokeSpan?.attribute as any;
+    const { currentProjectId } = ProjectsConsumer();
 
     let output: string | undefined = currentAttribute?.output || modelCallAttribute?.output
     if (!output || output === "\"\"") {
@@ -53,11 +55,11 @@ export const ModelInvokeUIDetailsDisplay = ({ span, relatedSpans = [] }: ModelIn
 
     const handleExperiment = useCallback(() => {
         if (apiInvokeSpan?.span_id) {
-            navigate(`/experiment?span_id=${apiInvokeSpan?.span_id}`);
+            navigate(`/experiment?span_id=${apiInvokeSpan?.span_id}${currentProjectId ? `&project_id=${currentProjectId}` : ''}`);
         } else if (span?.span_id) {
-            navigate(`/experiment?span_id=${span?.span_id}`);
+            navigate(`/experiment?span_id=${span?.span_id}${currentProjectId ? `&project_id=${currentProjectId}` : ''}`);
         }
-    }, [apiInvokeSpan, span]);
+    }, [apiInvokeSpan, span, navigate, currentProjectId]);
 
     const headerActions = (
         <div className="flex items-center gap-1">

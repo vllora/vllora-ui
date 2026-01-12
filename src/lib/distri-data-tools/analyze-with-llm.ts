@@ -81,36 +81,37 @@ interface SpanForAnalysis {
   output_excerpt: string;
   error?: string;
   model?: string;
+  label?: string;
 }
 
 /**
- * Issue detected by LLM analysis
+ * Issue detected by LLM analysis (matches JSON schema).
  */
 interface AnalysisIssue {
-  type: 'error' | 'performance' | 'semantic' | 'other';
-  description: string;
+  type: 'error' | 'performance' | 'semantic' | 'tool' | 'other';
   severity: 'high' | 'medium' | 'low';
-  evidence: string;
-  root_cause: string;
-  recommendation: string;
+  data_snippet: string;
+  explanation: string;
+  tool_name: string | null;
+  tool_call_id: string | null;
 }
 
 /**
- * Per-span analysis result
+ * Per-span analysis result (matches JSON schema).
  */
 interface SpanAnalysis {
   span_id: string;
+  issue_title: string;
   issues: AnalysisIssue[];
-  assessment: string;
 }
 
 /**
- * Correlation between spans
+ * Correlation between spans (matches JSON schema).
  */
 interface SpanCorrelation {
   spans: string[];
-  relationship: string;
-  combined_impact: string;
+  pattern: string;
+  description: string;
 }
 
 /**
@@ -156,8 +157,8 @@ const FOCUS_INSTRUCTIONS: Record<string, string> = {
   performance:
     'Focus on performance issues. Analyze durations, identify bottlenecks, look for slow operations and their causes.',
   semantic:
-    'Focus on semantic issues. Look for contradictory instructions, confusing prompts, misleading responses, and logical inconsistencies.',
-  all: 'Analyze comprehensively. Look for errors, performance issues, semantic problems, and any other issues that might affect agent behavior.',
+    'Focus on semantic issues. Look for contradictory instructions, confusing prompts, misleading responses, and logical inconsistencies. ALSO include tool-call failures/schema mismatches when they explain or cause semantic failures (classify as type="tool").',
+  all: 'Analyze comprehensively. Include errors, performance issues, semantic problems, AND tool-call failures/schema mismatches (classify tool issues as type="tool").',
 };
 
 /**
@@ -168,79 +169,79 @@ function buildAnalysisPrompt(
   focus: string,
   userContext: string
 ): string {
-  return `You are a trace analyzer. Find hidden issues and explain them from a data flow perspective.
-
-## Focus Area
+  return `## Focus Area
 ${FOCUS_INSTRUCTIONS[focus] || FOCUS_INSTRUCTIONS.all}
 
 ${userContext ? `## Additional Context\n${userContext}\n` : ''}
 
 ## Span Data to Analyze
-${JSON.stringify(spansToAnalyze, null, 2)}
-
-## CRITICAL: Extract Actual Data Snippets
-
-For each issue, extract the **actual JSON or text** from the trace that shows the problem.
-
-**GOOD** (shows actual data):
-{
-  "evidence": "{\\"status\\": \\"success\\", \\"results\\": [], \\"message\\": \\"could not find any relevant results\\"}",
-  "explanation": "Status says success but results array is empty. Human would see 'success' and miss the failure."
+${JSON.stringify(spansToAnalyze, null, 2)}`;
 }
 
-**BAD** (generic - DO NOT DO THIS):
-{
-  "evidence": "Response lacks comprehensive synthesis",
-  "explanation": "The agent did not provide complete information"
-}
 
-## Issue Types to Detect
-
-1. **Silent Failures**: status="success" but results empty or message says failure
-2. **Buried Warnings**: "WARNING", "INTERNAL NOTE", "fallback", "cached from 20XX" hidden in long text
-3. **Rate Limiting**: "rate limit", "429", "retry after", "too many requests"
-4. **Stale Data**: "cached", "outdated", "last verified on", old dates
-5. **Truncated/Partial**: "truncated", "partial", "maximum exceeded"
-6. **Tool Errors**: "Unknown tool:", "error", explicit error fields
-
-Analyze the spans and return your findings.`;
+/**
+ * Return full text for LLM analysis.
+ *
+ * This tool previously truncated/"excerpted" span content and appended
+ * `...[truncated]`, which prevented the model from extracting complete
+ * evidence snippets.
+ */
+function extractRelevantExcerpt(text: string): string {
+  return text || '';
 }
 
 /**
  * Extract span data for analysis from storage
  */
-function extractSpanData(
-  span: Span
-): SpanForAnalysis {
+function extractSpanData(span: Span): SpanForAnalysis {
   const attr = (span.attribute || {}) as Record<string, unknown>;
   const duration_ms =
     span.finish_time_us && span.start_time_us
       ? Math.round((span.finish_time_us - span.start_time_us) / 1000)
       : 0;
 
-  // Extract excerpts (limit to 2000 chars each to keep context manageable)
-  const inputStr =
-    typeof attr.input === 'string'
-      ? attr.input
-      : JSON.stringify(attr.input || '');
-  const outputStr =
-    typeof attr.output === 'string'
-      ? attr.output
-      : typeof attr.response === 'string'
-        ? attr.response
-        : JSON.stringify(attr.output || attr.response || '');
+  // `api_invoke` spans often store the actual conversation/tool results in `attribute.request.messages`
+  // rather than `attribute.input`/`attribute.output`.
+  let inputValue: unknown = attr.input;
+
+  if ((!inputValue || inputValue === '') && span.operation_name === 'api_invoke' && attr.request) {
+    const request = typeof attr.request === 'string' ? safeParseJson(attr.request) : attr.request;
+    const requestObj = request && typeof request === 'object' ? (request as Record<string, unknown>) : undefined;
+
+    if (requestObj?.messages && Array.isArray(requestObj.messages)) {
+      // Keep only the minimal fields needed for semantic analysis.
+      inputValue = {
+        model: requestObj.model,
+        messages: requestObj.messages,
+      };
+    } else {
+      inputValue = requestObj ?? attr.request;
+    }
+  }
+
+  const inputStr = typeof inputValue === 'string' ? inputValue : JSON.stringify(inputValue ?? '');
+
+  const outputValue = attr.output ?? attr.response ?? attr.content;
+  const outputStr = typeof outputValue === 'string' ? outputValue : JSON.stringify(outputValue ?? '');
 
   return {
     span_id: span.span_id,
     operation_name: span.operation_name,
     duration_ms,
-    input_excerpt:
-      inputStr.slice(0, 2000) + (inputStr.length > 2000 ? '...[truncated]' : ''),
-    output_excerpt:
-      outputStr.slice(0, 2000) + (outputStr.length > 2000 ? '...[truncated]' : ''),
+    input_excerpt: extractRelevantExcerpt(inputStr),
+    output_excerpt: extractRelevantExcerpt(outputStr),
     error: attr.error as string | undefined,
     model: (attr.model_name || (attr.model as Record<string, unknown>)?.name || attr.model) as string | undefined,
+    label: attr.label as string | undefined,
   };
+}
+
+function safeParseJson(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
 }
 
 /**
@@ -282,6 +283,30 @@ function buildChatCompletionsUrl(provider?: ProviderConfig): string {
   // Fallback to vLLora backend
   return getChatCompletionsUrl();
 }
+
+const ANALYSIS_SYSTEM_PROMPT = `You are an expert trace analyzer.
+
+Goal: find hidden issues in AI agent traces and explain them from a data-flow perspective.
+
+Data model notes:
+- Spans may include tool execution evidence inside JSON (e.g., api_invoke request.messages with role='tool').
+
+Rules:
+- Always extract the exact evidence from the provided span data. Quote actual JSON/text.
+- Do NOT write generic evidence like "agent did not comply" without quoting the trace.
+- If you see the literal string '...[truncated]', treat it as unconfirmed and mention that it should be validated with get_span_content.
+- Prefer deduplicating repeated root causes: report one primary issue and use "Also affects: <span_ids>" for repeats.
+- Output MUST be valid JSON matching the provided schema (no markdown, no code fences).
+- Always include tool_name and tool_call_id fields in every issue (use null when not applicable).
+
+Issue categories to watch for:
+- Silent failures (status success but empty/failed results)
+- Buried warnings (WARNING/INTERNAL NOTE/fallback/cached)
+- Rate limiting (429/retry-after)
+- Stale data (cached/outdated/old dates)
+- Truncated/partial outputs
+- Tool/schema mismatches (unexpected keyword argument, unknown tool)
+`;
 
 /**
  * JSON Schema for structured output response
@@ -326,7 +351,7 @@ const ANALYSIS_RESPONSE_SCHEMA = {
                   properties: {
                     type: {
                       type: 'string',
-                      enum: ['error', 'performance', 'semantic', 'other'],
+                      enum: ['error', 'performance', 'semantic', 'tool', 'other'],
                     },
                     severity: {
                       type: 'string',
@@ -342,8 +367,16 @@ const ANALYSIS_RESPONSE_SCHEMA = {
                       description:
                         'Why this is a problem from data flow perspective',
                     },
+                    tool_name: {
+                      type: ['string', 'null'],
+                      description: 'Tool name if the issue is tool-related',
+                    },
+                    tool_call_id: {
+                      type: ['string', 'null'],
+                      description: 'Tool call id if available',
+                    },
                   },
-                  required: ['type', 'severity', 'data_snippet', 'explanation'],
+                  required: ['type', 'severity', 'data_snippet', 'explanation', 'tool_name', 'tool_call_id'],
                   additionalProperties: false,
                 },
               },
@@ -397,11 +430,10 @@ async function callLLMForAnalysis(prompt: string): Promise<string> {
   const modelSettings = lucyConfig.model_settings;
   const provider = modelSettings?.provider;
 
-  // Use config values with sensible defaults for analysis
-  const model = modelSettings?.model || 'gpt-4o-mini';
-  // Use lower temperature for analysis (more consistent) - override config if set
+  // Force model for analysis (consistent behavior across environments)
+  const model = 'openai/gpt-4.1';
+  // Use lower temperature for analysis (more consistent)
   const temperature = 0.2;
-  const maxTokens = modelSettings?.max_tokens || 2000;
 
   // Build URL from provider config
   const chatCompletionsUrl = buildChatCompletionsUrl(provider);
@@ -431,8 +463,7 @@ async function callLLMForAnalysis(prompt: string): Promise<string> {
       messages: [
         {
           role: 'system',
-          content:
-            'You are an expert trace analyzer. Find hidden issues in AI agent traces and explain them from a data flow perspective. Extract ACTUAL data snippets from traces, not generic descriptions.',
+          content: ANALYSIS_SYSTEM_PROMPT,
         },
         {
           role: 'user',
@@ -440,7 +471,6 @@ async function callLLMForAnalysis(prompt: string): Promise<string> {
         },
       ],
       temperature,
-      max_tokens: maxTokens,
       response_format: ANALYSIS_RESPONSE_SCHEMA,
     }),
   });
@@ -481,14 +511,9 @@ export async function analyzeWithLLM(
     const focus = (params.focus as string) || 'all';
     const userContext = (params.context as string) || '';
 
-    // Limit to 5 spans to prevent context overflow
-    if (ids.length > 5) {
-      return {
-        success: false,
-        error:
-          'Maximum 5 spans can be analyzed at once. Please reduce the number of span_ids.',
-      };
-    }
+    // This tool auto-batches spanIds to respect model context constraints.
+    const batchSize = 5;
+    const maxBatches = 3;
 
     // Check if storage has data
     if (spanStorage.size === 0) {
@@ -498,40 +523,81 @@ export async function analyzeWithLLM(
       };
     }
 
-    // Retrieve span content for analysis
-    const spansToAnalyze: SpanForAnalysis[] = [];
-    const notFound: string[] = [];
-
-    for (const id of ids) {
-      const span = spanStorage.get(id);
-      if (span) {
-        spansToAnalyze.push(extractSpanData(span));
-      } else {
-        notFound.push(id);
-      }
+    const idBatches: string[][] = [];
+    for (let i = 0; i < ids.length; i += batchSize) {
+      idBatches.push(ids.slice(i, i + batchSize));
+      if (idBatches.length >= maxBatches) break;
     }
 
-    if (spansToAnalyze.length === 0) {
+    const notFoundSet = new Set<string>();
+    const analyses: LLMAnalysisResult[] = [];
+    let spansAnalyzed = 0;
+
+    for (const batchIds of idBatches) {
+      const spansToAnalyze: SpanForAnalysis[] = [];
+
+      for (const id of batchIds) {
+        const span = spanStorage.get(id);
+        if (span) {
+          spansToAnalyze.push(extractSpanData(span));
+        } else {
+          notFoundSet.add(id);
+        }
+      }
+
+      if (spansToAnalyze.length === 0) continue;
+
+      const prompt = buildAnalysisPrompt(spansToAnalyze, focus, userContext);
+      const analysisContent = await callLLMForAnalysis(prompt);
+      analyses.push(parseLLMResponse(analysisContent));
+      spansAnalyzed += spansToAnalyze.length;
+    }
+
+    if (spansAnalyzed === 0) {
       return {
         success: false,
         error: 'No matching spans found in memory.',
-        not_found: notFound,
+        not_found: Array.from(notFoundSet),
       };
     }
 
-    // Build the analysis prompt and call LLM
-    const prompt = buildAnalysisPrompt(spansToAnalyze, focus, userContext);
-    const analysisContent = await callLLMForAnalysis(prompt);
-    const analysis = parseLLMResponse(analysisContent);
+    const mergedRecommendations = new Set<string>();
+    const merged: LLMAnalysisResult = {
+      overall_assessment: analyses
+        .map((a, i) => `[Batch ${i + 1}] ${a.overall_assessment}`)
+        .join('\n\n'),
+      issue_count: { high: 0, medium: 0, low: 0 },
+      span_analyses: [],
+      correlations: [],
+      recommendations: [],
+    };
+
+    for (const a of analyses) {
+      merged.issue_count.high += a.issue_count?.high || 0;
+      merged.issue_count.medium += a.issue_count?.medium || 0;
+      merged.issue_count.low += a.issue_count?.low || 0;
+
+      merged.span_analyses.push(...(a.span_analyses || []));
+      merged.correlations.push(...(a.correlations || []));
+
+      for (const r of a.recommendations || []) {
+        mergedRecommendations.add(r);
+      }
+
+      if (a._raw_response) {
+        merged._raw_response = true;
+      }
+    }
+
+    merged.recommendations = Array.from(mergedRecommendations);
 
     return {
       success: true,
       focus,
-      spans_analyzed: spansToAnalyze.length,
-      not_found: notFound.length > 0 ? notFound : undefined,
-      analysis,
-      _note:
-        'LLM-powered deep analysis. Use this for complex issues that regex cannot detect.',
+      spans_analyzed: spansAnalyzed,
+      not_found: notFoundSet.size > 0 ? Array.from(notFoundSet) : undefined,
+      analysis: merged,
+      _note: `LLM-powered deep analysis (batched: ${idBatches.length} x ${batchSize}, capped at ${maxBatches} batches).`,
     };
   } catch (error) {
     return {
