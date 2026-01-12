@@ -118,7 +118,7 @@ export const RequestResponseViewer = (props: RequestResponseViewerProps) => {
     return (
         <div className="flex flex-col rounded-lg">
             {/* Stats Bar */}
-            <div className="p-4 pb-0">
+            <div className="p-2 pb-0">
                 <StatsBar latency={latency} startTime={startTime} endTime={endTime} usage={usage} cost={totalCost} />
             </div>
 
