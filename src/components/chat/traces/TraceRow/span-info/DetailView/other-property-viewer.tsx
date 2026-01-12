@@ -10,7 +10,7 @@ export const OtherPropertyViewer = ({ attributes, label }: { attributes: any, la
             collapsed={false}
             onCollapsedChange={() => { }}
         >
-            <JsonViewer data={attributes} />
+            <JsonViewer data={attributes}  collapsed={10}/>
         </ViewerCollapsibleSection>
     );
 }
