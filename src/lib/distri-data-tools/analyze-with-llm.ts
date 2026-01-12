@@ -77,6 +77,11 @@ interface SpanForAnalysis {
   span_id: string;
   operation_name: string;
   duration_ms: number;
+  cost?: number;
+  input_tokens?: number;
+  output_tokens?: number;
+  total_tokens?: number;
+  cached_tokens?: number;
   input_excerpt: string;
   output_excerpt: string;
   error?: string;
@@ -150,15 +155,19 @@ export interface AnalyzeWithLLMResult {
 
 /**
  * Focus area instructions for the LLM
+ *
+ * CHANGE: Logic updated to ensure FULL analysis is always performed,
+ * with the 'focus' parameter strictly controlling the sorting/prioritization order.
  */
 const FOCUS_INSTRUCTIONS: Record<string, string> = {
   errors:
-    'Focus on identifying errors, failures, and issues. Look for error messages, failed operations, tool execution problems, and unexpected behaviors.',
+    'MANDATE: Perform a COMPREHENSIVE analysis of all aspects (Errors, Performance, Semantic, Tools). \n\nPRIORITIZATION: When writing the "overall_assessment" and ordering "span_analyses", you MUST present Error/Failure issues FIRST. Discuss performance or semantic issues immediately after.',
   performance:
-    'Focus on performance issues. Analyze durations, identify bottlenecks, look for slow operations and their causes.',
+    'MANDATE: Perform a COMPREHENSIVE analysis of all aspects (Errors, Performance, Semantic, Tools). \n\nPRIORITIZATION: When writing the "overall_assessment" and ordering "span_analyses", you MUST present Performance issues (latency, cost, tokens) FIRST. Discuss errors or semantic issues immediately after.',
   semantic:
-    'Focus on semantic issues. Look for contradictory instructions, confusing prompts, misleading responses, and logical inconsistencies. ALSO include tool-call failures/schema mismatches when they explain or cause semantic failures (classify as type="tool").',
-  all: 'Analyze comprehensively. Include errors, performance issues, semantic problems, AND tool-call failures/schema mismatches (classify tool issues as type="tool").',
+    'MANDATE: Perform a COMPREHENSIVE analysis of all aspects (Errors, Performance, Semantic, Tools). \n\nPRIORITIZATION: When writing the "overall_assessment" and ordering "span_analyses", you MUST present Semantic/Logic issues (contradictions, prompt confusion, bad output) FIRST. Discuss errors or performance issues immediately after.',
+  all:
+    'MANDATE: Perform a COMPREHENSIVE analysis of all aspects. \n\nPRIORITIZATION: Order issues by severity (High -> Low). Group related issues together.',
 };
 
 /**
@@ -209,7 +218,7 @@ function extractSpanData(span: Span): SpanForAnalysis {
     const requestObj = request && typeof request === 'object' ? (request as Record<string, unknown>) : undefined;
 
     if (requestObj?.messages && Array.isArray(requestObj.messages)) {
-      // Keep only the minimal fields needed for semantic analysis.
+      // Keep only the minimal fields needed for analysis.
       inputValue = {
         model: requestObj.model,
         messages: requestObj.messages,
@@ -224,10 +233,18 @@ function extractSpanData(span: Span): SpanForAnalysis {
   const outputValue = attr.output ?? attr.response ?? attr.content;
   const outputStr = typeof outputValue === 'string' ? outputValue : JSON.stringify(outputValue ?? '');
 
+  const usage = extractUsage(attr);
+  const cost = extractCost(attr);
+
   return {
     span_id: span.span_id,
     operation_name: span.operation_name,
     duration_ms,
+    cost,
+    input_tokens: usage?.input_tokens,
+    output_tokens: usage?.output_tokens,
+    total_tokens: usage?.total_tokens,
+    cached_tokens: usage?.cached_tokens,
     input_excerpt: extractRelevantExcerpt(inputStr),
     output_excerpt: extractRelevantExcerpt(outputStr),
     error: attr.error as string | undefined,
@@ -242,6 +259,51 @@ function safeParseJson(value: string): unknown {
   } catch {
     return value;
   }
+}
+
+function extractCost(attr: Record<string, unknown>): number | undefined {
+  const value = attr.cost ?? attr.total_cost ?? attr.cost_usd;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function extractUsage(
+  attr: Record<string, unknown>
+):
+  | {
+      input_tokens?: number;
+      output_tokens?: number;
+      total_tokens?: number;
+      cached_tokens?: number;
+    }
+  | undefined {
+  const usageValue = attr.usage;
+  const usage =
+    typeof usageValue === 'string'
+      ? safeParseJson(usageValue)
+      : usageValue;
+
+  if (!usage || typeof usage !== 'object') return undefined;
+
+  const usageObj = usage as Record<string, unknown>;
+
+  const inputTokens = typeof usageObj.input_tokens === 'number' ? usageObj.input_tokens : undefined;
+  const outputTokens = typeof usageObj.output_tokens === 'number' ? usageObj.output_tokens : undefined;
+  const totalTokens = typeof usageObj.total_tokens === 'number' ? usageObj.total_tokens : undefined;
+
+  const promptDetails = usageObj.prompt_tokens_details as Record<string, unknown> | undefined;
+  const cachedTokens = typeof promptDetails?.cached_tokens === 'number' ? (promptDetails.cached_tokens as number) : undefined;
+
+  return {
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    total_tokens: totalTokens,
+    cached_tokens: cachedTokens,
+  };
 }
 
 /**
@@ -284,29 +346,47 @@ function buildChatCompletionsUrl(provider?: ProviderConfig): string {
   return getChatCompletionsUrl();
 }
 
-const ANALYSIS_SYSTEM_PROMPT = `You are an expert trace analyzer.
+const BASE_ANALYSIS_SYSTEM_PROMPT = `You are an expert trace analyzer.
 
-Goal: find hidden issues in AI agent traces and explain them from a data-flow perspective.
+Goal: Find ALL hidden issues in AI agent traces (Errors, Performance, Semantic, and Tool use).
 
 Data model notes:
 - Spans may include tool execution evidence inside JSON (e.g., api_invoke request.messages with role='tool').
 
 Rules:
-- Always extract the exact evidence from the provided span data. Quote actual JSON/text.
-- Do NOT write generic evidence like "agent did not comply" without quoting the trace.
-- If you see the literal string '...[truncated]', treat it as unconfirmed and mention that it should be validated with get_span_content.
-- Prefer deduplicating repeated root causes: report one primary issue and use "Also affects: <span_ids>" for repeats.
-- Output MUST be valid JSON matching the provided schema (no markdown, no code fences).
-- Always include tool_name and tool_call_id fields in every issue (use null when not applicable).
+1. **COMPLETENESS IS MANDATORY**: Do NOT filter out findings. If you see a performance issue while focusing on errors, you MUST report it.
+2. **SORTING**: Use the provided "Focus Area" to decide which issues to mention *first* in the summary and list *first* in the arrays.
+3. Always extract the exact evidence from the provided span data. Quote actual JSON/text.
+4. Prefer deduplicating repeated root causes: report one primary issue and use "Also affects: <span_ids>" for repeats.
+5. Output MUST be valid JSON matching the provided schema.
+6. Always include tool_name and tool_call_id fields in every issue (use null when not applicable).
 
-Issue categories to watch for:
-- Silent failures (status success but empty/failed results)
-- Buried warnings (WARNING/INTERNAL NOTE/fallback/cached)
-- Rate limiting (429/retry-after)
-- Stale data (cached/outdated/old dates)
-- Truncated/partial outputs
-- Tool/schema mismatches (unexpected keyword argument, unknown tool)
+Always watch for and report these categories:
+- Prompt contradictions (conflicting instructions)
+- Tool/provider failures (auth, invalid_request_error, rate limits)
+- Tool/schema mismatches (unexpected arguments)
+- Silent failures (success status but empty results)
+- Buried warnings (fallback/cached)
+- Cost/token anomalies
+- Repeated slow calls
+
+Remember: The "Focus Area" determines the *Headline*, not the *Content Scope*.
 `;
+
+const FOCUS_SYSTEM_HINTS: Record<string, string> = {
+  errors:
+    'Scan everything. Put Provider/Tool failures and crashes at the top of the report. List performance/semantic issues below them.',
+  performance:
+    'Scan everything. Put bottlenecks, slow spans, and cost anomalies at the top of the report. List errors/semantic issues below them.',
+  semantic:
+    'Scan everything. Put logic gaps, prompt contradictions, and bad outputs at the top of the report. List errors/performance issues below them.',
+  all: 'Scan everything. Sort purely by impact/severity.',
+};
+
+function buildAnalysisSystemPrompt(focus: string): string {
+  const hint = FOCUS_SYSTEM_HINTS[focus] || FOCUS_SYSTEM_HINTS.all;
+  return `${BASE_ANALYSIS_SYSTEM_PROMPT}\nFocus hint: ${hint}`;
+}
 
 /**
  * JSON Schema for structured output response
@@ -424,7 +504,7 @@ const ANALYSIS_RESPONSE_SCHEMA = {
 /**
  * Call the LLM API for analysis using Lucy config settings
  */
-async function callLLMForAnalysis(prompt: string): Promise<string> {
+async function callLLMForAnalysis(prompt: string, focus: string): Promise<string> {
   // Fetch Lucy config from backend to get model settings
   const lucyConfig = await fetchLucyConfig();
   const modelSettings = lucyConfig.model_settings;
@@ -463,7 +543,7 @@ async function callLLMForAnalysis(prompt: string): Promise<string> {
       messages: [
         {
           role: 'system',
-          content: ANALYSIS_SYSTEM_PROMPT,
+          content: buildAnalysisSystemPrompt(focus),
         },
         {
           role: 'user',
@@ -548,7 +628,7 @@ export async function analyzeWithLLM(
       if (spansToAnalyze.length === 0) continue;
 
       const prompt = buildAnalysisPrompt(spansToAnalyze, focus, userContext);
-      const analysisContent = await callLLMForAnalysis(prompt);
+      const analysisContent = await callLLMForAnalysis(prompt, focus);
       analyses.push(parseLLMResponse(analysisContent));
       spansAnalyzed += spansToAnalyze.length;
     }

@@ -276,8 +276,10 @@ export async function fetchSpansSummary(
       return 10;
     };
 
+    // `semantic_error_spans` is intended to represent user-facing request spans.
+    // Scope to `api_invoke` to avoid surfacing lower-level wrapper/model spans.
     const semanticErrorSpans = [...spanSummaries]
-      .filter(s => s.semantic_error)
+      .filter(s => s.operation === 'api_invoke' && s.semantic_error)
       .sort((a, b) => semanticSeverityScore(b.semantic_error) - semanticSeverityScore(a.semantic_error));
 
     const toolCallErrors = spanSummaries
@@ -291,11 +293,15 @@ export async function fetchSpansSummary(
         }))
       );
 
+    // `slowest_spans` should be user-facing request spans (api_invoke), not wrapper spans
+    // like run/cloud_api_invoke/model_call/openai that often share the same duration.
     const slowestSpans = [...spanSummaries]
+      .filter(s => s.operation === 'api_invoke' && s.duration_ms > 0)
       .sort((a, b) => b.duration_ms - a.duration_ms)
       .slice(0, 5);
+    // `expensive_spans` should be user-facing request spans (api_invoke), not wrapper spans.
     const expensiveSpans = [...spanSummaries]
-      .filter(s => s.cost && s.cost > 0)
+      .filter(s => s.operation === 'api_invoke' && (s.cost || 0) > 0)
       .sort((a, b) => (b.cost || 0) - (a.cost || 0))
       .slice(0, 5);
 
