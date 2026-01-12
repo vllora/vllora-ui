@@ -108,28 +108,9 @@ export const ToolUIDetailsDisplay = ({ span, relatedSpans = [] }: ToolUIDetailsD
                     </div>
                 </a>
             )}
-            {/* Tool Info section */}
-            {/* {currentToolsInfo && currentToolsInfo.length > 0 && (
-                <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2">
-                        <div className="h-px flex-1 bg-border/40" />
-                        <div className="flex items-center gap-2">
-                            <WrenchScrewdriverIcon className="h-3.5 w-3.5 text-zinc-400" />
-                            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                                Definitions
-                            </div>
-                            <span className="text-[10px] font-medium text-zinc-500">
-                                ({currentToolsInfo.length})
-                            </span>
-                        </div>
-                        <div className="h-px flex-1 bg-border/40" />
-                    </div>
-                    <ToolDefinitionsViewer toolCalls={currentToolsInfo} />
-                </div>
-            )} */}
             {/* Tool Calls section */}
             {jsonToolCalls && jsonToolCalls.length > 0 && (
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-2 px-2 pt-2">
                     <div className="flex items-center gap-2">
                         <div className="h-px flex-1 bg-border/40" />
                         <div className="flex items-center gap-2">

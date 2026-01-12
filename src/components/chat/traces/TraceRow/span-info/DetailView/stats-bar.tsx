@@ -1,4 +1,5 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { formatCost } from "@/utils/formatCost";
 
 interface StatsBarProps {
     latency?: string;
@@ -43,7 +44,7 @@ export const StatsBar = ({ latency, startTime, endTime, usage, cost }: StatsBarP
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <div className="flex-1 flex flex-col gap-1 px-4 py-3 rounded-lg border border-border bg-[#0d0d0d] cursor-help">
+                            <div className="flex-1 flex flex-col gap-1 px-4 py-3 rounded-lg border border-border cursor-help">
                                 <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">Duration</span>
                                 <span className="text-base font-semibold text-teal-400">{latency}s</span>
                             </div>
@@ -70,20 +71,20 @@ export const StatsBar = ({ latency, startTime, endTime, usage, cost }: StatsBarP
                 </TooltipProvider>
             )}
             {usage?.total_tokens !== undefined && (
-                <div className="flex-1 flex flex-col gap-1 px-4 py-3 rounded-lg border border-border bg-[#0d0d0d]">
+                <div className="flex-1 flex flex-col gap-1 px-4 py-3 rounded-lg border border-border">
                     <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">Tokens</span>
                     <span className="text-base font-semibold text-white">{usage.total_tokens.toLocaleString()}</span>
                     {(inputTokens !== undefined || outputTokens !== undefined) && (
-                        <span className="text-[10px] text-zinc-500">
+                        <code className="text-xs text-zinc-500">
                             {inputTokens?.toLocaleString() ?? 0} in · {outputTokens?.toLocaleString() ?? 0} out
-                        </span>
+                        </code>
                     )}
                 </div>
             )}
             {cost !== undefined && (
                 <div className="flex-1 flex flex-col gap-1 px-4 py-3 rounded-lg border border-border bg-[#0d0d0d]">
                     <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">Cost</span>
-                    <span className="text-base font-semibold text-emerald-400">${cost.toFixed(4)}</span>
+                    <span className="text-base font-semibold text-emerald-400">{formatCost(cost, 5)}</span>
                 </div>
             )}
         </div>

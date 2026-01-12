@@ -44,7 +44,7 @@ export const SingleToolCallViewer = (props: {
     );
 
     return (
-        <div key={`tool_${id}`} className="space-y-3">
+        <div key={`tool_${id}`} className="space-y-3 px-2">
             <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold text-zinc-100">{functionName}</span>

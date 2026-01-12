@@ -145,9 +145,9 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
           {modelName && totalUsage > 0 && <ModelContextViewer cost={costUsage} usage_tokens={totalUsage} model_name={modelName} />}
         </div>
       </div>
-      <div className="flex items-center gap-2 flex-shrink-0">
+      <div className="flex items-center gap-2 flex-shrink-0 px-2">
         {labelOfSpan && (
-          <LabelTag label={labelOfSpan} maxWidth={75} />
+          <LabelTag label={labelOfSpan} maxWidth={150} />
         )}
         {status && <StatusBadge status={status} />}
         {/* {span && <BasicSpanInfo span={span} />} */}
