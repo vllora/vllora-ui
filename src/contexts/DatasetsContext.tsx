@@ -34,6 +34,7 @@ interface DatasetsContextType {
   deleteRecord: (datasetId: string, recordId: string) => Promise<void>;
   updateRecordTopic: (datasetId: string, recordId: string, topic: string) => Promise<void>;
   updateRecordData: (datasetId: string, recordId: string, data: unknown) => Promise<void>;
+  updateRecordEvaluation: (datasetId: string, recordId: string, score: number | undefined) => Promise<void>;
   renameDataset: (datasetId: string, newName: string) => Promise<void>;
   spanExistsInDataset: (datasetId: string, spanId: string) => Promise<boolean>;
   getDatasetsBySpanId: (spanId: string) => Promise<Dataset[]>;
@@ -167,6 +168,15 @@ export function DatasetsProvider({ children }: { children: ReactNode }) {
     await datasetsDB.updateRecordData(datasetId, recordId, data);
   }, []);
 
+  // Update a record's evaluation
+  const updateRecordEvaluation = useCallback(async (
+    datasetId: string,
+    recordId: string,
+    score: number | undefined
+  ): Promise<void> => {
+    await datasetsDB.updateRecordEvaluation(datasetId, recordId, score);
+  }, []);
+
   // Rename a dataset
   const renameDataset = useCallback(async (datasetId: string, newName: string): Promise<void> => {
     await datasetsDB.renameDataset(datasetId, newName);
@@ -256,6 +266,7 @@ export function DatasetsProvider({ children }: { children: ReactNode }) {
     deleteRecord,
     updateRecordTopic,
     updateRecordData,
+    updateRecordEvaluation,
     renameDataset,
     spanExistsInDataset,
     getDatasetsBySpanId,

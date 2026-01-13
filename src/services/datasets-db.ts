@@ -372,6 +372,53 @@ export async function updateRecordData(
   });
 }
 
+// Update a record's evaluation
+export async function updateRecordEvaluation(
+  datasetId: string,
+  recordId: string,
+  score: number | undefined
+): Promise<void> {
+  const db = await getDB();
+  const now = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(['datasets', 'records'], 'readwrite');
+    const datasetsStore = tx.objectStore('datasets');
+    const recordsStore = tx.objectStore('records');
+
+    // Update record
+    const getRecordRequest = recordsStore.get(recordId);
+    getRecordRequest.onsuccess = () => {
+      const record = getRecordRequest.result;
+      if (record) {
+        if (score === undefined) {
+          record.evaluation = undefined;
+        } else {
+          record.evaluation = {
+            score,
+            evaluatedAt: now,
+          };
+        }
+        record.updatedAt = now;
+        recordsStore.put(record);
+      }
+    };
+
+    // Update dataset's updatedAt
+    const getDatasetRequest = datasetsStore.get(datasetId);
+    getDatasetRequest.onsuccess = () => {
+      const dataset = getDatasetRequest.result;
+      if (dataset) {
+        dataset.updatedAt = now;
+        datasetsStore.put(dataset);
+      }
+    };
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 // Rename a dataset
 export async function renameDataset(datasetId: string, newName: string): Promise<void> {
   const db = await getDB();

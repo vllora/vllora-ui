@@ -38,6 +38,7 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
     deleteRecord,
     updateRecordTopic,
     updateRecordData,
+    updateRecordEvaluation,
     renameDataset,
     importRecords,
     clearDatasetRecords,
@@ -171,14 +172,40 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
     if (!dataset) return;
     try {
       await updateRecordTopic(dataset.id, recordId, topic);
+      const now = Date.now();
       setRecords(prev =>
         prev.map(r =>
-          r.id === recordId ? { ...r, topic: topic.trim() || undefined, updatedAt: Date.now() } : r
+          r.id === recordId ? { ...r, topic: topic.trim() || undefined, updatedAt: now } : r
         )
       );
+      // Also update expanded record if viewing it
+      if (expandedRecord?.id === recordId) {
+        setExpandedRecord(prev => prev ? { ...prev, topic: topic.trim() || undefined, updatedAt: now } : null);
+      }
       toast.success("Topic updated");
     } catch {
       toast.error("Failed to update topic");
+    }
+  };
+
+  const handleUpdateRecordEvaluation = async (recordId: string, score: number | undefined) => {
+    if (!dataset) return;
+    try {
+      await updateRecordEvaluation(dataset.id, recordId, score);
+      const now = Date.now();
+      const newEvaluation = score === undefined ? undefined : { score, evaluatedAt: now };
+      setRecords(prev =>
+        prev.map(r =>
+          r.id === recordId ? { ...r, evaluation: newEvaluation, updatedAt: now } : r
+        )
+      );
+      // Also update expanded record if viewing it
+      if (expandedRecord?.id === recordId) {
+        setExpandedRecord(prev => prev ? { ...prev, evaluation: newEvaluation, updatedAt: now } : null);
+      }
+      toast.success(score === undefined ? "Evaluation cleared" : `Rated ${score}/5`);
+    } catch {
+      toast.error("Failed to update evaluation");
     }
   };
 
@@ -408,6 +435,8 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
         record={expandedRecord}
         onOpenChange={(open) => !open && setExpandedRecord(null)}
         onSave={handleSaveRecordData}
+        onUpdateTopic={handleUpdateRecordTopic}
+        onUpdateEvaluation={handleUpdateRecordEvaluation}
       />
 
       {/* Import data dialog */}
