@@ -59,6 +59,7 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
     field: "timestamp",
     direction: "desc",
   });
+  const [groupByTopic, setGroupByTopic] = useState(false);
 
   // Load dataset and records
   const loadDataset = useCallback(async () => {
@@ -356,6 +357,8 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
             onSearchChange={setSearchQuery}
             sortConfig={sortConfig}
             onSortChange={setSortConfig}
+            groupByTopic={groupByTopic}
+            onGroupByTopicChange={setGroupByTopic}
             onAssignTopic={() => setAssignTopicDialog(true)}
             onRunEvaluation={handleBulkRunEvaluation}
             onDeleteSelected={handleBulkDelete}
@@ -372,6 +375,7 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
               onSelectionChange={setSelectedRecordIds}
               sortConfig={sortConfig}
               onSortChange={setSortConfig}
+              groupByTopic={groupByTopic}
               emptyMessage={searchQuery ? `No records match "${searchQuery}"` : "No records in this dataset"}
               onUpdateTopic={handleUpdateRecordTopic}
               onDelete={(recordId: string) =>

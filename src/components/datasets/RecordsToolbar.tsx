@@ -14,10 +14,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Filter,
   SortAsc,
   SortDesc,
-  LayoutGrid,
   Tag,
   Play,
   Trash2,
@@ -26,6 +31,7 @@ import {
   Calendar,
   MessageSquare,
   Star,
+  Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +54,10 @@ interface RecordsToolbarProps {
   sortConfig?: SortConfig;
   /** Sort change handler */
   onSortChange?: (config: SortConfig) => void;
+  /** Whether records are grouped by topic */
+  groupByTopic?: boolean;
+  /** Group by topic change handler */
+  onGroupByTopicChange?: (grouped: boolean) => void;
   /** Assign topic to selected records */
   onAssignTopic?: () => void;
   /** Run evaluation on selected records */
@@ -74,6 +84,8 @@ export function RecordsToolbar({
   onSearchChange,
   sortConfig,
   onSortChange,
+  groupByTopic = false,
+  onGroupByTopicChange,
   onAssignTopic,
   onRunEvaluation,
   onDeleteSelected,
@@ -161,9 +173,26 @@ export function RecordsToolbar({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <LayoutGrid className="w-4 h-4" />
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-8 w-8",
+                    groupByTopic && "bg-[rgb(var(--theme-500))]/10 text-[rgb(var(--theme-500))]"
+                  )}
+                  onClick={() => onGroupByTopicChange?.(!groupByTopic)}
+                >
+                  <Layers className="w-4 h-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{groupByTopic ? "Ungroup records" : "Group by topic"}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
 
         {/* Search input */}

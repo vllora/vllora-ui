@@ -5,10 +5,10 @@
  * Uses @tanstack/react-virtual for efficient rendering of large lists.
  */
 
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { DatasetRecord } from "@/types/dataset-types";
-import { Loader2, ArrowRight, ArrowUp, ArrowDown } from "lucide-react";
+import { Loader2, ArrowRight, ArrowUp, ArrowDown, ChevronDown, ChevronRight } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { RecordRow } from "./RecordRow";
@@ -46,6 +46,14 @@ interface RecordsTableProps {
   onSortChange?: (config: SortConfig) => void;
   /** Callback when expand is clicked */
   onExpand?: (record: DatasetRecord) => void;
+  /** Group records by topic */
+  groupByTopic?: boolean;
+}
+
+/** Represents a group of records by topic */
+interface TopicGroup {
+  topic: string;
+  records: DatasetRecord[];
 }
 
 const ROW_HEIGHT = 72; // Height of each row in pixels (increased for expand link)
@@ -69,11 +77,15 @@ export function RecordsTable({
   sortConfig,
   onSortChange,
   onExpand,
+  groupByTopic = false,
 }: RecordsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
 
   // Internal selection state (used when not controlled)
   const [internalSelectedIds, setInternalSelectedIds] = useState<Set<string>>(new Set());
+
+  // Collapsed groups state (tracks which topic groups are collapsed)
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   // Use controlled or internal state
   const selectedIds = controlledSelectedIds ?? internalSelectedIds;
@@ -81,7 +93,52 @@ export function RecordsTable({
 
   const displayRecords = maxRecords > 0 ? records.slice(0, maxRecords) : records;
   const hasMore = maxRecords > 0 && records.length > maxRecords;
-  const shouldVirtualize = displayRecords.length > VIRTUALIZATION_THRESHOLD;
+  const shouldVirtualize = displayRecords.length > VIRTUALIZATION_THRESHOLD && !groupByTopic;
+
+  // Group records by topic
+  const groupedRecords = useMemo((): TopicGroup[] => {
+    if (!groupByTopic) return [];
+
+    const groups = new Map<string, DatasetRecord[]>();
+    const NO_TOPIC = "__no_topic__";
+
+    for (const record of displayRecords) {
+      const topic = record.topic || NO_TOPIC;
+      if (!groups.has(topic)) {
+        groups.set(topic, []);
+      }
+      groups.get(topic)!.push(record);
+    }
+
+    // Sort groups: named topics first (alphabetically), then "No Topic"
+    const sortedGroups: TopicGroup[] = [];
+    const topicKeys = Array.from(groups.keys()).sort((a, b) => {
+      if (a === NO_TOPIC) return 1;
+      if (b === NO_TOPIC) return -1;
+      return a.localeCompare(b);
+    });
+
+    for (const topic of topicKeys) {
+      sortedGroups.push({
+        topic: topic === NO_TOPIC ? "No Topic" : topic,
+        records: groups.get(topic)!,
+      });
+    }
+
+    return sortedGroups;
+  }, [displayRecords, groupByTopic]);
+
+  const toggleGroup = useCallback((topic: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(topic)) {
+        next.delete(topic);
+      } else {
+        next.add(topic);
+      }
+      return next;
+    });
+  }, []);
 
   const virtualizer = useVirtualizer({
     count: displayRecords.length,
@@ -126,6 +183,103 @@ export function RecordsTable({
       <div className="px-4 py-6 text-sm text-muted-foreground italic text-center">
         {emptyMessage}
       </div>
+    );
+  }
+
+  // Grouped rendering by topic
+  if (groupByTopic) {
+    return (
+      <>
+        {showHeader && (
+          <TableHeader
+            selectable={selectable}
+            allSelected={allSelected}
+            someSelected={someSelected}
+            onSelectAll={handleSelectAll}
+            sortConfig={sortConfig}
+            onSortChange={onSortChange}
+          />
+        )}
+        <div
+          className="overflow-auto"
+          style={{ maxHeight: height }}
+        >
+          {groupedRecords.map((group) => {
+            const isCollapsed = collapsedGroups.has(group.topic);
+            const groupRecordIds = group.records.map((r) => r.id);
+            const allGroupSelected = groupRecordIds.every((id) => selectedIds.has(id));
+            const someGroupSelected = groupRecordIds.some((id) => selectedIds.has(id));
+
+            return (
+              <div key={group.topic} className="border-b border-border last:border-b-0">
+                {/* Group Header */}
+                <button
+                  className="w-full px-4 py-3 flex items-center gap-3 bg-muted/50 hover:bg-muted/70 transition-colors text-left"
+                  onClick={() => toggleGroup(group.topic)}
+                >
+                  {selectable && (
+                    <div
+                      className="shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Toggle selection for all records in group
+                        const newSelected = new Set(selectedIds);
+                        if (allGroupSelected) {
+                          groupRecordIds.forEach((id) => newSelected.delete(id));
+                        } else {
+                          groupRecordIds.forEach((id) => newSelected.add(id));
+                        }
+                        setSelectedIds(newSelected);
+                      }}
+                    >
+                      <Checkbox
+                        checked={allGroupSelected ? true : someGroupSelected ? "indeterminate" : false}
+                        className="border-muted-foreground/30"
+                      />
+                    </div>
+                  )}
+                  {isCollapsed ? (
+                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+                  )}
+                  <span className={cn(
+                    "font-medium",
+                    group.topic === "No Topic" && "text-muted-foreground italic"
+                  )}>
+                    {group.topic}
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    ({group.records.length} record{group.records.length !== 1 ? "s" : ""})
+                  </span>
+                </button>
+
+                {/* Group Records */}
+                {!isCollapsed && (
+                  <div>
+                    {group.records.map((record) => (
+                      <RecordRow
+                        key={record.id}
+                        record={record}
+                        onUpdateTopic={onUpdateTopic}
+                        onDelete={onDelete}
+                        tableLayout={showHeader}
+                        showTopicLabel={showTopicLabel}
+                        selectable={selectable}
+                        selected={selectedIds.has(record.id)}
+                        onSelect={(checked) => handleSelectRecord(record.id, checked)}
+                        onExpand={onExpand}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {hasMore && onSeeAll && <SeeAllLink count={records.length} onClick={onSeeAll} />}
+        {showFooter && <TableFooter records={displayRecords} selectedCount={selectedIds.size} />}
+      </>
     );
   }
 
