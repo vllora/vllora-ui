@@ -46,6 +46,19 @@ export async function getDB(): Promise<IDBDatabase> {
   });
 }
 
+// Get a dataset by ID
+export async function getDatasetById(datasetId: string): Promise<Dataset | null> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('datasets', 'readonly');
+    const store = tx.objectStore('datasets');
+    const request = store.get(datasetId);
+
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+}
+
 // Get all datasets (metadata only)
 export async function getAllDatasets(): Promise<Dataset[]> {
   const db = await getDB();

@@ -130,7 +130,11 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
     };
 
     // Selection handlers
-    const handleSelectRecords = (data: { recordIds: string[] }) => {
+    const handleSelectRecords = (data: { datasetId: string; recordIds: string[] }) => {
+      // Navigate to the dataset first, then select records
+      if (data.datasetId && data.datasetId !== selectedDatasetId) {
+        setSearchParams({ id: data.datasetId });
+      }
       selectRecords(data.recordIds);
     };
 
@@ -173,7 +177,7 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
       emitter.off('vllora_dataset_set_sort' as any, handleSetSort);
       emitter.off('vllora_dataset_refresh' as any, handleRefresh);
     };
-  }, [navigateToDataset, expandDataset, collapseDataset, selectRecords, clearSelection, loadDatasets]);
+  }, [navigateToDataset, expandDataset, collapseDataset, selectRecords, clearSelection, loadDatasets, selectedDatasetId, setSearchParams]);
 
   const value: DatasetsUIContextType = {
     // Navigation state
