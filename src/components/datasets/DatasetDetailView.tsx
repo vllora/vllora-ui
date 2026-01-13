@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { DatasetsConsumer } from "@/contexts/DatasetsContext";
+import { DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
 import { Dataset, DatasetRecord } from "@/types/dataset-types";
 import { emitter } from "@/utils/eventEmitter";
 import { Button } from "@/components/ui/button";
@@ -28,7 +29,7 @@ import { DatasetDetailHeader } from "./DatasetDetailHeader";
 import { RecordsToolbar, SortConfig } from "./RecordsToolbar";
 import { RecordsTable } from "./RecordsTable";
 import { JsonEditor } from "@/components/chat/conversation/model-config/json-editor";
-import { getDataAsObject, getLabel } from "./record-utils";
+import { filterAndSortRecords } from "./record-filters";
 
 interface DatasetDetailViewProps {
   datasetId: string;
@@ -46,12 +47,14 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
     renameDataset,
   } = DatasetsConsumer();
 
+  // Get selection state from UI context (shared with Lucy tools)
+  const { selectedRecordIds, setSelectedRecordIds } = DatasetsUIConsumer();
+
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [records, setRecords] = useState<DatasetRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmation | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [assignTopicDialog, setAssignTopicDialog] = useState(false);
   const [bulkTopic, setBulkTopic] = useState("");
   const [expandedRecord, setExpandedRecord] = useState<DatasetRecord | null>(null);
@@ -95,6 +98,27 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
     };
   }, [loadDataset]);
 
+  // Listen for records deleted events from agent tools (same logic as handleBulkDelete)
+  useEffect(() => {
+    const handleRecordsDeleted = (data: { datasetId: string; recordIds: string[] }) => {
+      // Only handle if it's for the current dataset
+      if (data.datasetId !== datasetId) return;
+
+      const deletedSet = new Set(data.recordIds);
+      // Update local records state
+      setRecords(prev => prev.filter(r => !deletedSet.has(r.id)));
+      // Clear selection for deleted records
+      const newSelection = new Set(selectedRecordIds);
+      data.recordIds.forEach(id => newSelection.delete(id));
+      setSelectedRecordIds(newSelection);
+      toast.success(`Deleted ${data.recordIds.length} record${data.recordIds.length !== 1 ? "s" : ""}`);
+    };
+    emitter.on('vllora_dataset_records_deleted' as any, handleRecordsDeleted);
+    return () => {
+      emitter.off('vllora_dataset_records_deleted' as any, handleRecordsDeleted);
+    };
+  }, [datasetId, selectedRecordIds, setSelectedRecordIds]);
+
   // Update dataset from context when it changes
   useEffect(() => {
     const updated = datasets.find(d => d.id === datasetId);
@@ -103,43 +127,12 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
     }
   }, [datasets, datasetId, dataset]);
 
-  // Filter records by search query
-  const filteredRecords = searchQuery.trim()
-    ? records.filter(r => {
-        const query = searchQuery.toLowerCase();
-        const label = getLabel(r)?.toLowerCase() || "";
-        const topic = r.topic?.toLowerCase() || "";
-        const data = getDataAsObject(r);
-        const spanId = ((data.span_id as string) || r.id).toLowerCase();
-        return label.includes(query) || topic.includes(query) || spanId.includes(query);
-      })
-    : records;
-
-  // Sort records
-  const sortedRecords = [...filteredRecords].sort((a, b) => {
-    const direction = sortConfig.direction === "asc" ? 1 : -1;
-
-    switch (sortConfig.field) {
-      case "timestamp":
-        return (a.createdAt - b.createdAt) * direction;
-      case "topic":
-        const topicA = a.topic?.toLowerCase() || "";
-        const topicB = b.topic?.toLowerCase() || "";
-        if (!topicA && !topicB) return 0;
-        if (!topicA) return 1; // Empty topics go last
-        if (!topicB) return -1;
-        return topicA.localeCompare(topicB) * direction;
-      case "evaluation":
-        const scoreA = a.evaluation?.score ?? -1;
-        const scoreB = b.evaluation?.score ?? -1;
-        if (scoreA === -1 && scoreB === -1) return 0;
-        if (scoreA === -1) return 1; // No evaluation goes last
-        if (scoreB === -1) return -1;
-        return (scoreA - scoreB) * direction;
-      default:
-        return 0;
-    }
-  });
+  // Filter and sort records using shared utility (same logic as Lucy tools)
+  const sortedRecords = filterAndSortRecords(
+    records,
+    { search: searchQuery },
+    { field: sortConfig.field, direction: sortConfig.direction }
+  );
 
   // Handlers
   const handleRenameDataset = async (newName: string) => {
@@ -169,11 +162,10 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
     try {
       await deleteRecord(dataset.id, recordId);
       setRecords(prev => prev.filter(r => r.id !== recordId));
-      setSelectedIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(recordId);
-        return newSet;
-      });
+      // Remove deleted record from selection
+      const newSelection = new Set(selectedRecordIds);
+      newSelection.delete(recordId);
+      setSelectedRecordIds(newSelection);
       toast.success("Record deleted");
     } catch {
       toast.error("Failed to delete record");
@@ -208,10 +200,10 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
   const handleBulkAssignTopic = async () => {
     if (!dataset || !bulkTopic.trim()) return;
 
-    const selectedRecordIds = Array.from(selectedIds);
+    const idsToProcess = Array.from(selectedRecordIds);
     let successCount = 0;
 
-    for (const recordId of selectedRecordIds) {
+    for (const recordId of idsToProcess) {
       try {
         await updateRecordTopic(dataset.id, recordId, bulkTopic.trim());
         successCount++;
@@ -224,7 +216,7 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
       const now = Date.now();
       setRecords(prev =>
         prev.map(r =>
-          selectedIds.has(r.id) ? { ...r, topic: bulkTopic.trim(), updatedAt: now } : r
+          selectedRecordIds.has(r.id) ? { ...r, topic: bulkTopic.trim(), updatedAt: now } : r
         )
       );
       toast.success(`Assigned topic to ${successCount} record${successCount !== 1 ? "s" : ""}`);
@@ -232,7 +224,7 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
 
     setAssignTopicDialog(false);
     setBulkTopic("");
-    setSelectedIds(new Set());
+    setSelectedRecordIds(new Set());
   };
 
   const handleBulkRunEvaluation = () => {
@@ -242,10 +234,10 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
   const handleBulkDelete = async () => {
     if (!dataset) return;
 
-    const selectedRecordIds = Array.from(selectedIds);
+    const idsToProcess = Array.from(selectedRecordIds);
     let successCount = 0;
 
-    for (const recordId of selectedRecordIds) {
+    for (const recordId of idsToProcess) {
       try {
         await deleteRecord(dataset.id, recordId);
         successCount++;
@@ -255,11 +247,11 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
     }
 
     if (successCount > 0) {
-      setRecords(prev => prev.filter(r => !selectedIds.has(r.id)));
+      setRecords(prev => prev.filter(r => !selectedRecordIds.has(r.id)));
       toast.success(`Deleted ${successCount} record${successCount !== 1 ? "s" : ""}`);
     }
 
-    setSelectedIds(new Set());
+    setSelectedRecordIds(new Set());
   };
 
   const handleExport = () => {
@@ -373,7 +365,7 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
 
           {/* Toolbar */}
           <RecordsToolbar
-            selectedCount={selectedIds.size}
+            selectedCount={selectedRecordIds.size}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             sortConfig={sortConfig}
@@ -390,8 +382,8 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
               showHeader
               showFooter
               selectable
-              selectedIds={selectedIds}
-              onSelectionChange={setSelectedIds}
+              selectedIds={selectedRecordIds}
+              onSelectionChange={setSelectedRecordIds}
               sortConfig={sortConfig}
               onSortChange={setSortConfig}
               emptyMessage={searchQuery ? `No records match "${searchQuery}"` : "No records in this dataset"}
@@ -419,7 +411,7 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
           <DialogHeader>
             <DialogTitle>Assign Topic</DialogTitle>
             <DialogDescription>
-              Assign a topic to {selectedIds.size} selected record{selectedIds.size !== 1 ? "s" : ""}.
+              Assign a topic to {selectedRecordIds.size} selected record{selectedRecordIds.size !== 1 ? "s" : ""}.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">

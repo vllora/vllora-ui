@@ -20,11 +20,17 @@ export const deleteRecordsHandler: ToolHandler = async ({ dataset_id, record_ids
     };
   }
   try {
+    const deletedIds: string[] = [];
     for (const recordId of record_ids as string[]) {
       await datasetsDB.deleteRecord(dataset_id as string, recordId);
+      deletedIds.push(recordId);
     }
-    emitter.emit('vllora_dataset_refresh' as any, {});
-    return { success: true, deleted_count: record_ids.length };
+    // Emit event with deleted record IDs so UI can update state directly
+    emitter.emit('vllora_dataset_records_deleted' as any, {
+      datasetId: dataset_id,
+      recordIds: deletedIds,
+    });
+    return { success: true, deleted_count: deletedIds.length };
   } catch (error) {
     return {
       success: false,
