@@ -220,47 +220,50 @@ export function RecordsToolbar({
       </div>
 
       {/* Right side - Bulk action buttons */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         <Button
-          variant="outline"
+          variant="ghost"
+          size="sm"
           className={cn(
-            "gap-2",
+            "gap-1.5 h-8 px-3",
             hasSelection
-              ? "text-[rgb(var(--theme-500))] border-[rgb(var(--theme-500))]/30 hover:bg-[rgb(var(--theme-500))]/10"
-              : "text-muted-foreground"
+              ? "text-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-500))]/10"
+              : "text-muted-foreground/50"
           )}
           disabled={!hasSelection}
           onClick={onAssignTopic}
         >
-          <Tag className="w-4 h-4" />
-          Assign Topic
+          <Tag className="w-3.5 h-3.5" />
+          Topic
         </Button>
         <Button
-          variant="outline"
+          variant="ghost"
+          size="sm"
           className={cn(
-            "gap-2",
+            "gap-1.5 h-8 px-3",
             hasSelection
-              ? "text-[rgb(var(--theme-500))] border-[rgb(var(--theme-500))]/30 hover:bg-[rgb(var(--theme-500))]/10"
-              : "text-muted-foreground"
+              ? "text-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-500))]/10"
+              : "text-muted-foreground/50"
           )}
           disabled={!hasSelection}
           onClick={onRunEvaluation}
         >
-          <Play className="w-4 h-4" />
-          Run Evaluation
+          <Play className="w-3.5 h-3.5" />
+          Evaluate
         </Button>
         <Button
-          variant="outline"
+          variant="ghost"
+          size="sm"
           className={cn(
-            "gap-2",
+            "gap-1.5 h-8 px-3",
             hasSelection
-              ? "text-red-500 border-red-500/30 hover:bg-red-500/10"
-              : "text-muted-foreground"
+              ? "text-red-500 hover:bg-red-500/10"
+              : "text-muted-foreground/50"
           )}
           disabled={!hasSelection}
           onClick={onDeleteSelected}
         >
-          <Trash2 className="w-4 h-4" />
+          <Trash2 className="w-3.5 h-3.5" />
           Delete
         </Button>
       </div>

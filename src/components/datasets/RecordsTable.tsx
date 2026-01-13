@@ -8,8 +8,7 @@
 import { useRef, useState, useCallback, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { DatasetRecord } from "@/types/dataset-types";
-import { Loader2, ArrowRight, ArrowUp, ArrowDown, ChevronDown, ChevronRight } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Loader2, ArrowRight, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Check, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RecordRow } from "./RecordRow";
 import { getTopicColor } from "./record-utils";
@@ -220,7 +219,7 @@ export function RecordsTable({
                 >
                   {selectable && (
                     <div
-                      className="shrink-0"
+                      className="flex items-center justify-center w-6 shrink-0"
                       onClick={(e) => {
                         e.stopPropagation();
                         // Toggle selection for all records in group
@@ -233,10 +232,20 @@ export function RecordsTable({
                         setSelectedIds(newSelected);
                       }}
                     >
-                      <Checkbox
-                        checked={allGroupSelected ? true : someGroupSelected ? "indeterminate" : false}
-                        className="border-muted-foreground/30"
-                      />
+                      <div
+                        className={cn(
+                          "h-4 w-4 rounded flex items-center justify-center cursor-pointer transition-all duration-150",
+                          "border",
+                          allGroupSelected
+                            ? "bg-[rgb(var(--theme-500))] border-[rgb(var(--theme-500))]"
+                            : someGroupSelected
+                              ? "bg-[rgb(var(--theme-500))]/50 border-[rgb(var(--theme-500))]"
+                              : "bg-transparent border-muted-foreground/50 hover:border-muted-foreground"
+                        )}
+                      >
+                        {allGroupSelected && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
+                        {!allGroupSelected && someGroupSelected && <Minus className="h-3 w-3 text-white" strokeWidth={3} />}
+                      </div>
                     </div>
                   )}
                   {isCollapsed ? (
@@ -424,12 +433,24 @@ function TableHeader({ selectable, allSelected, someSelected, onSelectAll, sortC
   return (
     <div className="px-4 py-3 bg-muted/30 border-b border-border flex items-center gap-4 text-xs font-medium text-muted-foreground uppercase tracking-wide">
       {selectable && (
-        <div className="w-6 shrink-0">
-          <Checkbox
-            checked={allSelected ? true : someSelected ? "indeterminate" : false}
-            onCheckedChange={(checked) => onSelectAll?.(checked === true)}
-            className="border-muted-foreground/30"
-          />
+        <div
+          className="flex items-center justify-center w-6 shrink-0"
+          onClick={() => onSelectAll?.(!allSelected)}
+        >
+          <div
+            className={cn(
+              "h-4 w-4 rounded flex items-center justify-center cursor-pointer transition-all duration-150",
+              "border",
+              allSelected
+                ? "bg-[rgb(var(--theme-500))] border-[rgb(var(--theme-500))]"
+                : someSelected
+                  ? "bg-[rgb(var(--theme-500))]/50 border-[rgb(var(--theme-500))]"
+                  : "bg-transparent border-muted-foreground/50 hover:border-muted-foreground"
+            )}
+          >
+            {allSelected && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
+            {!allSelected && someSelected && <Minus className="h-3 w-3 text-white" strokeWidth={3} />}
+          </div>
         </div>
       )}
       <span className="flex-[2] min-w-0">Trace Data (Input/Output)</span>
