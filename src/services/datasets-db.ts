@@ -1,5 +1,6 @@
-import { Dataset, DatasetRecord } from '@/types/dataset-types';
+import { DataInfo, Dataset, DatasetRecord } from '@/types/dataset-types';
 import { Span } from '@/types/common-type';
+import { tryParseJson } from '@/utils/modelUtils';
 
 const DB_NAME = 'vllora-datasets';
 const DB_VERSION = 1;
@@ -138,14 +139,36 @@ export async function addSpansToDataset(
         datasetsStore.put(dataset);
       }
     };
+  
 
     // Add records
     let addedCount = 0;
     spans.forEach((span) => {
+      let spanAttributes = span.attribute as Record<string, unknown>;
+      let requestStr  = spanAttributes.request as string;
+      let outputStr = spanAttributes.output as string;
+      let finishReason = spanAttributes.finish_reason as string;
+      let requestJson = tryParseJson(requestStr);
+      let outputJson = tryParseJson(outputStr);
+      let inputMessages = requestJson?.messages as any[] || [];
+      let outputMessage = outputJson?.choices?.[0]?.message as any;
+
+      let dataInfo:DataInfo = {input: {messages: inputMessages}, output: {messages: outputMessage}}
+      if(finishReason){
+        dataInfo.output.finish_reason = finishReason;
+      }
+      if(requestJson?.tools){
+        dataInfo.input.tools = requestJson.tools;
+      }
+      if(outputJson?.choices?.[0]?.tool_calls){
+        dataInfo.output.tool_calls = outputJson.choices[0].tool_calls;
+      }
+
+
       const record: DatasetRecord = {
         id: crypto.randomUUID(),
         datasetId,
-        data: span,
+        data: dataInfo,
         spanId: span.span_id,
         topic: topic?.trim() || undefined,
         createdAt: now,

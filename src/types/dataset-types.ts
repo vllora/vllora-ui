@@ -18,7 +18,7 @@ export interface DatasetRecord {
 
 export interface DataInfo {
   input: {
-    messages: any[]
+    messages?: any[]
     tools?: any[]
     tool_choice?: string
     metadata?: any
@@ -26,7 +26,8 @@ export interface DataInfo {
   output: {
     messages?: any[]
     tool_calls?: any[]
-    metadata?: any
+    metadata?: any;
+    finish_reason?: string;
   }
 }
 
