@@ -3,7 +3,7 @@ import { Span } from '@/types/common-type';
 import { tryParseJson } from '@/utils/modelUtils';
 
 const DB_NAME = 'vllora-datasets';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -23,6 +23,7 @@ export async function getDB(): Promise<IDBDatabase> {
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
+      const tx = (event.target as IDBOpenDBRequest).transaction as IDBTransaction;
 
       // Create datasets store
       if (!db.objectStoreNames.contains('datasets')) {
@@ -32,15 +33,26 @@ export async function getDB(): Promise<IDBDatabase> {
         datasetsStore.createIndex('updatedAt', 'updatedAt', { unique: false });
       }
 
-      // Create records store
+      // Create or upgrade records store
+      let recordsStore: IDBObjectStore;
       if (!db.objectStoreNames.contains('records')) {
-        const recordsStore = db.createObjectStore('records', { keyPath: 'id' });
+        recordsStore = db.createObjectStore('records', { keyPath: 'id' });
         recordsStore.createIndex('datasetId', 'datasetId', { unique: false });
         recordsStore.createIndex('topic', 'topic', { unique: false });
         recordsStore.createIndex('createdAt', 'createdAt', { unique: false });
         recordsStore.createIndex('spanId', 'spanId', { unique: false });
         // Composite index for duplicate detection within a dataset
         recordsStore.createIndex('datasetId_spanId', ['datasetId', 'spanId'], { unique: false });
+      } else {
+        recordsStore = tx.objectStore('records');
+      }
+
+      // New indexes for hierarchical topics
+      if (!recordsStore.indexNames.contains('topic_root')) {
+        recordsStore.createIndex('topic_root', 'topic_root', { unique: false });
+      }
+      if (!recordsStore.indexNames.contains('topic_path_str')) {
+        recordsStore.createIndex('topic_path_str', 'topic_path_str', { unique: false });
       }
     };
   });
@@ -87,7 +99,15 @@ export async function getRecordsByDatasetId(datasetId: string): Promise<DatasetR
 
     request.onsuccess = () => {
       // Sort by createdAt descending
-      const records = request.result.sort((a, b) => b.createdAt - a.createdAt);
+      const records = request.result
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .map((r) => {
+          // Derive display fields from topic_paths without persisting duplicates.
+          if (r.topic_paths && Array.isArray(r.topic_paths)) {
+            return { ...r, ...deriveTopicFieldsFromTopicPaths(r.topic_paths) } as DatasetRecord;
+          }
+          return r as DatasetRecord;
+        });
       resolve(records);
     };
     request.onerror = () => reject(request.error);
@@ -127,6 +147,55 @@ export async function createDataset(name: string): Promise<Dataset> {
     request.onsuccess = () => resolve(dataset);
     request.onerror = () => reject(request.error);
   });
+}
+
+// Helpers to normalize/derive hierarchical topic data
+function normalizeTopicPaths(topicPaths?: string[][]): string[][] {
+  if (!topicPaths) return [];
+  return topicPaths
+    .filter((p) => Array.isArray(p))
+    .map((p) => p.map((t) => (t || '').trim()).filter(Boolean))
+    .filter((p) => p.length > 0);
+}
+
+function deriveTopicFieldsFromTopicPaths(topicPaths?: string[][]) {
+  const normalized = normalizeTopicPaths(topicPaths);
+  if (normalized.length === 0) return {} as Partial<DatasetRecord>;
+
+  // Root is the first segment of a 1-length path if present, else first segment of any path.
+  const rootPath = normalized.find((p) => p.length === 1);
+  const root = rootPath?.[0] || normalized[0][0];
+
+  // Choose a deterministic "display" path: deepest path; tie-break by joined string.
+  let chosen = normalized[0];
+  for (const p of normalized) {
+    if (p.length > chosen.length) {
+      chosen = p;
+    } else if (p.length === chosen.length && p.join('/') < chosen.join('/')) {
+      chosen = p;
+    }
+  }
+
+  return {
+    topic: root,
+    topic_root: root,
+    topic_path: chosen,
+    topic_path_str: chosen ? chosen.join('/') : undefined,
+  } as Partial<DatasetRecord>;
+}
+
+function topicPathsFromSingleTopic(topic?: string): string[][] | undefined {
+  const t = (topic || '').trim();
+  return t ? [[t]] : undefined;
+}
+
+function topicPathsFromPath(path: string[]): string[][] {
+  const clean = path.map((t) => (t || '').trim()).filter(Boolean);
+  const out: string[][] = [];
+  for (let i = 1; i <= clean.length; i++) {
+    out.push(clean.slice(0, i));
+  }
+  return out;
 }
 
 // Add spans to a dataset
@@ -177,13 +246,14 @@ export async function addSpansToDataset(
         dataInfo.output.tool_calls = outputJson.choices[0].tool_calls;
       }
 
+      const topicPaths = topicPathsFromSingleTopic(topic);
 
       const record: DatasetRecord = {
         id: crypto.randomUUID(),
         datasetId,
         data: dataInfo,
         spanId: span.span_id,
-        topic: topic?.trim() || undefined,
+        topic_paths: topicPaths,
         createdAt: now,
         updatedAt: now,
       };
@@ -292,14 +362,25 @@ export async function deleteRecord(datasetId: string, recordId: string): Promise
   });
 }
 
-// Update a record's topic
+// Update a record's topic (legacy flat)
 export async function updateRecordTopic(
   datasetId: string,
   recordId: string,
   topic: string
 ): Promise<void> {
+  const topicPaths = topicPathsFromSingleTopic(topic) || [];
+  return updateRecordTopicHierarchy(datasetId, recordId, topicPaths);
+}
+
+// Update a record's hierarchical topic tree (topic_paths is the single persisted source of truth)
+export async function updateRecordTopicHierarchy(
+  datasetId: string,
+  recordId: string,
+  topicPaths: string[][]
+): Promise<void> {
   const db = await getDB();
   const now = Date.now();
+  const normalized = normalizeTopicPaths(topicPaths);
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction(['datasets', 'records'], 'readwrite');
@@ -311,7 +392,12 @@ export async function updateRecordTopic(
     getRecordRequest.onsuccess = () => {
       const record = getRecordRequest.result;
       if (record) {
-        record.topic = topic.trim() || undefined;
+        record.topic_paths = normalized;
+        // Do not persist derived duplicates (topic/topic_path/etc); they are derived on read.
+        record.topic = undefined;
+        record.topic_path = undefined;
+        record.topic_root = undefined;
+        record.topic_path_str = undefined;
         record.updatedAt = now;
         recordsStore.put(record);
       }
@@ -330,6 +416,15 @@ export async function updateRecordTopic(
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+}
+
+// Convenience: set a single chosen path and expand it to all prefixes.
+export async function updateRecordTopicPath(
+  datasetId: string,
+  recordId: string,
+  topicPath: string[]
+): Promise<void> {
+  return updateRecordTopicHierarchy(datasetId, recordId, topicPathsFromPath(topicPath));
 }
 
 // Update a record's data

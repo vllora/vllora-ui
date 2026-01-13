@@ -260,12 +260,17 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
     const recordIds = Array.from(selectedRecordIds);
     if (recordIds.length === 0) return;
 
+    const maxDepth = 3;
+    const degree = 2;
+
     setIsGeneratingTopics(true);
     try {
       const result = await generateTopics({
         datasetId: dataset.id,
         recordIds,
         maxTopics: 3,
+        maxDepth,
+        degree,
       });
 
       if (result.success) {

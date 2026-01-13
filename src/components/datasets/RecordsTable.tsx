@@ -103,11 +103,11 @@ export function RecordsTable({
     const NO_TOPIC = "__no_topic__";
 
     for (const record of displayRecords) {
-      const topic = record.topic || NO_TOPIC;
-      if (!groups.has(topic)) {
-        groups.set(topic, []);
+      const topicKey = record.topic_root || record.topic || NO_TOPIC;
+      if (!groups.has(topicKey)) {
+        groups.set(topicKey, []);
       }
-      groups.get(topic)!.push(record);
+      groups.get(topicKey)!.push(record);
     }
 
     // Sort groups: named topics first (alphabetically), then "No Topic"

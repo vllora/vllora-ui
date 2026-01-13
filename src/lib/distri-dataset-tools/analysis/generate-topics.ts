@@ -29,23 +29,14 @@ interface RecordForAnalysis {
   existing_topic?: string;
 }
 
-interface SuggestedTopic {
-  topic: string;
-  description: string;
-  applies_to: string[];
-  confidence: number;
-}
-
-interface RecordTopicSuggestion {
+interface RecordTopicTree {
   record_id: string;
   operation: string;
-  suggested_topic: string;
+  topic_paths: string[][]; // All node paths root->node (includes internal nodes)
 }
 
 interface TopicAnalysisResult {
-  summary: string;
-  suggested_topics: SuggestedTopic[];
-  record_suggestions: RecordTopicSuggestion[];
+  topic_trees: RecordTopicTree[];
 }
 
 export interface AnalyzeRecordsForTopicsParams {
@@ -53,6 +44,8 @@ export interface AnalyzeRecordsForTopicsParams {
   datasetName?: string;
   recordIds?: string[];
   maxTopics?: number;
+  maxDepth?: number;
+  degree?: number;
 }
 
 export interface AnalyzeRecordsForTopicsResult {
@@ -74,11 +67,26 @@ export interface GenerateTopicsParams {
   record_ids?: string[];
   maxTopics?: number;
   max_topics?: number;
+  maxDepth?: number;
+  max_depth?: number;
+  degree?: number;
+  branching?: number;
 }
 
 // =========================================================================
 // Helpers
 // =========================================================================
+
+const DEFAULT_TOPIC_MAX_DEPTH = 3;
+const DEFAULT_TOPIC_DEGREE = 2;
+
+function normalizeTopicPath(topicPath?: string[], leaf?: string) {
+  const normalize = (t: string) => t.trim().replace(/\s+/g, '_').toLowerCase();
+  const cleaned = (topicPath || []).map((t) => (t || '').trim()).filter(Boolean).map(normalize);
+  if (cleaned.length > 0) return cleaned;
+  if (leaf && leaf.trim()) return [normalize(leaf)];
+  return [] as string[];
+}
 
 function safeParseJson(value: string): unknown {
   try {
@@ -188,28 +196,25 @@ function extractRecordData(record: DatasetRecord): RecordForAnalysis {
 // LLM setup
 // =========================================================================
 
-const TOPIC_ANALYSIS_SYSTEM_PROMPT = `You are a dataset topic categorization expert.
+const TOPIC_ANALYSIS_SYSTEM_PROMPT = `You are a hierarchical topic builder.
 
-Goal: Analyze AI agent traces (dataset records) and suggest 2-4 meaningful topic tags.
+Goal: Generate concise, hierarchical topic paths (root -> leaf) for dataset records, similar to a topic tree expansion.
 
 Rules:
-- Topics should be lowercase_with_underscores
-- Focus on what the records DO, not their status (avoid "failed", "error", "success")
-- Be specific, not generic (avoid "api_call", "request")
-- Group similar patterns together
-- Output MUST be valid JSON matching the provided schema (no markdown, no code fences)
+- Paths must be lowercase_with_underscores; include the leaf in topic_path
+- Depth must be within the requested range (default 3)
+- Be specific and action-oriented; avoid status labels like "error"/"success"
+- Do not invent record IDs; only use provided IDs
+- Output MUST be valid JSON that matches the schema (no markdown, no code fences)
 
-Good topic examples:
-- payment_processing
-- flight_search
-- user_authentication  
-- rate_limit_handling
-- hotel_booking
+Examples of good paths:
+- ["travel", "flights", "booking"]
+- ["commerce", "payments", "refunds"]
 
-Bad topic examples:
-- error (too generic)
-- api_call (too generic)
-- failed_request (focuses on status, not behavior)
+Examples of too-generic or status-only (avoid):
+- ["api_call"]
+- ["error_handling"]
+- ["failed_request"]
 `;
 
 const TOPIC_ANALYSIS_RESPONSE_SCHEMA = {
@@ -220,60 +225,63 @@ const TOPIC_ANALYSIS_RESPONSE_SCHEMA = {
     schema: {
       type: 'object',
       properties: {
-        summary: {
-          type: 'string',
-          description: 'Brief summary of the records and why these topics were chosen',
-        },
-        suggested_topics: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              topic: { type: 'string', description: 'lowercase_with_underscores topic tag' },
-              description: { type: 'string', description: 'Why this topic fits these records' },
-              applies_to: {
-                type: 'array',
-                items: { type: 'string' },
-                description: 'Record IDs that match this topic',
-              },
-              confidence: { type: 'number', description: 'Confidence 0-100' },
-            },
-            required: ['topic', 'description', 'applies_to', 'confidence'],
-            additionalProperties: false,
-          },
-        },
-        record_suggestions: {
+        topic_trees: {
           type: 'array',
           items: {
             type: 'object',
             properties: {
               record_id: { type: 'string' },
               operation: { type: 'string' },
-              suggested_topic: { type: 'string' },
+              topic_paths: {
+                type: 'array',
+                description: 'All node paths root->node (includes internal nodes).',
+                items: {
+                  type: 'array',
+                  items: { type: 'string' },
+                },
+              },
             },
-            required: ['record_id', 'operation', 'suggested_topic'],
+            required: ['record_id', 'operation', 'topic_paths'],
             additionalProperties: false,
           },
         },
       },
-      required: ['summary', 'suggested_topics', 'record_suggestions'],
+      required: ['topic_trees'],
       additionalProperties: false,
     },
   },
 };
 
-function buildTopicAnalysisPrompt(records: RecordForAnalysis[], maxTopics: number): string {
+function buildTopicAnalysisPrompt(records: RecordForAnalysis[], maxTopics: number, maxDepth: number, degree: number): string {
   return `## Task
-Analyze these ${records.length} dataset records and suggest ${maxTopics} topic tags.
+Generate a small topic tree (depth 1..${maxDepth}) for each record.
+Aim for up to ${degree} coherent siblings per level; when evidence allows, propose multiple branches (e.g., root + ${degree} children + ${degree ** 2} grandchildren) but do not exceed ${maxTopics} total leaves.
+Return JSON that matches the schema. Provide topic_paths (all node paths) for each record_id.
 
-## Records to Analyze
+## Records
 ${JSON.stringify(records, null, 2)}
 
-## Requirements
-- Suggest ${maxTopics} topics maximum
-- Each topic should apply to at least one record
-- Provide confidence score 0-100 for each topic
-- Match each record to its best suggested topic`;
+## Guidance (tree-style)
+- Think in paths (root -> leaf). Depth must be between 1 and ${maxDepth}.
+- Prefer the deepest meaningful path (aim for depth=${maxDepth} when context allows); shorten only if evidence is too weak.
+- Populate multiple branches when content allows; avoid collapsing everything into one path.
+- Leaf = the most specific topic; include it in topic_path.
+- Prefer action/subject paths over status labels. Avoid generic buckets.
+
+## Output requirements
+- topic_path elements must be lowercase_with_underscores.
+- topic_trees: array with one entry per record_id.
+- topic_paths: list of topic_path arrays representing ALL nodes in the tree (include internal nodes like root and intermediate levels). Try to include a complete tree up to depth=${maxDepth} with branching up to degree=${degree} (no duplicate paths).
+  - Example (degree=2, depth=3):
+    - ["root"]
+    - ["root","child_a"], ["root","child_b"]
+    - ["root","child_a","grandchild_1"], ["root","child_a","grandchild_2"], ["root","child_b","grandchild_1"], ["root","child_b","grandchild_2"]
+- Do NOT invent record IDs; only use the provided IDs.
+- Keep JSON concise: no summaries, no confidence scores.
+
+## Example topic_path
+["travel", "flights", "booking"] (leaf)
+`;
 }
 
 async function callLLMForTopics(prompt: string): Promise<string> {
@@ -318,7 +326,7 @@ function parseTopicAnalysisResponse(content: string): TopicAnalysisResult {
     } catch {
       // ignore
     }
-    return { summary: 'Failed to parse LLM response', suggested_topics: [], record_suggestions: [] };
+    return { topic_trees: [] };
   }
 }
 
@@ -328,8 +336,11 @@ function parseTopicAnalysisResponse(content: string): TopicAnalysisResult {
 
 export async function analyzeRecordsForTopics(params: Record<string, unknown>): Promise<AnalyzeRecordsForTopicsResult> {
   try {
-    const { datasetId: paramDatasetId, datasetName, recordIds, maxTopics = 3 } = params as unknown as AnalyzeRecordsForTopicsParams;
+    const { datasetId: paramDatasetId, datasetName, recordIds, maxTopics, maxDepth = DEFAULT_TOPIC_MAX_DEPTH, degree = DEFAULT_TOPIC_DEGREE } =
+      params as unknown as AnalyzeRecordsForTopicsParams & { maxDepth?: number; degree?: number };
     const autoApply = true;
+    const estimatedMaxTopics = degree > 1 ? Math.min(20, Math.max(1, Math.round((Math.pow(degree, maxDepth) - 1) / (degree - 1)))) : maxDepth;
+    const effectiveMaxTopics = maxTopics ?? estimatedMaxTopics;
 
     if (!paramDatasetId && !datasetName) {
       return { success: false, error: 'Either datasetId or datasetName is required' };
@@ -375,18 +386,24 @@ export async function analyzeRecordsForTopics(params: Record<string, unknown>): 
 
     const recordsForAnalysis = selectedRecords.map(extractRecordData);
 
-    const prompt = buildTopicAnalysisPrompt(recordsForAnalysis, maxTopics);
+    const prompt = buildTopicAnalysisPrompt(recordsForAnalysis, effectiveMaxTopics, maxDepth, degree);
     const analysisContent = await callLLMForTopics(prompt);
     const analysis = parseTopicAnalysisResponse(analysisContent);
 
     let appliedCount = 0;
-    if (autoApply && analysis.record_suggestions.length > 0) {
-      for (const suggestion of analysis.record_suggestions) {
-        const recordExists = selectedRecords.some(r => r.id === suggestion.record_id);
-        if (recordExists) {
-          await datasetsDB.updateRecordTopic(targetDatasetId, suggestion.record_id, suggestion.suggested_topic);
-          appliedCount++;
-        }
+    if (autoApply && analysis.topic_trees && analysis.topic_trees.length > 0) {
+      for (const entry of analysis.topic_trees) {
+        const recordExists = selectedRecords.some(r => r.id === entry.record_id);
+        if (!recordExists) continue;
+
+        const normalizedPaths = (entry.topic_paths || [])
+          .filter((p) => Array.isArray(p) && p.length > 0)
+          .map((p) => normalizeTopicPath(p));
+
+        if (normalizedPaths.length === 0) continue;
+
+        await datasetsDB.updateRecordTopicHierarchy(targetDatasetId, entry.record_id, normalizedPaths);
+        appliedCount++;
       }
     }
 
@@ -404,7 +421,7 @@ export async function analyzeRecordsForTopics(params: Record<string, unknown>): 
 }
 
 export async function generateTopics(params: Record<string, unknown>): Promise<AnalyzeRecordsForTopicsResult> {
-  const { datasetId, dataset_id, datasetName, dataset_name, recordIds, record_ids, maxTopics, max_topics } =
+  const { datasetId, dataset_id, datasetName, dataset_name, recordIds, record_ids, maxTopics, max_topics, maxDepth, max_depth, degree, branching } =
     params as unknown as GenerateTopicsParams;
 
   return analyzeRecordsForTopics({
@@ -412,6 +429,8 @@ export async function generateTopics(params: Record<string, unknown>): Promise<A
     datasetName: datasetName || dataset_name,
     recordIds: recordIds || record_ids,
     maxTopics: maxTopics ?? max_topics,
+    maxDepth: maxDepth ?? max_depth ?? DEFAULT_TOPIC_MAX_DEPTH,
+    degree: degree ?? branching ?? DEFAULT_TOPIC_DEGREE,
   });
 }
 
@@ -419,7 +438,7 @@ export async function generateTopics(params: Record<string, unknown>): Promise<A
 // Tool handler for provider/agent
 // =========================================================================
 
-export const generateTopicsHandler: ToolHandler = async ({ dataset_id, dataset_name, record_ids, max_topics }) => {
+export const generateTopicsHandler: ToolHandler = async ({ dataset_id, dataset_name, record_ids, max_topics, max_depth, degree, branching }) => {
   if (!dataset_id) {
     return { success: false, error: 'dataset_id is required' };
   }
@@ -429,6 +448,8 @@ export const generateTopicsHandler: ToolHandler = async ({ dataset_id, dataset_n
     dataset_name,
     record_ids: Array.isArray(record_ids) ? record_ids : undefined,
     max_topics: typeof max_topics === 'number' ? max_topics : undefined,
+    max_depth: typeof max_depth === 'number' ? max_depth : undefined,
+    degree: typeof degree === 'number' ? degree : typeof branching === 'number' ? branching : undefined,
   });
 };
 
@@ -449,6 +470,18 @@ export const generateTopicsTool: DistriFnTool = {
       max_topics: {
         type: 'number',
         description: 'Optional: maximum number of topics to suggest (default: 3)',
+      },
+      max_depth: {
+        type: 'number',
+        description: 'Optional: maximum depth of topic_path (default: 3)',
+      },
+      degree: {
+        type: 'number',
+        description: 'Optional: desired branching factor (siblings per level, default: 3)',
+      },
+      branching: {
+        type: 'number',
+        description: 'Alias for degree (branching factor)',
       },
     },
     required: ['dataset_id'],

@@ -10,7 +10,11 @@ export interface DatasetRecord {
   datasetId: string;           // Foreign key to dataset
   data: unknown;               // Flexible data - can be Span, generated data, or any structured object
   spanId?: string;             // For duplicate detection and keeping track of span (optional - undefined for generated data)
-  topic?: string;
+  topic?: string;              // Root topic (top-level)
+  topic_path?: string[];       // Chosen path root -> leaf
+  topic_paths?: string[][];    // Full tree as list of paths
+  topic_root?: string;         // First element of topic_path (for grouping)
+  topic_path_str?: string;     // Joined path (e.g., "a/b/c")
   evaluation?: DatasetEvaluation;
   createdAt: number;
   updatedAt: number;           // Last modified timestamp

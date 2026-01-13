@@ -88,6 +88,8 @@ export function RecordRow({
 
       <TopicCell
         topic={record.topic}
+        topicPath={record.topic_path}
+        topicPaths={record.topic_paths}
         onUpdate={(topic) => onUpdateTopic(record.id, topic)}
         showLabel={showTopicLabel}
         tableLayout={tableLayout}
