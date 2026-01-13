@@ -174,7 +174,7 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
       await updateRecordTopic(dataset.id, recordId, topic);
       setRecords(prev =>
         prev.map(r =>
-          r.id === recordId ? { ...r, topic: topic.trim() || undefined } : r
+          r.id === recordId ? { ...r, topic: topic.trim() || undefined, updatedAt: Date.now() } : r
         )
       );
       toast.success("Topic updated");
@@ -209,9 +209,10 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
     }
 
     if (successCount > 0) {
+      const now = Date.now();
       setRecords(prev =>
         prev.map(r =>
-          selectedIds.has(r.id) ? { ...r, topic: bulkTopic.trim() } : r
+          selectedIds.has(r.id) ? { ...r, topic: bulkTopic.trim(), updatedAt: now } : r
         )
       );
       toast.success(`Assigned topic to ${successCount} record${successCount !== 1 ? "s" : ""}`);
@@ -307,7 +308,7 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
       // Update local records state
       setRecords(prev =>
         prev.map(r =>
-          r.id === expandedRecord.id ? { ...r, data: parsedData } : r
+          r.id === expandedRecord.id ? { ...r, data: parsedData, updatedAt: Date.now() } : r
         )
       );
 

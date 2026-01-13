@@ -149,6 +149,7 @@ export async function addSpansToDataset(
         spanId: span.span_id,
         topic: topic?.trim() || undefined,
         createdAt: now,
+        updatedAt: now,
       };
       const addRequest = recordsStore.add(record);
       addRequest.onsuccess = () => addedCount++;
@@ -236,6 +237,7 @@ export async function updateRecordTopic(
       const record = getRecordRequest.result;
       if (record) {
         record.topic = topic.trim() || undefined;
+        record.updatedAt = now;
         recordsStore.put(record);
       }
     };
@@ -275,6 +277,7 @@ export async function updateRecordData(
       const record = getRecordRequest.result;
       if (record) {
         record.data = data;
+        record.updatedAt = now;
         recordsStore.put(record);
       }
     };

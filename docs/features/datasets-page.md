@@ -104,6 +104,7 @@ DatasetsPage
 | File | Purpose |
 |------|---------|
 | `ui/src/components/chat/traces/TraceRow/span-info/SpanFooter.tsx` | Shows datasets a span belongs to |
+| `ui/src/components/chat/conversation/model-config/json-editor.tsx` | Monaco JSON editor for data editing |
 | `ui/src/components/agent/useAgentChat.ts` | Shared Lucy agent chat state |
 | `ui/src/components/agent/lucy-agent/LucyChat.tsx` | Lucy chat component |
 | `ui/src/components/agent/lucy-agent/LucyWelcome.tsx` | Quick actions component |
@@ -138,6 +139,7 @@ export interface DatasetRecord {
   topic?: string;          // Optional category/classification
   evaluation?: DatasetEvaluation;  // For future use
   createdAt: number;       // Timestamp when record was added
+  updatedAt: number;       // Last modified timestamp
 }
 
 export interface DatasetEvaluation {
@@ -368,6 +370,62 @@ const toggleDataset = async (datasetId: string) => {
     }
   }
   setExpandedDatasets(newExpanded);
+};
+```
+
+### Sorting Configuration
+
+```typescript
+// File: ui/src/components/datasets/RecordsToolbar.tsx
+
+export type SortField = "timestamp" | "topic" | "evaluation";
+export type SortDirection = "asc" | "desc";
+
+export interface SortConfig {
+  field: SortField;
+  direction: SortDirection;
+}
+```
+
+### Record Data Editing
+
+```typescript
+// File: ui/src/components/datasets/DatasetDetailView.tsx
+
+// State for expand dialog
+const [expandedRecord, setExpandedRecord] = useState<DatasetRecord | null>(null);
+const [editedJson, setEditedJson] = useState("");
+const [jsonError, setJsonError] = useState<string | null>(null);
+const [isSavingData, setIsSavingData] = useState(false);
+
+// Handle opening expand dialog
+const handleExpandRecord = (record: DatasetRecord) => {
+  setExpandedRecord(record);
+  setEditedJson(JSON.stringify(record.data, null, 2));
+  setJsonError(null);
+};
+
+// Handle saving updated record data
+const handleSaveRecordData = async () => {
+  if (!dataset || !expandedRecord || jsonError) return;
+
+  try {
+    const parsedData = JSON.parse(editedJson);
+    setIsSavingData(true);
+    await updateRecordData(dataset.id, expandedRecord.id, parsedData);
+    // Update local records state
+    setRecords(prev =>
+      prev.map(r =>
+        r.id === expandedRecord.id ? { ...r, data: parsedData } : r
+      )
+    );
+    toast.success("Record data updated");
+    handleCloseExpand();
+  } catch (err) {
+    toast.error("Failed to save record data");
+  } finally {
+    setIsSavingData(false);
+  }
 };
 ```
 
@@ -606,6 +664,8 @@ className="hover:text-[rgb(var(--theme-500))]"
 |---------|---------|
 | `@distri/core` | Agent/chat message types |
 | `@distri/react` | React hooks for Distri |
+| `@monaco-editor/react` | Monaco JSON editor for record data editing |
+| `@tanstack/react-virtual` | Virtualized scrolling for large record lists |
 | `lucide-react` | Icons |
 | `sonner` | Toast notifications |
 | shadcn/ui | UI components (Button, Input, Dialog, etc.) |

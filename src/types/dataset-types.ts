@@ -9,10 +9,11 @@ export interface DatasetRecord {
   id: string;
   datasetId: string;           // Foreign key to dataset
   data: unknown;               // Flexible data - can be Span, generated data, or any structured object
-  spanId?: string;             // For duplicate detection (optional - undefined for generated data)
+  spanId?: string;             // For duplicate detection and keeping track of span (optional - undefined for generated data)
   topic?: string;
   evaluation?: DatasetEvaluation;
   createdAt: number;
+  updatedAt: number;           // Last modified timestamp
 }
 
 export interface DataInfo {
@@ -23,7 +24,7 @@ export interface DataInfo {
     metadata?: any
   }
   output: {
-    messages: any[]
+    messages?: any[]
     tool_calls?: any[]
     metadata?: any
   }
