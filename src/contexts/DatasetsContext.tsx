@@ -6,7 +6,7 @@
  */
 
 import { createContext, useContext, ReactNode, useCallback, useState, useEffect } from 'react';
-import { Dataset, DatasetWithRecords } from '@/types/dataset-types';
+import { Dataset, DatasetEvaluation, DatasetWithRecords } from '@/types/dataset-types';
 import { Span } from '@/types/common-type';
 import * as datasetsDB from '@/services/datasets-db';
 import { emitter } from '@/utils/eventEmitter';
@@ -28,6 +28,8 @@ interface DatasetsContextType {
   getRecordCount: (datasetId: string) => Promise<number>;
   createDataset: (name: string) => Promise<Dataset>;
   addSpansToDataset: (datasetId: string, spans: Span[], topic?: string) => Promise<number>;
+  importRecords: (datasetId: string, records: Array<{ data: unknown; topic?: string; evaluation?: DatasetEvaluation }>, defaultTopic?: string) => Promise<number>;
+  clearDatasetRecords: (datasetId: string) => Promise<number>;
   deleteDataset: (datasetId: string) => Promise<void>;
   deleteRecord: (datasetId: string, recordId: string) => Promise<void>;
   updateRecordTopic: (datasetId: string, recordId: string, topic: string) => Promise<void>;
@@ -113,6 +115,25 @@ export function DatasetsProvider({ children }: { children: ReactNode }) {
     // Refresh datasets to get updated timestamps
     await loadDatasets();
     return addedCount;
+  }, [loadDatasets]);
+
+  // Import raw records to an existing dataset (for file import)
+  const importRecords = useCallback(async (
+    datasetId: string,
+    records: Array<{ data: unknown; topic?: string; evaluation?: DatasetEvaluation }>,
+    defaultTopic?: string
+  ): Promise<number> => {
+    const addedCount = await datasetsDB.addRecordsToDataset(datasetId, records, defaultTopic);
+    // Refresh datasets to get updated timestamps
+    await loadDatasets();
+    return addedCount;
+  }, [loadDatasets]);
+
+  // Clear all records from a dataset (for replace import)
+  const clearDatasetRecords = useCallback(async (datasetId: string): Promise<number> => {
+    const deletedCount = await datasetsDB.clearDatasetRecords(datasetId);
+    await loadDatasets();
+    return deletedCount;
   }, [loadDatasets]);
 
   // Delete a dataset
@@ -229,6 +250,8 @@ export function DatasetsProvider({ children }: { children: ReactNode }) {
     getRecordCount,
     createDataset,
     addSpansToDataset,
+    importRecords,
+    clearDatasetRecords,
     deleteDataset,
     deleteRecord,
     updateRecordTopic,

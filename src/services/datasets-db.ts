@@ -1,4 +1,4 @@
-import { DataInfo, Dataset, DatasetRecord } from '@/types/dataset-types';
+import { DataInfo, Dataset, DatasetEvaluation, DatasetRecord } from '@/types/dataset-types';
 import { Span } from '@/types/common-type';
 import { tryParseJson } from '@/utils/modelUtils';
 
@@ -225,6 +225,45 @@ export async function deleteDataset(datasetId: string): Promise<void> {
   });
 }
 
+// Clear all records from a dataset (keeps the dataset itself)
+export async function clearDatasetRecords(datasetId: string): Promise<number> {
+  const db = await getDB();
+  const now = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(['datasets', 'records'], 'readwrite');
+    const datasetsStore = tx.objectStore('datasets');
+    const recordsStore = tx.objectStore('records');
+
+    // Update dataset's updatedAt
+    const getRequest = datasetsStore.get(datasetId);
+    getRequest.onsuccess = () => {
+      const dataset = getRequest.result;
+      if (dataset) {
+        dataset.updatedAt = now;
+        datasetsStore.put(dataset);
+      }
+    };
+
+    // Count and delete all records for this dataset
+    let deletedCount = 0;
+    const index = recordsStore.index('datasetId');
+    const cursorRequest = index.openCursor(datasetId);
+
+    cursorRequest.onsuccess = (event) => {
+      const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+      if (cursor) {
+        cursor.delete();
+        deletedCount++;
+        cursor.continue();
+      }
+    };
+
+    tx.oncomplete = () => resolve(deletedCount);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 // Delete a single record
 export async function deleteRecord(datasetId: string, recordId: string): Promise<void> {
   const db = await getDB();
@@ -369,6 +408,55 @@ export async function spanExistsInDataset(datasetId: string, spanId: string): Pr
 
     request.onsuccess = () => resolve(request.result > 0);
     request.onerror = () => reject(request.error);
+  });
+}
+
+// Add raw records to a dataset (for importing from file)
+export async function addRecordsToDataset(
+  datasetId: string,
+  records: Array<{
+    data: unknown;
+    topic?: string;
+    evaluation?: DatasetEvaluation;
+  }>,
+  defaultTopic?: string
+): Promise<number> {
+  const db = await getDB();
+  const now = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(['datasets', 'records'], 'readwrite');
+    const datasetsStore = tx.objectStore('datasets');
+    const recordsStore = tx.objectStore('records');
+
+    // Update dataset's updatedAt
+    const getRequest = datasetsStore.get(datasetId);
+    getRequest.onsuccess = () => {
+      const dataset = getRequest.result;
+      if (dataset) {
+        dataset.updatedAt = now;
+        datasetsStore.put(dataset);
+      }
+    };
+
+    // Add records
+    let addedCount = 0;
+    records.forEach((recordData) => {
+      const record: DatasetRecord = {
+        id: crypto.randomUUID(),
+        datasetId,
+        data: recordData.data,
+        topic: recordData.topic?.trim() || defaultTopic?.trim() || undefined,
+        evaluation: recordData.evaluation,
+        createdAt: now,
+        updatedAt: now,
+      };
+      const addRequest = recordsStore.add(record);
+      addRequest.onsuccess = () => addedCount++;
+    });
+
+    tx.oncomplete = () => resolve(addedCount);
+    tx.onerror = () => reject(tx.error);
   });
 }
 

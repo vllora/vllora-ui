@@ -22,6 +22,7 @@ import {
   Loader2,
   Search,
   Cloud,
+  Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -36,6 +37,7 @@ import {
   type DeleteConfirmation,
 } from "./DeleteConfirmationDialog";
 import { RecordsTable } from "./RecordsTable";
+import { IngestDataDialog, type ImportResult } from "./IngestDataDialog";
 
 interface DatasetsListViewProps {
   onSelectDataset: (datasetId: string) => void;
@@ -52,6 +54,8 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
     deleteRecord,
     updateRecordTopic,
     renameDataset,
+    importRecords,
+    clearDatasetRecords,
   } = DatasetsConsumer();
 
   // State
@@ -64,6 +68,7 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
   const [showNewDatasetInput, setShowNewDatasetInput] = useState(false);
   const [newDatasetName, setNewDatasetName] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [showImportDialog, setShowImportDialog] = useState(false);
 
   // Max records to show before "See all" link
   const MAX_VISIBLE_RECORDS = 5;
@@ -183,6 +188,59 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
     }
   };
 
+  const handleImportToDataset = async (result: ImportResult) => {
+    try {
+      let targetDatasetId: string;
+      let datasetName: string;
+
+      if (result.target === "new" && result.newDatasetName) {
+        // Create new dataset first
+        const newDataset = await createDataset(result.newDatasetName);
+        targetDatasetId = newDataset.id;
+        datasetName = newDataset.name;
+      } else if (result.target === "existing" && result.existingDatasetId) {
+        // Use existing dataset
+        targetDatasetId = result.existingDatasetId;
+        const existingDataset = datasets.find(d => d.id === targetDatasetId);
+        datasetName = existingDataset?.name || "dataset";
+
+        // If replace mode, clear existing records first
+        if (result.mode === "replace") {
+          await clearDatasetRecords(targetDatasetId);
+          // Clear local cache for this dataset
+          setDatasetRecords(prev => ({ ...prev, [targetDatasetId]: [] }));
+        }
+      } else {
+        throw new Error("Invalid import configuration");
+      }
+
+      // Import the records
+      const count = await importRecords(
+        targetDatasetId,
+        result.records,
+        result.defaultTopic
+      );
+
+      // Refresh records cache if the dataset is expanded
+      if (expandedDatasets.has(targetDatasetId)) {
+        const datasetWithRecords = await getDatasetWithRecords(targetDatasetId);
+        if (datasetWithRecords) {
+          setDatasetRecords(prev => ({ ...prev, [targetDatasetId]: datasetWithRecords.records }));
+        }
+      }
+
+      toast.success(
+        result.target === "new"
+          ? `Created "${datasetName}" with ${count} record${count !== 1 ? "s" : ""}`
+          : `Imported ${count} record${count !== 1 ? "s" : ""} to "${datasetName}"`
+      );
+    } catch (err) {
+      console.error("Failed to import data:", err);
+      toast.error("Failed to import data");
+      throw err;
+    }
+  };
+
   return (
     <>
       <div className="flex-1 overflow-auto">
@@ -240,13 +298,23 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
                   </Button>
                 </div>
               ) : (
-                <Button
-                  onClick={() => setShowNewDatasetInput(true)}
-                  className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
-                >
-                  <Plus className="w-4 h-4" />
-                  New Dataset
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowImportDialog(true)}
+                    className="gap-2"
+                  >
+                    <Upload className="w-4 h-4" />
+                    Import Data
+                  </Button>
+                  <Button
+                    onClick={() => setShowNewDatasetInput(true)}
+                    className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
+                  >
+                    <Plus className="w-4 h-4" />
+                    New Dataset
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -451,6 +519,14 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
             handleDeleteRecord(confirmation.datasetId, confirmation.id);
           }
         }}
+      />
+
+      {/* Import data dialog */}
+      <IngestDataDialog
+        open={showImportDialog}
+        onOpenChange={setShowImportDialog}
+        datasets={datasets}
+        onImportToDataset={handleImportToDataset}
       />
     </>
   );

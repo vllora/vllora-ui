@@ -18,6 +18,7 @@ import {
 } from "./DeleteConfirmationDialog";
 import { AssignTopicDialog } from "./AssignTopicDialog";
 import { ExpandTraceDialog } from "./ExpandTraceDialog";
+import { IngestDataDialog, type ImportMode } from "./IngestDataDialog";
 import { DatasetDetailHeader } from "./DatasetDetailHeader";
 import { RecordsToolbar, SortConfig } from "./RecordsToolbar";
 import { RecordsTable } from "./RecordsTable";
@@ -37,6 +38,8 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
     updateRecordTopic,
     updateRecordData,
     renameDataset,
+    importRecords,
+    clearDatasetRecords,
   } = DatasetsConsumer();
 
   // Get selection state from UI context (shared with Lucy tools)
@@ -48,6 +51,7 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
   const [searchQuery, setSearchQuery] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmation | null>(null);
   const [assignTopicDialog, setAssignTopicDialog] = useState(false);
+  const [importDialog, setImportDialog] = useState(false);
   const [expandedRecord, setExpandedRecord] = useState<DatasetRecord | null>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     field: "timestamp",
@@ -260,6 +264,32 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
     toast.success("Dataset exported");
   };
 
+  // Handle importing records from file
+  const handleImportRecords = async (
+    importedRecords: Array<{ data: unknown; topic?: string }>,
+    mode: ImportMode,
+    defaultTopic?: string
+  ) => {
+    if (!dataset) return;
+
+    // If replace mode, clear existing records first
+    if (mode === "replace" && records.length > 0) {
+      await clearDatasetRecords(dataset.id);
+      // Clear selection since all records are deleted
+      setSelectedRecordIds(new Set());
+    }
+
+    const count = await importRecords(dataset.id, importedRecords, defaultTopic);
+    // Reload to get the new records
+    await loadDataset();
+
+    if (mode === "replace") {
+      toast.success(`Replaced dataset with ${count} record${count !== 1 ? "s" : ""}`);
+    } else {
+      toast.success(`Imported ${count} record${count !== 1 ? "s" : ""}`);
+    }
+  };
+
   // Handle saving updated record data from dialog
   const handleSaveRecordData = async (recordId: string, data: unknown) => {
     if (!dataset) return;
@@ -313,6 +343,7 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
             onBack={onBack}
             onRename={handleRenameDataset}
             onExport={handleExport}
+            onIngest={() => setImportDialog(true)}
           />
 
           {/* Toolbar */}
@@ -370,6 +401,15 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
         record={expandedRecord}
         onOpenChange={(open) => !open && setExpandedRecord(null)}
         onSave={handleSaveRecordData}
+      />
+
+      {/* Import data dialog */}
+      <IngestDataDialog
+        open={importDialog}
+        onOpenChange={setImportDialog}
+        datasetId={dataset.id}
+        onImport={handleImportRecords}
+        currentRecordCount={records.length}
       />
     </>
   );

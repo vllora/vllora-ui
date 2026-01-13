@@ -13,7 +13,7 @@ import {
   Check,
   X,
   Download,
-  Plus,
+  Upload,
 } from "lucide-react";
 
 interface DatasetDetailHeaderProps {
@@ -146,8 +146,8 @@ export function DatasetDetailHeader({
             className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
             onClick={onIngest}
           >
-            <Plus className="w-4 h-4" />
-            Ingest Data
+            <Upload className="w-4 h-4" />
+            Import Data
           </Button>
         </div>
       </div>
