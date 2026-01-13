@@ -14,6 +14,7 @@ import {
   X,
   Download,
   Upload,
+  Sparkles,
 } from "lucide-react";
 
 interface DatasetDetailHeaderProps {
@@ -25,6 +26,7 @@ interface DatasetDetailHeaderProps {
   onRename: (newName: string) => Promise<void>;
   onExport?: () => void;
   onIngest?: () => void;
+  onFinetune?: () => void;
 }
 
 export function DatasetDetailHeader({
@@ -35,6 +37,7 @@ export function DatasetDetailHeader({
   onRename,
   onExport,
   onIngest,
+  onFinetune,
 }: DatasetDetailHeaderProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editingName, setEditingName] = useState("");
@@ -140,14 +143,22 @@ export function DatasetDetailHeader({
             onClick={onExport}
           >
             <Download className="w-4 h-4" />
-            Export Dataset
+            Export
           </Button>
           <Button
-            className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
+            variant="outline"
+            className="gap-2"
             onClick={onIngest}
           >
             <Upload className="w-4 h-4" />
-            Import Data
+            Import
+          </Button>
+          <Button
+            className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
+            onClick={onFinetune}
+          >
+            <Sparkles className="w-4 h-4" />
+            Finetune
           </Button>
         </div>
       </div>

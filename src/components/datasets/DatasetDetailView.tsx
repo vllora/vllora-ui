@@ -19,6 +19,7 @@ import {
 import { AssignTopicDialog } from "./AssignTopicDialog";
 import { ExpandTraceDialog } from "./ExpandTraceDialog";
 import { IngestDataDialog, type ImportMode } from "./IngestDataDialog";
+import { FinetuneJobDialog } from "./FinetuneJobDialog";
 import { DatasetDetailHeader } from "./DatasetDetailHeader";
 import { RecordsToolbar, SortConfig } from "./RecordsToolbar";
 import { RecordsTable } from "./RecordsTable";
@@ -52,6 +53,7 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmation | null>(null);
   const [assignTopicDialog, setAssignTopicDialog] = useState(false);
   const [importDialog, setImportDialog] = useState(false);
+  const [finetuneDialog, setFinetuneDialog] = useState(false);
   const [expandedRecord, setExpandedRecord] = useState<DatasetRecord | null>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     field: "timestamp",
@@ -344,6 +346,7 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
             onRename={handleRenameDataset}
             onExport={handleExport}
             onIngest={() => setImportDialog(true)}
+            onFinetune={() => setFinetuneDialog(true)}
           />
 
           {/* Toolbar */}
@@ -410,6 +413,13 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
         datasetId={dataset.id}
         onImport={handleImportRecords}
         currentRecordCount={records.length}
+      />
+
+      {/* Finetune job dialog */}
+      <FinetuneJobDialog
+        open={finetuneDialog}
+        onOpenChange={setFinetuneDialog}
+        dataset={{ ...dataset, records }}
       />
     </>
   );
