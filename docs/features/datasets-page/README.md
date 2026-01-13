@@ -13,11 +13,22 @@
 |------|---------|
 | `pages/datasets/index.tsx` | Main page with Lucy AI assistant integration |
 | `hooks/useDatasets.ts` | React hook wrapping IndexedDB operations |
+| `hooks/useDatasetAgentChat.ts` | Dataset-specific Lucy agent hook |
+| `hooks/useDatasetToolListeners.ts` | Tool event listeners for UI synchronization |
 | `services/datasets-db.ts` | Low-level IndexedDB CRUD operations |
 | `types/dataset-types.ts` | TypeScript interfaces |
+| `lib/distri-dataset-tools/` | Lucy agent tools (UI, data, analysis) |
 | `components/datasets/DatasetDetailView.tsx` | Full dataset view with records table |
 | `components/datasets/RecordsTable.tsx` | Virtualized table with sorting |
 | `components/datasets/AddToDatasetDialog.tsx` | Dialog for adding spans |
+
+**Agent Files (Backend):**
+| File | Purpose |
+|------|---------|
+| `gateway/agents/finetune-dataset/vllora-dataset-orchestrator.md` | Main orchestrator agent |
+| `gateway/agents/finetune-dataset/vllora-dataset-ui.md` | UI manipulation agent |
+| `gateway/agents/finetune-dataset/vllora-dataset-data.md` | Data operations agent |
+| `gateway/agents/finetune-dataset/vllora-dataset-analysis.md` | Analysis and insights agent |
 
 **Core Data Models:**
 ```typescript
@@ -91,11 +102,30 @@ ui/src/
 │       ├── EvaluationCell.tsx       # Evaluation display
 │       └── TimestampCell.tsx        # Timestamp display
 ├── hooks/
-│   └── useDatasets.ts               # React hook for IndexedDB
+│   ├── useDatasets.ts               # React hook for IndexedDB
+│   ├── useDatasetAgentChat.ts       # Dataset-specific Lucy agent
+│   └── useDatasetToolListeners.ts   # Tool event listeners
+├── lib/
+│   └── distri-dataset-tools/        # Lucy agent tools
+│       ├── index.ts                 # Export all tools
+│       ├── types.ts                 # Shared types & events
+│       ├── ui-tools.ts              # 11 UI manipulation tools
+│       ├── data-tools.ts            # 12 data operation tools
+│       └── analysis-tools.ts        # 5 analysis tools
 ├── services/
 │   └── datasets-db.ts               # IndexedDB operations
 └── types/
     └── dataset-types.ts             # TypeScript interfaces
+```
+
+### Agent Files (Backend)
+
+```
+gateway/agents/finetune-dataset/
+├── vllora-dataset-orchestrator.md   # Routes to sub-agents
+├── vllora-dataset-ui.md             # UI manipulation (gpt-4.1-mini)
+├── vllora-dataset-data.md           # Data CRUD operations (gpt-4.1)
+└── vllora-dataset-analysis.md       # Analysis & insights (gpt-4.1)
 ```
 
 ### Related Files
@@ -307,17 +337,73 @@ DataCell click → handleExpandRecord → Dialog with Monaco editor
 
 ## Lucy AI Integration
 
-Lucy is an OpenAI-powered assistant shown in the left panel.
+Lucy uses a specialized **multi-agent architecture** for the Datasets page:
+
+```
+┌─────────────────────────────────────┐
+│   vllora-dataset-orchestrator       │
+│   Routes requests to sub-agents     │
+└──────────────┬──────────────────────┘
+               │
+   ┌───────────┼───────────┐
+   ▼           ▼           ▼
+┌──────┐  ┌──────┐  ┌──────────┐
+│  UI  │  │ Data │  │ Analysis │
+└──────┘  └──────┘  └──────────┘
+```
+
+### Agent Types
+
+| Agent | Model | Purpose |
+|-------|-------|---------|
+| `vllora_dataset_orchestrator` | gpt-4.1 | Routes to sub-agents, handles confirmations |
+| `vllora_dataset_ui` | gpt-4.1-mini | UI manipulation (navigate, select, search) |
+| `vllora_dataset_data` | gpt-4.1 | CRUD operations on datasets/records |
+| `vllora_dataset_analysis` | gpt-4.1 | Topic suggestions, duplicates, summaries |
+
+### Hooks
+
+**`useDatasetAgentChat`** - Returns agent state for LucyChat component:
+```typescript
+const {
+  agent,              // The dataset orchestrator agent
+  agentLoading,       // Loading state
+  selectedThreadId,   // Current thread ID
+  tools,              // Combined UI + data + analysis tools
+  messages,           // Thread messages
+  handleNewChat,      // Start new conversation
+} = useDatasetAgentChat();
+```
+
+**`useDatasetToolListeners`** - Listens for tool events and updates UI:
+```typescript
+useDatasetToolListeners({
+  onNavigateToDataset: (datasetId) => { /* navigate */ },
+  onExpandDataset: (datasetId) => { /* expand */ },
+  onSelectRecords: (recordIds) => { /* select */ },
+  onSetSearchQuery: (query) => { /* filter */ },
+  onSetSort: (config) => { /* sort */ },
+  onRefresh: () => { /* reload */ },
+});
+```
 
 ### Context Injection
 
-Before each message, dataset context is prepended:
+Before each message, rich context is prepended:
 
 ```typescript
 const ctx = {
   page: "datasets",
+  current_view: selectedDatasetId ? "detail" : "list",
+  current_dataset_id: selectedDatasetId,
+  current_dataset_name: currentDataset?.name,
   datasets_count: datasets.length,
-  dataset_names: datasets.map(d => d.name),
+  dataset_names: datasets.map(d => ({ id: d.id, name: d.name })),
+  selected_records_count: selectedRecordIds.size,
+  selected_record_ids: [...selectedRecordIds],
+  search_query: searchQuery,
+  sort_config: sortConfig,
+  expanded_dataset_ids: [...expandedDatasetIds],
 };
 ```
 
@@ -326,11 +412,32 @@ const ctx = {
 ```typescript
 const DATASET_QUICK_ACTIONS = [
   { id: "list-datasets", icon: "📋", label: "List all my datasets" },
-  { id: "analyze-dataset", icon: "🔍", label: "Analyze records in a dataset" },
-  { id: "help-organize", icon: "🗂", label: "Help me organize my datasets" },
-  { id: "export-dataset", icon: "📤", label: "How do I export a dataset?" },
+  { id: "create-dataset", icon: "➕", label: "Create a new dataset" },
+  { id: "analyze-current", icon: "🔍", label: "Analyze current dataset" },
+  { id: "suggest-topics", icon: "🗂", label: "Suggest topics for records" },
+  { id: "find-duplicates", icon: "🔄", label: "Find duplicate records" },
+  { id: "export-dataset", icon: "📤", label: "Export this dataset" },
 ];
 ```
+
+### Tool Categories
+
+**UI Tools (11)**: Control page interactions
+- `navigate_to_dataset`, `expand_dataset`, `collapse_dataset`
+- `select_records`, `clear_selection`
+- `open_record_editor`, `close_record_editor`
+- `set_search_query`, `set_sort`
+- `show_assign_topic_dialog`, `export_dataset`
+
+**Data Tools (12)**: CRUD and span operations
+- `list_datasets`, `get_dataset_records`, `get_dataset_stats`
+- `create_dataset`, `rename_dataset`, `delete_dataset`
+- `delete_records`, `update_record_topic`, `update_record_data`
+- `bulk_assign_topic`, `fetch_spans`, `add_spans_to_dataset`
+
+**Analysis Tools (5)**: Insights and suggestions
+- `analyze_records`, `suggest_topics`, `find_duplicates`
+- `summarize_dataset`, `compare_records`
 
 ---
 

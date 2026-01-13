@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useState, useEffect, useMemo } from "react";
-import { useDatasets } from "@/hooks/useDatasets";
+import { DatasetsConsumer } from "@/contexts/DatasetsContext";
 import { Span } from "@/types/common-type";
 import { toast } from "sonner";
 import { Database, Plus, ArrowRight, ChevronDown, Check } from "lucide-react";
@@ -28,7 +28,7 @@ export function AddToDatasetDialog({
   spans,
   onSuccess,
 }: AddToDatasetDialogProps) {
-  const { datasets, createDataset, addSpansToDataset, getRecordCount } = useDatasets();
+  const { datasets, createDataset, addSpansToDataset, getRecordCount } = DatasetsConsumer();
   const [datasetsWithCounts, setDatasetsWithCounts] = useState<DatasetWithCount[]>([]);
   const [datasetSearch, setDatasetSearch] = useState('');
   const [selectedDataset, setSelectedDataset] = useState<DatasetWithCount | null>(null);

@@ -5,7 +5,7 @@
  */
 
 import { useState, useMemo, useEffect } from "react";
-import { useDatasets } from "@/hooks/useDatasets";
+import { DatasetsConsumer } from "@/contexts/DatasetsContext";
 import { DatasetRecord } from "@/types/dataset-types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,7 +52,7 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
     deleteRecord,
     updateRecordTopic,
     renameDataset,
-  } = useDatasets();
+  } = DatasetsConsumer();
 
   // State
   const [expandedDatasets, setExpandedDatasets] = useState<Set<string>>(new Set());

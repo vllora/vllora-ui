@@ -5,8 +5,9 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { useDatasets } from "@/hooks/useDatasets";
+import { DatasetsConsumer } from "@/contexts/DatasetsContext";
 import { Dataset, DatasetRecord } from "@/types/dataset-types";
+import { emitter } from "@/utils/eventEmitter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Loader2 } from "lucide-react";
@@ -43,7 +44,7 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
     updateRecordTopic,
     updateRecordData,
     renameDataset,
-  } = useDatasets();
+  } = DatasetsConsumer();
 
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [records, setRecords] = useState<DatasetRecord[]>([]);
@@ -81,6 +82,17 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
 
   useEffect(() => {
     loadDataset();
+  }, [loadDataset]);
+
+  // Listen for dataset refresh events from agent tools
+  useEffect(() => {
+    const handleRefresh = () => {
+      loadDataset();
+    };
+    emitter.on('vllora_dataset_refresh' as any, handleRefresh);
+    return () => {
+      emitter.off('vllora_dataset_refresh' as any, handleRefresh);
+    };
   }, [loadDataset]);
 
   // Update dataset from context when it changes

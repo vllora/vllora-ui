@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { DataCell, TopicCell, EvaluationCell, TimestampCell } from "./cells";
+import { DataCell, SourceCell, TopicCell, EvaluationCell, TimestampCell } from "./cells";
 
 interface RecordRowProps {
   record: DatasetRecord;
@@ -63,6 +63,13 @@ export function RecordRow({
         tableLayout={tableLayout}
         onExpand={onExpand ? () => onExpand(record) : undefined}
       />
+
+      {tableLayout && (
+        <SourceCell
+          spanId={record.spanId}
+          tableLayout={tableLayout}
+        />
+      )}
 
       <TopicCell
         topic={record.topic}

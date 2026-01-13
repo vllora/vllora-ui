@@ -272,6 +272,7 @@ function TableHeader({ selectable, allSelected, someSelected, onSelectAll, sortC
         </div>
       )}
       <span className="flex-[2]">Trace Data (Input/Output)</span>
+      <span className="w-24 text-center">Source</span>
       <button
         className={cn(
           "w-24 text-center hover:text-foreground transition-colors",
@@ -332,6 +333,7 @@ interface TableFooterProps {
 function TableFooter({ records, selectedCount = 0 }: TableFooterProps) {
   // Calculate summary stats
   const totalRecords = records.length;
+  const fromSpans = records.filter((r) => r.spanId).length;
   const withTopic = records.filter((r) => r.topic).length;
   const withEvaluation = records.filter((r) => r.evaluation?.score !== undefined).length;
 
@@ -357,6 +359,10 @@ function TableFooter({ records, selectedCount = 0 }: TableFooterProps) {
         )}
         <span>
           <span className="font-medium text-foreground">{totalRecords}</span> records
+        </span>
+        <span className="text-border">•</span>
+        <span>
+          <span className="font-medium text-foreground">{fromSpans}</span> from spans
         </span>
         <span className="text-border">•</span>
         <span>

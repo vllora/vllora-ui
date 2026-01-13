@@ -75,11 +75,31 @@ Access via toolbar dropdown or clickable column headers.
 
 ### Lucy AI Assistant
 
-Lucy is available in the left panel to help with:
-- Listing and describing datasets
-- Analyzing records
-- Organizing and categorizing data
-- Answering questions about features
+Lucy uses a specialized multi-agent system for the Datasets page:
+
+**What Lucy Can Do:**
+
+| Category | Examples |
+|----------|----------|
+| **Data Operations** | "List all datasets", "Create a dataset called 'Errors'", "Delete selected records" |
+| **UI Navigation** | "Go to Safety Test dataset", "Expand all datasets", "Select all records" |
+| **Search & Sort** | "Search for 'timeout'", "Sort by topic", "Clear selection" |
+| **Analysis** | "Suggest topics for this dataset", "Find duplicate records", "Summarize this dataset" |
+| **Bulk Operations** | "Assign topic 'safety' to selected records", "Export this dataset" |
+
+**Quick Actions** (click to send):
+- "List all my datasets"
+- "Create a new dataset"
+- "Analyze current dataset"
+- "Suggest topics for records"
+- "Find duplicate records"
+- "Export this dataset"
+
+**Tips for Best Results:**
+1. Lucy knows which dataset you're viewing and what records are selected
+2. Say "this dataset" to refer to the current one
+3. Say "selected records" to refer to checked records
+4. For deletions, Lucy will ask for confirmation first
 
 ---
 
@@ -177,8 +197,10 @@ Each record has:
 1. **Use topics** to categorize records for easy filtering later
 2. **Bulk operations** are faster than editing one at a time
 3. **Export** datasets before making major changes as backup
-4. **Lucy** can help explain features or analyze your data
+4. **Ask Lucy** to analyze data, suggest topics, or find duplicates
 5. **Click column headers** to quickly sort records
+6. **Use quick actions** in Lucy chat for common operations
+7. **Lucy sees your selection** - say "selected records" to operate on them
 
 ---
 
@@ -195,4 +217,6 @@ Each record has:
 
 - **Traces Page**: Where you select spans to add
 - **Span Detail**: Shows which datasets a span is in
-- **Lucy Agent**: AI assistant available across pages
+- **Lucy Agent**: AI assistant with specialized dataset tools
+  - See [LUCY_AGENT_PLAN.md](./LUCY_AGENT_PLAN.md) for architecture details
+  - See [README.md](./README.md) for technical implementation

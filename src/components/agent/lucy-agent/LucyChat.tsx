@@ -119,6 +119,7 @@ export function LucyChat({
 
   // Voice input state
   const [isStreamingVoice, setIsStreamingVoice] = useState(false);
+
   const {
     messages,
     isStreaming,

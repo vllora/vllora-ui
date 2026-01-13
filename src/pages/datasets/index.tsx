@@ -1,6 +1,7 @@
 import { useMemo, useCallback } from "react";
-import { useSearchParams } from "react-router-dom";
-import { useDatasets } from "@/hooks/useDatasets";
+import { DatasetsConsumer } from "@/contexts/DatasetsContext";
+import { DatasetsUIProvider, DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
+import { useDatasetAgentChat } from "@/hooks/useDatasetAgentChat";
 import { Plus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +13,6 @@ import {
 import { DistriMessage } from "@distri/core";
 import { useDistriConnection } from "@/providers/DistriProvider";
 import { ProviderKeysConsumer } from "@/contexts/ProviderKeysContext";
-import { useAgentChat } from "@/components/agent/useAgentChat";
 import {
   LucyChat,
   LucyProviderCheck,
@@ -31,38 +31,47 @@ const DATASET_QUICK_ACTIONS: QuickAction[] = [
     label: "List all my datasets",
   },
   {
-    id: "analyze-dataset",
-    icon: "🔍",
-    label: "Analyze records in a dataset",
+    id: "create-dataset",
+    icon: "➕",
+    label: "Create a new dataset",
   },
   {
-    id: "help-organize",
+    id: "analyze-current",
+    icon: "🔍",
+    label: "Analyze current dataset",
+  },
+  {
+    id: "suggest-topics",
     icon: "🗂",
-    label: "Help me organize my datasets",
+    label: "Suggest topics for records",
+  },
+  {
+    id: "find-duplicates",
+    icon: "🔄",
+    label: "Find duplicate records",
   },
   {
     id: "export-dataset",
     icon: "📤",
-    label: "How do I export a dataset?",
+    label: "Export this dataset",
   },
 ];
 
-export function DatasetsPage() {
-  const { datasets } = useDatasets();
+// Inner component that uses the UI context
+function DatasetsPageContent() {
+  const { datasets } = DatasetsConsumer();
+  const {
+    selectedDatasetId,
+    currentDataset,
+    selectedRecordIds,
+    searchQuery,
+    sortConfig,
+    expandedDatasetIds,
+    navigateToDataset,
+    navigateToList,
+  } = DatasetsUIConsumer();
 
-  // URL params for dataset detail view
-  const [searchParams, setSearchParams] = useSearchParams();
-  const selectedDatasetId = searchParams.get("id");
-
-  const handleSelectDataset = useCallback((datasetId: string) => {
-    setSearchParams({ id: datasetId });
-  }, [setSearchParams]);
-
-  const handleBackToList = useCallback(() => {
-    setSearchParams({});
-  }, [setSearchParams]);
-
-  // Lucy agent state
+  // Lucy agent state - using dataset-specific hook
   const { isConnected, reconnect } = useDistriConnection();
   const { providers, loading: providersLoading } = ProviderKeysConsumer();
   const {
@@ -72,7 +81,7 @@ export function DatasetsPage() {
     tools,
     messages,
     handleNewChat,
-  } = useAgentChat();
+  } = useDatasetAgentChat();
 
   const isOpenAIConfigured = useMemo(() => {
     const openaiProvider = providers.find(p => p.name.toLowerCase() === "openai");
@@ -86,13 +95,21 @@ export function DatasetsPage() {
     []
   );
 
-  // Attach dataset context to messages before sending
+  // Attach rich dataset context to messages before sending
   const handleBeforeSendMessage = useCallback(
     async (message: DistriMessage): Promise<DistriMessage> => {
       const ctx = {
         page: "datasets",
+        current_view: selectedDatasetId ? "detail" : "list",
+        current_dataset_id: selectedDatasetId,
+        current_dataset_name: currentDataset?.name,
         datasets_count: datasets.length,
-        dataset_names: datasets.map(d => d.name),
+        dataset_names: datasets.map(d => ({ id: d.id, name: d.name })),
+        selected_records_count: selectedRecordIds.size,
+        selected_record_ids: selectedRecordIds.size > 0 ? [...selectedRecordIds] : undefined,
+        search_query: searchQuery || undefined,
+        sort_config: sortConfig,
+        expanded_dataset_ids: expandedDatasetIds.size > 0 ? [...expandedDatasetIds] : undefined,
       };
 
       const contextText = `Context:\n\`\`\`json\n${JSON.stringify(ctx, null, 2)}\n\`\`\``;
@@ -100,7 +117,7 @@ export function DatasetsPage() {
 
       return { ...message, parts: [contextPart, ...message.parts] };
     },
-    [datasets]
+    [datasets, selectedDatasetId, currentDataset, selectedRecordIds, searchQuery, sortConfig, expandedDatasetIds]
   );
 
   return (
@@ -182,12 +199,21 @@ export function DatasetsPage() {
         {selectedDatasetId ? (
           <DatasetDetailView
             datasetId={selectedDatasetId}
-            onBack={handleBackToList}
+            onBack={navigateToList}
           />
         ) : (
-          <DatasetsListView onSelectDataset={handleSelectDataset} />
+          <DatasetsListView onSelectDataset={navigateToDataset} />
         )}
       </div>
     </section>
+  );
+}
+
+// Main component wrapped with UI provider
+export function DatasetsPage() {
+  return (
+    <DatasetsUIProvider>
+      <DatasetsPageContent />
+    </DatasetsUIProvider>
   );
 }
