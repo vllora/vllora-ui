@@ -9,6 +9,8 @@ The Datasets page (`/datasets`) provides a unified interface for managing span c
 - Create, rename, and delete datasets
 - View and manage individual records within datasets
 - Inline topic editing for records
+- Sort records by timestamp, topic, or evaluation (via toolbar or clickable column headers)
+- Click-to-expand record data with Monaco JSON editor for viewing and editing
 - Context-aware AI assistance with Lucy
 
 **Route:** `/datasets`
@@ -88,6 +90,14 @@ DatasetsPage
 | `ui/src/services/datasets-db.ts` | Low-level IndexedDB service |
 | `ui/src/types/dataset-types.ts` | TypeScript interfaces |
 | `ui/src/components/datasets/AddToDatasetDialog.tsx` | Dialog for adding spans to datasets |
+| `ui/src/components/datasets/DatasetDetailView.tsx` | Full dataset view with records table |
+| `ui/src/components/datasets/RecordsTable.tsx` | Virtualized records table with sorting |
+| `ui/src/components/datasets/RecordsToolbar.tsx` | Toolbar with search, sort, and bulk actions |
+| `ui/src/components/datasets/RecordRow.tsx` | Individual record row component |
+| `ui/src/components/datasets/cells/DataCell.tsx` | Clickable data preview cell |
+| `ui/src/components/datasets/cells/TopicCell.tsx` | Inline-editable topic cell |
+| `ui/src/components/datasets/cells/EvaluationCell.tsx` | Evaluation display cell |
+| `ui/src/components/datasets/cells/TimestampCell.tsx` | Timestamp display cell |
 
 ### Related Files
 
@@ -180,6 +190,7 @@ export async function getRecordCount(datasetId: string): Promise<number>
 export async function addSpansToDataset(datasetId: string, spans: Span[], topic?: string): Promise<number>
 export async function deleteRecord(datasetId: string, recordId: string): Promise<void>
 export async function updateRecordTopic(datasetId: string, recordId: string, topic: string): Promise<void>
+export async function updateRecordData(datasetId: string, recordId: string, data: unknown): Promise<void>
 
 // Query by span
 export async function getDatasetsBySpanId(spanId: string): Promise<Dataset[]>
@@ -207,6 +218,7 @@ export function useDatasets() {
     deleteDataset: (datasetId: string) => Promise<void>,
     deleteRecord: (datasetId: string, recordId: string) => Promise<void>,
     updateRecordTopic: (datasetId: string, recordId: string, topic: string) => Promise<void>,
+    updateRecordData: (datasetId: string, recordId: string, data: unknown) => Promise<void>,
     renameDataset: (datasetId: string, newName: string) => Promise<void>,
     spanExistsInDataset: (datasetId: string, spanId: string) => Promise<boolean>,
     getDatasetsBySpanId: (spanId: string) => Promise<Dataset[]>,
@@ -486,6 +498,22 @@ export const SpanFooter = () => {
 4. `deleteRecord()` called
 5. Toast confirms
 
+**View & Edit Record Data:**
+1. Click on data preview text in record row (hover shows "Click to view & edit" tooltip)
+2. Expand dialog opens with full JSON in Monaco editor
+3. Edit JSON data as needed
+4. Editor validates JSON in real-time (errors shown if invalid)
+5. Click "Save Changes" to persist
+6. `updateRecordData()` called
+7. Toast confirms, dialog closes
+
+**Sort Records:**
+1. Click sort dropdown in toolbar OR click sortable column header (Topic, Evaluation, Timestamp)
+2. Select sort field (timestamp, topic, or evaluation)
+3. Click same header again to toggle ascending/descending
+4. Records reorder immediately
+5. Sort indicator (↑/↓) shows current sort state
+
 ---
 
 ## UI States
@@ -596,18 +624,42 @@ className="hover:text-[rgb(var(--theme-500))]"
 
 ---
 
+## Implemented Features
+
+### Sorting
+Records can be sorted by:
+- **Timestamp** (default, descending) - When the record was added
+- **Topic** - Alphabetical by topic name (empty topics sort last)
+- **Evaluation** - By evaluation score (unevaluated sort last)
+
+Sorting is available via:
+- Dropdown in the toolbar
+- Clickable column headers with direction indicators
+
+### Bulk Operations
+- **Select All** - Checkbox in table header
+- **Bulk Delete** - Delete multiple selected records
+- **Bulk Topic Assignment** - Assign same topic to selected records
+
+### Search
+- Search box in toolbar filters by label, topic, or span ID
+
+### Record Data Editing
+- Click data preview to open expand dialog
+- Monaco JSON editor for viewing/editing
+- Real-time JSON validation
+- Save changes persisted to IndexedDB
+
+### Export
+- Export dataset as JSON file (includes all records)
+
+---
+
 ## Future Considerations
 
-1. **Export/Import**: Add ability to export datasets to JSON and import from files
+1. **Import**: Add ability to import datasets from JSON files
 
-2. **Batch Operations**:
-   - Select all records
-   - Bulk delete
-   - Bulk topic assignment
-
-3. **Search/Filter**: Filter records within a dataset by topic, operation type, or label
-
-4. **Lucy Tools**: Add dataset-specific tools Lucy can use:
+2. **Lucy Tools**: Add dataset-specific tools Lucy can use:
    - `list_datasets` - List all datasets
    - `get_dataset_records` - Get records from a dataset
    - `create_dataset` - Create a new dataset

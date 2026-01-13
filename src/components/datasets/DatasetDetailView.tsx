@@ -26,6 +26,7 @@ import {
 import { DatasetDetailHeader } from "./DatasetDetailHeader";
 import { RecordsToolbar, SortConfig } from "./RecordsToolbar";
 import { RecordsTable } from "./RecordsTable";
+import { JsonEditor } from "@/components/chat/conversation/model-config/json-editor";
 import { getDataAsObject, getLabel } from "./record-utils";
 
 interface DatasetDetailViewProps {
@@ -40,6 +41,7 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
     deleteDataset,
     deleteRecord,
     updateRecordTopic,
+    updateRecordData,
     renameDataset,
   } = useDatasets();
 
@@ -52,6 +54,9 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
   const [assignTopicDialog, setAssignTopicDialog] = useState(false);
   const [bulkTopic, setBulkTopic] = useState("");
   const [expandedRecord, setExpandedRecord] = useState<DatasetRecord | null>(null);
+  const [editedJson, setEditedJson] = useState("");
+  const [jsonError, setJsonError] = useState<string | null>(null);
+  const [isSavingData, setIsSavingData] = useState(false);
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     field: "timestamp",
     direction: "desc",
@@ -263,6 +268,58 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
     toast.success("Dataset exported");
   };
 
+  // Handle opening expand dialog
+  const handleExpandRecord = (record: DatasetRecord) => {
+    setExpandedRecord(record);
+    setEditedJson(JSON.stringify(record.data, null, 2));
+    setJsonError(null);
+  };
+
+  // Handle closing expand dialog
+  const handleCloseExpand = () => {
+    setExpandedRecord(null);
+    setEditedJson("");
+    setJsonError(null);
+  };
+
+  // Handle JSON change in editor
+  const handleJsonChange = (value: string) => {
+    setEditedJson(value);
+    try {
+      if (value.trim()) {
+        JSON.parse(value);
+        setJsonError(null);
+      }
+    } catch (err) {
+      setJsonError(err instanceof Error ? err.message : "Invalid JSON");
+    }
+  };
+
+  // Handle saving updated record data
+  const handleSaveRecordData = async () => {
+    if (!dataset || !expandedRecord || jsonError) return;
+
+    try {
+      const parsedData = JSON.parse(editedJson);
+      setIsSavingData(true);
+      await updateRecordData(dataset.id, expandedRecord.id, parsedData);
+
+      // Update local records state
+      setRecords(prev =>
+        prev.map(r =>
+          r.id === expandedRecord.id ? { ...r, data: parsedData } : r
+        )
+      );
+
+      toast.success("Record data updated");
+      handleCloseExpand();
+    } catch (err) {
+      toast.error("Failed to save record data");
+    } finally {
+      setIsSavingData(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -329,7 +386,7 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
               onDelete={(recordId: string) =>
                 setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
               }
-              onExpand={setExpandedRecord}
+              onExpand={handleExpandRecord}
               height={500}
             />
           </div>
@@ -381,10 +438,10 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
       </Dialog>
 
       {/* Expand trace dialog */}
-      <Dialog open={!!expandedRecord} onOpenChange={(open) => !open && setExpandedRecord(null)}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+      <Dialog open={!!expandedRecord} onOpenChange={(open) => !open && handleCloseExpand()}>
+        <DialogContent className="max-w-4xl h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle>Trace Data</DialogTitle>
+            <DialogTitle>Edit Trace Data</DialogTitle>
             <DialogDescription>
               {expandedRecord?.topic && (
                 <span className="text-[rgb(var(--theme-500))]">Topic: {expandedRecord.topic}</span>
@@ -393,14 +450,37 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
               Added {expandedRecord && new Date(expandedRecord.createdAt).toLocaleString()}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-auto">
-            <pre className="text-xs font-mono bg-muted/50 p-4 rounded-lg whitespace-pre-wrap break-all">
-              {expandedRecord && JSON.stringify(expandedRecord.data, null, 2)}
-            </pre>
+          <div className="flex-1 overflow-hidden">
+            {expandedRecord && (
+              <JsonEditor
+                value={editedJson}
+                onChange={handleJsonChange}
+                hideValidation={!jsonError}
+              />
+            )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setExpandedRecord(null)}>
-              Close
+          {jsonError && (
+            <div className="text-xs text-red-500 px-1">
+              Invalid JSON: {jsonError}
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={handleCloseExpand}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveRecordData}
+              disabled={!!jsonError || isSavingData}
+              className="bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
+            >
+              {isSavingData ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save Changes"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

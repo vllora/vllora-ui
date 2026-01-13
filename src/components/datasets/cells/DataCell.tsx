@@ -1,7 +1,7 @@
 /**
  * DataCell
  *
- * Displays trace data preview with tooltip showing full JSON and expand link.
+ * Displays trace data preview. Click to expand and edit.
  */
 
 import {
@@ -33,56 +33,36 @@ const getDataPreview = (data: unknown, maxLength = 120): string => {
   }
 };
 
-// Helper to format data for tooltip (more lines)
-const getDataTooltip = (data: unknown): string => {
-  if (data === null || data === undefined) return "null";
-  try {
-    return JSON.stringify(data, null, 2);
-  } catch {
-    return "[Object]";
-  }
-};
-
 export function DataCell({ data, tableLayout = false, onExpand }: DataCellProps) {
   const dataPreview = getDataPreview(data);
-  const dataTooltip = getDataTooltip(data);
 
   return (
     <div
       className={cn(
-        "flex-1 min-w-0 flex flex-col gap-1",
+        "flex-1 min-w-0",
         tableLayout && "flex-[2]"
       )}
     >
-      <TooltipProvider delayDuration={300}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <code className="text-xs text-muted-foreground font-mono px-2 py-1.5 rounded truncate block cursor-default leading-relaxed">
-              {dataPreview}
-            </code>
-          </TooltipTrigger>
-          <TooltipContent
-            side="bottom"
-            align="start"
-            className="max-w-md max-h-64 overflow-auto p-0"
-          >
-            <pre className="text-xs font-mono p-3 whitespace-pre-wrap break-all">
-              {dataTooltip}
-            </pre>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
       {onExpand ? (
-        <button
-          onClick={onExpand}
-          className="text-xs text-muted-foreground hover:text-[rgb(var(--theme-500))] transition-colors text-left px-2"
-        >
-          Expand trace
-        </button>
+        <TooltipProvider delayDuration={500}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={onExpand}
+                className="text-xs text-muted-foreground font-mono px-2 py-1.5 rounded truncate block leading-relaxed text-left w-full hover:bg-muted/50 hover:text-foreground transition-colors cursor-pointer"
+              >
+                {dataPreview}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              Click to view & edit
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       ) : (
-        <span className="text-xs text-muted-foreground/60 px-2">
-          Expand trace
-        </span>
+        <code className="text-xs text-muted-foreground font-mono px-2 py-1.5 rounded truncate block leading-relaxed">
+          {dataPreview}
+        </code>
       )}
     </div>
   );

@@ -89,6 +89,15 @@ export function useDatasets() {
     await datasetsDB.updateRecordTopic(datasetId, recordId, topic);
   }, []);
 
+  // Update a record's data
+  const updateRecordData = useCallback(async (
+    datasetId: string,
+    recordId: string,
+    data: unknown
+  ): Promise<void> => {
+    await datasetsDB.updateRecordData(datasetId, recordId, data);
+  }, []);
+
   // Rename a dataset
   const renameDataset = useCallback(async (datasetId: string, newName: string): Promise<void> => {
     await datasetsDB.renameDataset(datasetId, newName);
@@ -132,6 +141,7 @@ export function useDatasets() {
     deleteDataset,
     deleteRecord,
     updateRecordTopic,
+    updateRecordData,
     renameDataset,
     spanExistsInDataset,
     getDatasetsBySpanId,
