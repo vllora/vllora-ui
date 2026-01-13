@@ -24,7 +24,7 @@ import {
   type DeleteConfirmation,
 } from "./DeleteConfirmationDialog";
 import { DatasetDetailHeader } from "./DatasetDetailHeader";
-import { RecordsToolbar } from "./RecordsToolbar";
+import { RecordsToolbar, SortConfig } from "./RecordsToolbar";
 import { RecordsTable } from "./RecordsTable";
 import { getDataAsObject, getLabel } from "./record-utils";
 
@@ -51,6 +51,11 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [assignTopicDialog, setAssignTopicDialog] = useState(false);
   const [bulkTopic, setBulkTopic] = useState("");
+  const [expandedRecord, setExpandedRecord] = useState<DatasetRecord | null>(null);
+  const [sortConfig, setSortConfig] = useState<SortConfig>({
+    field: "timestamp",
+    direction: "desc",
+  });
 
   // Load dataset and records
   const loadDataset = useCallback(async () => {
@@ -92,6 +97,32 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
         return label.includes(query) || topic.includes(query) || spanId.includes(query);
       })
     : records;
+
+  // Sort records
+  const sortedRecords = [...filteredRecords].sort((a, b) => {
+    const direction = sortConfig.direction === "asc" ? 1 : -1;
+
+    switch (sortConfig.field) {
+      case "timestamp":
+        return (a.createdAt - b.createdAt) * direction;
+      case "topic":
+        const topicA = a.topic?.toLowerCase() || "";
+        const topicB = b.topic?.toLowerCase() || "";
+        if (!topicA && !topicB) return 0;
+        if (!topicA) return 1; // Empty topics go last
+        if (!topicB) return -1;
+        return topicA.localeCompare(topicB) * direction;
+      case "evaluation":
+        const scoreA = a.evaluation?.score ?? -1;
+        const scoreB = b.evaluation?.score ?? -1;
+        if (scoreA === -1 && scoreB === -1) return 0;
+        if (scoreA === -1) return 1; // No evaluation goes last
+        if (scoreB === -1) return -1;
+        return (scoreA - scoreB) * direction;
+      default:
+        return 0;
+    }
+  });
 
   // Handlers
   const handleRenameDataset = async (newName: string) => {
@@ -275,6 +306,8 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
             selectedCount={selectedIds.size}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
+            sortConfig={sortConfig}
+            onSortChange={setSortConfig}
             onAssignTopic={() => setAssignTopicDialog(true)}
             onRunEvaluation={handleBulkRunEvaluation}
             onDeleteSelected={handleBulkDelete}
@@ -283,17 +316,20 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
           {/* Records table */}
           <div className="border border-border rounded-lg overflow-hidden bg-card">
             <RecordsTable
-              records={filteredRecords}
+              records={sortedRecords}
               showHeader
               showFooter
               selectable
               selectedIds={selectedIds}
               onSelectionChange={setSelectedIds}
+              sortConfig={sortConfig}
+              onSortChange={setSortConfig}
               emptyMessage={searchQuery ? `No records match "${searchQuery}"` : "No records in this dataset"}
               onUpdateTopic={handleUpdateRecordTopic}
               onDelete={(recordId: string) =>
                 setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
               }
+              onExpand={setExpandedRecord}
               height={500}
             />
           </div>
@@ -339,6 +375,32 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
               className="bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
             >
               Assign Topic
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Expand trace dialog */}
+      <Dialog open={!!expandedRecord} onOpenChange={(open) => !open && setExpandedRecord(null)}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Trace Data</DialogTitle>
+            <DialogDescription>
+              {expandedRecord?.topic && (
+                <span className="text-[rgb(var(--theme-500))]">Topic: {expandedRecord.topic}</span>
+              )}
+              {expandedRecord?.topic && " • "}
+              Added {expandedRecord && new Date(expandedRecord.createdAt).toLocaleString()}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto">
+            <pre className="text-xs font-mono bg-muted/50 p-4 rounded-lg whitespace-pre-wrap break-all">
+              {expandedRecord && JSON.stringify(expandedRecord.data, null, 2)}
+            </pre>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExpandedRecord(null)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

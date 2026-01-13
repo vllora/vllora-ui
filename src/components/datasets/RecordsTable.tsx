@@ -8,9 +8,11 @@
 import { useRef, useState, useCallback } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { DatasetRecord } from "@/types/dataset-types";
-import { Loader2, ArrowRight } from "lucide-react";
+import { Loader2, ArrowRight, ArrowUp, ArrowDown } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
 import { RecordRow } from "./RecordRow";
+import type { SortConfig, SortField } from "./RecordsToolbar";
 
 interface RecordsTableProps {
   records: DatasetRecord[];
@@ -38,6 +40,12 @@ interface RecordsTableProps {
   selectedIds?: Set<string>;
   /** Selection change handler (controlled) */
   onSelectionChange?: (selectedIds: Set<string>) => void;
+  /** Current sort configuration */
+  sortConfig?: SortConfig;
+  /** Sort change handler */
+  onSortChange?: (config: SortConfig) => void;
+  /** Callback when expand is clicked */
+  onExpand?: (record: DatasetRecord) => void;
 }
 
 const ROW_HEIGHT = 72; // Height of each row in pixels (increased for expand link)
@@ -58,6 +66,9 @@ export function RecordsTable({
   selectable = false,
   selectedIds: controlledSelectedIds,
   onSelectionChange,
+  sortConfig,
+  onSortChange,
+  onExpand,
 }: RecordsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -128,6 +139,8 @@ export function RecordsTable({
             allSelected={allSelected}
             someSelected={someSelected}
             onSelectAll={handleSelectAll}
+            sortConfig={sortConfig}
+            onSortChange={onSortChange}
           />
         )}
         <div>
@@ -142,6 +155,7 @@ export function RecordsTable({
               selectable={selectable}
               selected={selectedIds.has(record.id)}
               onSelect={(checked) => handleSelectRecord(record.id, checked)}
+              onExpand={onExpand}
             />
           ))}
           {hasMore && onSeeAll && <SeeAllLink count={records.length} onClick={onSeeAll} />}
@@ -160,6 +174,8 @@ export function RecordsTable({
           allSelected={allSelected}
           someSelected={someSelected}
           onSelectAll={handleSelectAll}
+          sortConfig={sortConfig}
+          onSortChange={onSortChange}
         />
       )}
       <div
@@ -197,6 +213,7 @@ export function RecordsTable({
                   selectable={selectable}
                   selected={selectedIds.has(record.id)}
                   onSelect={(checked) => handleSelectRecord(record.id, checked)}
+                  onExpand={onExpand}
                 />
               </div>
             );
@@ -214,9 +231,35 @@ interface TableHeaderProps {
   allSelected?: boolean;
   someSelected?: boolean;
   onSelectAll?: (checked: boolean) => void;
+  sortConfig?: SortConfig;
+  onSortChange?: (config: SortConfig) => void;
 }
 
-function TableHeader({ selectable, allSelected, someSelected, onSelectAll }: TableHeaderProps) {
+function TableHeader({ selectable, allSelected, someSelected, onSelectAll, sortConfig, onSortChange }: TableHeaderProps) {
+  const handleSort = (field: SortField) => {
+    if (!onSortChange) return;
+
+    if (sortConfig?.field === field) {
+      // Toggle direction if same field
+      onSortChange({
+        field,
+        direction: sortConfig.direction === "asc" ? "desc" : "asc",
+      });
+    } else {
+      // Default to descending for new field
+      onSortChange({ field, direction: "desc" });
+    }
+  };
+
+  const SortIndicator = ({ field }: { field: SortField }) => {
+    if (sortConfig?.field !== field) return null;
+    return sortConfig.direction === "asc" ? (
+      <ArrowUp className="w-3 h-3 inline ml-1" />
+    ) : (
+      <ArrowDown className="w-3 h-3 inline ml-1" />
+    );
+  };
+
   return (
     <div className="px-4 py-3 bg-muted/30 border-b border-border flex items-center gap-4 text-xs font-medium text-muted-foreground uppercase tracking-wide">
       {selectable && (
@@ -229,9 +272,36 @@ function TableHeader({ selectable, allSelected, someSelected, onSelectAll }: Tab
         </div>
       )}
       <span className="flex-[2]">Trace Data (Input/Output)</span>
-      <span className="w-24 text-center">Topic</span>
-      <span className="w-28 text-center">Evaluation</span>
-      <span className="w-36 text-right">Timestamp</span>
+      <button
+        className={cn(
+          "w-24 text-center hover:text-foreground transition-colors",
+          sortConfig?.field === "topic" && "text-foreground"
+        )}
+        onClick={() => handleSort("topic")}
+      >
+        Topic
+        <SortIndicator field="topic" />
+      </button>
+      <button
+        className={cn(
+          "w-28 text-center hover:text-foreground transition-colors",
+          sortConfig?.field === "evaluation" && "text-foreground"
+        )}
+        onClick={() => handleSort("evaluation")}
+      >
+        Evaluation
+        <SortIndicator field="evaluation" />
+      </button>
+      <button
+        className={cn(
+          "w-36 text-right hover:text-foreground transition-colors",
+          sortConfig?.field === "timestamp" && "text-foreground"
+        )}
+        onClick={() => handleSort("timestamp")}
+      >
+        Timestamp
+        <SortIndicator field="timestamp" />
+      </button>
       <span className="w-7"></span>
     </div>
   );

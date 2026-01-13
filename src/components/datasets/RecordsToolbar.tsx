@@ -7,15 +7,35 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Filter,
   SortAsc,
+  SortDesc,
   LayoutGrid,
   Tag,
   Play,
   Trash2,
   Search,
+  Check,
+  Calendar,
+  MessageSquare,
+  Star,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+export type SortField = "timestamp" | "topic" | "evaluation";
+export type SortDirection = "asc" | "desc";
+
+export interface SortConfig {
+  field: SortField;
+  direction: SortDirection;
+}
 
 interface RecordsToolbarProps {
   /** Number of selected records */
@@ -24,6 +44,10 @@ interface RecordsToolbarProps {
   searchQuery: string;
   /** Search change handler */
   onSearchChange: (query: string) => void;
+  /** Current sort configuration */
+  sortConfig?: SortConfig;
+  /** Sort change handler */
+  onSortChange?: (config: SortConfig) => void;
   /** Assign topic to selected records */
   onAssignTopic?: () => void;
   /** Run evaluation on selected records */
@@ -32,15 +56,50 @@ interface RecordsToolbarProps {
   onDeleteSelected?: () => void;
 }
 
+const sortFieldLabels: Record<SortField, string> = {
+  timestamp: "Timestamp",
+  topic: "Topic",
+  evaluation: "Evaluation",
+};
+
+const sortFieldIcons: Record<SortField, React.ReactNode> = {
+  timestamp: <Calendar className="w-4 h-4" />,
+  topic: <MessageSquare className="w-4 h-4" />,
+  evaluation: <Star className="w-4 h-4" />,
+};
+
 export function RecordsToolbar({
   selectedCount,
   searchQuery,
   onSearchChange,
+  sortConfig,
+  onSortChange,
   onAssignTopic,
   onRunEvaluation,
   onDeleteSelected,
 }: RecordsToolbarProps) {
   const hasSelection = selectedCount > 0;
+  const currentSort = sortConfig || { field: "timestamp", direction: "desc" };
+
+  const handleSortFieldChange = (field: SortField) => {
+    if (currentSort.field === field) {
+      // Toggle direction if same field
+      onSortChange?.({
+        field,
+        direction: currentSort.direction === "asc" ? "desc" : "asc",
+      });
+    } else {
+      // Default to descending for new field
+      onSortChange?.({ field, direction: "desc" });
+    }
+  };
+
+  const handleSortDirectionToggle = () => {
+    onSortChange?.({
+      field: currentSort.field,
+      direction: currentSort.direction === "asc" ? "desc" : "asc",
+    });
+  };
 
   return (
     <div className="flex items-center justify-between px-4 py-3 border border-border rounded-lg bg-card mb-4">
@@ -50,9 +109,58 @@ export function RecordsToolbar({
           <Button variant="ghost" size="icon" className="h-8 w-8">
             <Filter className="w-4 h-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <SortAsc className="w-4 h-4" />
-          </Button>
+
+          {/* Sort dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                {currentSort.direction === "asc" ? (
+                  <SortAsc className="w-4 h-4" />
+                ) : (
+                  <SortDesc className="w-4 h-4" />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-48">
+              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                Sort by
+              </div>
+              {(Object.keys(sortFieldLabels) as SortField[]).map((field) => (
+                <DropdownMenuItem
+                  key={field}
+                  onClick={() => handleSortFieldChange(field)}
+                  className="gap-2"
+                >
+                  {sortFieldIcons[field]}
+                  <span className="flex-1">{sortFieldLabels[field]}</span>
+                  {currentSort.field === field && (
+                    <Check className="w-4 h-4 text-[rgb(var(--theme-500))]" />
+                  )}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                Direction
+              </div>
+              <DropdownMenuItem
+                onClick={handleSortDirectionToggle}
+                className="gap-2"
+              >
+                {currentSort.direction === "asc" ? (
+                  <>
+                    <SortAsc className="w-4 h-4" />
+                    <span>Ascending (oldest first)</span>
+                  </>
+                ) : (
+                  <>
+                    <SortDesc className="w-4 h-4" />
+                    <span>Descending (newest first)</span>
+                  </>
+                )}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Button variant="ghost" size="icon" className="h-8 w-8">
             <LayoutGrid className="w-4 h-4" />
           </Button>

@@ -25,6 +25,8 @@ interface RecordRowProps {
   selected?: boolean;
   /** Selection change handler */
   onSelect?: (checked: boolean) => void;
+  /** Callback when expand is clicked */
+  onExpand?: (record: DatasetRecord) => void;
 }
 
 export function RecordRow({
@@ -36,6 +38,7 @@ export function RecordRow({
   selectable = false,
   selected = false,
   onSelect,
+  onExpand,
 }: RecordRowProps) {
   return (
     <div
@@ -55,7 +58,11 @@ export function RecordRow({
         </div>
       )}
 
-      <DataCell data={record.data} tableLayout={tableLayout} />
+      <DataCell
+        data={record.data}
+        tableLayout={tableLayout}
+        onExpand={onExpand ? () => onExpand(record) : undefined}
+      />
 
       <TopicCell
         topic={record.topic}

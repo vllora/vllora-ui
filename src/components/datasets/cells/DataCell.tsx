@@ -57,7 +57,7 @@ export function DataCell({ data, tableLayout = false, onExpand }: DataCellProps)
       <TooltipProvider delayDuration={300}>
         <Tooltip>
           <TooltipTrigger asChild>
-            <code className="text-xs text-[rgb(var(--theme-400))] font-mono px-2 py-1.5 rounded truncate block cursor-default leading-relaxed">
+            <code className="text-xs text-muted-foreground font-mono px-2 py-1.5 rounded truncate block cursor-default leading-relaxed">
               {dataPreview}
             </code>
           </TooltipTrigger>
