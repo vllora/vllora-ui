@@ -12,6 +12,7 @@ import { Loader2, ArrowRight, ArrowUp, ArrowDown, ChevronDown, ChevronRight } fr
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { RecordRow } from "./RecordRow";
+import { getTopicColor } from "./record-utils";
 import type { SortConfig, SortField } from "./RecordsToolbar";
 
 interface RecordsTableProps {
@@ -243,12 +244,18 @@ export function RecordsTable({
                   ) : (
                     <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
                   )}
-                  <span className={cn(
-                    "font-medium",
-                    group.topic === "No Topic" && "text-muted-foreground italic"
-                  )}>
-                    {group.topic}
-                  </span>
+                  {group.topic === "No Topic" ? (
+                    <span className="text-sm text-muted-foreground italic">
+                      No Topic
+                    </span>
+                  ) : (
+                    <span className={cn(
+                      "text-sm font-bold px-2.5 py-1 rounded-full",
+                      getTopicColor(group.topic)
+                    )}>
+                      {group.topic}
+                    </span>
+                  )}
                   <span className="text-sm text-muted-foreground">
                     ({group.records.length} record{group.records.length !== 1 ? "s" : ""})
                   </span>

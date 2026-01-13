@@ -33,6 +33,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   DeleteConfirmationDialog,
   type DeleteConfirmation,
 } from "./DeleteConfirmationDialog";
@@ -299,21 +305,35 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
                 </div>
               ) : (
                 <>
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowImportDialog(true)}
-                    className="gap-2"
-                  >
-                    <Upload className="w-4 h-4" />
-                    Import Data
-                  </Button>
-                  <Button
-                    onClick={() => setShowNewDatasetInput(true)}
-                    className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
-                  >
-                    <Plus className="w-4 h-4" />
-                    New Dataset
-                  </Button>
+                  <TooltipProvider delayDuration={300}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowImportDialog(true)}
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                        >
+                          <Upload className="w-4 h-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Import data</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider delayDuration={300}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          onClick={() => setShowNewDatasetInput(true)}
+                          className="h-8 w-8 p-0 rounded-full bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white shadow-sm"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>New dataset</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </>
               )}
             </div>

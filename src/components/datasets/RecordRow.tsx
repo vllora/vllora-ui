@@ -6,14 +6,13 @@
 
 import { DatasetRecord } from "@/types/dataset-types";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Eye, Trash2 } from "lucide-react";
+import { Check, Eye, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DataCell, SourceCell, TopicCell, EvaluationCell, TimestampCell } from "./cells";
 
@@ -54,12 +53,24 @@ export function RecordRow({
       )}
     >
       {selectable && (
-        <div className="w-6 shrink-0">
-          <Checkbox
-            checked={selected}
-            onCheckedChange={(checked) => onSelect?.(checked === true)}
-            className="border-muted-foreground/30"
-          />
+        <div
+          className="flex items-center justify-center w-6 shrink-0"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect?.(!selected);
+          }}
+        >
+          <div
+            className={cn(
+              "h-4 w-4 rounded flex items-center justify-center cursor-pointer transition-all duration-150",
+              "border",
+              selected
+                ? "bg-[rgb(var(--theme-500))] border-[rgb(var(--theme-500))]"
+                : "bg-transparent border-muted-foreground/50 hover:border-muted-foreground"
+            )}
+          >
+            {selected && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
+          </div>
         </div>
       )}
 
