@@ -425,11 +425,11 @@ function TableHeader({ selectable, allSelected, someSelected, onSelectAll, sortC
           />
         </div>
       )}
-      <span className="flex-[2]">Trace Data (Input/Output)</span>
-      <span className="w-24 text-center">Source</span>
+      <span className="flex-[2] min-w-0">Trace Data (Input/Output)</span>
+      <span className="w-24 text-center shrink-0">Source</span>
       <button
         className={cn(
-          "w-24 text-center hover:text-foreground transition-colors",
+          "w-28 text-center shrink-0 hover:text-foreground transition-colors",
           sortConfig?.field === "topic" && "text-foreground"
         )}
         onClick={() => handleSort("topic")}
@@ -439,7 +439,7 @@ function TableHeader({ selectable, allSelected, someSelected, onSelectAll, sortC
       </button>
       <button
         className={cn(
-          "w-28 text-center hover:text-foreground transition-colors",
+          "w-28 text-center shrink-0 hover:text-foreground transition-colors",
           sortConfig?.field === "evaluation" && "text-foreground"
         )}
         onClick={() => handleSort("evaluation")}
@@ -449,7 +449,7 @@ function TableHeader({ selectable, allSelected, someSelected, onSelectAll, sortC
       </button>
       <button
         className={cn(
-          "w-36 text-right hover:text-foreground transition-colors",
+          "w-36 text-right shrink-0 hover:text-foreground transition-colors",
           sortConfig?.field === "timestamp" && "text-foreground"
         )}
         onClick={() => handleSort("timestamp")}
@@ -457,7 +457,7 @@ function TableHeader({ selectable, allSelected, someSelected, onSelectAll, sortC
         Timestamp
         <SortIndicator field="timestamp" />
       </button>
-      <span className="w-7"></span>
+      <span className="w-16 shrink-0"></span>
     </div>
   );
 }

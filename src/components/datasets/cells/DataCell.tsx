@@ -1,23 +1,15 @@
 /**
  * DataCell
  *
- * Displays trace data preview. Click to expand and edit.
+ * Displays trace data preview (read-only).
  */
 
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 interface DataCellProps {
   data: unknown;
   /** Fixed width layout for table view */
   tableLayout?: boolean;
-  /** Callback when expand is clicked */
-  onExpand?: () => void;
 }
 
 // Helper to get a preview of the data object
@@ -33,7 +25,7 @@ const getDataPreview = (data: unknown, maxLength = 120): string => {
   }
 };
 
-export function DataCell({ data, tableLayout = false, onExpand }: DataCellProps) {
+export function DataCell({ data, tableLayout = false }: DataCellProps) {
   const dataPreview = getDataPreview(data);
 
   return (
@@ -43,27 +35,9 @@ export function DataCell({ data, tableLayout = false, onExpand }: DataCellProps)
         tableLayout && "flex-[2]"
       )}
     >
-      {onExpand ? (
-        <TooltipProvider delayDuration={500}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={onExpand}
-                className="text-xs text-muted-foreground font-mono px-2 py-1.5 rounded truncate block leading-relaxed text-left w-full hover:bg-muted/50 hover:text-foreground transition-colors cursor-pointer"
-              >
-                {dataPreview}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="text-xs">
-              Click to view & edit
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      ) : (
-        <code className="text-xs text-muted-foreground font-mono px-2 py-1.5 rounded truncate block leading-relaxed">
-          {dataPreview}
-        </code>
-      )}
+      <code className="text-xs text-muted-foreground font-mono px-2 py-1.5 rounded truncate block leading-relaxed">
+        {dataPreview}
+      </code>
     </div>
   );
 }

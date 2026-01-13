@@ -55,13 +55,51 @@ export const getProviderColor = (provider: string): string => {
   }
 };
 
-// Get topic badge color based on topic name
+// Predefined color palette for topic badges (20 colors)
+const TOPIC_COLORS = [
+  "bg-emerald-500/15 text-emerald-500",
+  "bg-blue-500/15 text-blue-400",
+  "bg-violet-500/15 text-violet-400",
+  "bg-amber-500/15 text-amber-500",
+  "bg-cyan-500/15 text-cyan-400",
+  "bg-pink-500/15 text-pink-400",
+  "bg-indigo-500/15 text-indigo-400",
+  "bg-teal-500/15 text-teal-400",
+  "bg-orange-500/15 text-orange-400",
+  "bg-rose-500/15 text-rose-400",
+  "bg-lime-500/15 text-lime-500",
+  "bg-sky-500/15 text-sky-400",
+  "bg-fuchsia-500/15 text-fuchsia-400",
+  "bg-yellow-500/15 text-yellow-500",
+  "bg-purple-500/15 text-purple-400",
+  "bg-green-500/15 text-green-500",
+  "bg-neutral-500/15 text-neutral-400",
+  "bg-slate-500/15 text-slate-400",
+  "bg-zinc-500/15 text-zinc-400",
+];
+
+// Simple string hash function for consistent color assignment
+const hashString = (str: string): number => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return Math.abs(hash);
+};
+
+// Get topic badge color based on topic name (hash-based for consistency)
 export const getTopicColor = (topic: string | undefined): string => {
   if (!topic) return "";
   const t = topic.toLowerCase();
-  if (t.includes("safety") || t.includes("safe")) return "bg-green-500/20 text-green-400 border-green-500/30";
-  if (t.includes("jailbreak") || t.includes("attack")) return "bg-red-500/20 text-red-400 border-red-500/30";
-  if (t.includes("pii") || t.includes("privacy")) return "bg-yellow-500/20 text-yellow-400 border-yellow-500/30";
-  if (t.includes("error") || t.includes("fail")) return "bg-red-500/20 text-red-400 border-red-500/30";
-  return "bg-[rgb(var(--theme-500))]/20 text-[rgb(var(--theme-500))] border-[rgb(var(--theme-500))]/30";
+
+  // Reserve red for error-related topics
+  if (t.includes("error") || t.includes("fail") || t.includes("exception")) {
+    return "bg-red-500/15 text-red-400";
+  }
+
+  // Hash-based color for all other topics
+  const hash = hashString(t);
+  return TOPIC_COLORS[hash % TOPIC_COLORS.length];
 };

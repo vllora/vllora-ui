@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Check, X } from "lucide-react";
+import { Check, X, Tag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getTopicColor } from "../record-utils";
 
@@ -47,8 +47,8 @@ export function TopicCell({
   return (
     <div
       className={cn(
-        "flex items-center justify-center gap-2 shrink-0",
-        tableLayout ? "w-24" : "min-w-[100px]"
+        "flex items-center gap-2 shrink-0",
+        tableLayout ? "w-28 justify-center" : "min-w-[100px]"
       )}
     >
       {showLabel && (
@@ -62,7 +62,8 @@ export function TopicCell({
           <Input
             value={editingValue}
             onChange={(e) => setEditingValue(e.target.value)}
-            className="h-6 w-24 text-xs"
+            className="h-7 w-28 text-xs bg-background"
+            placeholder="Enter topic..."
             autoFocus
             onKeyDown={(e) => {
               if (e.key === "Enter") handleSave();
@@ -72,37 +73,39 @@ export function TopicCell({
           <Button
             size="sm"
             variant="ghost"
-            className="h-6 w-6 p-0"
+            className="h-6 w-6 p-0 text-green-500 hover:text-green-600 hover:bg-green-500/10"
             onClick={handleSave}
           >
-            <Check className="w-3 h-3" />
+            <Check className="w-3.5 h-3.5" />
           </Button>
           <Button
             size="sm"
             variant="ghost"
-            className="h-6 w-6 p-0"
+            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
             onClick={handleCancel}
           >
-            <X className="w-3 h-3" />
+            <X className="w-3.5 h-3.5" />
           </Button>
         </div>
       ) : topic ? (
         <button
           className={cn(
-            "text-[10px] font-medium px-2 py-0.5 rounded border uppercase tracking-wide",
+            "text-[11px] font-medium px-2.5 py-1 rounded-full transition-all hover:opacity-80",
             getTopicColor(topic)
           )}
           onClick={handleStartEdit}
+          title="Click to edit topic"
         >
           {topic}
         </button>
       ) : (
         <button
-          className="text-lg text-muted-foreground/50 hover:text-[rgb(var(--theme-500))] transition-colors"
+          className="flex items-center gap-1.5 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors group"
           onClick={handleStartEdit}
           title="Click to add topic"
         >
-          —
+          <Tag className="w-3 h-3 group-hover:text-[rgb(var(--theme-500))]" />
+          <span className="group-hover:text-[rgb(var(--theme-500))]">Add</span>
         </button>
       )}
     </div>

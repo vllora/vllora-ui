@@ -7,7 +7,13 @@
 import { DatasetRecord } from "@/types/dataset-types";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Trash2 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Eye, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DataCell, SourceCell, TopicCell, EvaluationCell, TimestampCell } from "./cells";
 
@@ -43,13 +49,12 @@ export function RecordRow({
   return (
     <div
       className={cn(
-        "px-4 py-3 flex items-start gap-4 hover:bg-muted/30 transition-colors border-b border-border/50 last:border-b-0",
-        tableLayout && "gap-4",
+        "px-4 py-3 flex items-center gap-4 hover:bg-muted/30 transition-colors border-b border-border/50 last:border-b-0",
         selected && "bg-[rgb(var(--theme-500))]/5"
       )}
     >
       {selectable && (
-        <div className="w-6 shrink-0 pt-1">
+        <div className="w-6 shrink-0">
           <Checkbox
             checked={selected}
             onCheckedChange={(checked) => onSelect?.(checked === true)}
@@ -61,7 +66,6 @@ export function RecordRow({
       <DataCell
         data={record.data}
         tableLayout={tableLayout}
-        onExpand={onExpand ? () => onExpand(record) : undefined}
       />
 
       {tableLayout && (
@@ -90,15 +94,45 @@ export function RecordRow({
         />
       )}
 
-      {/* Delete button */}
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-7 w-7 p-0 text-muted-foreground/50 hover:text-red-500 shrink-0"
-        onClick={() => onDelete(record.id)}
-      >
-        <Trash2 className="w-3.5 h-3.5" />
-      </Button>
+      {/* Action buttons */}
+      <div className="flex items-center justify-end gap-1 w-16 shrink-0">
+        {onExpand && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 text-muted-foreground/50 hover:text-[rgb(var(--theme-500))]"
+                  onClick={() => onExpand(record)}
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>View & edit</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0 text-muted-foreground/50 hover:text-red-500"
+                onClick={() => onDelete(record.id)}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Delete</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
     </div>
   );
 }
