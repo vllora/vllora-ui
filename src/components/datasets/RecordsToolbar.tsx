@@ -32,6 +32,7 @@ import {
   MessageSquare,
   Star,
   Layers,
+  Wand2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -60,11 +61,17 @@ interface RecordsToolbarProps {
   onGroupByTopicChange?: (grouped: boolean) => void;
   /** Assign topic to selected records */
   onAssignTopic?: () => void;
+  /** Generate topics using topic tool */
+  onGenerateTopics?: () => void;
+  /** Flag when topics are being generated */
+  isGeneratingTopics?: boolean;
   /** Run evaluation on selected records */
   onRunEvaluation?: () => void;
   /** Delete selected records */
   onDeleteSelected?: () => void;
 }
+
+
 
 const sortFieldLabels: Record<SortField, string> = {
   timestamp: "Timestamp",
@@ -87,6 +94,8 @@ export function RecordsToolbar({
   groupByTopic = false,
   onGroupByTopicChange,
   onAssignTopic,
+  onGenerateTopics,
+  isGeneratingTopics,
   onRunEvaluation,
   onDeleteSelected,
 }: RecordsToolbarProps) {
@@ -244,6 +253,20 @@ export function RecordsToolbar({
             hasSelection
               ? "text-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-500))]/10"
               : "text-muted-foreground/50"
+          )}
+          disabled={!hasSelection || isGeneratingTopics}
+          onClick={onGenerateTopics}
+        >
+          <Wand2 className="w-4 h-4" />
+          {isGeneratingTopics ? "Generating..." : "Generate Topics"}
+        </Button>
+        <Button
+          variant="outline"
+          className={cn(
+            "gap-2",
+            hasSelection
+              ? "text-[rgb(var(--theme-500))] border-[rgb(var(--theme-500))]/30 hover:bg-[rgb(var(--theme-500))]/10"
+              : "text-muted-foreground"
           )}
           disabled={!hasSelection}
           onClick={onRunEvaluation}

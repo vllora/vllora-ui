@@ -24,6 +24,9 @@ import { DatasetDetailHeader } from "./DatasetDetailHeader";
 import { RecordsToolbar, SortConfig } from "./RecordsToolbar";
 import { RecordsTable } from "./RecordsTable";
 import { filterAndSortRecords } from "./record-filters";
+import { JsonEditor } from "@/components/chat/conversation/model-config/json-editor";
+import { getDataAsObject, getLabel } from "./record-utils";
+import { generateTopics } from "@/lib/distri-dataset-tools/analysis/generate-topics";
 
 interface DatasetDetailViewProps {
   datasetId: string;
@@ -56,6 +59,10 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
   const [importDialog, setImportDialog] = useState(false);
   const [finetuneDialog, setFinetuneDialog] = useState(false);
   const [expandedRecord, setExpandedRecord] = useState<DatasetRecord | null>(null);
+  const [editedJson, setEditedJson] = useState("");
+  const [jsonError, setJsonError] = useState<string | null>(null);
+  const [isSavingData, setIsSavingData] = useState(false);
+  const [isGeneratingTopics, setIsGeneratingTopics] = useState(false);
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     field: "timestamp",
     direction: "desc",
@@ -248,6 +255,34 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
     setSelectedRecordIds(new Set());
   };
 
+  const handleGenerateTopics = async () => {
+    if (!dataset) return;
+    const recordIds = Array.from(selectedRecordIds);
+    if (recordIds.length === 0) return;
+
+    setIsGeneratingTopics(true);
+    try {
+      const result = await generateTopics({
+        datasetId: dataset.id,
+        recordIds,
+        maxTopics: 3,
+      });
+
+      if (result.success) {
+        toast.success("Topics generated and applied to selected records");
+        await loadDataset();
+        setSelectedRecordIds(new Set());
+      } else {
+        toast.error(result.error || "Failed to generate topics");
+      }
+    } catch (err) {
+      console.error("Failed to generate topics", err);
+      toast.error("Failed to generate topics");
+    } finally {
+      setIsGeneratingTopics(false);
+    }
+  };
+
   const handleBulkRunEvaluation = () => {
     toast.info("Run evaluation feature coming soon");
   };
@@ -387,6 +422,8 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
             groupByTopic={groupByTopic}
             onGroupByTopicChange={setGroupByTopic}
             onAssignTopic={() => setAssignTopicDialog(true)}
+            onGenerateTopics={handleGenerateTopics}
+            isGeneratingTopics={isGeneratingTopics}
             onRunEvaluation={handleBulkRunEvaluation}
             onDeleteSelected={handleBulkDelete}
           />
