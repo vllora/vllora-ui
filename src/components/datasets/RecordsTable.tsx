@@ -456,7 +456,7 @@ function TableHeader({ selectable, allSelected, someSelected, onSelectAll, sortC
           </div>
         </div>
       )}
-      <span className="flex-[2] min-w-0">Trace Data (Input/Output)</span>
+      <span className="flex-[2] min-w-0">Data</span>
       <span className="w-24 text-center shrink-0">Source</span>
       <button
         className={cn(
