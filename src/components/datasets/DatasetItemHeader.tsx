@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 interface DatasetItemHeaderProps {
   name: string;
   recordCount: number | string;
+  updatedAt: number;
   isExpanded: boolean;
   isEditing: boolean;
   editingName: string;
@@ -38,9 +39,26 @@ interface DatasetItemHeaderProps {
   onDelete: () => void;
 }
 
+function formatRelativeTime(timestamp: number): string {
+  const now = Date.now();
+  const diff = now - timestamp;
+  const seconds = Math.floor(diff / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (seconds < 60) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days < 7) return `${days}d ago`;
+
+  return new Date(timestamp).toLocaleDateString();
+}
+
 export function DatasetItemHeader({
   name,
   recordCount,
+  updatedAt,
   isExpanded,
   isEditing,
   editingName,
@@ -96,20 +114,25 @@ export function DatasetItemHeader({
             </Button>
           </div>
         ) : (
-          <button
-            className="font-medium hover:text-[rgb(var(--theme-500))] transition-colors text-left"
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelect();
-            }}
-          >
-            {name}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              className="font-semibold text-foreground hover:text-[rgb(var(--theme-500))] hover:underline transition-colors text-left"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect();
+              }}
+            >
+              {name}
+            </button>
+            <span className="text-sm text-muted-foreground">
+              ({recordCount})
+            </span>
+          </div>
         )}
       </div>
       <div className="flex items-center gap-3">
-        <span className="text-sm text-muted-foreground">
-          {recordCount} records
+        <span className="text-xs text-muted-foreground">
+          Updated {formatRelativeTime(updatedAt)}
         </span>
         <DropdownMenu>
           <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>

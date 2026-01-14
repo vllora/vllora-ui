@@ -17,6 +17,7 @@ import { CreateDatasetPopover } from "./CreateDatasetPopover";
 
 interface DatasetsListHeaderProps {
   searchQuery: string;
+  datasetCount: number;
   onSearchChange: (query: string) => void;
   onImportClick: () => void;
   onCreateDataset: (name: string) => Promise<void>;
@@ -24,6 +25,7 @@ interface DatasetsListHeaderProps {
 
 export function DatasetsListHeader({
   searchQuery,
+  datasetCount,
   onSearchChange,
   onImportClick,
   onCreateDataset,
@@ -37,7 +39,7 @@ export function DatasetsListHeader({
         <div>
           <h1 className="text-xl font-semibold">Datasets</h1>
           <p className="text-sm text-muted-foreground">
-            Manage and monitor your data collections
+            {datasetCount} {datasetCount === 1 ? "dataset" : "datasets"}
           </p>
         </div>
       </div>

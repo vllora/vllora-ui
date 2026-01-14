@@ -17,7 +17,6 @@ import { DatasetItem } from "./DatasetItem";
 import { DatasetsEmptyState } from "./DatasetsEmptyState";
 import { DatasetsListHeader } from "./DatasetsListHeader";
 import { DatasetsNoResultsState } from "./DatasetsNoResultsState";
-import { DatasetsStatusBar } from "./DatasetsStatusBar";
 import { IngestDataDialog, type ImportResult } from "./IngestDataDialog";
 
 interface DatasetsListViewProps {
@@ -76,11 +75,6 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
       loadCounts();
     }
   }, [datasets, getRecordCount]);
-
-  // Calculate total records across all datasets
-  const totalRecords = useMemo(() => {
-    return Object.values(recordCounts).reduce((sum, count) => sum + count, 0);
-  }, [recordCounts]);
 
   // Handlers
   const toggleDataset = async (datasetId: string) => {
@@ -236,6 +230,7 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
         <div className="w-full max-w-5xl mx-auto px-6 py-6">
           <DatasetsListHeader
             searchQuery={searchQuery}
+            datasetCount={datasets.length}
             onSearchChange={setSearchQuery}
             onImportClick={() => setShowImportDialog(true)}
             onCreateDataset={handleCreateDataset}
@@ -283,6 +278,7 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
                     datasetId={dataset.id}
                     name={dataset.name}
                     recordCount={recordCounts[dataset.id] ?? "..."}
+                    updatedAt={dataset.updatedAt}
                     records={records}
                     isExpanded={isExpanded}
                     isLoadingRecords={isLoadingRecords}
@@ -312,8 +308,6 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
           )}
         </div>
       </div>
-
-      <DatasetsStatusBar datasetCount={datasets.length} totalRecords={totalRecords} />
 
       {/* Delete confirmation dialog */}
       <DeleteConfirmationDialog

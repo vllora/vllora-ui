@@ -293,7 +293,7 @@ export function RecordsTable({
             );
           })}
         </div>
-        {hasMore && onSeeAll && <SeeAllLink count={records.length} onClick={onSeeAll} />}
+        {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
         {showFooter && <TableFooter records={displayRecords} selectedCount={selectedIds.size} />}
       </>
     );
@@ -328,7 +328,7 @@ export function RecordsTable({
               onExpand={onExpand}
             />
           ))}
-          {hasMore && onSeeAll && <SeeAllLink count={records.length} onClick={onSeeAll} />}
+          {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
         </div>
         {showFooter && <TableFooter records={displayRecords} selectedCount={selectedIds.size} />}
       </>
@@ -390,7 +390,7 @@ export function RecordsTable({
           })}
         </div>
       </div>
-      {hasMore && onSeeAll && <SeeAllLink count={records.length} onClick={onSeeAll} />}
+      {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
       {showFooter && <TableFooter records={displayRecords} selectedCount={selectedIds.size} />}
     </>
   );
@@ -490,18 +490,18 @@ function TableHeader({ selectable, allSelected, someSelected, onSelectAll, sortC
   );
 }
 
-function SeeAllLink({ count, onClick }: { count: number; onClick: () => void }) {
+function SeeAllLink({ onClick }: { onClick: () => void }) {
   return (
-    <div className="px-4 py-3 flex justify-end">
+    <div className="px-4 py-3 flex justify-end border-t border-border/50">
       <button
-        className="text-sm text-[rgb(var(--theme-500))] hover:text-[rgb(var(--theme-400))] flex items-center gap-1 transition-colors"
+        className="text-sm text-[rgb(var(--theme-500))] hover:text-[rgb(var(--theme-400))] hover:underline flex items-center gap-1 transition-colors"
         onClick={(e) => {
           e.stopPropagation();
           onClick();
         }}
       >
-        See all {count} records
-        <ArrowRight className="w-4 h-4" />
+        See all
+        <ArrowRight className="w-3.5 h-3.5" />
       </button>
     </div>
   );

@@ -12,12 +12,14 @@
 | File | Purpose |
 |------|---------|
 | `pages/datasets/index.tsx` | Main page with Lucy AI assistant integration |
-| `hooks/useDatasets.ts` | React hook wrapping IndexedDB operations |
-| `hooks/useDatasetAgentChat.ts` | Dataset-specific Lucy agent hook |
-| `hooks/useDatasetToolListeners.ts` | Tool event listeners for UI synchronization |
+| `contexts/DatasetsContext.tsx` | Datasets state management with Provider/Consumer pattern |
 | `services/datasets-db.ts` | Low-level IndexedDB CRUD operations |
 | `types/dataset-types.ts` | TypeScript interfaces |
 | `lib/distri-dataset-tools/` | Lucy agent tools (UI, data, analysis) |
+| `components/datasets/DatasetsListView.tsx` | Main list view container with all datasets |
+| `components/datasets/DatasetItem.tsx` | Single dataset item with expandable records |
+| `components/datasets/DatasetItemHeader.tsx` | Header for dataset item (expand/collapse, rename) |
+| `components/datasets/DatasetsListHeader.tsx` | Search, import, and create dataset actions |
 | `components/datasets/DatasetDetailView.tsx` | Full dataset view with records table |
 | `components/datasets/RecordsTable.tsx` | Virtualized table with sorting |
 | `components/datasets/AddToDatasetDialog.tsx` | Dialog for adding spans |
@@ -89,20 +91,34 @@ ui/src/
 │   └── index.tsx                    # Main page (Lucy + datasets list)
 ├── components/datasets/
 │   ├── AddToDatasetDialog.tsx       # Dialog for adding spans
+│   ├── AssignTopicDialog.tsx        # Dialog for assigning topics
+│   ├── CreateDatasetPopover.tsx     # Popover for creating new datasets
 │   ├── DatasetDetailView.tsx        # Full dataset view with table
 │   ├── DatasetDetailHeader.tsx      # Header with name, actions
+│   ├── DatasetItem.tsx              # Single dataset item in list view
+│   ├── DatasetItemHeader.tsx        # Header for dataset item (expand/collapse, rename)
+│   ├── DatasetsEmptyState.tsx       # Empty state when no datasets exist
+│   ├── DatasetsListHeader.tsx       # Header with search, import, create actions
+│   ├── DatasetsListView.tsx         # Main datasets list container
+│   ├── DatasetsNoResultsState.tsx   # State when search has no matches
+│   ├── DatasetsStatusBar.tsx        # Footer status bar with counts
 │   ├── DeleteConfirmationDialog.tsx # Reusable delete confirmation
+│   ├── ExpandTraceDialog.tsx        # Dialog for expanding trace data
+│   ├── FinetuneJobDialog.tsx        # Dialog for finetune jobs
+│   ├── IngestDataDialog.tsx         # Dialog for importing data
 │   ├── RecordsTable.tsx             # Virtualized records table
 │   ├── RecordsToolbar.tsx           # Search, sort, bulk actions
 │   ├── RecordRow.tsx                # Individual record row
 │   ├── record-utils.ts              # Helper functions for records
 │   └── cells/
 │       ├── DataCell.tsx             # Clickable data preview
-│       ├── TopicCell.tsx            # Inline-editable topic
 │       ├── EvaluationCell.tsx       # Evaluation display
+│       ├── SourceCell.tsx           # Source/origin display
+│       ├── TopicCell.tsx            # Inline-editable topic
 │       └── TimestampCell.tsx        # Timestamp display
+├── contexts/
+│   └── DatasetsContext.tsx          # Datasets state management (Provider/Consumer)
 ├── hooks/
-│   ├── useDatasets.ts               # React hook for IndexedDB
 │   ├── useDatasetAgentChat.ts       # Dataset-specific Lucy agent
 │   └── useDatasetToolListeners.ts   # Tool event listeners
 ├── lib/
@@ -183,10 +199,13 @@ export async function getDatasetsBySpanId(spanId: string): Promise<Dataset[]>
 export async function spanExistsInDataset(datasetId: string, spanId: string): Promise<boolean>
 ```
 
-### React Hook (`useDatasets.ts`)
+### DatasetsContext (`contexts/DatasetsContext.tsx`)
+
+Uses Provider/Consumer pattern for state management:
 
 ```typescript
-export function useDatasets() {
+// Consumer hook - use inside DatasetsProvider
+export function DatasetsConsumer() {
   return {
     // State
     datasets: Dataset[],
@@ -199,10 +218,13 @@ export function useDatasets() {
     getRecordCount,
     createDataset,
     addSpansToDataset,
+    importRecords,
+    clearDatasetRecords,
     deleteDataset,
     deleteRecord,
     updateRecordTopic,
     updateRecordData,
+    updateRecordEvaluation,
     renameDataset,
     spanExistsInDataset,
     getDatasetsBySpanId,
@@ -213,6 +235,82 @@ export function useDatasets() {
 ---
 
 ## Key Components
+
+### DatasetsListView
+
+The main container for the datasets list view. Orchestrates all list-related components and state.
+
+**Key Responsibilities:**
+- Manages expanded/collapsed state for datasets
+- Loads and caches dataset records
+- Handles record counts for all datasets (fetched upfront via `getRecordCount`)
+- Coordinates search, filtering, and CRUD operations
+
+**Key State:**
+```typescript
+const [expandedDatasets, setExpandedDatasets] = useState<Set<string>>(new Set());
+const [datasetRecords, setDatasetRecords] = useState<Record<string, DatasetRecord[]>>({});
+const [recordCounts, setRecordCounts] = useState<Record<string, number>>({});
+const [loadingRecords, setLoadingRecords] = useState<Set<string>>(new Set());
+const [searchQuery, setSearchQuery] = useState("");
+```
+
+**Child Components:**
+- `DatasetsListHeader` - Search, import, create actions
+- `DatasetItem` - Individual dataset with expandable records
+- `DatasetsEmptyState` - Shown when no datasets exist
+- `DatasetsNoResultsState` - Shown when search has no matches
+- `DatasetsStatusBar` - Footer with dataset/record counts
+
+### DatasetItem
+
+A single dataset item in the list view with expandable records.
+
+**Props:**
+```typescript
+interface DatasetItemProps {
+  datasetId: string;
+  name: string;
+  recordCount: number | string;  // Pre-fetched count, shows "..." while loading
+  records: DatasetRecord[];
+  isExpanded: boolean;
+  isLoadingRecords: boolean;
+  isEditing: boolean;
+  editingName: string;
+  maxRecords: number;
+  onToggle: () => void;
+  onSelect: () => void;
+  onEditNameChange: (name: string) => void;
+  onSaveRename: () => void;
+  onCancelRename: () => void;
+  onStartRename: () => void;
+  onDelete: () => void;
+  onUpdateRecordTopic: (recordId: string, topic: string) => Promise<void>;
+  onDeleteRecord: (recordId: string) => void;
+}
+```
+
+### DatasetItemHeader
+
+Header for a dataset item with expand/collapse, rename, and actions.
+
+**Props:**
+```typescript
+interface DatasetItemHeaderProps {
+  name: string;
+  recordCount: number | string;
+  isExpanded: boolean;
+  isEditing: boolean;
+  editingName: string;
+  onToggle: () => void;
+  onSelect: () => void;
+  onEditNameChange: (name: string) => void;
+  onSaveRename: () => void;
+  onCancelRename: () => void;
+  onStartRename: () => void;
+  onDelete: () => void;
+}
+```
 
 ### DatasetDetailView
 

@@ -12,6 +12,7 @@ interface DatasetItemProps {
   datasetId: string;
   name: string;
   recordCount: number | string;
+  updatedAt: number;
   records: DatasetRecord[];
   isExpanded: boolean;
   isLoadingRecords: boolean;
@@ -32,6 +33,7 @@ interface DatasetItemProps {
 export function DatasetItem({
   name,
   recordCount,
+  updatedAt,
   records,
   isExpanded,
   isLoadingRecords,
@@ -53,6 +55,7 @@ export function DatasetItem({
       <DatasetItemHeader
         name={name}
         recordCount={recordCount}
+        updatedAt={updatedAt}
         isExpanded={isExpanded}
         isEditing={isEditing}
         editingName={editingName}
@@ -73,7 +76,6 @@ export function DatasetItem({
           onSeeAll={onSelect}
           onUpdateTopic={onUpdateRecordTopic}
           onDelete={onDeleteRecord}
-          showTopicLabel
         />
       )}
     </div>
