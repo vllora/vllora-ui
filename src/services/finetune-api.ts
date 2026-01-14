@@ -76,7 +76,7 @@ export interface ReinforcementJob {
 }
 
 export interface DatasetUploadResponse {
-  id: string;
+  dataset_id: string;
   [key: string]: unknown;
 }
 
@@ -240,7 +240,7 @@ export async function startFinetuneJob(
 
   // Create reinforcement job with default config
   const job = await createReinforcementJob({
-    dataset: uploadResult.id,
+    dataset: uploadResult.dataset_id,
     base_model: options?.baseModel || 'llama-v3-8b-instruct',
     output_model: options?.outputModel || defaultOutputModel,
     display_name: options?.displayName || `${dataset.name} Fine-tune`,
