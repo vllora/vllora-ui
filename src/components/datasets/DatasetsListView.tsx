@@ -7,42 +7,17 @@
 import { useState, useMemo, useEffect } from "react";
 import { DatasetsConsumer } from "@/contexts/DatasetsContext";
 import { DatasetRecord } from "@/types/dataset-types";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  ChevronDown,
-  ChevronRight,
-  Database,
-  Trash2,
-  Pencil,
-  Check,
-  X,
-  Plus,
-  MoreHorizontal,
-  Loader2,
-  Search,
-  Cloud,
-  Upload,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import {
   DeleteConfirmationDialog,
   type DeleteConfirmation,
 } from "./DeleteConfirmationDialog";
-import { RecordsTable } from "./RecordsTable";
+import { DatasetItem } from "./DatasetItem";
+import { DatasetsEmptyState } from "./DatasetsEmptyState";
+import { DatasetsListHeader } from "./DatasetsListHeader";
+import { DatasetsNoResultsState } from "./DatasetsNoResultsState";
+import { DatasetsStatusBar } from "./DatasetsStatusBar";
 import { IngestDataDialog, type ImportResult } from "./IngestDataDialog";
 
 interface DatasetsListViewProps {
@@ -55,6 +30,7 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
     isLoading,
     error,
     getDatasetWithRecords,
+    getRecordCount,
     createDataset,
     deleteDataset,
     deleteRecord,
@@ -67,12 +43,11 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
   // State
   const [expandedDatasets, setExpandedDatasets] = useState<Set<string>>(new Set());
   const [datasetRecords, setDatasetRecords] = useState<Record<string, DatasetRecord[]>>({});
+  const [recordCounts, setRecordCounts] = useState<Record<string, number>>({});
   const [loadingRecords, setLoadingRecords] = useState<Set<string>>(new Set());
   const [editingDatasetId, setEditingDatasetId] = useState<string | null>(null);
   const [editingDatasetName, setEditingDatasetName] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmation | null>(null);
-  const [showNewDatasetInput, setShowNewDatasetInput] = useState(false);
-  const [newDatasetName, setNewDatasetName] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [showImportDialog, setShowImportDialog] = useState(false);
 
@@ -86,12 +61,26 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
     return datasets.filter(ds => ds.name.toLowerCase().includes(query));
   }, [datasets, searchQuery]);
 
-  // Calculate total records across all datasets
-  const [totalRecords, setTotalRecords] = useState(0);
+  // Load record counts for all datasets
   useEffect(() => {
-    const total = Object.values(datasetRecords).reduce((sum, records) => sum + records.length, 0);
-    setTotalRecords(total);
-  }, [datasetRecords]);
+    const loadCounts = async () => {
+      const counts: Record<string, number> = {};
+      await Promise.all(
+        datasets.map(async (ds) => {
+          counts[ds.id] = await getRecordCount(ds.id);
+        })
+      );
+      setRecordCounts(counts);
+    };
+    if (datasets.length > 0) {
+      loadCounts();
+    }
+  }, [datasets, getRecordCount]);
+
+  // Calculate total records across all datasets
+  const totalRecords = useMemo(() => {
+    return Object.values(recordCounts).reduce((sum, count) => sum + count, 0);
+  }, [recordCounts]);
 
   // Handlers
   const toggleDataset = async (datasetId: string) => {
@@ -179,16 +168,10 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
     }
   };
 
-  const handleCreateDataset = async () => {
-    if (!newDatasetName.trim()) {
-      toast.error("Dataset name cannot be empty");
-      return;
-    }
+  const handleCreateDataset = async (name: string) => {
     try {
-      await createDataset(newDatasetName);
+      await createDataset(name);
       toast.success("Dataset created");
-      setNewDatasetName("");
-      setShowNewDatasetInput(false);
     } catch {
       toast.error("Failed to create dataset");
     }
@@ -251,93 +234,12 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
     <>
       <div className="flex-1 overflow-auto">
         <div className="w-full max-w-5xl mx-auto px-6 py-6">
-          {/* Header */}
-          <div className="flex items-start justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-[rgb(var(--theme-500))]/10">
-                <Database className="w-6 h-6 text-[rgb(var(--theme-500))]" />
-              </div>
-              <div>
-                <h1 className="text-xl font-semibold">Datasets</h1>
-                <p className="text-sm text-muted-foreground">Manage and monitor your LLM data collections</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              {/* Search input */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search datasets..."
-                  className="pl-9 w-56 bg-muted/50 border-border/50"
-                />
-              </div>
-              {showNewDatasetInput ? (
-                <div className="flex items-center gap-2">
-                  <Input
-                    value={newDatasetName}
-                    onChange={(e) => setNewDatasetName(e.target.value)}
-                    placeholder="Dataset name"
-                    className="w-48"
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleCreateDataset();
-                      if (e.key === "Escape") {
-                        setShowNewDatasetInput(false);
-                        setNewDatasetName("");
-                      }
-                    }}
-                  />
-                  <Button size="sm" onClick={handleCreateDataset}>
-                    <Check className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setShowNewDatasetInput(false);
-                      setNewDatasetName("");
-                    }}
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <TooltipProvider delayDuration={300}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setShowImportDialog(true)}
-                          className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-                        >
-                          <Upload className="w-4 h-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Import data</TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <TooltipProvider delayDuration={300}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          size="sm"
-                          onClick={() => setShowNewDatasetInput(true)}
-                          className="h-8 w-8 p-0 rounded-full bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white shadow-sm"
-                        >
-                          <Plus className="w-4 h-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>New dataset</TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </>
-              )}
-            </div>
-          </div>
+          <DatasetsListHeader
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            onImportClick={() => setShowImportDialog(true)}
+            onCreateDataset={handleCreateDataset}
+          />
 
           {/* Loading state */}
           {isLoading && (
@@ -358,23 +260,12 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
 
           {/* Empty state */}
           {!isLoading && !error && datasets.length === 0 && (
-            <div className="text-center py-12 text-muted-foreground">
-              <Database className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p className="text-lg">No datasets yet</p>
-              <p className="text-sm mt-1">Select spans from traces and add them to a dataset</p>
-              <p className="text-sm mt-2 text-[rgb(var(--theme-500))]">
-                Ask Lucy to help you get started!
-              </p>
-            </div>
+            <DatasetsEmptyState />
           )}
 
           {/* No results state */}
           {!isLoading && !error && datasets.length > 0 && filteredDatasets.length === 0 && (
-            <div className="text-center py-12 text-muted-foreground">
-              <Search className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p className="text-lg">No datasets match "{searchQuery}"</p>
-              <p className="text-sm mt-1">Try a different search term</p>
-            </div>
+            <DatasetsNoResultsState searchQuery={searchQuery} />
           )}
 
           {/* Dataset list */}
@@ -387,118 +278,34 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
                 const isEditing = editingDatasetId === dataset.id;
 
                 return (
-                  <div
+                  <DatasetItem
                     key={dataset.id}
-                    className="border border-border rounded-lg overflow-hidden bg-card"
-                  >
-                    {/* Dataset header */}
-                    <div
-                      className={cn(
-                        "flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors",
-                        isExpanded && "border-b border-border"
-                      )}
-                      onClick={() => !isEditing && toggleDataset(dataset.id)}
-                    >
-                      <div className="flex items-center gap-3">
-                        {isExpanded ? (
-                          <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                        ) : (
-                          <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                        )}
-                        {isEditing ? (
-                          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                            <Input
-                              value={editingDatasetName}
-                              onChange={(e) => setEditingDatasetName(e.target.value)}
-                              className="h-7 w-48"
-                              autoFocus
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") handleRenameDataset(dataset.id);
-                                if (e.key === "Escape") setEditingDatasetId(null);
-                              }}
-                            />
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 w-7 p-0"
-                              onClick={() => handleRenameDataset(dataset.id)}
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 w-7 p-0"
-                              onClick={() => setEditingDatasetId(null)}
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <button
-                            className="font-medium hover:text-[rgb(var(--theme-500))] transition-colors text-left"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onSelectDataset(dataset.id);
-                            }}
-                          >
-                            {dataset.name}
-                          </button>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm text-muted-foreground">
-                          {records.length || "..."} records
-                        </span>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                              <MoreHorizontal className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingDatasetId(dataset.id);
-                                setEditingDatasetName(dataset.name);
-                              }}
-                            >
-                              <Pencil className="w-4 h-4 mr-2" />
-                              Rename
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-red-500 focus:text-red-500"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDeleteConfirm({ type: "dataset", id: dataset.id });
-                              }}
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-
-                    {/* Records table */}
-                    {isExpanded && (
-                      <RecordsTable
-                        records={records}
-                        isLoading={isLoadingRecords}
-                        maxRecords={MAX_VISIBLE_RECORDS}
-                        onSeeAll={() => onSelectDataset(dataset.id)}
-                        onUpdateTopic={(recordId: string, topic: string) =>
-                          handleUpdateRecordTopic(dataset.id, recordId, topic)
-                        }
-                        onDelete={(recordId: string) =>
-                          setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
-                        }
-                        showTopicLabel
-                      />
-                    )}
-                  </div>
+                    datasetId={dataset.id}
+                    name={dataset.name}
+                    recordCount={recordCounts[dataset.id] ?? "..."}
+                    records={records}
+                    isExpanded={isExpanded}
+                    isLoadingRecords={isLoadingRecords}
+                    isEditing={isEditing}
+                    editingName={editingDatasetName}
+                    maxRecords={MAX_VISIBLE_RECORDS}
+                    onToggle={() => toggleDataset(dataset.id)}
+                    onSelect={() => onSelectDataset(dataset.id)}
+                    onEditNameChange={setEditingDatasetName}
+                    onSaveRename={() => handleRenameDataset(dataset.id)}
+                    onCancelRename={() => setEditingDatasetId(null)}
+                    onStartRename={() => {
+                      setEditingDatasetId(dataset.id);
+                      setEditingDatasetName(dataset.name);
+                    }}
+                    onDelete={() => setDeleteConfirm({ type: "dataset", id: dataset.id })}
+                    onUpdateRecordTopic={(recordId, topic) =>
+                      handleUpdateRecordTopic(dataset.id, recordId, topic)
+                    }
+                    onDeleteRecord={(recordId) =>
+                      setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
+                    }
+                  />
                 );
               })}
             </div>
@@ -506,27 +313,7 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
         </div>
       </div>
 
-      {/* Footer Status Bar */}
-      <div className="border-t border-border px-6 py-2.5 flex items-center justify-center gap-6 text-xs text-muted-foreground bg-background/50 shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-500" />
-          <span>Active Datasets: <span className="text-foreground font-medium">{datasets.length}</span></span>
-        </div>
-        <span className="text-border">•</span>
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-muted-foreground/50" />
-          <span>Total Records Indexed: <span className="text-foreground font-medium">{totalRecords > 1000 ? `${(totalRecords / 1000).toFixed(1)}k` : totalRecords}</span></span>
-        </div>
-        <span className="text-border">•</span>
-        <div className="flex items-center gap-2">
-          <Cloud className="w-3.5 h-3.5" />
-          <span>Sync Status</span>
-        </div>
-        <span className="text-border">•</span>
-        <div>
-          <span>Workspace: <span className="text-foreground font-medium">Default Project</span></span>
-        </div>
-      </div>
+      <DatasetsStatusBar datasetCount={datasets.length} totalRecords={totalRecords} />
 
       {/* Delete confirmation dialog */}
       <DeleteConfirmationDialog
