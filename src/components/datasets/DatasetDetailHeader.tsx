@@ -129,13 +129,13 @@ export function DatasetDetailHeader({
               </Button>
             </div>
           )}
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs italic text-muted-foreground">
             {recordCount.toLocaleString()} total records
             {updatedAt && (
               <>
                 <span className="mx-2">•</span>
-                <span className="text-[rgb(var(--theme-500))]">
-                  Last updated {formatLastUpdated(updatedAt)}
+                <span className="">
+                  Last updated: {formatLastUpdated(updatedAt)}
                 </span>
               </>
             )}
