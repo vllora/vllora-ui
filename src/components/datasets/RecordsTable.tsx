@@ -489,7 +489,7 @@ function TableHeader({ selectable, allSelected, someSelected, onSelectAll, sortC
         )}
         onClick={() => handleSort("timestamp")}
       >
-        Timestamp
+        Updated at
         <SortIndicator field="timestamp" />
       </button>
       <span className={COLUMN_WIDTHS.actions}></span>

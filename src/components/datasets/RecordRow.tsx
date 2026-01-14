@@ -105,7 +105,7 @@ export function RecordRow({
 
       {tableLayout && (
         <TimestampCell
-          timestamp={record.createdAt}
+          timestamp={record.updatedAt}
           tableLayout={tableLayout}
         />
       )}
