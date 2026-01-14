@@ -2,10 +2,11 @@ import { DistriClient, type DistriMessage } from '@distri/core';
 import type { DistriFnTool } from '@distri/core';
 import { getDistriUrl } from '@/config/api';
 import { fetchLucyConfig, type LucyConfig } from '@/lib/agent-sync';
-import type { Span } from '@/types/common-type';
 import type { DatasetRecord } from '@/types/dataset-types';
 import * as datasetsDB from '@/services/datasets-db';
 import type { ToolHandler } from '../types';
+import { getInputSummary, getOutputSummary } from './helpers';
+import { getLabel } from '@/components/datasets/record-utils';
 
 // Cache for Lucy config
 let cachedLucyConfig: LucyConfig | null = null;
@@ -87,105 +88,12 @@ function normalizeTopicPath(topicPath?: string[], leaf?: string) {
   return [] as string[];
 }
 
-function safeParseJson(value: string): unknown {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
-}
-
-function extractInputSummary(span: Span): string {
-  const attr = (span.attribute || {}) as Record<string, unknown>;
-
-  if (span.operation_name === 'api_invoke' && attr.request) {
-    const request = typeof attr.request === 'string' ? safeParseJson(attr.request) : attr.request;
-    const requestObj = request && typeof request === 'object' ? (request as Record<string, unknown>) : undefined;
-
-    if (requestObj?.messages && Array.isArray(requestObj.messages)) {
-      const userMsg = requestObj.messages.find((m: any) => m.role === 'user');
-      if (userMsg?.content) {
-        const content = typeof userMsg.content === 'string' ? userMsg.content : JSON.stringify(userMsg.content);
-        return content.substring(0, 300);
-      }
-    }
-  }
-
-  const input = attr.input;
-  if (typeof input === 'string') {
-    const parsed = safeParseJson(input);
-    if (parsed && typeof parsed === 'object') {
-      if (Array.isArray(parsed)) {
-        const userMsg = parsed.find((m: any) => m.role === 'user');
-        if (userMsg?.content) {
-          return (typeof userMsg.content === 'string' ? userMsg.content : JSON.stringify(userMsg.content)).substring(0, 500);
-        }
-        const lastMsg = parsed[parsed.length - 1];
-        if (lastMsg?.content) {
-          return (typeof lastMsg.content === 'string' ? lastMsg.content : JSON.stringify(lastMsg.content)).substring(0, 500);
-        }
-      }
-      return JSON.stringify(parsed).substring(0, 500);
-    }
-    return input.substring(0, 500);
-  } else if (input) {
-    return JSON.stringify(input).substring(0, 500);
-  }
-
-  return '';
-}
-
-function extractOutputSummary(span: Span): string {
-  const attr = (span.attribute || {}) as Record<string, unknown>;
-
-  if (span.operation_name === 'api_invoke' && attr.response) {
-    const response = typeof attr.response === 'string' ? safeParseJson(attr.response) : attr.response;
-    const responseObj = response && typeof response === 'object' ? (response as Record<string, unknown>) : undefined;
-
-    if (responseObj?.choices && Array.isArray(responseObj.choices)) {
-      const firstChoice = responseObj.choices[0] as any;
-      if (firstChoice?.message?.content) {
-        const content = typeof firstChoice.message.content === 'string'
-          ? firstChoice.message.content
-          : JSON.stringify(firstChoice.message.content);
-        return content.substring(0, 300);
-      }
-    }
-  }
-
-  const output = attr.output || attr.response || attr.content;
-  if (typeof output === 'string') {
-    const parsed = safeParseJson(output);
-    if (parsed && typeof parsed === 'object') {
-      if (Array.isArray(parsed)) {
-        const first = parsed[0];
-        if (first?.message?.content) return JSON.stringify(first.message.content).substring(0, 500);
-        return JSON.stringify(parsed).substring(0, 500);
-      }
-      const choices = (parsed as any).choices;
-      if (Array.isArray(choices) && choices[0]?.message?.content) {
-        return String(choices[0].message.content).substring(0, 500);
-      }
-      return JSON.stringify(parsed).substring(0, 500);
-    }
-    return output.substring(0, 500);
-  } else if (output) {
-    return JSON.stringify(output).substring(0, 500);
-  }
-
-  return '';
-}
-
 function extractRecordData(record: DatasetRecord): RecordForAnalysis {
-  const span = record.data as Span;
-  const attr = (span.attribute || {}) as Record<string, unknown>;
-
   return {
     record_id: record.id,
-    label: attr.label as string | undefined,
-    input_summary: extractInputSummary(span),
-    output_summary: extractOutputSummary(span),
-    error: attr.error as string | undefined,
+    label: getLabel(record),
+    input_summary: getInputSummary(record.data),
+    output_summary: getOutputSummary(record.data),
     existing_topic: record.topic,
   };
 }

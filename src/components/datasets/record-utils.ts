@@ -9,11 +9,12 @@ export const getDataAsObject = (record: DatasetRecord): Record<string, unknown> 
   return (record.data as Record<string, unknown>) || {};
 };
 
-// Get label from record attributes
+// Get label from DataInfo-style records (preferred)
 export const getLabel = (record: DatasetRecord): string | undefined => {
   const data = getDataAsObject(record);
-  const attr = data.attribute as Record<string, unknown> | undefined;
-  return attr?.label as string | undefined;
+  const input = data.input as Record<string, unknown> | undefined;
+  const metadata = input?.metadata as Record<string, unknown> | undefined;
+  return metadata?.label as string | undefined;
 };
 
 // Get provider name from record attributes

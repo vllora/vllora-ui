@@ -29,7 +29,7 @@ export interface DataInfo {
     metadata?: any
   }
   output: {
-    messages?: any[]
+    messages?: any[] | any
     tool_calls?: any[]
     metadata?: any;
     finish_reason?: string;
