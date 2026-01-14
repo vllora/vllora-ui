@@ -15,10 +15,12 @@ import {
 import { Check, Eye, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DataCell, SourceCell, TopicCell, EvaluationCell, TimestampCell } from "./cells";
-import { COLUMN_WIDTHS } from "./table-columns";
+import { COLUMN_WIDTHS, ColumnVisibility, DEFAULT_COLUMN_VISIBILITY } from "./table-columns";
 
 interface RecordRowProps {
   record: DatasetRecord;
+  /** Row index (1-based) for display */
+  index?: number;
   onUpdateTopic: (recordId: string, topic: string) => Promise<void>;
   onDelete: (recordId: string) => void;
   /** Whether to show the Topic: label prefix (used in list view) */
@@ -33,10 +35,13 @@ interface RecordRowProps {
   onSelect?: (checked: boolean) => void;
   /** Callback when expand is clicked */
   onExpand?: (record: DatasetRecord) => void;
+  /** Column visibility configuration */
+  columnVisibility?: ColumnVisibility;
 }
 
 export function RecordRow({
   record,
+  index,
   onUpdateTopic,
   onDelete,
   showTopicLabel = false,
@@ -45,6 +50,7 @@ export function RecordRow({
   selected = false,
   onSelect,
   onExpand,
+  columnVisibility = DEFAULT_COLUMN_VISIBILITY,
 }: RecordRowProps) {
   return (
     <div
@@ -75,13 +81,18 @@ export function RecordRow({
           </div>
         </div>
       )}
+      {index !== undefined && columnVisibility.index && (
+        <span className={cn("text-xs text-muted-foreground tabular-nums", COLUMN_WIDTHS.index)}>
+          {index}
+        </span>
+      )}
 
       <DataCell
         data={record.data}
         tableLayout={tableLayout}
       />
 
-      {tableLayout && (
+      {tableLayout && columnVisibility.source && (
         <SourceCell
           spanId={record.spanId}
           isGenerated={record.is_generated}
@@ -89,21 +100,25 @@ export function RecordRow({
         />
       )}
 
-      <TopicCell
-        topic={record.topic}
-        topicPath={record.topic_path}
-        topicPaths={record.topic_paths}
-        onUpdate={(topic) => onUpdateTopic(record.id, topic)}
-        showLabel={showTopicLabel}
-        tableLayout={tableLayout}
-      />
+      {columnVisibility.topic && (
+        <TopicCell
+          topic={record.topic}
+          topicPath={record.topic_path}
+          topicPaths={record.topic_paths}
+          onUpdate={(topic) => onUpdateTopic(record.id, topic)}
+          showLabel={showTopicLabel}
+          tableLayout={tableLayout}
+        />
+      )}
 
-      <EvaluationCell
-        evaluation={record.evaluation}
-        tableLayout={tableLayout}
-      />
+      {columnVisibility.evaluation && (
+        <EvaluationCell
+          evaluation={record.evaluation}
+          tableLayout={tableLayout}
+        />
+      )}
 
-      {tableLayout && (
+      {tableLayout && columnVisibility.timestamp && (
         <TimestampCell
           timestamp={record.updatedAt}
           tableLayout={tableLayout}

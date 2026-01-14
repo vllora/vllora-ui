@@ -29,9 +29,15 @@ import {
   MessageSquare,
   Star,
   Layers,
+  Columns,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BulkActionButtons } from "./BulkActionButtons";
+import {
+  ColumnVisibility,
+  ToggleableColumn,
+  COLUMN_LABELS,
+} from "./table-columns";
 
 export type SortField = "timestamp" | "topic" | "evaluation";
 export type SortDirection = "asc" | "desc";
@@ -74,6 +80,10 @@ interface RecordsToolbarProps {
   onRunEvaluation?: () => void;
   /** Delete selected records */
   onDeleteSelected?: () => void;
+  /** Column visibility configuration */
+  columnVisibility?: ColumnVisibility;
+  /** Column visibility change handler */
+  onColumnVisibilityChange?: (visibility: ColumnVisibility) => void;
 }
 
 
@@ -107,6 +117,8 @@ export function RecordsToolbar({
   isGeneratingTraces,
   onRunEvaluation,
   onDeleteSelected,
+  columnVisibility,
+  onColumnVisibilityChange,
 }: RecordsToolbarProps) {
   const hasSelection = selectedCount > 0;
   const currentSort = sortConfig || { field: "timestamp", direction: "desc" };
@@ -254,6 +266,57 @@ export function RecordsToolbar({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+
+          {/* Column visibility dropdown */}
+          {columnVisibility && onColumnVisibilityChange && (
+            <DropdownMenu>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <Columns className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Show/hide columns</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <DropdownMenuContent align="start" className="w-48">
+                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                  Columns
+                </div>
+                {(Object.keys(COLUMN_LABELS) as ToggleableColumn[]).map((col) => (
+                  <DropdownMenuItem
+                    key={col}
+                    onClick={() => {
+                      onColumnVisibilityChange({
+                        ...columnVisibility,
+                        [col]: !columnVisibility[col],
+                      });
+                    }}
+                    className="gap-2"
+                  >
+                    <div
+                      className={cn(
+                        "h-4 w-4 rounded flex items-center justify-center border",
+                        columnVisibility[col]
+                          ? "bg-[rgb(var(--theme-500))] border-[rgb(var(--theme-500))]"
+                          : "bg-transparent border-muted-foreground/50"
+                      )}
+                    >
+                      {columnVisibility[col] && (
+                        <Check className="h-3 w-3 text-white" strokeWidth={3} />
+                      )}
+                    </div>
+                    <span className="flex-1">{COLUMN_LABELS[col]}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
 
         {/* Search input */}

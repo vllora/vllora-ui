@@ -94,7 +94,7 @@ export function DatasetDetailHeader({
         <ChevronRight className="w-4 h-4" />
         <span className="text-foreground font-medium">{name}</span>
         <ChevronRight className="w-4 h-4" />
-        <span>Raw Records</span>
+        <span>Records</span>
       </div>
 
       {/* Title and actions */}

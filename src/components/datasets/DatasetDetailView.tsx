@@ -24,6 +24,11 @@ import { startFinetuneJob } from "@/services/finetune-api";
 import { RecordsToolbar, SortConfig } from "./RecordsToolbar";
 import { RecordsTable } from "./RecordsTable";
 import { filterAndSortRecords } from "./record-filters";
+import {
+  ColumnVisibility,
+  DEFAULT_COLUMN_VISIBILITY,
+  COLUMN_VISIBILITY_STORAGE_KEY,
+} from "./table-columns";
 import { generateTopics } from "@/lib/distri-dataset-tools/analysis/generate-topics";
 import { generateTraces } from "@/lib/distri-dataset-tools/analysis/generate-traces";
 
@@ -66,6 +71,27 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
   });
   const [groupByTopic, setGroupByTopic] = useState(false);
   const [generatedFilter, setGeneratedFilter] = useState<"all" | "generated" | "not_generated">("all");
+  const [columnVisibility, setColumnVisibility] = useState<ColumnVisibility>(() => {
+    try {
+      const stored = localStorage.getItem(COLUMN_VISIBILITY_STORAGE_KEY);
+      if (stored) {
+        return { ...DEFAULT_COLUMN_VISIBILITY, ...JSON.parse(stored) };
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    return DEFAULT_COLUMN_VISIBILITY;
+  });
+
+  // Handle column visibility change with localStorage persistence
+  const handleColumnVisibilityChange = useCallback((visibility: ColumnVisibility) => {
+    setColumnVisibility(visibility);
+    try {
+      localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify(visibility));
+    } catch {
+      // Ignore storage errors
+    }
+  }, []);
 
   // Load dataset and records
   const loadDataset = useCallback(async () => {
@@ -481,6 +507,8 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
             isGeneratingTraces={isGeneratingTraces}
             onRunEvaluation={handleBulkRunEvaluation}
             onDeleteSelected={handleBulkDelete}
+            columnVisibility={columnVisibility}
+            onColumnVisibilityChange={handleColumnVisibilityChange}
           />
 
           {/* Records table */}
@@ -496,6 +524,7 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
               sortConfig={sortConfig}
               onSortChange={setSortConfig}
               groupByTopic={groupByTopic}
+              columnVisibility={columnVisibility}
               emptyMessage={searchQuery ? `No records match "${searchQuery}"` : "No records in this dataset"}
               onUpdateTopic={handleUpdateRecordTopic}
               onDelete={(recordId: string) =>

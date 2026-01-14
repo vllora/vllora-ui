@@ -12,7 +12,7 @@ import { Loader2, ArrowRight, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Che
 import { cn } from "@/lib/utils";
 import { RecordRow } from "./RecordRow";
 import { getTopicColor } from "./record-utils";
-import { COLUMN_WIDTHS } from "./table-columns";
+import { COLUMN_WIDTHS, ColumnVisibility, DEFAULT_COLUMN_VISIBILITY } from "./table-columns";
 import type { SortConfig, SortField } from "./RecordsToolbar";
 
 interface RecordsTableProps {
@@ -51,6 +51,8 @@ interface RecordsTableProps {
   onExpand?: (record: DatasetRecord) => void;
   /** Group records by topic */
   groupByTopic?: boolean;
+  /** Column visibility configuration */
+  columnVisibility?: ColumnVisibility;
 }
 
 /** Represents a group of records by topic */
@@ -82,6 +84,7 @@ export function RecordsTable({
   onSortChange,
   onExpand,
   groupByTopic = false,
+  columnVisibility = DEFAULT_COLUMN_VISIBILITY,
 }: RecordsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -202,6 +205,7 @@ export function RecordsTable({
             onSelectAll={handleSelectAll}
             sortConfig={sortConfig}
             onSortChange={onSortChange}
+            columnVisibility={columnVisibility}
           />
         )}
         <div
@@ -215,87 +219,89 @@ export function RecordsTable({
             const someGroupSelected = groupRecordIds.some((id) => selectedIds.has(id));
 
             return (
-              <div key={group.topic} className="border-b border-border last:border-b-0">
-                {/* Group Header */}
-                <button
-                  className="w-full px-4 py-3 flex items-center gap-3 bg-muted/50 hover:bg-muted/70 transition-colors text-left"
-                  onClick={() => toggleGroup(group.topic)}
-                >
-                  {selectable && (
-                    <div
-                      className="flex items-center justify-center w-6 shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // Toggle selection for all records in group
-                        const newSelected = new Set(selectedIds);
-                        if (allGroupSelected) {
-                          groupRecordIds.forEach((id) => newSelected.delete(id));
-                        } else {
-                          groupRecordIds.forEach((id) => newSelected.add(id));
-                        }
-                        setSelectedIds(newSelected);
-                      }}
-                    >
+                <div key={group.topic} className="border-b border-border last:border-b-0">
+                  {/* Group Header */}
+                  <button
+                    className="w-full px-4 py-3 flex items-center gap-3 bg-muted/50 hover:bg-muted/70 transition-colors text-left"
+                    onClick={() => toggleGroup(group.topic)}
+                  >
+                    {selectable && (
                       <div
-                        className={cn(
-                          "h-4 w-4 rounded flex items-center justify-center cursor-pointer transition-all duration-150",
-                          "border",
-                          allGroupSelected
-                            ? "bg-[rgb(var(--theme-500))] border-[rgb(var(--theme-500))]"
-                            : someGroupSelected
-                              ? "bg-[rgb(var(--theme-500))]/50 border-[rgb(var(--theme-500))]"
-                              : "bg-transparent border-muted-foreground/50 hover:border-muted-foreground"
-                        )}
+                        className="flex items-center justify-center w-6 shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Toggle selection for all records in group
+                          const newSelected = new Set(selectedIds);
+                          if (allGroupSelected) {
+                            groupRecordIds.forEach((id) => newSelected.delete(id));
+                          } else {
+                            groupRecordIds.forEach((id) => newSelected.add(id));
+                          }
+                          setSelectedIds(newSelected);
+                        }}
                       >
-                        {allGroupSelected && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
-                        {!allGroupSelected && someGroupSelected && <Minus className="h-3 w-3 text-white" strokeWidth={3} />}
+                        <div
+                          className={cn(
+                            "h-4 w-4 rounded flex items-center justify-center cursor-pointer transition-all duration-150",
+                            "border",
+                            allGroupSelected
+                              ? "bg-[rgb(var(--theme-500))] border-[rgb(var(--theme-500))]"
+                              : someGroupSelected
+                                ? "bg-[rgb(var(--theme-500))]/50 border-[rgb(var(--theme-500))]"
+                                : "bg-transparent border-muted-foreground/50 hover:border-muted-foreground"
+                          )}
+                        >
+                          {allGroupSelected && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
+                          {!allGroupSelected && someGroupSelected && <Minus className="h-3 w-3 text-white" strokeWidth={3} />}
+                        </div>
                       </div>
+                    )}
+                    {isCollapsed ? (
+                      <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+                    )}
+                    {group.topic === "No Topic" ? (
+                      <span className="text-sm text-muted-foreground italic">
+                        No Topic
+                      </span>
+                    ) : (
+                      <span className={cn(
+                        "text-sm font-bold px-2.5 py-1 rounded-full",
+                        getTopicColor(group.topic)
+                      )}>
+                        {group.topic}
+                      </span>
+                    )}
+                    <span className="text-sm text-muted-foreground">
+                      ({group.records.length} record{group.records.length !== 1 ? "s" : ""})
+                    </span>
+                  </button>
+
+                  {/* Group Records */}
+                  {!isCollapsed && (
+                    <div>
+                      {group.records.map((record, idx) => (
+                        <RecordRow
+                          key={record.id}
+                          record={record}
+                          index={idx + 1}
+                          onUpdateTopic={onUpdateTopic}
+                          onDelete={onDelete}
+                          tableLayout={showHeader}
+                          showTopicLabel={showTopicLabel}
+                          selectable={selectable}
+                          selected={selectedIds.has(record.id)}
+                          onSelect={(checked) => handleSelectRecord(record.id, checked)}
+                          onExpand={onExpand}
+                          columnVisibility={columnVisibility}
+                        />
+                      ))}
                     </div>
                   )}
-                  {isCollapsed ? (
-                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
-                  )}
-                  {group.topic === "No Topic" ? (
-                    <span className="text-sm text-muted-foreground italic">
-                      No Topic
-                    </span>
-                  ) : (
-                    <span className={cn(
-                      "text-sm font-bold px-2.5 py-1 rounded-full",
-                      getTopicColor(group.topic)
-                    )}>
-                      {group.topic}
-                    </span>
-                  )}
-                  <span className="text-sm text-muted-foreground">
-                    ({group.records.length} record{group.records.length !== 1 ? "s" : ""})
-                  </span>
-                </button>
-
-                {/* Group Records */}
-                {!isCollapsed && (
-                  <div>
-                    {group.records.map((record) => (
-                      <RecordRow
-                        key={record.id}
-                        record={record}
-                        onUpdateTopic={onUpdateTopic}
-                        onDelete={onDelete}
-                        tableLayout={showHeader}
-                        showTopicLabel={showTopicLabel}
-                        selectable={selectable}
-                        selected={selectedIds.has(record.id)}
-                        onSelect={(checked) => handleSelectRecord(record.id, checked)}
-                        onExpand={onExpand}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                </div>
+              );
+            })}
         </div>
         {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
         {showFooter && <TableFooter records={displayRecords} selectedCount={selectedIds.size} datasetId={datasetId} />}
@@ -315,13 +321,15 @@ export function RecordsTable({
             onSelectAll={handleSelectAll}
             sortConfig={sortConfig}
             onSortChange={onSortChange}
+            columnVisibility={columnVisibility}
           />
         )}
         <div>
-          {displayRecords.map((record) => (
+          {displayRecords.map((record, idx) => (
             <RecordRow
               key={record.id}
               record={record}
+              index={idx + 1}
               onUpdateTopic={onUpdateTopic}
               onDelete={onDelete}
               tableLayout={showHeader}
@@ -330,6 +338,7 @@ export function RecordsTable({
               selected={selectedIds.has(record.id)}
               onSelect={(checked) => handleSelectRecord(record.id, checked)}
               onExpand={onExpand}
+              columnVisibility={columnVisibility}
             />
           ))}
           {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
@@ -350,6 +359,7 @@ export function RecordsTable({
           onSelectAll={handleSelectAll}
           sortConfig={sortConfig}
           onSortChange={onSortChange}
+          columnVisibility={columnVisibility}
         />
       )}
       <div
@@ -380,6 +390,7 @@ export function RecordsTable({
               >
                 <RecordRow
                   record={record}
+                  index={virtualRow.index + 1}
                   onUpdateTopic={onUpdateTopic}
                   onDelete={onDelete}
                   tableLayout={showHeader}
@@ -388,6 +399,7 @@ export function RecordsTable({
                   selected={selectedIds.has(record.id)}
                   onSelect={(checked) => handleSelectRecord(record.id, checked)}
                   onExpand={onExpand}
+                  columnVisibility={columnVisibility}
                 />
               </div>
             );
@@ -407,9 +419,10 @@ interface TableHeaderProps {
   onSelectAll?: (checked: boolean) => void;
   sortConfig?: SortConfig;
   onSortChange?: (config: SortConfig) => void;
+  columnVisibility?: ColumnVisibility;
 }
 
-function TableHeader({ selectable, allSelected, someSelected, onSelectAll, sortConfig, onSortChange }: TableHeaderProps) {
+function TableHeader({ selectable, allSelected, someSelected, onSelectAll, sortConfig, onSortChange, columnVisibility = DEFAULT_COLUMN_VISIBILITY }: TableHeaderProps) {
   const handleSort = (field: SortField) => {
     if (!onSortChange) return;
 
@@ -457,41 +470,48 @@ function TableHeader({ selectable, allSelected, someSelected, onSelectAll, sortC
           </div>
         </div>
       )}
+      {columnVisibility.index && <span className={COLUMN_WIDTHS.index}>#</span>}
       <span className={COLUMN_WIDTHS.data}>Data</span>
-      <span className={cn(COLUMN_WIDTHS.source, "text-center")}>Source</span>
-      <button
-        className={cn(
-          COLUMN_WIDTHS.topic,
-          "text-center hover:text-foreground transition-colors",
-          sortConfig?.field === "topic" && "text-foreground"
-        )}
-        onClick={() => handleSort("topic")}
-      >
-        Topic
-        <SortIndicator field="topic" />
-      </button>
-      <button
-        className={cn(
-          COLUMN_WIDTHS.evaluation,
-          "text-center hover:text-foreground transition-colors",
-          sortConfig?.field === "evaluation" && "text-foreground"
-        )}
-        onClick={() => handleSort("evaluation")}
-      >
-        Evaluation
-        <SortIndicator field="evaluation" />
-      </button>
-      <button
-        className={cn(
-          COLUMN_WIDTHS.timestamp,
-          "text-right hover:text-foreground transition-colors",
-          sortConfig?.field === "timestamp" && "text-foreground"
-        )}
-        onClick={() => handleSort("timestamp")}
-      >
-        Updated at
-        <SortIndicator field="timestamp" />
-      </button>
+      {columnVisibility.source && <span className={cn(COLUMN_WIDTHS.source, "text-center")}>Source</span>}
+      {columnVisibility.topic && (
+        <button
+          className={cn(
+            COLUMN_WIDTHS.topic,
+            "text-center hover:text-foreground transition-colors",
+            sortConfig?.field === "topic" && "text-foreground"
+          )}
+          onClick={() => handleSort("topic")}
+        >
+          Topic
+          <SortIndicator field="topic" />
+        </button>
+      )}
+      {columnVisibility.evaluation && (
+        <button
+          className={cn(
+            COLUMN_WIDTHS.evaluation,
+            "text-center hover:text-foreground transition-colors",
+            sortConfig?.field === "evaluation" && "text-foreground"
+          )}
+          onClick={() => handleSort("evaluation")}
+        >
+          Evaluation
+          <SortIndicator field="evaluation" />
+        </button>
+      )}
+      {columnVisibility.timestamp && (
+        <button
+          className={cn(
+            COLUMN_WIDTHS.timestamp,
+            "text-right hover:text-foreground transition-colors",
+            sortConfig?.field === "timestamp" && "text-foreground"
+          )}
+          onClick={() => handleSort("timestamp")}
+        >
+          Updated at
+          <SortIndicator field="timestamp" />
+        </button>
+      )}
       <span className={COLUMN_WIDTHS.actions}></span>
     </div>
   );
