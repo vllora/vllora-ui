@@ -61,6 +61,10 @@ export interface GenerateTracesParams {
 const DEFAULT_COUNT = 5;
 const DEFAULT_MAX_TURNS = 3;
 
+// When seeding from selected records, generate 1 trace per leaf topic path.
+// This value caps the number of leaf topics used per seed record.
+const DEFAULT_LEAF_TRACES_PER_SEED = 2;
+
 const TOOL_CATALOG = [
   {
     name: 'get_dataset_records',
@@ -193,6 +197,29 @@ function pickTopicPathFromRecord(record: DatasetRecord): string[] | null {
   return chosen;
 }
 
+function isPrefixPath(prefix: string[], full: string[]): boolean {
+  if (prefix.length >= full.length) return false;
+  for (let i = 0; i < prefix.length; i++) {
+    if (prefix[i] !== full[i]) return false;
+  }
+  return true;
+}
+
+function getLeafTopicPaths(topicPaths: string[][]): string[][] {
+  const cleaned = topicPaths
+    .filter((p) => Array.isArray(p) && p.length > 0)
+    .map((p) => p.map((t) => (t || '').trim()).filter(Boolean))
+    .filter((p) => p.length > 0);
+
+  const leaves: string[][] = [];
+  for (const candidate of cleaned) {
+    const isPrefixOfAny = cleaned.some((other) => isPrefixPath(candidate, other));
+    if (!isPrefixOfAny) leaves.push(candidate);
+  }
+
+  return leaves.sort((a, b) => a.join('/').localeCompare(b.join('/')));
+}
+
 function extractSeedTools(record?: DatasetRecord): any[] {
   if (!record) return [];
   const data = (record.data || {}) as any;
@@ -285,13 +312,9 @@ function normalizeAndValidateMessages(messages: SyntheticMessage[], toolNames: S
 }
 
 function buildSyntheticTraceDataInfo(
-  datasetId: string,
-  datasetName: string,
   rec: SyntheticTraceRecord,
-  tools: any[],
-  seed?: { record_id?: string; topic_path?: string[] }
+  tools: any[]
 ): DataInfo {
-  const now = Date.now();
   const toolNames = new Set(
     tools
       .map((t: any) => t?.function?.name)
@@ -305,17 +328,6 @@ function buildSyntheticTraceDataInfo(
     input: {
       messages: normalizedMessages,
       tools,
-      metadata: {
-        label: 'generated_trace',
-        provider_name: 'synthetic',
-        dataset_id: datasetId,
-        dataset_name: datasetName,
-        topic_path: rec.topic_path,
-        persona: rec.persona,
-        seed_record_id: seed?.record_id,
-        seed_topic_path: seed?.topic_path,
-        generated_at_ms: now,
-      },
     },
     output: {
       messages: lastAssistant || { role: 'assistant', content: '' },
@@ -341,7 +353,7 @@ function buildPrompt(
   return `You are generating realistic synthetic agent traces.
 
 Seed record id: ${seedRecordId || 'none'}
-Topic context: ${topicPath.join(' -> ')}
+Target topic_path (MUST match exactly): ${JSON.stringify(topicPath)}
 
 Seed trace excerpt (last messages):
 ${JSON.stringify(seedExcerpt, null, 2)}
@@ -360,7 +372,7 @@ Hard requirements:
 - Tool arguments must be valid JSON and must include required fields.
 - Produce a conversation with up to ${maxTurns} user turns.
 - Include at least 1 tool call + tool result.
-- topic_path must be lowercase_with_underscores.
+- topic_path must be lowercase_with_underscores and MUST equal the provided Target topic_path.
 `;
 }
 
@@ -431,8 +443,6 @@ export async function generateTraces(params: Record<string, unknown>): Promise<G
 
     const normalize = (t: string) => t.trim().replace(/\s+/g, '_').toLowerCase();
 
-    // If record_ids are provided, interpret `count` as per-selected-record count.
-    const perSeedCount = typeof count === 'number' ? count : DEFAULT_COUNT;
     const turns = typeof maxTurns === 'number' ? maxTurns : typeof max_turns === 'number' ? max_turns : DEFAULT_MAX_TURNS;
 
     const seedRecords = selectedIds.length > 0
@@ -444,10 +454,6 @@ export async function generateTraces(params: Record<string, unknown>): Promise<G
     const batchErrors: string[] = [];
 
     for (const seedRecord of seedRecords) {
-      const seedTopicPath = seedRecord
-        ? (pickTopicPathFromRecord(seedRecord)?.map(normalize) || [normalize(dataset.name)])
-        : [normalize(dataset.name)];
-
       const seedData = (seedRecord?.data || {}) as any;
       const seedMessages = seedData?.input?.messages;
       const tools = (extractSeedTools(seedRecord).length > 0 ? extractSeedTools(seedRecord) : TOOL_CATALOG.map((t) => ({
@@ -455,24 +461,79 @@ export async function generateTraces(params: Record<string, unknown>): Promise<G
         function: { name: t.name, description: t.description, parameters: t.parameters },
       })));
 
-      for (let remaining = perSeedCount; remaining > 0; remaining -= TRACE_BATCH_SIZE) {
+      // When seeding from selected records, interpret `count` as the number of leaf topic paths to use.
+      // We generate exactly one trace per leaf topic path.
+      if (seedRecord) {
+        const leafLimit = typeof count === 'number' ? count : DEFAULT_LEAF_TRACES_PER_SEED;
+        const leaves = getLeafTopicPaths(seedRecord.topic_paths || []);
+        const targets = (leaves.length > 0 ? leaves : [pickTopicPathFromRecord(seedRecord) || [dataset.name]])
+          .map((p) => p.map(normalize));
+
+        for (const targetTopicPath of targets.slice(0, Math.max(0, leafLimit))) {
+          const prompt = buildPrompt(targetTopicPath, turns, 1, seedRecord.id, seedMessages, tools);
+          const llmResult = await callLLM(prompt);
+
+          const recordsToAdd = llmResult.records.map((r) => {
+            // Enforce the requested topic path for this generated trace.
+            const topicPath = targetTopicPath;
+            const topicPaths = topicPathsFromPath(topicPath);
+            const data = buildSyntheticTraceDataInfo(
+              { ...r, topic_path: topicPath },
+              tools
+            );
+
+            return {
+              data,
+              metadata: {
+                persona: r.persona,
+                seed_record_id: seedRecord.id,
+                seed_topic_path: targetTopicPath,
+                generated_at_ms: Date.now(),
+              },
+              topic_paths: topicPaths,
+              is_generated: true,
+              evaluation: undefined,
+            };
+          });
+
+          try {
+            const created = await datasetsDB.addRecordsToDataset(resolvedDatasetId, recordsToAdd);
+            createdTotal += created;
+          } catch (e) {
+            batchErrors.push(
+              `seed=${seedRecord.id} leaf=${targetTopicPath.join('/')} : ${e instanceof Error ? e.message : String(e)}`
+            );
+          }
+        }
+
+        continue;
+      }
+
+      // No selection: generate count TOTAL traces (batched).
+      const totalCount = typeof count === 'number' ? count : DEFAULT_COUNT;
+      const seedTopicPath = [normalize(dataset.name)];
+
+      for (let remaining = totalCount; remaining > 0; remaining -= TRACE_BATCH_SIZE) {
         const batchCount = Math.min(TRACE_BATCH_SIZE, remaining);
-        const prompt = buildPrompt(seedTopicPath, turns, batchCount, seedRecord?.id, seedMessages, tools);
+        const prompt = buildPrompt(seedTopicPath, turns, batchCount, undefined, seedMessages, tools);
         const llmResult = await callLLM(prompt);
 
         const recordsToAdd = llmResult.records.map((r) => {
           const topicPath = (r.topic_path || []).map((t) => (t || '').trim()).filter(Boolean).map(normalize);
           const topicPaths = topicPathsFromPath(topicPath);
           const data = buildSyntheticTraceDataInfo(
-            resolvedDatasetId,
-            dataset.name,
             { ...r, topic_path: topicPath },
-            tools,
-            { record_id: seedRecord?.id, topic_path: seedTopicPath }
+            tools
           );
 
           return {
             data,
+            metadata: {
+              persona: r.persona,
+              seed_record_id: undefined,
+              seed_topic_path: seedTopicPath,
+              generated_at_ms: Date.now(),
+            },
             topic_paths: topicPaths,
             is_generated: true,
             evaluation: undefined,
@@ -484,7 +545,7 @@ export async function generateTraces(params: Record<string, unknown>): Promise<G
           createdTotal += created;
         } catch (e) {
           batchErrors.push(
-            `seed=${seedRecord?.id || 'none'} batchCount=${batchCount}: ${e instanceof Error ? e.message : String(e)}`
+            `seed=none batchCount=${batchCount}: ${e instanceof Error ? e.message : String(e)}`
           );
         }
       }
@@ -513,8 +574,8 @@ export const generateTracesTool: DistriFnTool = {
     type: 'object',
     properties: {
       dataset_id: { type: 'string', description: 'The dataset ID' },
-      record_ids: { type: 'array', items: { type: 'string' }, description: 'Optional: seed from selected records (count becomes per selected record)' },
-      count: { type: 'number', description: 'Traces per selected record when record_ids provided (otherwise total, default 5)' },
+      record_ids: { type: 'array', items: { type: 'string' }, description: 'Optional: seed from selected records' },
+      count: { type: 'number', description: 'If record_ids provided: number of leaf topics to generate per record (default 2). Else: total traces (default 5).' },
       max_turns: { type: 'number', description: 'Max user turns per trace (default 3)' },
     },
     required: ['dataset_id'],

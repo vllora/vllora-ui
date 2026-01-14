@@ -6,7 +6,6 @@ import type { DatasetRecord } from '@/types/dataset-types';
 import * as datasetsDB from '@/services/datasets-db';
 import type { ToolHandler } from '../types';
 import { getInputSummary, getOutputSummary } from './helpers';
-import { getLabel } from '@/components/datasets/record-utils';
 
 // Cache for Lucy config
 let cachedLucyConfig: LucyConfig | null = null;
@@ -22,7 +21,6 @@ const fetchLucyConfigCached = async (): Promise<LucyConfig> => {
 
 interface RecordForAnalysis {
   record_id: string;
-  label?: string;
   input_summary: string;
   output_summary: string;
   error?: string;
@@ -91,7 +89,6 @@ function normalizeTopicPath(topicPath?: string[], leaf?: string) {
 function extractRecordData(record: DatasetRecord): RecordForAnalysis {
   return {
     record_id: record.id,
-    label: getLabel(record),
     input_summary: getInputSummary(record.data),
     output_summary: getOutputSummary(record.data),
     existing_topic: record.topic,
@@ -160,6 +157,7 @@ const TOPIC_ANALYSIS_RESPONSE_SCHEMA = {
 function buildTopicAnalysisPrompt(records: RecordForAnalysis[], maxTopics: number, maxDepth: number, degree: number): string {
   return `## Task
 Generate a small topic tree (depth 1..${maxDepth}) for each record.
+Use only the provided summaries; do not assume extra labels/metadata.
 Aim for up to ${degree} coherent siblings per level; when evidence allows, propose multiple branches (e.g., root + ${degree} children + ${degree ** 2} grandchildren) but do not exceed ${maxTopics} total leaves.
 Return JSON that matches the schema. Provide topic_paths (all node paths) for each record_id.
 

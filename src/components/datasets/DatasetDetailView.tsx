@@ -296,7 +296,7 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
       const result = await generateTraces({
         datasetId: dataset.id,
         recordIds: recordIds.length > 0 ? recordIds : undefined,
-        count: 5,
+        count: 2,
         maxTurns: 3,
       });
 

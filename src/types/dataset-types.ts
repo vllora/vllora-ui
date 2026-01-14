@@ -8,7 +8,8 @@ export interface DatasetEvaluation {
 export interface DatasetRecord {
   id: string;
   datasetId: string;           // Foreign key to dataset
-  data: unknown;               // Flexible data - can be Span, generated data, or any structured object
+  data: unknown;               // Trace payload (DataInfo) or imported object
+  metadata?: Record<string, unknown>; // Record-level metadata (provenance, flags)
   spanId?: string;             // For duplicate detection and keeping track of span (optional - undefined for generated data)
   topic?: string;              // Root topic (top-level)
   topic_path?: string[];       // Chosen path root -> leaf
@@ -26,12 +27,10 @@ export interface DataInfo {
     messages?: any[]
     tools?: any[]
     tool_choice?: string
-    metadata?: any
   }
   output: {
     messages?: any[] | any
     tool_calls?: any[]
-    metadata?: any;
     finish_reason?: string;
   }
 }

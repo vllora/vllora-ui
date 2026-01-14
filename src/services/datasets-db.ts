@@ -236,6 +236,10 @@ export async function addSpansToDataset(
       let outputMessage = outputJson?.choices?.[0]?.message as any;
 
       let dataInfo:DataInfo = {input: {messages: inputMessages}, output: {messages: outputMessage}}
+
+      // Note: keep DataInfo limited to request/response shape; avoid embedding metadata in data
+
+
       if(finishReason){
         dataInfo.output.finish_reason = finishReason;
       }
@@ -559,6 +563,7 @@ export async function addRecordsToDataset(
   datasetId: string,
   records: Array<{
     data: unknown;
+    metadata?: Record<string, unknown>;
     topic?: string;
     topic_paths?: string[][];
     is_generated?: boolean;
@@ -593,6 +598,7 @@ export async function addRecordsToDataset(
         id: crypto.randomUUID(),
         datasetId,
         data: recordData.data,
+        metadata: recordData.metadata,
         topic_paths: topicPaths,
         is_generated: recordData.is_generated ?? false,
         evaluation: recordData.evaluation,

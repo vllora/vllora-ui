@@ -9,23 +9,24 @@ export const getDataAsObject = (record: DatasetRecord): Record<string, unknown> 
   return (record.data as Record<string, unknown>) || {};
 };
 
-// Get label from DataInfo-style records (preferred)
-export const getLabel = (record: DatasetRecord): string | undefined => {
-  const data = getDataAsObject(record);
-  const input = data.input as Record<string, unknown> | undefined;
-  const metadata = input?.metadata as Record<string, unknown> | undefined;
-  return metadata?.label as string | undefined;
+// Labels are not guaranteed; return undefined by default
+export const getLabel = (_record: DatasetRecord): string | undefined => {
+  return undefined;
 };
 
-// Get provider name from record attributes
+// Get provider name from record data
 export const getProviderName = (record: DatasetRecord): string => {
   const data = getDataAsObject(record);
+
+  // Span-like records
   const attr = data.attribute as Record<string, unknown> | undefined;
   const provider = attr?.provider_name as string | undefined;
   if (provider) return provider.toLowerCase();
+
   // Try to infer from model name
   const model = attr?.model as Record<string, unknown> | undefined;
   const modelName = (model?.name as string) || (attr?.model_name as string) || "";
+
   if (modelName.includes("gpt") || modelName.includes("o1") || modelName.includes("o3")) return "openai";
   if (modelName.includes("claude")) return "anthropic";
   if (modelName.includes("llama") || modelName.includes("meta")) return "meta";
