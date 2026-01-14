@@ -47,8 +47,7 @@ export function useAgentChat() {
 
   // Combine UI and Data tools
   const tools = useMemo<DistriFnTool[]>(() => {
-    const allTools = [...uiTools, ...dataTools];
-    return allTools;
+    return [...uiTools, ...dataTools];
   }, []);
 
   // Get existing messages for the thread
