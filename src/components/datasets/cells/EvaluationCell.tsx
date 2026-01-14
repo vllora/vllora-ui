@@ -7,6 +7,7 @@
 import { DatasetEvaluation } from "@/types/dataset-types";
 import { cn } from "@/lib/utils";
 import { Star } from "lucide-react";
+import { COLUMN_WIDTHS } from "../table-columns";
 
 interface EvaluationCellProps {
   evaluation?: DatasetEvaluation;
@@ -31,7 +32,7 @@ export function EvaluationCell({
     <div
       className={cn(
         "shrink-0 flex justify-center",
-        tableLayout ? "w-28" : "min-w-[100px]"
+        tableLayout ? COLUMN_WIDTHS.evaluation : "min-w-[100px]"
       )}
     >
       {hasScore ? (

@@ -12,6 +12,7 @@ import { Loader2, ArrowRight, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Che
 import { cn } from "@/lib/utils";
 import { RecordRow } from "./RecordRow";
 import { getTopicColor } from "./record-utils";
+import { COLUMN_WIDTHS } from "./table-columns";
 import type { SortConfig, SortField } from "./RecordsToolbar";
 
 interface RecordsTableProps {
@@ -437,7 +438,7 @@ function TableHeader({ selectable, allSelected, someSelected, onSelectAll, sortC
     <div className="px-4 py-3 bg-muted/30 border-b border-border flex items-center gap-4 text-xs font-medium text-muted-foreground uppercase tracking-wide">
       {selectable && (
         <div
-          className="flex items-center justify-center w-6 shrink-0"
+          className={cn("flex items-center justify-center", COLUMN_WIDTHS.checkbox)}
           onClick={() => onSelectAll?.(!allSelected)}
         >
           <div
@@ -456,11 +457,12 @@ function TableHeader({ selectable, allSelected, someSelected, onSelectAll, sortC
           </div>
         </div>
       )}
-      <span className="flex-[2] min-w-0">Data</span>
-      <span className="w-24 text-center shrink-0">Source</span>
+      <span className={COLUMN_WIDTHS.data}>Data</span>
+      <span className={cn(COLUMN_WIDTHS.source, "text-center")}>Source</span>
       <button
         className={cn(
-          "w-28 text-center shrink-0 hover:text-foreground transition-colors",
+          COLUMN_WIDTHS.topic,
+          "text-center hover:text-foreground transition-colors",
           sortConfig?.field === "topic" && "text-foreground"
         )}
         onClick={() => handleSort("topic")}
@@ -470,7 +472,8 @@ function TableHeader({ selectable, allSelected, someSelected, onSelectAll, sortC
       </button>
       <button
         className={cn(
-          "w-28 text-center shrink-0 hover:text-foreground transition-colors",
+          COLUMN_WIDTHS.evaluation,
+          "text-center hover:text-foreground transition-colors",
           sortConfig?.field === "evaluation" && "text-foreground"
         )}
         onClick={() => handleSort("evaluation")}
@@ -480,7 +483,8 @@ function TableHeader({ selectable, allSelected, someSelected, onSelectAll, sortC
       </button>
       <button
         className={cn(
-          "w-36 text-right shrink-0 hover:text-foreground transition-colors",
+          COLUMN_WIDTHS.timestamp,
+          "text-right hover:text-foreground transition-colors",
           sortConfig?.field === "timestamp" && "text-foreground"
         )}
         onClick={() => handleSort("timestamp")}
@@ -488,7 +492,7 @@ function TableHeader({ selectable, allSelected, someSelected, onSelectAll, sortC
         Timestamp
         <SortIndicator field="timestamp" />
       </button>
-      <span className="w-16 shrink-0"></span>
+      <span className={COLUMN_WIDTHS.actions}></span>
     </div>
   );
 }

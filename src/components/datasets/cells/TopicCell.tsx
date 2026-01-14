@@ -11,6 +11,7 @@ import { Check, X, Tag, Plus, Minus } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { getTopicColor } from "../record-utils";
+import { COLUMN_WIDTHS } from "../table-columns";
 
 interface TopicCellProps {
   topic?: string;
@@ -82,7 +83,7 @@ export function TopicCell({
     <div
       className={cn(
         "flex items-center gap-2 shrink-0",
-        tableLayout ? "w-40 justify-center" : "min-w-[160px] flex-col items-start"
+        tableLayout ? cn(COLUMN_WIDTHS.topic, "justify-center") : "min-w-[160px] flex-col items-start"
       )}
     >
       {showLabel && (

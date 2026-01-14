@@ -5,6 +5,7 @@
  */
 
 import { cn } from "@/lib/utils";
+import { COLUMN_WIDTHS } from "../table-columns";
 
 interface DataCellProps {
   data: unknown;
@@ -32,7 +33,7 @@ export function DataCell({ data, tableLayout = false }: DataCellProps) {
     <div
       className={cn(
         "flex-1 min-w-0",
-        tableLayout && "flex-[2]"
+        tableLayout && COLUMN_WIDTHS.data
       )}
     >
       <code className="text-xs text-muted-foreground font-mono px-2 py-1.5 rounded truncate block leading-relaxed">

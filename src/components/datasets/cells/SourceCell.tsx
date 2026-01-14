@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Link2, FileText, Sparkles } from "lucide-react";
+import { COLUMN_WIDTHS } from "../table-columns";
 
 interface SourceCellProps {
   spanId?: string;
@@ -32,7 +33,7 @@ export function SourceCell({ spanId, isGenerated = false, tableLayout = false }:
     <div
       className={cn(
         "shrink-0",
-        tableLayout && "w-24 text-center"
+        tableLayout && cn(COLUMN_WIDTHS.source, "text-center")
       )}
     >
       {isGenerated ? (
