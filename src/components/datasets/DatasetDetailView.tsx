@@ -6,13 +6,6 @@
  */
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import {
   DatasetDetailProvider,
@@ -25,6 +18,7 @@ import { IngestDataDialog } from "./IngestDataDialog";
 import { DatasetDetailHeader } from "./DatasetDetailHeader";
 import { RecordsToolbar } from "./RecordsToolbar";
 import { RecordsTable } from "./RecordsTable";
+import { CreateDatasetDialog } from "./CreateDatasetDialog";
 
 interface DatasetDetailViewProps {
   datasetId: string;
@@ -82,10 +76,6 @@ function DatasetDetailContent() {
     setAssignTopicDialog,
     importDialog,
     setImportDialog,
-    createDatasetDialog,
-    setCreateDatasetDialog,
-    newDatasetName,
-    setNewDatasetName,
     expandedRecord,
     setExpandedRecord,
 
@@ -104,7 +94,6 @@ function DatasetDetailContent() {
     handleBulkDelete,
     handleImportRecords,
     handleSaveRecordData,
-    handleCreateDataset,
   } = DatasetDetailConsumer();
 
   if (isLoading) {
@@ -219,51 +208,7 @@ function DatasetDetailContent() {
       />
 
       {/* Create dataset dialog */}
-      <Dialog open={createDatasetDialog} onOpenChange={(open) => {
-        setCreateDatasetDialog(open);
-        if (!open) setNewDatasetName("");
-      }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Create new dataset</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <Input
-              value={newDatasetName}
-              onChange={(e) => setNewDatasetName(e.target.value)}
-              placeholder="Dataset name"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && newDatasetName.trim()) {
-                  handleCreateDataset();
-                }
-                if (e.key === "Escape") {
-                  setCreateDatasetDialog(false);
-                  setNewDatasetName("");
-                }
-              }}
-            />
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setCreateDatasetDialog(false);
-                  setNewDatasetName("");
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleCreateDataset}
-                disabled={!newDatasetName.trim()}
-                className="bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
-              >
-                Create
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <CreateDatasetDialog />
     </>
   );
 }
