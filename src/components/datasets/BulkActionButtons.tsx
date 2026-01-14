@@ -11,7 +11,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Tag, Play, Trash2, Wand2, Plus } from "lucide-react";
+import { Tag, Scale, Trash2, Wand2, Shuffle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface BulkActionButtonsProps {
@@ -149,17 +149,17 @@ export function BulkActionButtons({
         onClick={onGenerateTopics}
       />
       <ActionButton
-        icon={<Plus className="w-4 h-4" />}
-        label={isGeneratingTraces ? "Generating..." : "Generate Traces"}
-        tooltip="Generate synthetic traces"
-        disabledTooltip="Generate synthetic traces"
+        icon={<Shuffle className="w-4 h-4" />}
+        label={isGeneratingTraces ? "Generating..." : "Generate Data"}
+        tooltip="Generate sample data"
+        disabledTooltip="Generate sample data"
         disabled={!!isGeneratingTraces}
         requiresSelection={false}
         hasSelection={hasSelection}
         onClick={onGenerateTraces}
       />
       <ActionButton
-        icon={<Play className="w-3.5 h-3.5" />}
+        icon={<Scale className="w-3.5 h-3.5" />}
         label="Evaluate"
         tooltip="Run evaluation on selected records"
         disabledTooltip="Select records to run evaluation"
