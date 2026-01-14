@@ -23,19 +23,15 @@ import {
   Filter,
   SortAsc,
   SortDesc,
-  Tag,
-  Play,
-  Trash2,
   Search,
   Check,
   Calendar,
   MessageSquare,
   Star,
   Layers,
-  Wand2,
-  Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BulkActionButtons } from "./BulkActionButtons";
 
 export type SortField = "timestamp" | "topic" | "evaluation";
 export type SortDirection = "asc" | "desc";
@@ -272,134 +268,16 @@ export function RecordsToolbar({
         </div>
       </div>
 
-      {/* Right side - Bulk action buttons */}
-      <div className="flex items-center gap-1">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    "gap-1.5 h-8 px-3",
-                    hasSelection
-                      ? "text-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-500))]/10"
-                      : "text-muted-foreground/50"
-                  )}
-                  disabled={!hasSelection}
-                  onClick={onAssignTopic}
-                >
-                  <Tag className="w-3.5 h-3.5" />
-                  Topic
-                </Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{hasSelection ? "Assign topic to selected records" : "Select records to assign topic"}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    "gap-1.5 h-8 px-3",
-                    hasSelection
-                      ? "text-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-500))]/10"
-                      : "text-muted-foreground/50"
-                  )}
-                  disabled={!hasSelection || isGeneratingTopics}
-                  onClick={onGenerateTopics}
-                >
-                  <Wand2 className="w-4 h-4" />
-                  {isGeneratingTopics ? "Generating..." : "Generate Topics"}
-                </Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{hasSelection ? "Auto-generate topics for selected records" : "Select records to generate topics"}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className={cn(
-                  "gap-1.5 h-8 px-3",
-                  "text-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-500))]/10"
-                )}
-                disabled={isGeneratingTraces}
-                onClick={onGenerateTraces}
-              >
-                <Plus className="w-4 h-4" />
-                {isGeneratingTraces ? "Generating..." : "Generate Traces"}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Generate synthetic traces</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    "gap-2",
-                    hasSelection
-                      ? "text-[rgb(var(--theme-500))] border-[rgb(var(--theme-500))]/30 hover:bg-[rgb(var(--theme-500))]/10"
-                      : "text-muted-foreground"
-                  )}
-                  disabled={!hasSelection}
-                  onClick={onRunEvaluation}
-                >
-                  <Play className="w-3.5 h-3.5" />
-                  Evaluate
-                </Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{hasSelection ? "Run evaluation on selected records" : "Select records to run evaluation"}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    "gap-1.5 h-8 px-3",
-                    hasSelection
-                      ? "text-red-500 hover:bg-red-500/10"
-                      : "text-muted-foreground/50"
-                  )}
-                  disabled={!hasSelection}
-                  onClick={onDeleteSelected}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Delete
-                </Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{hasSelection ? "Delete selected records" : "Select records to delete"}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
+      <BulkActionButtons
+        hasSelection={hasSelection}
+        onAssignTopic={onAssignTopic}
+        onGenerateTopics={onGenerateTopics}
+        isGeneratingTopics={isGeneratingTopics}
+        onGenerateTraces={onGenerateTraces}
+        isGeneratingTraces={isGeneratingTraces}
+        onRunEvaluation={onRunEvaluation}
+        onDeleteSelected={onDeleteSelected}
+      />
     </div>
   );
 }
