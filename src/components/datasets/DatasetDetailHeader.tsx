@@ -21,6 +21,7 @@ import {
   Download,
   Upload,
   Sparkles,
+  Loader2,
 } from "lucide-react";
 
 interface DatasetDetailHeaderProps {
@@ -33,6 +34,7 @@ interface DatasetDetailHeaderProps {
   onExport?: () => void;
   onIngest?: () => void;
   onFinetune?: () => void;
+  isFinetuning?: boolean;
 }
 
 export function DatasetDetailHeader({
@@ -44,6 +46,7 @@ export function DatasetDetailHeader({
   onExport,
   onIngest,
   onFinetune,
+  isFinetuning,
 }: DatasetDetailHeaderProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editingName, setEditingName] = useState("");
@@ -178,11 +181,21 @@ export function DatasetDetailHeader({
               <TooltipTrigger asChild>
                 <Button
                   size="sm"
-                  className="h-8 px-4 rounded-full bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white shadow-sm"
+                  className="h-8 px-4 rounded-full bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white shadow-sm disabled:opacity-50"
                   onClick={onFinetune}
+                  disabled={isFinetuning}
                 >
-                  <Sparkles className="w-3.5 h-3.5 mr-1.5" />
-                  Finetune
+                  {isFinetuning ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                      Starting...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                      Finetune
+                    </>
+                  )}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Start fine-tuning job</TooltipContent>

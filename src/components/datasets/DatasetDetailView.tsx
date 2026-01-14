@@ -19,8 +19,8 @@ import {
 import { AssignTopicDialog } from "./AssignTopicDialog";
 import { ExpandTraceDialog } from "./ExpandTraceDialog";
 import { IngestDataDialog, type ImportMode } from "./IngestDataDialog";
-import { FinetuneJobDialog } from "./FinetuneJobDialog";
 import { DatasetDetailHeader } from "./DatasetDetailHeader";
+import { startFinetuneJob } from "@/services/finetune-api";
 import { RecordsToolbar, SortConfig } from "./RecordsToolbar";
 import { RecordsTable } from "./RecordsTable";
 import { filterAndSortRecords } from "./record-filters";
@@ -56,10 +56,10 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmation | null>(null);
   const [assignTopicDialog, setAssignTopicDialog] = useState(false);
   const [importDialog, setImportDialog] = useState(false);
-  const [finetuneDialog, setFinetuneDialog] = useState(false);
   const [expandedRecord, setExpandedRecord] = useState<DatasetRecord | null>(null);
   const [isGeneratingTopics, setIsGeneratingTopics] = useState(false);
   const [isGeneratingTraces, setIsGeneratingTraces] = useState(false);
+  const [isStartingFinetune, setIsStartingFinetune] = useState(false);
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     field: "timestamp",
     direction: "desc",
@@ -360,6 +360,25 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
     toast.success("Dataset exported");
   };
 
+  const handleStartFinetune = async () => {
+    if (!dataset || records.length === 0 || isStartingFinetune) return;
+
+    setIsStartingFinetune(true);
+    try {
+      const job = await startFinetuneJob({ ...dataset, records });
+      toast.success("Fine-tuning job started", {
+        description: `Job ID: ${job.id}`,
+      });
+    } catch (err) {
+      console.error("Failed to start fine-tuning job:", err);
+      toast.error("Failed to start fine-tuning job", {
+        description: err instanceof Error ? err.message : "An error occurred",
+      });
+    } finally {
+      setIsStartingFinetune(false);
+    }
+  };
+
   // Handle importing records from file
   const handleImportRecords = async (
     importedRecords: Array<{ data: unknown; topic?: string }>,
@@ -440,7 +459,8 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
             onRename={handleRenameDataset}
             onExport={handleExport}
             onIngest={() => setImportDialog(true)}
-            onFinetune={() => setFinetuneDialog(true)}
+            onFinetune={handleStartFinetune}
+            isFinetuning={isStartingFinetune}
           />
 
           {/* Toolbar */}
@@ -519,13 +539,6 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
         datasetId={dataset.id}
         onImport={handleImportRecords}
         currentRecordCount={records.length}
-      />
-
-      {/* Finetune job dialog */}
-      <FinetuneJobDialog
-        open={finetuneDialog}
-        onOpenChange={setFinetuneDialog}
-        dataset={{ ...dataset, records }}
       />
     </>
   );
