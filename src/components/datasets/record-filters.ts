@@ -14,6 +14,8 @@ export interface RecordFilterOptions {
   search?: string;
   /** Filter by exact topic match */
   topic?: string;
+  /** Filter by generated traces */
+  generated?: "all" | "generated" | "not_generated";
 }
 
 export interface RecordSortOptions {
@@ -37,6 +39,13 @@ export function filterRecords(
   if (options.topic) {
     const topicLower = options.topic.toLowerCase();
     filtered = filtered.filter(r => r.topic?.toLowerCase() === topicLower);
+  }
+
+  // Filter by generated status
+  if (options.generated === "generated") {
+    filtered = filtered.filter(r => !!r.is_generated);
+  } else if (options.generated === "not_generated") {
+    filtered = filtered.filter(r => !r.is_generated);
   }
 
   // Filter by search query (searches in label, topic, and spanId)

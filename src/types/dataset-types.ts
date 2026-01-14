@@ -15,6 +15,7 @@ export interface DatasetRecord {
   topic_paths?: string[][];    // Full tree as list of paths
   topic_root?: string;         // First element of topic_path (for grouping)
   topic_path_str?: string;     // Joined path (e.g., "a/b/c")
+  is_generated?: boolean;      // True for synthetic/generated traces
   evaluation?: DatasetEvaluation;
   createdAt: number;
   updatedAt: number;           // Last modified timestamp

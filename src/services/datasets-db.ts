@@ -254,6 +254,7 @@ export async function addSpansToDataset(
         data: dataInfo,
         spanId: span.span_id,
         topic_paths: topicPaths,
+        is_generated: false,
         createdAt: now,
         updatedAt: now,
       };
@@ -559,6 +560,8 @@ export async function addRecordsToDataset(
   records: Array<{
     data: unknown;
     topic?: string;
+    topic_paths?: string[][];
+    is_generated?: boolean;
     evaluation?: DatasetEvaluation;
   }>,
   defaultTopic?: string
@@ -584,11 +587,14 @@ export async function addRecordsToDataset(
     // Add records
     let addedCount = 0;
     records.forEach((recordData) => {
+      const topicPaths = recordData.topic_paths || topicPathsFromSingleTopic(recordData.topic?.trim() || defaultTopic?.trim());
+
       const record: DatasetRecord = {
         id: crypto.randomUUID(),
         datasetId,
         data: recordData.data,
-        topic: recordData.topic?.trim() || defaultTopic?.trim() || undefined,
+        topic_paths: topicPaths,
+        is_generated: recordData.is_generated ?? false,
         evaluation: recordData.evaluation,
         createdAt: now,
         updatedAt: now,

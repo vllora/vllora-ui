@@ -21,7 +21,6 @@ const fetchLucyConfigCached = async (): Promise<LucyConfig> => {
 
 interface RecordForAnalysis {
   record_id: string;
-  operation: string;
   label?: string;
   input_summary: string;
   output_summary: string;
@@ -31,7 +30,6 @@ interface RecordForAnalysis {
 
 interface RecordTopicTree {
   record_id: string;
-  operation: string;
   topic_paths: string[][]; // All node paths root->node (includes internal nodes)
 }
 
@@ -183,7 +181,6 @@ function extractRecordData(record: DatasetRecord): RecordForAnalysis {
 
   return {
     record_id: record.id,
-    operation: span.operation_name,
     label: attr.label as string | undefined,
     input_summary: extractInputSummary(span),
     output_summary: extractOutputSummary(span),
@@ -231,7 +228,6 @@ const TOPIC_ANALYSIS_RESPONSE_SCHEMA = {
             type: 'object',
             properties: {
               record_id: { type: 'string' },
-              operation: { type: 'string' },
               topic_paths: {
                 type: 'array',
                 description: 'All node paths root->node (includes internal nodes).',
@@ -241,7 +237,7 @@ const TOPIC_ANALYSIS_RESPONSE_SCHEMA = {
                 },
               },
             },
-            required: ['record_id', 'operation', 'topic_paths'],
+            required: ['record_id', 'topic_paths'],
             additionalProperties: false,
           },
         },
@@ -290,7 +286,7 @@ async function callLLMForTopics(prompt: string): Promise<string> {
   const baseUrl = `${rawUrl.replace(/\/$/, '')}/v1`;
   const distriClient = DistriClient.create({ baseUrl });
 
-  const { response_format: _ignored, ...modelSettingsFromConfig } = lucyConfig.model_settings || {};
+  const modelSettingsFromConfig = lucyConfig.model_settings || {};
 
   const messages: DistriMessage[] = [
     DistriClient.initDistriMessage('system', [{ part_type: 'text', data: TOPIC_ANALYSIS_SYSTEM_PROMPT }]),
@@ -298,7 +294,6 @@ async function callLLMForTopics(prompt: string): Promise<string> {
   ];
 
   const response = await distriClient.llm(messages, [], {
-    headers: { 'x-label': 'finetune-topic-analysis' },
     model_settings: {
       ...modelSettingsFromConfig,
       model: modelSettingsFromConfig.model || 'openai/gpt-4.1',

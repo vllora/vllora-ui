@@ -33,6 +33,7 @@ import {
   Star,
   Layers,
   Wand2,
+  Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -61,10 +62,18 @@ interface RecordsToolbarProps {
   onGroupByTopicChange?: (grouped: boolean) => void;
   /** Assign topic to selected records */
   onAssignTopic?: () => void;
+  /** Generated filter dropdown state */
+  generatedFilter?: "all" | "generated" | "not_generated";
+  /** Generated filter dropdown change handler */
+  onGeneratedFilterChange?: (value: "all" | "generated" | "not_generated") => void;
   /** Generate topics using topic tool */
   onGenerateTopics?: () => void;
   /** Flag when topics are being generated */
   isGeneratingTopics?: boolean;
+  /** Generate synthetic traces (optional selection seed) */
+  onGenerateTraces?: () => void;
+  /** Flag when traces are being generated */
+  isGeneratingTraces?: boolean;
   /** Run evaluation on selected records */
   onRunEvaluation?: () => void;
   /** Delete selected records */
@@ -94,8 +103,12 @@ export function RecordsToolbar({
   groupByTopic = false,
   onGroupByTopicChange,
   onAssignTopic,
+  generatedFilter = "all",
+  onGeneratedFilterChange,
   onGenerateTopics,
   isGeneratingTopics,
+  onGenerateTraces,
+  isGeneratingTraces,
   onRunEvaluation,
   onDeleteSelected,
 }: RecordsToolbarProps) {
@@ -127,9 +140,52 @@ export function RecordsToolbar({
       {/* Left side - Filter/Sort icons and search */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-1 border-r border-border pr-3">
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <Filter className="w-4 h-4" />
-          </Button>
+          <DropdownMenu>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={cn(
+                        "h-8 w-8",
+                        generatedFilter !== "all" && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                      )}
+                    >
+                      <Filter className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Filter records</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <DropdownMenuContent align="start" className="w-48">
+              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                Filter
+              </div>
+              <DropdownMenuItem onClick={() => onGeneratedFilterChange?.("all")} className="gap-2">
+                <span className="flex-1">All records</span>
+                {generatedFilter === "all" && (
+                  <Check className="w-4 h-4 text-[rgb(var(--theme-500))]" />
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onGeneratedFilterChange?.("generated")} className="gap-2">
+                <span className="flex-1">Generated only</span>
+                {generatedFilter === "generated" && (
+                  <Check className="w-4 h-4 text-[rgb(var(--theme-500))]" />
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onGeneratedFilterChange?.("not_generated")} className="gap-2">
+                <span className="flex-1">Not generated</span>
+                {generatedFilter === "not_generated" && (
+                  <Check className="w-4 h-4 text-[rgb(var(--theme-500))]" />
+                )}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Sort dropdown */}
           <DropdownMenu>
@@ -259,6 +315,19 @@ export function RecordsToolbar({
         >
           <Wand2 className="w-4 h-4" />
           {isGeneratingTopics ? "Generating..." : "Generate Topics"}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={cn(
+            "gap-1.5 h-8 px-3",
+            "text-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-500))]/10"
+          )}
+          disabled={isGeneratingTraces}
+          onClick={onGenerateTraces}
+        >
+          <Plus className="w-4 h-4" />
+          {isGeneratingTraces ? "Generating..." : "Generate Traces"}
         </Button>
         <Button
           variant="outline"

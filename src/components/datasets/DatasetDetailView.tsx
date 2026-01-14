@@ -24,9 +24,8 @@ import { DatasetDetailHeader } from "./DatasetDetailHeader";
 import { RecordsToolbar, SortConfig } from "./RecordsToolbar";
 import { RecordsTable } from "./RecordsTable";
 import { filterAndSortRecords } from "./record-filters";
-import { JsonEditor } from "@/components/chat/conversation/model-config/json-editor";
-import { getDataAsObject, getLabel } from "./record-utils";
 import { generateTopics } from "@/lib/distri-dataset-tools/analysis/generate-topics";
+import { generateTraces } from "@/lib/distri-dataset-tools/analysis/generate-traces";
 
 interface DatasetDetailViewProps {
   datasetId: string;
@@ -59,15 +58,14 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
   const [importDialog, setImportDialog] = useState(false);
   const [finetuneDialog, setFinetuneDialog] = useState(false);
   const [expandedRecord, setExpandedRecord] = useState<DatasetRecord | null>(null);
-  const [editedJson, setEditedJson] = useState("");
-  const [jsonError, setJsonError] = useState<string | null>(null);
-  const [isSavingData, setIsSavingData] = useState(false);
   const [isGeneratingTopics, setIsGeneratingTopics] = useState(false);
+  const [isGeneratingTraces, setIsGeneratingTraces] = useState(false);
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     field: "timestamp",
     direction: "desc",
   });
   const [groupByTopic, setGroupByTopic] = useState(false);
+  const [generatedFilter, setGeneratedFilter] = useState<"all" | "generated" | "not_generated">("all");
 
   // Load dataset and records
   const loadDataset = useCallback(async () => {
@@ -133,7 +131,7 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
   // Filter and sort records using shared utility (same logic as Lucy tools)
   const sortedRecords = filterAndSortRecords(
     records,
-    { search: searchQuery },
+    { search: searchQuery, generated: generatedFilter },
     { field: sortConfig.field, direction: sortConfig.direction }
   );
 
@@ -288,6 +286,34 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
     }
   };
 
+  const handleGenerateTraces = async () => {
+    if (!dataset) return;
+
+    const recordIds = Array.from(selectedRecordIds);
+
+    setIsGeneratingTraces(true);
+    try {
+      const result = await generateTraces({
+        datasetId: dataset.id,
+        recordIds: recordIds.length > 0 ? recordIds : undefined,
+        count: 5,
+        maxTurns: 3,
+      });
+
+      if (result.success) {
+        toast.success(`Generated ${result.created_count ?? 0} synthetic trace${(result.created_count ?? 0) === 1 ? "" : "s"}`);
+        await loadDataset();
+      } else {
+        toast.error(result.error || "Failed to generate traces");
+      }
+    } catch (err) {
+      console.error("Failed to generate traces", err);
+      toast.error("Failed to generate traces");
+    } finally {
+      setIsGeneratingTraces(false);
+    }
+  };
+
   const handleBulkRunEvaluation = () => {
     toast.info("Run evaluation feature coming soon");
   };
@@ -427,8 +453,12 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
             groupByTopic={groupByTopic}
             onGroupByTopicChange={setGroupByTopic}
             onAssignTopic={() => setAssignTopicDialog(true)}
+            generatedFilter={generatedFilter}
+            onGeneratedFilterChange={setGeneratedFilter}
             onGenerateTopics={handleGenerateTopics}
             isGeneratingTopics={isGeneratingTopics}
+            onGenerateTraces={handleGenerateTraces}
+            isGeneratingTraces={isGeneratingTraces}
             onRunEvaluation={handleBulkRunEvaluation}
             onDeleteSelected={handleBulkDelete}
           />

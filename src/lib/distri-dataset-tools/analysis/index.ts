@@ -10,6 +10,7 @@ import type { ToolHandler } from '../types';
 // Import individual tool handlers and definitions
 import { analyzeRecordsHandler, analyzeRecordsTool } from './analyze-records';
 import { generateTopicsHandler, generateTopicsTool } from './generate-topics';
+import { generateTracesHandler, generateTracesTool } from './generate-traces';
 import { suggestTopicsHandler, suggestTopicsTool } from './suggest-topics';
 import { findDuplicatesHandler, findDuplicatesTool } from './find-duplicates';
 import { summarizeDatasetHandler, summarizeDatasetTool } from './summarize-dataset';
@@ -19,6 +20,7 @@ import { compareRecordsHandler, compareRecordsTool } from './compare-records';
 export const datasetAnalysisToolHandlers: Record<string, ToolHandler> = {
   analyze_records: analyzeRecordsHandler,
   generate_topics: generateTopicsHandler,
+  generate_traces: generateTracesHandler,
   suggest_topics: suggestTopicsHandler,
   find_duplicates: findDuplicatesHandler,
   summarize_dataset: summarizeDatasetHandler,
@@ -29,6 +31,7 @@ export const datasetAnalysisToolHandlers: Record<string, ToolHandler> = {
 export const DATASET_ANALYSIS_TOOL_NAMES = [
   'analyze_records',
   'generate_topics',
+  'generate_traces',
   'suggest_topics',
   'find_duplicates',
   'summarize_dataset',
@@ -45,6 +48,7 @@ export function isDatasetAnalysisTool(toolName: string): toolName is DatasetAnal
 export const datasetAnalysisTools: DistriFnTool[] = [
   analyzeRecordsTool,
   generateTopicsTool,
+  generateTracesTool,
   suggestTopicsTool,
   findDuplicatesTool,
   summarizeDatasetTool,

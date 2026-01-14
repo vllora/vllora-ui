@@ -64,14 +64,12 @@ export function TopicCell({
       const path = rawPath.filter(Boolean);
       if (path.length === 0) continue;
       let currentMap = roots;
-      let currentNode: TreeNode | undefined;
       for (const segment of path) {
         let node = currentMap.get(segment);
         if (!node) {
           node = { label: segment, children: new Map() };
           currentMap.set(segment, node);
         }
-        currentNode = node;
         currentMap = node.children;
       }
     }

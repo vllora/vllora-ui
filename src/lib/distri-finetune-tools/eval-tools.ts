@@ -242,9 +242,6 @@ export async function runEvaluationOnDataset(
                         messages,
                         [],
                         {
-                            headers: {
-                                'x-label': 'finetune-eval'
-                            },
                             model_settings: {
                                 temperature: 0,
                                 response_format: EVAL_OUTPUT_SCHEMA
@@ -263,10 +260,7 @@ export async function runEvaluationOnDataset(
                     }
 
                     if (evalResult && typeof evalResult.score === 'number') {
-                        await datasetsDB.updateRecordEvaluation(targetDatasetId!, record.id, {
-                            score: evalResult.score,
-                            feedback: evalResult.feedback || ''
-                        });
+                        await datasetsDB.updateRecordEvaluation(targetDatasetId!, record.id, evalResult.score);
                         updatedCount++;
                         results.push({ id: record.id, score: evalResult.score });
                     }
