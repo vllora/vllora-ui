@@ -35,9 +35,11 @@ import { generateTraces } from "@/lib/distri-dataset-tools/analysis/generate-tra
 interface DatasetDetailViewProps {
   datasetId: string;
   onBack: () => void;
+  /** Called when user selects a different dataset from the dropdown */
+  onSelectDataset?: (datasetId: string) => void;
 }
 
-export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps) {
+export function DatasetDetailView({ datasetId, onBack, onSelectDataset }: DatasetDetailViewProps) {
   const {
     datasets,
     getDatasetWithRecords,
@@ -478,9 +480,12 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
           {/* Header */}
           <DatasetDetailHeader
             name={dataset.name}
+            datasetId={datasetId}
             recordCount={records.length}
             createdAt={dataset.createdAt}
             updatedAt={dataset.updatedAt}
+            datasets={datasets}
+            onSelectDataset={onSelectDataset}
             onBack={onBack}
             onRename={handleRenameDataset}
             onExport={handleExport}

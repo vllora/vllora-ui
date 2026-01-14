@@ -200,6 +200,7 @@ function DatasetsPageContent() {
           <DatasetDetailView
             datasetId={selectedDatasetId}
             onBack={navigateToList}
+            onSelectDataset={navigateToDataset}
           />
         ) : (
           <DatasetsListView onSelectDataset={navigateToDataset} />
