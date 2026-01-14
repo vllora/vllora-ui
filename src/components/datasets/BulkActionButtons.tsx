@@ -154,7 +154,7 @@ export function BulkActionButtons({
         tooltip="Generate sample data"
         disabledTooltip="Generate sample data"
         disabled={!!isGeneratingTraces}
-        requiresSelection={false}
+        requiresSelection={true}
         hasSelection={hasSelection}
         onClick={onGenerateTraces}
       />
