@@ -7,7 +7,7 @@
  * - List mode: Create new dataset or select existing (no datasetId)
  */
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -65,6 +65,8 @@ interface ListModeProps {
   currentRecordCount?: never;
   datasets: Dataset[];
   onImportToDataset: (result: ImportResult) => Promise<void>;
+  /** Pre-select an existing dataset (for per-dataset import from list view) */
+  preselectedDatasetId?: string;
 }
 
 type IngestDataDialogProps = {
@@ -83,6 +85,7 @@ export function IngestDataDialog(props: IngestDataDialogProps) {
   const onImportToDataset = isListMode ? (props as ListModeProps).onImportToDataset : undefined;
   const onImport = !isListMode ? (props as DetailModeProps).onImport : undefined;
   const currentRecordCount = !isListMode ? (props as DetailModeProps).currentRecordCount ?? 0 : 0;
+  const preselectedDatasetId = isListMode ? (props as ListModeProps).preselectedDatasetId : undefined;
 
   const [file, setFile] = useState<File | null>(null);
   const [records, setRecords] = useState<ParsedRecord[]>([]);
@@ -93,10 +96,14 @@ export function IngestDataDialog(props: IngestDataDialogProps) {
   const [isImporting, setIsImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // List mode specific state
-  const [datasetTarget, setDatasetTarget] = useState<DatasetTarget>("new");
+  // List mode specific state - use preselected dataset if provided
+  const [datasetTarget, setDatasetTarget] = useState<DatasetTarget>(
+    preselectedDatasetId ? "existing" : "new"
+  );
   const [newDatasetName, setNewDatasetName] = useState("");
-  const [selectedDatasetId, setSelectedDatasetId] = useState<string>("");
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string>(
+    preselectedDatasetId ?? ""
+  );
 
   const resetState = () => {
     setFile(null);
@@ -106,13 +113,22 @@ export function IngestDataDialog(props: IngestDataDialogProps) {
     setTopic("");
     setImportMode("append");
     setIsImporting(false);
-    setDatasetTarget("new");
+    // Reset to preselected dataset if provided, otherwise default to "new"
+    setDatasetTarget(preselectedDatasetId ? "existing" : "new");
     setNewDatasetName("");
-    setSelectedDatasetId("");
+    setSelectedDatasetId(preselectedDatasetId ?? "");
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
   };
+
+  // Sync state when preselectedDatasetId changes (e.g., opening dialog for different dataset)
+  useEffect(() => {
+    if (preselectedDatasetId) {
+      setDatasetTarget("existing");
+      setSelectedDatasetId(preselectedDatasetId);
+    }
+  }, [preselectedDatasetId]);
 
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
@@ -339,7 +355,7 @@ export function IngestDataDialog(props: IngestDataDialogProps) {
           {parseStatus === "success" && (
             <>
               {/* Dataset target selection (list mode only) */}
-              {isListMode && (
+              {isListMode && !preselectedDatasetId && (
                 <div className="space-y-3">
                   <Label>Destination</Label>
                   <RadioGroup
@@ -400,8 +416,21 @@ export function IngestDataDialog(props: IngestDataDialogProps) {
                 </div>
               )}
 
-              {/* Import mode - show for detail mode OR for existing dataset in list mode */}
-              {(!isListMode || (isListMode && datasetTarget === "existing" && selectedDatasetId)) && (
+              {/* Preselected dataset display (when importing to specific dataset) */}
+              {isListMode && preselectedDatasetId && (
+                <div className="space-y-2">
+                  <Label>Destination</Label>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 px-3 py-2 rounded-md">
+                    <Database className="w-4 h-4" />
+                    <span>
+                      {datasets.find(d => d.id === preselectedDatasetId)?.name ?? "Selected dataset"}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Import mode - show for detail mode OR for existing dataset in list mode (including preselected) */}
+              {(!isListMode || (isListMode && datasetTarget === "existing" && (selectedDatasetId || preselectedDatasetId))) && (
                 <div className="space-y-3">
                   <Label>Import Mode</Label>
                   <RadioGroup

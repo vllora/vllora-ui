@@ -8,7 +8,7 @@
 import { useRef, useState, useCallback, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { DatasetRecord } from "@/types/dataset-types";
-import { Loader2, ArrowRight, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Check, Minus } from "lucide-react";
+import { Loader2, ArrowRight, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Check, Minus, Copy, CheckCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RecordRow } from "./RecordRow";
 import { getTopicColor } from "./record-utils";
@@ -16,6 +16,8 @@ import type { SortConfig, SortField } from "./RecordsToolbar";
 
 interface RecordsTableProps {
   records: DatasetRecord[];
+  /** Dataset ID for display in footer */
+  datasetId?: string;
   isLoading?: boolean;
   emptyMessage?: string;
   /** Show table header with column titles */
@@ -61,6 +63,7 @@ const VIRTUALIZATION_THRESHOLD = 15; // Only virtualize if more than this many r
 
 export function RecordsTable({
   records,
+  datasetId,
   isLoading = false,
   emptyMessage = "No records in this dataset",
   showHeader = false,
@@ -294,7 +297,7 @@ export function RecordsTable({
           })}
         </div>
         {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
-        {showFooter && <TableFooter records={displayRecords} selectedCount={selectedIds.size} />}
+        {showFooter && <TableFooter records={displayRecords} selectedCount={selectedIds.size} datasetId={datasetId} />}
       </>
     );
   }
@@ -330,7 +333,7 @@ export function RecordsTable({
           ))}
           {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
         </div>
-        {showFooter && <TableFooter records={displayRecords} selectedCount={selectedIds.size} />}
+        {showFooter && <TableFooter records={displayRecords} selectedCount={selectedIds.size} datasetId={datasetId} />}
       </>
     );
   }
@@ -391,7 +394,7 @@ export function RecordsTable({
         </div>
       </div>
       {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
-      {showFooter && <TableFooter records={displayRecords} selectedCount={selectedIds.size} />}
+      {showFooter && <TableFooter records={displayRecords} selectedCount={selectedIds.size} datasetId={datasetId} />}
     </>
   );
 }
@@ -510,9 +513,12 @@ function SeeAllLink({ onClick }: { onClick: () => void }) {
 interface TableFooterProps {
   records: DatasetRecord[];
   selectedCount?: number;
+  datasetId?: string;
 }
 
-function TableFooter({ records, selectedCount = 0 }: TableFooterProps) {
+function TableFooter({ records, selectedCount = 0, datasetId }: TableFooterProps) {
+  const [copied, setCopied] = useState(false);
+
   // Calculate summary stats
   const totalRecords = records.length;
   const fromSpans = records.filter((r) => r.spanId).length;
@@ -527,6 +533,17 @@ function TableFooter({ records, selectedCount = 0 }: TableFooterProps) {
     }
   });
   const topicCount = topics.size;
+
+  const handleCopyId = async () => {
+    if (!datasetId) return;
+    try {
+      await navigator.clipboard.writeText(datasetId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
 
   return (
     <div className="px-4 py-2 bg-muted/30 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
@@ -559,6 +576,25 @@ function TableFooter({ records, selectedCount = 0 }: TableFooterProps) {
           <span className="font-medium text-foreground">{withEvaluation}</span> evaluated
         </span>
       </div>
+      {datasetId && (
+        <button
+          onClick={handleCopyId}
+          className="flex items-center gap-1.5 hover:text-foreground transition-colors"
+          title={`Copy dataset ID: ${datasetId}`}
+        >
+          <span>ID:</span>
+          <span className="font-mono">
+            {datasetId.length > 12
+              ? `${datasetId.slice(0, 5)}...${datasetId.slice(-5)}`
+              : datasetId}
+          </span>
+          {copied ? (
+            <CheckCheck className="w-3.5 h-3.5 text-green-500" />
+          ) : (
+            <Copy className="w-3.5 h-3.5" />
+          )}
+        </button>
+      )}
     </div>
   );
 }

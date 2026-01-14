@@ -467,6 +467,7 @@ export function DatasetDetailView({ datasetId, onBack }: DatasetDetailViewProps)
           <div className="border border-border rounded-lg overflow-hidden bg-card">
             <RecordsTable
               records={sortedRecords}
+              datasetId={datasetId}
               showHeader
               showFooter
               selectable

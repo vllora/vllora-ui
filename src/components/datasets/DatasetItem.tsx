@@ -25,12 +25,15 @@ interface DatasetItemProps {
   onSaveRename: () => void;
   onCancelRename: () => void;
   onStartRename: () => void;
+  onImport?: () => void;
+  onDownload?: () => void;
   onDelete: () => void;
   onUpdateRecordTopic: (recordId: string, topic: string) => Promise<void>;
   onDeleteRecord: (recordId: string) => void;
 }
 
 export function DatasetItem({
+  datasetId,
   name,
   recordCount,
   updatedAt,
@@ -46,6 +49,8 @@ export function DatasetItem({
   onSaveRename,
   onCancelRename,
   onStartRename,
+  onImport,
+  onDownload,
   onDelete,
   onUpdateRecordTopic,
   onDeleteRecord,
@@ -65,12 +70,15 @@ export function DatasetItem({
         onSaveRename={onSaveRename}
         onCancelRename={onCancelRename}
         onStartRename={onStartRename}
+        onImport={onImport}
+        onDownload={onDownload}
         onDelete={onDelete}
       />
 
       {isExpanded && (
         <RecordsTable
           records={records}
+          datasetId={datasetId}
           isLoading={isLoadingRecords}
           maxRecords={maxRecords}
           onSeeAll={onSelect}

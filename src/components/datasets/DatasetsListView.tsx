@@ -49,6 +49,7 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmation | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [importTargetDatasetId, setImportTargetDatasetId] = useState<string | null>(null);
 
   // Max records to show before "See all" link
   const MAX_VISIBLE_RECORDS = 5;
@@ -224,6 +225,35 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
     }
   };
 
+  const handleDownloadDataset = async (datasetId: string) => {
+    try {
+      const datasetWithRecords = await getDatasetWithRecords(datasetId);
+      if (!datasetWithRecords) {
+        toast.error("Dataset not found");
+        return;
+      }
+
+      const exportData = {
+        name: datasetWithRecords.name,
+        createdAt: datasetWithRecords.createdAt,
+        updatedAt: datasetWithRecords.updatedAt,
+        records: datasetWithRecords.records,
+      };
+
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${datasetWithRecords.name.toLowerCase().replace(/\s+/g, "-")}-export.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Dataset exported");
+    } catch (err) {
+      console.error("Failed to export dataset:", err);
+      toast.error("Failed to export dataset");
+    }
+  };
+
   return (
     <>
       <div className="flex-1 overflow-auto">
@@ -294,6 +324,11 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
                       setEditingDatasetId(dataset.id);
                       setEditingDatasetName(dataset.name);
                     }}
+                    onImport={() => {
+                      setImportTargetDatasetId(dataset.id);
+                      setShowImportDialog(true);
+                    }}
+                    onDownload={() => handleDownloadDataset(dataset.id)}
                     onDelete={() => setDeleteConfirm({ type: "dataset", id: dataset.id })}
                     onUpdateRecordTopic={(recordId, topic) =>
                       handleUpdateRecordTopic(dataset.id, recordId, topic)
@@ -325,9 +360,13 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
       {/* Import data dialog */}
       <IngestDataDialog
         open={showImportDialog}
-        onOpenChange={setShowImportDialog}
+        onOpenChange={(open) => {
+          setShowImportDialog(open);
+          if (!open) setImportTargetDatasetId(null);
+        }}
         datasets={datasets}
         onImportToDataset={handleImportToDataset}
+        preselectedDatasetId={importTargetDatasetId ?? undefined}
       />
     </>
   );

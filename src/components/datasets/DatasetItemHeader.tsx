@@ -6,22 +6,9 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  ChevronDown,
-  ChevronRight,
-  Trash2,
-  Pencil,
-  Check,
-  X,
-  MoreHorizontal,
-} from "lucide-react";
+import { ChevronDown, ChevronRight, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DatasetActionsMenu } from "./DatasetActionsMenu";
 
 interface DatasetItemHeaderProps {
   name: string;
@@ -36,6 +23,8 @@ interface DatasetItemHeaderProps {
   onSaveRename: () => void;
   onCancelRename: () => void;
   onStartRename: () => void;
+  onImport?: () => void;
+  onDownload?: () => void;
   onDelete: () => void;
 }
 
@@ -68,6 +57,8 @@ export function DatasetItemHeader({
   onSaveRename,
   onCancelRename,
   onStartRename,
+  onImport,
+  onDownload,
   onDelete,
 }: DatasetItemHeaderProps) {
   return (
@@ -134,34 +125,12 @@ export function DatasetItemHeader({
         <span className="text-xs text-muted-foreground">
           Updated {formatRelativeTime(updatedAt)}
         </span>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-            <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-              <MoreHorizontal className="w-4 h-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
-                onStartRename();
-              }}
-            >
-              <Pencil className="w-4 h-4 mr-2" />
-              Rename
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="text-red-500 focus:text-red-500"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete();
-              }}
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <DatasetActionsMenu
+          onRename={onStartRename}
+          onImport={onImport}
+          onDownload={onDownload}
+          onDelete={onDelete}
+        />
       </div>
     </div>
   );
