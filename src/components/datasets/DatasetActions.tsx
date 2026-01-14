@@ -2,6 +2,7 @@
  * DatasetActions
  *
  * Action buttons for dataset operations: Export, Import, and Finetune.
+ * Consumes DatasetDetailContext to avoid prop drilling.
  */
 
 import { Button } from "@/components/ui/button";
@@ -12,24 +13,16 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Download, Upload, Sparkles, Loader2 } from "lucide-react";
+import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 
-interface DatasetActionsProps {
-  /** Called when export button is clicked */
-  onExport?: () => void;
-  /** Called when import button is clicked */
-  onIngest?: () => void;
-  /** Called when finetune button is clicked */
-  onFinetune?: () => void;
-  /** Whether finetuning is in progress */
-  isFinetuning?: boolean;
-}
+export function DatasetActions() {
+  const {
+    handleExport,
+    setImportDialog,
+    handleStartFinetune,
+    isStartingFinetune,
+  } = DatasetDetailConsumer();
 
-export function DatasetActions({
-  onExport,
-  onIngest,
-  onFinetune,
-  isFinetuning,
-}: DatasetActionsProps) {
   return (
     <div className="flex items-center gap-2">
       <TooltipProvider delayDuration={300}>
@@ -39,7 +32,7 @@ export function DatasetActions({
               variant="ghost"
               size="sm"
               className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-              onClick={onExport}
+              onClick={handleExport}
             >
               <Download className="w-4 h-4" />
             </Button>
@@ -54,7 +47,7 @@ export function DatasetActions({
               variant="ghost"
               size="sm"
               className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-              onClick={onIngest}
+              onClick={() => setImportDialog(true)}
             >
               <Upload className="w-4 h-4" />
             </Button>
@@ -68,10 +61,10 @@ export function DatasetActions({
             <Button
               size="sm"
               className="h-8 px-4 rounded-full bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white shadow-sm disabled:opacity-50"
-              onClick={onFinetune}
-              disabled={isFinetuning}
+              onClick={handleStartFinetune}
+              disabled={isStartingFinetune}
             >
-              {isFinetuning ? (
+              {isStartingFinetune ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
                   Starting...

@@ -2,56 +2,36 @@
  * DatasetDetailHeader
  *
  * Header for the dataset detail view with breadcrumb, title, stats, and actions.
+ * Consumes DatasetDetailContext to avoid prop drilling.
  */
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChevronRight, Pencil, Check, X, Database } from "lucide-react";
-import { Dataset } from "@/types/dataset-types";
+import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { DatasetSelector } from "./DatasetSelector";
 import { DatasetActions } from "./DatasetActions";
 
-interface DatasetDetailHeaderProps {
-  name: string;
-  datasetId: string;
-  recordCount: number;
-  createdAt?: number;
-  updatedAt?: number;
-  /** All available datasets for the dropdown selector */
-  datasets?: Dataset[];
-  /** Record counts for each dataset (keyed by dataset ID) */
-  datasetRecordCounts?: Record<string, number>;
-  /** Called when user selects a different dataset */
-  onSelectDataset?: (datasetId: string) => void;
-  /** Called when user clicks "Create new dataset" in dropdown */
-  onCreateDataset?: () => void;
-  onBack: () => void;
-  onRename: (newName: string) => Promise<void>;
-  onExport?: () => void;
-  onIngest?: () => void;
-  onFinetune?: () => void;
-  isFinetuning?: boolean;
-}
+export function DatasetDetailHeader() {
+  const {
+    dataset,
+    datasetId,
+    records,
+    datasets,
+    datasetRecordCounts,
+    onBack,
+    onSelectDataset,
+    setCreateDatasetDialog,
+    handleRenameDataset,
+  } = DatasetDetailConsumer();
 
-export function DatasetDetailHeader({
-  name,
-  datasetId,
-  recordCount,
-  updatedAt,
-  datasets,
-  datasetRecordCounts,
-  onSelectDataset,
-  onCreateDataset,
-  onBack,
-  onRename,
-  onExport,
-  onIngest,
-  onFinetune,
-  isFinetuning,
-}: DatasetDetailHeaderProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editingName, setEditingName] = useState("");
+
+  const name = dataset?.name ?? "";
+  const recordCount = records.length;
+  const updatedAt = dataset?.updatedAt;
 
   const handleStartEdit = () => {
     setEditingName(name);
@@ -60,7 +40,7 @@ export function DatasetDetailHeader({
 
   const handleSave = async () => {
     if (editingName.trim()) {
-      await onRename(editingName.trim());
+      await handleRenameDataset(editingName.trim());
       setIsEditing(false);
     }
   };
@@ -102,7 +82,7 @@ export function DatasetDetailHeader({
             datasets={datasets}
             recordCounts={datasetRecordCounts}
             onSelect={onSelectDataset}
-            onCreateNew={onCreateDataset}
+            onCreateNew={() => setCreateDatasetDialog(true)}
           />
         ) : (
           <span className="px-2.5 py-1 rounded-md bg-muted/50 text-foreground font-medium">{name}</span>
@@ -159,12 +139,8 @@ export function DatasetDetailHeader({
           </p>
         </div>
 
-        <DatasetActions
-          onExport={onExport}
-          onIngest={onIngest}
-          onFinetune={onFinetune}
-          isFinetuning={isFinetuning}
-        />
+        {/* Actions - consumes context directly */}
+        <DatasetActions />
       </div>
     </div>
   );
