@@ -10,6 +10,13 @@ import { DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
 import { Dataset, DatasetRecord } from "@/types/dataset-types";
 import { emitter } from "@/utils/eventEmitter";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -43,6 +50,8 @@ export function DatasetDetailView({ datasetId, onBack, onSelectDataset }: Datase
   const {
     datasets,
     getDatasetWithRecords,
+    getRecordCount,
+    createDataset,
     deleteDataset,
     deleteRecord,
     updateRecordTopic,
@@ -59,10 +68,13 @@ export function DatasetDetailView({ datasetId, onBack, onSelectDataset }: Datase
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [records, setRecords] = useState<DatasetRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [datasetRecordCounts, setDatasetRecordCounts] = useState<Record<string, number>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmation | null>(null);
   const [assignTopicDialog, setAssignTopicDialog] = useState(false);
   const [importDialog, setImportDialog] = useState(false);
+  const [createDatasetDialog, setCreateDatasetDialog] = useState(false);
+  const [newDatasetName, setNewDatasetName] = useState("");
   const [expandedRecord, setExpandedRecord] = useState<DatasetRecord | null>(null);
   const [isGeneratingTopics, setIsGeneratingTopics] = useState(false);
   const [isGeneratingTraces, setIsGeneratingTraces] = useState(false);
@@ -155,6 +167,25 @@ export function DatasetDetailView({ datasetId, onBack, onSelectDataset }: Datase
       setDataset(updated);
     }
   }, [datasets, datasetId, dataset]);
+
+  // Load record counts for all datasets (for dropdown display)
+  useEffect(() => {
+    const loadCounts = async () => {
+      const counts: Record<string, number> = {};
+      // Set current dataset's count from local records
+      counts[datasetId] = records.length;
+      // Load counts for other datasets
+      for (const ds of datasets) {
+        if (ds.id !== datasetId) {
+          counts[ds.id] = await getRecordCount(ds.id);
+        }
+      }
+      setDatasetRecordCounts(counts);
+    };
+    if (datasets.length > 1) {
+      loadCounts();
+    }
+  }, [datasets, datasetId, records.length, getRecordCount]);
 
   // Filter and sort records using shared utility (same logic as Lucy tools)
   const sortedRecords = filterAndSortRecords(
@@ -450,6 +481,21 @@ export function DatasetDetailView({ datasetId, onBack, onSelectDataset }: Datase
     setExpandedRecord(null);
   };
 
+  // Handle creating a new dataset from the dropdown
+  const handleCreateDataset = async () => {
+    if (!newDatasetName.trim()) return;
+    try {
+      const newDs = await createDataset(newDatasetName.trim());
+      setCreateDatasetDialog(false);
+      setNewDatasetName("");
+      toast.success("Dataset created");
+      // Navigate to the new dataset
+      onSelectDataset?.(newDs.id);
+    } catch {
+      toast.error("Failed to create dataset");
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -485,7 +531,9 @@ export function DatasetDetailView({ datasetId, onBack, onSelectDataset }: Datase
             createdAt={dataset.createdAt}
             updatedAt={dataset.updatedAt}
             datasets={datasets}
+            datasetRecordCounts={datasetRecordCounts}
             onSelectDataset={onSelectDataset}
+            onCreateDataset={() => setCreateDatasetDialog(true)}
             onBack={onBack}
             onRename={handleRenameDataset}
             onExport={handleExport}
@@ -574,6 +622,53 @@ export function DatasetDetailView({ datasetId, onBack, onSelectDataset }: Datase
         onImport={handleImportRecords}
         currentRecordCount={records.length}
       />
+
+      {/* Create dataset dialog */}
+      <Dialog open={createDatasetDialog} onOpenChange={(open) => {
+        setCreateDatasetDialog(open);
+        if (!open) setNewDatasetName("");
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create new dataset</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <Input
+              value={newDatasetName}
+              onChange={(e) => setNewDatasetName(e.target.value)}
+              placeholder="Dataset name"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newDatasetName.trim()) {
+                  handleCreateDataset();
+                }
+                if (e.key === "Escape") {
+                  setCreateDatasetDialog(false);
+                  setNewDatasetName("");
+                }
+              }}
+            />
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setCreateDatasetDialog(false);
+                  setNewDatasetName("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreateDataset}
+                disabled={!newDatasetName.trim()}
+                className="bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
+              >
+                Create
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

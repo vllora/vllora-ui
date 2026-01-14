@@ -7,32 +7,10 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  ChevronRight,
-  ChevronDown,
-  Pencil,
-  Check,
-  X,
-  Download,
-  Upload,
-  Sparkles,
-  Loader2,
-  Database,
-} from "lucide-react";
+import { ChevronRight, Pencil, Check, X, Database } from "lucide-react";
 import { Dataset } from "@/types/dataset-types";
-import { cn } from "@/lib/utils";
+import { DatasetSelector } from "./DatasetSelector";
+import { DatasetActions } from "./DatasetActions";
 
 interface DatasetDetailHeaderProps {
   name: string;
@@ -42,8 +20,12 @@ interface DatasetDetailHeaderProps {
   updatedAt?: number;
   /** All available datasets for the dropdown selector */
   datasets?: Dataset[];
+  /** Record counts for each dataset (keyed by dataset ID) */
+  datasetRecordCounts?: Record<string, number>;
   /** Called when user selects a different dataset */
   onSelectDataset?: (datasetId: string) => void;
+  /** Called when user clicks "Create new dataset" in dropdown */
+  onCreateDataset?: () => void;
   onBack: () => void;
   onRename: (newName: string) => Promise<void>;
   onExport?: () => void;
@@ -58,7 +40,9 @@ export function DatasetDetailHeader({
   recordCount,
   updatedAt,
   datasets,
+  datasetRecordCounts,
   onSelectDataset,
+  onCreateDataset,
   onBack,
   onRename,
   onExport,
@@ -112,38 +96,14 @@ export function DatasetDetailHeader({
         </button>
         <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />
         {datasets && datasets.length > 1 && onSelectDataset ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted/50 text-foreground font-medium hover:bg-muted transition-all">
-                {name}
-                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="min-w-48 max-h-72 overflow-auto">
-              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                Switch dataset
-              </div>
-              {datasets.map((dataset) => (
-                <DropdownMenuItem
-                  key={dataset.id}
-                  onClick={() => onSelectDataset(dataset.id)}
-                  className={cn(
-                    "gap-2 cursor-pointer",
-                    dataset.id === datasetId && "bg-[rgb(var(--theme-500))]/10"
-                  )}
-                >
-                  <Database className={cn(
-                    "w-4 h-4",
-                    dataset.id === datasetId ? "text-[rgb(var(--theme-500))]" : "text-muted-foreground"
-                  )} />
-                  <span className="flex-1 truncate">{dataset.name}</span>
-                  {dataset.id === datasetId && (
-                    <Check className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-                  )}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <DatasetSelector
+            currentName={name}
+            currentId={datasetId}
+            datasets={datasets}
+            recordCounts={datasetRecordCounts}
+            onSelect={onSelectDataset}
+            onCreateNew={onCreateDataset}
+          />
         ) : (
           <span className="px-2.5 py-1 rounded-md bg-muted/50 text-foreground font-medium">{name}</span>
         )}
@@ -199,63 +159,12 @@ export function DatasetDetailHeader({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <TooltipProvider delayDuration={300}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-                  onClick={onExport}
-                >
-                  <Download className="w-4 h-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Export dataset</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <TooltipProvider delayDuration={300}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-                  onClick={onIngest}
-                >
-                  <Upload className="w-4 h-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Import data</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <TooltipProvider delayDuration={300}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="sm"
-                  className="h-8 px-4 rounded-full bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white shadow-sm disabled:opacity-50"
-                  onClick={onFinetune}
-                  disabled={isFinetuning}
-                >
-                  {isFinetuning ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                      Starting...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-3.5 h-3.5 mr-1.5" />
-                      Finetune
-                    </>
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Start fine-tuning job</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
+        <DatasetActions
+          onExport={onExport}
+          onIngest={onIngest}
+          onFinetune={onFinetune}
+          isFinetuning={isFinetuning}
+        />
       </div>
     </div>
   );
