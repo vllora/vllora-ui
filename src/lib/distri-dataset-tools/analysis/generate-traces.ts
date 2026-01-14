@@ -193,7 +193,12 @@ function pickTopicPathFromRecord(record: DatasetRecord): string[] | null {
   return chosen;
 }
 
-function buildSyntheticTraceData(datasetId: string, datasetName: string, rec: SyntheticTraceRecord) {
+function buildSyntheticTraceData(
+  datasetId: string,
+  datasetName: string,
+  rec: SyntheticTraceRecord,
+  seed?: { record_id?: string; topic_path?: string[] }
+) {
   const trace_id = crypto.randomUUID();
   const span_id = crypto.randomUUID();
   const now = Date.now();
@@ -214,6 +219,8 @@ function buildSyntheticTraceData(datasetId: string, datasetName: string, rec: Sy
       dataset_name: datasetName,
       topic_path: rec.topic_path,
       persona: rec.persona,
+      seed_record_id: seed?.record_id,
+      seed_topic_path: seed?.topic_path,
       generated_at_ms: now,
     },
   };
@@ -242,10 +249,11 @@ function buildSyntheticTraceData(datasetId: string, datasetName: string, rec: Sy
   };
 }
 
-function buildPrompt(topicPath: string[], maxTurns: number, count: number): string {
+function buildPrompt(topicPath: string[], maxTurns: number, count: number, seedRecordId?: string): string {
   return `Generate ${count} synthetic agent traces for training.
 
 Topic context: ${topicPath.join(' -> ')}
+Seed record: ${seedRecordId || 'none'}
 
 Available tools (call some of these):
 ${TOOL_CATALOG.map((t) => `- ${t.name}: ${t.description}`).join('\n')}
@@ -258,6 +266,10 @@ Requirements:
 - Messages must be coherent and realistic.
 - topic_path must be lowercase_with_underscores.
 `;
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function callLLM(prompt: string): Promise<GenerateTracesLLMResult> {
@@ -273,20 +285,33 @@ async function callLLM(prompt: string): Promise<GenerateTracesLLMResult> {
     DistriClient.initDistriMessage('user', [{ part_type: 'text', data: prompt }]),
   ];
 
-  const response = await distriClient.llm(messages, [], {
-    model_settings: {
-      ...modelSettingsFromConfig,
-      model: modelSettingsFromConfig.model || 'openai/gpt-4.1-mini',
-      temperature: modelSettingsFromConfig.temperature ?? 0.5,
-      response_format: GENERATE_TRACES_SCHEMA,
-    },
-  });
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await distriClient.llm(messages, [], {
+        model_settings: {
+          ...modelSettingsFromConfig,
+          model: modelSettingsFromConfig.model || 'openai/gpt-4.1-mini',
+          temperature: modelSettingsFromConfig.temperature ?? 0.5,
+          response_format: GENERATE_TRACES_SCHEMA,
+        },
+      });
 
-  if (!response.content) {
-    throw new Error('LLM returned empty response');
+      if (!response.content) {
+        throw new Error('LLM returned empty response');
+      }
+
+      return JSON.parse(response.content.trim());
+    } catch (err) {
+      lastError = err;
+      if (attempt < 2) {
+        const backoffMs = 800 * Math.pow(2, attempt);
+        await sleep(backoffMs);
+      }
+    }
   }
 
-  return JSON.parse(response.content.trim());
+  throw lastError instanceof Error ? lastError : new Error('LLM call failed');
 }
 
 export async function generateTraces(params: Record<string, unknown>): Promise<GenerateTracesResult> {
@@ -307,38 +332,65 @@ export async function generateTraces(params: Record<string, unknown>): Promise<G
 
     const allRecords = await datasetsDB.getRecordsByDatasetId(resolvedDatasetId);
     const selectedIds = (recordIds || record_ids || []).filter(Boolean);
-    const seedRecords = selectedIds.length > 0 ? allRecords.filter((r) => selectedIds.includes(r.id)) : allRecords;
 
-    const topicSeedPath = seedRecords.length > 0
-      ? (pickTopicPathFromRecord(seedRecords[Math.floor(Math.random() * seedRecords.length)]) || [dataset.name.toLowerCase().replace(/\s+/g, '_')])
-      : [dataset.name.toLowerCase().replace(/\s+/g, '_')];
+    const normalize = (t: string) => t.trim().replace(/\s+/g, '_').toLowerCase();
 
-    const n = typeof count === 'number' ? count : DEFAULT_COUNT;
+    // If record_ids are provided, interpret `count` as per-selected-record count.
+    const perSeedCount = typeof count === 'number' ? count : DEFAULT_COUNT;
     const turns = typeof maxTurns === 'number' ? maxTurns : typeof max_turns === 'number' ? max_turns : DEFAULT_MAX_TURNS;
 
-    const prompt = buildPrompt(topicSeedPath, turns, n);
-    const llmResult = await callLLM(prompt);
+    const seedRecords = selectedIds.length > 0
+      ? allRecords.filter((r) => selectedIds.includes(r.id))
+      : [undefined];
 
-    const recordsToAdd = llmResult.records.map((r) => {
-      const normalize = (t: string) => t.trim().replace(/\s+/g, '_').toLowerCase();
-      const topicPath = (r.topic_path || []).map((t) => (t || '').trim()).filter(Boolean).map(normalize);
-      const topicPaths = topicPathsFromPath(topicPath);
-      const data = buildSyntheticTraceData(resolvedDatasetId, dataset.name, { ...r, topic_path: topicPath });
+    const TRACE_BATCH_SIZE = 3;
+    let createdTotal = 0;
+    const batchErrors: string[] = [];
 
-      return {
-        data,
-        topic_paths: topicPaths,
-        is_generated: true,
-        evaluation: undefined,
-      };
-    });
+    for (const seedRecord of seedRecords) {
+      const seedTopicPath = seedRecord
+        ? (pickTopicPathFromRecord(seedRecord)?.map(normalize) || [normalize(dataset.name)])
+        : [normalize(dataset.name)];
 
-    const createdCount = await datasetsDB.addRecordsToDataset(resolvedDatasetId, recordsToAdd);
+      for (let remaining = perSeedCount; remaining > 0; remaining -= TRACE_BATCH_SIZE) {
+        const batchCount = Math.min(TRACE_BATCH_SIZE, remaining);
+        const prompt = buildPrompt(seedTopicPath, turns, batchCount, seedRecord?.id);
+        const llmResult = await callLLM(prompt);
+
+        const recordsToAdd = llmResult.records.map((r) => {
+          const topicPath = (r.topic_path || []).map((t) => (t || '').trim()).filter(Boolean).map(normalize);
+          const topicPaths = topicPathsFromPath(topicPath);
+          const data = buildSyntheticTraceData(
+            resolvedDatasetId,
+            dataset.name,
+            { ...r, topic_path: topicPath },
+            { record_id: seedRecord?.id, topic_path: seedTopicPath }
+          );
+
+          return {
+            data,
+            topic_paths: topicPaths,
+            is_generated: true,
+            evaluation: undefined,
+          };
+        });
+
+        try {
+          const created = await datasetsDB.addRecordsToDataset(resolvedDatasetId, recordsToAdd);
+          createdTotal += created;
+        } catch (e) {
+          batchErrors.push(
+            `seed=${seedRecord?.id || 'none'} batchCount=${batchCount}: ${e instanceof Error ? e.message : String(e)}`
+          );
+        }
+      }
+    }
 
     return {
       success: true,
       dataset_name: dataset.name,
-      created_count: createdCount,
+      created_count: createdTotal,
+      error: batchErrors.length > 0 ? `${batchErrors.length} batch(es) failed: ${batchErrors.join(' | ')}` : undefined,
     };
   } catch (error) {
     return { success: false, error: `LLM error: ${error instanceof Error ? error.message : 'Unknown error'}` };
@@ -357,8 +409,8 @@ export const generateTracesTool: DistriFnTool = {
     type: 'object',
     properties: {
       dataset_id: { type: 'string', description: 'The dataset ID' },
-      record_ids: { type: 'array', items: { type: 'string' }, description: 'Optional: seed from selected records' },
-      count: { type: 'number', description: 'Number of traces to generate (default 5)' },
+      record_ids: { type: 'array', items: { type: 'string' }, description: 'Optional: seed from selected records (count becomes per selected record)' },
+      count: { type: 'number', description: 'Traces per selected record when record_ids provided (otherwise total, default 5)' },
       max_turns: { type: 'number', description: 'Max user turns per trace (default 3)' },
     },
     required: ['dataset_id'],

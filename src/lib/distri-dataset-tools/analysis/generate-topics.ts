@@ -49,6 +49,7 @@ export interface AnalyzeRecordsForTopicsParams {
 export interface AnalyzeRecordsForTopicsResult {
   success: boolean;
   error?: string;
+  warnings?: string;
   dataset_name?: string;
   records_analyzed?: number;
   analysis?: TopicAnalysisResult;
@@ -280,6 +281,10 @@ ${JSON.stringify(records, null, 2)}
 `;
 }
 
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function callLLMForTopics(prompt: string): Promise<string> {
   const lucyConfig = await fetchLucyConfigCached();
   const rawUrl = lucyConfig.distri_url || getDistriUrl();
@@ -293,20 +298,33 @@ async function callLLMForTopics(prompt: string): Promise<string> {
     DistriClient.initDistriMessage('user', [{ part_type: 'text', data: prompt }]),
   ];
 
-  const response = await distriClient.llm(messages, [], {
-    model_settings: {
-      ...modelSettingsFromConfig,
-      model: modelSettingsFromConfig.model || 'openai/gpt-4.1',
-      temperature: modelSettingsFromConfig.temperature ?? 0.3,
-      response_format: TOPIC_ANALYSIS_RESPONSE_SCHEMA,
-    },
-  });
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await distriClient.llm(messages, [], {
+        model_settings: {
+          ...modelSettingsFromConfig,
+          model: modelSettingsFromConfig.model || 'openai/gpt-4.1',
+          temperature: modelSettingsFromConfig.temperature ?? 0.3,
+          response_format: TOPIC_ANALYSIS_RESPONSE_SCHEMA,
+        },
+      });
 
-  if (!response.content) {
-    throw new Error('LLM returned empty response');
+      if (!response.content) {
+        throw new Error('LLM returned empty response');
+      }
+
+      return response.content;
+    } catch (err) {
+      lastError = err;
+      if (attempt < 2) {
+        const backoffMs = 800 * Math.pow(2, attempt);
+        await sleep(backoffMs);
+      }
+    }
   }
 
-  return response.content;
+  throw lastError instanceof Error ? lastError : new Error('LLM call failed');
 }
 
 function parseTopicAnalysisResponse(content: string): TopicAnalysisResult {
@@ -419,13 +437,63 @@ export async function generateTopics(params: Record<string, unknown>): Promise<A
   const { datasetId, dataset_id, datasetName, dataset_name, recordIds, record_ids, maxTopics, max_topics, maxDepth, max_depth, degree, branching } =
     params as unknown as GenerateTopicsParams;
 
+  const resolvedDatasetId = datasetId || dataset_id;
+  const resolvedDatasetName = datasetName || dataset_name;
+  const resolvedRecordIds = (recordIds || record_ids || []).filter(Boolean);
+
+  const resolvedMaxDepth = maxDepth ?? max_depth ?? DEFAULT_TOPIC_MAX_DEPTH;
+  const resolvedDegree = degree ?? branching ?? DEFAULT_TOPIC_DEGREE;
+  const resolvedMaxTopics = maxTopics ?? max_topics;
+
+  // Batch large selections to reduce timeouts
+  const TOPIC_BATCH_SIZE = 5;
+  if (resolvedRecordIds.length > TOPIC_BATCH_SIZE) {
+    let totalAnalyzed = 0;
+    let totalApplied = 0;
+    const combinedTrees: RecordTopicTree[] = [];
+    const batchErrors: string[] = [];
+
+    for (let i = 0; i < resolvedRecordIds.length; i += TOPIC_BATCH_SIZE) {
+      const batchIds = resolvedRecordIds.slice(i, i + TOPIC_BATCH_SIZE);
+      const result = await analyzeRecordsForTopics({
+        datasetId: resolvedDatasetId,
+        datasetName: resolvedDatasetName,
+        recordIds: batchIds,
+        maxTopics: resolvedMaxTopics,
+        maxDepth: resolvedMaxDepth,
+        degree: resolvedDegree,
+      });
+
+      if (!result.success) {
+        batchErrors.push(result.error || `Batch ${Math.floor(i / TOPIC_BATCH_SIZE) + 1} failed`);
+        continue;
+      }
+
+      totalAnalyzed += result.records_analyzed || 0;
+      totalApplied += result.applied_count || 0;
+      if (result.analysis?.topic_trees) {
+        combinedTrees.push(...result.analysis.topic_trees);
+      }
+    }
+
+    return {
+      success: true,
+      dataset_name: resolvedDatasetName,
+      records_analyzed: totalAnalyzed,
+      applied_count: totalApplied,
+      auto_applied: true,
+      analysis: { topic_trees: combinedTrees },
+      warnings: batchErrors.length > 0 ? `${batchErrors.length} batch(es) failed: ${batchErrors.join(' | ')}` : undefined,
+    };
+  }
+
   return analyzeRecordsForTopics({
-    datasetId: datasetId || dataset_id,
-    datasetName: datasetName || dataset_name,
-    recordIds: recordIds || record_ids,
-    maxTopics: maxTopics ?? max_topics,
-    maxDepth: maxDepth ?? max_depth ?? DEFAULT_TOPIC_MAX_DEPTH,
-    degree: degree ?? branching ?? DEFAULT_TOPIC_DEGREE,
+    datasetId: resolvedDatasetId,
+    datasetName: resolvedDatasetName,
+    recordIds: resolvedRecordIds.length > 0 ? resolvedRecordIds : undefined,
+    maxTopics: resolvedMaxTopics,
+    maxDepth: resolvedMaxDepth,
+    degree: resolvedDegree,
   });
 }
 
