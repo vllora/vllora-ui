@@ -2,7 +2,7 @@ import { Span } from "@/types/common-type";
 import { BaseSpanUIDetailsDisplay, getParentApiInvoke, getParentCloudApiInvoke } from ".."
 import { getStatus } from "../index";
 import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ExclamationTriangleIcon, CheckCircleIcon, CpuChipIcon } from "@heroicons/react/24/outline";
+import { ExclamationTriangleIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
 import { ErrorViewer } from "../error-viewer";
 import { RequestResponseViewer } from "../request-response-viewer";
 import { useState } from "react";

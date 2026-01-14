@@ -7,7 +7,6 @@ import { getOperationIcon, getOperationIconColor, getSpanTitle } from "../new-ti
 import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
 import { getClientSDKName, isPromptCachingApplied } from "@/utils/graph-utils";
 import { SpanHeader } from "./SpanHeader";
-import { SpanFooter } from "./SpanFooter";
 
 export const SpanDetailsDisplay = () => {
   const [currentTab, setCurrentTab] = useState<string>("details");
