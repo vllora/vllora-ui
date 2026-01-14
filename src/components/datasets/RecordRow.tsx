@@ -15,6 +15,7 @@ import {
 import { Check, Eye, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DataCell, SourceCell, TopicCell, EvaluationCell, TimestampCell } from "./cells";
+import { COLUMN_WIDTHS } from "./table-columns";
 
 interface RecordRowProps {
   record: DatasetRecord;
@@ -55,7 +56,7 @@ export function RecordRow({
     >
       {selectable && (
         <div
-          className="flex items-center justify-center w-6 shrink-0"
+          className={cn("flex items-center justify-center", COLUMN_WIDTHS.checkbox)}
           onClick={(e) => {
             e.stopPropagation();
             onSelect?.(!selected);
@@ -110,7 +111,7 @@ export function RecordRow({
       )}
 
       {/* Action buttons */}
-      <div className="flex items-center justify-end gap-1 w-16 shrink-0">
+      <div className={cn("flex items-center justify-end gap-1", COLUMN_WIDTHS.actions)}>
         {onExpand && (
           <TooltipProvider>
             <Tooltip>

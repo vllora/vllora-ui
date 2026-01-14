@@ -5,6 +5,7 @@
  */
 
 import { cn } from "@/lib/utils";
+import { COLUMN_WIDTHS } from "../table-columns";
 
 interface TimestampCellProps {
   timestamp: number;
@@ -32,7 +33,7 @@ export function TimestampCell({
     <div
       className={cn(
         "shrink-0 text-right",
-        tableLayout ? "w-36" : "min-w-[120px]"
+        tableLayout ? COLUMN_WIDTHS.timestamp : "min-w-[120px]"
       )}
     >
       <span className="text-xs text-muted-foreground font-mono">
