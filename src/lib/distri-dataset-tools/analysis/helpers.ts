@@ -47,6 +47,10 @@ export function getOutputSummary(data: unknown): string {
         const str = typeof content === 'string' ? content : JSON.stringify(content);
         return str.slice(0, 200) + (str.length > 200 ? '...' : '');
       }
+      const toolCalls = (msg as any)?.tool_calls;
+      if (toolCalls) {
+        return `Tool calls: ${JSON.stringify(toolCalls).slice(0, 150)}...`;
+      }
     }
     if (dataInfo?.output?.tool_calls) {
       return `Tool calls: ${JSON.stringify(dataInfo.output.tool_calls).slice(0, 150)}...`;
