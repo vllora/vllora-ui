@@ -74,7 +74,7 @@ export const SpanDetailsDisplay = () => {
             <SpanUIDetailsDisplay span={currentSpan} />
         </div>
         {/* Sticky Footer section */}
-        {/* <SpanFooter /> */}
+        <SpanFooter />
       </Tabs>
     </div>
   );

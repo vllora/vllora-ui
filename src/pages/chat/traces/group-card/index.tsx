@@ -36,6 +36,9 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
     collapsedSpans,
     setCollapsedSpans,
     labelFilter,
+    isSpanSelectModeEnabled,
+    selectedSpanIdsForActions,
+    toggleSpanSelection,
   } = TracesPageConsumer();
 
   // Get the appropriate key based on group type
@@ -309,6 +312,9 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
                       isInSidebar={false}
                       collapsedSpans={collapsedSpans}
                       selectedLabels={labelFilter.selectedLabels}
+                      isSelectModeEnabled={isSpanSelectModeEnabled}
+                      selectedSpanIdsForActions={selectedSpanIdsForActions}
+                      onToggleSelection={toggleSpanSelection}
                     />
                   </ErrorBoundary>
                 </div>

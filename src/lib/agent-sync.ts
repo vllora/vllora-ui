@@ -4,10 +4,12 @@
 
 export interface LucyConfig {
   distri_url?: string;
+  // NOTE: backend may return additional provider-specific fields
   model_settings?: {
     model?: string;
     temperature?: number;
     max_tokens?: number;
+    [key: string]: any;
   };
 }
 

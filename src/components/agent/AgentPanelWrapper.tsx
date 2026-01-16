@@ -9,7 +9,7 @@
  */
 
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useLocation } from 'react-router';
 import { FloatingAgentPanel } from './FloatingAgentPanel';
 import { AgentPanel } from './AgentPanel';
 import { useDistriConnection } from '@/providers/DistriProvider';
@@ -22,6 +22,7 @@ export function AgentPanelWrapper() {
   const { isInitializing } = useDistriConnection();
   const { isOpen, close, mode } = useAgentPanel();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Listen for navigation events from agent tools
   useEffect(() => {
@@ -47,6 +48,11 @@ export function AgentPanelWrapper() {
 
   // Don't render if Lucy is disabled or still initializing
   if (!isLucyEnabled || isInitializing) {
+    return null;
+  }
+
+  // Don't render on datasets page - it has its own embedded Lucy
+  if (location.pathname.startsWith('/datasets')) {
     return null;
   }
 

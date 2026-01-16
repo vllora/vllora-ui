@@ -155,6 +155,76 @@ const { models, loading, error, refetchModels } = LocalModelsConsumer();
 - Automatic error handling with toast notifications
 - Shared across HomePage, ModelSelector, etc.
 
+### DatasetsContext
+
+Manages dataset data across the application. Single source of truth for all dataset-related data.
+
+**Location**: `src/contexts/DatasetsContext.tsx`
+
+**Usage**:
+```typescript
+import { DatasetsConsumer } from '@/contexts/DatasetsContext';
+
+const {
+  datasets,
+  isLoading,
+  error,
+  loadDatasets,
+  createDataset,
+  deleteDataset,
+  renameDataset,
+  // ... more actions
+} = DatasetsConsumer();
+```
+
+**Features**:
+- Fetches datasets from IndexedDB on mount
+- Provides CRUD operations for datasets and records
+- Listens for Lucy agent events to update state:
+  - `vllora_dataset_created` - adds new dataset to state
+  - `vllora_dataset_deleted` - removes dataset from state
+  - `vllora_dataset_renamed` - updates dataset name in state
+  - `vllora_dataset_refresh` - reloads all datasets from IndexedDB
+- Shared across DatasetsPage, AddToDatasetDialog, etc.
+
+### DatasetsUIContext
+
+Manages UI state for the Datasets page. Handles navigation, selection, and Lucy tool UI events.
+
+**Location**: `src/contexts/DatasetsUIContext.tsx`
+
+**Usage**:
+```typescript
+import { DatasetsUIConsumer } from '@/contexts/DatasetsUIContext';
+
+const {
+  selectedDatasetId,
+  currentDataset,
+  selectedRecordIds,
+  searchQuery,
+  sortConfig,
+  expandedDatasetIds,
+  navigateToDataset,
+  navigateToList,
+  selectRecords,
+  clearSelection,
+  // ... more actions
+} = DatasetsUIConsumer();
+```
+
+**Features**:
+- Manages URL-based navigation (selectedDatasetId from query params)
+- Handles record selection state
+- Manages search and sort configuration
+- Listens for Lucy agent UI events:
+  - `vllora_dataset_navigate` - navigates to a specific dataset
+  - `vllora_dataset_expand` / `vllora_dataset_collapse` - expands/collapses dataset in list
+  - `vllora_dataset_select_records` / `vllora_dataset_clear_selection` - manages selection
+  - `vllora_dataset_set_search` / `vllora_dataset_set_sort` - updates search/sort
+- Page-specific context (only wraps DatasetsPage)
+
+**Note**: This context depends on `DatasetsContext` and must be nested inside `DatasetsProvider`.
+
 ## Best Practices
 
 ### 1. When to Use Context
@@ -220,6 +290,49 @@ useEffect(() => {
   }
 }, [someCondition]);
 ```
+
+### 5. Handling External Events (e.g., Lucy Agent Tools)
+
+When a context needs to respond to external events (like Lucy agent tool calls), use the event emitter pattern:
+
+```typescript
+import { emitter } from '@/utils/eventEmitter';
+
+export function FeatureProvider({ children }: { children: ReactNode }) {
+  const [data, setData] = useState<Data[]>([]);
+
+  // Listen for external events
+  useEffect(() => {
+    const handleItemCreated = (event: { item: Data }) => {
+      setData(prev => {
+        // Avoid duplicates
+        if (prev.some(d => d.id === event.item.id)) return prev;
+        return [event.item, ...prev];
+      });
+    };
+
+    const handleItemDeleted = (event: { itemId: string }) => {
+      setData(prev => prev.filter(d => d.id !== event.itemId));
+    };
+
+    emitter.on('feature_item_created' as any, handleItemCreated);
+    emitter.on('feature_item_deleted' as any, handleItemDeleted);
+
+    return () => {
+      emitter.off('feature_item_created' as any, handleItemCreated);
+      emitter.off('feature_item_deleted' as any, handleItemDeleted);
+    };
+  }, []);
+
+  // ... rest of provider
+}
+```
+
+**Key points**:
+- Use `as any` type assertion for custom event names not in the Events type
+- Always clean up listeners in the useEffect return
+- Update state directly instead of refetching when possible (faster UI updates)
+- Use this pattern for Lucy agent tools that need to update UI state
 
 ## Migration Guide
 

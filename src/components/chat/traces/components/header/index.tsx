@@ -9,10 +9,22 @@ export const TraceHeader = (props: {
     loadingMoreRuns,
     openTraces,
     fetchSpansByRunId,
+    isSpanSelectModeEnabled,
+    setIsSpanSelectModeEnabled,
+    selectedSpanIdsForActions,
+    clearSpanSelection,
   } = ChatWindowConsumer();
 
   const { threadId } = props;
   const hasOpenTraces = openTraces && openTraces.length > 0;
+
+  const handleToggleSelectMode = () => {
+    if (isSpanSelectModeEnabled) {
+      clearSpanSelection();
+    } else {
+      setIsSpanSelectModeEnabled(true);
+    }
+  };
 
   return (
     <TraceListHeader
@@ -24,6 +36,9 @@ export const TraceHeader = (props: {
         }
       }}
       isLoading={loadingMoreRuns}
+      isSelectModeEnabled={isSpanSelectModeEnabled}
+      onToggleSelectMode={handleToggleSelectMode}
+      selectedCount={selectedSpanIdsForActions.length}
     />
   );
 };

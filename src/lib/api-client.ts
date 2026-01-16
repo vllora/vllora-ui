@@ -129,7 +129,7 @@ export async function handleApiResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const error = await response.text();
     const errorJson = tryParseJson(error)
-    throw new Error(errorJson?.error || errorJson.message || error || `API request failed with status ${response.status}`);
+    throw new Error(errorJson?.error || errorJson?.message || error || `API request failed with status ${response.status}`);
   }
 
   // Handle empty responses (e.g., 204 No Content or empty body)
