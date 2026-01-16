@@ -3,7 +3,7 @@ import { Span } from '@/types/common-type';
 import { tryParseJson } from '@/utils/modelUtils';
 
 const DB_NAME = 'vllora-datasets';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -53,6 +53,13 @@ export async function getDB(): Promise<IDBDatabase> {
       }
       if (!recordsStore.indexNames.contains('topic_path_str')) {
         recordsStore.createIndex('topic_path_str', 'topic_path_str', { unique: false });
+      }
+
+      // Create datasetFinetuneJobs store for tracking which datasets created which finetune jobs
+      if (!db.objectStoreNames.contains('datasetFinetuneJobs')) {
+        const finetuneJobsStore = db.createObjectStore('datasetFinetuneJobs', { keyPath: 'id' });
+        finetuneJobsStore.createIndex('datasetId', 'datasetId', { unique: false });
+        finetuneJobsStore.createIndex('jobId', 'jobId', { unique: false });
       }
     };
   });
@@ -543,6 +550,33 @@ export async function renameDataset(datasetId: string, newName: string): Promise
   });
 }
 
+// Update a dataset's backend dataset ID (set after uploading to cloud provider)
+export async function updateDatasetBackendId(
+  datasetId: string,
+  backendDatasetId: string
+): Promise<void> {
+  const db = await getDB();
+  const now = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('datasets', 'readwrite');
+    const store = tx.objectStore('datasets');
+
+    const getRequest = store.get(datasetId);
+    getRequest.onsuccess = () => {
+      const dataset = getRequest.result;
+      if (dataset) {
+        dataset.backendDatasetId = backendDatasetId;
+        dataset.updatedAt = now;
+        store.put(dataset);
+      }
+    };
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 // Check if span already exists in a dataset
 export async function spanExistsInDataset(datasetId: string, spanId: string): Promise<boolean> {
   const db = await getDB();
@@ -661,3 +695,4 @@ export async function getDatasetsBySpanId(spanId: string): Promise<Dataset[]> {
     request.onerror = () => reject(request.error);
   });
 }
+

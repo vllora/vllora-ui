@@ -41,6 +41,8 @@ export interface Dataset {
   name: string;
   createdAt: number;
   updatedAt: number;
+  // Backend dataset ID from the cloud provider (set after first finetune upload)
+  backendDatasetId?: string;
 }
 
 // Combined view for UI (dataset + its records)

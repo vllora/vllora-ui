@@ -19,7 +19,8 @@ import { DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
 import { Dataset, DatasetRecord } from "@/types/dataset-types";
 import { emitter } from "@/utils/eventEmitter";
 import { toast } from "sonner";
-import { startFinetuneJob } from "@/services/finetune-api";
+import { uploadDatasetForFinetune, createFinetuneJobFromUpload } from "@/services/finetune-api";
+import { updateDatasetBackendId } from "@/services/datasets-db";
 import { filterAndSortRecords } from "@/components/datasets/record-filters";
 import {
   ColumnVisibility,
@@ -524,10 +525,27 @@ export function DatasetDetailProvider({
 
     setIsStartingFinetune(true);
     try {
-      const job = await startFinetuneJob({ ...dataset, records });
+      let backendDatasetId = dataset.backendDatasetId;
+
+      // Step 1: Upload dataset to backend (skip if already uploaded)
+      if (!backendDatasetId) {
+        const uploadResult = await uploadDatasetForFinetune({ ...dataset, records });
+        backendDatasetId = uploadResult.backendDatasetId;
+
+        // Save the backend dataset ID immediately after upload succeeds
+        // This ensures we track the uploaded dataset even if job creation fails
+        await updateDatasetBackendId(dataset.id, backendDatasetId);
+        setDataset((prev) => prev ? { ...prev, backendDatasetId } : null);
+      }
+
+      // Step 2: Create the finetune job
+      const job = await createFinetuneJobFromUpload(backendDatasetId, dataset.name);
+
       toast.success("Fine-tuning job started", {
         description: `Job ID: ${job.id}`,
       });
+      // Emit event to notify FinetuneJobsContext to refresh
+      emitter.emit("vllora_finetune_job_created", { jobId: job.id });
     } catch (err) {
       console.error("Failed to start fine-tuning job:", err);
       toast.error("Failed to start fine-tuning job", {

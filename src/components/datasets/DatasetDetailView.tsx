@@ -11,6 +11,7 @@ import {
   DatasetDetailProvider,
   DatasetDetailConsumer,
 } from "@/contexts/DatasetDetailContext";
+import { FinetuneJobsProvider } from "@/contexts/FinetuneJobsContext";
 import { DeleteConfirmationDialog } from "./DeleteConfirmationDialog";
 import { AssignTopicDialog } from "./AssignTopicDialog";
 import { ExpandTraceDialog } from "./ExpandTraceDialog";
@@ -19,6 +20,7 @@ import { DatasetDetailHeader } from "./DatasetDetailHeader";
 import { RecordsToolbar } from "./RecordsToolbar";
 import { RecordsTable } from "./RecordsTable";
 import { CreateDatasetDialog } from "./CreateDatasetDialog";
+import { FinetuneJobsPanel } from "@/components/finetune/FinetuneJobsPanel";
 
 interface DatasetDetailViewProps {
   datasetId: string;
@@ -34,7 +36,9 @@ export function DatasetDetailView({ datasetId, onBack, onSelectDataset }: Datase
       onBack={onBack}
       onSelectDataset={onSelectDataset}
     >
-      <DatasetDetailContent />
+      <FinetuneJobsProvider>
+        <DatasetDetailContent />
+      </FinetuneJobsProvider>
     </DatasetDetailProvider>
   );
 }
@@ -121,57 +125,63 @@ function DatasetDetailContent() {
 
   return (
     <>
-      <div className="flex-1 overflow-auto">
-        <div className="w-full max-w-6xl mx-auto px-6 py-6">
-          {/* Header - consumes context directly */}
-          <DatasetDetailHeader />
+      <div className="flex-1 flex overflow-hidden">
+        {/* Main content */}
+        <div className="flex-1 overflow-auto">
+          <div className="w-full max-w-6xl mx-auto px-6 py-6">
+            {/* Header - consumes context directly */}
+            <DatasetDetailHeader />
 
-          {/* Toolbar */}
-          <RecordsToolbar
-            selectedCount={selectedRecordIds.size}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            sortConfig={sortConfig}
-            onSortChange={setSortConfig}
-            groupByTopic={groupByTopic}
-            onGroupByTopicChange={setGroupByTopic}
-            onAssignTopic={() => setAssignTopicDialog(true)}
-            generatedFilter={generatedFilter}
-            onGeneratedFilterChange={setGeneratedFilter}
-            onGenerateTopics={handleGenerateTopics}
-            isGeneratingTopics={isGeneratingTopics}
-            onGenerateTraces={handleGenerateTraces}
-            isGeneratingTraces={isGeneratingTraces}
-            onRunEvaluation={handleBulkRunEvaluation}
-            onDeleteSelected={handleBulkDelete}
-            columnVisibility={columnVisibility}
-            onColumnVisibilityChange={setColumnVisibility}
-          />
-
-          {/* Records table */}
-          <div className="border border-border rounded-lg overflow-hidden bg-card">
-            <RecordsTable
-              records={sortedRecords}
-              datasetId={datasetId}
-              showHeader
-              showFooter
-              selectable
-              selectedIds={selectedRecordIds}
-              onSelectionChange={setSelectedRecordIds}
+            {/* Toolbar */}
+            <RecordsToolbar
+              selectedCount={selectedRecordIds.size}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
               sortConfig={sortConfig}
               onSortChange={setSortConfig}
               groupByTopic={groupByTopic}
+              onGroupByTopicChange={setGroupByTopic}
+              onAssignTopic={() => setAssignTopicDialog(true)}
+              generatedFilter={generatedFilter}
+              onGeneratedFilterChange={setGeneratedFilter}
+              onGenerateTopics={handleGenerateTopics}
+              isGeneratingTopics={isGeneratingTopics}
+              onGenerateTraces={handleGenerateTraces}
+              isGeneratingTraces={isGeneratingTraces}
+              onRunEvaluation={handleBulkRunEvaluation}
+              onDeleteSelected={handleBulkDelete}
               columnVisibility={columnVisibility}
-              emptyMessage={searchQuery ? `No records match "${searchQuery}"` : "No records in this dataset"}
-              onUpdateTopic={handleUpdateRecordTopic}
-              onDelete={(recordId: string) =>
-                setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
-              }
-              onExpand={setExpandedRecord}
-              height={500}
+              onColumnVisibilityChange={setColumnVisibility}
             />
+
+            {/* Records table */}
+            <div className="border border-border rounded-lg overflow-hidden bg-card">
+              <RecordsTable
+                records={sortedRecords}
+                datasetId={datasetId}
+                showHeader
+                showFooter
+                selectable
+                selectedIds={selectedRecordIds}
+                onSelectionChange={setSelectedRecordIds}
+                sortConfig={sortConfig}
+                onSortChange={setSortConfig}
+                groupByTopic={groupByTopic}
+                columnVisibility={columnVisibility}
+                emptyMessage={searchQuery ? `No records match "${searchQuery}"` : "No records in this dataset"}
+                onUpdateTopic={handleUpdateRecordTopic}
+                onDelete={(recordId: string) =>
+                  setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
+                }
+                onExpand={setExpandedRecord}
+                height={500}
+              />
+            </div>
           </div>
         </div>
+
+        {/* Finetune jobs sidebar */}
+        <FinetuneJobsPanel />
       </div>
 
       {/* Delete confirmation dialog */}

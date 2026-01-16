@@ -38,46 +38,72 @@ export interface FinetuningJob {
 // Reinforcement job types
 export interface ReinforcementTrainingConfig {
   learning_rate?: number;
+  max_context_length?: number;
   lora_rank?: number;
   epochs?: number;
   batch_size?: number;
+  gradient_accumulation_steps?: number;
+  learning_rate_warmup_steps?: number;
+  batch_size_samples?: number;
 }
 
 export interface ReinforcementInferenceParameters {
   max_output_tokens?: number;
   temperature?: number;
   top_p?: number;
+  top_k?: number;
+  response_candidates_count?: number;
 }
 
 export interface CreateReinforcementJobRequest {
   dataset: string;
   base_model: string;
   output_model?: string;
+  evaluation_dataset?: string;
   display_name?: string;
   training_config?: ReinforcementTrainingConfig;
   inference_parameters?: ReinforcementInferenceParameters;
+  chunk_size?: number;
+  node_count?: number;
 }
 
-export interface ReinforcementJob {
+// Finetune job status enum
+export type FinetuneJobStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+
+// FinetuneJob - matches backend FinetuningJobResponse
+export interface FinetuneJob {
   id: string;
-  provider_job_id?: string;
-  status: string;
+  provider_job_id: string;
+  status: FinetuneJobStatus;
   base_model: string;
   fine_tuned_model?: string;
-  provider?: string;
-  hyperparameters?: any;
+  provider: string;
+  training_config?: ReinforcementTrainingConfig;
   suffix?: string;
   error_message?: string;
-  training_file_id?: string;
+  training_file_id: string;
   validation_file_id?: string;
   created_at: string;
   updated_at: string;
   completed_at?: string;
 }
 
+// Legacy type alias for backward compatibility
+export type ReinforcementJob = FinetuneJob;
+
 export interface DatasetUploadResponse {
   dataset_id: string;
   [key: string]: unknown;
+}
+
+export interface StartFinetuneResult {
+  job: ReinforcementJob;
+  backendDatasetId: string;
+}
+
+export interface DatasetUploadResult {
+  backendDatasetId: string;
+  jsonlContent: string;
 }
 
 // ============================================================================
@@ -212,17 +238,13 @@ export async function getReinforcementJobStatus(jobId: string): Promise<Reinforc
 }
 
 /**
- * Start a finetune job with default configuration
- * This uploads the dataset and creates a reinforcement job in one step
+ * Upload a dataset to the backend for finetuning
+ * This is step 1 of the finetune process - should be called first so the
+ * backendDatasetId can be saved before attempting to create the job
  */
-export async function startFinetuneJob(
-  dataset: DatasetWithRecords,
-  options?: {
-    baseModel?: string;
-    outputModel?: string;
-    displayName?: string;
-  }
-): Promise<ReinforcementJob> {
+export async function uploadDatasetForFinetune(
+  dataset: DatasetWithRecords
+): Promise<DatasetUploadResult> {
   // Convert dataset to JSONL
   const jsonlContent = datasetToJsonl(dataset.records);
 
@@ -233,17 +255,36 @@ export async function startFinetuneJob(
   // Upload dataset
   const uploadResult = await uploadDataset(jsonlContent);
 
+  return {
+    backendDatasetId: uploadResult.dataset_id,
+    jsonlContent,
+  };
+}
+
+/**
+ * Create a finetune job using an already-uploaded dataset
+ * This is step 2 of the finetune process - call after uploadDatasetForFinetune
+ */
+export async function createFinetuneJobFromUpload(
+  backendDatasetId: string,
+  datasetName: string,
+  options?: {
+    baseModel?: string;
+    outputModel?: string;
+    displayName?: string;
+  }
+): Promise<ReinforcementJob> {
   // Generate output model name from dataset name
   const timestamp = Date.now();
-  const safeName = dataset.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30);
+  const safeName = datasetName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30);
   const defaultOutputModel = `${safeName}-${timestamp}`;
 
   // Create reinforcement job with default config
   const job = await createReinforcementJob({
-    dataset: uploadResult.dataset_id,
+    dataset: backendDatasetId,
     base_model: options?.baseModel || 'llama-v3-8b-instruct',
     output_model: options?.outputModel || defaultOutputModel,
-    display_name: options?.displayName || `${dataset.name} Fine-tune`,
+    display_name: options?.displayName || `${datasetName} Fine-tune`,
     training_config: {
       learning_rate: 0.0001,
       lora_rank: 16,
@@ -258,6 +299,25 @@ export async function startFinetuneJob(
   });
 
   return job;
+}
+
+/**
+ * Start a finetune job with default configuration (convenience function)
+ * This uploads the dataset and creates a reinforcement job in one step
+ * Note: For better error handling, use uploadDatasetForFinetune + createFinetuneJobFromUpload
+ * to save the backendDatasetId before attempting job creation
+ */
+export async function startFinetuneJob(
+  dataset: DatasetWithRecords,
+  options?: {
+    baseModel?: string;
+    outputModel?: string;
+    displayName?: string;
+  }
+): Promise<StartFinetuneResult> {
+  const { backendDatasetId } = await uploadDatasetForFinetune(dataset);
+  const job = await createFinetuneJobFromUpload(backendDatasetId, dataset.name, options);
+  return { job, backendDatasetId };
 }
 
 // Legacy function - kept for backward compatibility

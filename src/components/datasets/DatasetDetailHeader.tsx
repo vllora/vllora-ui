@@ -5,13 +5,20 @@
  * Consumes DatasetDetailContext to avoid prop drilling.
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChevronRight, Pencil, Check, X, Database } from "lucide-react";
+import { ChevronRight, Pencil, Check, X, Database, PanelRightOpen, PanelRightClose } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
+import { useFinetuneJobs } from "@/contexts/FinetuneJobsContext";
 import { DatasetSelector } from "./DatasetSelector";
 import { DatasetActions } from "./DatasetActions";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export function DatasetDetailHeader() {
   const {
@@ -25,6 +32,16 @@ export function DatasetDetailHeader() {
     setCreateDatasetDialog,
     handleRenameDataset,
   } = DatasetDetailConsumer();
+
+  const { isSidebarOpen, setIsSidebarOpen, filteredJobs, setCurrentBackendDatasetId } = useFinetuneJobs();
+  const hasActiveJobs = filteredJobs.some(j => j.status === 'pending' || j.status === 'running');
+
+  // Set the backend dataset ID for filtering finetune jobs
+  // Uses the backend dataset ID stored in the local dataset after upload
+  useEffect(() => {
+    setCurrentBackendDatasetId(dataset?.backendDatasetId ?? null);
+    return () => setCurrentBackendDatasetId(null);
+  }, [dataset?.backendDatasetId, setCurrentBackendDatasetId]);
 
   const [isEditing, setIsEditing] = useState(false);
   const [editingName, setEditingName] = useState("");
@@ -139,8 +156,37 @@ export function DatasetDetailHeader() {
           </p>
         </div>
 
-        {/* Actions - consumes context directly */}
-        <DatasetActions />
+        {/* Actions */}
+        <div className="flex items-center gap-2">
+          {/* Dataset actions - consumes context directly */}
+          <DatasetActions />
+
+          {/* Finetune jobs sidebar toggle */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                  className="relative"
+                >
+                  {isSidebarOpen ? (
+                    <PanelRightClose className="h-4 w-4" />
+                  ) : (
+                    <PanelRightOpen className="h-4 w-4" />
+                  )}
+                  {hasActiveJobs && !isSidebarOpen && (
+                    <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-blue-500 animate-pulse" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{isSidebarOpen ? "Hide finetune jobs" : "Show finetune jobs"}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
       </div>
     </div>
   );
