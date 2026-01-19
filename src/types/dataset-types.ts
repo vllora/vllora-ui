@@ -50,8 +50,6 @@ export interface TopicHierarchyConfig {
   goals?: string;
   // Hierarchy depth (1-5 levels)
   depth: number;
-  // Whether to auto-tag records when they're added
-  autoTagging: boolean;
   // The generated topic hierarchy tree
   hierarchy?: TopicHierarchyNode[];
   // Timestamp when hierarchy was last generated

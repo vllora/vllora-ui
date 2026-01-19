@@ -32,6 +32,8 @@ export interface TopicTreeNodeProps {
   onUpdateName: (nodeId: string, newName: string) => void;
   onAddChild: (parentId: string) => void;
   onDelete: (nodeId: string) => void;
+  /** Map of topic name -> record count */
+  topicCounts?: Map<string, number>;
 }
 
 export function TopicTreeNode({
@@ -43,6 +45,7 @@ export function TopicTreeNode({
   onUpdateName,
   onAddChild,
   onDelete,
+  topicCounts,
 }: TopicTreeNodeProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(node.name);
@@ -51,6 +54,7 @@ export function TopicTreeNode({
   const hasChildren = node.children && node.children.length > 0;
   const isExpanded = expandedNodes.has(node.id);
   const canAddChildren = level < maxDepth - 1;
+  const recordCount = topicCounts?.get(node.name) || 0;
 
   const handleSaveEdit = () => {
     if (editValue.trim()) {
@@ -144,6 +148,11 @@ export function TopicTreeNode({
         ) : (
           <>
             <span className="text-sm truncate flex-1">{node.name}</span>
+            {recordCount > 0 && (
+              <span className="text-xs text-muted-foreground px-1.5 py-0.5 rounded bg-muted/50 shrink-0">
+                {recordCount}
+              </span>
+            )}
 
             {/* Action buttons - visible on hover */}
             <div className={cn(
@@ -206,6 +215,7 @@ export function TopicTreeNode({
               onUpdateName={onUpdateName}
               onAddChild={onAddChild}
               onDelete={onDelete}
+              topicCounts={topicCounts}
             />
           ))}
         </div>

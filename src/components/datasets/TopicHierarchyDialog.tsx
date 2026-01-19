@@ -9,7 +9,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import {
   Dialog,
@@ -23,6 +22,14 @@ import {
   TopicHierarchyNode,
 } from "@/types/dataset-types";
 import { TopicTreeNode } from "./TopicTreeNode";
+import {
+  countNodes,
+  getAllNodeIds,
+  cloneHierarchy,
+  updateNodeName,
+  addChildToNode,
+  deleteNode,
+} from "./topic-hierarchy-utils";
 
 interface TopicHierarchyDialogProps {
   open: boolean;
@@ -41,88 +48,8 @@ interface TopicHierarchyDialogProps {
   isAutoTagging?: boolean;
   /** Number of records that will be tagged */
   recordCount?: number;
-}
-
-// Count total nodes in hierarchy
-function countNodes(nodes: TopicHierarchyNode[]): number {
-  let count = 0;
-  for (const node of nodes) {
-    count += 1;
-    if (node.children) {
-      count += countNodes(node.children);
-    }
-  }
-  return count;
-}
-
-// Get all node IDs (for expand all)
-function getAllNodeIds(nodes: TopicHierarchyNode[]): string[] {
-  const ids: string[] = [];
-  for (const node of nodes) {
-    ids.push(node.id);
-    if (node.children) {
-      ids.push(...getAllNodeIds(node.children));
-    }
-  }
-  return ids;
-}
-
-// Deep clone hierarchy for immutable updates
-function cloneHierarchy(nodes: TopicHierarchyNode[]): TopicHierarchyNode[] {
-  return nodes.map((node) => ({
-    ...node,
-    children: node.children ? cloneHierarchy(node.children) : undefined,
-  }));
-}
-
-// Update a node's name by ID (recursive)
-function updateNodeName(
-  nodes: TopicHierarchyNode[],
-  nodeId: string,
-  newName: string
-): TopicHierarchyNode[] {
-  return nodes.map((node) => {
-    if (node.id === nodeId) {
-      return { ...node, name: newName };
-    }
-    if (node.children) {
-      return { ...node, children: updateNodeName(node.children, nodeId, newName) };
-    }
-    return node;
-  });
-}
-
-// Add a child to a node by ID (recursive)
-function addChildToNode(
-  nodes: TopicHierarchyNode[],
-  parentId: string,
-  newChild: TopicHierarchyNode
-): TopicHierarchyNode[] {
-  return nodes.map((node) => {
-    if (node.id === parentId) {
-      const children = node.children ? [...node.children, newChild] : [newChild];
-      return { ...node, children };
-    }
-    if (node.children) {
-      return { ...node, children: addChildToNode(node.children, parentId, newChild) };
-    }
-    return node;
-  });
-}
-
-// Delete a node by ID (recursive)
-function deleteNode(
-  nodes: TopicHierarchyNode[],
-  nodeId: string
-): TopicHierarchyNode[] {
-  return nodes
-    .filter((node) => node.id !== nodeId)
-    .map((node) => {
-      if (node.children) {
-        return { ...node, children: deleteNode(node.children, nodeId) };
-      }
-      return node;
-    });
+  /** Map of topic name -> record count */
+  topicCounts?: Map<string, number>;
 }
 
 export function TopicHierarchyDialog({
@@ -135,13 +62,11 @@ export function TopicHierarchyDialog({
   onAutoTag,
   isAutoTagging = false,
   recordCount = 0,
+  topicCounts,
 }: TopicHierarchyDialogProps) {
   // Form state
   const [goals, setGoals] = useState(initialConfig?.goals || "");
   const [depth, setDepth] = useState(initialConfig?.depth || 3);
-  const [autoTagging, setAutoTagging] = useState(
-    initialConfig?.autoTagging ?? true
-  );
 
   // Preview state
   const [hierarchy, setHierarchy] = useState<TopicHierarchyNode[]>(
@@ -154,7 +79,6 @@ export function TopicHierarchyDialog({
     if (open) {
       setGoals(initialConfig?.goals || "");
       setDepth(initialConfig?.depth || 3);
-      setAutoTagging(initialConfig?.autoTagging ?? true);
       setHierarchy(initialConfig?.hierarchy ? cloneHierarchy(initialConfig.hierarchy) : []);
       // Expand all nodes by default
       if (initialConfig?.hierarchy) {
@@ -216,7 +140,6 @@ export function TopicHierarchyDialog({
     const config: TopicHierarchyConfig = {
       goals,
       depth,
-      autoTagging,
       hierarchy,
       generatedAt: Date.now(),
     };
@@ -256,7 +179,7 @@ export function TopicHierarchyDialog({
                 className="min-h-[120px] resize-none bg-muted/30 border-border/50"
               />
               <p className="text-xs text-muted-foreground">
-                The LLM uses this context to categorize your data samples.
+                The LLM uses this context to generate relevant topic categories.
               </p>
             </div>
 
@@ -280,16 +203,6 @@ export function TopicHierarchyDialog({
                 <span>Flat (1)</span>
                 <span>Deep (5)</span>
               </div>
-            </div>
-
-            {/* Auto-tagging toggle */}
-            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-muted/30">
-              <span className="text-sm">Auto-tagging enabled</span>
-              <Switch
-                checked={autoTagging}
-                onCheckedChange={setAutoTagging}
-                className="data-[state=checked]:bg-[rgb(var(--theme-500))]"
-              />
             </div>
           </div>
 
@@ -333,6 +246,7 @@ export function TopicHierarchyDialog({
                     onUpdateName={handleUpdateName}
                     onAddChild={handleAddChild}
                     onDelete={handleDelete}
+                    topicCounts={topicCounts}
                   />
                 ))
               ) : (
@@ -376,7 +290,7 @@ export function TopicHierarchyDialog({
             )}
           </Button>
           <div className="flex items-center gap-2">
-            {onAutoTag && autoTagging && (
+            {onAutoTag && (
               <Button
                 onClick={onAutoTag}
                 disabled={hierarchy.length === 0 || isAutoTagging || recordCount === 0}

@@ -24,6 +24,7 @@ import { CreateDatasetDialog } from "./CreateDatasetDialog";
 import { FinetuneJobsPanel } from "@/components/finetune/FinetuneJobsPanel";
 import { TopicHierarchyDialog } from "./TopicHierarchyDialog";
 import { getLeafTopicsFromHierarchy } from "./record-utils";
+import { getTopicCounts } from "./topic-hierarchy-utils";
 
 interface DatasetDetailViewProps {
   datasetId: string;
@@ -114,6 +115,12 @@ function DatasetDetailContent() {
   const availableTopics = useMemo(
     () => getLeafTopicsFromHierarchy(dataset?.topicHierarchy?.hierarchy),
     [dataset?.topicHierarchy?.hierarchy]
+  );
+
+  // Compute topic counts for hierarchy preview
+  const topicCounts = useMemo(
+    () => getTopicCounts(sortedRecords),
+    [sortedRecords]
   );
 
   // Wrapper for auto-categorization that closes the dialog when done
@@ -255,6 +262,7 @@ function DatasetDetailContent() {
         onAutoTag={handleAutoTagRecords}
         isAutoTagging={isAutoTagging}
         recordCount={sortedRecords.length}
+        topicCounts={topicCounts}
       />
     </>
   );
