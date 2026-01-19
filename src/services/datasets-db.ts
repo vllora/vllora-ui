@@ -610,13 +610,15 @@ export async function addRecordsToDataset(
 
   // Build all record objects first so we can return them
   const createdRecords: DatasetRecord[] = records.map((recordData) => {
-    const topicPaths = recordData.topic_paths || topicPathsFromSingleTopic(recordData.topic?.trim() || defaultTopic?.trim());
+    const topic = recordData.topic?.trim() || defaultTopic?.trim();
+    const topicPaths = recordData.topic_paths || topicPathsFromSingleTopic(topic);
 
     return {
       id: crypto.randomUUID(),
       datasetId,
       data: recordData.data,
       metadata: recordData.metadata,
+      topic,
       topic_paths: topicPaths,
       is_generated: recordData.is_generated ?? false,
       evaluation: recordData.evaluation,

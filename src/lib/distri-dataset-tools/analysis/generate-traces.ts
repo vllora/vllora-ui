@@ -900,6 +900,7 @@ export async function generateTraces(params: Record<string, unknown>): Promise<G
       const recordsToAdd: Array<{
         data: DataInfo;
         metadata?: Record<string, unknown>;
+        topic?: string;
         topic_paths?: string[][];
         is_generated?: boolean;
         evaluation?: undefined;
@@ -912,6 +913,8 @@ export async function generateTraces(params: Record<string, unknown>): Promise<G
         if (result.status === 'fulfilled') {
           const { simulated } = result.value;
           const data = buildSyntheticTraceDataInfo(simulated, task.tools);
+          // Get the leaf topic (last element of the topic path)
+          const leafTopic = task.topicPath.length > 0 ? task.topicPath[task.topicPath.length - 1] : undefined;
           recordsToAdd.push({
             data,
             metadata: {
@@ -920,6 +923,7 @@ export async function generateTraces(params: Record<string, unknown>): Promise<G
               seed_topic_path: task.topicPath,
               generated_at_ms: Date.now(),
             },
+            topic: leafTopic,
             topic_paths: topicPathsFromPath(task.topicPath),
             is_generated: true,
             evaluation: undefined,
