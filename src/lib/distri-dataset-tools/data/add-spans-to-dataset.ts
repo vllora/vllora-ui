@@ -55,6 +55,7 @@ export const addSpansToDatasetTool: DistriFnTool = {
     },
     required: ['dataset_id', 'span_ids'],
   },
+  autoExecute: true,
   handler: async (input: object) =>
     JSON.stringify(await addSpansToDatasetHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

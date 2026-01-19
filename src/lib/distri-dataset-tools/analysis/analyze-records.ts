@@ -91,6 +91,7 @@ export const analyzeRecordsTool: DistriFnTool = {
     },
     required: ['dataset_id'],
   },
+  autoExecute: true,
   handler: async (input: object) =>
     JSON.stringify(await analyzeRecordsHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

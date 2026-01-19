@@ -121,6 +121,10 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
       navigateToDataset(data.datasetId);
     };
 
+    const handleNavigateToList = () => {
+      navigateToList();
+    };
+
     const handleExpand = (data: { datasetId: string }) => {
       expandDataset(data.datasetId);
     };
@@ -158,6 +162,7 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
 
     // Register event listeners
     emitter.on('vllora_dataset_navigate' as any, handleNavigate);
+    emitter.on('vllora_dataset_navigate_to_list' as any, handleNavigateToList);
     emitter.on('vllora_dataset_expand' as any, handleExpand);
     emitter.on('vllora_dataset_collapse' as any, handleCollapse);
     emitter.on('vllora_dataset_select_records' as any, handleSelectRecords);
@@ -169,6 +174,7 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
     // Cleanup
     return () => {
       emitter.off('vllora_dataset_navigate' as any, handleNavigate);
+      emitter.off('vllora_dataset_navigate_to_list' as any, handleNavigateToList);
       emitter.off('vllora_dataset_expand' as any, handleExpand);
       emitter.off('vllora_dataset_collapse' as any, handleCollapse);
       emitter.off('vllora_dataset_select_records' as any, handleSelectRecords);
@@ -177,7 +183,7 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
       emitter.off('vllora_dataset_set_sort' as any, handleSetSort);
       emitter.off('vllora_dataset_refresh' as any, handleRefresh);
     };
-  }, [navigateToDataset, expandDataset, collapseDataset, selectRecords, clearSelection, loadDatasets, selectedDatasetId, setSearchParams]);
+  }, [navigateToDataset, navigateToList, expandDataset, collapseDataset, selectRecords, clearSelection, loadDatasets, selectedDatasetId, setSearchParams]);
 
   const value: DatasetsUIContextType = {
     // Navigation state

@@ -80,6 +80,7 @@ export const suggestTopicsTool: DistriFnTool = {
     },
     required: ['dataset_id'],
   },
+  autoExecute: true,
   handler: async (input: object) =>
     JSON.stringify(await suggestTopicsHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

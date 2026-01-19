@@ -455,5 +455,6 @@ export const generateTopicsTool: DistriFnTool = {
     },
     required: ['dataset_id'],
   },
+  autoExecute: true,
   handler: async (input: object) => JSON.stringify(await generateTopicsHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

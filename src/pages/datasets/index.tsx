@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useEffect } from "react";
 import { DatasetsConsumer } from "@/contexts/DatasetsContext";
 import { DatasetsUIProvider, DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
 import { useDatasetAgentChat } from "@/hooks/useDatasetAgentChat";
@@ -22,6 +22,7 @@ import {
 import type { QuickAction } from "@/components/agent/lucy-agent/LucyWelcome";
 import { DatasetsListView } from "@/components/datasets/DatasetsListView";
 import { DatasetDetailView } from "@/components/datasets/DatasetDetailView";
+import { setDatasetContext, clearDatasetContext } from "@/lib/distri-dataset-tools";
 
 // Dataset-specific quick actions for Lucy
 const DATASET_QUICK_ACTIONS: QuickAction[] = [
@@ -119,6 +120,29 @@ function DatasetsPageContent() {
     },
     [datasets, selectedDatasetId, currentDataset, selectedRecordIds, searchQuery, sortConfig, expandedDatasetIds]
   );
+
+  // Keep the context store updated for composite tools to read from
+  // This ensures tools have access to current context even when not passed through agent chain
+  useEffect(() => {
+    setDatasetContext({
+      page: "datasets",
+      current_view: selectedDatasetId ? "detail" : "list",
+      current_dataset_id: selectedDatasetId ?? undefined,
+      current_dataset_name: currentDataset?.name,
+      datasets_count: datasets.length,
+      dataset_names: datasets.map(d => ({ id: d.id, name: d.name })),
+      selected_records_count: selectedRecordIds.size,
+      selected_record_ids: selectedRecordIds.size > 0 ? [...selectedRecordIds] : undefined,
+      search_query: searchQuery || undefined,
+      sort_config: sortConfig ?? { field: "timestamp", direction: "desc" },
+      expanded_dataset_ids: expandedDatasetIds.size > 0 ? [...expandedDatasetIds] : undefined,
+    });
+
+    // Clear context when leaving the datasets page
+    return () => {
+      clearDatasetContext();
+    };
+  }, [datasets, selectedDatasetId, currentDataset, selectedRecordIds, searchQuery, sortConfig, expandedDatasetIds]);
 
   return (
     <section className="flex-1 flex overflow-hidden bg-background text-foreground">

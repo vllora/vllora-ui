@@ -651,7 +651,7 @@ async function generateAssistantTurn(
     throw new Error('LLM returned invalid assistant_turn payload');
   }
 
-  const rawRecord = raw as Record<string, unknown>;
+  const rawRecord = raw as unknown as Record<string, unknown>;
   if ('records' in rawRecord) {
     throw new Error('LLM returned legacy records payload; expected assistant_turn JSON');
   }
@@ -920,5 +920,6 @@ export const generateTracesTool: DistriFnTool = {
     },
     required: ['dataset_id'],
   },
+  autoExecute: true,
   handler: async (input: object) => JSON.stringify(await generateTracesHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

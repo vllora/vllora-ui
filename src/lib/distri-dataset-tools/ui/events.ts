@@ -7,6 +7,7 @@
 export type DatasetUiEvents = {
   // Dataset navigation
   vllora_dataset_navigate: { datasetId: string };
+  vllora_dataset_navigate_to_list: Record<string, never>;
   vllora_dataset_expand: { datasetId: string };
   vllora_dataset_collapse: { datasetId: string };
 

@@ -41,6 +41,7 @@ export const bulkAssignTopicTool: DistriFnTool = {
     },
     required: ['dataset_id', 'record_ids', 'topic'],
   },
+  autoExecute: true,
   handler: async (input: object) =>
     JSON.stringify(await bulkAssignTopicHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

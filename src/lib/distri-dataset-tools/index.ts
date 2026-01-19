@@ -2,7 +2,8 @@
  * Distri Dataset Tools
  *
  * Tools for the vLLora Datasets page agent integration.
- * Organized into three categories:
+ * Organized into four categories:
+ * - Composite Tools: Combined data + UI workflows for common operations (fast path)
  * - UI Tools: Control the Datasets page UI (navigation, selection, etc.)
  * - Data Tools: CRUD operations on datasets and records
  * - Analysis Tools: Analyze records, suggest topics, find duplicates
@@ -11,6 +12,14 @@
 import { DistriFnTool } from '@distri/core';
 
 // Import from subdirectories
+import {
+  compositeToolHandlers,
+  compositeTools,
+  COMPOSITE_TOOL_NAMES,
+  isCompositeTool,
+  type CompositeToolName,
+} from './composite';
+
 import {
   datasetUiToolHandlers,
   datasetUiTools,
@@ -38,6 +47,14 @@ import {
 // Re-export types
 export type { ToolHandler, DatasetStats, DatasetListItem } from './types';
 export type { TopicSuggestion, DuplicateGroup, DatasetSummary, RecordComparison } from './types';
+export type { DatasetContext, CompositeToolParams } from './composite';
+
+// Re-export context store functions (for datasets page to update context)
+export {
+  setDatasetContext,
+  getDatasetContext,
+  clearDatasetContext,
+} from './composite';
 
 // Re-export event types
 export type { DatasetUiEvents } from './ui/events';
@@ -50,6 +67,7 @@ export const datasetToolHandlers: Record<
   string,
   (params: Record<string, unknown>) => Promise<unknown>
 > = {
+  ...compositeToolHandlers,
   ...datasetUiToolHandlers,
   ...datasetDataToolHandlers,
   ...datasetAnalysisToolHandlers,
@@ -60,12 +78,17 @@ export const datasetToolHandlers: Record<
 // ============================================================================
 
 export const DATASET_TOOL_NAMES = [
+  ...COMPOSITE_TOOL_NAMES,
   ...DATASET_UI_TOOL_NAMES,
   ...DATASET_DATA_TOOL_NAMES,
   ...DATASET_ANALYSIS_TOOL_NAMES,
 ] as const;
 
-export type DatasetToolName = DatasetUiToolName | DatasetDataToolName | DatasetAnalysisToolName;
+export type DatasetToolName =
+  | CompositeToolName
+  | DatasetUiToolName
+  | DatasetDataToolName
+  | DatasetAnalysisToolName;
 
 // ============================================================================
 // Tool Type Checkers
@@ -73,6 +96,7 @@ export type DatasetToolName = DatasetUiToolName | DatasetDataToolName | DatasetA
 
 export function isDatasetTool(toolName: string): toolName is DatasetToolName {
   return (
+    isCompositeTool(toolName) ||
     isDatasetUiTool(toolName) ||
     isDatasetDataTool(toolName) ||
     isDatasetAnalysisTool(toolName)
@@ -80,7 +104,7 @@ export function isDatasetTool(toolName: string): toolName is DatasetToolName {
 }
 
 // Re-export individual type checkers
-export { isDatasetUiTool, isDatasetDataTool, isDatasetAnalysisTool };
+export { isCompositeTool, isDatasetUiTool, isDatasetDataTool, isDatasetAnalysisTool };
 
 // ============================================================================
 // Execute Tool
@@ -105,10 +129,11 @@ export async function executeDatasetTool(
 // ============================================================================
 
 // Individual tool arrays for selective use
-export { datasetUiTools, datasetDataTools, datasetAnalysisTools };
+export { compositeTools, datasetUiTools, datasetDataTools, datasetAnalysisTools };
 
 // Combined array of all dataset tools
 export const datasetTools: DistriFnTool[] = [
+  ...compositeTools,
   ...datasetUiTools,
   ...datasetDataTools,
   ...datasetAnalysisTools,
@@ -117,6 +142,12 @@ export const datasetTools: DistriFnTool[] = [
 // ============================================================================
 // Tool Names by Agent
 // ============================================================================
+
+/**
+ * Tools for the vllora-dataset-composite agent
+ * Combined data + UI workflows for common operations (fast path)
+ */
+export const DATASET_COMPOSITE_AGENT_TOOLS = COMPOSITE_TOOL_NAMES;
 
 /**
  * Tools for the vllora-dataset-ui agent

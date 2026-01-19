@@ -88,6 +88,7 @@ export const findDuplicatesTool: DistriFnTool = {
     },
     required: ['dataset_id'],
   },
+  autoExecute: true,
   handler: async (input: object) =>
     JSON.stringify(await findDuplicatesHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

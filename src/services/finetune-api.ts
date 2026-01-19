@@ -209,14 +209,19 @@ export async function createReinforcementJob(
 
 /**
  * List reinforcement fine-tuning jobs
+ * @param limit - Maximum number of jobs to return
+ * @param after - Cursor for pagination
+ * @param datasetId - Optional backend dataset ID to filter jobs by
  */
 export async function listReinforcementJobs(
   limit?: number,
-  after?: string
+  after?: string,
+  datasetId?: string
 ): Promise<ReinforcementJob[]> {
   const params = new URLSearchParams();
   if (limit) params.set('limit', String(limit));
   if (after) params.set('after', after);
+  if (datasetId) params.set('dataset_id', datasetId);
 
   const queryString = params.toString();
   const endpoint = queryString

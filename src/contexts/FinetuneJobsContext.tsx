@@ -35,12 +35,12 @@ interface FinetuneJobsContextType {
   jobs: FinetuneJob[];
   isLoading: boolean;
   error: string | null;
-  loadJobs: () => Promise<void>;
+  loadJobs: (datasetId?: string | null) => Promise<void>;
   refreshJob: (jobId: string) => Promise<void>;
   // Sidebar visibility state
   isSidebarOpen: boolean;
   setIsSidebarOpen: (open: boolean) => void;
-  // Dataset filtering - uses backend dataset ID to match jobs by training_file_id
+  // Dataset filtering - server-side filter via backend dataset ID
   currentBackendDatasetId: string | null;
   setCurrentBackendDatasetId: (backendDatasetId: string | null) => void;
   filteredJobs: FinetuneJob[];
@@ -73,12 +73,18 @@ export function FinetuneJobsProvider({ children }: FinetuneJobsProviderProps) {
   const { subscribe } = ProjectEventsConsumer();
   const subscriptionIdRef = useRef<string>(`finetune-jobs-${Date.now()}`);
 
-  // Load all jobs from backend
-  const loadJobs = useCallback(async () => {
+  // Load jobs from backend (optionally filtered by dataset)
+  const loadJobs = useCallback(async (datasetId?: string | null) => {
     setIsLoading(true);
     setError(null);
     try {
-      const fetchedJobs = await listReinforcementJobs();
+      // Use provided datasetId or fall back to current state
+      const filterDatasetId = datasetId !== undefined ? datasetId : currentBackendDatasetId;
+      const fetchedJobs = await listReinforcementJobs(
+        undefined, // limit
+        undefined, // after
+        filterDatasetId || undefined // datasetId (server-side filter)
+      );
       setJobs(fetchedJobs);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load jobs";
@@ -87,7 +93,7 @@ export function FinetuneJobsProvider({ children }: FinetuneJobsProviderProps) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [currentBackendDatasetId]);
 
   // Refresh a specific job by ID
   const refreshJob = useCallback(async (providerJobId: string) => {
@@ -153,7 +159,12 @@ export function FinetuneJobsProvider({ children }: FinetuneJobsProviderProps) {
   // Load jobs on mount
   useEffect(() => {
     loadJobs();
-  }, [loadJobs]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reload jobs when currentBackendDatasetId changes (server-side filtering)
+  useEffect(() => {
+    loadJobs(currentBackendDatasetId);
+  }, [currentBackendDatasetId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Listen for job created events from DatasetDetailContext
   useEffect(() => {
@@ -169,11 +180,8 @@ export function FinetuneJobsProvider({ children }: FinetuneJobsProviderProps) {
     };
   }, [loadJobs]);
 
-  // Filter jobs based on current backend dataset ID
-  // Jobs are matched by their training_file_id which equals the backend dataset ID
-  const filteredJobs = currentBackendDatasetId
-    ? jobs.filter((job) => job.training_file_id === currentBackendDatasetId)
-    : jobs;
+  // Jobs are now filtered server-side, so filteredJobs just returns jobs
+  const filteredJobs = jobs;
 
   const value: FinetuneJobsContextType = {
     jobs,

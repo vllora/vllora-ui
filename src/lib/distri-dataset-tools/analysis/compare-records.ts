@@ -111,6 +111,7 @@ export const compareRecordsTool: DistriFnTool = {
     },
     required: ['record_ids'],
   },
+  autoExecute: true,
   handler: async (input: object) =>
     JSON.stringify(await compareRecordsHandler(input as Record<string, unknown>)),
 } as DistriFnTool;
