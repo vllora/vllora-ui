@@ -20,7 +20,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Check, X, Tag, Plus } from "lucide-react";
+import { Check, X, Tag, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getTopicColor, type AvailableTopic } from "../record-utils";
 import { COLUMN_WIDTHS } from "../table-columns";
@@ -82,6 +82,12 @@ export function TopicCell({
       setIsOpen(false);
       setSearchValue("");
     }
+  };
+
+  const handleRemoveTopic = async () => {
+    await onUpdate("", false);
+    setIsOpen(false);
+    setSearchValue("");
   };
 
   // Filter available topics based on search
@@ -216,6 +222,17 @@ export function TopicCell({
 
           {/* Topics list */}
           <div className="max-h-[200px] overflow-y-auto">
+            {/* Remove topic option - only show when topic is assigned and no search */}
+            {topic && !searchValue.trim() && (
+              <button
+                className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-red-500/10 text-left border-b border-border text-red-500"
+                onClick={handleRemoveTopic}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Remove topic</span>
+              </button>
+            )}
+
             {/* Create new option */}
             {showCreateNew && (
               <button

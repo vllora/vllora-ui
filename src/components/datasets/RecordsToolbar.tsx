@@ -30,7 +30,6 @@ import {
   Star,
   Layers,
   Columns,
-  GitBranch,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BulkActionButtons } from "./BulkActionButtons";
@@ -69,10 +68,6 @@ interface RecordsToolbarProps {
   generatedFilter?: "all" | "generated" | "not_generated";
   /** Generated filter dropdown change handler */
   onGeneratedFilterChange?: (value: "all" | "generated" | "not_generated") => void;
-  /** Generate topics using topic tool */
-  onGenerateTopics?: () => void;
-  /** Flag when topics are being generated */
-  isGeneratingTopics?: boolean;
   /** Generate synthetic traces (optional selection seed) */
   onGenerateTraces?: () => void;
   /** Flag when traces are being generated */
@@ -85,8 +80,6 @@ interface RecordsToolbarProps {
   columnVisibility?: ColumnVisibility;
   /** Column visibility change handler */
   onColumnVisibilityChange?: (visibility: ColumnVisibility) => void;
-  /** Open topic hierarchy dialog */
-  onConfigureTopicHierarchy?: () => void;
 }
 
 
@@ -114,15 +107,12 @@ export function RecordsToolbar({
   onAssignTopic,
   generatedFilter = "all",
   onGeneratedFilterChange,
-  onGenerateTopics,
-  isGeneratingTopics,
   onGenerateTraces,
   isGeneratingTraces,
   onRunEvaluation,
   onDeleteSelected,
   columnVisibility,
   onColumnVisibilityChange,
-  onConfigureTopicHierarchy,
 }: RecordsToolbarProps) {
   const hasSelection = selectedCount > 0;
   const currentSort = sortConfig || { field: "timestamp", direction: "desc" };
@@ -321,27 +311,6 @@ export function RecordsToolbar({
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-
-          {/* Topic hierarchy button */}
-          {onConfigureTopicHierarchy && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={onConfigureTopicHierarchy}
-                  >
-                    <GitBranch className="w-4 h-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Configure topic hierarchy</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
         </div>
 
         {/* Search input */}
@@ -359,8 +328,6 @@ export function RecordsToolbar({
       <BulkActionButtons
         hasSelection={hasSelection}
         onAssignTopic={onAssignTopic}
-        onGenerateTopics={onGenerateTopics}
-        isGeneratingTopics={isGeneratingTopics}
         onGenerateTraces={onGenerateTraces}
         isGeneratingTraces={isGeneratingTraces}
         onRunEvaluation={onRunEvaluation}

@@ -12,19 +12,35 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Download, Upload, Sparkles, Loader2 } from "lucide-react";
+import { Download, Upload, Sparkles, Loader2, GitBranch, ListTree } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 
 export function DatasetActions() {
   const {
     handleExport,
     setImportDialog,
+    setTopicHierarchyDialog,
     handleStartFinetune,
     isStartingFinetune,
   } = DatasetDetailConsumer();
 
   return (
     <div className="flex items-center gap-2">
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+              onClick={() => setTopicHierarchyDialog(true)}
+            >
+              <ListTree className="w-4 h-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Configure topic hierarchy</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
       <TooltipProvider delayDuration={300}>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -72,7 +88,6 @@ export function DatasetActions() {
               ) : (
                 <>
                   <Sparkles className="w-3.5 h-3.5 mr-1.5" />
-                  Finetune
                 </>
               )}
             </Button>

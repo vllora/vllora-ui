@@ -87,7 +87,6 @@ function DatasetDetailContent() {
     setExpandedRecord,
 
     // Loading states
-    isGeneratingTopics,
     isGeneratingTraces,
     isGeneratingHierarchy,
     isAutoTagging,
@@ -101,7 +100,6 @@ function DatasetDetailContent() {
     handleUpdateRecordEvaluation,
     handleDeleteConfirm,
     handleBulkAssignTopic,
-    handleGenerateTopics,
     handleGenerateTraces,
     handleBulkRunEvaluation,
     handleBulkDelete,
@@ -117,6 +115,12 @@ function DatasetDetailContent() {
     () => getLeafTopicsFromHierarchy(dataset?.topicHierarchy?.hierarchy),
     [dataset?.topicHierarchy?.hierarchy]
   );
+
+  // Wrapper for auto-categorization that closes the dialog when done
+  const handleAutoCategorizeSelected = async () => {
+    await handleAutoTagRecords();
+    setAssignTopicDialog(false);
+  };
 
   if (isLoading) {
     return (
@@ -162,15 +166,12 @@ function DatasetDetailContent() {
               onAssignTopic={() => setAssignTopicDialog(true)}
               generatedFilter={generatedFilter}
               onGeneratedFilterChange={setGeneratedFilter}
-              onGenerateTopics={handleGenerateTopics}
-              isGeneratingTopics={isGeneratingTopics}
               onGenerateTraces={handleGenerateTraces}
               isGeneratingTraces={isGeneratingTraces}
               onRunEvaluation={handleBulkRunEvaluation}
               onDeleteSelected={handleBulkDelete}
               columnVisibility={columnVisibility}
               onColumnVisibilityChange={setColumnVisibility}
-              onConfigureTopicHierarchy={() => setTopicHierarchyDialog(true)}
             />
 
             {/* Records table */}
@@ -217,6 +218,9 @@ function DatasetDetailContent() {
         onOpenChange={setAssignTopicDialog}
         selectedCount={selectedRecordIds.size}
         onAssign={handleBulkAssignTopic}
+        availableTopics={availableTopics}
+        onAutoCategorize={handleAutoCategorizeSelected}
+        isAutoCategorizing={isAutoTagging}
       />
 
       {/* Expand trace dialog */}

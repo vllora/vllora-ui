@@ -291,26 +291,6 @@ export function TopicHierarchyDialog({
                 className="data-[state=checked]:bg-[rgb(var(--theme-500))]"
               />
             </div>
-
-            {/* Generate button */}
-            <Button
-              onClick={handleGenerate}
-              disabled={isGenerating}
-              className="w-full bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white gap-2"
-              size="lg"
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Zap className="w-4 h-4" />
-                  Generate Hierarchy
-                </>
-              )}
-            </Button>
           </div>
 
           {/* Right panel - Live Preview */}
@@ -366,42 +346,64 @@ export function TopicHierarchyDialog({
               )}
             </div>
 
-            {/* Preview footer with Save and Auto-tag buttons */}
-            <div className="px-4 py-3 border-t border-border flex items-center justify-between">
+            {/* Preview footer stats */}
+            <div className="px-4 py-3 border-t border-border">
               <span className="text-xs text-muted-foreground">
                 {nodeCount} topic{nodeCount !== 1 ? "s" : ""} {recordCount > 0 && `· ${recordCount} records`}
               </span>
-              <div className="flex items-center gap-2">
-                {onAutoTag && autoTagging && (
-                  <Button
-                    onClick={onAutoTag}
-                    disabled={hierarchy.length === 0 || isAutoTagging || recordCount === 0}
-                    variant="outline"
-                    className="gap-2"
-                  >
-                    {isAutoTagging ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Tagging...
-                      </>
-                    ) : (
-                      <>
-                        <Wand2 className="w-4 h-4" />
-                        Auto-tag Records
-                      </>
-                    )}
-                  </Button>
-                )}
-                <Button
-                  onClick={handleSave}
-                  disabled={hierarchy.length === 0}
-                  className="bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white gap-2"
-                >
-                  <Save className="w-4 h-4" />
-                  Save Hierarchy
-                </Button>
-              </div>
             </div>
+          </div>
+        </div>
+
+        {/* Footer with all action buttons */}
+        <div className="px-6 py-4 border-t border-border flex items-center justify-between flex-shrink-0">
+          <Button
+            onClick={handleGenerate}
+            disabled={isGenerating}
+            variant="outline"
+            className="gap-2"
+          >
+            {isGenerating ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Zap className="w-4 h-4" />
+                Generate Hierarchy
+              </>
+            )}
+          </Button>
+          <div className="flex items-center gap-2">
+            {onAutoTag && autoTagging && (
+              <Button
+                onClick={onAutoTag}
+                disabled={hierarchy.length === 0 || isAutoTagging || recordCount === 0}
+                variant="outline"
+                className="gap-2"
+              >
+                {isAutoTagging ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Tagging...
+                  </>
+                ) : (
+                  <>
+                    <Wand2 className="w-4 h-4" />
+                    Auto-tag Records
+                  </>
+                )}
+              </Button>
+            )}
+            <Button
+              onClick={handleSave}
+              disabled={hierarchy.length === 0}
+              className="bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white gap-2"
+            >
+              <Save className="w-4 h-4" />
+              Save Hierarchy
+            </Button>
           </div>
         </div>
       </DialogContent>

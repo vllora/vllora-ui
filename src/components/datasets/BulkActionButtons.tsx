@@ -11,7 +11,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Tag, Scale, Trash2, Wand2, Shuffle } from "lucide-react";
+import { Tag, Scale, Trash2, Shuffle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface BulkActionButtonsProps {
@@ -19,10 +19,6 @@ interface BulkActionButtonsProps {
   hasSelection: boolean;
   /** Assign topic to selected records */
   onAssignTopic?: () => void;
-  /** Generate topics using topic tool */
-  onGenerateTopics?: () => void;
-  /** Flag when topics are being generated */
-  isGeneratingTopics?: boolean;
   /** Generate synthetic traces */
   onGenerateTraces?: () => void;
   /** Flag when traces are being generated */
@@ -119,8 +115,6 @@ function ActionButton({
 export function BulkActionButtons({
   hasSelection,
   onAssignTopic,
-  onGenerateTopics,
-  isGeneratingTopics,
   onGenerateTraces,
   isGeneratingTraces,
   onRunEvaluation,
@@ -130,23 +124,13 @@ export function BulkActionButtons({
     <div className="flex items-center gap-1">
       <ActionButton
         icon={<Tag className="w-3.5 h-3.5" />}
-        label="Topic"
+        label="Assign Topic"
         tooltip="Assign topic to selected records"
         disabledTooltip="Select records to assign topic"
         disabled={false}
         requiresSelection={true}
         hasSelection={hasSelection}
         onClick={onAssignTopic}
-      />
-      <ActionButton
-        icon={<Wand2 className="w-4 h-4" />}
-        label={isGeneratingTopics ? "Generating..." : "Generate Topics"}
-        tooltip="Auto-generate topics for selected records"
-        disabledTooltip="Select records to generate topics"
-        disabled={!!isGeneratingTopics}
-        requiresSelection={true}
-        hasSelection={hasSelection}
-        onClick={onGenerateTopics}
       />
       <ActionButton
         icon={<Shuffle className="w-4 h-4" />}
