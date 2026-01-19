@@ -61,7 +61,6 @@ export function RecordRow({
       className={cn(
         "px-4 py-3 flex items-center gap-4 hover:bg-muted/30 transition-colors border-b border-border/50 last:border-b-0",
         selected && "bg-[rgb(var(--theme-500))]/5",
-        record.is_generated && "border-l-2 border-l-emerald-500/50"
       )}
     >
       {selectable && (

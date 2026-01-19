@@ -72,6 +72,8 @@ interface RecordsToolbarProps {
   onGenerateTraces?: () => void;
   /** Flag when traces are being generated */
   isGeneratingTraces?: boolean;
+  /** Current count of generated records (null when not generating) */
+  generationProgress?: number | null;
   /** Run evaluation on selected records */
   onRunEvaluation?: () => void;
   /** Delete selected records */
@@ -109,6 +111,7 @@ export function RecordsToolbar({
   onGeneratedFilterChange,
   onGenerateTraces,
   isGeneratingTraces,
+  generationProgress,
   onRunEvaluation,
   onDeleteSelected,
   columnVisibility,
@@ -330,6 +333,7 @@ export function RecordsToolbar({
         onAssignTopic={onAssignTopic}
         onGenerateTraces={onGenerateTraces}
         isGeneratingTraces={isGeneratingTraces}
+        generationProgress={generationProgress}
         onRunEvaluation={onRunEvaluation}
         onDeleteSelected={onDeleteSelected}
       />

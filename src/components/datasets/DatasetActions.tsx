@@ -12,7 +12,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Download, Upload, Sparkles, Loader2, GitBranch, ListTree } from "lucide-react";
+import { Download, Upload, Sparkles, Loader2, ListTree } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 
 export function DatasetActions() {

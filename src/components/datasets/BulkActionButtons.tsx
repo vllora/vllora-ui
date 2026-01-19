@@ -11,7 +11,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Tag, Scale, Trash2, Shuffle } from "lucide-react";
+import { Tag, Scale, Trash2, Shuffle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface BulkActionButtonsProps {
@@ -23,6 +23,8 @@ interface BulkActionButtonsProps {
   onGenerateTraces?: () => void;
   /** Flag when traces are being generated */
   isGeneratingTraces?: boolean;
+  /** Current count of generated records (null when not generating) */
+  generationProgress?: number | null;
   /** Run evaluation on selected records */
   onRunEvaluation?: () => void;
   /** Delete selected records */
@@ -117,9 +119,19 @@ export function BulkActionButtons({
   onAssignTopic,
   onGenerateTraces,
   isGeneratingTraces,
+  generationProgress,
   onRunEvaluation,
   onDeleteSelected,
 }: BulkActionButtonsProps) {
+  // Build the label for the generate button
+  const getGenerateLabel = () => {
+    if (!isGeneratingTraces) return "Generate Data";
+    if (generationProgress !== null && generationProgress !== undefined && generationProgress > 0) {
+      return `Generating... (${generationProgress})`;
+    }
+    return "Generating...";
+  };
+
   return (
     <div className="flex items-center gap-1">
       <ActionButton
@@ -133,12 +145,12 @@ export function BulkActionButtons({
         onClick={onAssignTopic}
       />
       <ActionButton
-        icon={<Shuffle className="w-4 h-4" />}
-        label={isGeneratingTraces ? "Generating..." : "Generate Data"}
+        icon={isGeneratingTraces ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shuffle className="w-4 h-4" />}
+        label={getGenerateLabel()}
         tooltip="Generate sample data"
         disabledTooltip="Generate sample data"
         disabled={!!isGeneratingTraces}
-        requiresSelection={true}
+        requiresSelection={false}
         hasSelection={hasSelection}
         onClick={onGenerateTraces}
       />

@@ -23,6 +23,7 @@ import { RecordsTable } from "./RecordsTable";
 import { CreateDatasetDialog } from "./CreateDatasetDialog";
 import { FinetuneJobsPanel } from "@/components/finetune/FinetuneJobsPanel";
 import { TopicHierarchyDialog } from "./TopicHierarchyDialog";
+import { GenerateSyntheticDataDialog } from "./GenerateSyntheticDataDialog";
 import { getLeafTopicsFromHierarchy } from "./record-utils";
 import { getTopicCounts } from "./topic-hierarchy-utils";
 
@@ -89,12 +90,17 @@ function DatasetDetailContent() {
 
     // Loading states
     isGeneratingTraces,
+    generationProgress,
     isGeneratingHierarchy,
     isAutoTagging,
 
     // Topic hierarchy dialog
     topicHierarchyDialog,
     setTopicHierarchyDialog,
+
+    // Generate data dialog
+    generateDataDialog,
+    setGenerateDataDialog,
 
     // Handlers
     handleUpdateRecordTopic,
@@ -121,6 +127,12 @@ function DatasetDetailContent() {
   const topicCounts = useMemo(
     () => getTopicCounts(sortedRecords),
     [sortedRecords]
+  );
+
+  // Get selected records for synthetic data generation samples
+  const selectedRecords = useMemo(
+    () => sortedRecords.filter((record) => selectedRecordIds.has(record.id)),
+    [sortedRecords, selectedRecordIds]
   );
 
   // Wrapper for auto-categorization that closes the dialog when done
@@ -173,8 +185,9 @@ function DatasetDetailContent() {
               onAssignTopic={() => setAssignTopicDialog(true)}
               generatedFilter={generatedFilter}
               onGeneratedFilterChange={setGeneratedFilter}
-              onGenerateTraces={handleGenerateTraces}
+              onGenerateTraces={() => setGenerateDataDialog(true)}
               isGeneratingTraces={isGeneratingTraces}
+              generationProgress={generationProgress}
               onRunEvaluation={handleBulkRunEvaluation}
               onDeleteSelected={handleBulkDelete}
               columnVisibility={columnVisibility}
@@ -263,6 +276,16 @@ function DatasetDetailContent() {
         isAutoTagging={isAutoTagging}
         recordCount={sortedRecords.length}
         topicCounts={topicCounts}
+      />
+
+      {/* Generate synthetic data dialog */}
+      <GenerateSyntheticDataDialog
+        open={generateDataDialog}
+        onOpenChange={setGenerateDataDialog}
+        availableTopics={availableTopics}
+        sampleRecords={selectedRecords}
+        onGenerate={handleGenerateTraces}
+        isGenerating={isGeneratingTraces}
       />
     </>
   );

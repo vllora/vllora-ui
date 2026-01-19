@@ -30,6 +30,7 @@ import {
 import type { SortConfig } from "@/components/datasets/RecordsToolbar";
 import type { ImportMode } from "@/components/datasets/IngestDataDialog";
 import type { DeleteConfirmation } from "@/components/datasets/DeleteConfirmationDialog";
+import type { GenerationConfig } from "@/components/datasets/GenerateSyntheticDataDialog";
 import { generateTopics } from "@/lib/distri-dataset-tools/analysis/generate-topics";
 import { generateTraces } from "@/lib/distri-dataset-tools/analysis/generate-traces";
 import { generateHierarchy } from "@/lib/distri-dataset-tools/analysis/generate-hierarchy";
@@ -88,10 +89,13 @@ interface DatasetDetailContextType {
   setExpandedRecord: (record: DatasetRecord | null) => void;
   topicHierarchyDialog: boolean;
   setTopicHierarchyDialog: (open: boolean) => void;
+  generateDataDialog: boolean;
+  setGenerateDataDialog: (open: boolean) => void;
 
   // Loading states
   isGeneratingTopics: boolean;
   isGeneratingTraces: boolean;
+  generationProgress: number | null; // Count of records generated so far
   isStartingFinetune: boolean;
   isGeneratingHierarchy: boolean;
   isAutoTagging: boolean;
@@ -105,7 +109,7 @@ interface DatasetDetailContextType {
   handleDeleteConfirm: (confirmation: DeleteConfirmation) => void;
   handleBulkAssignTopic: (topic: string) => Promise<void>;
   handleGenerateTopics: () => Promise<void>;
-  handleGenerateTraces: () => Promise<void>;
+  handleGenerateTraces: (config?: GenerationConfig) => Promise<void>;
   handleBulkRunEvaluation: () => void;
   handleBulkDelete: () => Promise<void>;
   handleExport: () => void;
@@ -209,10 +213,12 @@ export function DatasetDetailProvider({
   const [newDatasetName, setNewDatasetName] = useState("");
   const [expandedRecord, setExpandedRecord] = useState<DatasetRecord | null>(null);
   const [topicHierarchyDialog, setTopicHierarchyDialog] = useState(false);
+  const [generateDataDialog, setGenerateDataDialog] = useState(false);
 
   // Loading states
   const [isGeneratingTopics, setIsGeneratingTopics] = useState(false);
   const [isGeneratingTraces, setIsGeneratingTraces] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState<number | null>(null);
   const [isStartingFinetune, setIsStartingFinetune] = useState(false);
   const [isGeneratingHierarchy, setIsGeneratingHierarchy] = useState(false);
   const [isAutoTagging, setIsAutoTagging] = useState(false);
@@ -486,22 +492,54 @@ export function DatasetDetailProvider({
     }
   }, [dataset, selectedRecordIds, loadDataset, setSelectedRecordIds]);
 
-  const handleGenerateTraces = useCallback(async () => {
+  const handleGenerateTraces = useCallback(async (config?: GenerationConfig) => {
     if (!dataset) return;
     const recordIds = Array.from(selectedRecordIds);
 
+    // Use config values or defaults
+    const count = config?.recordsPerTopic ?? 5;
+
+    // Close dialog immediately and show starting toast
+    setGenerateDataDialog(false);
+    toast.info(`Starting generation of ${count} records...`);
+
     setIsGeneratingTraces(true);
+    setGenerationProgress(0);
+
+    // Track previous completed count to detect new records
+    let prevCompleted = 0;
+
     try {
       const result = await generateTraces({
         datasetId: dataset.id,
         recordIds: recordIds.length > 0 ? recordIds : undefined,
-        count: 2,
+        count,
         maxTurns: 3,
+        concurrency: 5, // Run 5 generations in parallel
+        onProgress: async (progress: { completed: number; total: number }) => {
+          // Update progress count in real-time
+          setGenerationProgress(progress.completed);
+
+          // Refresh dataset when new records are added (after each batch)
+          if (progress.completed > prevCompleted) {
+            prevCompleted = progress.completed;
+            // Refresh to show newly added records
+            try {
+              await loadDataset();
+            } catch (e) {
+              console.warn("Failed to refresh during generation:", e);
+            }
+          }
+        },
       });
+
       if (result.success) {
+        const generatedCount = result.created_count ?? 0;
+        setGenerationProgress(generatedCount);
         toast.success(
-          `Generated ${result.created_count ?? 0} synthetic trace${(result.created_count ?? 0) === 1 ? "" : "s"}`
+          `Generated ${generatedCount} synthetic record${generatedCount === 1 ? "" : "s"}`
         );
+        // Final refresh to ensure all records are shown
         await loadDataset();
       } else {
         toast.error(result.error || "Failed to generate traces");
@@ -511,6 +549,7 @@ export function DatasetDetailProvider({
       toast.error("Failed to generate traces");
     } finally {
       setIsGeneratingTraces(false);
+      setGenerationProgress(null);
     }
   }, [dataset, selectedRecordIds, loadDataset]);
 
@@ -780,10 +819,13 @@ export function DatasetDetailProvider({
     setExpandedRecord,
     topicHierarchyDialog,
     setTopicHierarchyDialog,
+    generateDataDialog,
+    setGenerateDataDialog,
 
     // Loading states
     isGeneratingTopics,
     isGeneratingTraces,
+    generationProgress,
     isStartingFinetune,
     isGeneratingHierarchy,
     isAutoTagging,

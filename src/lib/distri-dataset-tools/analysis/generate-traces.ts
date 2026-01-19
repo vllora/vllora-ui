@@ -57,6 +57,12 @@ export interface GenerateTracesParams {
   count?: number;
   maxTurns?: number;
   max_turns?: number;
+  /** Number of parallel generation requests (default: 5) */
+  concurrency?: number;
+  /** Callback for progress updates (can be async) */
+  onProgress?: (progress: { completed: number; total: number }) => void | Promise<void>;
+  /** Callback when new records are added - receives the record IDs */
+  onRecordsAdded?: (recordIds: string[]) => void | Promise<void>;
 }
 
 const DEFAULT_COUNT = 5;
@@ -776,9 +782,19 @@ async function simulateConversation(
   return { topic_path: topicPath, persona, messages };
 }
 
+const DEFAULT_CONCURRENCY = 5;
+
+interface GenerationTask {
+  index: number;
+  seedRecord: DatasetRecord | undefined;
+  topicPath: string[];
+  seedMessages: any[];
+  tools: any[];
+}
+
 export async function generateTraces(params: Record<string, unknown>): Promise<GenerateTracesResult> {
   try {
-    const { datasetId, dataset_id, recordIds, record_ids, count, maxTurns, max_turns } =
+    const { datasetId, dataset_id, recordIds, record_ids, count, maxTurns, max_turns, concurrency, onProgress } =
       params as unknown as GenerateTracesParams;
 
     const resolvedDatasetId = datasetId || dataset_id;
@@ -809,17 +825,15 @@ export async function generateTraces(params: Record<string, unknown>): Promise<G
         ? max_turns
         : DEFAULT_MAX_TURNS;
 
+    const effectiveConcurrency = typeof concurrency === 'number' && concurrency > 0
+      ? Math.min(concurrency, 10) // Cap at 10 to avoid overwhelming the API
+      : DEFAULT_CONCURRENCY;
+
     const seedRecords = selectedRecords.length > 0 ? selectedRecords : [undefined];
     const personaCache = new Map<string, string[]>();
     const topicPoolCache = new Map<string, string[][]>();
-    const recordsToAdd: Array<{
-      data: DataInfo;
-      metadata?: Record<string, unknown>;
-      topic_paths?: string[][];
-      is_generated?: boolean;
-      evaluation?: undefined;
-    }> = [];
     const batchErrors: string[] = [];
+    let createdTotal = 0;
 
     const getTopicPool = (record?: DatasetRecord): string[][] => {
       const key = record?.id || 'none';
@@ -833,11 +847,12 @@ export async function generateTraces(params: Record<string, unknown>): Promise<G
       return normalized;
     };
 
+    // Prepare all generation tasks
+    const tasks: GenerationTask[] = [];
     for (let i = 0; i < totalCount; i++) {
       const seedRecord = seedRecords[i % seedRecords.length];
       const topicPool = getTopicPool(seedRecord);
       const topicPath = topicPool[Math.floor(Math.random() * topicPool.length)] || [normalizeTopic(dataset.name)];
-
       const seedMessages = extractSeedMessages(seedRecord);
       const tools = extractSeedTools(seedRecord);
       const effectiveTools = tools.length > 0
@@ -847,47 +862,95 @@ export async function generateTraces(params: Record<string, unknown>): Promise<G
           function: { name: t.name, description: t.description, parameters: t.parameters },
         }));
 
-      try {
-        const simulated = await simulateConversation(topicPath, seedMessages, effectiveTools, turns, personaCache);
-        if (!simulated) {
-          batchErrors.push(`trace=${i + 1}: simulation returned empty`);
-          continue;
-        }
+      tasks.push({
+        index: i,
+        seedRecord,
+        topicPath,
+        seedMessages,
+        tools: effectiveTools,
+      });
+    }
 
-        const data = buildSyntheticTraceDataInfo(simulated, effectiveTools);
-        recordsToAdd.push({
-          data,
-          metadata: {
-            persona: simulated.persona,
-            seed_record_id: seedRecord?.id,
-            seed_topic_path: topicPath,
-            generated_at_ms: Date.now(),
-          },
-          topic_paths: topicPathsFromPath(topicPath),
-          is_generated: true,
-          evaluation: undefined,
-        });
-      } catch (err) {
-        batchErrors.push(`trace=${i + 1}: ${err instanceof Error ? err.message : String(err)}`);
+    // Process in batches for incremental progress updates
+    const batchSize = effectiveConcurrency;
+    for (let batchStart = 0; batchStart < tasks.length; batchStart += batchSize) {
+      const batchTasks = tasks.slice(batchStart, batchStart + batchSize);
+
+      // Run batch in parallel
+      const batchResults = await Promise.allSettled(
+        batchTasks.map(async (task) => {
+          const simulated = await simulateConversation(
+            task.topicPath,
+            task.seedMessages,
+            task.tools,
+            turns,
+            personaCache
+          );
+          if (!simulated) {
+            throw new Error('simulation returned empty');
+          }
+          return {
+            task,
+            simulated,
+          };
+        })
+      );
+
+      // Collect successful results from this batch
+      const recordsToAdd: Array<{
+        data: DataInfo;
+        metadata?: Record<string, unknown>;
+        topic_paths?: string[][];
+        is_generated?: boolean;
+        evaluation?: undefined;
+      }> = [];
+
+      for (let j = 0; j < batchResults.length; j++) {
+        const result = batchResults[j];
+        const task = batchTasks[j];
+
+        if (result.status === 'fulfilled') {
+          const { simulated } = result.value;
+          const data = buildSyntheticTraceDataInfo(simulated, task.tools);
+          recordsToAdd.push({
+            data,
+            metadata: {
+              persona: simulated.persona,
+              seed_record_id: task.seedRecord?.id,
+              seed_topic_path: task.topicPath,
+              generated_at_ms: Date.now(),
+            },
+            topic_paths: topicPathsFromPath(task.topicPath),
+            is_generated: true,
+            evaluation: undefined,
+          });
+        } else {
+          const errorMsg = result.reason instanceof Error ? result.reason.message : String(result.reason);
+          batchErrors.push(`trace=${task.index + 1}: ${errorMsg}`);
+        }
+      }
+
+      // Add records from this batch immediately
+      if (recordsToAdd.length > 0) {
+        try {
+          const added = await datasetsDB.addRecordsToDataset(resolvedDatasetId, recordsToAdd);
+          createdTotal += added;
+        } catch (err) {
+          batchErrors.push(`batch add failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+
+      // Report progress after each batch (await if async to allow UI refresh)
+      if (onProgress) {
+        await onProgress({ completed: createdTotal, total: totalCount });
       }
     }
 
-    if (recordsToAdd.length === 0) {
+    if (createdTotal === 0) {
       return {
         success: false,
         dataset_name: dataset.name,
         error: batchErrors.length > 0 ? batchErrors.join(' | ') : 'No traces were generated',
-      };
-    }
-
-    let createdTotal = 0;
-    try {
-      createdTotal = await datasetsDB.addRecordsToDataset(resolvedDatasetId, recordsToAdd);
-    } catch (err) {
-      return {
-        success: false,
-        dataset_name: dataset.name,
-        error: err instanceof Error ? err.message : String(err),
       };
     }
 
