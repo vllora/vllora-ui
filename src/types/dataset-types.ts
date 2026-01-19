@@ -35,6 +35,29 @@ export interface DataInfo {
   }
 }
 
+// Topic hierarchy node for tree structure
+export interface TopicHierarchyNode {
+  id: string;
+  name: string;
+  children?: TopicHierarchyNode[];
+  // Whether this node is selected/checked
+  selected?: boolean;
+}
+
+// Topic hierarchy configuration stored at dataset level
+export interface TopicHierarchyConfig {
+  // User's description of dataset goals (used as context for LLM)
+  goals?: string;
+  // Hierarchy depth (1-5 levels)
+  depth: number;
+  // Whether to auto-tag records when they're added
+  autoTagging: boolean;
+  // The generated topic hierarchy tree
+  hierarchy?: TopicHierarchyNode[];
+  // Timestamp when hierarchy was last generated
+  generatedAt?: number;
+}
+
 // Stored in 'datasets' object store (metadata only, no records array)
 export interface Dataset {
   id: string;
@@ -43,6 +66,8 @@ export interface Dataset {
   updatedAt: number;
   // Backend dataset ID from the cloud provider (set after first finetune upload)
   backendDatasetId?: string;
+  // Topic hierarchy configuration
+  topicHierarchy?: TopicHierarchyConfig;
 }
 
 // Combined view for UI (dataset + its records)

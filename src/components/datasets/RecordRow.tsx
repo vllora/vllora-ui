@@ -16,12 +16,13 @@ import { Check, Eye, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DataCell, SourceCell, TopicCell, EvaluationCell, TimestampCell } from "./cells";
 import { COLUMN_WIDTHS, ColumnVisibility, DEFAULT_COLUMN_VISIBILITY } from "./table-columns";
+import type { AvailableTopic } from "./record-utils";
 
 interface RecordRowProps {
   record: DatasetRecord;
   /** Row index (1-based) for display */
   index?: number;
-  onUpdateTopic: (recordId: string, topic: string) => Promise<void>;
+  onUpdateTopic: (recordId: string, topic: string, isNew?: boolean) => Promise<void>;
   onDelete: (recordId: string) => void;
   /** Whether to show the Topic: label prefix (used in list view) */
   showTopicLabel?: boolean;
@@ -37,6 +38,8 @@ interface RecordRowProps {
   onExpand?: (record: DatasetRecord) => void;
   /** Column visibility configuration */
   columnVisibility?: ColumnVisibility;
+  /** Available topics from hierarchy for selection */
+  availableTopics?: AvailableTopic[];
 }
 
 export function RecordRow({
@@ -51,6 +54,7 @@ export function RecordRow({
   onSelect,
   onExpand,
   columnVisibility = DEFAULT_COLUMN_VISIBILITY,
+  availableTopics = [],
 }: RecordRowProps) {
   return (
     <div
@@ -105,9 +109,10 @@ export function RecordRow({
           topic={record.topic}
           topicPath={record.topic_path}
           topicPaths={record.topic_paths}
-          onUpdate={(topic) => onUpdateTopic(record.id, topic)}
+          onUpdate={(topic, isNew) => onUpdateTopic(record.id, topic, isNew)}
           showLabel={showTopicLabel}
           tableLayout={tableLayout}
+          availableTopics={availableTopics}
         />
       )}
 

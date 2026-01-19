@@ -30,6 +30,7 @@ import {
   Star,
   Layers,
   Columns,
+  GitBranch,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BulkActionButtons } from "./BulkActionButtons";
@@ -84,6 +85,8 @@ interface RecordsToolbarProps {
   columnVisibility?: ColumnVisibility;
   /** Column visibility change handler */
   onColumnVisibilityChange?: (visibility: ColumnVisibility) => void;
+  /** Open topic hierarchy dialog */
+  onConfigureTopicHierarchy?: () => void;
 }
 
 
@@ -119,6 +122,7 @@ export function RecordsToolbar({
   onDeleteSelected,
   columnVisibility,
   onColumnVisibilityChange,
+  onConfigureTopicHierarchy,
 }: RecordsToolbarProps) {
   const hasSelection = selectedCount > 0;
   const currentSort = sortConfig || { field: "timestamp", direction: "desc" };
@@ -316,6 +320,27 @@ export function RecordsToolbar({
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
+          )}
+
+          {/* Topic hierarchy button */}
+          {onConfigureTopicHierarchy && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={onConfigureTopicHierarchy}
+                  >
+                    <GitBranch className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Configure topic hierarchy</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </div>
 

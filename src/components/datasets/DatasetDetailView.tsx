@@ -5,6 +5,7 @@
  * Uses DatasetDetailContext to manage state and reduce prop drilling.
  */
 
+import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import {
@@ -21,6 +22,8 @@ import { RecordsToolbar } from "./RecordsToolbar";
 import { RecordsTable } from "./RecordsTable";
 import { CreateDatasetDialog } from "./CreateDatasetDialog";
 import { FinetuneJobsPanel } from "@/components/finetune/FinetuneJobsPanel";
+import { TopicHierarchyDialog } from "./TopicHierarchyDialog";
+import { getLeafTopicsFromHierarchy } from "./record-utils";
 
 interface DatasetDetailViewProps {
   datasetId: string;
@@ -86,6 +89,12 @@ function DatasetDetailContent() {
     // Loading states
     isGeneratingTopics,
     isGeneratingTraces,
+    isGeneratingHierarchy,
+    isAutoTagging,
+
+    // Topic hierarchy dialog
+    topicHierarchyDialog,
+    setTopicHierarchyDialog,
 
     // Handlers
     handleUpdateRecordTopic,
@@ -98,7 +107,16 @@ function DatasetDetailContent() {
     handleBulkDelete,
     handleImportRecords,
     handleSaveRecordData,
+    handleGenerateHierarchy,
+    handleApplyTopicHierarchy,
+    handleAutoTagRecords,
   } = DatasetDetailConsumer();
+
+  // Compute available topics from hierarchy for topic selection
+  const availableTopics = useMemo(
+    () => getLeafTopicsFromHierarchy(dataset?.topicHierarchy?.hierarchy),
+    [dataset?.topicHierarchy?.hierarchy]
+  );
 
   if (isLoading) {
     return (
@@ -152,6 +170,7 @@ function DatasetDetailContent() {
               onDeleteSelected={handleBulkDelete}
               columnVisibility={columnVisibility}
               onColumnVisibilityChange={setColumnVisibility}
+              onConfigureTopicHierarchy={() => setTopicHierarchyDialog(true)}
             />
 
             {/* Records table */}
@@ -175,6 +194,7 @@ function DatasetDetailContent() {
                 }
                 onExpand={setExpandedRecord}
                 height={500}
+                availableTopics={availableTopics}
               />
             </div>
           </div>
@@ -219,6 +239,19 @@ function DatasetDetailContent() {
 
       {/* Create dataset dialog */}
       <CreateDatasetDialog />
+
+      {/* Topic hierarchy dialog */}
+      <TopicHierarchyDialog
+        open={topicHierarchyDialog}
+        onOpenChange={setTopicHierarchyDialog}
+        initialConfig={dataset.topicHierarchy}
+        onApply={handleApplyTopicHierarchy}
+        onGenerate={handleGenerateHierarchy}
+        isGenerating={isGeneratingHierarchy}
+        onAutoTag={handleAutoTagRecords}
+        isAutoTagging={isAutoTagging}
+        recordCount={sortedRecords.length}
+      />
     </>
   );
 }

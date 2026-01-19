@@ -11,7 +11,7 @@ import { DatasetRecord } from "@/types/dataset-types";
 import { Loader2, ArrowRight, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Check, Minus, Copy, CheckCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RecordRow } from "./RecordRow";
-import { getTopicColor } from "./record-utils";
+import { getTopicColor, type AvailableTopic } from "./record-utils";
 import { COLUMN_WIDTHS, ColumnVisibility, DEFAULT_COLUMN_VISIBILITY } from "./table-columns";
 import type { SortConfig, SortField } from "./RecordsToolbar";
 
@@ -30,7 +30,7 @@ interface RecordsTableProps {
   /** Show "See all X records" link when truncated */
   onSeeAll?: () => void;
   /** Handler for updating record topic */
-  onUpdateTopic: (recordId: string, topic: string) => Promise<void>;
+  onUpdateTopic: (recordId: string, topic: string, isNew?: boolean) => Promise<void>;
   /** Handler for deleting a record */
   onDelete: (recordId: string) => void;
   /** Show "Topic:" label prefix in each row */
@@ -53,6 +53,8 @@ interface RecordsTableProps {
   groupByTopic?: boolean;
   /** Column visibility configuration */
   columnVisibility?: ColumnVisibility;
+  /** Available topics from hierarchy for selection */
+  availableTopics?: AvailableTopic[];
 }
 
 /** Represents a group of records by topic */
@@ -85,6 +87,7 @@ export function RecordsTable({
   onExpand,
   groupByTopic = false,
   columnVisibility = DEFAULT_COLUMN_VISIBILITY,
+  availableTopics = [],
 }: RecordsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -295,6 +298,7 @@ export function RecordsTable({
                           onSelect={(checked) => handleSelectRecord(record.id, checked)}
                           onExpand={onExpand}
                           columnVisibility={columnVisibility}
+                          availableTopics={availableTopics}
                         />
                       ))}
                     </div>
@@ -339,6 +343,7 @@ export function RecordsTable({
               onSelect={(checked) => handleSelectRecord(record.id, checked)}
               onExpand={onExpand}
               columnVisibility={columnVisibility}
+              availableTopics={availableTopics}
             />
           ))}
           {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
@@ -400,6 +405,7 @@ export function RecordsTable({
                   onSelect={(checked) => handleSelectRecord(record.id, checked)}
                   onExpand={onExpand}
                   columnVisibility={columnVisibility}
+                  availableTopics={availableTopics}
                 />
               </div>
             );

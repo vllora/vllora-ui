@@ -1,4 +1,4 @@
-import { DataInfo, Dataset, DatasetEvaluation, DatasetRecord } from '@/types/dataset-types';
+import { DataInfo, Dataset, DatasetEvaluation, DatasetRecord, TopicHierarchyConfig } from '@/types/dataset-types';
 import { Span } from '@/types/common-type';
 import { tryParseJson } from '@/utils/modelUtils';
 
@@ -693,6 +693,33 @@ export async function getDatasetsBySpanId(spanId: string): Promise<Dataset[]> {
       });
     };
     request.onerror = () => reject(request.error);
+  });
+}
+
+// Update a dataset's topic hierarchy configuration
+export async function updateDatasetTopicHierarchy(
+  datasetId: string,
+  topicHierarchy: TopicHierarchyConfig
+): Promise<void> {
+  const db = await getDB();
+  const now = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('datasets', 'readwrite');
+    const store = tx.objectStore('datasets');
+
+    const getRequest = store.get(datasetId);
+    getRequest.onsuccess = () => {
+      const dataset = getRequest.result;
+      if (dataset) {
+        dataset.topicHierarchy = topicHierarchy;
+        dataset.updatedAt = now;
+        store.put(dataset);
+      }
+    };
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
   });
 }
 

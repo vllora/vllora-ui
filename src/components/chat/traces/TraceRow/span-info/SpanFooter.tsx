@@ -1,77 +1,69 @@
 import { useState, useEffect, useCallback } from "react";
-import { Database, Plus } from "lucide-react";
+import { Database, Plus, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ChatWindowConsumer } from "@/contexts/ChatWindowContext";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Dataset } from "@/types/dataset-types";
+import { Span } from "@/types/common-type";
 import * as datasetsDB from "@/services/datasets-db";
 import { AddToDatasetDialog } from "@/components/datasets/AddToDatasetDialog";
+import { Link } from "react-router-dom";
 
-const MAX_VISIBLE_DATASETS = 3;
+interface SpanFooterProps {
+  span: Span;
+}
 
-export const SpanFooter = () => {
-  const { detailSpan } = ChatWindowConsumer();
+export const SpanFooter = ({ span }: SpanFooterProps) => {
   const [spanDatasets, setSpanDatasets] = useState<Dataset[]>([]);
   const [showAddDialog, setShowAddDialog] = useState(false);
 
   // Load datasets that contain this span
   const loadSpanDatasets = useCallback(() => {
-    if (detailSpan?.span_id) {
-      datasetsDB.getDatasetsBySpanId(detailSpan.span_id).then(setSpanDatasets);
+    if (span?.span_id) {
+      datasetsDB.getDatasetsBySpanId(span.span_id).then(setSpanDatasets);
     } else {
       setSpanDatasets([]);
     }
-  }, [detailSpan?.span_id]);
+  }, [span?.span_id]);
 
   useEffect(() => {
     loadSpanDatasets();
   }, [loadSpanDatasets]);
 
-  if (!detailSpan) {
-    return null;
-  }
-
   return (
     <>
       <div className="sticky bottom-0 z-10 flex flex-row items-center justify-between p-3 px-4 gap-3 w-full bg-[#161616] border-t border-border">
         {spanDatasets.length > 0 ? (
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <Database className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-            <div className="flex flex-wrap gap-1.5 min-w-0">
-              {spanDatasets.slice(0, MAX_VISIBLE_DATASETS).map(ds => (
-                <span
-                  key={ds.id}
-                  className="px-2 py-0.5 text-xs rounded-md bg-[rgb(var(--theme-500))]/10 text-[rgb(var(--theme-500))] truncate max-w-[120px]"
-                  title={ds.name}
-                >
-                  {ds.name}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="flex items-center gap-2 px-2.5 py-1.5 rounded-md hover:bg-muted/50 transition-colors text-sm text-muted-foreground">
+                <Database className="h-3.5 w-3.5" />
+                <span>
+                  In <span className="text-foreground font-medium">{spanDatasets.length}</span> dataset{spanDatasets.length !== 1 ? 's' : ''}
                 </span>
-              ))}
-              {spanDatasets.length > MAX_VISIBLE_DATASETS && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="px-2 py-0.5 text-xs rounded-md bg-muted text-muted-foreground cursor-help">
-                        +{spanDatasets.length - MAX_VISIBLE_DATASETS} more
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent className="p-2 max-w-xs bg-background border border-border rounded-md shadow-md">
-                      <div className="space-y-1">
-                        <p className="text-xs font-medium text-foreground">All datasets:</p>
-                        {spanDatasets.map(ds => (
-                          <div key={ds.id} className="text-xs text-muted-foreground">
-                            • {ds.name}
-                          </div>
-                        ))}
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-            </div>
-          </div>
+                <ChevronDown className="h-3 w-3 opacity-50" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-56 p-2" align="start">
+              <div className="space-y-1">
+                {spanDatasets.map(ds => (
+                  <Link
+                    key={ds.id}
+                    to={`/datasets?id=${ds.id}`}
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 text-sm"
+                  >
+                    <Database className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <span className="truncate" title={ds.name}>{ds.name}</span>
+                  </Link>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
         ) : (
-          <div />
+          <span className="text-sm text-muted-foreground">Not in any dataset</span>
         )}
 
         <Button
@@ -88,7 +80,7 @@ export const SpanFooter = () => {
       <AddToDatasetDialog
         open={showAddDialog}
         onOpenChange={setShowAddDialog}
-        spans={[detailSpan]}
+        spans={[span]}
         onSuccess={loadSpanDatasets}
       />
     </>

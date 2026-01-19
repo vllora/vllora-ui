@@ -75,10 +75,11 @@ export function DatasetsProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Get a dataset with its records
+  // Get a dataset with its records (fetches fresh from IndexedDB)
   const getDatasetWithRecords = useCallback(async (datasetId: string): Promise<DatasetWithRecords | null> => {
     try {
-      const dataset = datasets.find(ds => ds.id === datasetId);
+      // Fetch fresh dataset from IndexedDB to get latest data (including topicHierarchy)
+      const dataset = await datasetsDB.getDatasetById(datasetId);
       if (!dataset) return null;
 
       const records = await datasetsDB.getRecordsByDatasetId(datasetId);
@@ -87,7 +88,7 @@ export function DatasetsProvider({ children }: { children: ReactNode }) {
       console.error('Failed to get dataset with records:', err);
       return null;
     }
-  }, [datasets]);
+  }, []);
 
   // Get record count for a dataset
   const getRecordCount = useCallback(async (datasetId: string): Promise<number> => {

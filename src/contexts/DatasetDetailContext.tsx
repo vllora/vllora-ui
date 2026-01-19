@@ -16,11 +16,11 @@ import {
 } from "react";
 import { DatasetsConsumer } from "@/contexts/DatasetsContext";
 import { DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
-import { Dataset, DatasetRecord } from "@/types/dataset-types";
+import { Dataset, DatasetRecord, TopicHierarchyConfig, TopicHierarchyNode } from "@/types/dataset-types";
 import { emitter } from "@/utils/eventEmitter";
 import { toast } from "sonner";
 import { uploadDatasetForFinetune, createFinetuneJobFromUpload } from "@/services/finetune-api";
-import { updateDatasetBackendId } from "@/services/datasets-db";
+import { updateDatasetBackendId, updateDatasetTopicHierarchy } from "@/services/datasets-db";
 import { filterAndSortRecords } from "@/components/datasets/record-filters";
 import {
   ColumnVisibility,
@@ -32,6 +32,8 @@ import type { ImportMode } from "@/components/datasets/IngestDataDialog";
 import type { DeleteConfirmation } from "@/components/datasets/DeleteConfirmationDialog";
 import { generateTopics } from "@/lib/distri-dataset-tools/analysis/generate-topics";
 import { generateTraces } from "@/lib/distri-dataset-tools/analysis/generate-traces";
+import { generateHierarchy } from "@/lib/distri-dataset-tools/analysis/generate-hierarchy";
+import { classifyRecords } from "@/lib/distri-dataset-tools/analysis/classify-records";
 
 // ============================================================================
 // Types
@@ -84,17 +86,21 @@ interface DatasetDetailContextType {
   setNewDatasetName: (name: string) => void;
   expandedRecord: DatasetRecord | null;
   setExpandedRecord: (record: DatasetRecord | null) => void;
+  topicHierarchyDialog: boolean;
+  setTopicHierarchyDialog: (open: boolean) => void;
 
   // Loading states
   isGeneratingTopics: boolean;
   isGeneratingTraces: boolean;
   isStartingFinetune: boolean;
+  isGeneratingHierarchy: boolean;
+  isAutoTagging: boolean;
 
   // Handlers
   loadDataset: () => Promise<void>;
   handleRenameDataset: (newName: string) => Promise<void>;
   handleDeleteRecord: (recordId: string) => Promise<void>;
-  handleUpdateRecordTopic: (recordId: string, topic: string) => Promise<void>;
+  handleUpdateRecordTopic: (recordId: string, topic: string, isNew?: boolean) => Promise<void>;
   handleUpdateRecordEvaluation: (recordId: string, score: number | undefined) => Promise<void>;
   handleDeleteConfirm: (confirmation: DeleteConfirmation) => void;
   handleBulkAssignTopic: (topic: string) => Promise<void>;
@@ -111,6 +117,9 @@ interface DatasetDetailContextType {
   ) => Promise<void>;
   handleSaveRecordData: (recordId: string, data: unknown) => Promise<void>;
   handleCreateDataset: () => Promise<void>;
+  handleGenerateHierarchy: (goals: string, depth: number) => Promise<TopicHierarchyNode[]>;
+  handleApplyTopicHierarchy: (config: TopicHierarchyConfig) => Promise<void>;
+  handleAutoTagRecords: () => Promise<void>;
 }
 
 // ============================================================================
@@ -199,11 +208,14 @@ export function DatasetDetailProvider({
   const [createDatasetDialog, setCreateDatasetDialog] = useState(false);
   const [newDatasetName, setNewDatasetName] = useState("");
   const [expandedRecord, setExpandedRecord] = useState<DatasetRecord | null>(null);
+  const [topicHierarchyDialog, setTopicHierarchyDialog] = useState(false);
 
   // Loading states
   const [isGeneratingTopics, setIsGeneratingTopics] = useState(false);
   const [isGeneratingTraces, setIsGeneratingTraces] = useState(false);
   const [isStartingFinetune, setIsStartingFinetune] = useState(false);
+  const [isGeneratingHierarchy, setIsGeneratingHierarchy] = useState(false);
+  const [isAutoTagging, setIsAutoTagging] = useState(false);
 
   // Derived state: filtered and sorted records
   const sortedRecords = useMemo(
@@ -336,7 +348,7 @@ export function DatasetDetailProvider({
   );
 
   const handleUpdateRecordTopic = useCallback(
-    async (recordId: string, topic: string) => {
+    async (recordId: string, topic: string, isNew?: boolean) => {
       if (!dataset) return;
       try {
         await updateRecordTopic(dataset.id, recordId, topic);
@@ -351,7 +363,30 @@ export function DatasetDetailProvider({
             prev ? { ...prev, topic: topic.trim() || undefined, updatedAt: now } : null
           );
         }
-        toast.success("Topic updated");
+
+        // If this is a new topic and we have a hierarchy, add it to the hierarchy
+        if (isNew && topic.trim() && dataset.topicHierarchy) {
+          const newNode: TopicHierarchyNode = {
+            id: crypto.randomUUID(),
+            name: topic.trim(),
+            children: [],
+          };
+          const updatedHierarchy = [
+            ...(dataset.topicHierarchy.hierarchy || []),
+            newNode,
+          ];
+          const updatedConfig: TopicHierarchyConfig = {
+            ...dataset.topicHierarchy,
+            hierarchy: updatedHierarchy,
+          };
+          await updateDatasetTopicHierarchy(dataset.id, updatedConfig);
+          setDataset((prev) =>
+            prev ? { ...prev, topicHierarchy: updatedConfig } : null
+          );
+          toast.success(`Topic "${topic.trim()}" added to hierarchy`);
+        } else {
+          toast.success("Topic updated");
+        }
       } catch {
         toast.error("Failed to update topic");
       }
@@ -604,6 +639,96 @@ export function DatasetDetailProvider({
     }
   }, [newDatasetName, createDataset, onSelectDataset]);
 
+  const handleGenerateHierarchy = useCallback(
+    async (goals: string, depth: number): Promise<TopicHierarchyNode[]> => {
+      if (!dataset) return [];
+      setIsGeneratingHierarchy(true);
+      try {
+        const result = await generateHierarchy({
+          goals,
+          depth,
+          records,
+        });
+
+        if (!result.success || !result.hierarchy) {
+          toast.error(result.error || "Failed to generate hierarchy");
+          return [];
+        }
+
+        return result.hierarchy;
+      } catch (err) {
+        console.error("Failed to generate hierarchy:", err);
+        toast.error("Failed to generate hierarchy");
+        return [];
+      } finally {
+        setIsGeneratingHierarchy(false);
+      }
+    },
+    [dataset, records]
+  );
+
+  const handleApplyTopicHierarchy = useCallback(
+    async (config: TopicHierarchyConfig) => {
+      if (!dataset) return;
+      try {
+        await updateDatasetTopicHierarchy(dataset.id, config);
+        setDataset((prev) => (prev ? { ...prev, topicHierarchy: config } : null));
+        toast.success("Topic hierarchy saved");
+        setTopicHierarchyDialog(false);
+      } catch (err) {
+        console.error("Failed to save topic hierarchy:", err);
+        toast.error("Failed to save topic hierarchy");
+      }
+    },
+    [dataset]
+  );
+
+  const handleAutoTagRecords = useCallback(async () => {
+    if (!dataset || !dataset.topicHierarchy?.hierarchy) {
+      toast.error("No topic hierarchy configured");
+      return;
+    }
+
+    const recordsToTag = selectedRecordIds.size > 0
+      ? records.filter(r => selectedRecordIds.has(r.id))
+      : records;
+
+    if (recordsToTag.length === 0) {
+      toast.error("No records to tag");
+      return;
+    }
+
+    setIsAutoTagging(true);
+    try {
+      const result = await classifyRecords({
+        hierarchy: dataset.topicHierarchy.hierarchy,
+        records: recordsToTag,
+      });
+
+      if (!result.success || !result.classifications) {
+        toast.error(result.error || "Failed to classify records");
+        return;
+      }
+
+      // Update records with their assigned topics
+      let updatedCount = 0;
+      for (const [recordId, topicPath] of result.classifications) {
+        const topic = topicPath[topicPath.length - 1]; // Use leaf topic as the main topic
+        await updateRecordTopic(dataset.id, recordId, topic);
+        updatedCount++;
+      }
+
+      // Refresh records
+      await loadDataset();
+      toast.success(`Tagged ${updatedCount} record${updatedCount !== 1 ? 's' : ''}`);
+    } catch (err) {
+      console.error("Failed to auto-tag records:", err);
+      toast.error("Failed to auto-tag records");
+    } finally {
+      setIsAutoTagging(false);
+    }
+  }, [dataset, records, selectedRecordIds, loadDataset, updateRecordTopic]);
+
   // ============================================================================
   // Context value
   // ============================================================================
@@ -653,11 +778,15 @@ export function DatasetDetailProvider({
     setNewDatasetName,
     expandedRecord,
     setExpandedRecord,
+    topicHierarchyDialog,
+    setTopicHierarchyDialog,
 
     // Loading states
     isGeneratingTopics,
     isGeneratingTraces,
     isStartingFinetune,
+    isGeneratingHierarchy,
+    isAutoTagging,
 
     // Handlers
     loadDataset,
@@ -676,6 +805,9 @@ export function DatasetDetailProvider({
     handleImportRecords,
     handleSaveRecordData,
     handleCreateDataset,
+    handleGenerateHierarchy,
+    handleApplyTopicHierarchy,
+    handleAutoTagRecords,
   };
 
   return <DatasetDetailContext.Provider value={value}>{children}</DatasetDetailContext.Provider>;

@@ -2,7 +2,43 @@
  * Utility functions for dataset records
  */
 
-import { DatasetRecord } from "@/types/dataset-types";
+import { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
+
+/** Available topic for selection in TopicCell */
+export interface AvailableTopic {
+  name: string;
+  path: string[]; // Full path from root to this topic
+}
+
+/**
+ * Extract all leaf topics from a topic hierarchy.
+ * Returns topics with their full paths for display.
+ */
+export function getLeafTopicsFromHierarchy(
+  nodes: TopicHierarchyNode[] | undefined,
+  parentPath: string[] = []
+): AvailableTopic[] {
+  if (!nodes || nodes.length === 0) return [];
+
+  const topics: AvailableTopic[] = [];
+
+  for (const node of nodes) {
+    const currentPath = [...parentPath, node.name];
+
+    if (node.children && node.children.length > 0) {
+      // Recurse into children
+      topics.push(...getLeafTopicsFromHierarchy(node.children, currentPath));
+    } else {
+      // Leaf node - add as available topic
+      topics.push({
+        name: node.name,
+        path: currentPath,
+      });
+    }
+  }
+
+  return topics;
+}
 
 // Helper to safely access record data as object
 export const getDataAsObject = (record: DatasetRecord): Record<string, unknown> => {
