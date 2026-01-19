@@ -217,7 +217,7 @@ export const TimelineRow = (props: TimelineRowProps) => {
         >
             <div className={classNames(`flex w-full divide-x divide-border/50 ${!showHighlightButton && !isSelectModeEnabled ? "px-1" : ""}`)}>
                 {/* Checkbox for multi-select - shown when select mode is enabled */}
-                {isSelectModeEnabled && onToggleSelection && (
+                {isSelectModeEnabled && onToggleSelection && span.operation_name !== 'tools' && (
                     <SpanSelectionCheckbox
                         spanId={span.span_id}
                         isSelected={isSelectedForAction}
