@@ -147,10 +147,10 @@ export function BulkActionButtons({
       <ActionButton
         icon={isGeneratingTraces ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shuffle className="w-4 h-4" />}
         label={getGenerateLabel()}
-        tooltip="Generate sample data"
-        disabledTooltip="Generate sample data"
+        tooltip="Generate sample data based on selected records"
+        disabledTooltip="Select records to generate sample data"
         disabled={!!isGeneratingTraces}
-        requiresSelection={false}
+        requiresSelection={true}
         hasSelection={hasSelection}
         onClick={onGenerateTraces}
       />

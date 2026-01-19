@@ -125,10 +125,10 @@ export function DatasetsProvider({ children }: { children: ReactNode }) {
     records: Array<{ data: unknown; topic?: string; evaluation?: DatasetEvaluation }>,
     defaultTopic?: string
   ): Promise<number> => {
-    const addedCount = await datasetsDB.addRecordsToDataset(datasetId, records, defaultTopic);
+    const addedRecords = await datasetsDB.addRecordsToDataset(datasetId, records, defaultTopic);
     // Refresh datasets to get updated timestamps
     await loadDatasets();
-    return addedCount;
+    return addedRecords.length;
   }, [loadDatasets]);
 
   // Clear all records from a dataset (for replace import)

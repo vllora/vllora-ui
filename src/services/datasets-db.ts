@@ -604,9 +604,26 @@ export async function addRecordsToDataset(
     evaluation?: DatasetEvaluation;
   }>,
   defaultTopic?: string
-): Promise<number> {
+): Promise<DatasetRecord[]> {
   const db = await getDB();
   const now = Date.now();
+
+  // Build all record objects first so we can return them
+  const createdRecords: DatasetRecord[] = records.map((recordData) => {
+    const topicPaths = recordData.topic_paths || topicPathsFromSingleTopic(recordData.topic?.trim() || defaultTopic?.trim());
+
+    return {
+      id: crypto.randomUUID(),
+      datasetId,
+      data: recordData.data,
+      metadata: recordData.metadata,
+      topic_paths: topicPaths,
+      is_generated: recordData.is_generated ?? false,
+      evaluation: recordData.evaluation,
+      createdAt: now,
+      updatedAt: now,
+    };
+  });
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction(['datasets', 'records'], 'readwrite');
@@ -624,26 +641,11 @@ export async function addRecordsToDataset(
     };
 
     // Add records
-    let addedCount = 0;
-    records.forEach((recordData) => {
-      const topicPaths = recordData.topic_paths || topicPathsFromSingleTopic(recordData.topic?.trim() || defaultTopic?.trim());
-
-      const record: DatasetRecord = {
-        id: crypto.randomUUID(),
-        datasetId,
-        data: recordData.data,
-        metadata: recordData.metadata,
-        topic_paths: topicPaths,
-        is_generated: recordData.is_generated ?? false,
-        evaluation: recordData.evaluation,
-        createdAt: now,
-        updatedAt: now,
-      };
-      const addRequest = recordsStore.add(record);
-      addRequest.onsuccess = () => addedCount++;
+    createdRecords.forEach((record) => {
+      recordsStore.add(record);
     });
 
-    tx.oncomplete = () => resolve(addedCount);
+    tx.oncomplete = () => resolve(createdRecords);
     tx.onerror = () => reject(tx.error);
   });
 }

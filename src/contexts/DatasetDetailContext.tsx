@@ -506,9 +506,6 @@ export function DatasetDetailProvider({
     setIsGeneratingTraces(true);
     setGenerationProgress(0);
 
-    // Track previous completed count to detect new records
-    let prevCompleted = 0;
-
     try {
       const result = await generateTraces({
         datasetId: dataset.id,
@@ -516,20 +513,13 @@ export function DatasetDetailProvider({
         count,
         maxTurns: 3,
         concurrency: 5, // Run 5 generations in parallel
-        onProgress: async (progress: { completed: number; total: number }) => {
+        onRecordsAdded: (newRecords: DatasetRecord[]) => {
+          // Instantly append new records to state for immediate UI update
+          setRecords((prev) => [...prev, ...newRecords]);
+        },
+        onProgress: (progress: { completed: number; total: number }) => {
           // Update progress count in real-time
           setGenerationProgress(progress.completed);
-
-          // Refresh dataset when new records are added (after each batch)
-          if (progress.completed > prevCompleted) {
-            prevCompleted = progress.completed;
-            // Refresh to show newly added records
-            try {
-              await loadDataset();
-            } catch (e) {
-              console.warn("Failed to refresh during generation:", e);
-            }
-          }
         },
       });
 
@@ -539,8 +529,6 @@ export function DatasetDetailProvider({
         toast.success(
           `Generated ${generatedCount} synthetic record${generatedCount === 1 ? "" : "s"}`
         );
-        // Final refresh to ensure all records are shown
-        await loadDataset();
       } else {
         toast.error(result.error || "Failed to generate traces");
       }
@@ -551,7 +539,7 @@ export function DatasetDetailProvider({
       setIsGeneratingTraces(false);
       setGenerationProgress(null);
     }
-  }, [dataset, selectedRecordIds, loadDataset]);
+  }, [dataset, selectedRecordIds]);
 
   const handleBulkRunEvaluation = useCallback(() => {
     toast.info("Run evaluation feature coming soon");

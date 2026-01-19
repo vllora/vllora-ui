@@ -61,8 +61,8 @@ export interface GenerateTracesParams {
   concurrency?: number;
   /** Callback for progress updates (can be async) */
   onProgress?: (progress: { completed: number; total: number }) => void | Promise<void>;
-  /** Callback when new records are added - receives the record IDs */
-  onRecordsAdded?: (recordIds: string[]) => void | Promise<void>;
+  /** Callback when new records are added - receives the created records */
+  onRecordsAdded?: (records: DatasetRecord[]) => void | Promise<void>;
 }
 
 const DEFAULT_COUNT = 5;
@@ -794,7 +794,7 @@ interface GenerationTask {
 
 export async function generateTraces(params: Record<string, unknown>): Promise<GenerateTracesResult> {
   try {
-    const { datasetId, dataset_id, recordIds, record_ids, count, maxTurns, max_turns, concurrency, onProgress } =
+    const { datasetId, dataset_id, recordIds, record_ids, count, maxTurns, max_turns, concurrency, onProgress, onRecordsAdded } =
       params as unknown as GenerateTracesParams;
 
     const resolvedDatasetId = datasetId || dataset_id;
@@ -933,14 +933,19 @@ export async function generateTraces(params: Record<string, unknown>): Promise<G
       // Add records from this batch immediately
       if (recordsToAdd.length > 0) {
         try {
-          const added = await datasetsDB.addRecordsToDataset(resolvedDatasetId, recordsToAdd);
-          createdTotal += added;
+          const addedRecords = await datasetsDB.addRecordsToDataset(resolvedDatasetId, recordsToAdd);
+          createdTotal += addedRecords.length;
+
+          // Notify callback immediately with newly created records for instant UI update
+          if (onRecordsAdded && addedRecords.length > 0) {
+            await onRecordsAdded(addedRecords);
+          }
         } catch (err) {
           batchErrors.push(`batch add failed: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
 
-      // Report progress after each batch (await if async to allow UI refresh)
+      // Report progress after each batch
       if (onProgress) {
         await onProgress({ completed: createdTotal, total: totalCount });
       }
