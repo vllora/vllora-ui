@@ -70,10 +70,14 @@ interface RecordsToolbarProps {
   onGeneratedFilterChange?: (value: "all" | "generated" | "not_generated") => void;
   /** Generate topics using topic tool */
   onGenerateTopics?: () => void;
+  /** Open topic generation dialog */
+  onOpenGenerateTopics?: () => void;
   /** Flag when topics are being generated */
   isGeneratingTopics?: boolean;
   /** Generate synthetic traces (optional selection seed) */
   onGenerateTraces?: () => void;
+  /** Open trace generation dialog */
+  onOpenGenerateTraces?: () => void;
   /** Flag when traces are being generated */
   isGeneratingTraces?: boolean;
   /** Run evaluation on selected records */
@@ -112,8 +116,10 @@ export function RecordsToolbar({
   generatedFilter = "all",
   onGeneratedFilterChange,
   onGenerateTopics,
+  onOpenGenerateTopics,
   isGeneratingTopics,
   onGenerateTraces,
+  onOpenGenerateTraces,
   isGeneratingTraces,
   onRunEvaluation,
   onDeleteSelected,
@@ -331,16 +337,18 @@ export function RecordsToolbar({
         </div>
       </div>
 
-      <BulkActionButtons
-        hasSelection={hasSelection}
-        onAssignTopic={onAssignTopic}
-        onGenerateTopics={onGenerateTopics}
-        isGeneratingTopics={isGeneratingTopics}
-        onGenerateTraces={onGenerateTraces}
-        isGeneratingTraces={isGeneratingTraces}
-        onRunEvaluation={onRunEvaluation}
-        onDeleteSelected={onDeleteSelected}
-      />
+        <BulkActionButtons
+          hasSelection={hasSelection}
+          onAssignTopic={onAssignTopic}
+          onGenerateTopics={onOpenGenerateTopics || onGenerateTopics}
+          allowGenerateTopicsWithoutSelection
+          isGeneratingTopics={isGeneratingTopics}
+          onGenerateTraces={onOpenGenerateTraces || onGenerateTraces}
+          allowGenerateTracesWithoutSelection
+          isGeneratingTraces={isGeneratingTraces}
+          onRunEvaluation={onRunEvaluation}
+          onDeleteSelected={onDeleteSelected}
+        />
     </div>
   );
 }

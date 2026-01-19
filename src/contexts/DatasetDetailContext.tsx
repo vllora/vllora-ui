@@ -76,14 +76,25 @@ interface DatasetDetailContextType {
   setDeleteConfirm: (confirm: DeleteConfirmation | null) => void;
   assignTopicDialog: boolean;
   setAssignTopicDialog: (open: boolean) => void;
-  importDialog: boolean;
-  setImportDialog: (open: boolean) => void;
+  generateTopicsDialog: boolean;
+  setGenerateTopicsDialog: (open: boolean) => void;
+  topicContextDraft: string;
+  setTopicContextDraft: (context: string) => void;
+  generateTracesDialog: boolean;
+  setGenerateTracesDialog: (open: boolean) => void;
+  generateTracesCount: number;
+  setGenerateTracesCount: (count: number) => void;
+  generateTracesMaxTurns: number;
+  setGenerateTracesMaxTurns: (turns: number) => void;
   createDatasetDialog: boolean;
   setCreateDatasetDialog: (open: boolean) => void;
   newDatasetName: string;
   setNewDatasetName: (name: string) => void;
+  importDialog: boolean;
+  setImportDialog: (open: boolean) => void;
   expandedRecord: DatasetRecord | null;
   setExpandedRecord: (record: DatasetRecord | null) => void;
+
 
   // Loading states
   isGeneratingTopics: boolean;
@@ -98,9 +109,12 @@ interface DatasetDetailContextType {
   handleUpdateRecordEvaluation: (recordId: string, score: number | undefined) => Promise<void>;
   handleDeleteConfirm: (confirmation: DeleteConfirmation) => void;
   handleBulkAssignTopic: (topic: string) => Promise<void>;
-  handleGenerateTopics: () => Promise<void>;
-  handleGenerateTraces: () => Promise<void>;
+  handleOpenGenerateTopics: () => void;
+  handleOpenGenerateTraces: () => void;
+  handleGenerateTopics: (contextOverride?: string) => Promise<void>;
+  handleGenerateTraces: (countOverride?: number, maxTurnsOverride?: number) => Promise<void>;
   handleBulkRunEvaluation: () => void;
+
   handleBulkDelete: () => Promise<void>;
   handleExport: () => void;
   handleStartFinetune: () => Promise<void>;
@@ -195,10 +209,16 @@ export function DatasetDetailProvider({
   // Dialog states
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmation | null>(null);
   const [assignTopicDialog, setAssignTopicDialog] = useState(false);
-  const [importDialog, setImportDialog] = useState(false);
+  const [generateTopicsDialog, setGenerateTopicsDialog] = useState(false);
+  const [topicContextDraft, setTopicContextDraft] = useState("");
+  const [generateTracesDialog, setGenerateTracesDialog] = useState(false);
+  const [generateTracesCount, setGenerateTracesCount] = useState(2);
+  const [generateTracesMaxTurns, setGenerateTracesMaxTurns] = useState(3);
   const [createDatasetDialog, setCreateDatasetDialog] = useState(false);
   const [newDatasetName, setNewDatasetName] = useState("");
+  const [importDialog, setImportDialog] = useState(false);
   const [expandedRecord, setExpandedRecord] = useState<DatasetRecord | null>(null);
+
 
   // Loading states
   const [isGeneratingTopics, setIsGeneratingTopics] = useState(false);
@@ -422,24 +442,39 @@ export function DatasetDetailProvider({
     [dataset, selectedRecordIds, updateRecordTopic, setSelectedRecordIds]
   );
 
-  const handleGenerateTopics = useCallback(async () => {
+  const handleOpenGenerateTopics = useCallback(() => {
+    if (dataset) {
+      setTopicContextDraft(dataset.topic_context || "");
+    }
+    setGenerateTopicsDialog(true);
+  }, [dataset, setGenerateTopicsDialog]);
+
+  const handleOpenGenerateTraces = useCallback(() => {
+    setGenerateTracesDialog(true);
+  }, [setGenerateTracesDialog]);
+
+  const handleGenerateTopics = useCallback(async (contextOverride?: string) => {
     if (!dataset) return;
-    const recordIds = Array.from(selectedRecordIds);
-    if (recordIds.length === 0) return;
+    const context = (contextOverride ?? topicContextDraft).trim();
+    if (!context) {
+      toast.error("Please add a topic context description");
+      return;
+    }
 
     setIsGeneratingTopics(true);
     try {
       const result = await generateTopics({
         datasetId: dataset.id,
-        recordIds,
+        topicContext: context,
         maxTopics: 3,
         maxDepth: 3,
         degree: 2,
       });
       if (result.success) {
-        toast.success("Topics generated and applied to selected records");
+        toast.success("Dataset topic tree generated");
         await loadDataset();
         setSelectedRecordIds(new Set());
+        setGenerateTopicsDialog(false);
       } else {
         toast.error(result.error || "Failed to generate topics");
       }
@@ -449,25 +484,29 @@ export function DatasetDetailProvider({
     } finally {
       setIsGeneratingTopics(false);
     }
-  }, [dataset, selectedRecordIds, loadDataset, setSelectedRecordIds]);
+  }, [dataset, topicContextDraft, loadDataset, setSelectedRecordIds, setGenerateTopicsDialog]);
 
-  const handleGenerateTraces = useCallback(async () => {
+  const handleGenerateTraces = useCallback(async (countOverride?: number, maxTurnsOverride?: number) => {
     if (!dataset) return;
     const recordIds = Array.from(selectedRecordIds);
+    const count = typeof countOverride === "number" ? countOverride : generateTracesCount;
+    const maxTurns = typeof maxTurnsOverride === "number" ? maxTurnsOverride : generateTracesMaxTurns;
 
     setIsGeneratingTraces(true);
     try {
       const result = await generateTraces({
         datasetId: dataset.id,
         recordIds: recordIds.length > 0 ? recordIds : undefined,
-        count: 2,
-        maxTurns: 3,
+        topicPaths: dataset.topic_paths,
+        count,
+        maxTurns,
       });
       if (result.success) {
         toast.success(
           `Generated ${result.created_count ?? 0} synthetic trace${(result.created_count ?? 0) === 1 ? "" : "s"}`
         );
         await loadDataset();
+        setGenerateTracesDialog(false);
       } else {
         toast.error(result.error || "Failed to generate traces");
       }
@@ -477,7 +516,7 @@ export function DatasetDetailProvider({
     } finally {
       setIsGeneratingTraces(false);
     }
-  }, [dataset, selectedRecordIds, loadDataset]);
+  }, [dataset, selectedRecordIds, loadDataset, generateTracesCount, generateTracesMaxTurns]);
 
   const handleBulkRunEvaluation = useCallback(() => {
     toast.info("Run evaluation feature coming soon");
@@ -645,14 +684,26 @@ export function DatasetDetailProvider({
     setDeleteConfirm,
     assignTopicDialog,
     setAssignTopicDialog,
-    importDialog,
-    setImportDialog,
+    generateTopicsDialog,
+    setGenerateTopicsDialog,
+    topicContextDraft,
+    setTopicContextDraft,
+    generateTracesDialog,
+    setGenerateTracesDialog,
+    generateTracesCount,
+    setGenerateTracesCount,
+    generateTracesMaxTurns,
+    setGenerateTracesMaxTurns,
     createDatasetDialog,
     setCreateDatasetDialog,
     newDatasetName,
     setNewDatasetName,
+    importDialog,
+    setImportDialog,
     expandedRecord,
     setExpandedRecord,
+
+
 
     // Loading states
     isGeneratingTopics,
@@ -667,8 +718,11 @@ export function DatasetDetailProvider({
     handleUpdateRecordEvaluation,
     handleDeleteConfirm: handleDeleteConfirmHandler,
     handleBulkAssignTopic,
+    handleOpenGenerateTopics,
+    handleOpenGenerateTraces,
     handleGenerateTopics,
     handleGenerateTraces,
+
     handleBulkRunEvaluation,
     handleBulkDelete,
     handleExport,

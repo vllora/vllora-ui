@@ -21,10 +21,14 @@ interface BulkActionButtonsProps {
   onAssignTopic?: () => void;
   /** Generate topics using topic tool */
   onGenerateTopics?: () => void;
+  /** Whether topic generation is allowed without selection */
+  allowGenerateTopicsWithoutSelection?: boolean;
   /** Flag when topics are being generated */
   isGeneratingTopics?: boolean;
   /** Generate synthetic traces */
   onGenerateTraces?: () => void;
+  /** Whether trace generation is allowed without selection */
+  allowGenerateTracesWithoutSelection?: boolean;
   /** Flag when traces are being generated */
   isGeneratingTraces?: boolean;
   /** Run evaluation on selected records */
@@ -120,8 +124,10 @@ export function BulkActionButtons({
   hasSelection,
   onAssignTopic,
   onGenerateTopics,
+  allowGenerateTopicsWithoutSelection = false,
   isGeneratingTopics,
   onGenerateTraces,
+  allowGenerateTracesWithoutSelection = false,
   isGeneratingTraces,
   onRunEvaluation,
   onDeleteSelected,
@@ -141,10 +147,10 @@ export function BulkActionButtons({
       <ActionButton
         icon={<Wand2 className="w-4 h-4" />}
         label={isGeneratingTopics ? "Generating..." : "Generate Topics"}
-        tooltip="Auto-generate topics for selected records"
+        tooltip="Generate dataset topic tree"
         disabledTooltip="Select records to generate topics"
         disabled={!!isGeneratingTopics}
-        requiresSelection={true}
+        requiresSelection={!allowGenerateTopicsWithoutSelection}
         hasSelection={hasSelection}
         onClick={onGenerateTopics}
       />
@@ -154,7 +160,7 @@ export function BulkActionButtons({
         tooltip="Generate sample data"
         disabledTooltip="Generate sample data"
         disabled={!!isGeneratingTraces}
-        requiresSelection={true}
+        requiresSelection={!allowGenerateTracesWithoutSelection}
         hasSelection={hasSelection}
         onClick={onGenerateTraces}
       />

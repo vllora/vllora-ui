@@ -57,6 +57,8 @@ export interface GenerateTracesParams {
   count?: number;
   maxTurns?: number;
   max_turns?: number;
+  topicPaths?: string[][];
+  topic_paths?: string[][];
 }
 
 const DEFAULT_COUNT = 5;
@@ -304,7 +306,7 @@ function isPrefixPath(prefix: string[], full: string[]): boolean {
   return true;
 }
 
-function getLeafTopicPaths(topicPaths: string[][]): string[][] {
+export function getLeafTopicPaths(topicPaths: string[][]): string[][] {
   const cleaned = topicPaths
     .filter((p) => Array.isArray(p) && p.length > 0)
     .map((p) => p.map((t) => (t || '').trim()).filter(Boolean))
@@ -651,7 +653,7 @@ async function generateAssistantTurn(
     throw new Error('LLM returned invalid assistant_turn payload');
   }
 
-  const rawRecord = raw as Record<string, unknown>;
+  const rawRecord = raw as unknown as Record<string, unknown>;
   if ('records' in rawRecord) {
     throw new Error('LLM returned legacy records payload; expected assistant_turn JSON');
   }
@@ -778,7 +780,7 @@ async function simulateConversation(
 
 export async function generateTraces(params: Record<string, unknown>): Promise<GenerateTracesResult> {
   try {
-    const { datasetId, dataset_id, recordIds, record_ids, count, maxTurns, max_turns } =
+    const { datasetId, dataset_id, recordIds, record_ids, count, maxTurns, max_turns, topicPaths, topic_paths } =
       params as unknown as GenerateTracesParams;
 
     const resolvedDatasetId = datasetId || dataset_id;
@@ -797,6 +799,7 @@ export async function generateTraces(params: Record<string, unknown>): Promise<G
     const selectedRecords = selectedIds.length > 0
       ? allRecords.filter((record) => selectedIds.includes(record.id))
       : [];
+    const datasetTopicPaths = topicPaths || topic_paths || dataset.topic_paths || [];
 
     const totalCount = typeof count === 'number' ? count : DEFAULT_COUNT;
     if (totalCount <= 0) {
@@ -821,10 +824,25 @@ export async function generateTraces(params: Record<string, unknown>): Promise<G
     }> = [];
     const batchErrors: string[] = [];
 
+    const normalizedDatasetPaths = (datasetTopicPaths || [])
+      .filter((p) => Array.isArray(p) && p.length > 0)
+      .map((p) => normalizeTopicPath(p))
+      .filter((p) => p.length > 0);
+
+    const datasetLeaves = normalizedDatasetPaths.length > 0
+      ? getLeafTopicPaths(normalizedDatasetPaths)
+      : [];
+
     const getTopicPool = (record?: DatasetRecord): string[][] => {
       const key = record?.id || 'none';
       const cached = topicPoolCache.get(key);
       if (cached) return cached;
+
+      if (datasetLeaves.length > 0) {
+        topicPoolCache.set(key, datasetLeaves);
+        return datasetLeaves;
+      }
+
       const leaves = record ? getLeafTopicPaths(record.topic_paths || []) : [];
       const normalized = leaves.length > 0
         ? leaves.map(normalizeTopicPath)
@@ -862,6 +880,7 @@ export async function generateTraces(params: Record<string, unknown>): Promise<G
             seed_record_id: seedRecord?.id,
             seed_topic_path: topicPath,
             generated_at_ms: Date.now(),
+            dataset_topic_path: topicPath,
           },
           topic_paths: topicPathsFromPath(topicPath),
           is_generated: true,
@@ -915,6 +934,7 @@ export const generateTracesTool: DistriFnTool = {
     properties: {
       dataset_id: { type: 'string', description: 'The dataset ID' },
       record_ids: { type: 'array', items: { type: 'string' }, description: 'Optional: seed from selected records' },
+      topic_paths: { type: 'array', items: { type: 'array', items: { type: 'string' } }, description: 'Optional dataset topic paths to sample from' },
       count: { type: 'number', description: 'Total traces to generate (default 5).' },
       max_turns: { type: 'number', description: 'Max user turns per trace (default 3)' },
     },

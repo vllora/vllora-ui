@@ -41,6 +41,8 @@ export interface Dataset {
   name: string;
   createdAt: number;
   updatedAt: number;
+  topic_context?: string;
+  topic_paths?: string[][];
   // Backend dataset ID from the cloud provider (set after first finetune upload)
   backendDatasetId?: string;
 }

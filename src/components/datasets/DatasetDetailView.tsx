@@ -14,6 +14,8 @@ import {
 import { FinetuneJobsProvider } from "@/contexts/FinetuneJobsContext";
 import { DeleteConfirmationDialog } from "./DeleteConfirmationDialog";
 import { AssignTopicDialog } from "./AssignTopicDialog";
+import { GenerateTopicsDialog } from "./GenerateTopicsDialog";
+import { GenerateTracesDialog } from "./GenerateTracesDialog";
 import { ExpandTraceDialog } from "./ExpandTraceDialog";
 import { IngestDataDialog } from "./IngestDataDialog";
 import { DatasetDetailHeader } from "./DatasetDetailHeader";
@@ -78,6 +80,16 @@ function DatasetDetailContent() {
     setDeleteConfirm,
     assignTopicDialog,
     setAssignTopicDialog,
+    generateTopicsDialog,
+    setGenerateTopicsDialog,
+    topicContextDraft,
+    setTopicContextDraft,
+    generateTracesDialog,
+    setGenerateTracesDialog,
+    generateTracesCount,
+    setGenerateTracesCount,
+    generateTracesMaxTurns,
+    setGenerateTracesMaxTurns,
     importDialog,
     setImportDialog,
     expandedRecord,
@@ -92,6 +104,8 @@ function DatasetDetailContent() {
     handleUpdateRecordEvaluation,
     handleDeleteConfirm,
     handleBulkAssignTopic,
+    handleOpenGenerateTopics,
+    handleOpenGenerateTraces,
     handleGenerateTopics,
     handleGenerateTraces,
     handleBulkRunEvaluation,
@@ -133,26 +147,28 @@ function DatasetDetailContent() {
             <DatasetDetailHeader />
 
             {/* Toolbar */}
-            <RecordsToolbar
-              selectedCount={selectedRecordIds.size}
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
-              sortConfig={sortConfig}
-              onSortChange={setSortConfig}
-              groupByTopic={groupByTopic}
-              onGroupByTopicChange={setGroupByTopic}
-              onAssignTopic={() => setAssignTopicDialog(true)}
-              generatedFilter={generatedFilter}
-              onGeneratedFilterChange={setGeneratedFilter}
-              onGenerateTopics={handleGenerateTopics}
-              isGeneratingTopics={isGeneratingTopics}
-              onGenerateTraces={handleGenerateTraces}
-              isGeneratingTraces={isGeneratingTraces}
-              onRunEvaluation={handleBulkRunEvaluation}
-              onDeleteSelected={handleBulkDelete}
-              columnVisibility={columnVisibility}
-              onColumnVisibilityChange={setColumnVisibility}
-            />
+              <RecordsToolbar
+                selectedCount={selectedRecordIds.size}
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                sortConfig={sortConfig}
+                onSortChange={setSortConfig}
+                groupByTopic={groupByTopic}
+                onGroupByTopicChange={setGroupByTopic}
+                generatedFilter={generatedFilter}
+                onGeneratedFilterChange={setGeneratedFilter}
+                onAssignTopic={() => setAssignTopicDialog(true)}
+                onGenerateTopics={handleGenerateTopics}
+                onOpenGenerateTopics={handleOpenGenerateTopics}
+                isGeneratingTopics={isGeneratingTopics}
+                onGenerateTraces={handleGenerateTraces}
+                onOpenGenerateTraces={handleOpenGenerateTraces}
+                isGeneratingTraces={isGeneratingTraces}
+                onRunEvaluation={handleBulkRunEvaluation}
+                onDeleteSelected={handleBulkDelete}
+                columnVisibility={columnVisibility}
+                onColumnVisibilityChange={setColumnVisibility}
+              />
 
             {/* Records table */}
             <div className="border border-border rounded-lg overflow-hidden bg-card">
@@ -197,6 +213,28 @@ function DatasetDetailContent() {
         onOpenChange={setAssignTopicDialog}
         selectedCount={selectedRecordIds.size}
         onAssign={handleBulkAssignTopic}
+      />
+
+      {/* Generate topics dialog */}
+      <GenerateTopicsDialog
+        open={generateTopicsDialog}
+        onOpenChange={setGenerateTopicsDialog}
+        contextValue={topicContextDraft}
+        onContextChange={setTopicContextDraft}
+        onGenerate={handleGenerateTopics}
+        isGenerating={isGeneratingTopics}
+      />
+
+      {/* Generate traces dialog */}
+      <GenerateTracesDialog
+        open={generateTracesDialog}
+        onOpenChange={setGenerateTracesDialog}
+        count={generateTracesCount}
+        maxTurns={generateTracesMaxTurns}
+        onCountChange={setGenerateTracesCount}
+        onMaxTurnsChange={setGenerateTracesMaxTurns}
+        onGenerate={handleGenerateTraces}
+        isGenerating={isGeneratingTraces}
       />
 
       {/* Expand trace dialog */}

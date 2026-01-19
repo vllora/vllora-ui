@@ -3,7 +3,7 @@ import { Span } from '@/types/common-type';
 import { tryParseJson } from '@/utils/modelUtils';
 
 const DB_NAME = 'vllora-datasets';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -78,6 +78,35 @@ export async function getDatasetById(datasetId: string): Promise<Dataset | null>
   });
 }
 
+export async function updateDatasetTopicContext(
+  datasetId: string,
+  topicContext: string,
+  topicPaths: string[][]
+): Promise<void> {
+  const db = await getDB();
+  const now = Date.now();
+  const normalizedPaths = normalizeTopicPaths(topicPaths);
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('datasets', 'readwrite');
+    const store = tx.objectStore('datasets');
+    const request = store.get(datasetId);
+
+    request.onsuccess = () => {
+      const dataset = request.result;
+      if (dataset) {
+        dataset.topic_context = topicContext.trim();
+        dataset.topic_paths = normalizedPaths;
+        dataset.updatedAt = now;
+        store.put(dataset);
+      }
+    };
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 // Get all datasets (metadata only)
 export async function getAllDatasets(): Promise<Dataset[]> {
   const db = await getDB();
@@ -139,12 +168,14 @@ export async function getRecordCount(datasetId: string): Promise<number> {
 export async function createDataset(name: string): Promise<Dataset> {
   const db = await getDB();
   const now = Date.now();
-  const dataset: Dataset = {
-    id: crypto.randomUUID(),
-    name: name.trim(),
-    createdAt: now,
-    updatedAt: now,
-  };
+    const dataset: Dataset = {
+      id: crypto.randomUUID(),
+      name: name.trim(),
+      createdAt: now,
+      updatedAt: now,
+      topic_context: undefined,
+      topic_paths: undefined,
+    };
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction('datasets', 'readwrite');
@@ -421,6 +452,47 @@ export async function updateRecordTopicHierarchy(
       const dataset = getDatasetRequest.result;
       if (dataset) {
         dataset.updatedAt = now;
+        datasetsStore.put(dataset);
+      }
+    };
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function assignTopicPathsToRecords(
+  datasetId: string,
+  assignments: Map<string, string[]>,
+  updatedAt: number
+): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(['datasets', 'records'], 'readwrite');
+    const datasetsStore = tx.objectStore('datasets');
+    const recordsStore = tx.objectStore('records');
+
+    assignments.forEach((topicPath, recordId) => {
+      const request = recordsStore.get(recordId);
+      request.onsuccess = () => {
+        const record = request.result;
+        if (record) {
+          record.topic_paths = topicPathsFromPath(topicPath);
+          record.topic = undefined;
+          record.topic_path = undefined;
+          record.topic_root = undefined;
+          record.topic_path_str = undefined;
+          record.updatedAt = updatedAt;
+          recordsStore.put(record);
+        }
+      };
+    });
+
+    const getDatasetRequest = datasetsStore.get(datasetId);
+    getDatasetRequest.onsuccess = () => {
+      const dataset = getDatasetRequest.result;
+      if (dataset) {
+        dataset.updatedAt = updatedAt;
         datasetsStore.put(dataset);
       }
     };
