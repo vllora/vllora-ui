@@ -103,7 +103,7 @@ ui/src/
 │   ├── DatasetsNoResultsState.tsx   # State when search has no matches
 │   ├── DatasetsStatusBar.tsx        # Footer status bar with counts
 │   ├── DeleteConfirmationDialog.tsx # Reusable delete confirmation
-│   ├── ExpandTraceDialog.tsx        # Dialog for expanding trace data
+│   ├── RecordDataDialog.tsx         # Dialog for viewing/editing record data
 │   ├── FinetuneJobDialog.tsx        # Dialog for finetune jobs
 │   ├── IngestDataDialog.tsx         # Dialog for importing data
 │   ├── RecordsTable.tsx             # Virtualized records table

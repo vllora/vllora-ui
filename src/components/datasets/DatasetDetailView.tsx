@@ -15,7 +15,7 @@ import {
 import { FinetuneJobsProvider } from "@/contexts/FinetuneJobsContext";
 import { DeleteConfirmationDialog } from "./DeleteConfirmationDialog";
 import { AssignTopicDialog } from "./AssignTopicDialog";
-import { ExpandTraceDialog } from "./ExpandTraceDialog";
+import { RecordDataDialog } from "./RecordDataDialog";
 import { IngestDataDialog } from "./IngestDataDialog";
 import { DatasetDetailHeader } from "./DatasetDetailHeader";
 import { RecordsToolbar } from "./RecordsToolbar";
@@ -252,13 +252,14 @@ function DatasetDetailContent() {
         onClearTopics={handleClearSelectedRecordTopics}
       />
 
-      {/* Expand trace dialog */}
-      <ExpandTraceDialog
+      {/* Record data dialog */}
+      <RecordDataDialog
         record={expandedRecord}
         onOpenChange={(open) => !open && setExpandedRecord(null)}
         onSave={handleSaveRecordData}
         onUpdateTopic={handleUpdateRecordTopic}
         onUpdateEvaluation={handleUpdateRecordEvaluation}
+        availableTopics={availableTopics}
       />
 
       {/* Import data dialog */}

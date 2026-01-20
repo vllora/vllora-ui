@@ -1,13 +1,13 @@
 /**
- * ExpandTraceDialog
+ * RecordDataDialog
  *
- * Dialog for viewing and editing trace/record data in JSON format.
+ * Dialog for viewing and editing record data in JSON format.
+ * Supports inline topic editing and evaluation scoring.
  */
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Loader2, Star, Tag } from "lucide-react";
+import { Loader2, Star } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -17,29 +17,31 @@ import {
 } from "@/components/ui/dialog";
 import { JsonEditor } from "@/components/chat/conversation/model-config/json-editor";
 import { cn } from "@/lib/utils";
-import { getTopicColor } from "./record-utils";
+import { TopicCell } from "./cells/TopicCell";
+import type { AvailableTopic } from "./record-utils";
 import type { DatasetRecord } from "@/types/dataset-types";
 
-interface ExpandTraceDialogProps {
+interface RecordDataDialogProps {
   record: DatasetRecord | null;
   onOpenChange: (open: boolean) => void;
   onSave: (recordId: string, data: unknown) => Promise<void>;
-  onUpdateTopic?: (recordId: string, topic: string) => Promise<void>;
+  onUpdateTopic?: (recordId: string, topic: string, isNew?: boolean) => Promise<void>;
   onUpdateEvaluation?: (recordId: string, score: number | undefined) => Promise<void>;
+  /** Available topics from hierarchy for selection */
+  availableTopics?: AvailableTopic[];
 }
 
-export function ExpandTraceDialog({
+export function RecordDataDialog({
   record,
   onOpenChange,
   onSave,
   onUpdateTopic,
   onUpdateEvaluation,
-}: ExpandTraceDialogProps) {
+  availableTopics = [],
+}: RecordDataDialogProps) {
   const [editedJson, setEditedJson] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [editingTopic, setEditingTopic] = useState(false);
-  const [topicValue, setTopicValue] = useState("");
   const [hoveredStar, setHoveredStar] = useState<number | null>(null);
 
   // Initialize state when record changes
@@ -47,8 +49,6 @@ export function ExpandTraceDialog({
     if (record) {
       setEditedJson(JSON.stringify(record.data, null, 2));
       setJsonError(null);
-      setTopicValue(record.topic || "");
-      setEditingTopic(false);
     }
   }, [record]);
 
@@ -79,10 +79,9 @@ export function ExpandTraceDialog({
     }
   };
 
-  const handleTopicSave = async () => {
+  const handleTopicUpdate = async (topic: string, isNew?: boolean) => {
     if (!record || !onUpdateTopic) return;
-    await onUpdateTopic(record.id, topicValue.trim());
-    setEditingTopic(false);
+    await onUpdateTopic(record.id, topic, isNew);
   };
 
   const handleEvaluationClick = async (score: number) => {
@@ -95,7 +94,6 @@ export function ExpandTraceDialog({
   const handleClose = () => {
     setEditedJson("");
     setJsonError(null);
-    setEditingTopic(false);
     onOpenChange(false);
   };
 
@@ -113,54 +111,23 @@ export function ExpandTraceDialog({
         </DialogHeader>
 
         {/* Topic and Evaluation Row */}
-        <div className="flex items-center gap-6 py-3 border-b border-border">
+        <div className="flex items-center gap-8 py-3 border-b border-border">
           {/* Topic */}
-          <div className="flex items-center gap-2">
-            <Tag className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Topic:</span>
-            {editingTopic ? (
-              <div className="flex items-center gap-1">
-                <Input
-                  value={topicValue}
-                  onChange={(e) => setTopicValue(e.target.value)}
-                  className="h-7 w-40 text-sm"
-                  placeholder="Enter topic..."
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleTopicSave();
-                    if (e.key === "Escape") {
-                      setEditingTopic(false);
-                      setTopicValue(record?.topic || "");
-                    }
-                  }}
-                />
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 px-2 text-[rgb(var(--theme-500))]"
-                  onClick={handleTopicSave}
-                >
-                  Save
-                </Button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setEditingTopic(true)}
-                className={cn(
-                  "text-sm px-2.5 py-1 rounded-full transition-all hover:opacity-80",
-                  record?.topic
-                    ? getTopicColor(record.topic)
-                    : "text-muted-foreground/60 hover:text-muted-foreground"
-                )}
-              >
-                {record?.topic || "Add topic"}
-              </button>
-            )}
-          </div>
+          {onUpdateTopic && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Topic:</span>
+              <TopicCell
+                topic={record?.topic}
+                onUpdate={handleTopicUpdate}
+                availableTopics={availableTopics}
+                tableLayout
+              />
+            </div>
+          )}
 
           {/* Evaluation */}
           {onUpdateEvaluation && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <span className="text-sm text-muted-foreground">Evaluation:</span>
               <div className="flex items-center gap-0.5">
                 {[1, 2, 3, 4, 5].map((star) => (
