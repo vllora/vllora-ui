@@ -25,7 +25,8 @@ interface AssignTopicDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   selectedCount: number;
-  onAssign: (topic: string) => void;
+  /** Called when a topic is assigned. isNew=true when creating a new topic not in hierarchy */
+  onAssign: (topic: string, isNew?: boolean) => void;
   /** Available topics from hierarchy for selection */
   availableTopics?: AvailableTopic[];
   /** Auto-categorize selected records using topic hierarchy */
@@ -81,9 +82,9 @@ export function AssignTopicDialog({
   // Show "create new" option if user typed something that doesn't match
   const showCreateNew = searchValue.trim() && !isExactMatch;
 
-  const handleAssign = (topic: string) => {
+  const handleAssign = (topic: string, isNew?: boolean) => {
     if (topic.trim()) {
-      onAssign(topic.trim());
+      onAssign(topic.trim(), isNew);
       setSearchValue("");
     }
   };
@@ -126,7 +127,8 @@ export function AssignTopicDialog({
                   if (filteredTopics.length === 1) {
                     handleAssign(filteredTopics[0].name);
                   } else if (showCreateNew || !hasHierarchy) {
-                    handleAssign(searchValue.trim());
+                    // Creating a new topic - pass isNew: true
+                    handleAssign(searchValue.trim(), true);
                   }
                 }
               }}
@@ -141,7 +143,7 @@ export function AssignTopicDialog({
                 {showCreateNew && (
                   <button
                     className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-muted/50 text-left border-b border-border"
-                    onClick={() => handleAssign(searchValue.trim())}
+                    onClick={() => handleAssign(searchValue.trim(), true)}
                   >
                     <Plus className="w-4 h-4 text-[rgb(var(--theme-500))]" />
                     <span>
@@ -222,7 +224,7 @@ export function AssignTopicDialog({
           </Button>
           {!hasHierarchy && (
             <Button
-              onClick={() => handleAssign(searchValue)}
+              onClick={() => handleAssign(searchValue, true)}
               disabled={!searchValue.trim()}
               className="bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
             >

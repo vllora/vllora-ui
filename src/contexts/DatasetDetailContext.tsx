@@ -23,114 +23,20 @@ import { uploadDatasetForFinetune, createFinetuneJobFromUpload } from "@/service
 import { updateDatasetBackendId, updateDatasetTopicHierarchy, clearAllRecordTopics, updateRecordTopicsBatch, renameTopicInRecords, clearTopicFromRecords } from "@/services/datasets-db";
 import { filterAndSortRecords } from "@/components/datasets/record-filters";
 import {
-  ColumnVisibility,
   DEFAULT_COLUMN_VISIBILITY,
   COLUMN_VISIBILITY_STORAGE_KEY,
 } from "@/components/datasets/table-columns";
-import type { SortConfig } from "@/components/datasets/RecordsToolbar";
-import type { ImportMode } from "@/components/datasets/IngestDataDialog";
-import type { DeleteConfirmation } from "@/components/datasets/DeleteConfirmationDialog";
-import type { GenerationConfig } from "@/components/datasets/GenerateSyntheticDataDialog";
 import { generateTopics } from "@/lib/distri-dataset-tools/analysis/generate-topics";
 import { generateTraces } from "@/lib/distri-dataset-tools/analysis/generate-traces";
 import { generateHierarchy } from "@/lib/distri-dataset-tools/analysis/generate-hierarchy";
 import { classifyRecords } from "@/lib/distri-dataset-tools/analysis/classify-records";
 
-// ============================================================================
-// Types
-// ============================================================================
-
-type GeneratedFilter = "all" | "generated" | "not_generated";
-
-interface DatasetDetailContextType {
-  // Core data
-  dataset: Dataset | null;
-  records: DatasetRecord[];
-  sortedRecords: DatasetRecord[];
-  isLoading: boolean;
-  datasetId: string;
-
-  // Navigation
-  datasets: Dataset[];
-  datasetRecordCounts: Record<string, number>;
-  onBack: () => void;
-  onSelectDataset?: (datasetId: string) => void;
-
-  // Filtering & sorting
-  searchQuery: string;
-  setSearchQuery: (query: string) => void;
-  sortConfig: SortConfig;
-  setSortConfig: (config: SortConfig) => void;
-  groupByTopic: boolean;
-  setGroupByTopic: (value: boolean) => void;
-  generatedFilter: GeneratedFilter;
-  setGeneratedFilter: (filter: GeneratedFilter) => void;
-
-  // Column visibility
-  columnVisibility: ColumnVisibility;
-  setColumnVisibility: (visibility: ColumnVisibility) => void;
-
-  // Selection (from DatasetsUIContext)
-  selectedRecordIds: Set<string>;
-  setSelectedRecordIds: (ids: Set<string>) => void;
-
-  // Dialog states
-  deleteConfirm: DeleteConfirmation | null;
-  setDeleteConfirm: (confirm: DeleteConfirmation | null) => void;
-  assignTopicDialog: boolean;
-  setAssignTopicDialog: (open: boolean) => void;
-  importDialog: boolean;
-  setImportDialog: (open: boolean) => void;
-  createDatasetDialog: boolean;
-  setCreateDatasetDialog: (open: boolean) => void;
-  newDatasetName: string;
-  setNewDatasetName: (name: string) => void;
-  expandedRecord: DatasetRecord | null;
-  setExpandedRecord: (record: DatasetRecord | null) => void;
-  topicHierarchyDialog: boolean;
-  setTopicHierarchyDialog: (open: boolean) => void;
-  generateDataDialog: boolean;
-  setGenerateDataDialog: (open: boolean) => void;
-
-  // Loading states
-  isGeneratingTopics: boolean;
-  isGeneratingTraces: boolean;
-  generationProgress: number | null; // Count of records generated so far
-  isStartingFinetune: boolean;
-  isGeneratingHierarchy: boolean;
-  isAutoTagging: boolean;
-
-  // Derived counts
-  recordsWithTopicsCount: number;
-
-  // Handlers
-  loadDataset: () => Promise<void>;
-  handleRenameDataset: (newName: string) => Promise<void>;
-  handleDeleteRecord: (recordId: string) => Promise<void>;
-  handleUpdateRecordTopic: (recordId: string, topic: string, isNew?: boolean) => Promise<void>;
-  handleUpdateRecordEvaluation: (recordId: string, score: number | undefined) => Promise<void>;
-  handleDeleteConfirm: (confirmation: DeleteConfirmation) => void;
-  handleBulkAssignTopic: (topic: string) => Promise<void>;
-  handleGenerateTopics: () => Promise<void>;
-  handleGenerateTraces: (config?: GenerationConfig) => Promise<void>;
-  handleBulkRunEvaluation: () => void;
-  handleBulkDelete: () => Promise<void>;
-  handleExport: () => void;
-  handleStartFinetune: () => Promise<void>;
-  handleImportRecords: (
-    importedRecords: Array<{ data: unknown; topic?: string }>,
-    mode: ImportMode,
-    defaultTopic?: string
-  ) => Promise<void>;
-  handleSaveRecordData: (recordId: string, data: unknown) => Promise<void>;
-  handleCreateDataset: () => Promise<void>;
-  handleGenerateHierarchy: (goals: string, depth: number) => Promise<TopicHierarchyNode[]>;
-  handleApplyTopicHierarchy: (config: TopicHierarchyConfig) => Promise<void>;
-  handleAutoTagRecords: () => Promise<void>;
-  handleClearRecordTopics: () => Promise<void>;
-  handleRenameTopicInRecords: (oldName: string, newName: string) => Promise<void>;
-  handleDeleteTopicFromRecords: (topicNames: string[]) => Promise<void>;
-}
+import type { DatasetDetailContextType, GeneratedFilter } from "./DatasetDetailContext.types";
+import type { SortConfig } from "@/components/datasets/RecordsToolbar";
+import type { ColumnVisibility } from "@/components/datasets/table-columns";
+import type { DeleteConfirmation } from "@/components/datasets/DeleteConfirmationDialog";
+import type { GenerationConfig } from "@/components/datasets/GenerateSyntheticDataDialog";
+import type { ImportMode } from "@/components/datasets/IngestDataDialog";
 
 // ============================================================================
 // Context
@@ -327,6 +233,41 @@ export function DatasetDetailProvider({
   }, [datasets, datasetId, records.length, getRecordCount]);
 
   // ============================================================================
+  // Helpers
+  // ============================================================================
+
+  /**
+   * Add a new topic to the hierarchy (creates hierarchy if needed)
+   * Shared logic for both single record and bulk topic assignment
+   */
+  const addNewTopicToHierarchy = useCallback(
+    async (topicName: string): Promise<void> => {
+      if (!dataset || !topicName.trim()) return;
+
+      const newNode: TopicHierarchyNode = {
+        id: crypto.randomUUID(),
+        name: topicName.trim(),
+        children: [],
+      };
+      const existingHierarchy = dataset.topicHierarchy?.hierarchy || [];
+      const updatedHierarchy = [...existingHierarchy, newNode];
+      const updatedConfig: TopicHierarchyConfig = {
+        goals: dataset.topicHierarchy?.goals || "",
+        depth: dataset.topicHierarchy?.depth || 3,
+        hierarchy: updatedHierarchy,
+        generatedAt: dataset.topicHierarchy?.generatedAt || Date.now(),
+      };
+      // Save to IndexedDB and update local state
+      await updateDatasetTopicHierarchy(dataset.id, updatedConfig);
+      setDataset((prev) =>
+        prev ? { ...prev, topicHierarchy: updatedConfig } : null
+      );
+      toast.success(`Topic "${topicName.trim()}" added to hierarchy`);
+    },
+    [dataset]
+  );
+
+  // ============================================================================
   // Handlers
   // ============================================================================
 
@@ -389,27 +330,9 @@ export function DatasetDetailProvider({
           );
         }
 
-        // If this is a new topic, add it to the hierarchy (create hierarchy if needed)
+        // If this is a new topic, add it to the hierarchy
         if (isNew && topic.trim()) {
-          const newNode: TopicHierarchyNode = {
-            id: crypto.randomUUID(),
-            name: topic.trim(),
-            children: [],
-          };
-          const existingHierarchy = dataset.topicHierarchy?.hierarchy || [];
-          const updatedHierarchy = [...existingHierarchy, newNode];
-          const updatedConfig: TopicHierarchyConfig = {
-            goals: dataset.topicHierarchy?.goals || "",
-            depth: dataset.topicHierarchy?.depth || 3,
-            hierarchy: updatedHierarchy,
-            generatedAt: dataset.topicHierarchy?.generatedAt || Date.now(),
-          };
-          // Save to IndexedDB and update local state
-          await updateDatasetTopicHierarchy(dataset.id, updatedConfig);
-          setDataset((prev) =>
-            prev ? { ...prev, topicHierarchy: updatedConfig } : null
-          );
-          toast.success(`Topic "${topic.trim()}" added to hierarchy`);
+          await addNewTopicToHierarchy(topic);
         } else {
           toast.success("Topic updated");
         }
@@ -417,7 +340,7 @@ export function DatasetDetailProvider({
         toast.error("Failed to update topic");
       }
     },
-    [dataset, updateRecordTopic, expandedRecord]
+    [dataset, updateRecordTopic, expandedRecord, addNewTopicToHierarchy]
   );
 
   const handleUpdateRecordEvaluation = useCallback(
@@ -458,7 +381,7 @@ export function DatasetDetailProvider({
   );
 
   const handleBulkAssignTopic = useCallback(
-    async (topic: string) => {
+    async (topic: string, isNew?: boolean) => {
       if (!dataset) return;
       const idsToProcess = Array.from(selectedRecordIds);
       let successCount = 0;
@@ -477,10 +400,16 @@ export function DatasetDetailProvider({
         );
         toast.success(`Assigned topic to ${successCount} record${successCount !== 1 ? "s" : ""}`);
       }
+
+      // If this is a new topic, add it to the hierarchy
+      if (isNew && topic.trim()) {
+        await addNewTopicToHierarchy(topic);
+      }
+
       setAssignTopicDialog(false);
       setSelectedRecordIds(new Set());
     },
-    [dataset, selectedRecordIds, updateRecordTopic, setSelectedRecordIds]
+    [dataset, selectedRecordIds, updateRecordTopic, setSelectedRecordIds, addNewTopicToHierarchy]
   );
 
   const handleGenerateTopics = useCallback(async () => {
@@ -939,3 +868,6 @@ export function DatasetDetailConsumer() {
   }
   return context;
 }
+
+// Re-export types for consumers
+export type { DatasetDetailContextType, GeneratedFilter } from "./DatasetDetailContext.types";
