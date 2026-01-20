@@ -11,6 +11,11 @@ import type { GenerationConfig } from "@/components/datasets/GenerateSyntheticDa
 
 export type GeneratedFilter = "all" | "generated" | "not_generated";
 
+export interface AutoTagProgress {
+  completed: number;
+  total: number;
+}
+
 export interface DatasetDetailContextType {
   // Core data
   dataset: Dataset | null;
@@ -68,6 +73,7 @@ export interface DatasetDetailContextType {
   isStartingFinetune: boolean;
   isGeneratingHierarchy: boolean;
   isAutoTagging: boolean;
+  autoTagProgress: AutoTagProgress | null; // Progress of auto-tagging
 
   // Derived counts
   recordsWithTopicsCount: number;

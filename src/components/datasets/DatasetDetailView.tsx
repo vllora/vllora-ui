@@ -93,6 +93,7 @@ function DatasetDetailContent() {
     generationProgress,
     isGeneratingHierarchy,
     isAutoTagging,
+    autoTagProgress,
 
     // Topic hierarchy dialog
     topicHierarchyDialog,
@@ -139,8 +140,8 @@ function DatasetDetailContent() {
     [sortedRecords, selectedRecordIds]
   );
 
-  // Wrapper for auto-categorization that closes the dialog when done
-  const handleAutoCategorizeSelected = async () => {
+  // Wrapper for auto-tagging that closes the dialog when done
+  const handleAutoTagSelected = async () => {
     await handleAutoTagRecords();
     setAssignTopicDialog(false);
   };
@@ -243,8 +244,9 @@ function DatasetDetailContent() {
         selectedCount={selectedRecordIds.size}
         onAssign={handleBulkAssignTopic}
         availableTopics={availableTopics}
-        onAutoCategorize={handleAutoCategorizeSelected}
-        isAutoCategorizing={isAutoTagging}
+        onAutoTag={handleAutoTagSelected}
+        isAutoTagging={isAutoTagging}
+        autoTagProgress={autoTagProgress}
       />
 
       {/* Expand trace dialog */}
@@ -278,6 +280,7 @@ function DatasetDetailContent() {
         isGenerating={isGeneratingHierarchy}
         onAutoTag={handleAutoTagRecords}
         isAutoTagging={isAutoTagging}
+        autoTagProgress={autoTagProgress}
         recordCount={sortedRecords.length}
         topicCounts={topicCounts}
         recordsWithTopicsCount={recordsWithTopicsCount}

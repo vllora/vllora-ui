@@ -38,9 +38,16 @@ interface ClassificationResponse {
   classifications: ClassificationResult[];
 }
 
+export interface ClassifyRecordsProgress {
+  completed: number;
+  total: number;
+}
+
 export interface ClassifyRecordsParams {
   hierarchy: TopicHierarchyNode[];
   records: DatasetRecord[];
+  /** Optional callback for progress updates */
+  onProgress?: (progress: ClassifyRecordsProgress) => void;
 }
 
 export interface ClassifyRecordsResult {
@@ -220,9 +227,36 @@ function extractRecordData(record: DatasetRecord): RecordForClassification {
 
 const CLASSIFICATION_BATCH_SIZE = 10;
 
+// Process a single batch and return classifications
+async function processBatch(
+  batch: DatasetRecord[],
+  hierarchy: TopicHierarchyNode[],
+  validLeafTopics: Set<string>
+): Promise<Map<string, string>> {
+  const classifications = new Map<string, string>();
+  const recordsForClassification = batch.map(extractRecordData);
+  const prompt = buildClassificationPrompt(hierarchy, recordsForClassification);
+  const responseContent = await callLLMForClassification(prompt);
+  const result = parseClassificationResponse(responseContent);
+
+  if (result.classifications) {
+    for (const classification of result.classifications) {
+      const recordExists = batch.some(r => r.id === classification.record_id);
+      if (recordExists && classification.topic && validLeafTopics.has(classification.topic)) {
+        classifications.set(classification.record_id, classification.topic);
+      }
+    }
+  }
+
+  return classifications;
+}
+
+// Maximum concurrent batches to process
+const MAX_CONCURRENT_BATCHES = 10;
+
 export async function classifyRecords(params: ClassifyRecordsParams): Promise<ClassifyRecordsResult> {
   try {
-    const { hierarchy, records } = params;
+    const { hierarchy, records, onProgress } = params;
 
     if (!hierarchy || hierarchy.length === 0) {
       return {
@@ -247,6 +281,11 @@ export async function classifyRecords(params: ClassifyRecordsParams): Promise<Cl
     }
 
     const allClassifications = new Map<string, string>();
+    const total = records.length;
+    let completed = 0;
+
+    // Report initial progress
+    onProgress?.({ completed: 0, total });
 
     // Create all batches
     const batches: DatasetRecord[][] = [];
@@ -254,27 +293,24 @@ export async function classifyRecords(params: ClassifyRecordsParams): Promise<Cl
       batches.push(records.slice(i, i + CLASSIFICATION_BATCH_SIZE));
     }
 
-    // Process all batches in parallel
-    const batchResults = await Promise.all(
-      batches.map(async (batch) => {
-        const recordsForClassification = batch.map(extractRecordData);
-        const prompt = buildClassificationPrompt(hierarchy, recordsForClassification);
-        const responseContent = await callLLMForClassification(prompt);
-        const result = parseClassificationResponse(responseContent);
-        return { batch, result };
-      })
-    );
+    // Process batches with limited concurrency for progress tracking
+    for (let i = 0; i < batches.length; i += MAX_CONCURRENT_BATCHES) {
+      const batchGroup = batches.slice(i, i + MAX_CONCURRENT_BATCHES);
 
-    // Collect results from all batches
-    for (const { batch, result } of batchResults) {
-      if (result.classifications) {
-        for (const classification of result.classifications) {
-          const recordExists = batch.some(r => r.id === classification.record_id);
-          if (recordExists && classification.topic && validLeafTopics.has(classification.topic)) {
-            allClassifications.set(classification.record_id, classification.topic);
-          }
+      const results = await Promise.all(
+        batchGroup.map((batch) => processBatch(batch, hierarchy, validLeafTopics))
+      );
+
+      // Merge results and update progress
+      for (let j = 0; j < batchGroup.length; j++) {
+        const batchClassifications = results[j];
+        for (const [recordId, topic] of batchClassifications) {
+          allClassifications.set(recordId, topic);
         }
+        completed += batchGroup[j].length;
       }
+
+      onProgress?.({ completed: Math.min(completed, total), total });
     }
 
     return {

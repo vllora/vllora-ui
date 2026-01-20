@@ -18,12 +18,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Tag, Zap, Loader2, Plus, Wand2, Check, AlertTriangle } from "lucide-react";
+import { Tag, Zap, Loader2, Plus, Check, AlertTriangle } from "lucide-react";
 import {
   TopicHierarchyConfig,
   TopicHierarchyNode,
 } from "@/types/dataset-types";
 import { TopicTreeNode } from "./TopicTreeNode";
+import { AutoTagButton, type AutoTagProgress } from "./AutoTagButton";
 import {
   countNodes,
   getAllNodeIds,
@@ -65,6 +66,8 @@ interface TopicHierarchyDialogProps {
   onAutoTag?: () => Promise<void>;
   /** Whether auto-tagging is in progress */
   isAutoTagging?: boolean;
+  /** Progress of auto-tagging */
+  autoTagProgress?: AutoTagProgress | null;
   /** Number of records that will be tagged */
   recordCount?: number;
   /** Map of topic name -> record count */
@@ -90,6 +93,7 @@ export function TopicHierarchyDialog({
   isGenerating = false,
   onAutoTag,
   isAutoTagging = false,
+  autoTagProgress,
   recordCount = 0,
   topicCounts,
   recordsWithTopicsCount = 0,
@@ -423,24 +427,12 @@ export function TopicHierarchyDialog({
               </span>
             )}
             {onAutoTag && (
-              <Button
-                onClick={onAutoTag}
-                disabled={hierarchy.length === 0 || isAutoTagging || recordCount === 0}
-                variant="outline"
-                className="gap-2"
-              >
-                {isAutoTagging ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Tagging...
-                  </>
-                ) : (
-                  <>
-                    <Wand2 className="w-4 h-4" />
-                    Auto-tag Records
-                  </>
-                )}
-              </Button>
+              <AutoTagButton
+                onAutoTag={onAutoTag}
+                isAutoTagging={isAutoTagging}
+                progress={autoTagProgress}
+                disabled={hierarchy.length === 0 || recordCount === 0}
+              />
             )}
           </div>
         </div>

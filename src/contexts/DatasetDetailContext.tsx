@@ -30,7 +30,6 @@ import { generateTopics } from "@/lib/distri-dataset-tools/analysis/generate-top
 import { generateTraces } from "@/lib/distri-dataset-tools/analysis/generate-traces";
 import { generateHierarchy } from "@/lib/distri-dataset-tools/analysis/generate-hierarchy";
 import { classifyRecords } from "@/lib/distri-dataset-tools/analysis/classify-records";
-
 import type { DatasetDetailContextType, GeneratedFilter } from "./DatasetDetailContext.types";
 import type { SortConfig } from "@/components/datasets/RecordsToolbar";
 import type { ColumnVisibility } from "@/components/datasets/table-columns";
@@ -134,6 +133,7 @@ export function DatasetDetailProvider({
   const [isStartingFinetune, setIsStartingFinetune] = useState(false);
   const [isGeneratingHierarchy, setIsGeneratingHierarchy] = useState(false);
   const [isAutoTagging, setIsAutoTagging] = useState(false);
+  const [autoTagProgress, setAutoTagProgress] = useState<{ completed: number; total: number } | null>(null);
 
   // Derived state: filtered and sorted records
   const sortedRecords = useMemo(
@@ -679,10 +679,14 @@ export function DatasetDetailProvider({
     }
 
     setIsAutoTagging(true);
+    setAutoTagProgress({ completed: 0, total: recordsToTag.length });
     try {
       const result = await classifyRecords({
         hierarchy: dataset.topicHierarchy.hierarchy,
         records: recordsToTag,
+        onProgress: (progress) => {
+          setAutoTagProgress(progress);
+        },
       });
 
       if (!result.success || !result.classifications) {
@@ -701,6 +705,7 @@ export function DatasetDetailProvider({
       toast.error("Failed to auto-tag records");
     } finally {
       setIsAutoTagging(false);
+      setAutoTagProgress(null);
     }
   }, [dataset, records, selectedRecordIds, refreshDataset]);
 
@@ -825,6 +830,7 @@ export function DatasetDetailProvider({
     isStartingFinetune,
     isGeneratingHierarchy,
     isAutoTagging,
+    autoTagProgress,
 
     // Derived counts
     recordsWithTopicsCount,

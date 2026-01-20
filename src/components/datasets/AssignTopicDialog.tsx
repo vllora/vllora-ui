@@ -3,7 +3,7 @@
  *
  * Dialog for bulk assigning a topic to selected records.
  * Supports selecting from existing topics or typing a new one.
- * Also provides auto-categorization using the topic hierarchy.
+ * Also provides auto-tagging using the topic hierarchy.
  */
 
 import { useState, useMemo, useRef, useEffect } from "react";
@@ -17,9 +17,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Check, Plus, Wand2, Loader2 } from "lucide-react";
+import { Check, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getTopicColor, type AvailableTopic } from "./record-utils";
+import { AutoTagButton, type AutoTagProgress } from "./AutoTagButton";
 
 interface AssignTopicDialogProps {
   open: boolean;
@@ -29,10 +30,12 @@ interface AssignTopicDialogProps {
   onAssign: (topic: string, isNew?: boolean) => void;
   /** Available topics from hierarchy for selection */
   availableTopics?: AvailableTopic[];
-  /** Auto-categorize selected records using topic hierarchy */
-  onAutoCategorize?: () => Promise<void>;
-  /** Whether auto-categorization is in progress */
-  isAutoCategorizing?: boolean;
+  /** Auto-tag selected records using topic hierarchy */
+  onAutoTag?: () => Promise<void>;
+  /** Whether auto-tagging is in progress */
+  isAutoTagging?: boolean;
+  /** Progress of auto-tagging */
+  autoTagProgress?: AutoTagProgress | null;
 }
 
 export function AssignTopicDialog({
@@ -41,8 +44,9 @@ export function AssignTopicDialog({
   selectedCount,
   onAssign,
   availableTopics = [],
-  onAutoCategorize,
-  isAutoCategorizing = false,
+  onAutoTag,
+  isAutoTagging = false,
+  autoTagProgress,
 }: AssignTopicDialogProps) {
   const [searchValue, setSearchValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -96,9 +100,9 @@ export function AssignTopicDialog({
     onOpenChange(newOpen);
   };
 
-  const handleAutoCategorize = async () => {
-    if (onAutoCategorize) {
-      await onAutoCategorize();
+  const handleAutoTag = async () => {
+    if (onAutoTag) {
+      await onAutoTag();
     }
   };
 
@@ -106,7 +110,7 @@ export function AssignTopicDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-md max-h-[80vh] flex flex-col overflow-hidden">
+      <DialogContent className="max-w-[50vw] max-h-[80vh] flex flex-col overflow-hidden">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle>Assign Topic</DialogTitle>
           <DialogDescription>
@@ -190,39 +194,26 @@ export function AssignTopicDialog({
             </div>
           )}
 
-          {/* Auto-categorize section */}
-          {onAutoCategorize && hasHierarchy && (
+          {/* Auto-tag section */}
+          {onAutoTag && hasHierarchy && (
             <div className="flex-shrink-0 pt-2 border-t border-border">
               <p className="text-xs text-muted-foreground mb-3">
-                Or let AI automatically categorize selected records based on your topic hierarchy.
+                Or let AI automatically tag selected records based on your topic hierarchy.
               </p>
-              <Button
-                variant="outline"
-                className="w-full gap-2"
-                onClick={handleAutoCategorize}
-                disabled={isAutoCategorizing}
-              >
-                {isAutoCategorizing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Auto-categorizing...
-                  </>
-                ) : (
-                  <>
-                    <Wand2 className="w-4 h-4" />
-                    Auto-categorize Selected Records
-                  </>
-                )}
-              </Button>
+              <AutoTagButton
+                onAutoTag={handleAutoTag}
+                isAutoTagging={isAutoTagging}
+                progress={autoTagProgress}
+                className="w-full"
+                label="Auto-tag Selected Records"
+              />
             </div>
           )}
         </div>
 
-        <DialogFooter className="flex-shrink-0">
-          <Button variant="outline" onClick={() => handleOpenChange(false)}>
-            Cancel
-          </Button>
-          {!hasHierarchy && (
+        {/* Only show footer with Assign button when there's no hierarchy */}
+        {!hasHierarchy && (
+          <DialogFooter className="flex-shrink-0">
             <Button
               onClick={() => handleAssign(searchValue, true)}
               disabled={!searchValue.trim()}
@@ -230,8 +221,8 @@ export function AssignTopicDialog({
             >
               Assign Topic
             </Button>
-          )}
-        </DialogFooter>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );
