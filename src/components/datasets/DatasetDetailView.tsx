@@ -15,7 +15,6 @@ import {
 import { FinetuneJobsProvider } from "@/contexts/FinetuneJobsContext";
 import { DeleteConfirmationDialog } from "./DeleteConfirmationDialog";
 import { AssignTopicDialog } from "./AssignTopicDialog";
-import { RecordDataDialog } from "./RecordDataDialog";
 import { IngestDataDialog } from "./IngestDataDialog";
 import { DatasetDetailHeader } from "./DatasetDetailHeader";
 import { RecordsToolbar } from "./RecordsToolbar";
@@ -85,8 +84,6 @@ function DatasetDetailContent() {
     setAssignTopicDialog,
     importDialog,
     setImportDialog,
-    expandedRecord,
-    setExpandedRecord,
 
     // Loading states
     isGeneratingTraces,
@@ -105,7 +102,6 @@ function DatasetDetailContent() {
 
     // Handlers
     handleUpdateRecordTopic,
-    handleUpdateRecordEvaluation,
     handleDeleteConfirm,
     handleBulkAssignTopic,
     handleGenerateTraces,
@@ -218,7 +214,7 @@ function DatasetDetailContent() {
               onDelete={(recordId: string) =>
                 setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
               }
-              onExpand={setExpandedRecord}
+              onSave={handleSaveRecordData}
               availableTopics={availableTopics}
               topicHierarchy={dataset?.topicHierarchy?.hierarchy}
             />
@@ -249,15 +245,6 @@ function DatasetDetailContent() {
         onClearTopics={handleClearSelectedRecordTopics}
       />
 
-      {/* Record data dialog */}
-      <RecordDataDialog
-        record={expandedRecord}
-        onOpenChange={(open) => !open && setExpandedRecord(null)}
-        onSave={handleSaveRecordData}
-        onUpdateTopic={handleUpdateRecordTopic}
-        onUpdateEvaluation={handleUpdateRecordEvaluation}
-        availableTopics={availableTopics}
-      />
 
       {/* Import data dialog */}
       <IngestDataDialog

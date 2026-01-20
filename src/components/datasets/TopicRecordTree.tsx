@@ -21,6 +21,8 @@ interface TopicRecordTreeProps {
   onUpdateTopic: (recordId: string, topic: string, isNew?: boolean) => Promise<void>;
   /** Handler for deleting a record */
   onDelete: (recordId: string) => void;
+  /** Handler for saving record data changes */
+  onSave?: (recordId: string, data: unknown) => Promise<void>;
   /** Enable selection mode */
   selectable?: boolean;
   /** Selected record IDs */
@@ -40,6 +42,7 @@ interface TreeNodeProps {
   descendantCounts: Map<string, number>;
   onUpdateTopic: (recordId: string, topic: string, isNew?: boolean) => Promise<void>;
   onDelete: (recordId: string) => void;
+  onSave?: (recordId: string, data: unknown) => Promise<void>;
   selectable: boolean;
   selectedIds: Set<string>;
   onSelectRecord: (recordId: string, checked: boolean) => void;
@@ -75,6 +78,7 @@ function TreeNode({
   descendantCounts,
   onUpdateTopic,
   onDelete,
+  onSave,
   selectable,
   selectedIds,
   onSelectRecord,
@@ -200,6 +204,7 @@ function TreeNode({
                   descendantCounts={descendantCounts}
                   onUpdateTopic={onUpdateTopic}
                   onDelete={onDelete}
+                  onSave={onSave}
                   selectable={selectable}
                   selectedIds={selectedIds}
                   onSelectRecord={onSelectRecord}
@@ -241,6 +246,7 @@ function TreeNode({
                     record={record}
                     onUpdateTopic={onUpdateTopic}
                     onDelete={onDelete}
+                    onSave={onSave}
                     selectable={selectable}
                     selected={selectedIds.has(record.id)}
                     onSelect={(checked) => onSelectRecord(record.id, checked)}
@@ -263,6 +269,7 @@ export function TopicRecordTree({
   records,
   onUpdateTopic,
   onDelete,
+  onSave,
   selectable = false,
   selectedIds,
   onSelectRecord,
@@ -303,6 +310,7 @@ export function TopicRecordTree({
           descendantCounts={descendantCounts}
           onUpdateTopic={onUpdateTopic}
           onDelete={onDelete}
+          onSave={onSave}
           selectable={selectable}
           selectedIds={selectedIds}
           onSelectRecord={onSelectRecord}
@@ -317,6 +325,7 @@ export function TopicRecordTree({
           records={unassignedRecords}
           onUpdateTopic={onUpdateTopic}
           onDelete={onDelete}
+          onSave={onSave}
           selectable={selectable}
           selectedIds={selectedIds}
           onSelectRecord={onSelectRecord}
@@ -332,6 +341,7 @@ interface UnassignedSectionProps {
   records: DatasetRecord[];
   onUpdateTopic: (recordId: string, topic: string, isNew?: boolean) => Promise<void>;
   onDelete: (recordId: string) => void;
+  onSave?: (recordId: string, data: unknown) => Promise<void>;
   selectable: boolean;
   selectedIds: Set<string>;
   onSelectRecord: (recordId: string, checked: boolean) => void;
@@ -343,6 +353,7 @@ function UnassignedSection({
   records,
   onUpdateTopic,
   onDelete,
+  onSave,
   selectable,
   selectedIds,
   onSelectRecord,
@@ -379,6 +390,7 @@ function UnassignedSection({
               record={record}
               onUpdateTopic={onUpdateTopic}
               onDelete={onDelete}
+              onSave={onSave}
               selectable={selectable}
               selected={selectedIds.has(record.id)}
               onSelect={(checked) => onSelectRecord(record.id, checked)}

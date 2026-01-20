@@ -519,20 +519,18 @@ export function DatasetDetailProvider({
 
   const handleExport = useCallback(() => {
     if (!dataset) return;
-    const exportData = {
-      name: dataset.name,
-      createdAt: dataset.createdAt,
-      updatedAt: dataset.updatedAt,
-      records: records,
-    };
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+    // Export as JSONL format (one record data per line)
+    const jsonlContent = records
+      .map((record) => JSON.stringify(record.data))
+      .join("\n");
+    const blob = new Blob([jsonlContent], { type: "application/jsonl" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${dataset.name.toLowerCase().replace(/\s+/g, "-")}-export.json`;
+    a.download = `${dataset.name.toLowerCase().replace(/\s+/g, "-")}-export.jsonl`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success("Dataset exported");
+    toast.success(`Exported ${records.length} records as JSONL`);
   }, [dataset, records]);
 
   const handleStartFinetune = useCallback(async () => {

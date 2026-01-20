@@ -146,7 +146,10 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
 
         {/* Actions */}
         <div className={cn("flex items-center justify-center", COLUMN_WIDTHS.deepDiveActions)}>
-          <RecordActions onDelete={() => onDelete(record.id)} />
+          <RecordActions
+            onEdit={onSave ? () => setEditDialogOpen(true) : undefined}
+            onDelete={() => onDelete(record.id)}
+          />
         </div>
       </div>
 
@@ -154,6 +157,18 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
       {isExpanded && (
         <RecordExpandedDetail
           record={record}
+          availableTopics={availableTopics}
+        />
+      )}
+
+      {/* Edit dialog */}
+      {onSave && (
+        <RecordDataDialog
+          record={editDialogOpen ? record : null}
+          onOpenChange={setEditDialogOpen}
+          onSave={onSave}
+          onUpdateTopic={onUpdateTopic}
+          onUpdateEvaluation={onUpdateEvaluation}
           availableTopics={availableTopics}
         />
       )}

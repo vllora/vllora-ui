@@ -33,6 +33,8 @@ interface RecordsTableProps {
   onUpdateTopic: (recordId: string, topic: string, isNew?: boolean) => Promise<void>;
   /** Handler for deleting a record */
   onDelete: (recordId: string) => void;
+  /** Handler for saving record data changes */
+  onSave?: (recordId: string, data: unknown) => Promise<void>;
   /** Height of the table container for virtualization. Use "auto" to fill available space */
   height?: number | "auto";
   /** Enable selection mode */
@@ -72,6 +74,7 @@ export function RecordsTable({
   onSeeAll,
   onUpdateTopic,
   onDelete,
+  onSave,
   height = "auto",
   selectable = false,
   selectedIds: controlledSelectedIds,
@@ -229,6 +232,7 @@ export function RecordsTable({
             records={displayRecords}
             onUpdateTopic={onUpdateTopic}
             onDelete={onDelete}
+            onSave={onSave}
             selectable={selectable}
             selectedIds={selectedIds}
             onSelectRecord={handleSelectRecord}
@@ -331,6 +335,7 @@ export function RecordsTable({
                           record={record}
                           onUpdateTopic={onUpdateTopic}
                           onDelete={onDelete}
+                          onSave={onSave}
                           selectable={selectable}
                           selected={selectedIds.has(record.id)}
                           onSelect={(checked) => handleSelectRecord(record.id, checked)}
@@ -370,6 +375,7 @@ export function RecordsTable({
               record={record}
               onUpdateTopic={onUpdateTopic}
               onDelete={onDelete}
+              onSave={onSave}
               selectable={selectable}
               selected={selectedIds.has(record.id)}
               onSelect={(checked) => handleSelectRecord(record.id, checked)}
@@ -427,6 +433,7 @@ export function RecordsTable({
                   record={record}
                   onUpdateTopic={onUpdateTopic}
                   onDelete={onDelete}
+                  onSave={onSave}
                   selectable={selectable}
                   selected={selectedIds.has(record.id)}
                   onSelect={(checked) => handleSelectRecord(record.id, checked)}
