@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Zap, Loader2, Info, ChevronDown, ChevronRight, FileText } from "lucide-react";
+import { Zap, Loader2, Info, ChevronDown, ChevronRight, FileText, AlertTriangle } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -154,6 +154,21 @@ export function GenerateSyntheticDataDialog({
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto space-y-6 py-4">
+          {/* Warning when no topic hierarchy */}
+          {!hasTopics && (
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                  No topic hierarchy configured
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  For better results, configure a topic hierarchy first. Generated data will be more diverse and organized when topics are defined.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Prompt / Direction */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
