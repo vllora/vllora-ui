@@ -289,6 +289,15 @@ function extractSeedMessages(record?: DatasetRecord): any[] {
   return Array.isArray(data?.input?.messages) ? data.input.messages : [];
 }
 
+function extractSeedSystemPrompt(messages: any[]): string | null {
+  if (!Array.isArray(messages)) return null;
+  const systemMsg = messages.find((m: any) => m?.role === 'system');
+  if (systemMsg && typeof systemMsg.content === 'string') {
+    return systemMsg.content;
+  }
+  return null;
+}
+
 function condenseToolsForPrompt(tools: any[]): Array<{ name: string; required: string[]; properties: string[] }> {
   const out: Array<{ name: string; required: string[]; properties: string[] }> = [];
   for (const t of tools) {
@@ -648,6 +657,7 @@ async function generateUserResponse(
 
 async function simulateConversation(
   topicPath: string[],
+  seedSystemPrompt: string | null,
   seedMessages: any[],
   tools: any[],
   maxTurns: number,
@@ -657,11 +667,9 @@ async function simulateConversation(
   const topicKey = topicPath.join('/');
   const contextStr = topicStr;
 
-  // Run persona and system prompt generation in parallel
-  const [persona, systemPrompt] = await Promise.all([
-    ensurePersona(personaCache, topicKey, contextStr),
-    generateSystemPrompt(topicPath, seedMessages),
-  ]);
+  // Use seed system prompt if available, otherwise use a fallback
+  const persona = await ensurePersona(personaCache, topicKey, contextStr);
+  const systemPrompt = seedSystemPrompt || `You are a helpful assistant specializing in ${topicStr}.`;
   const firstUserMsg = await generateFirstUserMessage(contextStr, persona, systemPrompt);
   const toolInstruction = tools.length > 0
     ? '\nYou have available tools where needed to complete the user\'s request.'
@@ -779,9 +787,11 @@ async function generateSingleRecord(
   try {
     const seedRecord = task.seedRecords[recordIndex % task.seedRecords.length];
     const seedMessages = extractSeedMessages(seedRecord);
+    const seedSystemPrompt = extractSeedSystemPrompt(seedMessages);
 
     const simulated = await simulateConversation(
       task.topicPath,
+      seedSystemPrompt,
       seedMessages,
       task.tools,
       turns,
