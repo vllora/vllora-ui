@@ -174,8 +174,8 @@ function DatasetDetailContent() {
     <>
       <div className="flex-1 flex overflow-hidden">
         {/* Main content */}
-        <div className="flex-1 overflow-auto">
-          <div className="w-full max-w-6xl mx-auto px-6 py-6">
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="px-6 pt-6 pb-4 shrink-0">
             {/* Header - consumes context directly */}
             <DatasetDetailHeader />
 
@@ -200,31 +200,28 @@ function DatasetDetailContent() {
               columnVisibility={columnVisibility}
               onColumnVisibilityChange={setColumnVisibility}
             />
+          </div>
 
-            {/* Records table */}
-            <div className="border border-border rounded-lg overflow-hidden bg-card">
-              <RecordsTable
-                records={sortedRecords}
-                datasetId={datasetId}
-                showHeader
-                showFooter
-                selectable
-                selectedIds={selectedRecordIds}
-                onSelectionChange={setSelectedRecordIds}
-                sortConfig={sortConfig}
-                onSortChange={setSortConfig}
-                groupByTopic={groupByTopic}
-                columnVisibility={columnVisibility}
-                emptyMessage={searchQuery ? `No records match "${searchQuery}"` : "No records in this dataset"}
-                onUpdateTopic={handleUpdateRecordTopic}
-                onDelete={(recordId: string) =>
-                  setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
-                }
-                onExpand={setExpandedRecord}
-                height={500}
-                availableTopics={availableTopics}
-              />
-            </div>
+          {/* Records table - fills remaining space */}
+          <div className="flex-1 mx-6 mb-6 border border-border rounded-lg overflow-hidden bg-card">
+            <RecordsTable
+              records={sortedRecords}
+              datasetId={datasetId}
+              showHeader
+              showFooter
+              selectable
+              selectedIds={selectedRecordIds}
+              onSelectionChange={setSelectedRecordIds}
+              groupByTopic={groupByTopic}
+              emptyMessage={searchQuery ? `No records match "${searchQuery}"` : "No records in this dataset"}
+              onUpdateTopic={handleUpdateRecordTopic}
+              onDelete={(recordId: string) =>
+                setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
+              }
+              onExpand={setExpandedRecord}
+              availableTopics={availableTopics}
+              topicHierarchy={dataset?.topicHierarchy?.hierarchy}
+            />
           </div>
         </div>
 

@@ -257,7 +257,7 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
   return (
     <>
       <div className="flex-1 overflow-auto">
-        <div className="w-full max-w-5xl mx-auto px-6 py-6">
+        <div className="w-full mx-auto px-6 py-6">
           <DatasetsListHeader
             searchQuery={searchQuery}
             datasetCount={datasets.length}
