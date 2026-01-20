@@ -132,14 +132,15 @@ export function GenerateSyntheticDataDialog({
     return onGenerate(config);
   };
 
+  const hasTopics = availableTopics.length > 0;
+
   const canGenerate = useMemo(() => {
+    if (!hasTopics) return false; // Require topic hierarchy
     if (!prompt.trim()) return false;
     if (targetTopics === "selected" && selectedTopics.size === 0) return false;
     if (recordsPerTopic < 1) return false;
     return true;
-  }, [prompt, targetTopics, selectedTopics.size, recordsPerTopic]);
-
-  const hasTopics = availableTopics.length > 0;
+  }, [hasTopics, prompt, targetTopics, selectedTopics.size, recordsPerTopic]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -156,14 +157,14 @@ export function GenerateSyntheticDataDialog({
         <div className="flex-1 overflow-y-auto space-y-6 py-4">
           {/* Warning when no topic hierarchy */}
           {!hasTopics && (
-            <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+              <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
               <div className="space-y-1">
-                <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
-                  No topic hierarchy configured
+                <p className="text-sm font-medium text-destructive">
+                  Topic hierarchy required
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  For better results, configure a topic hierarchy first. Generated data will be more diverse and organized when topics are defined.
+                  Synthetic data generation requires a topic hierarchy. Please configure topics first before generating data.
                 </p>
               </div>
             </div>

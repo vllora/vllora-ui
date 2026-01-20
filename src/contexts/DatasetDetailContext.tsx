@@ -726,6 +726,36 @@ export function DatasetDetailProvider({
     }
   }, [dataset]);
 
+  const handleClearSelectedRecordTopics = useCallback(async () => {
+    if (!dataset || selectedRecordIds.size === 0) return;
+    try {
+      // Create a map with undefined values to clear topics
+      const clearMap = new Map<string, string>();
+      for (const recordId of selectedRecordIds) {
+        clearMap.set(recordId, ""); // Empty string will be treated as clearing the topic
+      }
+
+      // Use batch update to clear topics
+      const clearedCount = await updateRecordTopicsBatch(dataset.id, clearMap);
+
+      // Update local state
+      setRecords((prev) =>
+        prev.map((r) =>
+          selectedRecordIds.has(r.id) && r.topic
+            ? { ...r, topic: undefined, updatedAt: Date.now() }
+            : r
+        )
+      );
+
+      if (clearedCount > 0) {
+        toast.success(`Cleared topics from ${clearedCount} record${clearedCount !== 1 ? "s" : ""}`);
+      }
+    } catch (err) {
+      console.error("Failed to clear selected record topics:", err);
+      toast.error("Failed to clear topics from selected records");
+    }
+  }, [dataset, selectedRecordIds]);
+
   const handleRenameTopicInRecords = useCallback(async (oldName: string, newName: string) => {
     if (!dataset || !oldName || !newName || oldName === newName) return;
     try {
@@ -856,6 +886,7 @@ export function DatasetDetailProvider({
     handleApplyTopicHierarchy,
     handleAutoTagRecords,
     handleClearRecordTopics,
+    handleClearSelectedRecordTopics,
     handleRenameTopicInRecords,
     handleDeleteTopicFromRecords,
   };

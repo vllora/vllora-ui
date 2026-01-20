@@ -13,11 +13,10 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Check, Plus } from "lucide-react";
+import { Check, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getTopicColor, type AvailableTopic } from "./record-utils";
 import { AutoTagButton, type AutoTagProgress } from "./AutoTagButton";
@@ -36,6 +35,8 @@ interface AssignTopicDialogProps {
   isAutoTagging?: boolean;
   /** Progress of auto-tagging */
   autoTagProgress?: AutoTagProgress | null;
+  /** Clear topics from selected records */
+  onClearTopics?: () => Promise<void>;
 }
 
 export function AssignTopicDialog({
@@ -47,6 +48,7 @@ export function AssignTopicDialog({
   onAutoTag,
   isAutoTagging = false,
   autoTagProgress,
+  onClearTopics,
 }: AssignTopicDialogProps) {
   const [searchValue, setSearchValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -90,6 +92,7 @@ export function AssignTopicDialog({
     if (topic.trim()) {
       onAssign(topic.trim(), isNew);
       setSearchValue("");
+      onOpenChange(false);
     }
   };
 
@@ -106,123 +109,133 @@ export function AssignTopicDialog({
     }
   };
 
+  const handleClearTopics = async () => {
+    if (onClearTopics) {
+      await onClearTopics();
+      onOpenChange(false);
+    }
+  };
+
   const hasHierarchy = availableTopics.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-[50vw] max-h-[80vh] flex flex-col overflow-hidden">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle>Assign Topic</DialogTitle>
-          <DialogDescription>
-            Assign a topic to {selectedCount} selected record{selectedCount !== 1 ? "s" : ""}.
+      <DialogContent className="max-w-[50vw] p-0 gap-0 overflow-hidden">
+        <DialogHeader className="px-4 pt-4 pb-3">
+          <DialogTitle className="text-base">Assign Topic</DialogTitle>
+          <DialogDescription className="text-xs">
+            {selectedCount} record{selectedCount !== 1 ? "s" : ""} selected
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-hidden flex flex-col gap-4 py-4">
-          {/* Search/input field */}
-          <div className="flex-shrink-0">
-            <Input
-              ref={inputRef}
-              value={searchValue}
-              onChange={(e) => setSearchValue(e.target.value)}
-              placeholder={hasHierarchy ? "Search or type new topic..." : "Enter topic name..."}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  if (filteredTopics.length === 1) {
-                    handleAssign(filteredTopics[0].name);
-                  } else if (showCreateNew || !hasHierarchy) {
-                    // Creating a new topic - pass isNew: true
-                    handleAssign(searchValue.trim(), true);
-                  }
+        <div className="px-4 pb-3">
+          <Input
+            ref={inputRef}
+            value={searchValue}
+            onChange={(e) => setSearchValue(e.target.value)}
+            placeholder={hasHierarchy ? "Search or type new topic..." : "Enter topic name..."}
+            className="h-9"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                if (filteredTopics.length === 1) {
+                  handleAssign(filteredTopics[0].name);
+                } else if (showCreateNew || !hasHierarchy) {
+                  handleAssign(searchValue.trim(), true);
                 }
-              }}
-            />
-          </div>
-
-          {/* Topics list */}
-          {hasHierarchy && (
-            <div className="flex-1 min-h-0 border border-border rounded-lg overflow-hidden">
-              <div className="h-full max-h-[250px] overflow-y-auto">
-                {/* Create new option */}
-                {showCreateNew && (
-                  <button
-                    className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-muted/50 text-left border-b border-border"
-                    onClick={() => handleAssign(searchValue.trim(), true)}
-                  >
-                    <Plus className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-                    <span>
-                      Create{" "}
-                      <span className="font-medium text-[rgb(var(--theme-500))]">
-                        "{searchValue.trim()}"
-                      </span>
-                    </span>
-                  </button>
-                )}
-
-                {/* Existing topics */}
-                {filteredTopics.length > 0 ? (
-                  filteredTopics.map((t, idx) => (
-                    <button
-                      key={`${t.name}-${idx}`}
-                      className="w-full flex items-center justify-between px-3 py-2.5 text-sm hover:bg-muted/50 text-left border-b border-border last:border-b-0"
-                      onClick={() => handleAssign(t.name)}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span
-                          className={cn(
-                            "text-xs font-medium px-2 py-0.5 rounded-full shrink-0",
-                            getTopicColor(t.name)
-                          )}
-                        >
-                          {t.name}
-                        </span>
-                        {t.path.length > 1 && (
-                          <span className="text-xs text-muted-foreground truncate">
-                            {t.path.slice(0, -1).join(" / ")}
-                          </span>
-                        )}
-                      </div>
-                      <Check className="w-4 h-4 text-transparent group-hover:text-muted-foreground shrink-0" />
-                    </button>
-                  ))
-                ) : !showCreateNew ? (
-                  <div className="px-3 py-4 text-sm text-muted-foreground text-center">
-                    No matching topics
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          )}
-
-          {/* Auto-tag section */}
-          {onAutoTag && hasHierarchy && (
-            <div className="flex-shrink-0 pt-2 border-t border-border">
-              <p className="text-xs text-muted-foreground mb-3">
-                Or let AI automatically tag selected records based on your topic hierarchy.
-              </p>
-              <AutoTagButton
-                onAutoTag={handleAutoTag}
-                isAutoTagging={isAutoTagging}
-                progress={autoTagProgress}
-                className="w-full"
-                label="Auto-tag Selected Records"
-              />
-            </div>
-          )}
+              }
+            }}
+          />
         </div>
 
-        {/* Only show footer with Assign button when there's no hierarchy */}
-        {!hasHierarchy && (
-          <DialogFooter className="flex-shrink-0">
+        {/* Topics list */}
+        {hasHierarchy && (
+          <div className="max-h-[200px] overflow-y-auto border-t border-border">
+            {/* Create new option */}
+            {showCreateNew && (
+              <button
+                className="w-full flex items-center gap-2 px-4 py-2 text-sm hover:bg-muted/50 text-left"
+                onClick={() => handleAssign(searchValue.trim(), true)}
+              >
+                <Plus className="w-4 h-4 text-[rgb(var(--theme-500))]" />
+                <span>
+                  Create{" "}
+                  <span className="font-medium text-[rgb(var(--theme-500))]">
+                    "{searchValue.trim()}"
+                  </span>
+                </span>
+              </button>
+            )}
+
+            {/* Existing topics */}
+            {filteredTopics.length > 0 ? (
+              filteredTopics.map((t, idx) => (
+                <button
+                  key={`${t.name}-${idx}`}
+                  className="w-full flex items-center justify-between px-4 py-2 text-sm hover:bg-muted/50 text-left group"
+                  onClick={() => handleAssign(t.name)}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span
+                      className={cn(
+                        "text-xs font-medium px-2 py-0.5 rounded-full shrink-0",
+                        getTopicColor(t.name)
+                      )}
+                    >
+                      {t.name}
+                    </span>
+                    {t.path.length > 1 && (
+                      <span className="text-xs text-muted-foreground truncate">
+                        {t.path.slice(0, -1).join(" / ")}
+                      </span>
+                    )}
+                  </div>
+                  <Check className="w-4 h-4 text-transparent group-hover:text-muted-foreground shrink-0" />
+                </button>
+              ))
+            ) : !showCreateNew ? (
+              <div className="px-4 py-3 text-sm text-muted-foreground text-center">
+                No matching topics
+              </div>
+            ) : null}
+          </div>
+        )}
+
+        {/* Footer with actions */}
+        <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-border bg-muted/30">
+          {/* Left side - Clear topic */}
+          {onClearTopics ? (
+            <button
+              className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1 transition-colors"
+              onClick={handleClearTopics}
+            >
+              <X className="w-3 h-3" />
+              Clear topic
+            </button>
+          ) : (
+            <div />
+          )}
+
+          {/* Right side - Auto-tag or manual assign */}
+          {onAutoTag && hasHierarchy ? (
+            <AutoTagButton
+              onAutoTag={handleAutoTag}
+              isAutoTagging={isAutoTagging}
+              progress={autoTagProgress}
+              variant="default"
+              className="h-8 text-xs bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
+              label="Auto-tag"
+            />
+          ) : !hasHierarchy ? (
             <Button
+              size="sm"
               onClick={() => handleAssign(searchValue, true)}
               disabled={!searchValue.trim()}
-              className="bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
+              className="h-8 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
             >
-              Assign Topic
+              Assign
             </Button>
-          </DialogFooter>
-        )}
+          ) : null}
+        </div>
       </DialogContent>
     </Dialog>
   );

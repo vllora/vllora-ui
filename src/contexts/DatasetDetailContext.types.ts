@@ -103,6 +103,7 @@ export interface DatasetDetailContextType {
   handleApplyTopicHierarchy: (config: TopicHierarchyConfig) => Promise<void>;
   handleAutoTagRecords: () => Promise<void>;
   handleClearRecordTopics: () => Promise<void>;
+  handleClearSelectedRecordTopics: () => Promise<void>;
   handleRenameTopicInRecords: (oldName: string, newName: string) => Promise<void>;
   handleDeleteTopicFromRecords: (topicNames: string[]) => Promise<void>;
 }

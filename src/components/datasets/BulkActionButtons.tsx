@@ -17,6 +17,8 @@ import { cn } from "@/lib/utils";
 interface BulkActionButtonsProps {
   /** Whether any records are selected */
   hasSelection: boolean;
+  /** Whether a topic hierarchy is configured (required for generation) */
+  hasTopicHierarchy?: boolean;
   /** Assign topic to selected records */
   onAssignTopic?: () => void;
   /** Generate synthetic traces */
@@ -57,9 +59,8 @@ function ActionButton({
   onClick,
 }: ActionButtonProps) {
   const isDisabled = disabled || (requiresSelection && !hasSelection);
-  const currentTooltip = isDisabled && requiresSelection && !hasSelection
-    ? disabledTooltip
-    : tooltip;
+  // Show disabled tooltip when button is disabled for any reason
+  const currentTooltip = isDisabled ? disabledTooltip : tooltip;
 
   const getButtonStyles = () => {
     if (variant === "danger") {
@@ -116,6 +117,7 @@ function ActionButton({
 
 export function BulkActionButtons({
   hasSelection,
+  hasTopicHierarchy = true,
   onAssignTopic,
   onGenerateTraces,
   isGeneratingTraces,
@@ -130,6 +132,12 @@ export function BulkActionButtons({
       return `Generating... (${generationProgress})`;
     }
     return "Generating...";
+  };
+
+  // Determine disabled tooltip for generate button
+  const getGenerateDisabledTooltip = () => {
+    if (!hasTopicHierarchy) return "Configure topic hierarchy first to generate data";
+    return "Select records to generate sample data";
   };
 
   return (
@@ -148,8 +156,8 @@ export function BulkActionButtons({
         icon={isGeneratingTraces ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shuffle className="w-4 h-4" />}
         label={getGenerateLabel()}
         tooltip="Generate sample data based on selected records"
-        disabledTooltip="Select records to generate sample data"
-        disabled={!!isGeneratingTraces}
+        disabledTooltip={getGenerateDisabledTooltip()}
+        disabled={!!isGeneratingTraces || !hasTopicHierarchy}
         requiresSelection={true}
         hasSelection={hasSelection}
         onClick={onGenerateTraces}

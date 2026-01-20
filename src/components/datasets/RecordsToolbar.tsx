@@ -74,6 +74,8 @@ interface RecordsToolbarProps {
   isGeneratingTraces?: boolean;
   /** Current count of generated records (null when not generating) */
   generationProgress?: number | null;
+  /** Whether a topic hierarchy is configured (required for generation) */
+  hasTopicHierarchy?: boolean;
   /** Run evaluation on selected records */
   onRunEvaluation?: () => void;
   /** Delete selected records */
@@ -112,6 +114,7 @@ export function RecordsToolbar({
   onGenerateTraces,
   isGeneratingTraces,
   generationProgress,
+  hasTopicHierarchy = true,
   onRunEvaluation,
   onDeleteSelected,
   columnVisibility,
@@ -330,6 +333,7 @@ export function RecordsToolbar({
 
       <BulkActionButtons
         hasSelection={hasSelection}
+        hasTopicHierarchy={hasTopicHierarchy}
         onAssignTopic={onAssignTopic}
         onGenerateTraces={onGenerateTraces}
         isGeneratingTraces={isGeneratingTraces}

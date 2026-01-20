@@ -117,6 +117,7 @@ function DatasetDetailContent() {
     handleApplyTopicHierarchy,
     handleAutoTagRecords,
     handleClearRecordTopics,
+    handleClearSelectedRecordTopics,
     handleRenameTopicInRecords,
     handleDeleteTopicFromRecords,
     recordsWithTopicsCount,
@@ -193,6 +194,7 @@ function DatasetDetailContent() {
               onGenerateTraces={() => setGenerateDataDialog(true)}
               isGeneratingTraces={isGeneratingTraces}
               generationProgress={generationProgress}
+              hasTopicHierarchy={availableTopics.length > 0}
               onRunEvaluation={handleBulkRunEvaluation}
               onDeleteSelected={handleBulkDelete}
               columnVisibility={columnVisibility}
@@ -247,6 +249,7 @@ function DatasetDetailContent() {
         onAutoTag={handleAutoTagSelected}
         isAutoTagging={isAutoTagging}
         autoTagProgress={autoTagProgress}
+        onClearTopics={handleClearSelectedRecordTopics}
       />
 
       {/* Expand trace dialog */}
