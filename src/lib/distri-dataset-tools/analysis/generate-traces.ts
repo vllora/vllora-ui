@@ -68,54 +68,6 @@ export interface GenerateTracesParams {
 const DEFAULT_MAX_TURNS = 3;
 const DEFAULT_PERSONA_GUIDANCE = 'Diverse and realistic';
 
-const TOOL_CATALOG = [
-  {
-    name: 'get_dataset_records',
-    description: 'Fetch records from a dataset by id.',
-    parameters: {
-      type: 'object',
-      properties: { dataset_id: { type: 'string' } },
-      required: ['dataset_id'],
-      additionalProperties: false,
-    },
-  },
-  {
-    name: 'summarize_dataset',
-    description: 'Summarize a dataset content and characteristics.',
-    parameters: {
-      type: 'object',
-      properties: { dataset_id: { type: 'string' } },
-      required: ['dataset_id'],
-      additionalProperties: false,
-    },
-  },
-  {
-    name: 'find_duplicates',
-    description: 'Find potential duplicate records in a dataset.',
-    parameters: {
-      type: 'object',
-      properties: { dataset_id: { type: 'string' } },
-      required: ['dataset_id'],
-      additionalProperties: false,
-    },
-  },
-  {
-    name: 'generate_topics',
-    description: 'Generate hierarchical topic tags for dataset records.',
-    parameters: {
-      type: 'object',
-      properties: {
-        dataset_id: { type: 'string' },
-        record_ids: { type: 'array', items: { type: 'string' } },
-        max_depth: { type: 'number' },
-        degree: { type: 'number' },
-      },
-      required: ['dataset_id'],
-      additionalProperties: false,
-    },
-  },
-] as const;
-
 const SIMULATED_PERSONA_BATCH_PROMPT = `Create a JSON list of 10 diverse user personas who would be interested in the following topic.
 
 Topic: {{subtopics}}

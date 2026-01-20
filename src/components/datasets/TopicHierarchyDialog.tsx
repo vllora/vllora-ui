@@ -117,6 +117,9 @@ export function TopicHierarchyDialog({
   // Stable ref for onApply to avoid effect re-triggers when parent recreates callback
   const onApplyRef = useRef(onApply);
   onApplyRef.current = onApply;
+  // Stable ref for initialConfig to ensure we always read the latest value when dialog opens
+  const initialConfigRef = useRef(initialConfig);
+  initialConfigRef.current = initialConfig;
 
   // Reset state only when dialog transitions from closed to open
   useEffect(() => {
@@ -124,12 +127,14 @@ export function TopicHierarchyDialog({
     wasOpen.current = open;
 
     if (justOpened) {
-      setGoals(initialConfig?.goals || "");
-      setDepth(initialConfig?.depth || 3);
-      setHierarchy(initialConfig?.hierarchy ? cloneHierarchy(initialConfig.hierarchy) : []);
+      // Read from ref to get the latest config value
+      const config = initialConfigRef.current;
+      setGoals(config?.goals || "");
+      setDepth(config?.depth || 3);
+      setHierarchy(config?.hierarchy ? cloneHierarchy(config.hierarchy) : []);
       // Expand all nodes by default
-      if (initialConfig?.hierarchy) {
-        setExpandedNodes(new Set(getAllNodeIds(initialConfig.hierarchy)));
+      if (config?.hierarchy) {
+        setExpandedNodes(new Set(getAllNodeIds(config.hierarchy)));
       } else {
         setExpandedNodes(new Set());
       }
@@ -137,7 +142,7 @@ export function TopicHierarchyDialog({
       setSaveStatus("idle");
       hasUserEdited.current = false;
     }
-  }, [open, initialConfig]);
+  }, [open]);
 
   // Auto-save with debouncing when hierarchy changes
   // Goals and depth are just generation config - only save when hierarchy is modified

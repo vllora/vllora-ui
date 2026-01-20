@@ -1,6 +1,10 @@
 import { DataInfo, Dataset, DatasetEvaluation, DatasetRecord, TopicHierarchyConfig } from '@/types/dataset-types';
 import { Span } from '@/types/common-type';
 import { tryParseJson } from '@/utils/modelUtils';
+import { emitter } from '@/utils/eventEmitter';
+
+// Event type for dataset changes - context listens for this to refresh
+const DATASET_REFRESH_EVENT = 'vllora_dataset_refresh';
 
 const DB_NAME = 'vllora-datasets';
 const DB_VERSION = 3;
@@ -824,7 +828,11 @@ export async function updateDatasetTopicHierarchy(
       }
     };
 
-    tx.oncomplete = () => resolve();
+    tx.oncomplete = () => {
+      // Emit refresh event so context auto-syncs with IndexedDB
+      emitter.emit(DATASET_REFRESH_EVENT as any, { datasetId });
+      resolve();
+    };
     tx.onerror = () => reject(tx.error);
   });
 }

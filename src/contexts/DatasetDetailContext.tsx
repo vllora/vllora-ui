@@ -240,7 +240,7 @@ export function DatasetDetailProvider({
     [records, searchQuery, generatedFilter, sortConfig]
   );
 
-  // Load dataset and records
+  // Load dataset and records (with loading indicator for initial load)
   const loadDataset = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -257,19 +257,32 @@ export function DatasetDetailProvider({
     }
   }, [datasetId, getDatasetWithRecords]);
 
+  // Refresh dataset silently (no loading indicator - for background syncs)
+  const refreshDataset = useCallback(async () => {
+    try {
+      const result = await getDatasetWithRecords(datasetId);
+      if (result) {
+        setDataset(result);
+        setRecords(result.records);
+      }
+    } catch (err) {
+      console.error("Failed to refresh dataset:", err);
+    }
+  }, [datasetId, getDatasetWithRecords]);
+
   // Initial load
   useEffect(() => {
     loadDataset();
   }, [loadDataset]);
 
-  // Listen for dataset refresh events
+  // Listen for dataset refresh events (use silent refresh to avoid unmounting dialogs)
   useEffect(() => {
-    const handleRefresh = () => loadDataset();
+    const handleRefresh = () => refreshDataset();
     emitter.on("vllora_dataset_refresh" as any, handleRefresh);
     return () => {
       emitter.off("vllora_dataset_refresh" as any, handleRefresh);
     };
-  }, [loadDataset]);
+  }, [refreshDataset]);
 
   // Listen for records deleted events
   useEffect(() => {
@@ -391,6 +404,7 @@ export function DatasetDetailProvider({
             hierarchy: updatedHierarchy,
             generatedAt: dataset.topicHierarchy?.generatedAt || Date.now(),
           };
+          // Save to IndexedDB and update local state
           await updateDatasetTopicHierarchy(dataset.id, updatedConfig);
           setDataset((prev) =>
             prev ? { ...prev, topicHierarchy: updatedConfig } : null
@@ -708,6 +722,7 @@ export function DatasetDetailProvider({
     async (config: TopicHierarchyConfig) => {
       if (!dataset) return;
       try {
+        // Save to IndexedDB and update local state
         await updateDatasetTopicHierarchy(dataset.id, config);
         setDataset((prev) => (prev ? { ...prev, topicHierarchy: config } : null));
         // Dialog shows its own "Saved" indicator - no toast or auto-close needed
@@ -749,8 +764,8 @@ export function DatasetDetailProvider({
       // Batch update all records' topics in a single transaction
       const updatedCount = await updateRecordTopicsBatch(dataset.id, result.classifications);
 
-      // Refresh records
-      await loadDataset();
+      // Refresh records silently (avoid unmounting dialogs)
+      await refreshDataset();
       toast.success(`Tagged ${updatedCount} record${updatedCount !== 1 ? 's' : ''}`);
     } catch (err) {
       console.error("Failed to auto-tag records:", err);
@@ -758,7 +773,7 @@ export function DatasetDetailProvider({
     } finally {
       setIsAutoTagging(false);
     }
-  }, [dataset, records, selectedRecordIds, loadDataset]);
+  }, [dataset, records, selectedRecordIds, refreshDataset]);
 
   const handleClearRecordTopics = useCallback(async () => {
     if (!dataset) return;
