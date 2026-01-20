@@ -20,7 +20,7 @@ import { Dataset, DatasetRecord, TopicHierarchyConfig, TopicHierarchyNode } from
 import { emitter } from "@/utils/eventEmitter";
 import { toast } from "sonner";
 import { uploadDatasetForFinetune, createFinetuneJobFromUpload } from "@/services/finetune-api";
-import { updateDatasetBackendId, updateDatasetTopicHierarchy, clearAllRecordTopics, updateRecordTopicsBatch } from "@/services/datasets-db";
+import { updateDatasetBackendId, updateDatasetTopicHierarchy, clearAllRecordTopics, updateRecordTopicsBatch, renameTopicInRecords, clearTopicFromRecords } from "@/services/datasets-db";
 import { filterAndSortRecords } from "@/components/datasets/record-filters";
 import {
   ColumnVisibility,
@@ -128,6 +128,8 @@ interface DatasetDetailContextType {
   handleApplyTopicHierarchy: (config: TopicHierarchyConfig) => Promise<void>;
   handleAutoTagRecords: () => Promise<void>;
   handleClearRecordTopics: () => Promise<void>;
+  handleRenameTopicInRecords: (oldName: string, newName: string) => Promise<void>;
+  handleDeleteTopicFromRecords: (topicNames: string[]) => Promise<void>;
 }
 
 // ============================================================================
@@ -374,20 +376,20 @@ export function DatasetDetailProvider({
           );
         }
 
-        // If this is a new topic and we have a hierarchy, add it to the hierarchy
-        if (isNew && topic.trim() && dataset.topicHierarchy) {
+        // If this is a new topic, add it to the hierarchy (create hierarchy if needed)
+        if (isNew && topic.trim()) {
           const newNode: TopicHierarchyNode = {
             id: crypto.randomUUID(),
             name: topic.trim(),
             children: [],
           };
-          const updatedHierarchy = [
-            ...(dataset.topicHierarchy.hierarchy || []),
-            newNode,
-          ];
+          const existingHierarchy = dataset.topicHierarchy?.hierarchy || [];
+          const updatedHierarchy = [...existingHierarchy, newNode];
           const updatedConfig: TopicHierarchyConfig = {
-            ...dataset.topicHierarchy,
+            goals: dataset.topicHierarchy?.goals || "",
+            depth: dataset.topicHierarchy?.depth || 3,
             hierarchy: updatedHierarchy,
+            generatedAt: dataset.topicHierarchy?.generatedAt || Date.now(),
           };
           await updateDatasetTopicHierarchy(dataset.id, updatedConfig);
           setDataset((prev) =>
@@ -775,6 +777,43 @@ export function DatasetDetailProvider({
     }
   }, [dataset]);
 
+  const handleRenameTopicInRecords = useCallback(async (oldName: string, newName: string) => {
+    if (!dataset || !oldName || !newName || oldName === newName) return;
+    try {
+      const renamedCount = await renameTopicInRecords(dataset.id, oldName, newName);
+      if (renamedCount > 0) {
+        // Update local state to reflect renamed topics
+        setRecords((prev) =>
+          prev.map((r) => (r.topic === oldName ? { ...r, topic: newName, updatedAt: Date.now() } : r))
+        );
+      }
+    } catch (err) {
+      console.error("Failed to rename topic in records:", err);
+      toast.error("Failed to rename topic in records");
+    }
+  }, [dataset]);
+
+  const handleDeleteTopicFromRecords = useCallback(async (topicNames: string[]) => {
+    if (!dataset || topicNames.length === 0) return;
+    try {
+      let totalCleared = 0;
+      for (const topicName of topicNames) {
+        const clearedCount = await clearTopicFromRecords(dataset.id, topicName);
+        totalCleared += clearedCount;
+      }
+      if (totalCleared > 0) {
+        // Update local state to reflect cleared topics
+        const topicSet = new Set(topicNames);
+        setRecords((prev) =>
+          prev.map((r) => (r.topic && topicSet.has(r.topic) ? { ...r, topic: undefined, updatedAt: Date.now() } : r))
+        );
+      }
+    } catch (err) {
+      console.error("Failed to clear topic from records:", err);
+      toast.error("Failed to clear topic from records");
+    }
+  }, [dataset]);
+
   // Derived: count of records that have topics assigned
   const recordsWithTopicsCount = useMemo(
     () => records.filter((r) => r.topic).length,
@@ -867,6 +906,8 @@ export function DatasetDetailProvider({
     handleApplyTopicHierarchy,
     handleAutoTagRecords,
     handleClearRecordTopics,
+    handleRenameTopicInRecords,
+    handleDeleteTopicFromRecords,
   };
 
   return <DatasetDetailContext.Provider value={value}>{children}</DatasetDetailContext.Provider>;

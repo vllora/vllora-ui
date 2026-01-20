@@ -57,6 +57,25 @@ export function cloneHierarchy(nodes: TopicHierarchyNode[]): TopicHierarchyNode[
 }
 
 /**
+ * Find a node by ID (recursive)
+ */
+export function findNodeById(
+  nodes: TopicHierarchyNode[],
+  nodeId: string
+): TopicHierarchyNode | undefined {
+  for (const node of nodes) {
+    if (node.id === nodeId) {
+      return node;
+    }
+    if (node.children) {
+      const found = findNodeById(node.children, nodeId);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Update a node's name by ID (recursive)
  */
 export function updateNodeName(
@@ -110,6 +129,21 @@ export function deleteNode(
       }
       return node;
     });
+}
+
+/**
+ * Get all leaf topic names from a node and its descendants
+ * If the node has no children, it is itself a leaf and returns [node.name]
+ */
+export function getLeafNamesFromNode(node: TopicHierarchyNode): string[] {
+  if (!node.children || node.children.length === 0) {
+    return [node.name];
+  }
+  const leaves: string[] = [];
+  for (const child of node.children) {
+    leaves.push(...getLeafNamesFromNode(child));
+  }
+  return leaves;
 }
 
 /**

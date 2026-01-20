@@ -28,9 +28,11 @@ import {
   countNodes,
   getAllNodeIds,
   cloneHierarchy,
+  findNodeById,
   updateNodeName,
   addChildToNode,
   deleteNode,
+  getLeafNamesFromNode,
 } from "./topic-hierarchy-utils";
 
 /**
@@ -71,6 +73,10 @@ interface TopicHierarchyDialogProps {
   recordsWithTopicsCount?: number;
   /** Called to clear all record topics after new hierarchy is generated */
   onClearRecordTopics?: () => Promise<void>;
+  /** Called when a topic is renamed to update records with that topic */
+  onRenameTopic?: (oldName: string, newName: string) => Promise<void>;
+  /** Called when a topic node is deleted to clear topics from records */
+  onDeleteTopic?: (topicNames: string[]) => Promise<void>;
 }
 
 const AUTO_SAVE_DEBOUNCE_MS = 500;
@@ -88,6 +94,8 @@ export function TopicHierarchyDialog({
   topicCounts,
   recordsWithTopicsCount = 0,
   onClearRecordTopics,
+  onRenameTopic,
+  onDeleteTopic,
 }: TopicHierarchyDialogProps) {
   // Form state
   const [goals, setGoals] = useState(initialConfig?.goals || "");
@@ -186,8 +194,15 @@ export function TopicHierarchyDialog({
 
   const handleUpdateName = useCallback((nodeId: string, newName: string) => {
     hasUserEdited.current = true;
+    // Find old name before updating, so we can rename records with that topic
+    const oldNode = findNodeById(hierarchy, nodeId);
+    const oldName = oldNode?.name;
     setHierarchy((prev) => updateNodeName(prev, nodeId, newName));
-  }, []);
+    // Rename records that had the old topic name
+    if (oldName && oldName !== newName && onRenameTopic) {
+      onRenameTopic(oldName, newName);
+    }
+  }, [hierarchy, onRenameTopic]);
 
   const handleAddChild = useCallback((parentId: string) => {
     hasUserEdited.current = true;
@@ -202,8 +217,14 @@ export function TopicHierarchyDialog({
 
   const handleDelete = useCallback((nodeId: string) => {
     hasUserEdited.current = true;
+    // Find the node being deleted to get all its leaf topic names
+    const nodeToDelete = findNodeById(hierarchy, nodeId);
+    if (nodeToDelete && onDeleteTopic) {
+      const leafNames = getLeafNamesFromNode(nodeToDelete);
+      onDeleteTopic(leafNames);
+    }
     setHierarchy((prev) => deleteNode(prev, nodeId));
-  }, []);
+  }, [hierarchy, onDeleteTopic]);
 
   const handleAddRootTopic = useCallback(() => {
     hasUserEdited.current = true;

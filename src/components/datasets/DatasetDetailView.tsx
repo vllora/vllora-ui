@@ -116,6 +116,8 @@ function DatasetDetailContent() {
     handleApplyTopicHierarchy,
     handleAutoTagRecords,
     handleClearRecordTopics,
+    handleRenameTopicInRecords,
+    handleDeleteTopicFromRecords,
     recordsWithTopicsCount,
   } = DatasetDetailConsumer();
 
@@ -280,6 +282,8 @@ function DatasetDetailContent() {
         topicCounts={topicCounts}
         recordsWithTopicsCount={recordsWithTopicsCount}
         onClearRecordTopics={handleClearRecordTopics}
+        onRenameTopic={handleRenameTopicInRecords}
+        onDeleteTopic={handleDeleteTopicFromRecords}
       />
 
       {/* Generate synthetic data dialog */}

@@ -705,8 +705,11 @@ async function simulateConversation(
   const topicKey = topicPath.join('/');
   const contextStr = topicStr;
 
-  const persona = await ensurePersona(personaCache, topicKey, contextStr);
-  const systemPrompt = await generateSystemPrompt(topicPath, seedMessages);
+  // Run persona and system prompt generation in parallel
+  const [persona, systemPrompt] = await Promise.all([
+    ensurePersona(personaCache, topicKey, contextStr),
+    generateSystemPrompt(topicPath, seedMessages),
+  ]);
   const firstUserMsg = await generateFirstUserMessage(contextStr, persona, systemPrompt);
   const toolInstruction = tools.length > 0
     ? '\nYou have available tools where needed to complete the user\'s request.'
@@ -740,12 +743,18 @@ async function simulateConversation(
     });
 
     if (assistant.tool_calls) {
-      for (const toolCall of assistant.tool_calls) {
+      // Simulate all tool results in parallel
+      const toolResults = await Promise.all(
+        assistant.tool_calls.map(async (toolCall) => ({
+          toolCall,
+          result: await simulateToolResult(toolCall.function.name, toolCall.function.arguments, contextStr),
+        }))
+      );
+      for (const { toolCall, result } of toolResults) {
         toolCallNameById.set(toolCall.id, toolCall.function.name);
-        const toolResult = await simulateToolResult(toolCall.function.name, toolCall.function.arguments, contextStr);
         messages.push({
           role: 'tool',
-          content: toolResult,
+          content: result,
           tool_calls: null,
           tool_call_id: toolCall.id,
         });

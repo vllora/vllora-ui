@@ -534,6 +534,103 @@ export async function clearAllRecordTopics(datasetId: string): Promise<number> {
   });
 }
 
+// Rename a topic across all records in a dataset
+export async function renameTopicInRecords(
+  datasetId: string,
+  oldName: string,
+  newName: string
+): Promise<number> {
+  if (!oldName || !newName || oldName === newName) return 0;
+
+  const db = await getDB();
+  const now = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(['datasets', 'records'], 'readwrite');
+    const datasetsStore = tx.objectStore('datasets');
+    const recordsStore = tx.objectStore('records');
+    const index = recordsStore.index('datasetId');
+
+    let renamedCount = 0;
+    const request = index.openCursor(IDBKeyRange.only(datasetId));
+
+    request.onsuccess = (event) => {
+      const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+      if (cursor) {
+        const record = cursor.value;
+        if (record.topic === oldName) {
+          record.topic = newName.trim();
+          record.updatedAt = now;
+          cursor.update(record);
+          renamedCount++;
+        }
+        cursor.continue();
+      }
+    };
+
+    // Update dataset's updatedAt
+    const getDatasetRequest = datasetsStore.get(datasetId);
+    getDatasetRequest.onsuccess = () => {
+      const dataset = getDatasetRequest.result;
+      if (dataset) {
+        dataset.updatedAt = now;
+        datasetsStore.put(dataset);
+      }
+    };
+
+    tx.oncomplete = () => resolve(renamedCount);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// Clear topic from all records that have a specific topic name
+export async function clearTopicFromRecords(
+  datasetId: string,
+  topicName: string
+): Promise<number> {
+  if (!topicName) return 0;
+
+  const db = await getDB();
+  const now = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(['datasets', 'records'], 'readwrite');
+    const datasetsStore = tx.objectStore('datasets');
+    const recordsStore = tx.objectStore('records');
+    const index = recordsStore.index('datasetId');
+
+    let clearedCount = 0;
+    const request = index.openCursor(IDBKeyRange.only(datasetId));
+
+    request.onsuccess = (event) => {
+      const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+      if (cursor) {
+        const record = cursor.value;
+        if (record.topic === topicName) {
+          record.topic = undefined;
+          record.updatedAt = now;
+          cursor.update(record);
+          clearedCount++;
+        }
+        cursor.continue();
+      }
+    };
+
+    // Update dataset's updatedAt
+    const getDatasetRequest = datasetsStore.get(datasetId);
+    getDatasetRequest.onsuccess = () => {
+      const dataset = getDatasetRequest.result;
+      if (dataset) {
+        dataset.updatedAt = now;
+        datasetsStore.put(dataset);
+      }
+    };
+
+    tx.oncomplete = () => resolve(clearedCount);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 // Rename a dataset
 export async function renameDataset(datasetId: string, newName: string): Promise<void> {
   const db = await getDB();
