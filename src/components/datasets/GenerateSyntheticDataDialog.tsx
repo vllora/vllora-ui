@@ -129,7 +129,7 @@ export function GenerateSyntheticDataDialog({
       model,
       diversityLevel,
     };
-    await onGenerate(config);
+    return onGenerate(config);
   };
 
   const canGenerate = useMemo(() => {

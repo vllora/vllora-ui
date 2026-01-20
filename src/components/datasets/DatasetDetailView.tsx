@@ -115,6 +115,8 @@ function DatasetDetailContent() {
     handleGenerateHierarchy,
     handleApplyTopicHierarchy,
     handleAutoTagRecords,
+    handleClearRecordTopics,
+    recordsWithTopicsCount,
   } = DatasetDetailConsumer();
 
   // Compute available topics from hierarchy for topic selection
@@ -276,6 +278,8 @@ function DatasetDetailContent() {
         isAutoTagging={isAutoTagging}
         recordCount={sortedRecords.length}
         topicCounts={topicCounts}
+        recordsWithTopicsCount={recordsWithTopicsCount}
+        onClearRecordTopics={handleClearRecordTopics}
       />
 
       {/* Generate synthetic data dialog */}

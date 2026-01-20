@@ -13,6 +13,7 @@ import { CurrentAppConsumer } from "@/contexts/CurrentAppContext";
 import { FloatingActionBar } from "@/components/chat/traces/components/FloatingActionBar";
 import { SelectModeToggle } from "@/components/chat/traces/components/SelectModeToggle";
 import { AddToDatasetDialog } from "@/components/datasets/AddToDatasetDialog";
+import { isActualModelCall } from "@/utils/span-to-message";
 
 export function TracesPageContent() {
   const {
@@ -28,16 +29,20 @@ export function TracesPageContent() {
     isSpanSelectModeEnabled,
     setIsSpanSelectModeEnabled,
     selectedSpanIdsForActions,
+    setSelectedSpanIdsForActions,
     clearSpanSelection,
     flattenSpans,
   } = TracesPageConsumer();
 
   const [showAddToDatasetDialog, setShowAddToDatasetDialog] = useState(false);
 
+  const actualModelCallSpans = useMemo(() => {
+    return flattenSpans.filter(span => isActualModelCall(span));
+  }, [flattenSpans]);
   // Resolve selected span IDs to full Span objects
   const selectedSpans = useMemo(() => {
-    return flattenSpans.filter(span => selectedSpanIdsForActions.includes(span.span_id));
-  }, [flattenSpans, selectedSpanIdsForActions]);
+    return actualModelCallSpans.filter(span => selectedSpanIdsForActions.includes(span.span_id));
+  }, [actualModelCallSpans, selectedSpanIdsForActions]);
 
   const { currentProjectId } = ProjectsConsumer();
   const { app_mode } = CurrentAppConsumer();
@@ -87,6 +92,11 @@ export function TracesPageContent() {
     }
   };
 
+  const handleSelectAll = () => {
+    const allSpanIds = flattenSpans.filter(span => isActualModelCall(span)).map(span => span.span_id);
+    setSelectedSpanIdsForActions(allSpanIds);
+  };
+
   return <div className="flex flex-col flex-1 h-full overflow-hidden relative">
     {/* Grouping Controls */}
     <div className="px-6 py-3 border-b border-border">
@@ -115,6 +125,8 @@ export function TracesPageContent() {
           isEnabled={isSpanSelectModeEnabled}
           onToggle={handleToggleSelectMode}
           selectedCount={selectedSpanIdsForActions.length}
+          totalCount={actualModelCallSpans?.length || 0}
+          onSelectAll={handleSelectAll}
         />
       </div>
     </div>

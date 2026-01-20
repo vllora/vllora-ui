@@ -20,7 +20,7 @@ import { Dataset, DatasetRecord, TopicHierarchyConfig, TopicHierarchyNode } from
 import { emitter } from "@/utils/eventEmitter";
 import { toast } from "sonner";
 import { uploadDatasetForFinetune, createFinetuneJobFromUpload } from "@/services/finetune-api";
-import { updateDatasetBackendId, updateDatasetTopicHierarchy } from "@/services/datasets-db";
+import { updateDatasetBackendId, updateDatasetTopicHierarchy, clearAllRecordTopics, updateRecordTopicsBatch } from "@/services/datasets-db";
 import { filterAndSortRecords } from "@/components/datasets/record-filters";
 import {
   ColumnVisibility,
@@ -100,6 +100,9 @@ interface DatasetDetailContextType {
   isGeneratingHierarchy: boolean;
   isAutoTagging: boolean;
 
+  // Derived counts
+  recordsWithTopicsCount: number;
+
   // Handlers
   loadDataset: () => Promise<void>;
   handleRenameDataset: (newName: string) => Promise<void>;
@@ -124,6 +127,7 @@ interface DatasetDetailContextType {
   handleGenerateHierarchy: (goals: string, depth: number) => Promise<TopicHierarchyNode[]>;
   handleApplyTopicHierarchy: (config: TopicHierarchyConfig) => Promise<void>;
   handleAutoTagRecords: () => Promise<void>;
+  handleClearRecordTopics: () => Promise<void>;
 }
 
 // ============================================================================
@@ -498,6 +502,8 @@ export function DatasetDetailProvider({
 
     // Use config values or defaults
     const count = config?.recordsPerTopic ?? 5;
+    const targetTopics = config?.targetTopics ?? 'all';
+    const selectedTopicsList = config?.selectedTopics ?? [];
 
     // Close dialog immediately and show starting toast
     setGenerateDataDialog(false);
@@ -508,16 +514,18 @@ export function DatasetDetailProvider({
 
     try {
       const result = await generateTraces({
-        datasetId: dataset.id,
-        recordIds: recordIds.length > 0 ? recordIds : undefined,
+        dataset_id: dataset.id,
+        record_ids: recordIds.length > 0 ? recordIds : undefined,
         count,
-        maxTurns: 3,
+        max_turns: 3,
         concurrency: 5, // Run 5 generations in parallel
-        onRecordsAdded: (newRecords: DatasetRecord[]) => {
+        target_topics: targetTopics,
+        selected_topics: selectedTopicsList,
+        on_records_added: (newRecords: DatasetRecord[]) => {
           // Instantly append new records to state for immediate UI update
           setRecords((prev) => [...prev, ...newRecords]);
         },
-        onProgress: (progress: { completed: number; total: number }) => {
+        on_progress: (progress: { completed: number; total: number }) => {
           // Update progress count in real-time
           setGenerationProgress(progress.completed);
         },
@@ -700,8 +708,7 @@ export function DatasetDetailProvider({
       try {
         await updateDatasetTopicHierarchy(dataset.id, config);
         setDataset((prev) => (prev ? { ...prev, topicHierarchy: config } : null));
-        toast.success("Topic hierarchy saved");
-        setTopicHierarchyDialog(false);
+        // Dialog shows its own "Saved" indicator - no toast or auto-close needed
       } catch (err) {
         console.error("Failed to save topic hierarchy:", err);
         toast.error("Failed to save topic hierarchy");
@@ -737,13 +744,8 @@ export function DatasetDetailProvider({
         return;
       }
 
-      // Update records with their assigned topics
-      let updatedCount = 0;
-      for (const [recordId, topicPath] of result.classifications) {
-        const topic = topicPath[topicPath.length - 1]; // Use leaf topic as the main topic
-        await updateRecordTopic(dataset.id, recordId, topic);
-        updatedCount++;
-      }
+      // Batch update all records' topics in a single transaction
+      const updatedCount = await updateRecordTopicsBatch(dataset.id, result.classifications);
 
       // Refresh records
       await loadDataset();
@@ -754,7 +756,30 @@ export function DatasetDetailProvider({
     } finally {
       setIsAutoTagging(false);
     }
-  }, [dataset, records, selectedRecordIds, loadDataset, updateRecordTopic]);
+  }, [dataset, records, selectedRecordIds, loadDataset]);
+
+  const handleClearRecordTopics = useCallback(async () => {
+    if (!dataset) return;
+    try {
+      const clearedCount = await clearAllRecordTopics(dataset.id);
+      // Update local state to reflect cleared topics
+      setRecords((prev) =>
+        prev.map((r) => (r.topic ? { ...r, topic: undefined, updatedAt: Date.now() } : r))
+      );
+      if (clearedCount > 0) {
+        toast.success(`Cleared topics from ${clearedCount} record${clearedCount !== 1 ? "s" : ""}`);
+      }
+    } catch (err) {
+      console.error("Failed to clear record topics:", err);
+      toast.error("Failed to clear record topics");
+    }
+  }, [dataset]);
+
+  // Derived: count of records that have topics assigned
+  const recordsWithTopicsCount = useMemo(
+    () => records.filter((r) => r.topic).length,
+    [records]
+  );
 
   // ============================================================================
   // Context value
@@ -818,6 +843,9 @@ export function DatasetDetailProvider({
     isGeneratingHierarchy,
     isAutoTagging,
 
+    // Derived counts
+    recordsWithTopicsCount,
+
     // Handlers
     loadDataset,
     handleRenameDataset,
@@ -838,6 +866,7 @@ export function DatasetDetailProvider({
     handleGenerateHierarchy,
     handleApplyTopicHierarchy,
     handleAutoTagRecords,
+    handleClearRecordTopics,
   };
 
   return <DatasetDetailContext.Provider value={value}>{children}</DatasetDetailContext.Provider>;

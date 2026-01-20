@@ -31,7 +31,7 @@ interface RecordForClassification {
 
 interface ClassificationResult {
   record_id: string;
-  topic_path: string[]; // Path from root to leaf, e.g., ["Technical Support", "Hardware Issues"]
+  topic: string; // Leaf topic name
 }
 
 interface ClassificationResponse {
@@ -46,7 +46,7 @@ export interface ClassifyRecordsParams {
 export interface ClassifyRecordsResult {
   success: boolean;
   error?: string;
-  classifications?: Map<string, string[]>; // record_id -> topic_path
+  classifications?: Map<string, string>; // record_id -> leaf topic name
   classifiedCount?: number;
 }
 
@@ -55,41 +55,31 @@ export interface ClassifyRecordsResult {
 // =========================================================================
 
 /**
- * Flatten hierarchy into a list of valid topic paths
+ * Get all leaf topic names from hierarchy
  */
-function getValidTopicPaths(nodes: TopicHierarchyNode[], parentPath: string[] = []): string[][] {
-  const paths: string[][] = [];
+function getLeafTopicNames(nodes: TopicHierarchyNode[]): string[] {
+  const leaves: string[] = [];
 
   for (const node of nodes) {
-    const currentPath = [...parentPath, node.name];
-
     if (node.children && node.children.length > 0) {
-      // Add paths from children
-      paths.push(...getValidTopicPaths(node.children, currentPath));
+      leaves.push(...getLeafTopicNames(node.children));
     } else {
-      // Leaf node - this is a valid classification target
-      paths.push(currentPath);
+      // Leaf node
+      leaves.push(node.name);
     }
   }
 
-  return paths;
+  return leaves;
 }
 
 /**
- * Format hierarchy as readable text for LLM prompt
+ * Strip ids from hierarchy for cleaner prompt (only keep name and children)
  */
-function formatHierarchyForPrompt(nodes: TopicHierarchyNode[], indent: number = 0): string {
-  const lines: string[] = [];
-  const prefix = '  '.repeat(indent);
-
-  for (const node of nodes) {
-    lines.push(`${prefix}- ${node.name}`);
-    if (node.children && node.children.length > 0) {
-      lines.push(formatHierarchyForPrompt(node.children, indent + 1));
-    }
-  }
-
-  return lines.join('\n');
+function stripHierarchyIds(nodes: TopicHierarchyNode[]): Array<{ name: string; children?: Array<{ name: string; children?: unknown[] }> }> {
+  return nodes.map(node => ({
+    name: node.name,
+    ...(node.children && node.children.length > 0 ? { children: stripHierarchyIds(node.children) } : {}),
+  }));
 }
 
 // =========================================================================
@@ -98,48 +88,27 @@ function formatHierarchyForPrompt(nodes: TopicHierarchyNode[], indent: number = 
 
 const CLASSIFICATION_SYSTEM_PROMPT = `You are a record classifier for datasets.
 
-Goal: Classify each record into the most appropriate topic from the provided hierarchy.
+Goal: Classify each record into the most appropriate leaf topic from the provided hierarchy.
 
 Rules:
-- Each record must be assigned to exactly one leaf topic
-- The topic_path should be the full path from root to leaf (e.g., ["Technical Support", "Hardware Issues", "Device Malfunction"])
+- Each record must be assigned to exactly one leaf topic (from the provided list)
 - Choose the most specific and relevant topic for each record
 - If a record doesn't fit any topic well, choose the closest match
 - Output MUST be valid JSON that matches the schema (no markdown, no code fences)
-- Only use topic names that exist in the provided hierarchy
+- Only use topic names that exist in the provided leaf topics list
 `;
 
 function buildClassificationPrompt(
   hierarchy: TopicHierarchyNode[],
   records: RecordForClassification[]
 ): string {
-  const hierarchyText = formatHierarchyForPrompt(hierarchy);
-  const validPaths = getValidTopicPaths(hierarchy);
+  const cleanHierarchy = stripHierarchyIds(hierarchy);
 
-  return `## Task
-Classify each record into the most appropriate topic from the hierarchy below.
-
-## Topic Hierarchy
-${hierarchyText}
-
-## Valid Topic Paths (use one of these for each record)
-${validPaths.map(p => `- ${JSON.stringify(p)}`).join('\n')}
+  return `## Topic Hierarchy
+${JSON.stringify(cleanHierarchy, null, 2)}
 
 ## Records to Classify
 ${JSON.stringify(records, null, 2)}
-
-## Output
-Return a JSON object with a "classifications" array. Each item should have:
-- record_id: The ID of the record
-- topic_path: Array of topic names from root to leaf (must match one of the valid paths above)
-
-Example:
-{
-  "classifications": [
-    { "record_id": "abc123", "topic_path": ["Technical Support", "Hardware Issues", "Device Malfunction"] },
-    { "record_id": "def456", "topic_path": ["Account Management", "Billing Inquiries"] }
-  ]
-}
 `;
 }
 
@@ -158,13 +127,12 @@ function buildClassificationResponseSchema() {
               type: 'object',
               properties: {
                 record_id: { type: 'string' },
-                topic_path: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Topic path from root to leaf',
+                topic: {
+                  type: 'string',
+                  description: 'The leaf topic name',
                 },
               },
-              required: ['record_id', 'topic_path'],
+              required: ['record_id', 'topic'],
               additionalProperties: false,
             },
           },
@@ -270,31 +238,40 @@ export async function classifyRecords(params: ClassifyRecordsParams): Promise<Cl
       };
     }
 
-    const validPaths = getValidTopicPaths(hierarchy);
-    if (validPaths.length === 0) {
+    const validLeafTopics = new Set(getLeafTopicNames(hierarchy));
+    if (validLeafTopics.size === 0) {
       return {
         success: false,
         error: 'Topic hierarchy has no leaf topics',
       };
     }
 
-    const allClassifications = new Map<string, string[]>();
+    const allClassifications = new Map<string, string>();
 
-    // Process in batches
+    // Create all batches
+    const batches: DatasetRecord[][] = [];
     for (let i = 0; i < records.length; i += CLASSIFICATION_BATCH_SIZE) {
-      const batch = records.slice(i, i + CLASSIFICATION_BATCH_SIZE);
-      const recordsForClassification = batch.map(extractRecordData);
+      batches.push(records.slice(i, i + CLASSIFICATION_BATCH_SIZE));
+    }
 
-      const prompt = buildClassificationPrompt(hierarchy, recordsForClassification);
-      const responseContent = await callLLMForClassification(prompt);
-      const result = parseClassificationResponse(responseContent);
+    // Process all batches in parallel
+    const batchResults = await Promise.all(
+      batches.map(async (batch) => {
+        const recordsForClassification = batch.map(extractRecordData);
+        const prompt = buildClassificationPrompt(hierarchy, recordsForClassification);
+        const responseContent = await callLLMForClassification(prompt);
+        const result = parseClassificationResponse(responseContent);
+        return { batch, result };
+      })
+    );
 
+    // Collect results from all batches
+    for (const { batch, result } of batchResults) {
       if (result.classifications) {
         for (const classification of result.classifications) {
-          // Validate that the record exists in our batch
           const recordExists = batch.some(r => r.id === classification.record_id);
-          if (recordExists && classification.topic_path && classification.topic_path.length > 0) {
-            allClassifications.set(classification.record_id, classification.topic_path);
+          if (recordExists && classification.topic && validLeafTopics.has(classification.topic)) {
+            allClassifications.set(classification.record_id, classification.topic);
           }
         }
       }

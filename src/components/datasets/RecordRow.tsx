@@ -106,8 +106,6 @@ export function RecordRow({
       {columnVisibility.topic && (
         <TopicCell
           topic={record.topic}
-          topicPath={record.topic_path}
-          topicPaths={record.topic_paths}
           onUpdate={(topic, isNew) => onUpdateTopic(record.id, topic, isNew)}
           showLabel={showTopicLabel}
           tableLayout={tableLayout}

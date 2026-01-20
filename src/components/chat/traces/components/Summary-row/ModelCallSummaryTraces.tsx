@@ -2,7 +2,7 @@ import React, { useCallback, useMemo } from "react";
 import { RunDTO } from "@/types/common-type";
 import { Card } from "@/components/ui/card";
 import { ExclamationTriangleIcon } from "@heroicons/react/24/outline";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Check, Minus } from "lucide-react";
 import {
   Tooltip,
   TooltipProvider,
@@ -15,6 +15,7 @@ import { formatMessageTime } from "@/utils/dateUtils";
 import { useRelativeTime } from "@/hooks/useRelativeTime";
 import { ListProviders } from "@/components/chat/thread/ListProviders";
 import { MetricsDisplay } from "./MetricsDisplay";
+import { isActualModelCall } from "@/utils/span-to-message";
 
 interface ModelCallSummaryTracesProps {
   run: RunDTO;
@@ -28,9 +29,47 @@ const SidebarModelCallSummaryTracesImpl = ({
   isOpen,
   onChevronClick,
 }: ModelCallSummaryTracesProps) => {
-  const { runHighlighted } = ChatWindowConsumer();
+  const {
+    runHighlighted,
+    flattenSpans,
+    isSpanSelectModeEnabled,
+    selectedSpanIdsForActions,
+    setSelectedSpanIdsForActions,
+  } = ChatWindowConsumer();
   const runId = run.run_id || "";
   const isHighlighted = runHighlighted === runId;
+
+  // Get model call spans for this run (for selection)
+  const modelCallSpansForRun = useMemo(() => {
+    return flattenSpans
+      .filter(span => span.run_id === runId)
+      .filter(span => isActualModelCall(span));
+  }, [flattenSpans, runId]);
+
+  // Count how many model spans in this run are selected
+  const selectedModelSpansCount = useMemo(() => {
+    return modelCallSpansForRun.filter(span => selectedSpanIdsForActions.includes(span.span_id)).length;
+  }, [modelCallSpansForRun, selectedSpanIdsForActions]);
+
+  const allSelected = modelCallSpansForRun.length > 0 && selectedModelSpansCount === modelCallSpansForRun.length;
+  const someSelected = selectedModelSpansCount > 0 && selectedModelSpansCount < modelCallSpansForRun.length;
+
+  // Toggle selection for all model spans in this run
+  const handleToggleRunSelection = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    const modelSpanIds = modelCallSpansForRun.map(span => span.span_id);
+
+    if (allSelected) {
+      // Deselect all model spans in this run
+      setSelectedSpanIdsForActions(prev => prev.filter(id => !modelSpanIds.includes(id)));
+    } else {
+      // Select all model spans in this run
+      setSelectedSpanIdsForActions(prev => {
+        const newIds = modelSpanIds.filter(id => !prev.includes(id));
+        return [...prev, ...newIds];
+      });
+    }
+  }, [modelCallSpansForRun, allSelected, setSelectedSpanIdsForActions]);
 
   // Extract models and providers
   const usedModels = run.used_models || [];
@@ -135,6 +174,23 @@ const SidebarModelCallSummaryTracesImpl = ({
       <div className="flex items-center justify-between gap-6 flex-1">
         {/* Left: Chevron, Provider, Time, and Status indicators */}
         <div className="flex items-center gap-3 min-w-0 flex-1">
+          {/* Selection checkbox - shown when select mode is enabled */}
+          {isSpanSelectModeEnabled && modelCallSpansForRun.length > 0 && (
+            <button
+              onClick={handleToggleRunSelection}
+              className={cn(
+                "w-4 h-4 rounded border-2 flex items-center justify-center transition-all flex-shrink-0",
+                allSelected
+                  ? "bg-[rgb(var(--theme-500))] border-[rgb(var(--theme-500))]"
+                  : someSelected
+                    ? "bg-[rgb(var(--theme-500))]/50 border-[rgb(var(--theme-500))]"
+                    : "border-muted-foreground/50 hover:border-[rgb(var(--theme-500))]"
+              )}
+            >
+              {allSelected && <Check className="w-3 h-3 text-white" />}
+              {someSelected && <Minus className="w-3 h-3 text-white" />}
+            </button>
+          )}
           {/* Chevron */}
           {isOpen ? (
             <ChevronDown className="w-5 h-5 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0" />

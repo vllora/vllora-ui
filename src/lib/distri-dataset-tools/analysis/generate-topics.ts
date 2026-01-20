@@ -321,7 +321,11 @@ export async function analyzeRecordsForTopics(params: Record<string, unknown>): 
 
         if (normalizedPaths.length === 0) continue;
 
-        await datasetsDB.updateRecordTopicHierarchy(targetDatasetId, entry.record_id, normalizedPaths);
+        // Find the deepest path (leaf topic)
+        const deepestPath = normalizedPaths.reduce((a, b) => (b.length > a.length ? b : a), normalizedPaths[0]);
+        const leafTopic = deepestPath[deepestPath.length - 1];
+
+        await datasetsDB.updateRecordTopic(targetDatasetId, entry.record_id, leafTopic);
         appliedCount++;
       }
     }

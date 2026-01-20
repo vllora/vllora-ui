@@ -3,10 +3,12 @@
  *
  * Dialog for configuring and generating a topic hierarchy for a dataset.
  * Allows users to describe dataset goals, set hierarchy depth, generate
- * a topic tree, and manually edit the hierarchy before saving.
+ * a topic tree, and manually edit the hierarchy.
+ *
+ * Changes are auto-saved with debouncing (500ms) - no explicit save button needed.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
@@ -16,7 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Tag, Zap, Loader2, Plus, Save, Wand2 } from "lucide-react";
+import { Tag, Zap, Loader2, Plus, Wand2, Check, AlertTriangle } from "lucide-react";
 import {
   TopicHierarchyConfig,
   TopicHierarchyNode,
@@ -31,12 +33,27 @@ import {
   deleteNode,
 } from "./topic-hierarchy-utils";
 
+/**
+ * Empty state component shown when no hierarchy is configured
+ */
+function EmptyHierarchyState() {
+  return (
+    <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm">
+      <Tag className="w-8 h-8 mb-2 opacity-50" />
+      <p>No hierarchy yet</p>
+      <p className="text-xs mt-1">
+        Generate from goals or add categories manually
+      </p>
+    </div>
+  );
+}
+
 interface TopicHierarchyDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Current topic hierarchy config from the dataset */
   initialConfig?: TopicHierarchyConfig;
-  /** Called when user clicks "Save" */
+  /** Called when hierarchy changes (auto-saved with debouncing) */
   onApply: (config: TopicHierarchyConfig) => void;
   /** Called to generate hierarchy (should call LLM) */
   onGenerate: (goals: string, depth: number) => Promise<TopicHierarchyNode[]>;
@@ -50,7 +67,13 @@ interface TopicHierarchyDialogProps {
   recordCount?: number;
   /** Map of topic name -> record count */
   topicCounts?: Map<string, number>;
+  /** Number of records that have topics assigned */
+  recordsWithTopicsCount?: number;
+  /** Called to clear all record topics after new hierarchy is generated */
+  onClearRecordTopics?: () => Promise<void>;
 }
+
+const AUTO_SAVE_DEBOUNCE_MS = 500;
 
 export function TopicHierarchyDialog({
   open,
@@ -63,6 +86,8 @@ export function TopicHierarchyDialog({
   isAutoTagging = false,
   recordCount = 0,
   topicCounts,
+  recordsWithTopicsCount = 0,
+  onClearRecordTopics,
 }: TopicHierarchyDialogProps) {
   // Form state
   const [goals, setGoals] = useState(initialConfig?.goals || "");
@@ -74,9 +99,23 @@ export function TopicHierarchyDialog({
   );
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
-  // Reset state when dialog opens with new config
+  // Auto-save state
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track if user has made any edits (to distinguish from initial state setup)
+  const hasUserEdited = useRef(false);
+  // Track previous open state to detect dialog open transition
+  const wasOpen = useRef(false);
+  // Stable ref for onApply to avoid effect re-triggers when parent recreates callback
+  const onApplyRef = useRef(onApply);
+  onApplyRef.current = onApply;
+
+  // Reset state only when dialog transitions from closed to open
   useEffect(() => {
-    if (open) {
+    const justOpened = open && !wasOpen.current;
+    wasOpen.current = open;
+
+    if (justOpened) {
       setGoals(initialConfig?.goals || "");
       setDepth(initialConfig?.depth || 3);
       setHierarchy(initialConfig?.hierarchy ? cloneHierarchy(initialConfig.hierarchy) : []);
@@ -86,8 +125,52 @@ export function TopicHierarchyDialog({
       } else {
         setExpandedNodes(new Set());
       }
+      // Reset save status and edit tracking
+      setSaveStatus("idle");
+      hasUserEdited.current = false;
     }
   }, [open, initialConfig]);
+
+  // Auto-save with debouncing when hierarchy changes
+  // Goals and depth are just generation config - only save when hierarchy is modified
+  useEffect(() => {
+    // Skip if dialog is closed
+    if (!open) return;
+
+    // Skip auto-save until user has made an edit
+    if (!hasUserEdited.current) return;
+
+    // Clear any pending debounce
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+
+    // Set saving status immediately to show user something is happening
+    setSaveStatus("saving");
+
+    // Debounce the actual save
+    debounceRef.current = setTimeout(() => {
+      const config: TopicHierarchyConfig = {
+        goals,
+        depth,
+        hierarchy,
+        generatedAt: Date.now(),
+      };
+      onApplyRef.current(config);
+      setSaveStatus("saved");
+
+      // Reset to idle after showing "saved" for a moment
+      setTimeout(() => setSaveStatus("idle"), 1500);
+    }, AUTO_SAVE_DEBOUNCE_MS);
+
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+    // Only trigger on hierarchy changes, not goals/depth/onApply
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hierarchy, open]);
 
   const toggleNode = useCallback((nodeId: string) => {
     setExpandedNodes((prev) => {
@@ -102,10 +185,12 @@ export function TopicHierarchyDialog({
   }, []);
 
   const handleUpdateName = useCallback((nodeId: string, newName: string) => {
+    hasUserEdited.current = true;
     setHierarchy((prev) => updateNodeName(prev, nodeId, newName));
   }, []);
 
   const handleAddChild = useCallback((parentId: string) => {
+    hasUserEdited.current = true;
     const newChild: TopicHierarchyNode = {
       id: crypto.randomUUID(),
       name: "New Topic",
@@ -116,10 +201,12 @@ export function TopicHierarchyDialog({
   }, []);
 
   const handleDelete = useCallback((nodeId: string) => {
+    hasUserEdited.current = true;
     setHierarchy((prev) => deleteNode(prev, nodeId));
   }, []);
 
   const handleAddRootTopic = useCallback(() => {
+    hasUserEdited.current = true;
     const newNode: TopicHierarchyNode = {
       id: crypto.randomUUID(),
       name: "New Category",
@@ -129,28 +216,29 @@ export function TopicHierarchyDialog({
   }, []);
 
   const handleGenerate = async () => {
+    hasUserEdited.current = true;
     const generatedHierarchy = await onGenerate(goals, depth);
-    setHierarchy(generatedHierarchy);
-    // Expand all nodes
-    const allIds = getAllNodeIds(generatedHierarchy);
-    setExpandedNodes(new Set(allIds));
-  };
-
-  const handleSave = () => {
-    const config: TopicHierarchyConfig = {
-      goals,
-      depth,
-      hierarchy,
-      generatedAt: Date.now(),
-    };
-    onApply(config);
+    if (generatedHierarchy.length > 0) {
+      setHierarchy(generatedHierarchy);
+      // Expand all nodes
+      const allIds = getAllNodeIds(generatedHierarchy);
+      setExpandedNodes(new Set(allIds));
+      // Clear record topics since hierarchy changed
+      if (onClearRecordTopics) {
+        await onClearRecordTopics();
+      }
+    }
   };
 
   const nodeCount = countNodes(hierarchy);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl h-[70vh] p-0 gap-0 flex flex-col">
+      <DialogContent
+        className="max-w-6xl h-[70vh] p-0 gap-0 flex flex-col"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         {/* Header */}
         <DialogHeader className="px-6 py-4 border-b border-border flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -250,13 +338,7 @@ export function TopicHierarchyDialog({
                   />
                 ))
               ) : (
-                <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm">
-                  <Tag className="w-8 h-8 mb-2 opacity-50" />
-                  <p>No hierarchy yet</p>
-                  <p className="text-xs mt-1">
-                    Generate from goals or add categories manually
-                  </p>
-                </div>
+                <EmptyHierarchyState />
               )}
             </div>
 
@@ -269,27 +351,51 @@ export function TopicHierarchyDialog({
           </div>
         </div>
 
-        {/* Footer with all action buttons */}
+        {/* Footer with action buttons */}
         <div className="px-6 py-4 border-t border-border flex items-center justify-between flex-shrink-0">
-          <Button
-            onClick={handleGenerate}
-            disabled={isGenerating}
-            variant="outline"
-            className="gap-2"
-          >
-            {isGenerating ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Generating...
-              </>
-            ) : (
-              <>
-                <Zap className="w-4 h-4" />
-                Generate Hierarchy
-              </>
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={handleGenerate}
+              disabled={isGenerating}
+              variant="outline"
+              className="gap-2"
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Zap className="w-4 h-4" />
+                  Generate Hierarchy
+                </>
+              )}
+            </Button>
+            {recordsWithTopicsCount > 0 && !isGenerating && (
+              <span className="text-xs text-amber-600 flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                Will clear topics from {recordsWithTopicsCount} record{recordsWithTopicsCount !== 1 ? "s" : ""}
+              </span>
             )}
-          </Button>
-          <div className="flex items-center gap-2">
+          </div>
+          <div className="flex items-center gap-3">
+            {/* Auto-save status indicator */}
+            {saveStatus !== "idle" && (
+              <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                {saveStatus === "saving" ? (
+                  <>
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3 h-3 text-green-500" />
+                    Saved
+                  </>
+                )}
+              </span>
+            )}
             {onAutoTag && (
               <Button
                 onClick={onAutoTag}
@@ -310,14 +416,6 @@ export function TopicHierarchyDialog({
                 )}
               </Button>
             )}
-            <Button
-              onClick={handleSave}
-              disabled={hierarchy.length === 0}
-              className="bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white gap-2"
-            >
-              <Save className="w-4 h-4" />
-              Save Hierarchy
-            </Button>
           </div>
         </div>
       </DialogContent>

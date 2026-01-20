@@ -27,8 +27,6 @@ import { COLUMN_WIDTHS } from "../table-columns";
 
 interface TopicCellProps {
   topic?: string;
-  topicPath?: string[];
-  topicPaths?: string[][];
   onUpdate: (topic: string, isNew?: boolean) => Promise<void>;
   /** Whether to show the "Topic:" label prefix */
   showLabel?: boolean;
@@ -40,8 +38,6 @@ interface TopicCellProps {
 
 export function TopicCell({
   topic,
-  topicPath,
-  topicPaths,
   onUpdate,
   showLabel = false,
   tableLayout = false,
@@ -111,12 +107,14 @@ export function TopicCell({
   // Show "create new" option if user typed something that doesn't match
   const showCreateNew = searchValue.trim() && !isExactMatch;
 
-  const hasPath = topicPath && topicPath.length > 0;
-  const fullPath = hasPath ? topicPath!.join(" / ") : undefined;
-  const displayTopic = topic;
+  // Derive full path from availableTopics if topic is assigned
+  const topicInfo = useMemo(() => {
+    if (!topic) return null;
+    return availableTopics.find((t) => t.name === topic);
+  }, [topic, availableTopics]);
 
-  // topicPaths available for future tree view support
-  void topicPaths;
+  const fullPath = topicInfo?.path.join(" / ");
+  const displayTopic = topic;
 
   return (
     <div

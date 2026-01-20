@@ -47,14 +47,6 @@ export async function getDB(): Promise<IDBDatabase> {
         recordsStore = tx.objectStore('records');
       }
 
-      // New indexes for hierarchical topics
-      if (!recordsStore.indexNames.contains('topic_root')) {
-        recordsStore.createIndex('topic_root', 'topic_root', { unique: false });
-      }
-      if (!recordsStore.indexNames.contains('topic_path_str')) {
-        recordsStore.createIndex('topic_path_str', 'topic_path_str', { unique: false });
-      }
-
       // Create datasetFinetuneJobs store for tracking which datasets created which finetune jobs
       if (!db.objectStoreNames.contains('datasetFinetuneJobs')) {
         const finetuneJobsStore = db.createObjectStore('datasetFinetuneJobs', { keyPath: 'id' });
@@ -96,7 +88,10 @@ export async function getAllDatasets(): Promise<Dataset[]> {
 }
 
 // Get records for a dataset
-export async function getRecordsByDatasetId(datasetId: string): Promise<DatasetRecord[]> {
+export async function getRecordsByDatasetId(
+  datasetId: string,
+  recordIds?: string[]
+): Promise<DatasetRecord[]> {
   const db = await getDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('records', 'readonly');
@@ -105,16 +100,15 @@ export async function getRecordsByDatasetId(datasetId: string): Promise<DatasetR
     const request = index.getAll(datasetId);
 
     request.onsuccess = () => {
+      // Filter by recordIds if provided
+      let filteredResults = request.result;
+      if (recordIds && recordIds.length > 0) {
+        const idSet = new Set(recordIds);
+        filteredResults = filteredResults.filter((r) => idSet.has(r.id));
+      }
+
       // Sort by createdAt descending
-      const records = request.result
-        .sort((a, b) => b.createdAt - a.createdAt)
-        .map((r) => {
-          // Derive display fields from topic_paths without persisting duplicates.
-          if (r.topic_paths && Array.isArray(r.topic_paths)) {
-            return { ...r, ...deriveTopicFieldsFromTopicPaths(r.topic_paths) } as DatasetRecord;
-          }
-          return r as DatasetRecord;
-        });
+      const records = filteredResults.sort((a, b) => b.createdAt - a.createdAt) as DatasetRecord[];
       resolve(records);
     };
     request.onerror = () => reject(request.error);
@@ -156,54 +150,6 @@ export async function createDataset(name: string): Promise<Dataset> {
   });
 }
 
-// Helpers to normalize/derive hierarchical topic data
-function normalizeTopicPaths(topicPaths?: string[][]): string[][] {
-  if (!topicPaths) return [];
-  return topicPaths
-    .filter((p) => Array.isArray(p))
-    .map((p) => p.map((t) => (t || '').trim()).filter(Boolean))
-    .filter((p) => p.length > 0);
-}
-
-function deriveTopicFieldsFromTopicPaths(topicPaths?: string[][]) {
-  const normalized = normalizeTopicPaths(topicPaths);
-  if (normalized.length === 0) return {} as Partial<DatasetRecord>;
-
-  // Root is the first segment of a 1-length path if present, else first segment of any path.
-  const rootPath = normalized.find((p) => p.length === 1);
-  const root = rootPath?.[0] || normalized[0][0];
-
-  // Choose a deterministic "display" path: deepest path; tie-break by joined string.
-  let chosen = normalized[0];
-  for (const p of normalized) {
-    if (p.length > chosen.length) {
-      chosen = p;
-    } else if (p.length === chosen.length && p.join('/') < chosen.join('/')) {
-      chosen = p;
-    }
-  }
-
-  return {
-    topic: root,
-    topic_root: root,
-    topic_path: chosen,
-    topic_path_str: chosen ? chosen.join('/') : undefined,
-  } as Partial<DatasetRecord>;
-}
-
-function topicPathsFromSingleTopic(topic?: string): string[][] | undefined {
-  const t = (topic || '').trim();
-  return t ? [[t]] : undefined;
-}
-
-function topicPathsFromPath(path: string[]): string[][] {
-  const clean = path.map((t) => (t || '').trim()).filter(Boolean);
-  const out: string[][] = [];
-  for (let i = 1; i <= clean.length; i++) {
-    out.push(clean.slice(0, i));
-  }
-  return out;
-}
 
 // Add spans to a dataset
 export async function addSpansToDataset(
@@ -257,14 +203,12 @@ export async function addSpansToDataset(
         dataInfo.output.tool_calls = outputJson.choices[0].tool_calls;
       }
 
-      const topicPaths = topicPathsFromSingleTopic(topic);
-
       const record: DatasetRecord = {
         id: crypto.randomUUID(),
         datasetId,
         data: dataInfo,
         spanId: span.span_id,
-        topic_paths: topicPaths,
+        topic: topic?.trim() || undefined,
         is_generated: false,
         createdAt: now,
         updatedAt: now,
@@ -374,25 +318,14 @@ export async function deleteRecord(datasetId: string, recordId: string): Promise
   });
 }
 
-// Update a record's topic (legacy flat)
+// Update a record's topic
 export async function updateRecordTopic(
   datasetId: string,
   recordId: string,
   topic: string
 ): Promise<void> {
-  const topicPaths = topicPathsFromSingleTopic(topic) || [];
-  return updateRecordTopicHierarchy(datasetId, recordId, topicPaths);
-}
-
-// Update a record's hierarchical topic tree (topic_paths is the single persisted source of truth)
-export async function updateRecordTopicHierarchy(
-  datasetId: string,
-  recordId: string,
-  topicPaths: string[][]
-): Promise<void> {
   const db = await getDB();
   const now = Date.now();
-  const normalized = normalizeTopicPaths(topicPaths);
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction(['datasets', 'records'], 'readwrite');
@@ -404,12 +337,7 @@ export async function updateRecordTopicHierarchy(
     getRecordRequest.onsuccess = () => {
       const record = getRecordRequest.result;
       if (record) {
-        record.topic_paths = normalized;
-        // Do not persist derived duplicates (topic/topic_path/etc); they are derived on read.
-        record.topic = undefined;
-        record.topic_path = undefined;
-        record.topic_root = undefined;
-        record.topic_path_str = undefined;
+        record.topic = topic?.trim() || undefined;
         record.updatedAt = now;
         recordsStore.put(record);
       }
@@ -430,13 +358,50 @@ export async function updateRecordTopicHierarchy(
   });
 }
 
-// Convenience: set a single chosen path and expand it to all prefixes.
-export async function updateRecordTopicPath(
+// Batch update multiple records' topics in a single transaction
+export async function updateRecordTopicsBatch(
   datasetId: string,
-  recordId: string,
-  topicPath: string[]
-): Promise<void> {
-  return updateRecordTopicHierarchy(datasetId, recordId, topicPathsFromPath(topicPath));
+  updates: Map<string, string> // recordId -> topic
+): Promise<number> {
+  if (updates.size === 0) return 0;
+
+  const db = await getDB();
+  const now = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(['datasets', 'records'], 'readwrite');
+    const datasetsStore = tx.objectStore('datasets');
+    const recordsStore = tx.objectStore('records');
+
+    let updatedCount = 0;
+
+    // Update all records
+    for (const [recordId, topic] of updates) {
+      const getRecordRequest = recordsStore.get(recordId);
+      getRecordRequest.onsuccess = () => {
+        const record = getRecordRequest.result;
+        if (record) {
+          record.topic = topic?.trim() || undefined;
+          record.updatedAt = now;
+          recordsStore.put(record);
+          updatedCount++;
+        }
+      };
+    }
+
+    // Update dataset's updatedAt once
+    const getDatasetRequest = datasetsStore.get(datasetId);
+    getDatasetRequest.onsuccess = () => {
+      const dataset = getDatasetRequest.result;
+      if (dataset) {
+        dataset.updatedAt = now;
+        datasetsStore.put(dataset);
+      }
+    };
+
+    tx.oncomplete = () => resolve(updatedCount);
+    tx.onerror = () => reject(tx.error);
+  });
 }
 
 // Update a record's data
@@ -526,6 +491,49 @@ export async function updateRecordEvaluation(
   });
 }
 
+// Clear all record topics for a dataset
+export async function clearAllRecordTopics(datasetId: string): Promise<number> {
+  const db = await getDB();
+  const now = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(['datasets', 'records'], 'readwrite');
+    const datasetsStore = tx.objectStore('datasets');
+    const recordsStore = tx.objectStore('records');
+    const index = recordsStore.index('datasetId');
+
+    let clearedCount = 0;
+    const request = index.openCursor(IDBKeyRange.only(datasetId));
+
+    request.onsuccess = (event) => {
+      const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+      if (cursor) {
+        const record = cursor.value;
+        if (record.topic) {
+          record.topic = undefined;
+          record.updatedAt = now;
+          cursor.update(record);
+          clearedCount++;
+        }
+        cursor.continue();
+      }
+    };
+
+    // Update dataset's updatedAt
+    const getDatasetRequest = datasetsStore.get(datasetId);
+    getDatasetRequest.onsuccess = () => {
+      const dataset = getDatasetRequest.result;
+      if (dataset) {
+        dataset.updatedAt = now;
+        datasetsStore.put(dataset);
+      }
+    };
+
+    tx.oncomplete = () => resolve(clearedCount);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 // Rename a dataset
 export async function renameDataset(datasetId: string, newName: string): Promise<void> {
   const db = await getDB();
@@ -599,7 +607,6 @@ export async function addRecordsToDataset(
     data: unknown;
     metadata?: Record<string, unknown>;
     topic?: string;
-    topic_paths?: string[][];
     is_generated?: boolean;
     evaluation?: DatasetEvaluation;
   }>,
@@ -611,15 +618,13 @@ export async function addRecordsToDataset(
   // Build all record objects first so we can return them
   const createdRecords: DatasetRecord[] = records.map((recordData) => {
     const topic = recordData.topic?.trim() || defaultTopic?.trim();
-    const topicPaths = recordData.topic_paths || topicPathsFromSingleTopic(topic);
 
     return {
       id: crypto.randomUUID(),
       datasetId,
       data: recordData.data,
       metadata: recordData.metadata,
-      topic,
-      topic_paths: topicPaths,
+      topic: topic || undefined,
       is_generated: recordData.is_generated ?? false,
       evaluation: recordData.evaluation,
       createdAt: now,

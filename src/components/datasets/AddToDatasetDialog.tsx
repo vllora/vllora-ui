@@ -183,7 +183,7 @@ export function AddToDatasetDialog({
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                 </div>
               </PopoverTrigger>
-              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-1 max-h-64 overflow-y-auto" align="start">
+              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-1 max-h-64 overflow-y-auto" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
                 {/* Create new option */}
                 {showCreateOption && (
                   <button
@@ -244,7 +244,7 @@ export function AddToDatasetDialog({
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                 </div>
               </PopoverTrigger>
-              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-1" align="start">
+              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-1" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
                 {topicSuggestions.map((t) => (
                   <button
                     key={t}

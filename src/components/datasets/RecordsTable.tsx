@@ -113,7 +113,7 @@ export function RecordsTable({
     const NO_TOPIC = "__no_topic__";
 
     for (const record of displayRecords) {
-      const topicKey = record.topic_root || record.topic || NO_TOPIC;
+      const topicKey = record.topic || NO_TOPIC;
       if (!groups.has(topicKey)) {
         groups.set(topicKey, []);
       }

@@ -48,24 +48,23 @@ export interface GenerateTracesResult {
 }
 
 export interface GenerateTracesParams {
-  datasetId?: string;
   dataset_id?: string;
-  datasetName?: string;
   dataset_name?: string;
-  recordIds?: string[];
   record_ids?: string[];
-  count?: number;
-  maxTurns?: number;
+  count?: number; 
   max_turns?: number;
   /** Number of parallel generation requests (default: 5) */
   concurrency?: number;
+  /** Whether to generate for all topics or only selected ones */
+  target_topics?: 'all' | 'selected';
+  /** List of topic names to generate for (when targetTopics is 'selected') */
+  selected_topics?: string[];
   /** Callback for progress updates (can be async) */
-  onProgress?: (progress: { completed: number; total: number }) => void | Promise<void>;
+  on_progress?: (progress: { completed: number; total: number }) => void | Promise<void>;
   /** Callback when new records are added - receives the created records */
-  onRecordsAdded?: (records: DatasetRecord[]) => void | Promise<void>;
+  on_records_added?: (records: DatasetRecord[]) => void | Promise<void>;
 }
 
-const DEFAULT_COUNT = 5;
 const DEFAULT_MAX_TURNS = 3;
 const DEFAULT_PERSONA_GUIDANCE = 'Diverse and realistic';
 
@@ -287,42 +286,30 @@ function parsePersonaList(raw: string): string[] {
   return cleaned ? [cleaned] : [];
 }
 
-function normalizeTopic(value: string): string {
-  return value.trim().replace(/\s+/g, '_').toLowerCase();
+interface TopicHierarchyNode {
+  id: string;
+  name: string;
+  children?: TopicHierarchyNode[];
 }
 
-function normalizeTopicPath(path: string[]): string[] {
-  return path.map(normalizeTopic).filter(Boolean);
+interface LeafTopic {
+  name: string;
+  path: string[];
 }
 
-function topicPathsFromPath(path: string[]): string[][] {
-  const clean = path.map((t) => (t || '').trim()).filter(Boolean);
-  const out: string[][] = [];
-  for (let i = 1; i <= clean.length; i++) out.push(clean.slice(0, i));
-  return out;
-}
-
-function isPrefixPath(prefix: string[], full: string[]): boolean {
-  if (prefix.length >= full.length) return false;
-  for (let i = 0; i < prefix.length; i++) {
-    if (prefix[i] !== full[i]) return false;
+function extractLeafTopicsFromHierarchy(nodes: TopicHierarchyNode[], parentPath: string[] = []): LeafTopic[] {
+  const leaves: LeafTopic[] = [];
+  for (const node of nodes) {
+    const currentPath = [...parentPath, node.name];
+    if (node.children && node.children.length > 0) {
+      // Recurse into children with current path
+      leaves.push(...extractLeafTopicsFromHierarchy(node.children, currentPath));
+    } else {
+      // Leaf node - add with full path
+      leaves.push({ name: node.name, path: currentPath });
+    }
   }
-  return true;
-}
-
-function getLeafTopicPaths(topicPaths: string[][]): string[][] {
-  const cleaned = topicPaths
-    .filter((p) => Array.isArray(p) && p.length > 0)
-    .map((p) => p.map((t) => (t || '').trim()).filter(Boolean))
-    .filter((p) => p.length > 0);
-
-  const leaves: string[][] = [];
-  for (const candidate of cleaned) {
-    const isPrefixOfAny = cleaned.some((other) => isPrefixPath(candidate, other));
-    if (!isPrefixOfAny) leaves.push(candidate);
-  }
-
-  return leaves.sort((a, b) => a.join('/').localeCompare(b.join('/')));
+  return leaves;
 }
 
 function extractSeedTools(record?: DatasetRecord): any[] {
@@ -783,183 +770,262 @@ async function simulateConversation(
 }
 
 const DEFAULT_CONCURRENCY = 5;
+const DEFAULT_RECORDS_PER_TOPIC = 5;
 
-interface GenerationTask {
-  index: number;
-  seedRecord: DatasetRecord | undefined;
+interface TopicGenerationTask {
+  topicName: string;
   topicPath: string[];
-  seedMessages: any[];
+  recordsToGenerate: number;
+  seedRecords: (DatasetRecord | undefined)[];
   tools: any[];
 }
 
-export async function generateTraces(params: Record<string, unknown>): Promise<GenerateTracesResult> {
-  try {
-    const { datasetId, dataset_id, recordIds, record_ids, count, maxTurns, max_turns, concurrency, onProgress, onRecordsAdded } =
-      params as unknown as GenerateTracesParams;
+interface TopicGenerationResult {
+  topicName: string;
+  records: Array<{
+    data: DataInfo;
+    metadata?: Record<string, unknown>;
+    topic?: string;
+    is_generated?: boolean;
+    evaluation?: undefined;
+  }>;
+  errors: string[];
+}
 
-    const resolvedDatasetId = datasetId || dataset_id;
+/**
+ * Callbacks for tracking generation progress across parallel topics
+ */
+interface GenerationCallbacks {
+  datasetId: string;
+  totalExpectedRecords: number;
+  /** Shared counter for tracking total created records across parallel topics */
+  progressCounter: { count: number };
+  on_progress?: (progress: { completed: number; total: number }) => void | Promise<void>;
+  on_records_added?: (records: DatasetRecord[]) => void | Promise<void>;
+}
+
+/**
+ * Generate a single record for a topic
+ * Returns the record data or null if generation failed
+ */
+async function generateSingleRecord(
+  task: TopicGenerationTask,
+  recordIndex: number,
+  turns: number,
+  personaCache: Map<string, string[]>,
+  callbacks: GenerationCallbacks
+): Promise<{ record: TopicGenerationResult['records'][0]; error?: string } | { record: null; error: string }> {
+  try {
+    const seedRecord = task.seedRecords[recordIndex % task.seedRecords.length];
+    const seedMessages = extractSeedMessages(seedRecord);
+
+    const simulated = await simulateConversation(
+      task.topicPath,
+      seedMessages,
+      task.tools,
+      turns,
+      personaCache
+    );
+
+    if (!simulated) {
+      return { record: null, error: `${task.topicName}[${recordIndex + 1}]: simulation returned empty` };
+    }
+
+    const data = buildSyntheticTraceDataInfo(simulated, task.tools);
+    const leafTopic = task.topicPath.length > 0 ? task.topicPath[task.topicPath.length - 1] : undefined;
+
+    const recordData = {
+      data,
+      metadata: {
+        persona: simulated.persona,
+        seed_record_id: seedRecord?.id,
+        seed_topic_path: task.topicPath,
+        generated_at_ms: Date.now(),
+      },
+      topic: leafTopic,
+      is_generated: true,
+      evaluation: undefined,
+    };
+
+    // Add record to DB immediately for real-time UI update
+    try {
+      const addedRecords = await datasetsDB.addRecordsToDataset(callbacks.datasetId, [recordData]);
+
+      // Update shared progress counter atomically
+      callbacks.progressCounter.count += addedRecords.length;
+
+      // Notify UI with newly created record
+      if (callbacks.on_records_added && addedRecords.length > 0) {
+        await callbacks.on_records_added(addedRecords);
+      }
+
+      // Report progress after each record
+      if (callbacks.on_progress) {
+        await callbacks.on_progress({
+          completed: callbacks.progressCounter.count,
+          total: callbacks.totalExpectedRecords
+        });
+      }
+
+      return { record: recordData };
+    } catch (dbErr) {
+      return { record: null, error: `${task.topicName}[${recordIndex + 1}]: DB add failed - ${dbErr instanceof Error ? dbErr.message : String(dbErr)}` };
+    }
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return { record: null, error: `${task.topicName}[${recordIndex + 1}]: ${errorMsg}` };
+  }
+}
+
+/**
+ * Generate multiple records for a single topic
+ * Generates all records in parallel for maximum throughput
+ */
+async function generateRecordsForTopic(
+  task: TopicGenerationTask,
+  turns: number,
+  personaCache: Map<string, string[]>,
+  callbacks: GenerationCallbacks
+): Promise<TopicGenerationResult> {
+  // Generate all records for this topic in parallel
+  const recordPromises = Array.from({ length: task.recordsToGenerate }, (_, i) =>
+    generateSingleRecord(task, i, turns, personaCache, callbacks)
+  );
+
+  const results = await Promise.allSettled(recordPromises);
+
+  const records: TopicGenerationResult['records'] = [];
+  const errors: string[] = [];
+
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      if (result.value.record) {
+        records.push(result.value.record);
+      }
+      if (result.value.error) {
+        errors.push(result.value.error);
+      }
+    } else {
+      errors.push(`${task.topicName}: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`);
+    }
+  }
+
+  return { topicName: task.topicName, records, errors };
+}
+
+export async function generateTraces(params: GenerateTracesParams): Promise<GenerateTracesResult> {
+  try {
+    const { dataset_id, record_ids, count, max_turns, concurrency, target_topics, selected_topics, on_progress, on_records_added } =
+      params;
+
+    const resolvedDatasetId = dataset_id;
     if (!resolvedDatasetId) {
       return { success: false, error: 'dataset_id is required' };
     }
 
-    const allDatasets = await datasetsDB.getAllDatasets();
-    const dataset = allDatasets.find((d) => d.id === resolvedDatasetId);
+    const dataset = await datasetsDB.getDatasetById(resolvedDatasetId);
     if (!dataset) {
       return { success: false, error: `Dataset ${resolvedDatasetId} not found` };
     }
+    const topicHierarchy = dataset.topicHierarchy;
 
-    const allRecords = await datasetsDB.getRecordsByDatasetId(resolvedDatasetId);
-    const selectedIds = (recordIds || record_ids || []).filter(Boolean);
+    const selectedIds = (record_ids || []).filter(Boolean) as string[];
+    // Fetch seed records if IDs provided, otherwise use undefined as placeholder
     const selectedRecords = selectedIds.length > 0
-      ? allRecords.filter((record) => selectedIds.includes(record.id))
+      ? await datasetsDB.getRecordsByDatasetId(resolvedDatasetId, selectedIds)
+      : [];
+    const seedRecords = selectedRecords.length > 0 ? selectedRecords : [undefined];
+
+    // Build target topics list based on target_topics setting
+    // Extract leaf topics from hierarchy with full paths
+    const hierarchyLeafTopics = topicHierarchy?.hierarchy && topicHierarchy.hierarchy.length > 0
+      ? extractLeafTopicsFromHierarchy(topicHierarchy.hierarchy)
       : [];
 
-    const totalCount = typeof count === 'number' ? count : DEFAULT_COUNT;
-    if (totalCount <= 0) {
-      return { success: true, dataset_name: dataset.name, created_count: 0 };
+    let targetLeafTopics: LeafTopic[] = [];
+    if (target_topics === 'selected' && selected_topics && selected_topics.length > 0) {
+      // Find the full paths for selected topic names from hierarchy
+      targetLeafTopics = selected_topics
+        .map(name => hierarchyLeafTopics.find(t => t.name === name))
+        .filter((t): t is LeafTopic => t !== undefined);
+    } else {
+      targetLeafTopics = hierarchyLeafTopics;
     }
 
-    const turns = typeof maxTurns === 'number'
-      ? maxTurns
-      : typeof max_turns === 'number'
-        ? max_turns
-        : DEFAULT_MAX_TURNS;
+    // Error if no topics found
+    if (targetLeafTopics.length === 0) {
+      return {
+        success: false,
+        error: 'No topics found. Please configure a topic hierarchy or select specific topics to generate data for.'
+      };
+    }
 
+    const recordsPerTopic = typeof count === 'number' && count > 0 ? count : DEFAULT_RECORDS_PER_TOPIC;
+    const totalExpectedRecords = targetLeafTopics.length * recordsPerTopic;
+
+    const turns = typeof max_turns === 'number' ? max_turns : DEFAULT_MAX_TURNS;
     const effectiveConcurrency = typeof concurrency === 'number' && concurrency > 0
-      ? Math.min(concurrency, 10) // Cap at 10 to avoid overwhelming the API
+      ? Math.min(concurrency, 10)
       : DEFAULT_CONCURRENCY;
 
-    const seedRecords = selectedRecords.length > 0 ? selectedRecords : [undefined];
-    const personaCache = new Map<string, string[]>();
-    const topicPoolCache = new Map<string, string[][]>();
-    const batchErrors: string[] = [];
-    let createdTotal = 0;
+    // Extract tools from seed records (use first available or fallback to catalog)
+    const seedTools = seedRecords.find(r => r !== undefined) ? extractSeedTools(seedRecords.find(r => r !== undefined)) : [];
+    const effectiveTools = seedTools.length > 0
+      ? seedTools
+      : [];
 
-    const getTopicPool = (record?: DatasetRecord): string[][] => {
-      const key = record?.id || 'none';
-      const cached = topicPoolCache.get(key);
-      if (cached) return cached;
-      const leaves = record ? getLeafTopicPaths(record.topic_paths || []) : [];
-      const normalized = leaves.length > 0
-        ? leaves.map(normalizeTopicPath)
-        : [[normalizeTopic(dataset.name)]];
-      topicPoolCache.set(key, normalized);
-      return normalized;
+    // Create one task per topic with full path
+    const topicTasks: TopicGenerationTask[] = targetLeafTopics.map(topic => ({
+      topicName: topic.name,
+      topicPath: topic.path,
+      recordsToGenerate: recordsPerTopic,
+      seedRecords,
+      tools: effectiveTools,
+    }));
+    const personaCache = new Map<string, string[]>();
+    const allErrors: string[] = [];
+
+    // Shared progress counter for real-time tracking across parallel topics
+    const progressCounter = { count: 0 };
+
+    // Callbacks object shared by all parallel tasks
+    const callbacks: GenerationCallbacks = {
+      datasetId: resolvedDatasetId,
+      totalExpectedRecords,
+      progressCounter,
+      on_progress,
+      on_records_added,
     };
 
-    // Prepare all generation tasks
-    const tasks: GenerationTask[] = [];
-    for (let i = 0; i < totalCount; i++) {
-      const seedRecord = seedRecords[i % seedRecords.length];
-      const topicPool = getTopicPool(seedRecord);
-      const topicPath = topicPool[Math.floor(Math.random() * topicPool.length)] || [normalizeTopic(dataset.name)];
-      const seedMessages = extractSeedMessages(seedRecord);
-      const tools = extractSeedTools(seedRecord);
-      const effectiveTools = tools.length > 0
-        ? tools
-        : TOOL_CATALOG.map((t) => ({
-          type: 'function',
-          function: { name: t.name, description: t.description, parameters: t.parameters },
-        }));
+    // Process topics in parallel batches
+    for (let batchStart = 0; batchStart < topicTasks.length; batchStart += effectiveConcurrency) {
+      const batchTasks = topicTasks.slice(batchStart, batchStart + effectiveConcurrency);
 
-      tasks.push({
-        index: i,
-        seedRecord,
-        topicPath,
-        seedMessages,
-        tools: effectiveTools,
-      });
-    }
-
-    // Process in batches for incremental progress updates
-    const batchSize = effectiveConcurrency;
-    for (let batchStart = 0; batchStart < tasks.length; batchStart += batchSize) {
-      const batchTasks = tasks.slice(batchStart, batchStart + batchSize);
-
-      // Run batch in parallel
+      // Run topic tasks in parallel - each task handles DB writes and progress updates internally
       const batchResults = await Promise.allSettled(
-        batchTasks.map(async (task) => {
-          const simulated = await simulateConversation(
-            task.topicPath,
-            task.seedMessages,
-            task.tools,
-            turns,
-            personaCache
-          );
-          if (!simulated) {
-            throw new Error('simulation returned empty');
-          }
-          return {
-            task,
-            simulated,
-          };
-        })
+        batchTasks.map(task => generateRecordsForTopic(task, turns, personaCache, callbacks))
       );
-
-      // Collect successful results from this batch
-      const recordsToAdd: Array<{
-        data: DataInfo;
-        metadata?: Record<string, unknown>;
-        topic?: string;
-        topic_paths?: string[][];
-        is_generated?: boolean;
-        evaluation?: undefined;
-      }> = [];
-
+      // Collect errors from completed tasks
       for (let j = 0; j < batchResults.length; j++) {
         const result = batchResults[j];
         const task = batchTasks[j];
 
         if (result.status === 'fulfilled') {
-          const { simulated } = result.value;
-          const data = buildSyntheticTraceDataInfo(simulated, task.tools);
-          // Get the leaf topic (last element of the topic path)
-          const leafTopic = task.topicPath.length > 0 ? task.topicPath[task.topicPath.length - 1] : undefined;
-          recordsToAdd.push({
-            data,
-            metadata: {
-              persona: simulated.persona,
-              seed_record_id: task.seedRecord?.id,
-              seed_topic_path: task.topicPath,
-              generated_at_ms: Date.now(),
-            },
-            topic: leafTopic,
-            topic_paths: topicPathsFromPath(task.topicPath),
-            is_generated: true,
-            evaluation: undefined,
-          });
+          allErrors.push(...result.value.errors);
         } else {
           const errorMsg = result.reason instanceof Error ? result.reason.message : String(result.reason);
-          batchErrors.push(`trace=${task.index + 1}: ${errorMsg}`);
+          allErrors.push(`${task.topicName}: ${errorMsg}`);
         }
-      }
-
-      // Add records from this batch immediately
-      if (recordsToAdd.length > 0) {
-        try {
-          const addedRecords = await datasetsDB.addRecordsToDataset(resolvedDatasetId, recordsToAdd);
-          createdTotal += addedRecords.length;
-
-          // Notify callback immediately with newly created records for instant UI update
-          if (onRecordsAdded && addedRecords.length > 0) {
-            await onRecordsAdded(addedRecords);
-          }
-        } catch (err) {
-          batchErrors.push(`batch add failed: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      }
-
-      // Report progress after each batch
-      if (onProgress) {
-        await onProgress({ completed: createdTotal, total: totalCount });
       }
     }
+
+    const createdTotal = progressCounter.count;
 
     if (createdTotal === 0) {
       return {
         success: false,
         dataset_name: dataset.name,
-        error: batchErrors.length > 0 ? batchErrors.join(' | ') : 'No traces were generated',
+        error: allErrors.length > 0 ? allErrors.join(' | ') : 'No traces were generated',
       };
     }
 
@@ -967,7 +1033,7 @@ export async function generateTraces(params: Record<string, unknown>): Promise<G
       success: true,
       dataset_name: dataset.name,
       created_count: createdTotal,
-      error: batchErrors.length > 0 ? `${batchErrors.length} trace(s) failed: ${batchErrors.join(' | ')}` : undefined,
+      error: allErrors.length > 0 ? `${allErrors.length} error(s): ${allErrors.slice(0, 5).join(' | ')}${allErrors.length > 5 ? '...' : ''}` : undefined,
     };
   } catch (error) {
     return { success: false, error: `LLM error: ${error instanceof Error ? error.message : 'Unknown error'}` };
@@ -975,7 +1041,7 @@ export async function generateTraces(params: Record<string, unknown>): Promise<G
 }
 
 export const generateTracesHandler: ToolHandler = async (input) => {
-  return generateTraces(input);
+  return generateTraces(input as GenerateTracesParams);
 };
 
 export const generateTracesTool: DistriFnTool = {

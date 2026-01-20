@@ -111,3 +111,44 @@ export function deleteNode(
       return node;
     });
 }
+
+/**
+ * Look up a topic's full path from the hierarchy by topic name
+ * Returns the path from root to leaf, or undefined if not found
+ */
+export function getTopicPathFromHierarchy(
+  topicName: string,
+  nodes: TopicHierarchyNode[],
+  parentPath: string[] = []
+): string[] | undefined {
+  for (const node of nodes) {
+    const currentPath = [...parentPath, node.name];
+    if (node.name === topicName) {
+      return currentPath;
+    }
+    if (node.children && node.children.length > 0) {
+      const found = getTopicPathFromHierarchy(topicName, node.children, currentPath);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Extract all leaf topics with their full paths from hierarchy
+ */
+export function extractLeafTopicsFromHierarchy(
+  nodes: TopicHierarchyNode[],
+  parentPath: string[] = []
+): Array<{ name: string; path: string[] }> {
+  const leaves: Array<{ name: string; path: string[] }> = [];
+  for (const node of nodes) {
+    const currentPath = [...parentPath, node.name];
+    if (node.children && node.children.length > 0) {
+      leaves.push(...extractLeafTopicsFromHierarchy(node.children, currentPath));
+    } else {
+      leaves.push({ name: node.name, path: currentPath });
+    }
+  }
+  return leaves;
+}

@@ -12,6 +12,8 @@ interface TraceListHeaderProps {
   isSelectModeEnabled?: boolean;
   onToggleSelectMode?: () => void;
   selectedCount?: number;
+  totalCount?: number;
+  onSelectAll?: () => void;
 }
 
 export const TraceListHeader: React.FC<TraceListHeaderProps> = ({
@@ -21,6 +23,8 @@ export const TraceListHeader: React.FC<TraceListHeaderProps> = ({
   isSelectModeEnabled,
   onToggleSelectMode,
   selectedCount = 0,
+  totalCount = 0,
+  onSelectAll,
 }) => {
   const navigate = useNavigate();
 
@@ -40,6 +44,8 @@ export const TraceListHeader: React.FC<TraceListHeaderProps> = ({
             isEnabled={isSelectModeEnabled || false}
             onToggle={onToggleSelectMode}
             selectedCount={selectedCount}
+            totalCount={totalCount}
+            onSelectAll={onSelectAll}
           />
         )}
         {threadId && (
