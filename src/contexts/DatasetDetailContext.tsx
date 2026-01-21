@@ -519,9 +519,27 @@ export function DatasetDetailProvider({
 
   const handleExport = useCallback(() => {
     if (!dataset) return;
-    // Export as JSONL format (one record data per line)
+    // Export as JSONL format with messages and tools columns
     const jsonlContent = records
-      .map((record) => JSON.stringify(record.data))
+      .map((record) => {
+        const data = record.data as Record<string, unknown> | undefined;
+        const input = data?.input as Record<string, unknown> | undefined;
+        const output = data?.output as Record<string, unknown> | undefined;
+
+        // Combine input.messages with output (output is a single message)
+        const inputMessages = (input?.messages as unknown[]) || [];
+        const outputMessage = output?.messages
+          ? (Array.isArray(output.messages) ? output.messages[0] : output.messages)
+          : output;
+        const messages = outputMessage
+          ? [...inputMessages, outputMessage]
+          : inputMessages;
+
+        // Get tools from input.tools
+        const tools = (input?.tools as unknown[]) || [];
+
+        return JSON.stringify({ messages, tools });
+      })
       .join("\n");
     const blob = new Blob([jsonlContent], { type: "application/jsonl" });
     const url = URL.createObjectURL(blob);

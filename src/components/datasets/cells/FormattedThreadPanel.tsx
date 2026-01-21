@@ -38,10 +38,15 @@ function extractMessagesForPanel(data: unknown): ExtractedMessage[] {
         : Array.isArray(msg.content)
           ? msg.content.map((c: { text?: string }) => c.text || "").join("")
           : "";
+      let toolCalls = msg.tool_calls;
+      if (toolCalls && !Array.isArray(toolCalls)) {
+        toolCalls = [toolCalls];
+      }
 
       messages.push({
         role: msg.role || "user",
         content,
+        toolCalls,
         parts: Array.isArray(msg.content) ? msg.content : undefined,
       });
     }
@@ -82,7 +87,6 @@ export function FormattedThreadPanel({ data }: FormattedThreadPanelProps) {
       </div>
     );
   }
-
   return (
     <div className="divide-y divide-border/30">
       {messages.map((msg, idx) => (
