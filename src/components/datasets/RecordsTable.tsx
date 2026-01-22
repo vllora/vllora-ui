@@ -8,12 +8,14 @@
 import { useRef, useState, useCallback, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
-import { Loader2, ArrowRight, ChevronDown, ChevronRight, Check, Minus, Copy, CheckCheck } from "lucide-react";
+import { Loader2, ChevronDown, ChevronRight, Check, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RecordRow } from "./RecordRow";
 import { TopicRecordTree } from "./TopicRecordTree";
+import { RecordsTableHeader } from "./RecordsTableHeader";
+import { RecordsTableFooter } from "./RecordsTableFooter";
+import { SeeAllLink } from "./SeeAllLink";
 import { getTopicColor, type AvailableTopic } from "./record-utils";
-import { COLUMN_WIDTHS } from "./table-columns";
 
 interface RecordsTableProps {
   records: DatasetRecord[];
@@ -218,7 +220,7 @@ export function RecordsTable({
     return (
       <div className="flex flex-col" style={containerStyle}>
         {showHeader && (
-          <TableHeader
+          <RecordsTableHeader
             selectable={selectable}
             allSelected={allSelected}
             someSelected={someSelected}
@@ -241,7 +243,7 @@ export function RecordsTable({
           />
         </div>
         {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
-        {showFooter && <TableFooter records={displayRecords} selectedCount={selectedIds.size} datasetId={datasetId} />}
+        {showFooter && <RecordsTableFooter records={displayRecords} selectedCount={selectedIds.size} datasetId={datasetId} />}
       </div>
     );
   }
@@ -251,7 +253,7 @@ export function RecordsTable({
     return (
       <div className="flex flex-col" style={containerStyle}>
         {showHeader && (
-          <TableHeader
+          <RecordsTableHeader
             selectable={selectable}
             allSelected={allSelected}
             someSelected={someSelected}
@@ -351,7 +353,7 @@ export function RecordsTable({
             })}
         </div>
         {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
-        {showFooter && <TableFooter records={displayRecords} selectedCount={selectedIds.size} datasetId={datasetId} />}
+        {showFooter && <RecordsTableFooter records={displayRecords} selectedCount={selectedIds.size} datasetId={datasetId} />}
       </div>
     );
   }
@@ -361,7 +363,7 @@ export function RecordsTable({
     return (
       <div className="flex flex-col" style={containerStyle}>
         {showHeader && (
-          <TableHeader
+          <RecordsTableHeader
             selectable={selectable}
             allSelected={allSelected}
             someSelected={someSelected}
@@ -385,7 +387,7 @@ export function RecordsTable({
           ))}
           {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
         </div>
-        {showFooter && <TableFooter records={displayRecords} selectedCount={selectedIds.size} datasetId={datasetId} />}
+        {showFooter && <RecordsTableFooter records={displayRecords} selectedCount={selectedIds.size} datasetId={datasetId} />}
       </div>
     );
   }
@@ -394,7 +396,7 @@ export function RecordsTable({
   return (
     <div className="flex flex-col" style={containerStyle}>
       {showHeader && (
-        <TableHeader
+        <RecordsTableHeader
           selectable={selectable}
           allSelected={allSelected}
           someSelected={someSelected}
@@ -448,155 +450,8 @@ export function RecordsTable({
         </div>
       </div>
       {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
-      {showFooter && <TableFooter records={displayRecords} selectedCount={selectedIds.size} datasetId={datasetId} />}
+      {showFooter && <RecordsTableFooter records={displayRecords} selectedCount={selectedIds.size} datasetId={datasetId} />}
     </div>
   );
 }
 
-interface TableHeaderProps {
-  selectable?: boolean;
-  allSelected?: boolean;
-  someSelected?: boolean;
-  onSelectAll?: (checked: boolean) => void;
-  /** Hide topic column (used in grouped mode) */
-  hideTopic?: boolean;
-}
-
-function TableHeader({ selectable, allSelected, someSelected, onSelectAll, hideTopic }: TableHeaderProps) {
-  return (
-    <div className="px-4 py-3 bg-muted/30 border-b border-border flex items-center gap-4 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-      {selectable && (
-        <div
-          className={cn("flex items-center justify-center", COLUMN_WIDTHS.checkbox)}
-          onClick={() => onSelectAll?.(!allSelected)}
-        >
-          <div
-            className={cn(
-              "h-4 w-4 rounded flex items-center justify-center cursor-pointer transition-all duration-150",
-              "border",
-              allSelected
-                ? "bg-[rgb(var(--theme-500))] border-[rgb(var(--theme-500))]"
-                : someSelected
-                  ? "bg-[rgb(var(--theme-500))]/50 border-[rgb(var(--theme-500))]"
-                  : "bg-transparent border-muted-foreground/50 hover:border-muted-foreground"
-            )}
-          >
-            {allSelected && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
-            {!allSelected && someSelected && <Minus className="h-3 w-3 text-white" strokeWidth={3} />}
-          </div>
-        </div>
-      )}
-      <span className={COLUMN_WIDTHS.thread}>Data</span>
-      <span className={cn(COLUMN_WIDTHS.tools, "text-center")}>Tools</span>
-      {!hideTopic && <span className={cn(COLUMN_WIDTHS.strategy, "text-center")}>Topic</span>}
-      <span className={cn(COLUMN_WIDTHS.stats, "text-center")}>Stats</span>
-      <span className={COLUMN_WIDTHS.deepDiveActions}>Actions</span>
-    </div>
-  );
-}
-
-function SeeAllLink({ onClick }: { onClick: () => void }) {
-  return (
-    <div className="px-4 py-3 flex justify-end border-t border-border/50">
-      <button
-        className="text-sm text-[rgb(var(--theme-500))] hover:text-[rgb(var(--theme-400))] hover:underline flex items-center gap-1 transition-colors"
-        onClick={(e) => {
-          e.stopPropagation();
-          onClick();
-        }}
-      >
-        See all
-        <ArrowRight className="w-3.5 h-3.5" />
-      </button>
-    </div>
-  );
-}
-
-interface TableFooterProps {
-  records: DatasetRecord[];
-  selectedCount?: number;
-  datasetId?: string;
-}
-
-function TableFooter({ records, selectedCount = 0, datasetId }: TableFooterProps) {
-  const [copied, setCopied] = useState(false);
-
-  // Calculate summary stats
-  const totalRecords = records.length;
-  const fromSpans = records.filter((r) => r.spanId).length;
-  const withTopic = records.filter((r) => r.topic).length;
-  const withEvaluation = records.filter((r) => r.evaluation?.score !== undefined).length;
-
-  // Get unique topics
-  const topics = new Map<string, number>();
-  records.forEach((r) => {
-    if (r.topic) {
-      topics.set(r.topic, (topics.get(r.topic) || 0) + 1);
-    }
-  });
-  const topicCount = topics.size;
-
-  const handleCopyId = async () => {
-    if (!datasetId) return;
-    try {
-      await navigator.clipboard.writeText(datasetId);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy:", err);
-    }
-  };
-
-  return (
-    <div className="px-4 py-2 bg-muted/30 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
-      <div className="flex items-center gap-4">
-        {selectedCount > 0 && (
-          <>
-            <span className="text-[rgb(var(--theme-500))] font-medium">
-              {selectedCount} selected
-            </span>
-            <span className="text-border">•</span>
-          </>
-        )}
-        <span>
-          <span className="font-medium text-foreground">{totalRecords}</span> records
-        </span>
-        <span className="text-border">•</span>
-        <span>
-          <span className="font-medium text-foreground">{fromSpans}</span> from spans
-        </span>
-        <span className="text-border">•</span>
-        <span>
-          <span className="font-medium text-foreground">{topicCount}</span> topics
-        </span>
-        <span className="text-border">•</span>
-        <span>
-          <span className="font-medium text-foreground">{withTopic}</span> labeled
-        </span>
-        <span className="text-border">•</span>
-        <span>
-          <span className="font-medium text-foreground">{withEvaluation}</span> evaluated
-        </span>
-      </div>
-      {datasetId && (
-        <button
-          onClick={handleCopyId}
-          className="flex items-center gap-1.5 hover:text-foreground transition-colors"
-          title={`Copy dataset ID: ${datasetId}`}
-        >
-          <span>ID:</span>
-          <span className="font-mono">
-            {datasetId.length > 12
-              ? `${datasetId.slice(0, 5)}...${datasetId.slice(-5)}`
-              : datasetId}
-          </span>
-          {copied ? (
-            <CheckCheck className="w-3.5 h-3.5 text-green-500" />
-          ) : (
-            <Copy className="w-3.5 h-3.5" />
-          )}
-        </button>
-      )}
-    </div>
-  );
-}
