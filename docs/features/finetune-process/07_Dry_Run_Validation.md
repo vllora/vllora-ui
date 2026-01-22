@@ -4,13 +4,22 @@
 
 ---
 
-## Step H — Dry Run Validation
+## Action H — Dry Run
+
+**Trigger:** `[Dry Run]` button in Dataset Details  
+**Can Repeat:** ✅ Yes - run anytime to validate dataset + grader
 
 **Purpose:** Test the grader on sample data to assess TWO things:
 1. **Dataset Quality** - Are the prompts learnable?
 2. **Grader Quality** - Does the evaluation function work correctly?
 
-> ⚠️ **This step is CRITICAL.** Never skip dry run validation.
+**When to Use:**
+- After defining/changing grader
+- After adding new data
+- After generating samples
+- Before starting RFT training
+
+> ⚠️ **This step is CRITICAL.** Always run dry run before training.
 
 ---
 

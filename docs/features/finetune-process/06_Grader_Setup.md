@@ -4,12 +4,18 @@
 
 ---
 
-## Step G — Define Evaluation Function (Grader)
+## Action G — Define Grader
 
-**Purpose:** Configure how model outputs will be scored during training.
+**Trigger:** `[Define Grader]` button in Dataset Details  
+**Can Repeat:** ✅ Yes - iterate on grader configuration anytime
 
-**Input:** User selections  
-**Output:** `grader_config.json`
+**Purpose:** Configure how model outputs will be scored during training and dry run.
+
+**When to Use:**
+- Before running dry run
+- After dry run shows grader issues  
+- When changing evaluation criteria
+- To test different grader configurations
 
 ---
 

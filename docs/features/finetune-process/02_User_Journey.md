@@ -16,9 +16,15 @@ The RFT pipeline starts from the **Dataset Details** page. Users can perform act
 │ Topics: 5 defined     │ Categorized: 11,234 (94.5%)                     │
 │ Generated: 1,434      │ Last sanitized: 2 hours ago                     │
 ├─────────────────────────────────────────────────────────────────────────┤
+│ Data Actions:                                                           │
+│  [Sanitize Data]  [Manage Topics]  [Generate Samples]                  │
 │                                                                         │
-│  [Sanitize Data]  [Manage Topics]  [Generate Samples]  [Start RFT →]   │
+│ Validation Actions:                                                     │
+│  [Define Grader]  [Dry Run]                                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│ Grader: ✅ Configured (Tool Usage)  │  Dry Run: ✅ Passed (mean: 0.42) │
 │                                                                         │
+│                                                    [Start RFT →]        │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -30,7 +36,9 @@ The RFT pipeline starts from the **Dataset Details** page. Users can perform act
 | **Manage Topics** | Define/edit topic hierarchy | ✅ Anytime |
 | **Categorize** | After topics defined, after new data | ✅ Anytime |
 | **Generate Samples** | After coverage gaps identified | ✅ Anytime |
-| **Start RFT** | When dataset is ready | ✅ Multiple runs |
+| **Define Grader** | Set up evaluation function | ✅ Anytime |
+| **Dry Run** | Test dataset + grader quality | ✅ Anytime |
+| **Start RFT** | When dataset + grader are ready | ✅ Multiple runs |
 
 ---
 
@@ -43,6 +51,7 @@ Unlike a linear pipeline, users can perform actions in any order and repeat as n
 │                         DATASET ACTIONS (Repeatable)                    │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
+│   DATA PREPARATION:                                                     │
 │   ┌──────────────┐     ┌──────────────┐     ┌──────────────┐           │
 │   │   Sanitize   │ ←─→ │    Topics    │ ←─→ │  Categorize  │           │
 │   │    Data      │     │   & Coverage │     │   Records    │           │
@@ -55,6 +64,12 @@ Unlike a linear pipeline, users can perform actions in any order and repeat as n
 │                      │   Generate   │                                   │
 │                      │   Samples    │                                   │
 │                      └──────────────┘                                   │
+│                               ↑                                         │
+│   VALIDATION:                 │                                         │
+│   ┌──────────────┐     ┌──────────────┐                                │
+│   │   Define     │ ←─→ │   Dry Run    │ ←── Test dataset + grader     │
+│   │   Grader     │     │              │                                │
+│   └──────────────┘     └──────────────┘                                │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
                                 ↓
@@ -63,7 +78,13 @@ Unlike a linear pipeline, users can perform actions in any order and repeat as n
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                         RFT TRAINING FLOW (Linear)                      │
 ├─────────────────────────────────────────────────────────────────────────┤
-│  Define Grader  →   Dry Run Validation   →   Train   →   Deploy        │
+│                                                                         │
+│        ┌──────────────┐     ┌──────────────┐     ┌──────────────┐      │
+│        │  Configure   │ ──→ │    Train     │ ──→ │    Deploy    │      │
+│        │    Split     │     │    Model     │     │    Model     │      │
+│        └──────────────┘     └──────────────┘     └──────────────┘      │
+│             (1)                  (2)                  (3)              │
+│                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -78,7 +99,9 @@ Unlike a linear pipeline, users can perform actions in any order and repeat as n
 3. Click [Manage Topics] → auto-generate topics
 4. Records get categorized automatically
 5. Review coverage → click [Generate Samples] if gaps exist
-6. Click [Start RFT] → define grader → dry run → train
+6. Click [Define Grader] → configure evaluation
+7. Click [Dry Run] → validate dataset + grader quality
+8. Click [Start RFT] → configure split → train → deploy
 ```
 
 ### Workflow 2: Add More Data
@@ -87,6 +110,7 @@ Unlike a linear pipeline, users can perform actions in any order and repeat as n
 2. Click [Sanitize Data] → validates new + existing records
 3. New records get categorized into existing topics
 4. Review coverage → generate more if needed
+5. Click [Dry Run] → revalidate with existing grader
 ```
 
 ### Workflow 3: Fix Bad Generated Data
@@ -95,14 +119,25 @@ Unlike a linear pipeline, users can perform actions in any order and repeat as n
 2. Delete bad generated records
 3. Click [Generate Samples] again with different settings
 4. Click [Sanitize Data] to revalidate
+5. Click [Dry Run] to check quality
 ```
 
-### Workflow 4: Retrain with Updated Data
+### Workflow 4: Iterate on Grader
+```
+1. Click [Dry Run] → see low scores
+2. Analyze: Is it dataset issue or grader issue?
+3. Click [Define Grader] → adjust settings
+4. Click [Dry Run] again → compare results
+5. Repeat until satisfied
+```
+
+### Workflow 5: Retrain with Updated Data
 ```
 1. Production data shows new patterns
 2. Upload new traces
 3. [Sanitize] → [Categorize] → maybe adjust topics
-4. Click [Start RFT] for new training run
+4. [Dry Run] → verify quality
+5. Click [Start RFT] for new training run
 ```
 
 ---
@@ -118,15 +153,16 @@ Unlike a linear pipeline, users can perform actions in any order and repeat as n
 | C | Categorize Records | Auto after topics, or manual | Assigns topics to records |
 | D | Review Coverage | Automatic | Shows distribution stats |
 | E | Generate Samples | Manual button | Fill coverage gaps |
+| F | Define Grader | Manual button | Configure evaluation function |
+| G | Dry Run | Manual button | Test dataset + grader quality |
 
 ### Phase 2: RFT Training (Linear Flow)
 
 | Step | Action | Trigger | Notes |
 |------|--------|---------|-------|
-| F | Define Grader | Start of RFT flow | Configure evaluation |
-| G | Dry Run | Automatic | Validates dataset + grader |
-| H | Train Model | After dry run passes | Execute RFT |
-| I | Deploy | After training | Ship to production |
+| 1 | Configure Split | Start of RFT flow | Set train/validation ratio |
+| 2 | Train Model | After split configured | Execute RFT |
+| 3 | Deploy | After training | Ship to production |
 
 ---
 
@@ -410,6 +446,7 @@ Unlike a linear pipeline, users can perform actions in any order and repeat as n
 - Source distribution (traces vs generated)
 - Validation status
 - Balance score
+- Grader and Dry Run status
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -427,6 +464,9 @@ Unlike a linear pipeline, users can perform actions in any order and repeat as n
 │   Categorized:    14,071 (100%)             │
 │   Balance Score:  0.75 (Good)               │
 │                                             │
+│ Grader:   ✅ Configured (Tool Usage)        │
+│ Dry Run:  ✅ Passed (mean: 0.42)            │
+│                                             │
 │ Ready for RFT: ✅ Yes                        │
 │                                             │
 │                           [Start RFT →]     │
@@ -435,43 +475,18 @@ Unlike a linear pipeline, users can perform actions in any order and repeat as n
 
 ---
 
-## Phase 2: RFT Training (Linear Flow)
+### Action G — Define Grader
 
-When the user clicks `[Start RFT]`, they enter a linear wizard flow.
-
-### Step F — Configure Train/Validation Split
-
-**Purpose:** Define how to split records for training.
-
-**User Configures:**
-- Train/validation ratio (default 90/10)
-- Stratification options
-- Minimum validation size
-
-```
-┌─────────────────────────────────────────────┐
-│ Configure Dataset Split                     │
-├─────────────────────────────────────────────┤
-│ Total valid records: 13,856                 │
-│                                             │
-│ Train/Validation Split:                     │
-│ [████████████████████░░] 90% / 10%          │
-│                                             │
-│ Train set:       12,470 records             │
-│ Validation set:   1,386 records             │
-│                                             │
-│ ☑ Stratify by topic (recommended)           │
-│ ☐ Include generated data in validation      │
-│                                             │
-│              [← Back]  [Continue →]         │
-└─────────────────────────────────────────────┘
-```
-
----
-
-### Step G — Define Evaluation Function (Grader)
+**Trigger:** `[Define Grader]` button in Dataset Details  
+**Can Repeat:** ✅ Yes - iterate on grader configuration anytime
 
 **Purpose:** Configure how model outputs will be scored.
+
+**When to Use:**
+- Before running dry run
+- After dry run shows grader issues
+- When changing evaluation criteria
+- To test different grader configurations
 
 **User Chooses:**
 1. **Preset** - Pre-configured for common goals
@@ -485,11 +500,9 @@ When the user clicks `[Start RFT]`, they enter a linear wizard flow.
 | Tool Usage | Correct tool selection & execution |
 | Conciseness | Length + completeness balance |
 
-**Output:** `grader_config.json`
-
 ```
 ┌─────────────────────────────────────────────┐
-│ Define Evaluation Function                  │
+│ Define Grader                        [Save] │
 ├─────────────────────────────────────────────┤
 │ How should model outputs be scored?         │
 │                                             │
@@ -504,17 +517,26 @@ When the user clicks `[Start RFT]`, they enter a linear wizard flow.
 │ ○ Custom Configuration                      │
 │   Build your own multi-grader               │
 │                                             │
-│ [Preview Grader]              [Continue →]  │
+│ [Preview Grader] [Test on Sample]    [Save] │
 └─────────────────────────────────────────────┘
 ```
 
 ---
 
-### Step H — Dry Run Validation
+### Action H — Dry Run
+
+**Trigger:** `[Dry Run]` button in Dataset Details  
+**Can Repeat:** ✅ Yes - run anytime to validate dataset + grader
 
 **Purpose:** Test grader on sample data to assess:
 1. **Dataset quality** - Are prompts answerable?
 2. **Grader quality** - Does it differentiate good/bad?
+
+**When to Use:**
+- After defining/changing grader
+- After adding new data
+- After generating samples
+- Before starting RFT training
 
 **Process:**
 1. Sample N prompts (recommend 200-500)
@@ -540,7 +562,7 @@ When the user clicks `[Start RFT]`, they enter a linear wizard flow.
 
 ```
 ┌─────────────────────────────────────────────┐
-│ Dry Run Validation                   [🟢 GO]│
+│ Dry Run                              [🟢 GO]│
 ├─────────────────────────────────────────────┤
 │ Tested: 300 samples                         │
 │                                             │
@@ -565,14 +587,14 @@ When the user clicks `[Start RFT]`, they enter a linear wizard flow.
 │   calculations:  0.38 (room to improve)     │
 │   content_gen:   0.45 (good)                │
 │                                             │
-│ [View Samples] [Adjust Grader] [Train →]    │
+│ [View Samples] [Adjust Grader] [Re-run]     │
 └─────────────────────────────────────────────┘
 ```
 
 **NO-GO Example:**
 ```
 ┌─────────────────────────────────────────────┐
-│ Dry Run Validation              [🔴 NO-GO]  │
+│ Dry Run                            [🔴 NO-GO]│
 ├─────────────────────────────────────────────┤
 │ Tested: 300 samples                         │
 │                                             │
@@ -600,7 +622,49 @@ When the user clicks `[Start RFT]`, they enter a linear wizard flow.
 
 ---
 
-### Step I — Train RFT Model
+## Phase 2: RFT Training (Linear Flow)
+
+When the user clicks `[Start RFT]`, they enter a linear wizard flow.
+
+**Prerequisites before starting:**
+- ✅ Dataset has valid records
+- ✅ Grader is configured
+- ✅ Dry run passed (recommended)
+
+### Step 1 — Configure Train/Validation Split
+
+**Purpose:** Define how to split records for training.
+
+**User Configures:**
+- Train/validation ratio (default 90/10)
+- Stratification options
+- Minimum validation size
+
+```
+┌─────────────────────────────────────────────┐
+│ Configure Dataset Split              [1/3]  │
+├─────────────────────────────────────────────┤
+│ Total valid records: 13,856                 │
+│                                             │
+│ Train/Validation Split:                     │
+│ [████████████████████░░] 90% / 10%          │
+│                                             │
+│ Train set:       12,470 records             │
+│ Validation set:   1,386 records             │
+│                                             │
+│ ☑ Stratify by topic (recommended)           │
+│ ☐ Include generated data in validation      │
+│                                             │
+│ Grader: Tool Usage (configured)             │
+│ Last Dry Run: Passed (mean: 0.42)           │
+│                                             │
+│              [← Cancel]  [Start Training →] │
+└─────────────────────────────────────────────┘
+```
+
+---
+
+### Step 2 — Train RFT Model
 
 **Purpose:** Execute reinforcement fine-tuning.
 
@@ -616,7 +680,7 @@ When the user clicks `[Start RFT]`, they enter a linear wizard flow.
 
 ```
 ┌─────────────────────────────────────────────┐
-│ Training in Progress                        │
+│ Training in Progress                 [2/3]  │
 ├─────────────────────────────────────────────┤
 │ ████████████░░░░░░░░ 60%                    │
 │                                             │
@@ -631,7 +695,7 @@ When the user clicks `[Start RFT]`, they enter a linear wizard flow.
 
 ---
 
-### Step J — Results & Deploy
+### Step 3 — Results & Deploy
 
 **Purpose:** Review training results and deploy model.
 
@@ -674,40 +738,45 @@ When the user clicks `[Start RFT]`, they enter a linear wizard flow.
 │                    (Repeatable Actions)                                 │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
+│   DATA PREPARATION:                                                     │
 │   ┌──────────────┐                                                      │
 │   │  [Sanitize]  │ ←──── Run anytime: after upload, edit, generation   │
-│   │    Button    │                                                      │
 │   └──────┬───────┘                                                      │
-│          │ validates records                                            │
 │          ▼                                                              │
 │   ┌──────────────┐                                                      │
 │   │  [Manage     │ ←──── Define/edit topic hierarchy                   │
 │   │   Topics]    │                                                      │
 │   └──────┬───────┘                                                      │
-│          │ triggers categorization                                      │
 │          ▼                                                              │
 │   ┌──────────────┐                                                      │
 │   │  Categorize  │ ←──── Auto or manual, assigns topic to records      │
 │   │   Records    │                                                      │
 │   └──────┬───────┘                                                      │
-│          │ updates coverage                                             │
 │          ▼                                                              │
 │   ┌──────────────┐                                                      │
 │   │  Coverage    │ ←──── Always visible, shows distribution            │
 │   │  Dashboard   │                                                      │
 │   └──────┬───────┘                                                      │
-│          │ shows gaps                                                   │
 │          ▼                                                              │
 │   ┌──────────────┐                                                      │
 │   │  [Generate   │ ←──── Fill gaps with LLM-generated records          │
 │   │   Samples]   │                                                      │
 │   └──────────────┘                                                      │
-│          │                                                              │
-│          │ (user can repeat any action above)                           │
-│          │                                                              │
+│                                                                         │
+│   VALIDATION:                                                           │
+│   ┌──────────────┐                                                      │
+│   │  [Define     │ ←──── Configure evaluation function                 │
+│   │   Grader]    │                                                      │
+│   └──────┬───────┘                                                      │
 │          ▼                                                              │
 │   ┌──────────────┐                                                      │
-│   │ [Start RFT]  │ ←──── When dataset is ready                         │
+│   │  [Dry Run]   │ ←──── Test dataset + grader quality                 │
+│   └──────────────┘                                                      │
+│                                                                         │
+│   (User can repeat any action above until satisfied)                    │
+│                                                                         │
+│   ┌──────────────┐                                                      │
+│   │ [Start RFT]  │ ←──── When dataset + grader are ready               │
 │   └──────────────┘                                                      │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -718,32 +787,10 @@ When the user clicks `[Start RFT]`, they enter a linear wizard flow.
 │                         (Linear Flow)                                   │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
-│   ┌──────────────┐                                                      │
-│   │ F: Configure │──→ Set train/validation split                       │
-│   │    Split     │                                                      │
-│   └──────┬───────┘                                                      │
-│          ▼                                                              │
-│   ┌──────────────┐                                                      │
-│   │ G: Define    │──→ Configure grader (preset or custom)              │
-│   │    Grader    │                                                      │
-│   └──────┬───────┘                                                      │
-│          ▼                                                              │
-│   ┌──────────────┐                                                      │
-│   │ H: Dry Run   │──→ Validate dataset + grader quality                │
-│   └──────┬───────┘                                                      │
-│          │                                                              │
-│      Pass? ──No──→ [Back to adjust grader or dataset]                   │
-│          │                                                              │
-│         Yes                                                             │
-│          ▼                                                              │
-│   ┌──────────────┐                                                      │
-│   │ I: Train     │──→ Execute RFT training                             │
-│   │    Model     │                                                      │
-│   └──────┬───────┘                                                      │
-│          ▼                                                              │
-│   ┌──────────────┐                                                      │
-│   │ J: Deploy    │──→ Ship to production                               │
-│   └──────────────┘                                                      │
+│   ┌──────────────┐     ┌──────────────┐     ┌──────────────┐           │
+│   │ 1: Configure │ ──→ │  2: Train    │ ──→ │  3: Deploy   │           │
+│   │    Split     │     │    Model     │     │    Model     │           │
+│   └──────────────┘     └──────────────┘     └──────────────┘           │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```

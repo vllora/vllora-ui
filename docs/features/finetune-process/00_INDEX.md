@@ -47,12 +47,13 @@ The RFT pipeline has two distinct parts:
 │                 DATASET DETAILS PAGE (Repeatable)                       │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
+│  Data Actions:                                                          │
 │  [Sanitize]  ←→  [Manage Topics]  ←→  [Generate Samples]               │
-│       ↓              ↓                      ↓                           │
-│   validates      categorizes           fills gaps                       │
-│   records        records               with LLM                         │
 │                                                                         │
-│                   Coverage Dashboard (always visible)                   │
+│  Validation Actions:                                                    │
+│  [Define Grader]  ←→  [Dry Run]                                        │
+│                                                                         │
+│  Dashboards: Coverage │ Grader Status │ Dry Run Results                │
 │                                                                         │
 │                         [Start RFT →]                                   │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -60,8 +61,7 @@ The RFT pipeline has two distinct parts:
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                     RFT TRAINING WIZARD (Linear)                        │
 ├─────────────────────────────────────────────────────────────────────────┤
-│  Configure   →   Define    →   Dry Run   →   Train   →   Deploy        │
-│  Split           Grader        Validation     Model       Model         │
+│       Configure Split   →   Train Model   →   Deploy                   │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -72,16 +72,16 @@ The RFT pipeline has two distinct parts:
 | Sanitize | `[Sanitize Data]` | After upload, edit, generation |
 | Topics | `[Manage Topics]` | Define/edit category hierarchy |
 | Generate | `[Generate Samples]` | Fill coverage gaps |
+| Grader | `[Define Grader]` | Configure evaluation function |
+| Dry Run | `[Dry Run]` | Test dataset + grader quality |
 
 ### RFT Flow (Linear)
 
 | Step | Name | Purpose |
 |------|------|---------|
-| F | Configure Split | Set train/validation ratio |
-| G | Define Grader | Configure evaluation function |
-| H | Dry Run | Validate dataset + grader quality |
-| I | Train | Execute RFT training |
-| J | Deploy | Ship to production |
+| 1 | Configure Split | Set train/validation ratio |
+| 2 | Train | Execute RFT training |
+| 3 | Deploy | Ship to production |
 
 ---
 

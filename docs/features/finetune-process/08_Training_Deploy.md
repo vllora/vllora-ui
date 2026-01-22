@@ -6,12 +6,70 @@
 
 ## Overview
 
-- **Step I:** Train RFT Model
-- **Step J:** Deploy Model
+When user clicks `[Start RFT]`, they enter a linear wizard:
+
+- **Step 1:** Configure Train/Validation Split
+- **Step 2:** Train RFT Model
+- **Step 3:** Deploy Model
+
+**Prerequisites before starting:**
+- ✅ Dataset has valid records
+- ✅ Grader is configured
+- ✅ Dry run passed (recommended)
 
 ---
 
-## Step I — Train RFT Model
+## Step 1 — Configure Split
+
+**Purpose:** Define how to split records for training.
+
+**User Configures:**
+- Train/validation ratio (default 90/10)
+- Stratification by topic (recommended)
+- Whether to include generated data in validation
+
+```typescript
+interface SplitConfig {
+  trainRatio: number;       // default: 0.9
+  stratifyByTopic: boolean; // default: true
+  includeGeneratedInValid: boolean; // default: false
+}
+
+function createSplit(
+  records: DatasetRecord[],
+  config: SplitConfig
+): { train: DatasetRecord[]; valid: DatasetRecord[] } {
+  const validRecords = records.filter(r => r.metadata?.valid !== false);
+  
+  if (config.stratifyByTopic) {
+    // Split each topic proportionally
+    const byTopic = groupBy(validRecords, r => r.topic);
+    const train: DatasetRecord[] = [];
+    const valid: DatasetRecord[] = [];
+    
+    for (const [topic, topicRecords] of Object.entries(byTopic)) {
+      const shuffled = shuffle(topicRecords);
+      const splitIdx = Math.floor(shuffled.length * config.trainRatio);
+      train.push(...shuffled.slice(0, splitIdx));
+      valid.push(...shuffled.slice(splitIdx));
+    }
+    
+    return { train: shuffle(train), valid: shuffle(valid) };
+  }
+  
+  // Simple random split
+  const shuffled = shuffle(validRecords);
+  const splitIdx = Math.floor(shuffled.length * config.trainRatio);
+  return {
+    train: shuffled.slice(0, splitIdx),
+    valid: shuffled.slice(splitIdx),
+  };
+}
+```
+
+---
+
+## Step 2 — Train RFT Model
 
 **Purpose:** Execute reinforcement fine-tuning with validated dataset and grader.
 
@@ -88,7 +146,7 @@ Track these metrics:
 
 ---
 
-## Step J — Results & Deploy
+## Step 3 — Results & Deploy
 
 **Purpose:** Review training results and deploy the improved model.
 
