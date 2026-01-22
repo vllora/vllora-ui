@@ -5,7 +5,7 @@
  */
 
 import { cn } from "@/lib/utils";
-import { COLUMN_WIDTHS } from "../table-columns";
+import { COLUMN_WIDTHS } from "../../table-columns";
 
 interface TimestampCellProps {
   timestamp: number;

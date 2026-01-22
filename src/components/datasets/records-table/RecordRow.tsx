@@ -9,7 +9,7 @@ import { useState, forwardRef } from "react";
 import { DatasetRecord } from "@/types/dataset-types";
 import { Check, ChevronRight, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ConversationThreadCell, ToolsBadge, StatsBadge, TopicCell, RecordExpandedDetail, RecordActions } from "../cells";
+import { ConversationThreadCell, ToolsBadge, StatsBadge, TopicCell, RecordExpandedDetail, RecordActions } from "./cells";
 import { RecordDataDialog } from "./RecordDataDialog";
 import { COLUMN_WIDTHS } from "../table-columns";
 import type { AvailableTopic } from "../record-utils";

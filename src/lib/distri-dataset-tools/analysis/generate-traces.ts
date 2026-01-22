@@ -131,18 +131,18 @@ Instructions:
 - If the task is effectively complete or the conversation has reached a natural conclusion, respond with [END].
 - Do not repeat previous messages verbatim.`;
 
-const SIMULATED_SYSTEM_PROMPT_GENERATION_PROMPT = `You are an expert in defining AI assistant personas for high-quality synthetic data generation.
-Your task is to generate a comprehensive system prompt for an AI assistant based on a specific topic.
+// const SIMULATED_SYSTEM_PROMPT_GENERATION_PROMPT = `You are an expert in defining AI assistant personas for high-quality synthetic data generation.
+// Your task is to generate a comprehensive system prompt for an AI assistant based on a specific topic.
 
-Topic context: {{subtopics}}
-Seed Example Context: {{seed_context}}
+// Topic context: {{subtopics}}
+// Seed Example Context: {{seed_context}}
 
-Requirements:
-1. The system prompt should define the assistant's expertise, tone, and specific responsibilities related to the Topic Context.
-2. The tone should be consistent with the Seed Example Context provided.
-3. Explicitly mention that the assistant should use appropriate tools when needed or if available to complete tasks effectively.
-4. Output ONLY the system prompt text. Do not include any tags like <system_prompt> or extra commentary.
-`;
+// Requirements:
+// 1. The system prompt should define the assistant's expertise, tone, and specific responsibilities related to the Topic Context.
+// 2. The tone should be consistent with the Seed Example Context provided.
+// 3. Explicitly mention that the assistant should use appropriate tools when needed or if available to complete tasks effectively.
+// 4. Output ONLY the system prompt text. Do not include any tags like <system_prompt> or extra commentary.
+// `;
 
 const ASSISTANT_RESPONSE_INSTRUCTIONS = `You are continuing a multi-turn conversation as the assistant.
 
@@ -398,14 +398,14 @@ function buildSyntheticTraceDataInfo(rec: SyntheticTraceRecord, tools: any[]): D
   };
 }
 
-function formatSeedExcerpt(messages: any[]): string {
-  if (!Array.isArray(messages) || messages.length === 0) return 'N/A';
-  const excerpt = messages.slice(Math.max(0, messages.length - 8)).map((m: any) => ({
-    role: m?.role,
-    content: typeof m?.content === 'string' ? m.content : JSON.stringify(m?.content ?? ''),
-  }));
-  return JSON.stringify(excerpt, null, 2);
-}
+// function formatSeedExcerpt(messages: any[]): string {
+//   if (!Array.isArray(messages) || messages.length === 0) return 'N/A';
+//   const excerpt = messages.slice(Math.max(0, messages.length - 8)).map((m: any) => ({
+//     role: m?.role,
+//     content: typeof m?.content === 'string' ? m.content : JSON.stringify(m?.content ?? ''),
+//   }));
+//   return JSON.stringify(excerpt, null, 2);
+// }
 
 function buildAssistantSystemPrompt(systemPrompt: string, tools: any[]): string {
   const toolInstruction = tools.length > 0
@@ -559,21 +559,21 @@ async function ensurePersona(
   return next.shift() || 'A curious user interested in the topic.';
 }
 
-async function generateSystemPrompt(topicPath: string[], seedMessages: any[]): Promise<string> {
-  const topicStr = topicPath.join(' -> ');
-  const seedContext = formatSeedExcerpt(seedMessages);
-  const fallbackPrompt = `You are a helpful assistant specializing in ${topicStr}.`;
-  const prompt = SIMULATED_SYSTEM_PROMPT_GENERATION_PROMPT
-    .replace('{{subtopics}}', topicStr)
-    .replace('{{seed_context}}', seedContext);
+// async function generateSystemPrompt(topicPath: string[], seedMessages: any[]): Promise<string> {
+//   const topicStr = topicPath.join(' -> ');
+//   const seedContext = formatSeedExcerpt(seedMessages);
+//   const fallbackPrompt = `You are a helpful assistant specializing in ${topicStr}.`;
+//   const prompt = SIMULATED_SYSTEM_PROMPT_GENERATION_PROMPT
+//     .replace('{{subtopics}}', topicStr)
+//     .replace('{{seed_context}}', seedContext);
 
-  try {
-    const content = await callLLMText(prompt);
-    return content.trim() || fallbackPrompt;
-  } catch {
-    return fallbackPrompt;
-  }
-}
+//   try {
+//     const content = await callLLMText(prompt);
+//     return content.trim() || fallbackPrompt;
+//   } catch {
+//     return fallbackPrompt;
+//   }
+// }
 
 async function generateFirstUserMessage(
   contextStr: string,
@@ -658,7 +658,7 @@ async function generateUserResponse(
 async function simulateConversation(
   topicPath: string[],
   seedSystemPrompt: string | null,
-  seedMessages: any[],
+  _seedMessages: any[],
   tools: any[],
   maxTurns: number,
   personaCache: Map<string, string[]>

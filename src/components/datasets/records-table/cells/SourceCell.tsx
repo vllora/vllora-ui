@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Link2, FileText, Sparkles } from "lucide-react";
-import { COLUMN_WIDTHS } from "../table-columns";
+import { COLUMN_WIDTHS } from "../../table-columns";
 
 interface SourceCellProps {
   spanId?: string;
