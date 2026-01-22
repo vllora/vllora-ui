@@ -23,7 +23,6 @@ import {
 import {
   Loader2,
   Scale,
-  BookOpen,
   CheckCircle2,
   Zap,
 } from "lucide-react";
@@ -183,10 +182,6 @@ export function EvaluationConfigDialog({
                 </p>
               </div>
             </div>
-            <Button variant="outline" size="sm" className="gap-2">
-              <BookOpen className="w-4 h-4" />
-              Best Practices
-            </Button>
           </div>
         </DialogHeader>
 
