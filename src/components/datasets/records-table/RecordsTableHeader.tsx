@@ -6,7 +6,7 @@
 
 import { Check, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { COLUMN_WIDTHS } from "./table-columns";
+import { COLUMN_WIDTHS } from "../table-columns";
 
 export interface RecordsTableHeaderProps {
   selectable?: boolean;

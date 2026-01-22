@@ -10,7 +10,7 @@ import { ChevronRight, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import { RecordRow } from "./RecordRow";
-import type { AvailableTopic } from "./record-utils";
+import type { AvailableTopic } from "../record-utils";
 
 export interface TopicTreeNodeRowProps {
   node: TopicHierarchyNode;

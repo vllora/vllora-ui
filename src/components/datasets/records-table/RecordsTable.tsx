@@ -15,7 +15,7 @@ import { TopicRecordTree } from "./TopicRecordTree";
 import { RecordsTableHeader } from "./RecordsTableHeader";
 import { RecordsTableFooter } from "./RecordsTableFooter";
 import { SeeAllLink } from "./SeeAllLink";
-import { getTopicColor, type AvailableTopic } from "./record-utils";
+import { getTopicColor, type AvailableTopic } from "../record-utils";
 
 interface RecordsTableProps {
   records: DatasetRecord[];

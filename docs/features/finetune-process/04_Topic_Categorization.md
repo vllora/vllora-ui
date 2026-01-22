@@ -13,12 +13,57 @@ This module covers three steps:
 
 ---
 
+## Data Structures
+
+```typescript
+// Topic hierarchy stored in Dataset
+interface TopicHierarchy {
+  version: string;
+  topics: Record<string, TopicNode>;
+}
+
+interface TopicNode {
+  description: string;
+  subtopics?: string[];
+  keywords?: string[];
+  parentTopic?: string;
+}
+
+// Categorization result stored in DatasetRecord
+interface CategorizationMetadata {
+  topic: string;           // Leaf topic name
+  confidence: number;      // 0-1 score
+  method: 'embedding' | 'llm' | 'keyword' | 'manual';
+  needsReview?: boolean;   // Flag for low confidence
+  secondaryTopics?: string[];
+}
+
+// Coverage analysis
+interface CoverageReport {
+  timestamp: string;
+  totalRecords: number;
+  distribution: Record<string, TopicDistribution>;
+  balanceScore: number;
+  recommendations: string[];
+}
+
+interface TopicDistribution {
+  count: number;
+  percentage: number;
+  targetPercentage: number;
+  gap: number;
+  status: 'under' | 'ok' | 'over';
+}
+```
+
+---
+
 ## Step B — Define Topic Hierarchy
 
-**Purpose:** Create the taxonomy for categorizing prompts.
+**Purpose:** Create the taxonomy for categorizing records.
 
-**Input:** `sanitized_prompts.jsonl`  
-**Output:** `topic_hierarchy.json`
+**Input:** Validated `DatasetRecord[]`  
+**Output:** `TopicHierarchy`
 
 ### Options
 
@@ -30,65 +75,118 @@ This module covers three steps:
 
 ### Auto-Generate Process
 
-1. **Embed prompts** using text-embedding model
-2. **Cluster** using HDBSCAN or k-means
-3. **Label clusters** using LLM summarization
-4. **Organize** into 2-level hierarchy
+```typescript
+interface ClusterResult {
+  clusterId: number;
+  members: DatasetRecord[];
+  centroid: number[];
+}
 
-```python
-def auto_generate_topics(prompts: list, n_clusters: int = 10) -> dict:
-    # 1. Embed
-    embeddings = embed_prompts(prompts)
+async function autoGenerateTopics(
+  records: DatasetRecord[],
+  options: {
+    numClusters?: number;
+    embeddingModel?: string;
+  } = {}
+): Promise<TopicHierarchy> {
+  const { numClusters = 10, embeddingModel = 'text-embedding-3-small' } = options;
+  
+  // 1. Extract user content from each record
+  const contents = records.map(r => extractUserContent(r));
+  
+  // 2. Embed all content
+  const embeddings = await embedBatch(contents, embeddingModel);
+  
+  // 3. Cluster embeddings
+  const clusters = kMeansClustering(embeddings, numClusters);
+  
+  // 4. Generate labels for each cluster using LLM
+  const topics: Record<string, TopicNode> = {};
+  
+  for (const cluster of clusters) {
+    const sampleRecords = cluster.members.slice(0, 5);
+    const sampleContents = sampleRecords.map(r => extractUserContent(r));
     
-    # 2. Cluster
-    clusters = cluster_embeddings(embeddings, n_clusters)
+    const { label, description, keywords } = await generateTopicLabel(sampleContents);
     
-    # 3. Label each cluster
-    topics = {}
-    for cluster_id, members in clusters.items():
-        sample_prompts = random.sample(members, min(5, len(members)))
-        label = llm_generate_label(sample_prompts)
-        topics[label] = {
-            "description": llm_generate_description(sample_prompts),
-            "example_prompts": sample_prompts[:3]
-        }
-    
-    return topics
+    topics[label] = {
+      description,
+      keywords,
+    };
+  }
+  
+  return {
+    version: '1.0',
+    topics,
+  };
+}
+
+function extractUserContent(record: DatasetRecord): string {
+  const dataInfo = record.data as DataInfo;
+  const messages = dataInfo.input?.messages || [];
+  
+  // Get last user message content
+  const userMessages = messages.filter(m => m.role === 'user');
+  const lastUserMsg = userMessages[userMessages.length - 1];
+  
+  return typeof lastUserMsg?.content === 'string' 
+    ? lastUserMsg.content 
+    : '';
+}
+
+async function generateTopicLabel(samples: string[]): Promise<{
+  label: string;
+  description: string;
+  keywords: string[];
+}> {
+  const prompt = `Analyze these user prompts and generate:
+1. A short label (2-3 words, snake_case)
+2. A description (1 sentence)
+3. Keywords (5-10 words)
+
+Prompts:
+${samples.map((s, i) => `${i + 1}. ${s.slice(0, 200)}`).join('\n')}
+
+Respond in JSON: { "label": "", "description": "", "keywords": [] }`;
+
+  const response = await llmComplete(prompt);
+  return JSON.parse(response);
+}
 ```
 
-### Topic Hierarchy Format
+### Topic Hierarchy Example
 
-```json
-{
-  "version": "1.0",
-  "topics": {
-    "data_queries": {
-      "description": "Fetching and querying data from various sources",
-      "subtopics": ["database_lookups", "api_requests", "search_operations"],
-      "keywords": ["find", "get", "query", "search", "lookup"]
+```typescript
+const hierarchy: TopicHierarchy = {
+  version: "1.0",
+  topics: {
+    data_queries: {
+      description: "Fetching and querying data from various sources",
+      subtopics: ["database_lookups", "api_requests", "search_operations"],
+      keywords: ["find", "get", "query", "search", "lookup"],
     },
-    "calculations": {
-      "description": "Mathematical and analytical operations",
-      "subtopics": ["aggregations", "conversions", "financial_math"],
-      "keywords": ["calculate", "sum", "average", "convert"]
+    calculations: {
+      description: "Mathematical and analytical operations",
+      subtopics: ["aggregations", "conversions", "financial_math"],
+      keywords: ["calculate", "sum", "average", "convert"],
     },
-    "content_generation": {
-      "description": "Creating text, summaries, and formatted output",
-      "subtopics": ["summaries", "formatting", "translation"],
-      "keywords": ["write", "summarize", "format", "create"]
-    }
-  }
-}
+    content_generation: {
+      description: "Creating text, summaries, and formatted output",
+      subtopics: ["summaries", "formatting", "translation"],
+      keywords: ["write", "summarize", "format", "create"],
+    },
+  },
+};
 ```
 
 ---
 
 ## Step C — Categorize Records
 
-**Purpose:** Assign each sanitized prompt to a topic in the hierarchy.
+**Purpose:** Assign each record to a topic in the hierarchy.
 
-**Input:** `sanitized_prompts.jsonl`, `topic_hierarchy.json`  
-**Output:** `categorized_prompts.jsonl`
+**Input:** Validated `DatasetRecord[]`, `TopicHierarchy`  
+**Output:** `DatasetRecord[]` with `topic` field populated
 
 ### Classification Methods
 
@@ -101,53 +199,173 @@ def auto_generate_topics(prompts: list, n_clusters: int = 10) -> dict:
 
 ### Recommended: Hybrid Approach
 
-```python
-def categorize_prompt(prompt: dict, topics: dict, threshold: float = 0.7) -> dict:
-    """Categorize using embeddings with LLM fallback"""
+```typescript
+interface TopicEmbeddings {
+  [topic: string]: number[];
+}
+
+async function categorizeRecords(
+  records: DatasetRecord[],
+  hierarchy: TopicHierarchy,
+  options: {
+    confidenceThreshold?: number;
+    embeddingModel?: string;
+  } = {}
+): Promise<{
+  categorized: DatasetRecord[];
+  stats: CategorizationStats;
+}> {
+  const { confidenceThreshold = 0.7, embeddingModel = 'text-embedding-3-small' } = options;
+  
+  // Pre-compute topic embeddings
+  const topicEmbeddings = await computeTopicEmbeddings(hierarchy, embeddingModel);
+  
+  const categorized: DatasetRecord[] = [];
+  const stats: CategorizationStats = {
+    total: records.length,
+    highConfidence: 0,
+    mediumConfidence: 0,
+    needsReview: 0,
+    byMethod: { embedding: 0, llm: 0, keyword: 0 },
+  };
+  
+  for (const record of records) {
+    const result = await categorizeRecord(
+      record,
+      hierarchy,
+      topicEmbeddings,
+      confidenceThreshold
+    );
     
-    # 1. Try embedding similarity
-    prompt_embedding = embed(get_user_content(prompt))
+    // Update record with topic
+    const updatedRecord: DatasetRecord = {
+      ...record,
+      topic: result.topic,
+      metadata: {
+        ...record.metadata,
+        categorization: result,
+      },
+    };
     
-    best_topic = None
-    best_score = 0
+    categorized.push(updatedRecord);
     
-    for topic, topic_embedding in topic_embeddings.items():
-        score = cosine_similarity(prompt_embedding, topic_embedding)
-        if score > best_score:
-            best_score = score
-            best_topic = topic
+    // Update stats
+    stats.byMethod[result.method]++;
+    if (result.confidence >= 0.8) stats.highConfidence++;
+    else if (result.confidence >= 0.5) stats.mediumConfidence++;
+    else stats.needsReview++;
+  }
+  
+  return { categorized, stats };
+}
+
+async function categorizeRecord(
+  record: DatasetRecord,
+  hierarchy: TopicHierarchy,
+  topicEmbeddings: TopicEmbeddings,
+  threshold: number
+): Promise<CategorizationMetadata> {
+  const content = extractUserContent(record);
+  
+  // 1. Try keyword matching first (fast)
+  const keywordMatch = matchByKeywords(content, hierarchy);
+  if (keywordMatch && keywordMatch.confidence >= 0.9) {
+    return { ...keywordMatch, method: 'keyword' };
+  }
+  
+  // 2. Try embedding similarity
+  const contentEmbedding = await embed(content);
+  const embeddingResult = findBestTopicByEmbedding(
+    contentEmbedding,
+    topicEmbeddings
+  );
+  
+  if (embeddingResult.confidence >= threshold) {
+    return { ...embeddingResult, method: 'embedding' };
+  }
+  
+  // 3. Fall back to LLM for low confidence
+  const llmResult = await classifyWithLLM(content, Object.keys(hierarchy.topics));
+  
+  return {
+    topic: llmResult.topic,
+    confidence: llmResult.confidence,
+    method: 'llm',
+    needsReview: llmResult.confidence < 0.5,
+  };
+}
+
+function matchByKeywords(
+  content: string,
+  hierarchy: TopicHierarchy
+): { topic: string; confidence: number } | null {
+  const contentLower = content.toLowerCase();
+  let bestMatch: { topic: string; score: number } | null = null;
+  
+  for (const [topic, node] of Object.entries(hierarchy.topics)) {
+    const keywords = node.keywords || [];
+    const matchCount = keywords.filter(kw => contentLower.includes(kw)).length;
+    const score = matchCount / keywords.length;
     
-    # 2. High confidence: use embedding result
-    if best_score >= threshold:
-        return {
-            "topic": best_topic,
-            "confidence": best_score,
-            "method": "embedding"
-        }
-    
-    # 3. Low confidence: use LLM
-    llm_result = llm_classify(prompt, list(topics.keys()))
-    return {
-        "topic": llm_result["topic"],
-        "confidence": llm_result["confidence"],
-        "method": "llm"
+    if (score > (bestMatch?.score || 0)) {
+      bestMatch = { topic, score };
     }
+  }
+  
+  if (bestMatch && bestMatch.score >= 0.3) {
+    return { topic: bestMatch.topic, confidence: Math.min(bestMatch.score * 1.5, 0.95) };
+  }
+  
+  return null;
+}
+
+function findBestTopicByEmbedding(
+  contentEmbedding: number[],
+  topicEmbeddings: TopicEmbeddings
+): { topic: string; confidence: number } {
+  let bestTopic = '';
+  let bestScore = -1;
+  
+  for (const [topic, embedding] of Object.entries(topicEmbeddings)) {
+    const score = cosineSimilarity(contentEmbedding, embedding);
+    if (score > bestScore) {
+      bestScore = score;
+      bestTopic = topic;
+    }
+  }
+  
+  return { topic: bestTopic, confidence: bestScore };
+}
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
 ```
 
-### Handling Edge Cases
+### Categorization Stats
 
-| Case | Action |
-|------|--------|
-| Multi-topic prompt | Assign to primary topic, tag secondary |
-| Uncategorizable | Assign to "other" or flag for review |
-| Low confidence (<0.5) | Queue for manual review |
-
-### Output Format
-
-```jsonl
-{"messages": [...], "metadata": {"topic": "data_queries", "confidence": 0.92, "method": "embedding"}}
-{"messages": [...], "metadata": {"topic": "calculations", "confidence": 0.67, "method": "llm"}}
-{"messages": [...], "metadata": {"topic": "other", "confidence": 0.41, "needs_review": true}}
+```typescript
+interface CategorizationStats {
+  total: number;
+  highConfidence: number;   // >= 0.8
+  mediumConfidence: number; // 0.5 - 0.8
+  needsReview: number;      // < 0.5
+  byMethod: {
+    embedding: number;
+    llm: number;
+    keyword: number;
+  };
+}
 ```
 
 ---
@@ -156,77 +374,144 @@ def categorize_prompt(prompt: dict, topics: dict, threshold: float = 0.7) -> dic
 
 **Purpose:** Understand current dataset composition before deciding what to generate.
 
-**Input:** `categorized_prompts.jsonl`  
-**Output:** `coverage_report.json`
+**Input:** Categorized `DatasetRecord[]`  
+**Output:** `CoverageReport`
 
-### Metrics to Calculate
+### Coverage Analysis Code
 
-| Metric | Formula | Purpose |
-|--------|---------|---------|
-| Count per topic | `count(topic)` | Raw distribution |
-| Percentage | `count(topic) / total * 100` | Relative distribution |
-| Gap score | `target - actual` | What's missing |
-| Balance score | `min(counts) / max(counts)` | Overall balance |
+```typescript
+interface TargetDistribution {
+  [topic: string]: number;  // target percentage (0-100)
+}
 
-### Coverage Report
-
-```json
-{
-  "timestamp": "2025-01-22T11:00:00Z",
-  "total_prompts": 11892,
-  "distribution": {
-    "data_queries": {
-      "count": 4521,
-      "percentage": 38.0,
-      "target_percentage": 30.0,
-      "gap": -8.0,
-      "status": "over"
-    },
-    "calculations": {
-      "count": 892,
-      "percentage": 7.5,
-      "target_percentage": 20.0,
-      "gap": 12.5,
-      "status": "under"
-    },
-    "content_generation": {
-      "count": 3245,
-      "percentage": 27.3,
-      "target_percentage": 25.0,
-      "gap": -2.3,
-      "status": "ok"
-    },
-    "tool_usage": {
-      "count": 2134,
-      "percentage": 17.9,
-      "target_percentage": 20.0,
-      "gap": 2.1,
-      "status": "ok"
-    },
-    "other": {
-      "count": 1100,
-      "percentage": 9.3,
-      "target_percentage": 5.0,
-      "gap": -4.3,
-      "status": "over"
-    }
-  },
-  "balance_score": 0.20,
-  "recommendations": {
-    "calculations": "Generate ~1,500 more prompts",
-    "tool_usage": "Generate ~250 more prompts (optional)"
+function analyzeCoverage(
+  records: DatasetRecord[],
+  targets?: TargetDistribution
+): CoverageReport {
+  // Count by topic
+  const counts: Record<string, number> = {};
+  for (const record of records) {
+    const topic = record.topic || 'uncategorized';
+    counts[topic] = (counts[topic] || 0) + 1;
   }
+  
+  const total = records.length;
+  const topics = Object.keys(counts);
+  
+  // Default targets: uniform distribution
+  const defaultTarget = 100 / topics.length;
+  const targetDist = targets || Object.fromEntries(
+    topics.map(t => [t, defaultTarget])
+  );
+  
+  // Build distribution analysis
+  const distribution: Record<string, TopicDistribution> = {};
+  
+  for (const topic of topics) {
+    const count = counts[topic];
+    const percentage = (count / total) * 100;
+    const targetPct = targetDist[topic] || defaultTarget;
+    const gap = targetPct - percentage;
+    
+    distribution[topic] = {
+      count,
+      percentage: Math.round(percentage * 10) / 10,
+      targetPercentage: targetPct,
+      gap: Math.round(gap * 10) / 10,
+      status: gap > 5 ? 'under' : gap < -5 ? 'over' : 'ok',
+    };
+  }
+  
+  // Calculate balance score (min/max ratio)
+  const countValues = Object.values(counts);
+  const balanceScore = Math.min(...countValues) / Math.max(...countValues);
+  
+  // Generate recommendations
+  const recommendations = generateCoverageRecommendations(distribution, total);
+  
+  return {
+    timestamp: new Date().toISOString(),
+    totalRecords: total,
+    distribution,
+    balanceScore: Math.round(balanceScore * 100) / 100,
+    recommendations,
+  };
+}
+
+function generateCoverageRecommendations(
+  distribution: Record<string, TopicDistribution>,
+  total: number
+): string[] {
+  const recommendations: string[] = [];
+  
+  for (const [topic, dist] of Object.entries(distribution)) {
+    if (dist.status === 'under' && dist.gap > 10) {
+      const needed = Math.ceil((dist.gap / 100) * total);
+      recommendations.push(`Generate ~${needed} more "${topic}" records`);
+    }
+  }
+  
+  const underTopics = Object.entries(distribution)
+    .filter(([_, d]) => d.status === 'under')
+    .length;
+  
+  if (underTopics > Object.keys(distribution).length / 2) {
+    recommendations.push('Consider adjusting target distribution to match data');
+  }
+  
+  return recommendations;
 }
 ```
 
-### Target Distribution Options
+### Coverage Report Example
 
-| Approach | Description |
-|----------|-------------|
-| Uniform | Equal % for all topics |
-| Weighted | User-defined weights |
-| Production-aligned | Match production traffic |
-| Gap-focused | Prioritize weakest areas |
+```typescript
+const report: CoverageReport = {
+  timestamp: "2025-01-22T11:00:00Z",
+  totalRecords: 11892,
+  distribution: {
+    data_queries: {
+      count: 4521,
+      percentage: 38.0,
+      targetPercentage: 25.0,
+      gap: -13.0,
+      status: "over",
+    },
+    calculations: {
+      count: 892,
+      percentage: 7.5,
+      targetPercentage: 20.0,
+      gap: 12.5,
+      status: "under",
+    },
+    content_generation: {
+      count: 3245,
+      percentage: 27.3,
+      targetPercentage: 25.0,
+      gap: -2.3,
+      status: "ok",
+    },
+    tool_usage: {
+      count: 2134,
+      percentage: 17.9,
+      targetPercentage: 20.0,
+      gap: 2.1,
+      status: "ok",
+    },
+    other: {
+      count: 1100,
+      percentage: 9.3,
+      targetPercentage: 10.0,
+      gap: 0.7,
+      status: "ok",
+    },
+  },
+  balanceScore: 0.20,
+  recommendations: [
+    'Generate ~1,485 more "calculations" records',
+  ],
+};
+```
 
 ---
 
@@ -271,11 +556,11 @@ def categorize_prompt(prompt: dict, topics: dict, threshold: float = 0.7) -> dic
 │ Coverage Distribution                       │
 ├─────────────────────────────────────────────┤
 │                  Current    Target          │
-│ data_queries     ████████░░ 38%   (30%)    │
+│ data_queries     ████████░░ 38%   (25%)    │
 │ calculations     ██░░░░░░░░  8%   (20%) ⚠️  │
 │ content_gen      ██████░░░░ 27%   (25%)    │
 │ tool_usage       ████░░░░░░ 18%   (20%)    │
-│ other            ██░░░░░░░░  9%   (5%)     │
+│ other            ██░░░░░░░░  9%   (10%)    │
 │                                             │
 │ Balance Score: 0.20 (Poor)                  │
 │ ⚠️ "calculations" significantly under       │

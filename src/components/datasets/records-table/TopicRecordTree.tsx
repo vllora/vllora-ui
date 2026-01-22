@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import { RecordRow } from "./RecordRow";
 import { TopicTreeNodeRow } from "./TopicTreeNodeRow";
-import type { AvailableTopic } from "./record-utils";
+import type { AvailableTopic } from "../record-utils";
 
 interface TopicRecordTreeProps {
   /** The topic hierarchy from dataset */

@@ -18,7 +18,7 @@ import { AssignTopicDialog } from "./AssignTopicDialog";
 import { IngestDataDialog } from "./IngestDataDialog";
 import { DatasetDetailHeader } from "./DatasetDetailHeader";
 import { RecordsToolbar } from "./RecordsToolbar";
-import { RecordsTable } from "./RecordsTable";
+import { RecordsTable } from "./records-table";
 import { CreateDatasetDialog } from "./CreateDatasetDialog";
 import { FinetuneJobsPanel } from "@/components/finetune/FinetuneJobsPanel";
 import { TopicHierarchyDialog } from "./topics-dialog";
@@ -171,7 +171,7 @@ function DatasetDetailContent() {
       <div className="flex-1 flex overflow-hidden">
         {/* Main content */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="px-6 pt-6 pb-4 shrink-0">
+          <div className="px-3 shrink-0 pt-2">
             {/* Header - consumes context directly */}
             <DatasetDetailHeader />
 
@@ -199,7 +199,7 @@ function DatasetDetailContent() {
           </div>
 
           {/* Records table - fills remaining space */}
-          <div className="flex-1 mx-6 mb-6 border border-border rounded-lg overflow-hidden bg-card">
+          <div className="flex-1 mx-6 mb-2 border border-border  overflow-hidden bg-card">
             <RecordsTable
               records={sortedRecords}
               datasetId={datasetId}
