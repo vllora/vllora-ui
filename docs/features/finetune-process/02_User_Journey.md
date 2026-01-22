@@ -4,44 +4,147 @@
 
 ---
 
-## Prerequisites
+## Dataset Details Page
 
-**Input:** `raw_traces.jsonl` (from trace selection module)
+The RFT pipeline starts from the **Dataset Details** page. Users can perform actions on their dataset at any time.
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Dataset: Customer Support Traces                                        │
+├─────────────────────────────────────────────────────────────────────────┤
+│ Records: 12,453 total │ Valid: 11,892 │ Invalid: 561                    │
+│ Topics: 5 defined     │ Categorized: 11,234 (94.5%)                     │
+│ Generated: 1,434      │ Last sanitized: 2 hours ago                     │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  [Sanitize Data]  [Manage Topics]  [Generate Samples]  [Start RFT →]   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Available Actions
+
+| Action | When to Use | Can Repeat? |
+|--------|-------------|-------------|
+| **Sanitize Data** | After upload, after edits, after generation | ✅ Anytime |
+| **Manage Topics** | Define/edit topic hierarchy | ✅ Anytime |
+| **Categorize** | After topics defined, after new data | ✅ Anytime |
+| **Generate Samples** | After coverage gaps identified | ✅ Anytime |
+| **Start RFT** | When dataset is ready | ✅ Multiple runs |
+
+---
+
+## Flexible Workflow
+
+Unlike a linear pipeline, users can perform actions in any order and repeat as needed:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         DATASET ACTIONS (Repeatable)                    │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   ┌──────────────┐     ┌──────────────┐     ┌──────────────┐           │
+│   │   Sanitize   │ ←─→ │    Topics    │ ←─→ │  Categorize  │           │
+│   │    Data      │     │   & Coverage │     │   Records    │           │
+│   └──────────────┘     └──────────────┘     └──────────────┘           │
+│          ↑                    ↑                    ↑                    │
+│          │                    │                    │                    │
+│          └────────────────────┴────────────────────┘                    │
+│                               ↑                                         │
+│                      ┌──────────────┐                                   │
+│                      │   Generate   │                                   │
+│                      │   Samples    │                                   │
+│                      └──────────────┘                                   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+                                ↓
+                    (When ready, user clicks "Start RFT")
+                                ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         RFT TRAINING FLOW (Linear)                      │
+├─────────────────────────────────────────────────────────────────────────┤
+│  Define Grader  →   Dry Run Validation   →   Train   →   Deploy        │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Typical User Workflows
+
+### Workflow 1: First Time Setup
+```
+1. Upload traces to dataset
+2. Click [Sanitize Data] → see valid/invalid counts
+3. Click [Manage Topics] → auto-generate topics
+4. Records get categorized automatically
+5. Review coverage → click [Generate Samples] if gaps exist
+6. Click [Start RFT] → define grader → dry run → train
+```
+
+### Workflow 2: Add More Data
+```
+1. Upload additional traces (or import from file)
+2. Click [Sanitize Data] → validates new + existing records
+3. New records get categorized into existing topics
+4. Review coverage → generate more if needed
+```
+
+### Workflow 3: Fix Bad Generated Data
+```
+1. Review generated samples → some are low quality
+2. Delete bad generated records
+3. Click [Generate Samples] again with different settings
+4. Click [Sanitize Data] to revalidate
+```
+
+### Workflow 4: Retrain with Updated Data
+```
+1. Production data shows new patterns
+2. Upload new traces
+3. [Sanitize] → [Categorize] → maybe adjust topics
+4. Click [Start RFT] for new training run
+```
 
 ---
 
 ## Journey Overview
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           DATA PREPARATION                              │
-├─────────────────────────────────────────────────────────────────────────┤
-│  A: Sanitize    →   B: Define    →   C: Categorize   →   D: Review     │
-│     Data            Topics           Records             Coverage       │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    ↓
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           DATA AUGMENTATION                             │
-├─────────────────────────────────────────────────────────────────────────┤
-│  E: Generate    →   F: Review Final Distribution                        │
-│     Samples                                                             │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    ↓
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           VALIDATION & TRAINING                         │
-├─────────────────────────────────────────────────────────────────────────┤
-│  G: Define      →   H: Dry Run   →   I: Train   →   J: Deploy          │
-│     Grader          Validation                                          │
-└─────────────────────────────────────────────────────────────────────────┘
-```
+### Phase 1: Dataset Preparation (Repeatable Actions)
+
+| Step | Action | Trigger | Notes |
+|------|--------|---------|-------|
+| A | Sanitize Data | Manual button | Run after any data changes |
+| B | Define Topics | Manual button | Can edit anytime |
+| C | Categorize Records | Auto after topics, or manual | Assigns topics to records |
+| D | Review Coverage | Automatic | Shows distribution stats |
+| E | Generate Samples | Manual button | Fill coverage gaps |
+
+### Phase 2: RFT Training (Linear Flow)
+
+| Step | Action | Trigger | Notes |
+|------|--------|---------|-------|
+| F | Define Grader | Start of RFT flow | Configure evaluation |
+| G | Dry Run | Automatic | Validates dataset + grader |
+| H | Train Model | After dry run passes | Execute RFT |
+| I | Deploy | After training | Ship to production |
 
 ---
 
-## Phase 1: Data Preparation
+## Phase 1: Dataset Preparation (Repeatable Actions)
 
-### Step A — Sanitize Data
+### Action A — Sanitize Data
 
-**Purpose:** Clean raw traces, remove malformed records before investing time in categorization.
+**Trigger:** `[Sanitize Data]` button in Dataset Details  
+**Can Repeat:** ✅ Yes - run after uploads, edits, or generation
+
+**Purpose:** Validate all records, mark invalid ones, remove duplicates.
+
+**When to Run:**
+- After uploading new traces
+- After editing records manually
+- After generating synthetic samples
+- After importing from file
+- Anytime data quality is uncertain
 
 **Process:**
 1. Validate JSON structure
@@ -51,35 +154,43 @@
 5. Filter by token length
 
 **User Sees:**
-- Total records in / valid records out
+- Total records / valid / invalid counts
 - Rejection breakdown by error type
 - "View rejected samples" option
 
-**Output:** `sanitized_prompts.jsonl`
+**Updates:** Sets `valid` flag on each record
 
 ```
 ┌─────────────────────────────────────────────┐
-│ Data Sanitization                           │
+│ Sanitize Data                        [Run]  │
 ├─────────────────────────────────────────────┤
-│ Input:  12,453 raw traces                   │
+│ Records to validate: 12,453                 │
 │                                             │
-│ ✓ Valid structure     11,892 (95.5%)        │
-│ ✗ Missing user msg       234 (1.9%)         │
-│ ✗ Invalid JSON           127 (1.0%)         │
-│ ✗ Broken tool chain      112 (0.9%)         │
-│ ✗ Duplicates              88 (0.7%)         │
+│ Processing... ████████████████████ 100%     │
 │                                             │
-│ Output: 11,892 clean prompts                │
+│ Results:                                    │
+│ ┌─────────────────────────────────────────┐ │
+│ │ ✓ Valid:             11,892 (95.5%)     │ │
+│ │ ✗ Invalid:              473 (3.8%)      │ │
+│ │   - Last not user:      156             │ │
+│ │   - Empty message:       98             │ │
+│ │   - Tool chain error:    79             │ │
+│ │   - Other:              140             │ │
+│ │ ⊘ Duplicates:            88 (0.7%)      │ │
+│ └─────────────────────────────────────────┘ │
 │                                             │
-│ [View Rejected] [View Report]    [Next →]   │
+│ [View Invalid Records] [Download Report]    │
 └─────────────────────────────────────────────┘
 ```
 
 ---
 
-### Step B — Define Topic Hierarchy
+### Action B — Manage Topics
 
-**Purpose:** Create the taxonomy for categorizing prompts.
+**Trigger:** `[Manage Topics]` button in Dataset Details  
+**Can Repeat:** ✅ Yes - edit hierarchy anytime
+
+**Purpose:** Create/edit the taxonomy for categorizing records.
 
 **Options:**
 1. **Auto-generate** - System clusters and labels topics using embeddings
@@ -89,6 +200,7 @@
 **User Sees:**
 - Topic tree editor (add/edit/delete/reorder)
 - Description per topic
+- Record count per topic
 - Suggested topics from auto-clustering
 
 **Output:** `topic_hierarchy.json`
@@ -136,12 +248,21 @@
 
 ---
 
-### Step C — Categorize Records
+### Action C — Categorize Records
 
-**Purpose:** Assign each sanitized prompt to a topic in the hierarchy.
+**Trigger:** Automatic after topics saved, or `[Re-categorize]` button  
+**Can Repeat:** ✅ Yes - re-run after topic changes or new data
+
+**Purpose:** Assign each record to a topic in the hierarchy.
+
+**When to Run:**
+- Automatically after defining/editing topics
+- After uploading new data
+- After sanitization flags new valid records
+- Manually to re-categorize with updated settings
 
 **Process:**
-1. Embed all prompts
+1. Embed all uncategorized records
 2. Classify into topics (using embeddings or LLM)
 3. Handle edge cases (multi-topic, uncategorized)
 
@@ -150,11 +271,11 @@
 - Categorization confidence distribution
 - Records needing manual review (low confidence)
 
-**Output:** `categorized_prompts.jsonl` (with topic assignments)
+**Updates:** Sets `topic` field on each record
 
 ```
 ┌─────────────────────────────────────────────┐
-│ Categorizing Records...                     │
+│ Categorize Records                   [Run]  │
 ├─────────────────────────────────────────────┤
 │ ████████████████░░░░ 80%                    │
 │                                             │
@@ -164,6 +285,7 @@
 │ Medium confidence:         1,012 (10.6%)    │
 │ Needs review (<0.5):         268 (2.8%)     │
 │                                             │
+│ [View Low Confidence]                       │
 └─────────────────────────────────────────────┘
 ```
 
@@ -171,22 +293,29 @@
 
 ### Step D — Review Coverage Distribution
 
-**Purpose:** Understand current dataset composition before augmentation.
+---
+
+### Display D — Coverage Distribution
+
+**Trigger:** Automatic - always visible in Dataset Details  
+**Updates:** Automatically when records change
+
+**Purpose:** Show current dataset composition and identify gaps.
 
 **User Sees:**
 - Distribution chart by topic
-- Distribution by difficulty (if applicable)
 - Gaps highlighted (topics with few samples)
 - Target vs actual comparison
+- Balance score
 
 **Key Metrics:**
 - Records per topic
 - % of total per topic
-- Min/max/std across topics
+- Balance score (min/max ratio)
 
 ```
 ┌─────────────────────────────────────────────┐
-│ Current Coverage Distribution               │
+│ Coverage Distribution              [Refresh]│
 ├─────────────────────────────────────────────┤
 │                                             │
 │ data_queries      ████████████████ 4,521    │
@@ -195,103 +324,150 @@
 │ tool_usage        ██████████░░░░░░ 2,134    │
 │ other             ████░░░░░░░░░░░░ 1,100    │
 │                                             │
-│ ⚠️ Imbalanced: "calculations" has only 7.5% │
+│ Balance Score: 0.20 (Poor)                  │
+│ ⚠️ "calculations" has only 7.5%             │
 │    Recommended: Generate ~1,500 more        │
 │                                             │
-│ [Adjust Targets]              [Continue →]  │
+│ [Set Targets]                               │
 └─────────────────────────────────────────────┘
 ```
 
 ---
 
-## Phase 2: Data Augmentation
+### Action E — Generate Samples
 
-### Step E — Generate Synthetic Samples
+**Trigger:** `[Generate Samples]` button in Dataset Details  
+**Can Repeat:** ✅ Yes - generate more anytime
 
-**Purpose:** Fill coverage gaps with LLM-generated prompts.
+**Purpose:** Fill coverage gaps with LLM-generated records.
+
+**When to Run:**
+- After identifying coverage gaps
+- After deleting bad generated records
+- To increase dataset size for specific topics
 
 **User Configures:**
-- Target distribution (or accept recommended)
+- Target counts per topic (or accept recommended)
 - Generation method (few-shot from examples)
 - Quality settings
 
 **Process:**
 1. For each under-represented topic:
-   - Sample existing prompts as examples
-   - Generate new prompts using LLM
-   - Validate generated prompts (structure + quality)
+   - Sample existing records as examples
+   - Generate new records using LLM
+   - Validate generated records (structure + quality)
 
-**User Sees:**
-- Generation progress per topic
-- Validation pass rate
-- Sample previews
-
-**Output:** `synthetic_prompts.jsonl`
+**Creates:** New `DatasetRecord` with `is_generated: true`
 
 ```
 ┌─────────────────────────────────────────────┐
-│ Generate Synthetic Samples                  │
+│ Generate Samples                     [Run]  │
 ├─────────────────────────────────────────────┤
-│ Filling coverage gaps...                    │
+│ Topics to fill:                             │
+│ ☑ calculations    +1,500 (current: 892)     │
+│ ☑ tool_usage      +300   (current: 2,134)   │
+│ ☐ other           +0     (current: 1,100)   │
 │                                             │
+│ Total to generate: 1,800 records            │
+│                                             │
+│                    [Cancel] [Start Generation]│
+└─────────────────────────────────────────────┘
+```
+
+**During generation:**
+```
+┌─────────────────────────────────────────────┐
+│ Generating Samples...                       │
+├─────────────────────────────────────────────┤
 │ calculations:                               │
 │   Target: +1,500  Generated: 1,423          │
 │   ████████████████████ 95% valid            │
 │                                             │
 │ tool_usage:                                 │
-│   Target: +800   Generated: 756             │
-│   ██████████████████░░ 90% valid            │
+│   Target: +300   Generated: 285             │
+│   ██████████████████░░ 95% valid            │
 │                                             │
-│ Preview generated sample:                   │
+│ Preview:                                    │
 │ ┌─────────────────────────────────────────┐ │
 │ │ "Calculate the compound interest on..." │ │
 │ └─────────────────────────────────────────┘ │
-│ [Regenerate] [Edit]                         │
 │                                             │
-│                            [Continue →]     │
+│ [Stop] [View Generated]                     │
 └─────────────────────────────────────────────┘
 ```
 
 ---
 
-### Step F — Review Final Distribution
+### Display F — Dataset Summary
 
-**Purpose:** Confirm combined dataset is balanced and ready.
+**Trigger:** Automatic - always visible in Dataset Details  
+**Updates:** After any action (sanitize, generate, categorize)
+
+**Purpose:** Show overall dataset readiness for RFT training.
 
 **User Sees:**
-- Before/after comparison
-- Final distribution chart
-- Train/validation split preview
-- Total dataset size
-
-**Output:** 
-- `rft_prompts.train.jsonl`
-- `rft_prompts.valid.jsonl`
+- Total records breakdown
+- Source distribution (traces vs generated)
+- Validation status
+- Balance score
 
 ```
 ┌─────────────────────────────────────────────┐
-│ Final Dataset Distribution                  │
+│ Dataset Summary                             │
 ├─────────────────────────────────────────────┤
-│                  Before    After            │
-│ data_queries     38.0%  →  32.1%           │
-│ calculations      7.5%  →  18.2%  ✓ Fixed  │
-│ content_gen      27.3%  →  24.5%           │
-│ tool_usage       17.9%  →  16.8%           │
-│ other             9.3%  →   8.4%           │
-│                                             │
-│ Total: 11,892 → 14,071 (+18.3%)            │
+│ Total Records:    14,071                    │
 │   From traces:    11,892 (84.5%)            │
-│   Synthetic:       2,179 (15.5%)            │
+│   Generated:       2,179 (15.5%)            │
 │                                             │
-│ Train/Valid Split: 12,664 / 1,407 (90/10)  │
+│ Validation:                                 │
+│   Valid:          13,856 (98.5%)            │
+│   Invalid:           215 (1.5%)             │
 │                                             │
-│ [Adjust Split]                [Continue →]  │
+│ Coverage:                                   │
+│   Categorized:    14,071 (100%)             │
+│   Balance Score:  0.75 (Good)               │
+│                                             │
+│ Ready for RFT: ✅ Yes                        │
+│                                             │
+│                           [Start RFT →]     │
 └─────────────────────────────────────────────┘
 ```
 
 ---
 
-## Phase 3: Validation & Training
+## Phase 2: RFT Training (Linear Flow)
+
+When the user clicks `[Start RFT]`, they enter a linear wizard flow.
+
+### Step F — Configure Train/Validation Split
+
+**Purpose:** Define how to split records for training.
+
+**User Configures:**
+- Train/validation ratio (default 90/10)
+- Stratification options
+- Minimum validation size
+
+```
+┌─────────────────────────────────────────────┐
+│ Configure Dataset Split                     │
+├─────────────────────────────────────────────┤
+│ Total valid records: 13,856                 │
+│                                             │
+│ Train/Validation Split:                     │
+│ [████████████████████░░] 90% / 10%          │
+│                                             │
+│ Train set:       12,470 records             │
+│ Validation set:   1,386 records             │
+│                                             │
+│ ☑ Stratify by topic (recommended)           │
+│ ☐ Include generated data in validation      │
+│                                             │
+│              [← Back]  [Continue →]         │
+└─────────────────────────────────────────────┘
+```
+
+---
 
 ### Step G — Define Evaluation Function (Grader)
 
@@ -493,62 +669,85 @@
 ## Visual Flow Summary
 
 ```
-INPUT: raw_traces.jsonl
-       │
-       ▼
-┌──────────────┐
-│ A: Sanitize  │──→ Remove malformed records
-│    Data      │
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│ B: Define    │──→ Create topic taxonomy
-│    Topics    │
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│ C: Categorize│──→ Assign records to topics
-│    Records   │
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│ D: Review    │──→ See current distribution
-│    Coverage  │    Identify gaps
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│ E: Generate  │──→ Fill gaps with LLM
-│    Samples   │
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│ F: Review    │──→ Confirm balanced dataset
-│    Final     │    Create train/valid split
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│ G: Define    │──→ Configure reward function
-│    Grader    │
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│ H: Dry Run   │──→ Test: Is dataset good?
-│    Validation│    Test: Is grader good?
-└──────┬───────┘
-       │
-       │ Pass?
-       ▼
-┌──────────────┐
-│ I: Train     │──→ Run RFT
-│    Model     │
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│ J: Deploy    │──→ Ship improved model
-│    Model     │
-└──────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    DATASET DETAILS PAGE                                 │
+│                    (Repeatable Actions)                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   ┌──────────────┐                                                      │
+│   │  [Sanitize]  │ ←──── Run anytime: after upload, edit, generation   │
+│   │    Button    │                                                      │
+│   └──────┬───────┘                                                      │
+│          │ validates records                                            │
+│          ▼                                                              │
+│   ┌──────────────┐                                                      │
+│   │  [Manage     │ ←──── Define/edit topic hierarchy                   │
+│   │   Topics]    │                                                      │
+│   └──────┬───────┘                                                      │
+│          │ triggers categorization                                      │
+│          ▼                                                              │
+│   ┌──────────────┐                                                      │
+│   │  Categorize  │ ←──── Auto or manual, assigns topic to records      │
+│   │   Records    │                                                      │
+│   └──────┬───────┘                                                      │
+│          │ updates coverage                                             │
+│          ▼                                                              │
+│   ┌──────────────┐                                                      │
+│   │  Coverage    │ ←──── Always visible, shows distribution            │
+│   │  Dashboard   │                                                      │
+│   └──────┬───────┘                                                      │
+│          │ shows gaps                                                   │
+│          ▼                                                              │
+│   ┌──────────────┐                                                      │
+│   │  [Generate   │ ←──── Fill gaps with LLM-generated records          │
+│   │   Samples]   │                                                      │
+│   └──────────────┘                                                      │
+│          │                                                              │
+│          │ (user can repeat any action above)                           │
+│          │                                                              │
+│          ▼                                                              │
+│   ┌──────────────┐                                                      │
+│   │ [Start RFT]  │ ←──── When dataset is ready                         │
+│   └──────────────┘                                                      │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         RFT TRAINING WIZARD                             │
+│                         (Linear Flow)                                   │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   ┌──────────────┐                                                      │
+│   │ F: Configure │──→ Set train/validation split                       │
+│   │    Split     │                                                      │
+│   └──────┬───────┘                                                      │
+│          ▼                                                              │
+│   ┌──────────────┐                                                      │
+│   │ G: Define    │──→ Configure grader (preset or custom)              │
+│   │    Grader    │                                                      │
+│   └──────┬───────┘                                                      │
+│          ▼                                                              │
+│   ┌──────────────┐                                                      │
+│   │ H: Dry Run   │──→ Validate dataset + grader quality                │
+│   └──────┬───────┘                                                      │
+│          │                                                              │
+│      Pass? ──No──→ [Back to adjust grader or dataset]                   │
+│          │                                                              │
+│         Yes                                                             │
+│          ▼                                                              │
+│   ┌──────────────┐                                                      │
+│   │ I: Train     │──→ Execute RFT training                             │
+│   │    Model     │                                                      │
+│   └──────┬───────┘                                                      │
+│          ▼                                                              │
+│   ┌──────────────┐                                                      │
+│   │ J: Deploy    │──→ Ship to production                               │
+│   └──────────────┘                                                      │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-[Next: Data Pipeline →](./03_Data_Pipeline.md)
+[Next: Data Sanitization →](./03_Data_Sanitization.md)

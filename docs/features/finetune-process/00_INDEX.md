@@ -35,140 +35,92 @@
 
 ## Architecture Overview
 
-### Three-Phase Flow
+### Two-Part Flow
+
+The RFT pipeline has two distinct parts:
+
+1. **Dataset Preparation** (Repeatable Actions) - User can run these anytime from Dataset Details page
+2. **RFT Training** (Linear Wizard) - User enters this flow when dataset is ready
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                      PHASE 1: DATA PREPARATION                          │
+│                 DATASET DETAILS PAGE (Repeatable)                       │
 ├─────────────────────────────────────────────────────────────────────────┤
-│  A: Sanitize    →   B: Define    →   C: Categorize   →   D: Review     │
-│     Data            Topics           Records             Coverage       │
+│                                                                         │
+│  [Sanitize]  ←→  [Manage Topics]  ←→  [Generate Samples]               │
+│       ↓              ↓                      ↓                           │
+│   validates      categorizes           fills gaps                       │
+│   records        records               with LLM                         │
+│                                                                         │
+│                   Coverage Dashboard (always visible)                   │
+│                                                                         │
+│                         [Start RFT →]                                   │
 └─────────────────────────────────────────────────────────────────────────┘
                                     ↓
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                      PHASE 2: DATA AUGMENTATION                         │
+│                     RFT TRAINING WIZARD (Linear)                        │
 ├─────────────────────────────────────────────────────────────────────────┤
-│  E: Generate Samples    →    F: Review Final Distribution               │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    ↓
-┌─────────────────────────────────────────────────────────────────────────┐
-│                      PHASE 3: VALIDATION & TRAINING                     │
-├─────────────────────────────────────────────────────────────────────────┤
-│  G: Define      →   H: Dry Run   →   I: Train    →   J: Deploy         │
-│     Grader          Validation        Model           Model             │
+│  Configure   →   Define    →   Dry Run   →   Train   →   Deploy        │
+│  Split           Grader        Validation     Model       Model         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Step Summary
+### Dataset Actions (Repeatable)
 
-| Step | Name | Purpose | Output |
-|------|------|---------|--------|
-| **A** | Sanitize Data | Remove malformed records | `sanitized_prompts.jsonl` |
-| **B** | Define Topics | Create category taxonomy | `topic_hierarchy.json` |
-| **C** | Categorize Records | Assign prompts to topics | `categorized_prompts.jsonl` |
-| **D** | Review Coverage | Analyze current distribution | `coverage_report.json` |
-| **E** | Generate Samples | Fill gaps with LLM | `synthetic_prompts.jsonl` |
-| **F** | Review Final | Confirm balanced dataset | `rft_prompts.train/valid.jsonl` |
-| **G** | Define Grader | Configure evaluation function | `grader_config.json` |
-| **H** | Dry Run | Validate dataset + grader quality | `dry_run_report.json` |
-| **I** | Train | Execute RFT training | Fine-tuned model |
-| **J** | Deploy | Ship to production | Deployed endpoint |
+| Action | Button | When to Use |
+|--------|--------|-------------|
+| Sanitize | `[Sanitize Data]` | After upload, edit, generation |
+| Topics | `[Manage Topics]` | Define/edit category hierarchy |
+| Generate | `[Generate Samples]` | Fill coverage gaps |
 
----
+### RFT Flow (Linear)
 
-## Pipeline Diagram
-
-```
-INPUT: raw_traces.jsonl
-       │
-       ▼
-┌──────────────┐
-│ A: Sanitize  │──→ Validate structure, remove broken records
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│ B: Define    │──→ Auto-generate or manually define topics
-│    Topics    │
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│ C: Categorize│──→ Classify each prompt into a topic
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│ D: Review    │──→ See distribution, identify gaps
-│    Coverage  │
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│ E: Generate  │──→ LLM creates prompts for under-represented topics
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│ F: Review    │──→ Confirm balance, create train/valid split
-│    Final     │
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│ G: Define    │──→ Configure how outputs are scored
-│    Grader    │
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│ H: Dry Run   │──→ Test dataset quality + grader quality
-└──────┬───────┘
-       │
-   Pass? ──No──→ [Adjust grader] or [Use SFT first]
-       │
-      Yes
-       ▼
-┌──────────────┐
-│ I: Train     │──→ Run RFT training
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│ J: Deploy    │──→ Ship improved model
-└──────────────┘
-```
+| Step | Name | Purpose |
+|------|------|---------|
+| F | Configure Split | Set train/validation ratio |
+| G | Define Grader | Configure evaluation function |
+| H | Dry Run | Validate dataset + grader quality |
+| I | Train | Execute RFT training |
+| J | Deploy | Ship to production |
 
 ---
 
 ## Key Principles
 
-### 1. Sanitize First
+### 1. Actions Are Repeatable
+Users can sanitize, categorize, and generate multiple times. This allows iterative improvement of the dataset.
+
+### 2. Sanitize First
 Clean data before investing time in categorization. Bad data = wasted effort.
 
-### 2. Understand Your Data
+### 3. Understand Your Data
 Topic hierarchy and coverage analysis help you see what you have before deciding what to generate.
 
-### 3. Balance Before Training
+### 4. Balance Before Training
 Imbalanced datasets lead to models that only excel in over-represented areas.
 
-### 4. Validate Both Dataset AND Grader
+### 5. Validate Both Dataset AND Grader
 Dry run tells you two things:
 - **Dataset quality:** Can the base model do these tasks at all?
 - **Grader quality:** Does the evaluation function differentiate good from bad?
 
-### 5. RFT ≠ SFT
+### 6. RFT ≠ SFT
 - RFT needs prompts + grader (not gold answers)
 - Model generates responses during training
 - Grader provides learning signal
 
 ---
 
-## Output Artifacts
+## Data Storage
 
-| Phase | Artifact | Description |
-|-------|----------|-------------|
-| Prep | `sanitized_prompts.jsonl` | Clean, valid prompts |
-| Prep | `topic_hierarchy.json` | Category taxonomy |
-| Prep | `categorized_prompts.jsonl` | Prompts with topic assignments |
-| Prep | `coverage_report.json` | Distribution analysis |
-| Aug | `synthetic_prompts.jsonl` | LLM-generated prompts |
-| Aug | `rft_prompts.train.jsonl` | Training dataset (80-90%) |
-| Aug | `rft_prompts.valid.jsonl` | Validation dataset (10-20%) |
-| Val | `grader_config.json` | Evaluation function |
-| Val | `dry_run_report.json` | Pre-training diagnostics |
+All data is stored in the database, not files:
+
+| Data | Storage | Key Fields |
+|------|---------|------------|
+| Records | `DatasetRecord` table | `data`, `topic`, `is_generated`, `metadata` |
+| Topics | `Dataset.topicHierarchy` | Topic tree JSON |
+| Grader Config | `RFTJob.graderConfig` | Grader JSON |
+| Training Results | `RFTJob` table | Model ID, metrics, status |
 
 ---
 

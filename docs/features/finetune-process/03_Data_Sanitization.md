@@ -6,7 +6,7 @@
 
 ## Step A — Sanitize Data
 
-**Purpose:** Clean raw traces and remove malformed records BEFORE investing time in categorization.
+**Purpose:** Clean raw records and remove malformed data BEFORE investing time in categorization.
 
 **Input:** `DatasetRecord[]` (records with `DataInfo` payload)  
 **Output:** Validated `DatasetRecord[]`, `HygieneReport`
@@ -32,7 +32,7 @@ export interface DatasetRecord {
 
 export interface DataInfo {
   input: {
-    messages?: Message[];
+    messages?: Message[];      // ← This IS the RFT prompt
     tools?: Tool[];
     tool_choice?: string;
   };
@@ -81,66 +81,31 @@ interface Tool {
 
 ---
 
-## Validation Pipeline
+## RFT Prompt Structure
 
-### 1. Extract RFT Prompts from Records
-
-Convert `DatasetRecord` with `DataInfo` into RFT prompt format.
+Since `DataInfo` already separates input and output:
 
 ```typescript
-interface RFTPrompt {
-  messages: Message[];
-  tools?: Tool[];
-  metadata: {
-    recordId: string;
-    spanId?: string;
-  };
-}
+// For RFT training, we use:
+// - input.messages  → The prompt (must end with user message)
+// - input.tools     → Available tools (optional)
 
-function extractRFTPrompt(record: DatasetRecord): RFTPrompt | null {
-  const dataInfo = record.data as DataInfo;
-  
-  if (!dataInfo?.input?.messages?.length) {
-    return null;
-  }
-  
-  const messages = dataInfo.input.messages;
-  
-  // RFT needs prompt ending with user message
-  // Find the last user message position
-  const lastUserIdx = findLastIndex(messages, m => m.role === 'user');
-  
-  if (lastUserIdx === -1) {
-    return null;
-  }
-  
-  // Take messages up to and including last user message
-  const promptMessages = messages.slice(0, lastUserIdx + 1);
-  
-  return {
-    messages: promptMessages,
-    tools: dataInfo.input.tools,
-    metadata: {
-      recordId: record.id,
-      spanId: record.spanId,
-    },
-  };
-}
-
-function findLastIndex<T>(arr: T[], predicate: (item: T) => boolean): number {
-  for (let i = arr.length - 1; i >= 0; i--) {
-    if (predicate(arr[i])) return i;
-  }
-  return -1;
-}
+// We DON'T need:
+// - output.messages → Model's response (RFT generates its own)
+// - output.tool_calls → Model's tool usage (RFT learns this)
 ```
 
-### 2. Validation Checks
+**No extraction needed** - `input.messages` is already the RFT prompt.
+
+---
+
+## Validation Checks
 
 | Check | Reason | Action |
 |-------|--------|--------|
 | `data` is valid `DataInfo` | Core structure | REJECT |
-| `input.messages` array exists | Required for RFT | REJECT |
+| `input.messages` exists | Required for RFT | REJECT |
+| `input.messages` is non-empty array | Need at least one message | REJECT |
 | Each message has valid `role` | system/user/assistant/tool | REJECT |
 | **Last message is `user`** | RFT requirement | REJECT |
 | User message not empty | No task to learn | REJECT |
@@ -148,11 +113,14 @@ function findLastIndex<T>(arr: T[], predicate: (item: T) => boolean): number {
 | Tool results have matching `tool_call_id` | Orphan results | REJECT |
 | Token count < max | Context overflow | REJECT |
 
-### 3. Validation Result Types
+---
+
+## Validation Types
 
 ```typescript
 type ValidationError =
   | 'invalid_data_structure'
+  | 'missing_input'
   | 'missing_messages'
   | 'empty_messages'
   | 'invalid_role'
@@ -199,8 +167,13 @@ function validateRecord(
     return { valid: false, error: 'invalid_data_structure' };
   }
   
-  // 2. Check messages exist
-  const messages = dataInfo.input?.messages;
+  // 2. Check input exists
+  if (!dataInfo.input) {
+    return { valid: false, error: 'missing_input' };
+  }
+  
+  // 3. Check messages exist
+  const messages = dataInfo.input.messages;
   
   if (!messages) {
     return { valid: false, error: 'missing_messages' };
@@ -210,11 +183,10 @@ function validateRecord(
     return { valid: false, error: 'empty_messages' };
   }
   
-  // 3. Validate each message
+  // 4. Validate each message
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
     
-    // Check role
     if (!msg.role || !config.allowedRoles.has(msg.role)) {
       return { 
         valid: false, 
@@ -224,13 +196,13 @@ function validateRecord(
     }
   }
   
-  // 4. Check last message is user
+  // 5. Check last message is user (RFT requirement)
   const lastMessage = messages[messages.length - 1];
   if (lastMessage.role !== 'user') {
     return { valid: false, error: 'last_not_user' };
   }
   
-  // 5. Validate user messages have content
+  // 6. Validate user messages have content
   const userMessages = messages.filter(m => m.role === 'user');
   for (const userMsg of userMessages) {
     const content = userMsg.content;
@@ -244,13 +216,13 @@ function validateRecord(
     }
   }
   
-  // 6. Validate tool chain integrity
+  // 7. Validate tool chain integrity
   const toolChainResult = validateToolChain(messages);
   if (!toolChainResult.valid) {
     return toolChainResult;
   }
   
-  // 7. Check token limit (approximate)
+  // 8. Check token limit (approximate)
   const tokenCount = estimateTokens(messages);
   if (tokenCount > config.maxTokens) {
     return { 
@@ -400,7 +372,7 @@ function generateRecommendations(
   const lastNotUserRate = (errors['last_not_user'] || 0) / total;
   if (lastNotUserRate > 0.1) {
     recommendations.push(
-      `High 'last_not_user' rate (${(lastNotUserRate * 100).toFixed(1)}%) - check trace extraction logic`
+      `High 'last_not_user' rate (${(lastNotUserRate * 100).toFixed(1)}%) - traces may include assistant responses in input`
     );
   }
   
@@ -419,6 +391,26 @@ function generateRecommendations(
   }
   
   return recommendations;
+}
+```
+
+---
+
+## Helper: Extract User Content
+
+```typescript
+// Utility used by other modules (categorization, generation)
+function extractUserContent(record: DatasetRecord): string {
+  const dataInfo = record.data as DataInfo;
+  const messages = dataInfo.input?.messages || [];
+  
+  // Get last user message content
+  const userMessages = messages.filter(m => m.role === 'user');
+  const lastUserMsg = userMessages[userMessages.length - 1];
+  
+  return typeof lastUserMsg?.content === 'string' 
+    ? lastUserMsg.content 
+    : '';
 }
 ```
 
@@ -444,7 +436,7 @@ const report: HygieneReport = {
   },
   duplicatesRemoved: 88,
   recommendations: [
-    "High 'last_not_user' rate - check trace extraction logic",
+    "High 'last_not_user' rate - traces may include assistant responses in input",
     "79 tool chain errors - check tool call/result pairing"
   ],
 };
