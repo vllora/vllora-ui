@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Download, Upload, Sparkles, Loader2, ListTree, AlertCircle, Scale, ShieldCheck, FlaskConical } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
-import { EvaluationConfigDialog } from "./EvaluationConfigDialog";
+import { EvaluationConfigDialog } from "./evaluation-dialog/EvaluationConfigDialog";
 
 export function DatasetActions() {
   const {
