@@ -21,7 +21,7 @@ import { RecordsToolbar } from "./RecordsToolbar";
 import { RecordsTable } from "./RecordsTable";
 import { CreateDatasetDialog } from "./CreateDatasetDialog";
 import { FinetuneJobsPanel } from "@/components/finetune/FinetuneJobsPanel";
-import { TopicHierarchyDialog } from "./TopicHierarchyDialog";
+import { TopicHierarchyDialog } from "./topics-dialog";
 import { GenerateSyntheticDataDialog } from "./GenerateSyntheticDataDialog";
 import { getLeafTopicsFromHierarchy } from "./record-utils";
 import { getTopicCounts } from "./topic-hierarchy-utils";
