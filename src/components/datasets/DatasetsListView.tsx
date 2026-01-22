@@ -1,19 +1,18 @@
 /**
  * DatasetsListView
  *
- * Displays the list of all datasets with expandable records preview.
+ * Displays the list of all datasets in a table view.
  */
 
 import { useState, useMemo, useEffect } from "react";
 import { DatasetsConsumer } from "@/contexts/DatasetsContext";
-import { DatasetRecord } from "@/types/dataset-types";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   DeleteConfirmationDialog,
   type DeleteConfirmation,
 } from "./DeleteConfirmationDialog";
-import { DatasetItem } from "./DatasetItem";
+import { DatasetTableRow } from "./DatasetTableRow";
 import { DatasetsEmptyState } from "./DatasetsEmptyState";
 import { DatasetsListHeader } from "./DatasetsListHeader";
 import { DatasetsNoResultsState } from "./DatasetsNoResultsState";
@@ -30,20 +29,19 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
     error,
     getDatasetWithRecords,
     getRecordCount,
+    getTopicCoverageStats,
     createDataset,
     deleteDataset,
-    deleteRecord,
-    updateRecordTopic,
     renameDataset,
     importRecords,
     clearDatasetRecords,
   } = DatasetsConsumer();
 
   // State
-  const [expandedDatasets, setExpandedDatasets] = useState<Set<string>>(new Set());
-  const [datasetRecords, setDatasetRecords] = useState<Record<string, DatasetRecord[]>>({});
   const [recordCounts, setRecordCounts] = useState<Record<string, number>>({});
-  const [loadingRecords, setLoadingRecords] = useState<Set<string>>(new Set());
+  const [topicCoverageStats, setTopicCoverageStats] = useState<
+    Record<string, { total: number; withTopic: number }>
+  >({});
   const [editingDatasetId, setEditingDatasetId] = useState<string | null>(null);
   const [editingDatasetName, setEditingDatasetName] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmation | null>(null);
@@ -51,55 +49,33 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [importTargetDatasetId, setImportTargetDatasetId] = useState<string | null>(null);
 
-  // Max records to show before "See all" link
-  const MAX_VISIBLE_RECORDS = 5;
-
   // Filter datasets by search query
   const filteredDatasets = useMemo(() => {
     if (!searchQuery.trim()) return datasets;
     const query = searchQuery.toLowerCase();
-    return datasets.filter(ds => ds.name.toLowerCase().includes(query));
+    return datasets.filter((ds) => ds.name.toLowerCase().includes(query));
   }, [datasets, searchQuery]);
 
-  // Load record counts for all datasets
+  // Load record counts and topic coverage stats for all datasets
   useEffect(() => {
-    const loadCounts = async () => {
+    const loadStats = async () => {
       const counts: Record<string, number> = {};
+      const coverage: Record<string, { total: number; withTopic: number }> = {};
       await Promise.all(
         datasets.map(async (ds) => {
           counts[ds.id] = await getRecordCount(ds.id);
+          coverage[ds.id] = await getTopicCoverageStats(ds.id);
         })
       );
       setRecordCounts(counts);
+      setTopicCoverageStats(coverage);
     };
     if (datasets.length > 0) {
-      loadCounts();
+      loadStats();
     }
-  }, [datasets, getRecordCount]);
+  }, [datasets, getRecordCount, getTopicCoverageStats]);
 
   // Handlers
-  const toggleDataset = async (datasetId: string) => {
-    const newExpanded = new Set(expandedDatasets);
-    if (newExpanded.has(datasetId)) {
-      newExpanded.delete(datasetId);
-    } else {
-      newExpanded.add(datasetId);
-      if (!datasetRecords[datasetId] && !loadingRecords.has(datasetId)) {
-        setLoadingRecords(prev => new Set(prev).add(datasetId));
-        const datasetWithRecords = await getDatasetWithRecords(datasetId);
-        if (datasetWithRecords) {
-          setDatasetRecords(prev => ({ ...prev, [datasetId]: datasetWithRecords.records }));
-        }
-        setLoadingRecords(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(datasetId);
-          return newSet;
-        });
-      }
-    }
-    setExpandedDatasets(newExpanded);
-  };
-
   const handleRenameDataset = async (datasetId: string) => {
     if (!editingDatasetName.trim()) {
       toast.error("Dataset name cannot be empty");
@@ -117,50 +93,11 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
   const handleDeleteDataset = async (datasetId: string) => {
     try {
       await deleteDataset(datasetId);
-      setDatasetRecords(prev => {
-        const newRecords = { ...prev };
-        delete newRecords[datasetId];
-        return newRecords;
-      });
-      setExpandedDatasets(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(datasetId);
-        return newSet;
-      });
       toast.success("Dataset deleted");
     } catch {
       toast.error("Failed to delete dataset");
     }
     setDeleteConfirm(null);
-  };
-
-  const handleDeleteRecord = async (datasetId: string, recordId: string) => {
-    try {
-      await deleteRecord(datasetId, recordId);
-      setDatasetRecords(prev => ({
-        ...prev,
-        [datasetId]: prev[datasetId]?.filter(r => r.id !== recordId) || [],
-      }));
-      toast.success("Record deleted");
-    } catch {
-      toast.error("Failed to delete record");
-    }
-    setDeleteConfirm(null);
-  };
-
-  const handleUpdateRecordTopic = async (datasetId: string, recordId: string, topic: string) => {
-    try {
-      await updateRecordTopic(datasetId, recordId, topic);
-      setDatasetRecords(prev => ({
-        ...prev,
-        [datasetId]: prev[datasetId]?.map(r =>
-          r.id === recordId ? { ...r, topic: topic.trim() || undefined } : r
-        ) || [],
-      }));
-      toast.success("Topic updated");
-    } catch {
-      toast.error("Failed to update topic");
-    }
   };
 
   const handleCreateDataset = async (name: string) => {
@@ -185,14 +122,12 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
       } else if (result.target === "existing" && result.existingDatasetId) {
         // Use existing dataset
         targetDatasetId = result.existingDatasetId;
-        const existingDataset = datasets.find(d => d.id === targetDatasetId);
+        const existingDataset = datasets.find((d) => d.id === targetDatasetId);
         datasetName = existingDataset?.name || "dataset";
 
         // If replace mode, clear existing records first
         if (result.mode === "replace") {
           await clearDatasetRecords(targetDatasetId);
-          // Clear local cache for this dataset
-          setDatasetRecords(prev => ({ ...prev, [targetDatasetId]: [] }));
         }
       } else {
         throw new Error("Invalid import configuration");
@@ -204,14 +139,6 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
         result.records,
         result.defaultTopic
       );
-
-      // Refresh records cache if the dataset is expanded
-      if (expandedDatasets.has(targetDatasetId)) {
-        const datasetWithRecords = await getDatasetWithRecords(targetDatasetId);
-        if (datasetWithRecords) {
-          setDatasetRecords(prev => ({ ...prev, [targetDatasetId]: datasetWithRecords.records }));
-        }
-      }
 
       toast.success(
         result.target === "new"
@@ -233,21 +160,39 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
         return;
       }
 
-      const exportData = {
-        name: datasetWithRecords.name,
-        createdAt: datasetWithRecords.createdAt,
-        updatedAt: datasetWithRecords.updatedAt,
-        records: datasetWithRecords.records,
-      };
+      // Export as JSONL format with messages and tools columns
+      const jsonlContent = datasetWithRecords.records
+        .map((record) => {
+          const data = record.data as Record<string, unknown> | undefined;
+          const input = data?.input as Record<string, unknown> | undefined;
+          const output = data?.output as Record<string, unknown> | undefined;
 
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+          // Combine input.messages with output (output is a single message)
+          const inputMessages = (input?.messages as unknown[]) || [];
+          const outputMessage = output?.messages
+            ? Array.isArray(output.messages)
+              ? output.messages[0]
+              : output.messages
+            : output;
+          const messages = outputMessage
+            ? [...inputMessages, outputMessage]
+            : inputMessages;
+
+          // Get tools from input.tools
+          const tools = (input?.tools as unknown[]) || [];
+
+          return JSON.stringify({ messages, tools });
+        })
+        .join("\n");
+
+      const blob = new Blob([jsonlContent], { type: "application/jsonl" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${datasetWithRecords.name.toLowerCase().replace(/\s+/g, "-")}-export.json`;
+      a.download = `${datasetWithRecords.name.toLowerCase().replace(/\s+/g, "-")}-export.jsonl`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success("Dataset exported");
+      toast.success(`Exported ${datasetWithRecords.records.length} records as JSONL`);
     } catch (err) {
       console.error("Failed to export dataset:", err);
       toast.error("Failed to export dataset");
@@ -257,7 +202,7 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
   return (
     <>
       <div className="flex-1 overflow-auto">
-        <div className="w-full max-w-5xl mx-auto px-6 py-6">
+        <div className="w-full mx-auto px-6 py-6">
           <DatasetsListHeader
             searchQuery={searchQuery}
             datasetCount={datasets.length}
@@ -284,38 +229,48 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
           )}
 
           {/* Empty state */}
-          {!isLoading && !error && datasets.length === 0 && (
-            <DatasetsEmptyState />
-          )}
+          {!isLoading && !error && datasets.length === 0 && <DatasetsEmptyState />}
 
           {/* No results state */}
           {!isLoading && !error && datasets.length > 0 && filteredDatasets.length === 0 && (
             <DatasetsNoResultsState searchQuery={searchQuery} />
           )}
 
-          {/* Dataset list */}
+          {/* Dataset table */}
           {!isLoading && !error && filteredDatasets.length > 0 && (
-            <div className="space-y-3">
+            <div className="border border-border rounded-lg overflow-hidden bg-card">
+              {/* Table header */}
+              <div className="grid grid-cols-[1fr_120px_200px_160px_48px] items-center px-6 py-3 border-b border-border bg-muted/30">
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Dataset Name
+                </span>
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Records
+                </span>
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Topic Coverage
+                </span>
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Last Modified
+                </span>
+                <span />
+              </div>
+
+              {/* Table rows */}
               {filteredDatasets.map((dataset) => {
-                const isExpanded = expandedDatasets.has(dataset.id);
-                const records = datasetRecords[dataset.id] || [];
-                const isLoadingRecords = loadingRecords.has(dataset.id);
                 const isEditing = editingDatasetId === dataset.id;
 
                 return (
-                  <DatasetItem
+                  <DatasetTableRow
                     key={dataset.id}
                     datasetId={dataset.id}
                     name={dataset.name}
                     recordCount={recordCounts[dataset.id] ?? "..."}
+                    topicCoverage={topicCoverageStats[dataset.id] ?? null}
+                    hasTopicHierarchy={!!dataset.topicHierarchy?.hierarchy}
                     updatedAt={dataset.updatedAt}
-                    records={records}
-                    isExpanded={isExpanded}
-                    isLoadingRecords={isLoadingRecords}
                     isEditing={isEditing}
                     editingName={editingDatasetName}
-                    maxRecords={MAX_VISIBLE_RECORDS}
-                    onToggle={() => toggleDataset(dataset.id)}
                     onSelect={() => onSelectDataset(dataset.id)}
                     onEditNameChange={setEditingDatasetName}
                     onSaveRename={() => handleRenameDataset(dataset.id)}
@@ -330,12 +285,6 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
                     }}
                     onDownload={() => handleDownloadDataset(dataset.id)}
                     onDelete={() => setDeleteConfirm({ type: "dataset", id: dataset.id })}
-                    onUpdateRecordTopic={(recordId, topic) =>
-                      handleUpdateRecordTopic(dataset.id, recordId, topic)
-                    }
-                    onDeleteRecord={(recordId) =>
-                      setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
-                    }
                   />
                 );
               })}
@@ -351,8 +300,6 @@ export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
         onConfirm={(confirmation) => {
           if (confirmation.type === "dataset") {
             handleDeleteDataset(confirmation.id);
-          } else if (confirmation.type === "record" && confirmation.datasetId) {
-            handleDeleteRecord(confirmation.datasetId, confirmation.id);
           }
         }}
       />

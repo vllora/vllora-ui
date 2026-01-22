@@ -138,7 +138,7 @@ export function IngestDataDialog(props: IngestDataDialogProps) {
   };
 
   const extractRecord = (item: Record<string, unknown>): ParsedRecord => {
-    // Check if item has a 'data' field (exported format)
+    // Check if item has a 'data' field (exported format with full record structure)
     if (item.data !== undefined) {
       return {
         data: item.data,
@@ -146,6 +146,43 @@ export function IngestDataDialog(props: IngestDataDialogProps) {
         evaluation: item.evaluation as ParsedRecord['evaluation'],
       };
     }
+
+    // Check if item is in JSONL export format: { messages, tools }
+    // Reconstruct back to DataInfo structure
+    if (item.messages !== undefined && Array.isArray(item.messages)) {
+      const messages = item.messages as Array<Record<string, unknown>>;
+      const tools = (item.tools as unknown[]) || [];
+
+      // Split messages: all except last go to input, last goes to output
+      if (messages.length > 0) {
+        const inputMessages = messages.slice(0, -1);
+        const outputMessage = messages[messages.length - 1];
+
+        return {
+          data: {
+            input: {
+              messages: inputMessages,
+              ...(tools.length > 0 ? { tools } : {}),
+            },
+            output: {
+              messages: outputMessage,
+            },
+          },
+        };
+      }
+
+      // If no messages, just store tools in input
+      return {
+        data: {
+          input: {
+            messages: [],
+            ...(tools.length > 0 ? { tools } : {}),
+          },
+          output: {},
+        },
+      };
+    }
+
     // Otherwise treat the whole item as data
     return { data: item };
   };

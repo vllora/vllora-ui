@@ -1,13 +1,15 @@
 /**
  * RecordDataDialog
  *
- * Dialog for viewing and editing record data in JSON format.
- * Supports inline topic editing and evaluation scoring.
+ * Dialog for viewing and editing record data with a 3-panel layout:
+ * - Formatted thread panel (conversation view)
+ * - Metadata panel (topic, tools, stats)
+ * - JSON editor panel (raw data editing)
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader2, Star } from "lucide-react";
+import { Loader2, MessageSquare, Info, Code } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -16,8 +18,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { JsonEditor } from "@/components/chat/conversation/model-config/json-editor";
-import { cn } from "@/lib/utils";
-import { TopicCell } from "./cells/TopicCell";
+import { FormattedThreadPanel } from "./cells/FormattedThreadPanel";
+import { MetadataPanel } from "./cells/MetadataPanel";
 import type { AvailableTopic } from "./record-utils";
 import type { DatasetRecord } from "@/types/dataset-types";
 
@@ -35,14 +37,18 @@ export function RecordDataDialog({
   record,
   onOpenChange,
   onSave,
-  onUpdateTopic,
-  onUpdateEvaluation,
   availableTopics = [],
 }: RecordDataDialogProps) {
   const [editedJson, setEditedJson] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [hoveredStar, setHoveredStar] = useState<number | null>(null);
+
+  // Get topic path from availableTopics
+  const topicPath = useMemo(() => {
+    if (!record?.topic) return null;
+    const topic = availableTopics.find((t) => t.name === record.topic);
+    return topic?.path || [record.topic];
+  }, [record?.topic, availableTopics]);
 
   // Initialize state when record changes
   useEffect(() => {
@@ -79,101 +85,61 @@ export function RecordDataDialog({
     }
   };
 
-  const handleTopicUpdate = async (topic: string, isNew?: boolean) => {
-    if (!record || !onUpdateTopic) return;
-    await onUpdateTopic(record.id, topic, isNew);
-  };
-
-  const handleEvaluationClick = async (score: number) => {
-    if (!record || !onUpdateEvaluation) return;
-    // If clicking the same score, clear it
-    const newScore = record.evaluation?.score === score ? undefined : score;
-    await onUpdateEvaluation(record.id, newScore);
-  };
-
   const handleClose = () => {
     setEditedJson("");
     setJsonError(null);
     onOpenChange(false);
   };
 
-  const currentScore = record?.evaluation?.score;
-  const displayScore = hoveredStar ?? currentScore;
-
   return (
     <Dialog open={!!record} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="max-w-4xl h-[80vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-7xl h-[85vh] overflow-hidden flex flex-col p-0">
+        <DialogHeader className="px-6 py-4 border-b border-border shrink-0">
           <DialogTitle>Edit Record</DialogTitle>
           <p className="text-sm text-muted-foreground">
             Added {record && new Date(record.createdAt).toLocaleString()}
           </p>
         </DialogHeader>
 
-        {/* Topic and Evaluation Row */}
-        <div className="flex items-center gap-8 py-3 border-b border-border">
-          {/* Topic */}
-          {onUpdateTopic && (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Topic:</span>
-              <TopicCell
-                topic={record?.topic}
-                onUpdate={handleTopicUpdate}
-                availableTopics={availableTopics}
-                tableLayout
-              />
+        {/* 3-Panel Layout */}
+        <div className="flex-1 grid grid-cols-4 divide-x divide-border overflow-hidden">
+          {/* Left Panel - Formatted Thread (2/4 width) */}
+          <div className="col-span-2 flex flex-col overflow-hidden">
+            <PanelHeader icon={MessageSquare} title="Formatted Thread" />
+            <div className="flex-1 overflow-auto p-4">
+              {record && <FormattedThreadPanel data={record.data} />}
             </div>
-          )}
-
-          {/* Evaluation */}
-          {onUpdateEvaluation && (
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-muted-foreground">Evaluation:</span>
-              <div className="flex items-center gap-0.5">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button
-                    key={star}
-                    onClick={() => handleEvaluationClick(star)}
-                    onMouseEnter={() => setHoveredStar(star)}
-                    onMouseLeave={() => setHoveredStar(null)}
-                    className="p-0.5 transition-colors"
-                  >
-                    <Star
-                      className={cn(
-                        "w-5 h-5 transition-colors",
-                        displayScore && star <= displayScore
-                          ? "text-amber-500 fill-amber-500"
-                          : "text-muted-foreground/30 hover:text-amber-500/50"
-                      )}
-                    />
-                  </button>
-                ))}
-                {currentScore && (
-                  <span className="ml-2 text-sm text-muted-foreground">
-                    ({currentScore}/5)
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* JSON Editor */}
-        <div className="flex-1 overflow-hidden">
-          {record && (
-            <JsonEditor
-              value={editedJson}
-              onChange={handleJsonChange}
-              hideValidation={!jsonError}
-            />
-          )}
-        </div>
-        {jsonError && (
-          <div className="text-xs text-red-500 px-1">
-            Invalid JSON: {jsonError}
           </div>
-        )}
-        <DialogFooter className="gap-2">
+
+          {/* Middle Panel - Metadata (1/4 width) */}
+          <div className="col-span-1 flex flex-col overflow-hidden">
+            <PanelHeader icon={Info} title="Definitions & Meta" />
+            <div className="flex-1 overflow-auto p-4">
+              {record && <MetadataPanel record={record} topicPath={topicPath} />}
+            </div>
+          </div>
+
+          {/* Right Panel - JSON Editor (1/4 width) */}
+          <div className="col-span-1 flex flex-col overflow-hidden">
+            <PanelHeader icon={Code} title="JSON Data" />
+            <div className="flex-1 overflow-hidden">
+              {record && (
+                <JsonEditor
+                  value={editedJson}
+                  onChange={handleJsonChange}
+                  hideValidation={!jsonError}
+                />
+              )}
+            </div>
+            {jsonError && (
+              <div className="text-xs text-red-500 px-4 py-2 border-t border-border bg-red-500/10">
+                Invalid JSON: {jsonError}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter className="px-6 py-3 border-t border-border shrink-0">
           <Button variant="ghost" size="sm" onClick={handleClose}>
             Cancel
           </Button>
@@ -195,5 +161,21 @@ export function RecordDataDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface PanelHeaderProps {
+  icon: React.ElementType;
+  title: string;
+}
+
+function PanelHeader({ icon: Icon, title }: PanelHeaderProps) {
+  return (
+    <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30 shrink-0">
+      <Icon className="w-4 h-4 text-muted-foreground" />
+      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+        {title}
+      </span>
+    </div>
   );
 }

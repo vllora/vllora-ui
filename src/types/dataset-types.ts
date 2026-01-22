@@ -52,6 +52,18 @@ export interface TopicHierarchyConfig {
   generatedAt?: number;
 }
 
+// LLM-as-a-Judge evaluation configuration
+export interface EvaluationConfig {
+  // Combined prompt template with evaluation instructions and variable placeholders
+  promptTemplate: string;
+  // JSON Schema for structured output
+  outputSchema: string;
+  // Model to use for evaluation
+  model: string;
+  // Timestamp when config was last updated
+  updatedAt?: number;
+}
+
 // Stored in 'datasets' object store (metadata only, no records array)
 export interface Dataset {
   id: string;
@@ -62,6 +74,8 @@ export interface Dataset {
   backendDatasetId?: string;
   // Topic hierarchy configuration
   topicHierarchy?: TopicHierarchyConfig;
+  // LLM-as-a-Judge evaluation configuration
+  evaluationConfig?: EvaluationConfig;
 }
 
 // Combined view for UI (dataset + its records)

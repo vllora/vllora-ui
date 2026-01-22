@@ -21,6 +21,16 @@ export const COLUMN_WIDTHS = {
   timestamp: "w-36 shrink-0",
   /** Actions column */
   actions: "w-16 shrink-0",
+  /** Conversation thread column (new layout) */
+  thread: "flex-1 min-w-0",
+  /** Tools badge column (new layout) */
+  tools: "w-24 shrink-0",
+  /** Strategy/topic column (new layout) */
+  strategy: "w-40 shrink-0",
+  /** Stats column (new layout) */
+  stats: "w-32 shrink-0",
+  /** Actions dropdown column (new layout) */
+  deepDiveActions: "w-14 shrink-0",
 } as const;
 
 /** Columns that can be toggled by the user */

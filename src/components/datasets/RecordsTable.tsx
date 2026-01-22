@@ -7,13 +7,13 @@
 
 import { useRef, useState, useCallback, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { DatasetRecord } from "@/types/dataset-types";
-import { Loader2, ArrowRight, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Check, Minus, Copy, CheckCheck } from "lucide-react";
+import { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
+import { Loader2, ArrowRight, ChevronDown, ChevronRight, Check, Minus, Copy, CheckCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RecordRow } from "./RecordRow";
+import { TopicRecordTree } from "./TopicRecordTree";
 import { getTopicColor, type AvailableTopic } from "./record-utils";
-import { COLUMN_WIDTHS, ColumnVisibility, DEFAULT_COLUMN_VISIBILITY } from "./table-columns";
-import type { SortConfig, SortField } from "./RecordsToolbar";
+import { COLUMN_WIDTHS } from "./table-columns";
 
 interface RecordsTableProps {
   records: DatasetRecord[];
@@ -33,28 +33,24 @@ interface RecordsTableProps {
   onUpdateTopic: (recordId: string, topic: string, isNew?: boolean) => Promise<void>;
   /** Handler for deleting a record */
   onDelete: (recordId: string) => void;
-  /** Show "Topic:" label prefix in each row */
-  showTopicLabel?: boolean;
-  /** Height of the table container for virtualization */
-  height?: number;
+  /** Handler for saving record data changes */
+  onSave?: (recordId: string, data: unknown) => Promise<void>;
+  /** Height of the table container for virtualization. Use "auto" to fill available space */
+  height?: number | "auto";
   /** Enable selection mode */
   selectable?: boolean;
   /** Selected record IDs (controlled) */
   selectedIds?: Set<string>;
   /** Selection change handler (controlled) */
   onSelectionChange?: (selectedIds: Set<string>) => void;
-  /** Current sort configuration */
-  sortConfig?: SortConfig;
-  /** Sort change handler */
-  onSortChange?: (config: SortConfig) => void;
   /** Callback when expand is clicked */
   onExpand?: (record: DatasetRecord) => void;
   /** Group records by topic */
   groupByTopic?: boolean;
-  /** Column visibility configuration */
-  columnVisibility?: ColumnVisibility;
   /** Available topics from hierarchy for selection */
   availableTopics?: AvailableTopic[];
+  /** Topic hierarchy for nested tree display */
+  topicHierarchy?: TopicHierarchyNode[];
 }
 
 /** Represents a group of records by topic */
@@ -63,8 +59,9 @@ interface TopicGroup {
   records: DatasetRecord[];
 }
 
-const ROW_HEIGHT = 72; // Height of each row in pixels (increased for expand link)
-const VIRTUALIZATION_THRESHOLD = 15; // Only virtualize if more than this many records
+const ROW_HEIGHT = 118; // Base height of collapsed row in pixels (includes 8px gap)
+const EXPANDED_ROW_HEIGHT = 428; // Approximate height when expanded (includes detail panel + gap)
+const VIRTUALIZATION_THRESHOLD = 50; // Virtualize when more than this many records
 
 export function RecordsTable({
   records,
@@ -77,17 +74,15 @@ export function RecordsTable({
   onSeeAll,
   onUpdateTopic,
   onDelete,
-  showTopicLabel = false,
-  height = 400,
+  onSave,
+  height = "auto",
   selectable = false,
   selectedIds: controlledSelectedIds,
   onSelectionChange,
-  sortConfig,
-  onSortChange,
   onExpand,
   groupByTopic = false,
-  columnVisibility = DEFAULT_COLUMN_VISIBILITY,
   availableTopics = [],
+  topicHierarchy,
 }: RecordsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -97,6 +92,9 @@ export function RecordsTable({
   // Collapsed groups state (tracks which topic groups are collapsed)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
+  // Expanded rows state (tracks which rows are expanded for virtualized list)
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
   // Use controlled or internal state
   const selectedIds = controlledSelectedIds ?? internalSelectedIds;
   const setSelectedIds = onSelectionChange ?? setInternalSelectedIds;
@@ -104,6 +102,22 @@ export function RecordsTable({
   const displayRecords = maxRecords > 0 ? records.slice(0, maxRecords) : records;
   const hasMore = maxRecords > 0 && records.length > maxRecords;
   const shouldVirtualize = displayRecords.length > VIRTUALIZATION_THRESHOLD && !groupByTopic;
+
+  // Compute container style based on height prop
+  const containerStyle = height === "auto" ? { height: "100%" } : { height };
+
+  // Toggle row expansion (for virtualized list)
+  const toggleRowExpansion = useCallback((recordId: string) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(recordId)) {
+        next.delete(recordId);
+      } else {
+        next.add(recordId);
+      }
+      return next;
+    });
+  }, []);
 
   // Group records by topic
   const groupedRecords = useMemo((): TopicGroup[] => {
@@ -153,7 +167,10 @@ export function RecordsTable({
   const virtualizer = useVirtualizer({
     count: displayRecords.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: (index) => {
+      const record = displayRecords[index];
+      return expandedRows.has(record.id) ? EXPANDED_ROW_HEIGHT : ROW_HEIGHT;
+    },
     overscan: 5,
   });
 
@@ -196,25 +213,53 @@ export function RecordsTable({
     );
   }
 
-  // Grouped rendering by topic
-  if (groupByTopic) {
+  // Hierarchical tree rendering (when topic hierarchy is available)
+  if (groupByTopic && topicHierarchy && topicHierarchy.length > 0) {
     return (
-      <>
+      <div className="flex flex-col" style={containerStyle}>
         {showHeader && (
           <TableHeader
             selectable={selectable}
             allSelected={allSelected}
             someSelected={someSelected}
             onSelectAll={handleSelectAll}
-            sortConfig={sortConfig}
-            onSortChange={onSortChange}
-            columnVisibility={columnVisibility}
+            hideTopic
           />
         )}
-        <div
-          className="overflow-auto"
-          style={{ maxHeight: height }}
-        >
+        <div className="flex-1 overflow-auto min-h-0">
+          <TopicRecordTree
+            hierarchy={topicHierarchy}
+            records={displayRecords}
+            onUpdateTopic={onUpdateTopic}
+            onDelete={onDelete}
+            onSave={onSave}
+            selectable={selectable}
+            selectedIds={selectedIds}
+            onSelectRecord={handleSelectRecord}
+            onExpand={onExpand}
+            availableTopics={availableTopics}
+          />
+        </div>
+        {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
+        {showFooter && <TableFooter records={displayRecords} selectedCount={selectedIds.size} datasetId={datasetId} />}
+      </div>
+    );
+  }
+
+  // Flat grouped rendering by topic (fallback when no hierarchy)
+  if (groupByTopic) {
+    return (
+      <div className="flex flex-col" style={containerStyle}>
+        {showHeader && (
+          <TableHeader
+            selectable={selectable}
+            allSelected={allSelected}
+            someSelected={someSelected}
+            onSelectAll={handleSelectAll}
+            hideTopic
+          />
+        )}
+        <div className="flex-1 overflow-auto">
           {groupedRecords.map((group) => {
             const isCollapsed = collapsedGroups.has(group.topic);
             const groupRecordIds = group.records.map((r) => r.id);
@@ -283,22 +328,20 @@ export function RecordsTable({
 
                   {/* Group Records */}
                   {!isCollapsed && (
-                    <div>
-                      {group.records.map((record, idx) => (
+                    <div className="p-2 space-y-2">
+                      {group.records.map((record) => (
                         <RecordRow
                           key={record.id}
                           record={record}
-                          index={idx + 1}
                           onUpdateTopic={onUpdateTopic}
                           onDelete={onDelete}
-                          tableLayout={showHeader}
-                          showTopicLabel={showTopicLabel}
+                          onSave={onSave}
                           selectable={selectable}
                           selected={selectedIds.has(record.id)}
                           onSelect={(checked) => handleSelectRecord(record.id, checked)}
                           onExpand={onExpand}
-                          columnVisibility={columnVisibility}
                           availableTopics={availableTopics}
+                          hideTopic
                         />
                       ))}
                     </div>
@@ -309,68 +352,58 @@ export function RecordsTable({
         </div>
         {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
         {showFooter && <TableFooter records={displayRecords} selectedCount={selectedIds.size} datasetId={datasetId} />}
-      </>
+      </div>
     );
   }
 
   // Non-virtualized rendering for small lists
   if (!shouldVirtualize) {
     return (
-      <>
+      <div className="flex flex-col" style={containerStyle}>
         {showHeader && (
           <TableHeader
             selectable={selectable}
             allSelected={allSelected}
             someSelected={someSelected}
             onSelectAll={handleSelectAll}
-            sortConfig={sortConfig}
-            onSortChange={onSortChange}
-            columnVisibility={columnVisibility}
           />
         )}
-        <div>
-          {displayRecords.map((record, idx) => (
+        <div className="flex-1 overflow-auto p-2 space-y-2">
+          {displayRecords.map((record) => (
             <RecordRow
               key={record.id}
               record={record}
-              index={idx + 1}
               onUpdateTopic={onUpdateTopic}
               onDelete={onDelete}
-              tableLayout={showHeader}
-              showTopicLabel={showTopicLabel}
+              onSave={onSave}
               selectable={selectable}
               selected={selectedIds.has(record.id)}
               onSelect={(checked) => handleSelectRecord(record.id, checked)}
               onExpand={onExpand}
-              columnVisibility={columnVisibility}
               availableTopics={availableTopics}
             />
           ))}
           {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
         </div>
         {showFooter && <TableFooter records={displayRecords} selectedCount={selectedIds.size} datasetId={datasetId} />}
-      </>
+      </div>
     );
   }
 
-  // Virtualized rendering for large lists
+  // Virtualized rendering for large lists with dynamic row heights
   return (
-    <>
+    <div className="flex flex-col" style={containerStyle}>
       {showHeader && (
         <TableHeader
           selectable={selectable}
           allSelected={allSelected}
           someSelected={someSelected}
           onSelectAll={handleSelectAll}
-          sortConfig={sortConfig}
-          onSortChange={onSortChange}
-          columnVisibility={columnVisibility}
         />
       )}
       <div
         ref={parentRef}
-        className="overflow-auto"
-        style={{ height }}
+        className="flex-1 overflow-auto p-2"
       >
         <div
           style={{
@@ -381,31 +414,33 @@ export function RecordsTable({
         >
           {virtualizer.getVirtualItems().map((virtualRow) => {
             const record = displayRecords[virtualRow.index];
+            const isRowExpanded = expandedRows.has(record.id);
             return (
               <div
                 key={record.id}
+                data-index={virtualRow.index}
+                ref={virtualizer.measureElement}
                 style={{
                   position: "absolute",
                   top: 0,
                   left: 0,
                   width: "100%",
-                  height: `${virtualRow.size}px`,
                   transform: `translateY(${virtualRow.start}px)`,
+                  paddingBottom: "8px",
                 }}
               >
                 <RecordRow
                   record={record}
-                  index={virtualRow.index + 1}
                   onUpdateTopic={onUpdateTopic}
                   onDelete={onDelete}
-                  tableLayout={showHeader}
-                  showTopicLabel={showTopicLabel}
+                  onSave={onSave}
                   selectable={selectable}
                   selected={selectedIds.has(record.id)}
                   onSelect={(checked) => handleSelectRecord(record.id, checked)}
                   onExpand={onExpand}
-                  columnVisibility={columnVisibility}
                   availableTopics={availableTopics}
+                  isExpanded={isRowExpanded}
+                  onToggleExpand={() => toggleRowExpansion(record.id)}
                 />
               </div>
             );
@@ -414,7 +449,7 @@ export function RecordsTable({
       </div>
       {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
       {showFooter && <TableFooter records={displayRecords} selectedCount={selectedIds.size} datasetId={datasetId} />}
-    </>
+    </div>
   );
 }
 
@@ -423,36 +458,11 @@ interface TableHeaderProps {
   allSelected?: boolean;
   someSelected?: boolean;
   onSelectAll?: (checked: boolean) => void;
-  sortConfig?: SortConfig;
-  onSortChange?: (config: SortConfig) => void;
-  columnVisibility?: ColumnVisibility;
+  /** Hide topic column (used in grouped mode) */
+  hideTopic?: boolean;
 }
 
-function TableHeader({ selectable, allSelected, someSelected, onSelectAll, sortConfig, onSortChange, columnVisibility = DEFAULT_COLUMN_VISIBILITY }: TableHeaderProps) {
-  const handleSort = (field: SortField) => {
-    if (!onSortChange) return;
-
-    if (sortConfig?.field === field) {
-      // Toggle direction if same field
-      onSortChange({
-        field,
-        direction: sortConfig.direction === "asc" ? "desc" : "asc",
-      });
-    } else {
-      // Default to descending for new field
-      onSortChange({ field, direction: "desc" });
-    }
-  };
-
-  const SortIndicator = ({ field }: { field: SortField }) => {
-    if (sortConfig?.field !== field) return null;
-    return sortConfig.direction === "asc" ? (
-      <ArrowUp className="w-3 h-3 inline ml-1" />
-    ) : (
-      <ArrowDown className="w-3 h-3 inline ml-1" />
-    );
-  };
-
+function TableHeader({ selectable, allSelected, someSelected, onSelectAll, hideTopic }: TableHeaderProps) {
   return (
     <div className="px-4 py-3 bg-muted/30 border-b border-border flex items-center gap-4 text-xs font-medium text-muted-foreground uppercase tracking-wide">
       {selectable && (
@@ -476,49 +486,11 @@ function TableHeader({ selectable, allSelected, someSelected, onSelectAll, sortC
           </div>
         </div>
       )}
-      {columnVisibility.index && <span className={COLUMN_WIDTHS.index}>#</span>}
-      <span className={COLUMN_WIDTHS.data}>Data</span>
-      {columnVisibility.source && <span className={cn(COLUMN_WIDTHS.source, "text-center")}>Source</span>}
-      {columnVisibility.topic && (
-        <button
-          className={cn(
-            COLUMN_WIDTHS.topic,
-            "text-center hover:text-foreground transition-colors",
-            sortConfig?.field === "topic" && "text-foreground"
-          )}
-          onClick={() => handleSort("topic")}
-        >
-          Topic
-          <SortIndicator field="topic" />
-        </button>
-      )}
-      {columnVisibility.evaluation && (
-        <button
-          className={cn(
-            COLUMN_WIDTHS.evaluation,
-            "text-center hover:text-foreground transition-colors",
-            sortConfig?.field === "evaluation" && "text-foreground"
-          )}
-          onClick={() => handleSort("evaluation")}
-        >
-          Evaluation
-          <SortIndicator field="evaluation" />
-        </button>
-      )}
-      {columnVisibility.timestamp && (
-        <button
-          className={cn(
-            COLUMN_WIDTHS.timestamp,
-            "text-right hover:text-foreground transition-colors",
-            sortConfig?.field === "timestamp" && "text-foreground"
-          )}
-          onClick={() => handleSort("timestamp")}
-        >
-          Updated at
-          <SortIndicator field="timestamp" />
-        </button>
-      )}
-      <span className={COLUMN_WIDTHS.actions}></span>
+      <span className={COLUMN_WIDTHS.thread}>Data</span>
+      <span className={cn(COLUMN_WIDTHS.tools, "text-center")}>Tools</span>
+      {!hideTopic && <span className={cn(COLUMN_WIDTHS.strategy, "text-center")}>Topic</span>}
+      <span className={cn(COLUMN_WIDTHS.stats, "text-center")}>Stats</span>
+      <span className={COLUMN_WIDTHS.deepDiveActions}>Actions</span>
     </div>
   );
 }

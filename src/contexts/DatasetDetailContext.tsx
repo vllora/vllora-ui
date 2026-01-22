@@ -519,20 +519,36 @@ export function DatasetDetailProvider({
 
   const handleExport = useCallback(() => {
     if (!dataset) return;
-    const exportData = {
-      name: dataset.name,
-      createdAt: dataset.createdAt,
-      updatedAt: dataset.updatedAt,
-      records: records,
-    };
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+    // Export as JSONL format with messages and tools columns
+    const jsonlContent = records
+      .map((record) => {
+        const data = record.data as Record<string, unknown> | undefined;
+        const input = data?.input as Record<string, unknown> | undefined;
+        const output = data?.output as Record<string, unknown> | undefined;
+
+        // Combine input.messages with output (output is a single message)
+        const inputMessages = (input?.messages as unknown[]) || [];
+        const outputMessage = output?.messages
+          ? (Array.isArray(output.messages) ? output.messages[0] : output.messages)
+          : output;
+        const messages = outputMessage
+          ? [...inputMessages, outputMessage]
+          : inputMessages;
+
+        // Get tools from input.tools
+        const tools = (input?.tools as unknown[]) || [];
+
+        return JSON.stringify({ messages, tools });
+      })
+      .join("\n");
+    const blob = new Blob([jsonlContent], { type: "application/jsonl" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${dataset.name.toLowerCase().replace(/\s+/g, "-")}-export.json`;
+    a.download = `${dataset.name.toLowerCase().replace(/\s+/g, "-")}-export.jsonl`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success("Dataset exported");
+    toast.success(`Exported ${records.length} records as JSONL`);
   }, [dataset, records]);
 
   const handleStartFinetune = useCallback(async () => {
