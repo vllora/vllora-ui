@@ -87,7 +87,7 @@ Since `DataInfo` already separates input and output:
 
 ```typescript
 // For RFT training, we use:
-// - input.messages  → The prompt (must end with user message)
+// - input.messages  → The prompt (already separated from output)
 // - input.tools     → Available tools (optional)
 
 // We DON'T need:
@@ -107,7 +107,7 @@ Since `DataInfo` already separates input and output:
 | `input.messages` exists | Required for RFT | REJECT |
 | `input.messages` is non-empty array | Need at least one message | REJECT |
 | Each message has valid `role` | system/user/assistant/tool | REJECT |
-| **Last message is `user`** | RFT requirement | REJECT |
+| Has at least one user message | Need a task to learn | REJECT |
 | User message not empty | No task to learn | REJECT |
 | Tool calls have `id` | Required for matching | REJECT |
 | Tool results have matching `tool_call_id` | Orphan results | REJECT |
@@ -124,7 +124,7 @@ type ValidationError =
   | 'missing_messages'
   | 'empty_messages'
   | 'invalid_role'
-  | 'last_not_user'
+  | 'no_user_message'
   | 'empty_user_message'
   | 'user_message_too_short'
   | 'orphan_tool_result'
@@ -196,14 +196,13 @@ function validateRecord(
     }
   }
   
-  // 5. Check last message is user (RFT requirement)
-  const lastMessage = messages[messages.length - 1];
-  if (lastMessage.role !== 'user') {
-    return { valid: false, error: 'last_not_user' };
+  // 5. Check has at least one user message
+  const userMessages = messages.filter(m => m.role === 'user');
+  if (userMessages.length === 0) {
+    return { valid: false, error: 'no_user_message' };
   }
   
   // 6. Validate user messages have content
-  const userMessages = messages.filter(m => m.role === 'user');
   for (const userMsg of userMessages) {
     const content = userMsg.content;
     
@@ -369,10 +368,10 @@ function generateRecommendations(
 ): string[] {
   const recommendations: string[] = [];
   
-  const lastNotUserRate = (errors['last_not_user'] || 0) / total;
-  if (lastNotUserRate > 0.1) {
+  const noUserRate = (errors['no_user_message'] || 0) / total;
+  if (noUserRate > 0.05) {
     recommendations.push(
-      `High 'last_not_user' rate (${(lastNotUserRate * 100).toFixed(1)}%) - traces may include assistant responses in input`
+      `High 'no_user_message' rate (${(noUserRate * 100).toFixed(1)}%) - records missing user messages`
     );
   }
   
@@ -426,17 +425,17 @@ const report: HygieneReport = {
   rejected: 473,
   rejectionRate: "4.5%",
   errorsByType: {
-    last_not_user: 156,
+    no_user_message: 56,
     empty_user_message: 98,
     orphan_tool_result: 67,
     invalid_role: 45,
     user_message_too_short: 52,
     exceeds_max_tokens: 43,
     missing_tool_call_id: 12,
+    invalid_data_structure: 100,
   },
   duplicatesRemoved: 88,
   recommendations: [
-    "High 'last_not_user' rate - traces may include assistant responses in input",
     "79 tool chain errors - check tool call/result pairing"
   ],
 };

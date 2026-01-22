@@ -41,7 +41,7 @@ UI mockups for all screens in the RFT pipeline.
 │ ┌─────────────────────────────────────────┐ │
 │ │ ✓ Valid records:     11,892 (95.5%)     │ │
 │ │ ✗ Invalid:              561 (4.5%)      │ │
-│ │   - Last not user:      234             │ │
+│ │   - No user message:    234             │ │
 │ │   - Empty message:      127             │ │
 │ │   - Tool chain error:   111             │ │
 │ │   - Other:               89             │ │

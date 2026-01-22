@@ -208,7 +208,7 @@ Unlike a linear pipeline, users can perform actions in any order and repeat as n
 │ ┌─────────────────────────────────────────┐ │
 │ │ ✓ Valid:             11,892 (95.5%)     │ │
 │ │ ✗ Invalid:              473 (3.8%)      │ │
-│ │   - Last not user:      156             │ │
+│ │   - No user message:    156             │ │
 │ │   - Empty message:       98             │ │
 │ │   - Tool chain error:    79             │ │
 │ │   - Other:              140             │ │

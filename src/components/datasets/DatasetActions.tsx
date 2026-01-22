@@ -13,7 +13,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Download, Upload, Sparkles, Loader2, ListTree, AlertCircle, Scale } from "lucide-react";
+import { Download, Upload, Sparkles, Loader2, ListTree, AlertCircle, Scale, ShieldCheck, FlaskConical } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { EvaluationConfigDialog } from "./EvaluationConfigDialog";
 
@@ -23,6 +23,8 @@ export function DatasetActions() {
     handleExport,
     setImportDialog,
     setTopicHierarchyDialog,
+    setSanitizeDataDialog,
+    setDryRunDialog,
     handleStartFinetune,
     isStartingFinetune,
   } = DatasetDetailConsumer();
@@ -46,6 +48,21 @@ export function DatasetActions() {
 
   return (
     <div className="flex items-center gap-2">
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+              onClick={() => setSanitizeDataDialog(true)}
+            >
+              <ShieldCheck className="w-4 h-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Sanitize data</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
       <TooltipProvider delayDuration={300}>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -90,6 +107,21 @@ export function DatasetActions() {
           <TooltipContent>
             {hasEvaluationConfig ? "Configure evaluation" : "Configure evaluation (not set)"}
           </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+              onClick={() => setDryRunDialog(true)}
+            >
+              <FlaskConical className="w-4 h-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Dry run validation</TooltipContent>
         </Tooltip>
       </TooltipProvider>
       <TooltipProvider delayDuration={300}>

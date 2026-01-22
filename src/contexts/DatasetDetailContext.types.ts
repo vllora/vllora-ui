@@ -65,6 +65,10 @@ export interface DatasetDetailContextType {
   setTopicHierarchyDialog: (open: boolean) => void;
   generateDataDialog: boolean;
   setGenerateDataDialog: (open: boolean) => void;
+  sanitizeDataDialog: boolean;
+  setSanitizeDataDialog: (open: boolean) => void;
+  dryRunDialog: boolean;
+  setDryRunDialog: (open: boolean) => void;
 
   // Loading states
   isGeneratingTopics: boolean;

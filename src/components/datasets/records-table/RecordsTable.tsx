@@ -198,6 +198,27 @@ export function RecordsTable({
   const allSelected = displayRecords.length > 0 && displayRecords.every((r) => selectedIds.has(r.id));
   const someSelected = displayRecords.some((r) => selectedIds.has(r.id));
 
+  const hasTopicHierarchy = topicHierarchy && topicHierarchy.length > 0;
+
+  // Compute topic counts for distribution chart (includes all topics from hierarchy)
+  const topicCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+
+    // Initialize all topics from hierarchy with 0
+    for (const topic of availableTopics) {
+      counts[topic.name] = 0;
+    }
+
+    // Count records per topic
+    for (const record of displayRecords) {
+      if (record.topic && counts[record.topic] !== undefined) {
+        counts[record.topic]++;
+      }
+    }
+
+    return counts;
+  }, [displayRecords, availableTopics]);
+
   if (isLoading) {
     return (
       <div className="px-4 py-4 text-sm text-muted-foreground flex items-center gap-2">
@@ -368,6 +389,10 @@ export function RecordsTable({
             allSelected={allSelected}
             someSelected={someSelected}
             onSelectAll={handleSelectAll}
+            topicCounts={topicCounts}
+            totalRecords={displayRecords.length}
+            hasTopicHierarchy={hasTopicHierarchy}
+            topicHierarchy={topicHierarchy}
           />
         )}
         <div className="flex-1 overflow-auto p-2 space-y-2">
@@ -401,6 +426,10 @@ export function RecordsTable({
           allSelected={allSelected}
           someSelected={someSelected}
           onSelectAll={handleSelectAll}
+          topicCounts={topicCounts}
+          totalRecords={displayRecords.length}
+          hasTopicHierarchy={hasTopicHierarchy}
+          topicHierarchy={topicHierarchy}
         />
       )}
       <div
