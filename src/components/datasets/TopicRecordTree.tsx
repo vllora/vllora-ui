@@ -6,7 +6,7 @@
  */
 
 import { useState, useMemo } from "react";
-import { ChevronRight, ChevronDown, Folder, FolderOpen, FileText } from "lucide-react";
+import { ChevronRight, ChevronDown, Folder } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import { RecordRow } from "./RecordRow";
@@ -38,6 +38,7 @@ interface TopicRecordTreeProps {
 interface TreeNodeProps {
   node: TopicHierarchyNode;
   depth: number;
+  parentPath: string[];
   recordsByTopic: Map<string, DatasetRecord[]>;
   descendantCounts: Map<string, number>;
   onUpdateTopic: (recordId: string, topic: string, isNew?: boolean) => Promise<void>;
@@ -74,6 +75,7 @@ function calculateDescendantCounts(
 function TreeNode({
   node,
   depth,
+  parentPath,
   recordsByTopic,
   descendantCounts,
   onUpdateTopic,
@@ -93,168 +95,107 @@ function TreeNode({
   const hasContent = hasChildren || hasRecords;
   const totalCount = descendantCounts.get(node.id) || 0;
 
-  // Determine if this is a leaf node (no children)
-  const isLeaf = !hasChildren;
-
-  // Icon based on node type
-  const Icon = isLeaf ? FileText : isExpanded ? FolderOpen : Folder;
+  // Build the full path including this node
+  const currentPath = [...parentPath, node.name];
 
   return (
     <div className="relative">
-      {/* Vertical tree line from parent */}
-      {depth > 0 && (
-        <div
-          className="absolute border-l border-border/40"
-          style={{
-            left: `${(depth - 1) * 24 + 20}px`,
-            top: 0,
-            height: "20px",
-          }}
-        />
-      )}
-
-      {/* Horizontal connector to node */}
-      {depth > 0 && (
-        <div
-          className="absolute border-t border-border/40"
-          style={{
-            left: `${(depth - 1) * 24 + 20}px`,
-            top: "20px",
-            width: "12px",
-          }}
-        />
-      )}
-
-      {/* Node header */}
+      {/* Node header - breadcrumb style */}
       <button
         className={cn(
-          "w-full flex items-center gap-2 py-2.5 px-3 text-left transition-colors",
-          "hover:bg-muted/30",
+          "w-full flex items-center gap-3 py-3 px-4 text-left transition-colors",
+          "hover:bg-muted/40 border-b border-border/50",
           hasContent ? "cursor-pointer" : "cursor-default opacity-60"
         )}
-        style={{ paddingLeft: `${depth * 24 + 12}px` }}
         onClick={() => hasContent && setIsExpanded(!isExpanded)}
         disabled={!hasContent}
       >
-        {/* Expand/collapse indicator */}
-        <span className="w-4 h-4 flex items-center justify-center shrink-0">
+        {/* Expand/collapse chevron */}
+        <span className="w-5 h-5 flex items-center justify-center shrink-0">
           {hasContent ? (
-            isExpanded ? (
-              <ChevronDown className="w-4 h-4 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="w-4 h-4 text-muted-foreground" />
-            )
-          ) : (
-            <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30" />
-          )}
+            <ChevronDown
+              className={cn(
+                "w-4 h-4 text-muted-foreground transition-transform duration-200",
+                !isExpanded && "-rotate-90"
+              )}
+            />
+          ) : null}
         </span>
 
-        {/* Folder/file icon */}
-        <Icon
-          className={cn(
-            "w-4 h-4 shrink-0",
-            isLeaf ? "text-muted-foreground" : "text-[rgb(var(--theme-500))]"
-          )}
-        />
+        {/* Breadcrumb path */}
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          {currentPath.map((segment, index) => {
+            const isLast = index === currentPath.length - 1;
+            return (
+              <span key={index} className="flex items-center gap-2 shrink-0">
+                {index > 0 && (
+                  <ChevronRight className="w-4 h-4 text-muted-foreground/50" />
+                )}
+                <span
+                  className={cn(
+                    "text-sm uppercase tracking-wide",
+                    isLast
+                      ? "font-bold text-emerald-500"
+                      : "font-medium text-muted-foreground"
+                  )}
+                >
+                  {segment}
+                </span>
+              </span>
+            );
+          })}
+        </div>
 
-        {/* Node name */}
-        <span className="font-medium text-sm truncate">{node.name}</span>
-
-        {/* Record count */}
-        <span className="text-sm text-muted-foreground ml-1">
-          {totalCount} record{totalCount !== 1 ? "s" : ""}
-        </span>
+        {/* Record count badge */}
+        {totalCount > 0 && (
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-500/15 text-emerald-500 text-xs font-semibold uppercase tracking-wider shrink-0">
+            <span>{totalCount.toLocaleString()}</span>
+            <span className="text-emerald-500/70">RECORDS</span>
+          </span>
+        )}
       </button>
 
       {/* Expanded content */}
       {isExpanded && hasContent && (
-        <div className="relative">
-          {/* Vertical line connecting children/records */}
-          {(hasChildren || hasRecords) && (
-            <div
-              className="absolute border-l border-border/40"
-              style={{
-                left: `${depth * 24 + 20}px`,
-                top: 0,
-                bottom: 0,
-              }}
-            />
-          )}
-
+        <div className="bg-muted/10">
           {/* Child nodes */}
           {hasChildren &&
-            node.children!.map((child, idx) => (
-              <div key={child.id} className="relative">
-                {/* Hide the bottom part of the vertical line for the last child */}
-                {idx === node.children!.length - 1 && !hasRecords && (
-                  <div
-                    className="absolute bg-card"
-                    style={{
-                      left: `${depth * 24 + 19}px`,
-                      top: "20px",
-                      bottom: 0,
-                      width: "2px",
-                    }}
-                  />
-                )}
-                <TreeNode
-                  node={child}
-                  depth={depth + 1}
-                  recordsByTopic={recordsByTopic}
-                  descendantCounts={descendantCounts}
-                  onUpdateTopic={onUpdateTopic}
-                  onDelete={onDelete}
-                  onSave={onSave}
-                  selectable={selectable}
-                  selectedIds={selectedIds}
-                  onSelectRecord={onSelectRecord}
-                  onExpand={onExpand}
-                  availableTopics={availableTopics}
-                />
-              </div>
+            node.children!.map((child) => (
+              <TreeNode
+                key={child.id}
+                node={child}
+                depth={depth + 1}
+                parentPath={currentPath}
+                recordsByTopic={recordsByTopic}
+                descendantCounts={descendantCounts}
+                onUpdateTopic={onUpdateTopic}
+                onDelete={onDelete}
+                onSave={onSave}
+                selectable={selectable}
+                selectedIds={selectedIds}
+                onSelectRecord={onSelectRecord}
+                onExpand={onExpand}
+                availableTopics={availableTopics}
+              />
             ))}
 
           {/* Records at this node (only shown for leaf nodes) */}
           {hasRecords && (
-            <div
-              className="divide-y divide-border/50"
-              style={{ marginLeft: `${(depth + 1) * 24}px` }}
-            >
-              {records.map((record, idx) => (
-                <div key={record.id} className="relative">
-                  {/* Horizontal connector to record */}
-                  <div
-                    className="absolute border-t border-border/40"
-                    style={{
-                      left: `-4px`,
-                      width: "16px",
-                      top: "55px", // Center of row
-                    }}
-                  />
-                  {/* Vertical connector between records */}
-                  {idx < records.length - 1 && (
-                    <div
-                      className="absolute border-l border-border/40"
-                      style={{
-                        left: `-4px`,
-                        top: "55px",
-                        bottom: "-55px",
-                      }}
-                    />
-                  )}
-                  <RecordRow
-                    record={record}
-                    onUpdateTopic={onUpdateTopic}
-                    onDelete={onDelete}
-                    onSave={onSave}
-                    selectable={selectable}
-                    selected={selectedIds.has(record.id)}
-                    onSelect={(checked) => onSelectRecord(record.id, checked)}
-                    onExpand={onExpand}
-                    availableTopics={availableTopics}
-                    hideTopic
-                  />
-                </div>
+            <div className="p-2 space-y-2">
+              {records.map((record) => (
+                <RecordRow
+                  key={record.id}
+                  record={record}
+                  onUpdateTopic={onUpdateTopic}
+                  onDelete={onDelete}
+                  onSave={onSave}
+                  selectable={selectable}
+                  selected={selectedIds.has(record.id)}
+                  onSelect={(checked) => onSelectRecord(record.id, checked)}
+                  onExpand={onExpand}
+                  availableTopics={availableTopics}
+                  hideTopic
+                />
               ))}
             </div>
           )}
@@ -299,13 +240,14 @@ export function TopicRecordTree({
   const unassignedRecords = recordsByTopic.get("__unassigned__") || [];
 
   return (
-    <div className="py-2">
+    <div>
       {/* Render hierarchy tree */}
       {hierarchy.map((node) => (
         <TreeNode
           key={node.id}
           node={node}
           depth={0}
+          parentPath={[]}
           recordsByTopic={recordsByTopic}
           descendantCounts={descendantCounts}
           onUpdateTopic={onUpdateTopic}
@@ -363,27 +305,31 @@ function UnassignedSection({
   const [isExpanded, setIsExpanded] = useState(true);
 
   return (
-    <div className="mt-4 pt-4 border-t border-border/50">
+    <div className="border-t border-border/50">
       <button
-        className="w-full flex items-center gap-2 py-2.5 px-3 text-left transition-colors hover:bg-muted/30"
+        className="w-full flex items-center gap-3 py-3 px-4 text-left transition-colors hover:bg-muted/40"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <span className="w-4 h-4 flex items-center justify-center shrink-0">
-          {isExpanded ? (
-            <ChevronDown className="w-4 h-4 text-muted-foreground" />
-          ) : (
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
-          )}
+        <span className="w-5 h-5 flex items-center justify-center shrink-0">
+          <ChevronDown
+            className={cn(
+              "w-4 h-4 text-muted-foreground transition-transform duration-200",
+              !isExpanded && "-rotate-90"
+            )}
+          />
         </span>
         <Folder className="w-4 h-4 text-muted-foreground shrink-0" />
-        <span className="font-medium text-sm text-muted-foreground">Unassigned</span>
-        <span className="text-sm text-muted-foreground ml-1">
-          {records.length} record{records.length !== 1 ? "s" : ""}
+        <span className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+          Unassigned
+        </span>
+        <span className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted text-muted-foreground text-xs font-semibold uppercase tracking-wider">
+          <span>{records.length.toLocaleString()}</span>
+          <span className="opacity-70">RECORDS</span>
         </span>
       </button>
 
       {isExpanded && (
-        <div className="divide-y divide-border/50" style={{ marginLeft: "24px" }}>
+        <div className="p-2 space-y-2 bg-muted/10">
           {records.map((record) => (
             <RecordRow
               key={record.id}

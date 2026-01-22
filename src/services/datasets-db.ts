@@ -133,6 +133,25 @@ export async function getRecordCount(datasetId: string): Promise<number> {
   });
 }
 
+// Get topic coverage stats for a dataset (total records and records with topic assigned)
+export async function getTopicCoverageStats(datasetId: string): Promise<{ total: number; withTopic: number }> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('records', 'readonly');
+    const store = tx.objectStore('records');
+    const index = store.index('datasetId');
+    const request = index.getAll(datasetId);
+
+    request.onsuccess = () => {
+      const records = request.result as DatasetRecord[];
+      const total = records.length;
+      const withTopic = records.filter(r => r.topic && r.topic.trim() !== '').length;
+      resolve({ total, withTopic });
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
 // Create a new dataset
 export async function createDataset(name: string): Promise<Dataset> {
   const db = await getDB();

@@ -2,29 +2,29 @@
  * TopicHierarchyDialog
  *
  * Dialog for configuring and generating a topic hierarchy for a dataset.
- * Allows users to describe dataset goals, set hierarchy depth, generate
- * a topic tree, and manually edit the hierarchy.
+ * Features a two-panel layout:
+ * - Left: Searchable topic tree
+ * - Right: Smart Topic Generator with AI controls
  *
- * Changes are auto-saved with debouncing (500ms) - no explicit save button needed.
+ * Changes are auto-saved with debouncing (500ms).
  */
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
-import { Tag, Zap, Loader2, Plus, Check, AlertTriangle } from "lucide-react";
+import { Sparkles, Loader2, Plus, Check, Search, ChevronRight, RefreshCw } from "lucide-react";
 import {
   TopicHierarchyConfig,
   TopicHierarchyNode,
 } from "@/types/dataset-types";
 import { TopicTreeNode } from "./TopicTreeNode";
-import { AutoTagButton, type AutoTagProgress } from "./AutoTagButton";
+import { type AutoTagProgress } from "./AutoTagButton";
 import {
   countNodes,
   getAllNodeIds,
@@ -36,49 +36,21 @@ import {
   getLeafNamesFromNode,
 } from "./topic-hierarchy-utils";
 
-/**
- * Empty state component shown when no hierarchy is configured
- */
-function EmptyHierarchyState() {
-  return (
-    <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm">
-      <Tag className="w-8 h-8 mb-2 opacity-50" />
-      <p>No hierarchy yet</p>
-      <p className="text-xs mt-1">
-        Generate from goals or add categories manually
-      </p>
-    </div>
-  );
-}
-
 interface TopicHierarchyDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Current topic hierarchy config from the dataset */
   initialConfig?: TopicHierarchyConfig;
-  /** Called when hierarchy changes (auto-saved with debouncing) */
   onApply: (config: TopicHierarchyConfig) => void;
-  /** Called to generate hierarchy (should call LLM) */
   onGenerate: (goals: string, depth: number) => Promise<TopicHierarchyNode[]>;
-  /** Whether generation is in progress */
   isGenerating?: boolean;
-  /** Called to auto-tag records based on the hierarchy */
   onAutoTag?: () => Promise<void>;
-  /** Whether auto-tagging is in progress */
   isAutoTagging?: boolean;
-  /** Progress of auto-tagging */
   autoTagProgress?: AutoTagProgress | null;
-  /** Number of records that will be tagged */
   recordCount?: number;
-  /** Map of topic name -> record count */
   topicCounts?: Map<string, number>;
-  /** Number of records that have topics assigned */
   recordsWithTopicsCount?: number;
-  /** Called to clear all record topics after new hierarchy is generated */
   onClearRecordTopics?: () => Promise<void>;
-  /** Called when a topic is renamed to update records with that topic */
   onRenameTopic?: (oldName: string, newName: string) => Promise<void>;
-  /** Called when a topic node is deleted to clear topics from records */
   onDeleteTopic?: (topicNames: string[]) => Promise<void>;
 }
 
@@ -104,8 +76,9 @@ export function TopicHierarchyDialog({
   // Form state
   const [goals, setGoals] = useState(initialConfig?.goals || "");
   const [depth, setDepth] = useState(initialConfig?.depth || 3);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  // Preview state
+  // Hierarchy state
   const [hierarchy, setHierarchy] = useState<TopicHierarchyNode[]>(
     initialConfig?.hierarchy || []
   );
@@ -114,58 +87,74 @@ export function TopicHierarchyDialog({
   // Auto-save state
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Track if user has made any edits (to distinguish from initial state setup)
   const hasUserEdited = useRef(false);
-  // Track previous open state to detect dialog open transition
   const wasOpen = useRef(false);
-  // Stable ref for onApply to avoid effect re-triggers when parent recreates callback
   const onApplyRef = useRef(onApply);
   onApplyRef.current = onApply;
-  // Stable ref for initialConfig to ensure we always read the latest value when dialog opens
   const initialConfigRef = useRef(initialConfig);
   initialConfigRef.current = initialConfig;
 
-  // Reset state only when dialog transitions from closed to open
+  // Calculate unlabeled percentage
+  const unlabeledPercent = recordCount > 0
+    ? Math.round(((recordCount - recordsWithTopicsCount) / recordCount) * 100)
+    : 0;
+
+  // Filter hierarchy based on search query
+  const filteredHierarchy = useMemo(() => {
+    if (!searchQuery.trim()) return hierarchy;
+    const query = searchQuery.toLowerCase();
+
+    const filterNodes = (nodes: TopicHierarchyNode[]): TopicHierarchyNode[] => {
+      const result: TopicHierarchyNode[] = [];
+      for (const node of nodes) {
+        const matchesSearch = node.name.toLowerCase().includes(query);
+        const filteredChildren = node.children ? filterNodes(node.children) : [];
+
+        if (matchesSearch || filteredChildren.length > 0) {
+          result.push({
+            ...node,
+            children: filteredChildren.length > 0 ? filteredChildren : node.children,
+          });
+        }
+      }
+      return result;
+    };
+
+    return filterNodes(hierarchy);
+  }, [hierarchy, searchQuery]);
+
+  // Reset state when dialog opens
   useEffect(() => {
     const justOpened = open && !wasOpen.current;
     wasOpen.current = open;
 
     if (justOpened) {
-      // Read from ref to get the latest config value
       const config = initialConfigRef.current;
       setGoals(config?.goals || "");
       setDepth(config?.depth || 3);
       setHierarchy(config?.hierarchy ? cloneHierarchy(config.hierarchy) : []);
-      // Expand all nodes by default
+      setSearchQuery("");
       if (config?.hierarchy) {
         setExpandedNodes(new Set(getAllNodeIds(config.hierarchy)));
       } else {
         setExpandedNodes(new Set());
       }
-      // Reset save status and edit tracking
       setSaveStatus("idle");
       hasUserEdited.current = false;
     }
   }, [open]);
 
-  // Auto-save with debouncing when hierarchy changes
-  // Goals and depth are just generation config - only save when hierarchy is modified
+  // Auto-save with debouncing
   useEffect(() => {
-    // Skip if dialog is closed
     if (!open) return;
-
-    // Skip auto-save until user has made an edit
     if (!hasUserEdited.current) return;
 
-    // Clear any pending debounce
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
 
-    // Set saving status immediately to show user something is happening
     setSaveStatus("saving");
 
-    // Debounce the actual save
     debounceRef.current = setTimeout(() => {
       const config: TopicHierarchyConfig = {
         goals,
@@ -175,8 +164,6 @@ export function TopicHierarchyDialog({
       };
       onApplyRef.current(config);
       setSaveStatus("saved");
-
-      // Reset to idle after showing "saved" for a moment
       setTimeout(() => setSaveStatus("idle"), 1500);
     }, AUTO_SAVE_DEBOUNCE_MS);
 
@@ -185,9 +172,7 @@ export function TopicHierarchyDialog({
         clearTimeout(debounceRef.current);
       }
     };
-    // Only trigger on hierarchy changes, not goals/depth/onApply
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hierarchy, open]);
+  }, [hierarchy, open, goals, depth]);
 
   const toggleNode = useCallback((nodeId: string) => {
     setExpandedNodes((prev) => {
@@ -203,11 +188,9 @@ export function TopicHierarchyDialog({
 
   const handleUpdateName = useCallback((nodeId: string, newName: string) => {
     hasUserEdited.current = true;
-    // Find old name before updating, so we can rename records with that topic
     const oldNode = findNodeById(hierarchy, nodeId);
     const oldName = oldNode?.name;
     setHierarchy((prev) => updateNodeName(prev, nodeId, newName));
-    // Rename records that had the old topic name
     if (oldName && oldName !== newName && onRenameTopic) {
       onRenameTopic(oldName, newName);
     }
@@ -220,13 +203,11 @@ export function TopicHierarchyDialog({
       name: "New Topic",
     };
     setHierarchy((prev) => addChildToNode(prev, parentId, newChild));
-    // Expand the new node's ID so user can see it
     setExpandedNodes((prev) => new Set([...prev, newChild.id]));
   }, []);
 
   const handleDelete = useCallback((nodeId: string) => {
     hasUserEdited.current = true;
-    // Find the node being deleted to get all its leaf topic names
     const nodeToDelete = findNodeById(hierarchy, nodeId);
     if (nodeToDelete && onDeleteTopic) {
       const leafNames = getLeafNamesFromNode(nodeToDelete);
@@ -250,10 +231,8 @@ export function TopicHierarchyDialog({
     const generatedHierarchy = await onGenerate(goals, depth);
     if (generatedHierarchy.length > 0) {
       setHierarchy(generatedHierarchy);
-      // Expand all nodes
       const allIds = getAllNodeIds(generatedHierarchy);
       setExpandedNodes(new Set(allIds));
-      // Clear record topics since hierarchy changed
       if (onClearRecordTopics) {
         await onClearRecordTopics();
       }
@@ -265,175 +244,237 @@ export function TopicHierarchyDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-6xl h-[70vh] p-0 gap-0 flex flex-col"
+        className="max-w-6xl h-[80vh] p-0 gap-0 flex flex-col overflow-hidden"
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
-        {/* Header */}
-        <DialogHeader className="px-6 py-4 border-b border-border flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded bg-[rgb(var(--theme-500))]/10 flex items-center justify-center">
-              <Tag className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-            </div>
-            <DialogTitle className="text-lg">
-              Configure Topic Hierarchy
-            </DialogTitle>
-          </div>
-        </DialogHeader>
-
-        {/* Content */}
+        {/* Main content - two panel layout */}
         <div className="flex-1 flex overflow-hidden">
-          {/* Left panel - Configuration */}
-          <div className="w-1/2 p-6 border-r border-border flex flex-col gap-6 overflow-y-auto">
-            {/* Goals textarea */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Describe your dataset goals
-              </label>
-              <Textarea
-                value={goals}
-                onChange={(e) => setGoals(e.target.value)}
-                placeholder="e.g., Focus on technical support and error resolution. Highlight common error codes, troubleshooting steps, and customer sentiment for hardware failures..."
-                className="min-h-[120px] resize-none bg-muted/30 border-border/50"
-              />
-              <p className="text-xs text-muted-foreground">
-                The LLM uses this context to generate relevant topic categories.
-              </p>
-            </div>
-
-            {/* Depth slider */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">Hierarchy Depth</label>
-                <span className="text-sm font-medium px-2.5 py-0.5 rounded-full bg-[rgb(var(--theme-500))]/10 text-[rgb(var(--theme-500))]">
-                  {depth} Level{depth !== 1 ? "s" : ""}
-                </span>
-              </div>
-              <Slider
-                value={[depth]}
-                onValueChange={([value]) => setDepth(value)}
-                min={1}
-                max={5}
-                step={1}
-                className="[&_[role=slider]]:bg-[rgb(var(--theme-500))] [&_[role=slider]]:border-[rgb(var(--theme-500))] [&_.bg-primary]:bg-[rgb(var(--theme-500))]"
-              />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Flat (1)</span>
-                <span>Deep (5)</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Right panel - Live Preview */}
-          <div className="w-1/2 flex flex-col bg-muted/20">
-            {/* Preview header */}
-            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Hierarchy Preview
-              </span>
-              <div className="flex items-center gap-2">
-                {isGenerating && (
-                  <div className="flex items-center gap-2 text-xs text-[rgb(var(--theme-500))]">
-                    <div className="w-2 h-2 rounded-full bg-[rgb(var(--theme-500))] animate-pulse" />
-                    Processing...
-                  </div>
-                )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs gap-1"
-                  onClick={handleAddRootTopic}
-                >
-                  <Plus className="w-3 h-3" />
-                  Add Category
-                </Button>
+          {/* Left panel - Topic Hierarchy Tree */}
+          <div className="w-1/2 flex flex-col border-r border-border">
+            {/* Search input */}
+            <div className="p-4 border-b border-border">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search hierarchy..."
+                  className="pl-9 bg-muted/30 border-border/50"
+                />
               </div>
             </div>
 
             {/* Tree view */}
-            <div className="flex-1 overflow-y-auto p-2">
-              {hierarchy.length > 0 ? (
-                hierarchy.map((node) => (
-                  <TopicTreeNode
-                    key={node.id}
-                    node={node}
-                    level={0}
-                    maxDepth={depth}
-                    expandedNodes={expandedNodes}
-                    toggleNode={toggleNode}
-                    onUpdateName={handleUpdateName}
-                    onAddChild={handleAddChild}
-                    onDelete={handleDelete}
-                    topicCounts={topicCounts}
+            <div className="flex-1 overflow-y-auto p-4">
+              {filteredHierarchy.length > 0 ? (
+                <div className="space-y-1">
+                  {filteredHierarchy.map((node, index) => (
+                    <TopicTreeNode
+                      key={node.id}
+                      node={node}
+                      level={0}
+                      maxDepth={depth}
+                      expandedNodes={expandedNodes}
+                      toggleNode={toggleNode}
+                      onUpdateName={handleUpdateName}
+                      onAddChild={handleAddChild}
+                      onDelete={handleDelete}
+                      topicCounts={topicCounts}
+                      isLast={index === filteredHierarchy.length - 1}
+                    />
+                  ))}
+                </div>
+              ) : searchQuery ? (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                  <Search className="w-10 h-10 text-muted-foreground/30 mb-3" />
+                  <p className="text-sm">No topics match "{searchQuery}"</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                  <div className="w-16 h-16 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
+                    <Sparkles className="w-8 h-8 text-muted-foreground/40" />
+                  </div>
+                  <p className="text-sm font-medium">No hierarchy yet</p>
+                  <p className="text-xs mt-1 text-muted-foreground/70">Generate with AI or add topics manually</p>
+                </div>
+              )}
+            </div>
+
+            {/* Add root topic button */}
+            <div className="p-4 border-t border-border">
+              <button
+                onClick={handleAddRootTopic}
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Create Manual Root Topic
+              </button>
+            </div>
+          </div>
+
+          {/* Right panel - Smart Topic Generator */}
+          <div className="w-1/2 flex flex-col overflow-y-auto bg-muted/5">
+            <div className="p-6 space-y-5">
+              {/* Header */}
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
+                  <Sparkles className="w-4 h-4 text-emerald-500" />
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold">Smart Topic Generator</h2>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    Describe how you want to organize your dataset. The AI will analyze your LLM traces and propose a hierarchical structure.
+                  </p>
+                </div>
+              </div>
+
+              {/* Agent Instructions */}
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Agent Instructions
+                </label>
+                <Textarea
+                  value={goals}
+                  onChange={(e) => {
+                    hasUserEdited.current = true;
+                    setGoals(e.target.value);
+                  }}
+                  placeholder="e.g. Group these by chess strategy and openings. Create a nested structure for beginner vs advanced tactics based on Elo rating tags."
+                  className="min-h-[120px] resize-none bg-muted/30 border-border/50 text-sm"
+                />
+              </div>
+
+              {/* Parameters */}
+              <div className="space-y-3">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Parameters
+                </label>
+                <div className="p-4 rounded-lg border border-border bg-card">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm text-muted-foreground">MAX DEPTH</span>
+                    <span className="text-xs font-medium px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500">
+                      Level {depth}
+                    </span>
+                  </div>
+                  <Slider
+                    value={[depth]}
+                    onValueChange={([value]) => {
+                      hasUserEdited.current = true;
+                      setDepth(value);
+                    }}
+                    min={1}
+                    max={5}
+                    step={1}
+                    className="[&_[role=slider]]:bg-emerald-500 [&_[role=slider]]:border-emerald-500 [&_.bg-primary]:bg-emerald-500"
                   />
-                ))
-              ) : (
-                <EmptyHierarchyState />
-              )}
-            </div>
+                  <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                    <span>1</span>
+                    <span>2</span>
+                    <span>3</span>
+                    <span>4</span>
+                    <span>5</span>
+                  </div>
+                </div>
+              </div>
 
-            {/* Preview footer stats */}
-            <div className="px-4 py-3 border-t border-border">
-              <span className="text-xs text-muted-foreground">
-                {nodeCount} topic{nodeCount !== 1 ? "s" : ""} {recordCount > 0 && `· ${recordCount} records`}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer with action buttons */}
-        <div className="px-6 py-4 border-t border-border flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <Button
-              onClick={handleGenerate}
-              disabled={isGenerating}
-              variant="outline"
-              className="gap-2"
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Zap className="w-4 h-4" />
-                  Generate Hierarchy
-                </>
-              )}
-            </Button>
-            {recordsWithTopicsCount > 0 && !isGenerating && (
-              <span className="text-xs text-amber-600 flex items-center gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5" />
-                Will clear topics from {recordsWithTopicsCount} record{recordsWithTopicsCount !== 1 ? "s" : ""}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Auto-save status indicator */}
-            {saveStatus !== "idle" && (
-              <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                {saveStatus === "saving" ? (
+              {/* Generate button */}
+              <Button
+                onClick={handleGenerate}
+                disabled={isGenerating}
+                className="w-full h-10 bg-emerald-500 hover:bg-emerald-600 text-white gap-2 text-sm font-medium"
+              >
+                {isGenerating ? (
                   <>
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    Saving...
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Generating...
                   </>
                 ) : (
                   <>
-                    <Check className="w-3 h-3 text-green-500" />
-                    Saved
+                    <Sparkles className="w-4 h-4" />
+                    GENERATE WITH AI
                   </>
                 )}
-              </span>
-            )}
-            {onAutoTag && (
-              <AutoTagButton
-                onAutoTag={onAutoTag}
-                isAutoTagging={isAutoTagging}
-                progress={autoTagProgress}
-                disabled={hierarchy.length === 0 || recordCount === 0}
-              />
-            )}
+              </Button>
+
+              {/* Categorize Records section */}
+              <div className="space-y-2 pt-1">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Categorize Records
+                </label>
+
+                {/* Apply to Unlabeled Records */}
+                <button
+                  onClick={onAutoTag}
+                  disabled={hierarchy.length === 0 || recordCount === 0 || isAutoTagging || unlabeledPercent === 0}
+                  className="w-full p-3 rounded-lg border border-border bg-card hover:bg-muted/30 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed group"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium text-sm">Apply to Unlabeled Records</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {isAutoTagging && autoTagProgress ? (
+                          `Processing ${autoTagProgress.completed}/${autoTagProgress.total}...`
+                        ) : (
+                          `Map the remaining ${unlabeledPercent}% of unlabeled records to the new hierarchy structure.`
+                        )}
+                      </div>
+                    </div>
+                    {isAutoTagging ? (
+                      <Loader2 className="w-4 h-4 text-muted-foreground animate-spin flex-shrink-0" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors flex-shrink-0" />
+                    )}
+                  </div>
+                </button>
+
+                {/* Recategorize All Current Records */}
+                <button
+                  onClick={async () => {
+                    if (onClearRecordTopics) {
+                      await onClearRecordTopics();
+                    }
+                    if (onAutoTag) {
+                      await onAutoTag();
+                    }
+                  }}
+                  disabled={hierarchy.length === 0 || recordCount === 0 || isAutoTagging}
+                  className="w-full p-3 rounded-lg border border-border bg-card hover:bg-muted/30 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed group"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium text-sm">Recategorize All Current Records</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        Reset and re-assign all dataset records based on the updated categories and AI logic.
+                      </div>
+                    </div>
+                    <RefreshCw className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors flex-shrink-0" />
+                  </div>
+                </button>
+              </div>
+
+              {/* Status indicators */}
+              <div className="flex items-center justify-between text-xs text-muted-foreground pt-2">
+                <span>
+                  {nodeCount} topic{nodeCount !== 1 ? "s" : ""} {recordCount > 0 && `· ${recordCount} records`}
+                </span>
+                {saveStatus !== "idle" && (
+                  <span className="flex items-center gap-1.5">
+                    {saveStatus === "saving" ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3 h-3 text-green-500" />
+                        Saved
+                      </>
+                    )}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </DialogContent>

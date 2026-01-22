@@ -186,3 +186,152 @@ export function extractLeafTopicsFromHierarchy(
   }
   return leaves;
 }
+
+/**
+ * Flatten hierarchy to array with parent info for drag-and-drop
+ */
+export interface FlattenedNode {
+  node: TopicHierarchyNode;
+  parentId: string | null;
+  depth: number;
+  index: number;
+}
+
+export function flattenHierarchy(
+  nodes: TopicHierarchyNode[],
+  parentId: string | null = null,
+  depth: number = 0
+): FlattenedNode[] {
+  const result: FlattenedNode[] = [];
+  nodes.forEach((node, index) => {
+    result.push({ node, parentId, depth, index });
+    if (node.children) {
+      result.push(...flattenHierarchy(node.children, node.id, depth + 1));
+    }
+  });
+  return result;
+}
+
+/**
+ * Find parent ID of a node
+ */
+export function findParentId(
+  nodes: TopicHierarchyNode[],
+  nodeId: string,
+  parentId: string | null = null
+): string | null {
+  for (const node of nodes) {
+    if (node.id === nodeId) {
+      return parentId;
+    }
+    if (node.children) {
+      const found = findParentId(node.children, nodeId, node.id);
+      if (found !== undefined) return found;
+    }
+  }
+  return null;
+}
+
+/**
+ * Move a node to a new position in the hierarchy
+ */
+export function moveNode(
+  nodes: TopicHierarchyNode[],
+  activeId: string,
+  overId: string,
+  position: 'before' | 'after' | 'inside'
+): TopicHierarchyNode[] {
+  // Find and remove the active node
+  const activeNode = findNodeById(nodes, activeId);
+  if (!activeNode) return nodes;
+
+  // Remove node from its current position
+  let result = deleteNode(nodes, activeId);
+
+  // If dropping inside another node (as a child)
+  if (position === 'inside') {
+    return result.map((node) => {
+      if (node.id === overId) {
+        const children = node.children ? [...node.children, activeNode] : [activeNode];
+        return { ...node, children };
+      }
+      if (node.children) {
+        return { ...node, children: moveNode(node.children, activeId, overId, position) };
+      }
+      return node;
+    });
+  }
+
+  // If dropping before/after at the same level
+  const insertAtLevel = (
+    nodes: TopicHierarchyNode[],
+    targetId: string,
+    nodeToInsert: TopicHierarchyNode,
+    pos: 'before' | 'after'
+  ): TopicHierarchyNode[] => {
+    const newNodes: TopicHierarchyNode[] = [];
+    for (const node of nodes) {
+      if (node.id === targetId) {
+        if (pos === 'before') {
+          newNodes.push(nodeToInsert);
+          newNodes.push(node);
+        } else {
+          newNodes.push(node);
+          newNodes.push(nodeToInsert);
+        }
+      } else {
+        if (node.children) {
+          newNodes.push({
+            ...node,
+            children: insertAtLevel(node.children, targetId, nodeToInsert, pos),
+          });
+        } else {
+          newNodes.push(node);
+        }
+      }
+    }
+    return newNodes;
+  };
+
+  return insertAtLevel(result, overId, activeNode, position);
+}
+
+/**
+ * Reorder nodes at the same level (for simple sibling reordering)
+ */
+export function reorderSiblings(
+  nodes: TopicHierarchyNode[],
+  parentId: string | null,
+  activeId: string,
+  overId: string
+): TopicHierarchyNode[] {
+  if (parentId === null) {
+    // Reordering at root level
+    const activeIndex = nodes.findIndex((n) => n.id === activeId);
+    const overIndex = nodes.findIndex((n) => n.id === overId);
+    if (activeIndex === -1 || overIndex === -1) return nodes;
+
+    const newNodes = [...nodes];
+    const [removed] = newNodes.splice(activeIndex, 1);
+    newNodes.splice(overIndex, 0, removed);
+    return newNodes;
+  }
+
+  // Reordering within a parent
+  return nodes.map((node) => {
+    if (node.id === parentId && node.children) {
+      const activeIndex = node.children.findIndex((n) => n.id === activeId);
+      const overIndex = node.children.findIndex((n) => n.id === overId);
+      if (activeIndex === -1 || overIndex === -1) return node;
+
+      const newChildren = [...node.children];
+      const [removed] = newChildren.splice(activeIndex, 1);
+      newChildren.splice(overIndex, 0, removed);
+      return { ...node, children: newChildren };
+    }
+    if (node.children) {
+      return { ...node, children: reorderSiblings(node.children, parentId, activeId, overId) };
+    }
+    return node;
+  });
+}

@@ -26,6 +26,7 @@ interface DatasetsContextType {
   loadDatasets: () => Promise<void>;
   getDatasetWithRecords: (datasetId: string) => Promise<DatasetWithRecords | null>;
   getRecordCount: (datasetId: string) => Promise<number>;
+  getTopicCoverageStats: (datasetId: string) => Promise<{ total: number; withTopic: number }>;
   createDataset: (name: string) => Promise<Dataset>;
   addSpansToDataset: (datasetId: string, spans: Span[], topic?: string) => Promise<number>;
   importRecords: (datasetId: string, records: Array<{ data: unknown; topic?: string; evaluation?: DatasetEvaluation }>, defaultTopic?: string) => Promise<number>;
@@ -97,6 +98,16 @@ export function DatasetsProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error('Failed to get record count:', err);
       return 0;
+    }
+  }, []);
+
+  // Get topic coverage stats for a dataset
+  const getTopicCoverageStats = useCallback(async (datasetId: string): Promise<{ total: number; withTopic: number }> => {
+    try {
+      return await datasetsDB.getTopicCoverageStats(datasetId);
+    } catch (err) {
+      console.error('Failed to get topic coverage stats:', err);
+      return { total: 0, withTopic: 0 };
     }
   }, []);
 
@@ -259,6 +270,7 @@ export function DatasetsProvider({ children }: { children: ReactNode }) {
     loadDatasets,
     getDatasetWithRecords,
     getRecordCount,
+    getTopicCoverageStats,
     createDataset,
     addSpansToDataset,
     importRecords,
