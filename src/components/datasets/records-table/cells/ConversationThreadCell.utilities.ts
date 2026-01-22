@@ -25,7 +25,7 @@ function extractContent(content: unknown): string {
         if (typeof item === "string") return item;
         if (item?.text) return item.text;
         if (item?.content) return extractContent(item.content);
-        return "";
+        return JSON.stringify(item);
       })
       .filter(Boolean)
       .join(" ");
@@ -52,11 +52,13 @@ export function extractMessages(data: unknown): MessagePreview[] {
     for (const msg of dataInfo.input.messages) {
       if (msg && typeof msg === "object") {
         const role = (msg as Record<string, unknown>).role;
-        const content = (msg as Record<string, unknown>).content;
+        const content = (msg as Record<string, unknown>).content || msg.toolCalls;
         if (role && content !== undefined) {
+          let contentExtracted = extractContent(content);
+          
           messages.push({
             role: String(role),
-            content: extractContent(content),
+            content: contentExtracted,
           });
         }
       }
@@ -73,7 +75,8 @@ export function extractMessages(data: unknown): MessagePreview[] {
       if (msg && typeof msg === "object") {
         const msgObj = msg as Record<string, unknown>;
         const role = msgObj.role || "assistant";
-        const content = msgObj.content ?? msg;
+        const content = msgObj.content || msgObj.tool_calls || msg;
+       
         messages.push({
           role: String(role),
           content: extractContent(content),
