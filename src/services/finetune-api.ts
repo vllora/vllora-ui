@@ -169,14 +169,24 @@ export function datasetToJsonl(records: DatasetRecord[]): string {
 
 /**
  * Upload a dataset file (JSONL format) to the provider
+ * @param jsonlContent - JSONL content for training
+ * @param topicHierarchy - Optional topic hierarchy JSON string
  */
-export async function uploadDataset(jsonlContent: string): Promise<DatasetUploadResponse> {
+export async function uploadDataset(
+  jsonlContent: string,
+  topicHierarchy?: string
+): Promise<DatasetUploadResponse> {
   const apiUrl = getBackendUrl();
   const formData = new FormData();
 
   // Create a Blob from the JSONL content
   const blob = new Blob([jsonlContent], { type: 'application/x-ndjson' });
   formData.append('file', blob, 'training.jsonl');
+
+  // Add topic hierarchy if provided
+  if (topicHierarchy) {
+    formData.append('topicHierarchy', topicHierarchy);
+  }
 
   // Build headers
   const headers: Record<string, string> = {};
@@ -257,8 +267,13 @@ export async function uploadDatasetForFinetune(
     throw new Error('No valid training records found in dataset');
   }
 
-  // Upload dataset
-  const uploadResult = await uploadDataset(jsonlContent);
+  // Extract topic hierarchy if available
+  const topicHierarchy = dataset.topicHierarchy?.hierarchy
+    ? JSON.stringify(dataset.topicHierarchy.hierarchy)
+    : undefined;
+
+  // Upload dataset with topic hierarchy
+  const uploadResult = await uploadDataset(jsonlContent, topicHierarchy);
 
   return {
     backendDatasetId: uploadResult.dataset_id,
