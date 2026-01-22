@@ -671,14 +671,11 @@ async function simulateConversation(
   const persona = await ensurePersona(personaCache, topicKey, contextStr);
   const systemPrompt = seedSystemPrompt || `You are a helpful assistant specializing in ${topicStr}.`;
   const firstUserMsg = await generateFirstUserMessage(contextStr, persona, systemPrompt);
-  const toolInstruction = tools.length > 0
-    ? '\nYou have available tools where needed to complete the user\'s request.'
-    : '';
 
   const messages: SyntheticMessage[] = [
     {
       role: 'system',
-      content: systemPrompt + toolInstruction,
+      content: systemPrompt,
       tool_calls: null,
       tool_call_id: null,
     },
