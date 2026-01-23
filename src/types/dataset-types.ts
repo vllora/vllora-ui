@@ -52,24 +52,45 @@ export interface TopicHierarchyConfig {
   generatedAt?: number;
 }
 
-// LLM-as-a-Judge evaluation configuration
-export interface EvaluationConfig {
+// Evaluator type discriminator
+export type EvaluatorType = 'llm_as_judge' | 'js';
+
+// Base completion params shared by both evaluator types
+export interface CompletionParams {
+  model: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
+// LLM-as-a-Judge specific config
+export interface LlmAsJudgeConfig {
+  type: 'llm_as_judge';
   // Combined prompt template with evaluation instructions and variable placeholders
   promptTemplate: string;
   // JSON Schema for structured output
   outputSchema: string;
-  // Model to use for evaluation
-  model: string;
-  // Temperature for LLM inference (0-1)
-  temperature?: number;
-  // Max tokens for LLM response
-  maxTokens?: number;
+  // Completion parameters
+  completionParams: CompletionParams;
   // Timestamp when config was last updated
   updatedAt?: number;
 }
 
-// Backend evaluator format for upload
-export interface BackendEvaluator {
+// JavaScript evaluator specific config
+export interface JsEvaluatorConfig {
+  type: 'js';
+  // JavaScript code for evaluation
+  script: string;
+  // Completion parameters (for any LLM calls within the script)
+  completionParams: CompletionParams;
+  // Timestamp when config was last updated
+  updatedAt?: number;
+}
+
+// Union type for evaluation config
+export type EvaluationConfig = LlmAsJudgeConfig | JsEvaluatorConfig;
+
+// Backend evaluator format for upload - LLM as Judge
+export interface BackendLlmAsJudgeEvaluator {
   type: 'llm_as_judge';
   config: {
     prompt_template: string;
@@ -81,6 +102,22 @@ export interface BackendEvaluator {
     };
   };
 }
+
+// Backend evaluator format for upload - JavaScript
+export interface BackendJsEvaluator {
+  type: 'js';
+  config: {
+    script: string;
+    completion_params: {
+      model_name: string;
+      temperature?: number;
+      max_tokens?: number;
+    };
+  };
+}
+
+// Union type for backend evaluator
+export type BackendEvaluator = BackendLlmAsJudgeEvaluator | BackendJsEvaluator;
 
 // Stored in 'datasets' object store (metadata only, no records array)
 export interface Dataset {

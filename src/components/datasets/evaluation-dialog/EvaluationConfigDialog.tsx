@@ -1,8 +1,8 @@
 /**
  * EvaluationConfigDialog
  *
- * Dialog for configuring LLM-as-a-Judge evaluation settings.
- * Allows users to define system instructions and structured output schema.
+ * Dialog for configuring evaluation settings.
+ * Supports both LLM-as-a-Judge and JavaScript evaluator types.
  */
 
 import { useState, useEffect } from "react";
@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -27,10 +28,12 @@ import {
   Scale,
   CheckCircle2,
   Zap,
+  Code2,
 } from "lucide-react";
 import { JudgeInstructionsPanel } from "./JudgeInstructionsPanel";
 import { OutputSchemaPanel } from "./OutputSchemaPanel";
-import type { EvaluationConfig } from "@/types/dataset-types";
+import { JavaScriptPanel, DEFAULT_SCRIPT } from "./JavaScriptPanel";
+import type { EvaluationConfig, EvaluatorType } from "@/types/dataset-types";
 
 interface EvaluationConfigDialogProps {
   open: boolean;
@@ -98,48 +101,84 @@ export function EvaluationConfigDialog({
   config,
   onSave,
 }: EvaluationConfigDialogProps) {
+  // Evaluator type tab
+  const [evaluatorType, setEvaluatorType] = useState<EvaluatorType>("llm_as_judge");
+
+  // LLM Judge specific state
   const [promptTemplate, setPromptTemplate] = useState(DEFAULT_PROMPT_TEMPLATE);
   const [outputSchema, setOutputSchema] = useState(DEFAULT_OUTPUT_SCHEMA);
+  const [schemaError, setSchemaError] = useState<string | null>(null);
+
+  // JavaScript evaluator specific state
+  const [script, setScript] = useState(DEFAULT_SCRIPT);
+
+  // Shared completion params
   const [selectedModel, setSelectedModel] = useState("gpt-4o");
   const [temperature, setTemperature] = useState(0.0);
   const [maxTokens, setMaxTokens] = useState(2048);
+
+  // UI state
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
-  const [schemaError, setSchemaError] = useState<string | null>(null);
 
   // Initialize from config when dialog opens
   useEffect(() => {
     if (open && config) {
-      setPromptTemplate(config.promptTemplate || DEFAULT_PROMPT_TEMPLATE);
-      setOutputSchema(config.outputSchema || DEFAULT_OUTPUT_SCHEMA);
-      setSelectedModel(config.model || "gpt-4o");
-      setTemperature(config.temperature ?? 0.0);
-      setMaxTokens(config.maxTokens ?? 2048);
+      setEvaluatorType(config.type);
+      setSelectedModel(config.completionParams.model || "gpt-4o");
+      setTemperature(config.completionParams.temperature ?? 0.0);
+      setMaxTokens(config.completionParams.maxTokens ?? 2048);
+
+      if (config.type === "llm_as_judge") {
+        setPromptTemplate(config.promptTemplate || DEFAULT_PROMPT_TEMPLATE);
+        setOutputSchema(config.outputSchema || DEFAULT_OUTPUT_SCHEMA);
+      } else {
+        setScript(config.script || DEFAULT_SCRIPT);
+      }
     }
   }, [open, config]);
 
-  // Validate JSON schema
+  // Validate JSON schema (only for LLM Judge)
   useEffect(() => {
-    try {
-      JSON.parse(outputSchema);
+    if (evaluatorType === "llm_as_judge") {
+      try {
+        JSON.parse(outputSchema);
+        setSchemaError(null);
+      } catch (e) {
+        setSchemaError((e as Error).message);
+      }
+    } else {
       setSchemaError(null);
-    } catch (e) {
-      setSchemaError((e as Error).message);
     }
-  }, [outputSchema]);
+  }, [outputSchema, evaluatorType]);
 
   const handleSave = async () => {
-    if (schemaError) return;
+    if (evaluatorType === "llm_as_judge" && schemaError) return;
 
     setIsSaving(true);
     try {
-      await onSave({
-        promptTemplate,
-        outputSchema,
-        model: selectedModel,
-        temperature,
-        maxTokens,
-      });
+      if (evaluatorType === "llm_as_judge") {
+        await onSave({
+          type: "llm_as_judge",
+          promptTemplate,
+          outputSchema,
+          completionParams: {
+            model: selectedModel,
+            temperature,
+            maxTokens,
+          },
+        });
+      } else {
+        await onSave({
+          type: "js",
+          script,
+          completionParams: {
+            model: selectedModel,
+            temperature,
+            maxTokens,
+          },
+        });
+      }
       onOpenChange(false);
     } catch {
       // Error handled by parent
@@ -150,7 +189,7 @@ export function EvaluationConfigDialog({
 
   const handleTest = async () => {
     setIsTesting(true);
-    // Simulate test - in real implementation, this would call the LLM
+    // Simulate test - in real implementation, this would call the evaluator
     await new Promise((resolve) => setTimeout(resolve, 2000));
     setIsTesting(false);
   };
@@ -165,6 +204,7 @@ export function EvaluationConfigDialog({
   };
 
   const selectedModelInfo = AVAILABLE_MODELS.find((m) => m.value === selectedModel);
+  const hasError = evaluatorType === "llm_as_judge" && !!schemaError;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -178,28 +218,54 @@ export function EvaluationConfigDialog({
               </div>
               <div>
                 <DialogTitle className="text-xl font-semibold">
-                  LLM-as-a-Judge Configuration
+                  Evaluator Configuration
                 </DialogTitle>
                 <p className="text-sm text-muted-foreground mt-0.5">
-                  Define the system instructions and the structured output format for automated evaluation.
+                  Configure the evaluation function for scoring training samples.
                 </p>
               </div>
             </div>
+
+            {/* Evaluator Type Tabs */}
+            <Tabs
+              value={evaluatorType}
+              onValueChange={(v) => setEvaluatorType(v as EvaluatorType)}
+            >
+              <TabsList className="bg-muted/50">
+                <TabsTrigger value="llm_as_judge" className="gap-2">
+                  <Scale className="w-4 h-4" />
+                  LLM Judge
+                </TabsTrigger>
+                <TabsTrigger value="js" className="gap-2">
+                  <Code2 className="w-4 h-4" />
+                  JavaScript
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
         </DialogHeader>
 
-        {/* Main Content - Two Panel Layout */}
-        <div className="flex-1 grid grid-cols-2 divide-x divide-border overflow-hidden">
-          <JudgeInstructionsPanel
-            value={promptTemplate}
-            onChange={setPromptTemplate}
-          />
-          <OutputSchemaPanel
-            value={outputSchema}
-            onChange={setOutputSchema}
-            error={schemaError}
-            onPrettify={handlePrettify}
-          />
+        {/* Main Content */}
+        <div className="flex-1 overflow-hidden">
+          {evaluatorType === "llm_as_judge" ? (
+            <div className="h-full grid grid-cols-2 divide-x divide-border">
+              <JudgeInstructionsPanel
+                value={promptTemplate}
+                onChange={setPromptTemplate}
+              />
+              <OutputSchemaPanel
+                value={outputSchema}
+                onChange={setOutputSchema}
+                error={schemaError}
+                onPrettify={handlePrettify}
+              />
+            </div>
+          ) : (
+            <JavaScriptPanel
+              value={script}
+              onChange={setScript}
+            />
+          )}
         </div>
 
         {/* Footer */}
@@ -277,7 +343,7 @@ export function EvaluationConfigDialog({
               variant="outline"
               size="sm"
               onClick={handleTest}
-              disabled={isTesting || !!schemaError}
+              disabled={isTesting || hasError}
               className="gap-2"
             >
               {isTesting ? (
@@ -285,12 +351,12 @@ export function EvaluationConfigDialog({
               ) : (
                 <Scale className="w-4 h-4" />
               )}
-              Test Judge
+              Test Evaluator
             </Button>
             <Button
               size="sm"
               onClick={handleSave}
-              disabled={isSaving || !!schemaError}
+              disabled={isSaving || hasError}
               className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
             >
               {isSaving ? (
@@ -298,7 +364,7 @@ export function EvaluationConfigDialog({
               ) : (
                 <CheckCircle2 className="w-4 h-4" />
               )}
-              Save Judge Config
+              Save Config
             </Button>
           </div>
         </div>

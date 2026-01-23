@@ -48,28 +48,36 @@ Unlike a linear pipeline, users can perform actions in any order and repeat as n
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         DATASET ACTIONS (Repeatable)                    │
+│                    DATASET PREPARATION (All Repeatable)                 │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
-│   DATA PREPARATION:                                                     │
 │   ┌──────────────┐     ┌──────────────┐     ┌──────────────┐           │
 │   │   Sanitize   │ ←─→ │    Topics    │ ←─→ │  Categorize  │           │
 │   │    Data      │     │   & Coverage │     │   Records    │           │
 │   └──────────────┘     └──────────────┘     └──────────────┘           │
 │          ↑                    ↑                    ↑                    │
 │          │                    │                    │                    │
-│          └────────────────────┴────────────────────┘                    │
-│                               ↑                                         │
+│          └────────────────────┼────────────────────┘                    │
+│                               │                                         │
 │                      ┌──────────────┐                                   │
 │                      │   Generate   │                                   │
 │                      │   Samples    │                                   │
 │                      └──────────────┘                                   │
 │                               ↑                                         │
-│   VALIDATION:                 │                                         │
+│                               │                                         │
 │   ┌──────────────┐     ┌──────────────┐                                │
-│   │   Define     │ ←─→ │   Dry Run    │ ←── Test dataset + grader     │
+│   │   Define     │ ←─→ │   Dry Run    │                                │
 │   │   Grader     │     │              │                                │
 │   └──────────────┘     └──────────────┘                                │
+│          ↑                    │                                         │
+│          │                    │                                         │
+│          │         ┌─────────────────────┐                              │
+│          │         │  Dry Run reveals:   │                              │
+│          │         │  • Data quality     │───→ Adjust data (generate,  │
+│          └─────────│  • Grader quality   │     sanitize, edit records) │
+│                    └─────────────────────┘                              │
+│                              │                                          │
+│                              └───→ Adjust grader (tweak scoring)        │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
                                 ↓
@@ -87,6 +95,10 @@ Unlike a linear pipeline, users can perform actions in any order and repeat as n
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+**Key Insight:** Dry Run tests BOTH data and grader quality. Based on results, user can:
+- **If data issue:** Generate more samples, edit records, re-sanitize
+- **If grader issue:** Adjust grader configuration, change scoring weights
 
 ---
 
@@ -122,7 +134,17 @@ Unlike a linear pipeline, users can perform actions in any order and repeat as n
 5. Click [Dry Run] to check quality
 ```
 
-### Workflow 4: Iterate on Grader
+### Workflow 4: Expand from Good Records
+```
+1. Browse records → find high-quality examples
+2. Click [Generate Variations] on a good record
+3. Review generated variations → approve good ones
+4. Repeat for other good records
+5. Click [Sanitize Data] to validate new records
+6. Click [Dry Run] to check overall quality
+```
+
+### Workflow 5: Iterate on Grader
 ```
 1. Click [Dry Run] → see low scores
 2. Analyze: Is it dataset issue or grader issue?
@@ -131,13 +153,25 @@ Unlike a linear pipeline, users can perform actions in any order and repeat as n
 5. Repeat until satisfied
 ```
 
-### Workflow 5: Retrain with Updated Data
+### Workflow 6: Retrain with Updated Data
 ```
 1. Production data shows new patterns
 2. Upload new traces
 3. [Sanitize] → [Categorize] → maybe adjust topics
 4. [Dry Run] → verify quality
 5. Click [Start RFT] for new training run
+```
+
+### Workflow 7: Regenerate Topic Hierarchy
+```
+1. Current topics don't reflect data well
+2. Click [Manage Topics] → "Generate with AI"
+3. ⚠️ Warning: "9 records are labeled, regenerating will orphan them"
+4. Click [Regenerate & Clear Labels]
+5. New hierarchy generated
+6. Prompt: "9 records need recategorization"
+7. Click [Recategorize Now] → all records re-assigned
+8. Review coverage with new topics
 ```
 
 ---
@@ -155,6 +189,8 @@ Unlike a linear pipeline, users can perform actions in any order and repeat as n
 | E | Generate Samples | Manual button | Fill coverage gaps |
 | F | Define Grader | Manual button | Configure evaluation function |
 | G | Dry Run | Manual button | Test dataset + grader quality |
+
+> **Iteration Loop:** Dry Run results inform adjustments to BOTH data (A-E) and grader (F). Users typically iterate multiple times before training.
 
 ### Phase 2: RFT Training (Linear Flow)
 
@@ -372,65 +408,75 @@ Unlike a linear pipeline, users can perform actions in any order and repeat as n
 
 ### Action E — Generate Samples
 
-**Trigger:** `[Generate Samples]` button in Dataset Details  
+**Trigger:** Multiple entry points → **same unified modal**  
 **Can Repeat:** ✅ Yes - generate more anytime
 
-**Purpose:** Fill coverage gaps with LLM-generated records.
+**Purpose:** Generate variations to improve coverage.
 
-**When to Run:**
-- After identifying coverage gaps
-- After deleting bad generated records
-- To increase dataset size for specific topics
+---
 
-**User Configures:**
-- Target counts per topic (or accept recommended)
-- Generation method (few-shot from examples)
-- Quality settings
+#### Entry Points → Same Modal
 
-**Process:**
-1. For each under-represented topic:
-   - Sample existing records as examples
-   - Generate new records using LLM
-   - Validate generated records (structure + quality)
+| Entry Point | Location | Modal Default |
+|-------------|----------|---------------|
+| `[Generate to Fill Gaps]` | Coverage Dashboard | Auto-select mode |
+| `[Generate Variations]` | Single record row | Selected record |
+| `[Generate from Selected]` | Bulk selection | Selected records |
+
+**Key:** User can always switch between modes in the modal!
+
+---
+
+#### Unified Modal
+
+```
+┌─────────────────────────────────────────────┐
+│ Generate Variations                         │
+├─────────────────────────────────────────────┤
+│ SOURCE RECORDS:                             │
+│ ○ Auto-select from gaps                     │
+│   (calculations -1,400, tool_usage -200)    │
+│                                             │
+│ ● Use selected records (3)     ← can switch │
+│   rec_001, rec_005, rec_012                 │
+│   [Add more...]                             │
+│                                             │
+│ SETTINGS:                                   │
+│ Strategy: [Message variation ▼] ⭐          │
+│ Variations per record: [3]                  │
+│ Preserve intent: [✓]                        │
+│                                             │
+│ Preview: 3 records × 3 = ~9 variations     │
+│ Coverage: calculations (+6), tool_usage (+3)│
+│                                             │
+│              [Cancel] [Generate]            │
+└─────────────────────────────────────────────┘
+```
+
+---
+
+#### Review & Approve
+
+```
+┌─────────────────────────────────────────────┐
+│ Review Variations                           │
+├─────────────────────────────────────────────┤
+│ Generated: 9 from 3 sources                 │
+│                                             │
+│ FROM rec_001:                               │
+│ ☑ "Total interest on $250k at 5.5%?"       │
+│ ☑ "Payments for $400k, 15yr, 7%"           │
+│ ☐ "mortgage" ⚠️ too short                  │
+│                                             │
+│ Selected: 8/9                               │
+│                                             │
+│ [Regenerate]              [Add to Dataset]  │
+└─────────────────────────────────────────────┘
+```
+
+---
 
 **Creates:** New `DatasetRecord` with `is_generated: true`
-
-```
-┌─────────────────────────────────────────────┐
-│ Generate Samples                     [Run]  │
-├─────────────────────────────────────────────┤
-│ Topics to fill:                             │
-│ ☑ calculations    +1,500 (current: 892)     │
-│ ☑ tool_usage      +300   (current: 2,134)   │
-│ ☐ other           +0     (current: 1,100)   │
-│                                             │
-│ Total to generate: 1,800 records            │
-│                                             │
-│                    [Cancel] [Start Generation]│
-└─────────────────────────────────────────────┘
-```
-
-**During generation:**
-```
-┌─────────────────────────────────────────────┐
-│ Generating Samples...                       │
-├─────────────────────────────────────────────┤
-│ calculations:                               │
-│   Target: +1,500  Generated: 1,423          │
-│   ████████████████████ 95% valid            │
-│                                             │
-│ tool_usage:                                 │
-│   Target: +300   Generated: 285             │
-│   ██████████████████░░ 95% valid            │
-│                                             │
-│ Preview:                                    │
-│ ┌─────────────────────────────────────────┐ │
-│ │ "Calculate the compound interest on..." │ │
-│ └─────────────────────────────────────────┘ │
-│                                             │
-│ [Stop] [View Generated]                     │
-└─────────────────────────────────────────────┘
-```
 
 ---
 
@@ -544,14 +590,29 @@ Unlike a linear pipeline, users can perform actions in any order and repeat as n
 3. Score with configured grader
 4. Analyze distribution
 
-**Interpretation Guide:**
+### Quality Thresholds (Quick Reference)
 
-| Signal | Dataset Issue | Grader Issue |
-|--------|---------------|--------------|
-| Mean < 0.10 | Prompts too hard | Grader too strict |
-| Mean > 0.90 | Prompts too easy | Grader too lenient |
-| Std < 0.10 | - | Grader can't differentiate |
-| Bimodal (0 or 1) | - | Grader needs calibration |
+**Data Distribution (from Coverage):**
+| Balance Score | Status |
+|---------------|--------|
+| > 0.6 | ✅ Good to proceed |
+| 0.4 - 0.6 | ⚠️ Consider generating more |
+| < 0.4 | 🔴 Fix before training |
+
+**Score Distribution (from Dry Run):**
+| Metric | Target | Why |
+|--------|--------|-----|
+| Mean | 0.20 - 0.60 | Room for RFT to improve |
+| Std | > 0.15 | Grader differentiates outputs |
+
+**Diagnosis Matrix:**
+| Signal | Likely Cause | Fix |
+|--------|--------------|-----|
+| Mean < 0.15 | Data too hard OR grader strict | Review samples, relax grader or use SFT first |
+| Mean > 0.70 | Data too easy OR grader lenient | Add harder examples or tighten grader |
+| Std < 0.10 | Grader can't differentiate | Add more grader dimensions |
+
+> 📖 **See [07_Dry_Run_Validation.md](./07_Dry_Run_Validation.md)** for detailed quality assessment framework.
 
 **User Sees:**
 - Score histogram
@@ -735,10 +796,9 @@ When the user clicks `[Start RFT]`, they enter a linear wizard flow.
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                    DATASET DETAILS PAGE                                 │
-│                    (Repeatable Actions)                                 │
+│                    (All Actions Repeatable)                             │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
-│   DATA PREPARATION:                                                     │
 │   ┌──────────────┐                                                      │
 │   │  [Sanitize]  │ ←──── Run anytime: after upload, edit, generation   │
 │   └──────┬───────┘                                                      │
@@ -761,18 +821,19 @@ When the user clicks `[Start RFT]`, they enter a linear wizard flow.
 │   ┌──────────────┐                                                      │
 │   │  [Generate   │ ←──── Fill gaps with LLM-generated records          │
 │   │   Samples]   │                                                      │
-│   └──────────────┘                                                      │
-│                                                                         │
-│   VALIDATION:                                                           │
+│   └──────┬───────┘                                                      │
+│          ▼                                                              │
 │   ┌──────────────┐                                                      │
 │   │  [Define     │ ←──── Configure evaluation function                 │
 │   │   Grader]    │                                                      │
 │   └──────┬───────┘                                                      │
 │          ▼                                                              │
-│   ┌──────────────┐                                                      │
-│   │  [Dry Run]   │ ←──── Test dataset + grader quality                 │
-│   └──────────────┘                                                      │
-│                                                                         │
+│   ┌──────────────┐      ┌─────────────────────────────────────────┐    │
+│   │  [Dry Run]   │ ───→ │ Results inform:                         │    │
+│   └──────────────┘      │ • Data quality → adjust A-E             │    │
+│          ↑              │ • Grader quality → adjust Grader        │    │
+│          │              └─────────────────────────────────────────┘    │
+│          │                                                              │
 │   (User can repeat any action above until satisfied)                    │
 │                                                                         │
 │   ┌──────────────┐                                                      │

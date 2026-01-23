@@ -167,18 +167,32 @@ export function datasetToJsonl(records: DatasetRecord[]): string {
  * Convert FE EvaluationConfig to backend Evaluator format
  */
 export function evaluationConfigToBackendEvaluator(config: EvaluationConfig): BackendEvaluator {
-  return {
-    type: 'llm_as_judge',
-    config: {
-      prompt_template: config.promptTemplate,
-      output_schema: config.outputSchema,
-      completion_params: {
-        model_name: config.model,
-        temperature: config.temperature,
-        max_tokens: config.maxTokens,
+  if (config.type === 'llm_as_judge') {
+    return {
+      type: 'llm_as_judge',
+      config: {
+        prompt_template: config.promptTemplate,
+        output_schema: config.outputSchema,
+        completion_params: {
+          model_name: config.completionParams.model,
+          temperature: config.completionParams.temperature,
+          max_tokens: config.completionParams.maxTokens,
+        },
       },
-    },
-  };
+    };
+  } else {
+    return {
+      type: 'js',
+      config: {
+        script: config.script,
+        completion_params: {
+          model_name: config.completionParams.model,
+          temperature: config.completionParams.temperature,
+          max_tokens: config.completionParams.maxTokens,
+        },
+      },
+    };
+  }
 }
 
 // ============================================================================

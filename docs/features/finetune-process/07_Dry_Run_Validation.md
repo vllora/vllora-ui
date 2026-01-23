@@ -76,6 +76,151 @@ def run_dry_run(
 
 ---
 
+## Quality Assessment Framework
+
+Dry Run helps assess **two independent qualities** that both need to be good:
+
+### 1. Data Distribution Quality (from Coverage Dashboard)
+
+**Balance Score** measures how evenly distributed your records are across topics.
+
+| Balance Score | Rating | Meaning |
+|---------------|--------|---------|
+| **0.8 - 1.0** | ✅ Excellent | Topics are well-balanced |
+| **0.6 - 0.8** | ✅ Good | Minor imbalance, acceptable |
+| **0.4 - 0.6** | ⚠️ Fair | Noticeable gaps, consider generating more |
+| **0.2 - 0.4** | 🔴 Poor | Significant imbalance, needs attention |
+| **0.0 - 0.2** | 🔴 Critical | Severe imbalance, will hurt training |
+
+**How it's calculated:**
+```
+Balance Score = min(topic_percentages) / max(topic_percentages)
+```
+
+**Example:**
+- Topics at 25%, 25%, 25%, 25% → Balance = 1.0 (perfect)
+- Topics at 40%, 30%, 20%, 10% → Balance = 0.25 (poor)
+
+---
+
+### 2. Score Distribution Quality (from Dry Run)
+
+**What makes a "good" score distribution for RFT?**
+
+| Metric | Good Range | Why It Matters |
+|--------|------------|----------------|
+| **Mean** | 0.20 - 0.60 | Room for model to improve |
+| **Std** | > 0.15 | Grader can differentiate good vs bad |
+| **Min** | > 0.0 | Some tasks are solvable |
+| **Max** | < 1.0 | Not everything is trivially easy |
+
+**Why mean should be 0.2-0.6 (not higher)?**
+
+RFT learns by reinforcing good outputs and discouraging bad ones. If base model already scores 0.9+, there's little room to improve.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│              IDEAL ZONE FOR RFT                                 │
+│                                                                 │
+│  Too Hard    │    Sweet Spot     │    Too Easy                 │
+│  (SFT first) │    (RFT works)    │    (RFT won't help)         │
+│              │                   │                             │
+│  ◀──────────▶│◀─────────────────▶│◀──────────────────────────▶ │
+│  0.0    0.15 │ 0.20         0.60 │ 0.65                   1.0  │
+│              │                   │                             │
+│  Mean < 0.15 │  Mean 0.20-0.60   │  Mean > 0.65               │
+│  RFT fails   │  RFT learns well  │  RFT no signal             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 3. The Relationship: Data Quality vs Grader Quality
+
+**The critical insight:** Low scores could mean bad data OR bad grader. You need to diagnose which.
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    DIAGNOSTIC MATRIX                                    │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│                        GRADER QUALITY                                   │
+│                    ┌─────────────┬─────────────┐                        │
+│                    │   Good      │    Bad      │                        │
+│               ┌────┼─────────────┼─────────────┤                        │
+│               │    │ ✅ IDEAL    │ ⚠️ FIX      │                        │
+│    DATA   Good│    │             │ GRADER      │                        │
+│  QUALITY      │    │ Proceed to  │             │                        │
+│               │    │ training    │ Scores don't│                        │
+│               │    │             │ reflect     │                        │
+│               │    │             │ actual      │                        │
+│               │    │             │ quality     │                        │
+│               ├────┼─────────────┼─────────────┤                        │
+│               │    │ ⚠️ FIX      │ 🔴 FIX      │                        │
+│           Bad │    │ DATA        │ BOTH        │                        │
+│               │    │             │             │                        │
+│               │    │ Generate    │ Start with  │                        │
+│               │    │ more, or    │ grader,     │                        │
+│               │    │ use SFT     │ then data   │                        │
+│               └────┴─────────────┴─────────────┘                        │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 4. How to Diagnose: Data Issue or Grader Issue?
+
+**Step 1: Manually inspect samples**
+
+| Look At | If Good Outputs Score Low | If Bad Outputs Score High |
+|---------|---------------------------|---------------------------|
+| **Diagnosis** | Grader too strict | Grader too lenient |
+| **Fix** | Relax grader thresholds | Add stricter dimensions |
+
+**Step 2: Check per-topic breakdown**
+
+| Pattern | Diagnosis | Fix |
+|---------|-----------|-----|
+| One topic scores much lower | That topic is harder | SFT for that topic, or exclude |
+| All topics uniformly low | Grader issue OR base model weak | Try relaxing grader first |
+| Scores vary widely within topic | Good! Grader differentiates | Proceed |
+
+**Step 3: Test grader on known examples**
+
+```typescript
+// Create test cases with known quality
+const testCases = [
+  { input: "...", output: "perfect response", expectedScore: 0.9 },
+  { input: "...", output: "mediocre response", expectedScore: 0.5 },
+  { input: "...", output: "terrible response", expectedScore: 0.1 },
+];
+
+// If grader scores don't match expectations, fix grader
+for (const test of testCases) {
+  const actualScore = grader.evaluate(test.output);
+  console.log(`Expected: ${test.expectedScore}, Actual: ${actualScore}`);
+}
+```
+
+---
+
+### 5. Decision Checklist Before Training
+
+| Check | Threshold | Status |
+|-------|-----------|--------|
+| Balance Score | > 0.5 | ☐ |
+| Dry Run Mean | 0.20 - 0.60 | ☐ |
+| Dry Run Std | > 0.15 | ☐ |
+| Manual sample review | Scores match intuition | ☐ |
+| Per-topic variance | No topic < 0.10 mean | ☐ |
+
+**All checks pass?** → 🟢 GO - Proceed to training
+
+**Any check fails?** → 🔴 NO-GO - Diagnose and fix first
+
+---
+
 ## Interpreting Results
 
 ### Key Metrics

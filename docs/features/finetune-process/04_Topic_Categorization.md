@@ -181,12 +181,140 @@ const hierarchy: TopicHierarchy = {
 
 ---
 
+### Topic Regeneration Flow
+
+When user wants to regenerate topics after records are already labeled:
+
+```typescript
+interface RegenerationCheck {
+  hasLabeledRecords: boolean;
+  labeledCount: number;
+  totalRecords: number;
+}
+
+function checkBeforeRegeneration(records: DatasetRecord[]): RegenerationCheck {
+  const labeledRecords = records.filter(r => r.topic !== null && r.topic !== undefined);
+  
+  return {
+    hasLabeledRecords: labeledRecords.length > 0,
+    labeledCount: labeledRecords.length,
+    totalRecords: records.length,
+  };
+}
+
+// Called when user confirms regeneration
+async function regenerateTopicsWithWarning(
+  records: DatasetRecord[],
+  options: TopicGenerationOptions
+): Promise<{
+  newHierarchy: TopicHierarchy;
+  orphanedRecords: DatasetRecord[];
+}> {
+  // 1. Generate new topic hierarchy
+  const newHierarchy = await autoGenerateTopics(records, options);
+  
+  // 2. Find records with topics that no longer exist
+  const newTopicNames = Object.keys(newHierarchy.topics);
+  const orphanedRecords = records.filter(r => 
+    r.topic && !newTopicNames.includes(r.topic)
+  );
+  
+  // 3. Clear topic assignments for orphaned records
+  for (const record of orphanedRecords) {
+    record.topic = null;
+    record.metadata = {
+      ...record.metadata,
+      previousTopic: record.topic,  // Keep for reference
+      needsRecategorization: true,
+    };
+  }
+  
+  return { newHierarchy, orphanedRecords };
+}
+```
+
+#### Regeneration Decision Flow
+
+```
+User clicks "Generate with AI"
+           │
+           ▼
+┌─────────────────────────┐
+│ Check: Any labeled      │
+│ records exist?          │
+└───────────┬─────────────┘
+            │
+     ┌──────┴──────┐
+     │             │
+    Yes           No
+     │             │
+     ▼             ▼
+┌─────────┐   ┌─────────────┐
+│ Show    │   │ Generate    │
+│ Warning │   │ immediately │
+└────┬────┘   └─────────────┘
+     │
+     ▼
+┌─────────────────────────┐
+│ User confirms?          │
+└───────────┬─────────────┘
+            │
+     ┌──────┴──────┐
+     │             │
+   Cancel      Confirm
+     │             │
+     ▼             ▼
+  (done)    ┌─────────────────┐
+            │ 1. Generate new │
+            │    hierarchy    │
+            │ 2. Mark records │
+            │    as orphaned  │
+            │ 3. Prompt to    │
+            │    recategorize │
+            └─────────────────┘
+```
+
+---
+
 ## Step C — Categorize Records
 
 **Purpose:** Assign each record to a topic in the hierarchy.
 
 **Input:** Validated `DatasetRecord[]`, `TopicHierarchy`  
 **Output:** `DatasetRecord[]` with `topic` field populated
+
+### Two Categorization Modes
+
+| Mode | When to Use | What It Does |
+|------|-------------|--------------|
+| **Apply to Unlabeled** | After adding NEW records | Only categorizes records where `topic = null` |
+| **Recategorize All** | After regenerating hierarchy | Clears ALL topics, re-runs on everything |
+
+```typescript
+type CategorizationMode = 'unlabeled_only' | 'recategorize_all';
+
+async function categorizeWithMode(
+  records: DatasetRecord[],
+  hierarchy: TopicHierarchy,
+  mode: CategorizationMode
+): Promise<DatasetRecord[]> {
+  let recordsToProcess: DatasetRecord[];
+  
+  if (mode === 'unlabeled_only') {
+    // Only process records without a topic
+    recordsToProcess = records.filter(r => !r.topic);
+  } else {
+    // Clear all topics first, then process all
+    records.forEach(r => { r.topic = null; });
+    recordsToProcess = records;
+  }
+  
+  // Run categorization on selected records
+  const { categorized } = await categorizeRecords(recordsToProcess, hierarchy);
+  
+  return categorized;
+}
+```
 
 ### Classification Methods
 
@@ -376,6 +504,33 @@ interface CategorizationStats {
 
 **Input:** Categorized `DatasetRecord[]`  
 **Output:** `CoverageReport`
+
+### Understanding Balance Score
+
+The **Balance Score** (0.0 - 1.0) measures how evenly distributed your data is across topics.
+
+| Balance Score | Rating | Meaning | Action |
+|---------------|--------|---------|--------|
+| **0.8 - 1.0** | ✅ Excellent | Topics well-balanced | Ready for training |
+| **0.6 - 0.8** | ✅ Good | Minor imbalance | Acceptable, can proceed |
+| **0.4 - 0.6** | ⚠️ Fair | Noticeable gaps | Consider generating more |
+| **0.2 - 0.4** | 🔴 Poor | Significant imbalance | Generate samples to fill gaps |
+| **0.0 - 0.2** | 🔴 Critical | Severe imbalance | Must fix before training |
+
+**Formula:** `Balance Score = min(topic_count) / max(topic_count)`
+
+**Example interpretations:**
+
+```
+Topics: [2500, 2400, 2600, 2500]  →  Balance = 2400/2600 = 0.92 ✅ Excellent
+Topics: [3000, 1500, 2000, 1500]  →  Balance = 1500/3000 = 0.50 ⚠️ Fair  
+Topics: [5000,  500, 1000,  500]  →  Balance =  500/5000 = 0.10 🔴 Critical
+```
+
+**Why Balance Matters for RFT:**
+- Imbalanced data → Model learns some topics better than others
+- Under-represented topics → Model may not improve on those tasks
+- Target: Balance Score > 0.5 before training
 
 ### Coverage Analysis Code
 

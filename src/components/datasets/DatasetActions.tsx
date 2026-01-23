@@ -16,6 +16,7 @@ import {
 import { Download, Upload, Sparkles, Loader2, ListTree, AlertCircle, Scale, ShieldCheck, FlaskConical } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { EvaluationConfigDialog } from "./evaluation-dialog/EvaluationConfigDialog";
+import type { EvaluationConfig } from "@/types/dataset-types";
 
 export function DatasetActions() {
   const {
@@ -37,11 +38,7 @@ export function DatasetActions() {
   // Check if evaluation config exists
   const hasEvaluationConfig = !!dataset?.evaluationConfig;
 
-  const handleSaveEvaluationConfig = async (config: {
-    promptTemplate: string;
-    outputSchema: string;
-    model: string;
-  }) => {
+  const handleSaveEvaluationConfig = async (config: EvaluationConfig) => {
     // TODO: Save evaluation config to dataset
     console.log("Saving evaluation config:", config);
   };
