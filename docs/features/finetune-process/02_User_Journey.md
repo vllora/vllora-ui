@@ -602,21 +602,24 @@ Unlike a linear pipeline, users can perform actions in any order and repeat as n
 **Score Distribution (from Dry Run):**
 | Metric | Target | Why |
 |--------|--------|-----|
-| Mean | 0.20 - 0.60 | Room for RFT to improve |
-| Std | > 0.15 | Grader differentiates outputs |
+| Mean | 0.25 - 0.65 | Room for RFT to improve |
+| Std | 0.10 - 0.25 | Grader differentiates outputs |
+| % > 0 | > 10-20% | Base model can solve some tasks |
+| % = 1.0 | < 30-50% | Not everything is trivially easy |
 
 **Diagnosis Matrix:**
 | Signal | Likely Cause | Fix |
 |--------|--------------|-----|
-| Mean < 0.15 | Data too hard OR grader strict | Review samples, relax grader or use SFT first |
-| Mean > 0.70 | Data too easy OR grader lenient | Add harder examples or tighten grader |
+| Mean < 0.25 | Data too hard OR grader strict | Review samples, relax grader or use SFT first |
+| Mean > 0.65 | Data too easy OR grader lenient | Add harder examples or tighten grader |
 | Std < 0.10 | Grader can't differentiate | Add more grader dimensions |
 
 > 📖 **See [07_Dry_Run_Validation.md](./07_Dry_Run_Validation.md)** for detailed quality assessment framework.
 
 **User Sees:**
 - Score histogram
-- Statistics (mean, std, min, max)
+- Statistics (mean, std, percentiles)
+- % > 0 and % = 1.0 metrics
 - Breakdown by topic
 - Sample outputs with scores
 - Diagnosis and recommendations
@@ -635,7 +638,8 @@ Unlike a linear pipeline, users can perform actions in any order and repeat as n
 │ ██████████████████                          │
 │ 0.0  0.2  0.4  0.6  0.8  1.0               │
 │                                             │
-│ Mean: 0.42  Std: 0.21                       │
+│ Mean: 0.45  Std: 0.18                       │
+│ %>0: 86%   %=1.0: 7%                        │
 │                                             │
 │ ✓ Dataset quality: Good                     │
 │   Base model can partially solve tasks      │

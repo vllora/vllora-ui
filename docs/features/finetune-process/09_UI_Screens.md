@@ -430,10 +430,16 @@ When user clicks "Generate with AI" and records are already labeled:
 │ ██████████████████                          │
 │ 0.0  0.2  0.4  0.6  0.8  1.0               │
 │                                             │
-│ Mean: 0.42  Std: 0.21                       │
+│ Mean: 0.45  Std: 0.18                       │
+│ %>0: 86%   %=1.0: 7%                        │
 │                                             │
 │ ✓ Dataset quality: Good                     │
+│   Base model can partially solve tasks      │
+│                                             │
 │ ✓ Grader quality: Good                      │
+│   Scores differentiate outputs well         │
+│                                             │
+│ [View High Scores] [View Low Scores]        │
 │                                             │
 │        [View Samples] [Adjust Grader]       │
 └─────────────────────────────────────────────┘
@@ -447,16 +453,22 @@ When user clicks "Generate with AI" and records are already labeled:
 ├─────────────────────────────────────────────┤
 │ Tested: 300 samples                         │
 │                                             │
-│ Mean: 0.08  Std: 0.12                       │
+│ Score Distribution:                         │
+│ ████████████████████                        │
+│ ██████░░░░░░░░░░░░░░                        │
+│ 0.0  0.2  0.4  0.6  0.8  1.0               │
 │                                             │
-│ ⚠️ Problem: Scores too low                  │
+│ Mean: 0.08  Std: 0.09                       │
+│ %>0: 12%   %=1.0: 0%                        │
+│                                             │
+│ ⚠️ Problem Detected                         │
 │                                             │
 │ Likely causes:                              │
 │ 1. Dataset too hard for base model          │
 │ 2. Grader scoring too strictly              │
 │                                             │
 │ Recommended:                                │
-│ • Review sample outputs                     │
+│ • Review samples to determine the cause     │
 │ • If dataset issue: Use SFT first           │
 │ • If grader issue: Adjust configuration     │
 │                                             │
@@ -488,7 +500,7 @@ Triggered by clicking 🚀 icon in the icon bar. Opens as full-screen wizard.
 │ ☐ Include generated data in validation      │
 │                                             │
 │ Grader: Tool Usage (configured)             │
-│ Last Dry Run: Passed (mean: 0.42)           │
+│ Last Dry Run: Passed (mean: 0.45)           │
 │                                             │
 │              [← Cancel]  [Start Training →] │
 └─────────────────────────────────────────────┘
@@ -522,7 +534,7 @@ Triggered by clicking 🚀 icon in the icon bar. Opens as full-screen wizard.
 │ Training Complete ✅                  [3/3]  │
 ├─────────────────────────────────────────────┤
 │                                             │
-│ Overall: 0.42 → 0.67  (+60%)               │
+│ Overall: 0.45 → 0.67  (+49%)               │
 │                                             │
 │ By Topic:                                   │
 │   data_queries:  0.51 → 0.72  (+41%)       │

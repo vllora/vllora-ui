@@ -50,21 +50,21 @@ def run_dry_run(
 ) -> dict:
     # Sample prompts
     samples = random.sample(prompts, min(sample_size, len(prompts)))
-    
+
     results = []
     for prompt in samples:
         # Generate response
         response = generate(base_model, prompt["messages"])
-        
+
         # Score with grader
         score = evaluate(response, prompt, grader_config)
-        
+
         results.append({
             "prompt": prompt,
             "response": response,
             "score": score
         })
-    
+
     # Analyze
     scores = [r["score"] for r in results]
     return {
@@ -101,35 +101,59 @@ Balance Score = min(topic_percentages) / max(topic_percentages)
 - Topics at 25%, 25%, 25%, 25% → Balance = 1.0 (perfect)
 - Topics at 40%, 30%, 20%, 10% → Balance = 0.25 (poor)
 
+> Note: If a topic has 0 samples, Balance Score becomes 0.  
+> This is a quick heuristic to catch severe imbalance early.
+
 ---
 
 ### 2. Score Distribution Quality (from Dry Run)
 
-**What makes a "good" score distribution for RFT?**
+Dry Run produces a set of **reward scores** (usually normalized to **0.0 → 1.0**) for base-model outputs.
 
-| Metric | Good Range | Why It Matters |
-|--------|------------|----------------|
-| **Mean** | 0.20 - 0.60 | Room for model to improve |
-| **Std** | > 0.15 | Grader can differentiate good vs bad |
-| **Min** | > 0.0 | Some tasks are solvable |
-| **Max** | < 1.0 | Not everything is trivially easy |
+A “healthy” score distribution means:
+- the base model can solve **some** tasks (signal exists),
+- but not **all** tasks (room to improve),
+- and the grader produces **enough spread** to distinguish good vs bad outputs.
 
-**Why mean should be 0.2-0.6 (not higher)?**
+> ✅ **Important note:** In some dashboards you may see `_mean` metrics that refer to **token usage mean** (prompt/completion tokens) for model graders.  
+> In this document, **mean/std always refer to the reward score distribution** from Dry Run.
 
-RFT learns by reinforcing good outputs and discouraging bad ones. If base model already scores 0.9+, there's little room to improve.
+---
+
+#### What makes a "good" score distribution for RFT?
+
+Instead of relying on strict `min > 0` and `max < 1` (which can be misleading), use **distribution-based checks**.
+
+| Metric | Healthy Range (Reward 0..1) | Why It Matters |
+|--------|------------------------------|----------------|
+| **Mean** | **0.25 - 0.65** | Enough failures to learn, enough wins to guide learning |
+| **Std Dev** | **0.10 - 0.25** | Grader can differentiate outputs (not flat/noisy) |
+| **% Scores > 0** | **> 10 - 20%** | Base model can solve some tasks → learnable signal |
+| **% Scores = 1.0** | **< 30 - 50%** | Prevents "too easy" datasets or overly-lenient grading |
+| **Percentiles** | `p10 < p50 < p90` with visible gaps | Confirms useful spread across easy/medium/hard cases |
+
+✅ A common “good shape” looks like:
+- some 0.0-0.2 (hard/failed)
+- many 0.3-0.7 (learnable)
+- some 0.8-1.0 (easy/high quality)
+
+---
+
+#### Why mean should be in the middle (not too high)
+
+RFT improves the model by reinforcing higher-reward outputs.  
+If the base model already scores near **0.9+**, there’s little improvement signal left.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│              IDEAL ZONE FOR RFT                                 │
+│                      IDEAL ZONE FOR RFT                          │
 │                                                                 │
-│  Too Hard    │    Sweet Spot     │    Too Easy                 │
-│  (SFT first) │    (RFT works)    │    (RFT won't help)         │
-│              │                   │                             │
-│  ◀──────────▶│◀─────────────────▶│◀──────────────────────────▶ │
-│  0.0    0.15 │ 0.20         0.60 │ 0.65                   1.0  │
-│              │                   │                             │
-│  Mean < 0.15 │  Mean 0.20-0.60   │  Mean > 0.65               │
-│  RFT fails   │  RFT learns well  │  RFT no signal             │
+│  Too Hard          Sweet Spot                 Too Easy           │
+│  (SFT first)       (RFT works best)           (RFT low signal)   │
+│                                                                 │
+│  0.0     0.15      0.25                0.65     0.85        1.0  │
+│   │───────│──────────│──────────────────│────────│──────────│   │
+│           Mean too low        ✅ best            Mean too high   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -208,12 +232,14 @@ for (const test of testCases) {
 ### 5. Decision Checklist Before Training
 
 | Check | Threshold | Status |
-|-------|-----------|--------|
+|------|-----------|--------|
 | Balance Score | > 0.5 | ☐ |
-| Dry Run Mean | 0.20 - 0.60 | ☐ |
-| Dry Run Std | > 0.15 | ☐ |
+| Dry Run Mean | 0.25 - 0.65 | ☐ |
+| Dry Run Std | 0.10 - 0.25 | ☐ |
+| % Scores > 0 | > 10 - 20% | ☐ |
+| % Scores = 1.0 | < 30 - 50% | ☐ |
 | Manual sample review | Scores match intuition | ☐ |
-| Per-topic variance | No topic < 0.10 mean | ☐ |
+| Per-topic breakdown | No topic mean < 0.15 | ☐ |
 
 **All checks pass?** → 🟢 GO - Proceed to training
 
@@ -225,12 +251,20 @@ for (const test of testCases) {
 
 ### Key Metrics
 
-| Metric | Healthy Range | Meaning |
-|--------|---------------|---------|
-| Mean | 0.20 - 0.80 | Average performance |
-| Std | > 0.15 | Grader differentiates outputs |
-| Min | > 0.0 | Some tasks are solvable |
-| Max | < 1.0 | Room for improvement |
+Use these metrics to interpret the Dry Run outcome:
+
+| Metric | Healthy Range (Reward 0..1) | Meaning |
+|--------|------------------------------|---------|
+| Mean | 0.25 - 0.65 | Average base model performance with room to improve |
+| Std | 0.10 - 0.25 | Grader distinguishes outputs meaningfully |
+| p10 / p50 / p90 | separated by visible gaps | Confirms tasks span hard → medium → easy |
+| % > 0 | > 10 - 20% | Confirms learnability (some success exists) |
+| % = 1.0 | < 30 - 50% | Avoids "everything already perfect" |
+
+> ⚠️ `min == 0` or `max == 1` is **not automatically bad**.  
+> It’s normal to have a few perfect or failed cases — the *percentage* is what matters.
+
+---
 
 ### Score Distribution Patterns
 
@@ -244,13 +278,14 @@ Score Distribution:
 ██████████████████
 0.0  0.2  0.4  0.6  0.8  1.0
 
-Mean: 0.42  Std: 0.21
+Mean: 0.45  Std: 0.18
+%>0: 85%   %=1.0: 8%
 ```
-- Bell-shaped curve
-- Mean in middle range
-- Good variance
+- Mid-range hump (learnable)
+- Visible spread across difficulty levels
+- Base model partially succeeds
 
-#### ⚠️ Mean Too Low (Dataset Issue OR Grader Too Strict)
+#### ⚠️ Mean Too Low (Dataset too hard OR Grader too strict)
 ```
 Score Distribution:
 ████████████████████
@@ -258,16 +293,17 @@ Score Distribution:
 ██░░░░░░░░░░░░░░░░░░
 0.0  0.2  0.4  0.6  0.8  1.0
 
-Mean: 0.08  Std: 0.12
+Mean: 0.08  Std: 0.09
+%>0: 12%   %=1.0: 0%
 ```
 
 **Possible causes:**
-1. **Dataset issue:** Prompts are too hard for base model
+1. **Dataset too hard:** Base model can't perform tasks
    - Solution: Use SFT first to bootstrap capability
-2. **Grader issue:** Scoring criteria too strict
-   - Solution: Relax grader thresholds
+2. **Grader too strict:** Valid outputs marked as failures
+   - Solution: Relax thresholds / allow partial credit
 
-#### ⚠️ Mean Too High (Dataset Issue OR Grader Too Lenient)
+#### ⚠️ Mean Too High (Dataset too easy OR Grader too lenient)
 ```
 Score Distribution:
 ░░░░░░░░░░░░░░░░░░██
@@ -275,30 +311,31 @@ Score Distribution:
 ░░░░░░░░░░████████████
 0.0  0.2  0.4  0.6  0.8  1.0
 
-Mean: 0.91  Std: 0.08
+Mean: 0.92  Std: 0.06
+%>0: 99%   %=1.0: 78%
 ```
 
 **Possible causes:**
-1. **Dataset issue:** Tasks are too easy, model already good
-   - Solution: RFT may not help, consider harder tasks
-2. **Grader issue:** Scoring criteria too lenient
-   - Solution: Add stricter dimensions
+1. **Dataset too easy:** Model already solves tasks
+   - Solution: RFT may not help, add harder tasks/examples
+2. **Grader too lenient:** Scoring criteria too permissive
+   - Solution: Add stricter dimensions (correctness, constraints, evidence)
 
-#### ⚠️ Low Variance (Grader Issue)
+#### ⚠️ Low Variance / Flat Scores (Grader Issue)
 ```
 Score Distribution:
-░░░░░░░░████████░░░░░░
-░░░░░░██████████████░░
-░░░░████████████████░░
+░░░░░░████████░░░░░░
+░░░░██████████████░░
+░░████████████████░░
 0.0  0.2  0.4  0.6  0.8  1.0
 
-Mean: 0.50  Std: 0.08
+Mean: 0.52  Std: 0.06
 ```
 
 **Cause:** Grader doesn't differentiate good from bad
-- Solution: Add more discriminating dimensions
+- Solution: Add more discriminating dimensions (partial credit, step-based scoring)
 
-#### ⚠️ Bimodal (Grader Calibration Issue)
+#### ⚠️ Bimodal (Binary scoring / Hard thresholds)
 ```
 Score Distribution:
 ████████░░░░░░████████
@@ -310,7 +347,11 @@ Mean: 0.50  Std: 0.35
 ```
 
 **Cause:** Grader is binary (pass/fail) instead of gradient
-- Solution: Add partial credit dimensions
+- Solution: Break reward into components and combine into a smooth score:
+  - format correctness (0/1)
+  - content correctness (0..1)
+  - completeness (0..1)
+  - constraint adherence (0/1)
 
 ---
 
@@ -321,44 +362,47 @@ Mean: 0.50  Std: 0.35
                     │  Run Dry Run    │
                     └────────┬────────┘
                              │
-                    ┌────────▼────────┐
-                    │   Mean < 0.10?  │
-                    └────────┬────────┘
+                    ┌────────▼───────────────┐
+                    │ Mean outside 0.25-0.65 │
+                    └────────┬───────────────┘
                              │
               ┌──────────────┼──────────────┐
               │ Yes          │              │ No
               ▼              │              ▼
-    ┌─────────────────┐      │    ┌─────────────────┐
-    │ Dataset too hard│      │    │   Mean > 0.90?  │
-    │   OR            │      │    └────────┬────────┘
-    │ Grader too strict│     │             │
-    └─────────────────┘      │  ┌──────────┼──────────┐
-              │              │  │ Yes      │          │ No
-              ▼              │  ▼          │          ▼
-    ┌─────────────────┐      │  ┌─────────────────┐  ┌─────────────────┐
-    │ Try: Review     │      │  │ Dataset too easy│  │   Std < 0.10?   │
-    │ grader config   │      │  │   OR            │  └────────┬────────┘
-    │ If still low:   │      │  │ Grader lenient  │           │
-    │ Use SFT first   │      │  └─────────────────┘  ┌────────┼────────┐
-    └─────────────────┘      │           │           │ Yes    │        │ No
-                             │           ▼           ▼        │        ▼
-                             │  ┌─────────────────┐  ┌─────────────────┐
-                             │  │ RFT may not help│  │ Grader can't    │
-                             │  │ Model is good   │  │ differentiate   │
-                             │  └─────────────────┘  └─────────────────┘
-                             │                                │
-                             │                                ▼
-                             │                       ┌─────────────────┐
-                             │                       │ Add more grader │
-                             │                       │ dimensions      │
-                             │                       └─────────────────┘
+    ┌───────────────────────┐│     ┌───────────────────────┐
+    │ Mean too low (<0.25)  ││     │ Mean too high (>0.65) │
+    └──────────┬────────────┘│     └──────────┬────────────┘
+               │             │                │
+               ▼             │                ▼
+    ┌───────────────────────┐│     ┌────────────────────────────┐
+    │ Check %>0 and samples  ││     │ Check %=1.0 and samples    │
+    │ - %>0 too small?       ││     │ - %=1.0 too large?         │
+    │ - Good outputs low?    ││     │ - Bad outputs high?        │
+    └──────────┬────────────┘│     └──────────┬─────────────────┘
+               │             │                │
+   ┌───────────┴───────────┐ │   ┌────────────┴─────────────┐
+   │ Dataset too hard OR    │ │   │ Dataset too easy OR      │
+   │ grader too strict      │ │   │ grader too lenient       │
+   └───────────┬───────────┘ │   └────────────┬─────────────┘
+               │             │                │
+               ▼             │                ▼
+    ┌───────────────────────┐│     ┌────────────────────────────┐
+    │ Fix grader first       ││     │ Tighten grader / add harder │
+    │ If still low: use SFT  ││     │ examples (RFT may not help) │
+    └───────────────────────┘│     └────────────────────────────┘
                              │
                              ▼
-                    ┌─────────────────┐
-                    │    🟢 GO        │
-                    │ Proceed to      │
-                    │ training        │
-                    └─────────────────┘
+                 ┌───────────────────────────┐
+                 │ Std too low (<0.10)?      │
+                 └──────────┬────────────────┘
+                            │
+                ┌───────────┼───────────┐
+                │ Yes       │           │ No
+                ▼           │           ▼
+      ┌───────────────────┐ │  ┌───────────────────┐
+      │ Grader too flat    │ │  │ 🟢 GO             │
+      │ Add more dimensions│ │  │ Proceed to train  │
+      └───────────────────┘ │  └───────────────────┘
 ```
 
 ---
@@ -393,7 +437,7 @@ Always manually review:
 | 5 highest scores | Are they actually good? (detect reward hacking) |
 | 5 lowest scores | Are they actually bad? (detect over-strict grader) |
 | 5 around mean | Typical performance |
-| Edge cases (0.5) | Grader boundary behavior |
+| Edge cases (0.4-0.6) | Grader boundary behavior |
 
 ---
 
@@ -404,22 +448,24 @@ Always manually review:
   "timestamp": "2025-01-22T13:00:00Z",
   "samples_evaluated": 300,
   "statistics": {
-    "mean": 0.42,
-    "std": 0.21,
-    "min": 0.0,
-    "max": 0.95,
-    "median": 0.40,
+    "mean": 0.45,
+    "std": 0.18,
+    "median": 0.44,
     "percentiles": {
-      "p10": 0.15,
-      "p25": 0.28,
-      "p75": 0.55,
-      "p90": 0.72
+      "p10": 0.18,
+      "p25": 0.32,
+      "p75": 0.58,
+      "p90": 0.73
+    },
+    "score_fractions": {
+      "gt_0": 0.86,
+      "eq_1": 0.07
     }
   },
   "distribution": {
-    "0.0-0.2": 0.15,
-    "0.2-0.4": 0.30,
-    "0.4-0.6": 0.35,
+    "0.0-0.2": 0.18,
+    "0.2-0.4": 0.28,
+    "0.4-0.6": 0.34,
     "0.6-0.8": 0.15,
     "0.8-1.0": 0.05
   },
@@ -459,7 +505,8 @@ Always manually review:
 │ ██████████████████                          │
 │ 0.0  0.2  0.4  0.6  0.8  1.0               │
 │                                             │
-│ Mean: 0.42  Std: 0.21                       │
+│ Mean: 0.45  Std: 0.18                       │
+│ %>0: 86%   %=1.0: 7%                        │
 │                                             │
 │ ✓ Dataset quality: Good                     │
 │   Base model can partially solve tasks      │
@@ -486,7 +533,8 @@ Always manually review:
 │ ██████░░░░░░░░░░░░░░                        │
 │ 0.0  0.2  0.4  0.6  0.8  1.0               │
 │                                             │
-│ Mean: 0.08  Std: 0.12                       │
+│ Mean: 0.08  Std: 0.09                       │
+│ %>0: 12%   %=1.0: 0%                        │
 │                                             │
 │ ⚠️ Problem Detected                         │
 │                                             │
@@ -498,8 +546,8 @@ Always manually review:
 │    → Valid outputs marked as failures       │
 │                                             │
 │ Recommended actions:                        │
-│ • Review sample outputs to determine cause  │
-│ • If dataset issue: Use SFT fine-tuning     │
+│ • Review samples to determine the cause     │
+│ • If dataset issue: Use SFT to bootstrap    │
 │ • If grader issue: Adjust grader config     │
 │                                             │
 │ [Review Samples] [Adjust Grader] [Try SFT]  │
