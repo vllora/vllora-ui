@@ -25,6 +25,7 @@ import { DistriProvider } from "./providers/DistriProvider"
 import { AgentPanelWrapper } from "./components/agent"
 import { AgentPanelProvider } from "./contexts/AgentPanelContext"
 import { DatasetsProvider } from "./contexts/DatasetsContext"
+import { FinetuneProvider, DatasetsListPage, CreateDatasetPage, DatasetCanvasPage } from "./components/finetune"
 
 // Lazy load the models page
 const ModelsPage = lazy(() => import("./pages/models").then(module => ({ default: module.ModelsPage })))
@@ -94,6 +95,11 @@ function App() {
                 <Route path="projects" element={<ProjectsPage />} />
                 <Route path="datasets" element={<DatasetsPage />} />
                 <Route path="settings" element={<SettingsPage />} />
+
+                {/* Optimization/Finetune routes */}
+                <Route path="optimization" element={<FinetuneProvider><DatasetsListPage /></FinetuneProvider>} />
+                <Route path="optimization/new" element={<FinetuneProvider><CreateDatasetPage /></FinetuneProvider>} />
+                <Route path="optimization/:id" element={<FinetuneProvider><DatasetCanvasPage /></FinetuneProvider>} />
               </Route>
             </Routes>
             <Toaster position="top-right" richColors />
