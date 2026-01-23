@@ -60,8 +60,26 @@ export interface EvaluationConfig {
   outputSchema: string;
   // Model to use for evaluation
   model: string;
+  // Temperature for LLM inference (0-1)
+  temperature?: number;
+  // Max tokens for LLM response
+  maxTokens?: number;
   // Timestamp when config was last updated
   updatedAt?: number;
+}
+
+// Backend evaluator format for upload
+export interface BackendEvaluator {
+  type: 'llm_as_judge';
+  config: {
+    prompt_template: string;
+    output_schema: string;
+    completion_params: {
+      model_name: string;
+      temperature?: number;
+      max_tokens?: number;
+    };
+  };
 }
 
 // Stored in 'datasets' object store (metadata only, no records array)

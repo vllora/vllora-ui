@@ -1,6 +1,6 @@
 import { apiClient, handleApiResponse, getAuthToken } from "@/lib/api-client";
 import { getBackendUrl } from "@/config/api";
-import { DatasetWithRecords, DatasetRecord, DataInfo } from "@/types/dataset-types";
+import { DatasetWithRecords, DatasetRecord, DataInfo, EvaluationConfig, BackendEvaluator } from "@/types/dataset-types";
 
 // ============================================================================
 // Types
@@ -163,6 +163,24 @@ export function datasetToJsonl(records: DatasetRecord[]): string {
   return lines.join('\n');
 }
 
+/**
+ * Convert FE EvaluationConfig to backend Evaluator format
+ */
+export function evaluationConfigToBackendEvaluator(config: EvaluationConfig): BackendEvaluator {
+  return {
+    type: 'llm_as_judge',
+    config: {
+      prompt_template: config.promptTemplate,
+      output_schema: config.outputSchema,
+      completion_params: {
+        model_name: config.model,
+        temperature: config.temperature,
+        max_tokens: config.maxTokens,
+      },
+    },
+  };
+}
+
 // ============================================================================
 // API Functions
 // ============================================================================
@@ -171,10 +189,12 @@ export function datasetToJsonl(records: DatasetRecord[]): string {
  * Upload a dataset file (JSONL format) to the provider
  * @param jsonlContent - JSONL content for training
  * @param topicHierarchy - Optional topic hierarchy JSON string
+ * @param evaluator - Optional evaluator config JSON string
  */
 export async function uploadDataset(
   jsonlContent: string,
-  topicHierarchy?: string
+  topicHierarchy?: string,
+  evaluator?: string
 ): Promise<DatasetUploadResponse> {
   const apiUrl = getBackendUrl();
   const formData = new FormData();
@@ -185,7 +205,12 @@ export async function uploadDataset(
 
   // Add topic hierarchy if provided
   if (topicHierarchy) {
-    formData.append('topicHierarchy', topicHierarchy);
+    formData.append('topic_hierarchy', topicHierarchy);
+  }
+
+  // Add evaluator if provided
+  if (evaluator) {
+    formData.append('evaluator', evaluator);
   }
 
   // Build headers
@@ -272,8 +297,13 @@ export async function uploadDatasetForFinetune(
     ? JSON.stringify(dataset.topicHierarchy.hierarchy)
     : undefined;
 
-  // Upload dataset with topic hierarchy
-  const uploadResult = await uploadDataset(jsonlContent, topicHierarchy);
+  // Extract evaluator config if available
+  const evaluator = dataset.evaluationConfig
+    ? JSON.stringify(evaluationConfigToBackendEvaluator(dataset.evaluationConfig))
+    : undefined;
+
+  // Upload dataset with topic hierarchy and evaluator
+  const uploadResult = await uploadDataset(jsonlContent, topicHierarchy, evaluator);
 
   return {
     backendDatasetId: uploadResult.dataset_id,
