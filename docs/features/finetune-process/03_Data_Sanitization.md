@@ -4,12 +4,40 @@
 
 ---
 
-## Step A — Sanitize Data
+## Overview: Automatic Validation
 
-**Purpose:** Clean raw records and remove malformed data BEFORE investing time in categorization.
+Data sanitization is **NOT a pipeline step**. It runs **automatically** in the background whenever data changes.
+
+**Triggers:**
+- Initial dataset creation (from traces or upload)
+- Importing/appending records
+- Generating synthetic data
+- Editing records
+
+**Results shown in:** Health Indicator bar (always visible on canvas)
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ ✓ 1,008 valid records    ⚠ 34 invalid (3%)            [View Issues]   │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Invalid records are:**
+- Excluded from training
+- Kept in database for review/fixing
+- Viewable via "View Issues" button
+
+---
+
+## Purpose
+
+Validate records and identify malformed data that would cause issues in:
+- Topic categorization (can't classify broken data)
+- Grader execution (malformed data crashes graders)
+- Training (noisy data = noisy training signal)
 
 **Input:** `DatasetRecord[]` (records with `DataInfo` payload)  
-**Output:** Validated `DatasetRecord[]`, `HygieneReport`
+**Output:** Validated `DatasetRecord[]` with `valid` flag set
 
 ---
 
@@ -25,6 +53,8 @@ export interface DatasetRecord {
   spanId?: string;
   topic?: string;
   is_generated?: boolean;
+  is_valid?: boolean;          // Set by validation
+  validation_error?: string;   // Rejection reason if invalid
   evaluation?: DatasetEvaluation;
   createdAt: number;
   updatedAt: number;
@@ -72,12 +102,12 @@ interface Tool {
 
 ---
 
-## Why Sanitize First?
+## Why Validate?
 
-1. **Avoid wasted effort** - Don't categorize broken records
-2. **Grader compatibility** - Malformed data crashes graders
-3. **Training quality** - Noisy data = noisy training signal
-4. **Cost savings** - Don't pay to process invalid records
+1. **Avoid wasted effort** — Don't categorize broken records
+2. **Grader compatibility** — Malformed data crashes graders
+3. **Training quality** — Noisy data = noisy training signal
+4. **Cost savings** — Don't pay to process invalid records
 
 ---
 

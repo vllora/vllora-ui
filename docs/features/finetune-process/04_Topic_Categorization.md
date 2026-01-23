@@ -6,10 +6,13 @@
 
 ## Overview
 
-This module covers three steps:
-- **Step B:** Define Topic Hierarchy
-- **Step C:** Categorize Records
-- **Step D:** Review Coverage Distribution
+This module covers **Step 2: Topics & Categorization** — a combined step that handles:
+- Define topic hierarchy (taxonomy)
+- Assign topics to records (categorization)
+
+**Step 3: Review Coverage** is covered in [05_Coverage_Generation.md](./05_Coverage_Generation.md).
+
+All actions within Step 2 are **re-triggerable** from the canvas at any time.
 
 ---
 
@@ -58,7 +61,15 @@ interface TopicDistribution {
 
 ---
 
-## Step B — Define Topic Hierarchy
+## Step 2 — Topics & Categorization
+
+This combined step has two phases that run together:
+1. **Define Topics** — Create the taxonomy
+2. **Categorize Records** — Assign topics (auto-runs after topics defined)
+
+---
+
+### Phase 1: Define Topics
 
 **Purpose:** Create the taxonomy for categorizing records.
 
@@ -276,7 +287,7 @@ User clicks "Generate with AI"
 
 ---
 
-## Step C — Categorize Records
+### Phase 2: Categorize Records
 
 **Purpose:** Assign each record to a topic in the hierarchy.
 
@@ -498,7 +509,9 @@ interface CategorizationStats {
 
 ---
 
-## Step D — Review Coverage Distribution
+## Coverage Analysis (Leads into Step 3)
+
+> **Note:** Coverage analysis is fully handled in **Step 3: Review Coverage**. This section provides background on the metrics used.
 
 **Purpose:** Understand current dataset composition before deciding what to generate.
 
@@ -672,7 +685,7 @@ const report: CoverageReport = {
 
 ## UI Mockups
 
-### Step B: Topic Definition
+### Step 2: Topic Definition
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -688,7 +701,7 @@ const report: CoverageReport = {
 └─────────────────────────────────────────────┘
 ```
 
-### Step C: Categorization Progress
+### Step 2: Topics & Categorization Progress
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -704,7 +717,7 @@ const report: CoverageReport = {
 └─────────────────────────────────────────────┘
 ```
 
-### Step D: Coverage Review
+### Step 3: Coverage Review
 
 ```
 ┌─────────────────────────────────────────────┐

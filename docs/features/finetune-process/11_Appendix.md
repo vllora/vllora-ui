@@ -181,7 +181,9 @@ Features NOT provided by OpenAI/Azure/Bedrock:
 | 1.0 | 2025-01-20 | Initial spec |
 | 2.0 | 2025-01-21 | Added validation, train/valid split, platform verification |
 | 2.1 | 2025-01-22 | Removed trace selection (separate module) |
-| 3.0 | 2025-01-22 | Redesigned journey: 10 steps (A-J), 3 phases, topic categorization flow |
+| 3.0 | 2025-01-22 | Redesigned journey: repeatable actions, topic categorization flow |
+| 3.5 | 2025-01-23 | Canvas-based UI: 8-step pipeline, auto-validation (Health Indicator), import/export data |
+| 3.6 | 2025-01-23 | Combined Topics & Categorization into single step (7-step pipeline) |
 
 ---
 

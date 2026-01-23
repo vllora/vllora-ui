@@ -6,9 +6,13 @@
 
 ## Overview
 
-This module covers:
-- **Action D:** Coverage Analysis (automatic dashboard)
-- **Action E:** Generate Synthetic Samples
+This module covers **Step 3: Review Coverage** and the generation actions available from it.
+
+**Step 3 includes:**
+- Coverage Analysis — automatic distribution dashboard
+- Generate Synthetic Samples — fill gaps with AI-generated data
+
+Generation is triggered from Step 3 when coverage gaps are detected.
 
 ---
 
@@ -505,51 +509,263 @@ interface SplitStats {
 
 ## Action E — Generate Synthetic Samples
 
-**Trigger:** `[Generate Samples]` button in Dataset Details  
+**Trigger:** Multiple entry points → **same unified modal**  
 **Can Repeat:** ✅ Yes - generate more anytime
 
-**Purpose:** Fill coverage gaps with high-quality LLM-generated records.
+**Purpose:** Generate variations to improve coverage (either auto-select or from specific records).
 
-### UI Flow
+---
+
+### Entry Points → Same Modal
+
+| Entry Point | Location | Modal Opens With |
+|-------------|----------|------------------|
+| `[Generate to Fill Gaps]` | Coverage Dashboard | "Auto-select" pre-selected |
+| `[Generate Variations]` | Single record row | "Selected records" with that record |
+| `[Generate from Selected]` | Bulk selection | "Selected records" with N records |
+
+**Key insight:** User can always switch between modes in the modal!
+
+---
+
+### UI: Coverage Dashboard (Entry Point 1)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ Generate Samples                                                        │
+│ Coverage Dashboard                                                      │
 ├─────────────────────────────────────────────────────────────────────────┤
+│                  Current    Target    Status                            │
+│ data_queries     ████████░░ 38%      (25%)    ⚠️ Over                  │
+│ calculations     ██░░░░░░░░  8%      (20%)    🔴 Under (-1,400)        │
+│ tool_usage       ████░░░░░░ 18%      (20%)    🟡 Slightly under (-200) │
+│ content_gen      ██████░░░░ 27%      (25%)    ✅ OK                     │
 │                                                                         │
-│ Default Strategy: [Message variation ▼]  ⭐ Recommended for multi-turn  │
+│ Balance Score: 0.45 (Needs improvement)                                │
 │                                                                         │
-│ Topics to fill:                                                         │
-│ ┌─────────────────────────────────────────────────────────────────────┐ │
-│ │ Topic             Need     Strategy                  Multi-turn?    │ │
-│ │ ───────────────────────────────────────────────────────────────────│ │
-│ │ ☑ calculations    +1,400   [Message variation ▼]    ✓ 89%          │ │
-│ │ ☑ tool_usage      +300     [Message variation ▼]    ✓ 95%          │ │
-│ │ ☑ simple_queries  +200     [Few-shot ▼]             ✗ 12%          │ │
-│ │ ☐ other           +0       -                        -              │ │
-│ └─────────────────────────────────────────────────────────────────────┘ │
+│ Recommendations:                                                        │
+│ • Generate ~1,400 more "calculations" records                          │
+│ • Generate ~200 more "tool_usage" records                              │
 │                                                                         │
-│ Strategy options:                                                       │
-│ • Message variation - Vary last user message (best for multi-turn)     │
-│ • Few-shot - Generate from examples (best for single-turn)             │
-│ • Topic description - Generate from topic keywords                      │
-│ • Tool chain - Generate tool-requiring prompts                         │
-│                                                                         │
-│ Advanced Settings:                                                      │
-│ ├─ Variations per record: [3]    (for message variation)               │
-│ ├─ Preserve intent: [✓]          (stay within same topic)              │
-│ ├─ Temperature: [0.7]                                                   │
-│ ├─ Max synthetic ratio: [30%]                                          │
-│ └─ Validation strictness: [Medium ▼]                                   │
-│                                                                         │
-│ Total to generate: 1,900 records                                       │
-│ Estimated cost: ~$1.80  (message variation is cheaper!)                │
-│                                                                         │
-│                                    [Cancel] [Start Generation]          │
+│                              [Generate to Fill Gaps]                    │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Create Generation Plan
+### UI: Record List (Entry Points 2 & 3)
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Dataset Records                                    [Filters ▼] 🔍       │
+├─────────────────────────────────────────────────────────────────────────┤
+│ Topic: [calculations ▼]  │  Showing 892 records                        │
+│                                                                         │
+│ ┌─────────────────────────────────────────────────────────────────────┐ │
+│ │ ☐ rec_001  │ multi-turn │ ⭐⭐⭐⭐⭐ │ original                       │ │
+│ │ ┌─────────────────────────────────────────────────────────────────┐ │ │
+│ │ │ [system]: You are a financial calculator...                     │ │ │
+│ │ │ [user]: What's my account balance?                              │ │ │
+│ │ │ [assistant]: Your balance is $5,432.21                          │ │ │
+│ │ │ [user]: Calculate monthly payment for $300k mortgage at 6.5%    │ │ │
+│ │ └─────────────────────────────────────────────────────────────────┘ │ │
+│ │                                                                     │ │
+│ │ [View] [Edit] [Delete]                      [Generate Variations]   │ │
+│ └─────────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+│ ┌─────────────────────────────────────────────────────────────────────┐ │
+│ │ ☑ rec_002  │ single-turn │ ⭐⭐⭐⭐ │ original                        │ │
+│ │ [user]: What's compound interest on $10k at 5% for 10 years?        │ │
+│ │ [View] [Edit] [Delete]                      [Generate Variations]   │ │
+│ └─────────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+│ Selected: 1  │  Bulk: [Select All] [Generate from Selected]            │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Unified Generation Modal
+
+All entry points open the **same modal** with different defaults:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Generate Variations                                                     │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│ ┌─── SOURCE RECORDS ────────────────────────────────────────────────┐  │
+│ │                                                                   │  │
+│ │ ○ Auto-select from topics with coverage gaps                      │  │
+│ │   Topics: calculations (-1,400), tool_usage (-200)                │  │
+│ │   Will select: ~534 diverse records                               │  │
+│ │                                                                   │  │
+│ │ ● Use selected records (3 records)                                │  │
+│ │   ┌─────────────────────────────────────────────────────────────┐ │  │
+│ │   │ rec_001  │ calculations │ ⭐⭐⭐⭐⭐ │ "Calculate mortgage..."│ │  │
+│ │   │ rec_005  │ calculations │ ⭐⭐⭐⭐⭐ │ "Interest rate on..."  │ │  │
+│ │   │ rec_012  │ tool_usage   │ ⭐⭐⭐⭐  │ "Look up stock price..."│ │  │
+│ │   └─────────────────────────────────────────────────────────────┘ │  │
+│ │   [Add more records...]                                           │  │
+│ │                                                                   │  │
+│ └───────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│ ┌─── GENERATION SETTINGS ───────────────────────────────────────────┐  │
+│ │                                                                   │  │
+│ │ Strategy: [Message variation ▼]  ⭐ Recommended for multi-turn    │  │
+│ │   • Message variation - Vary last user message (highest quality)  │  │
+│ │   • Few-shot - Generate similar prompts from examples             │  │
+│ │   • Topic description - Generate from topic keywords              │  │
+│ │   • Tool chain - Generate tool-requiring prompts                  │  │
+│ │                                                                   │  │
+│ │ Variations per record: [3]                                        │  │
+│ │ Preserve intent: [✓] Stay within same topic                       │  │
+│ │                                                                   │  │
+│ │ ▼ Advanced Settings                                               │  │
+│ │   Temperature: [0.7]                                              │  │
+│ │   Max synthetic ratio: [30%]                                      │  │
+│ │   Validation strictness: [Medium ▼]                               │  │
+│ │                                                                   │  │
+│ └───────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│ ┌─── PREVIEW ───────────────────────────────────────────────────────┐  │
+│ │ • 3 source records × 3 variations = ~9 new records                │  │
+│ │ • Coverage impact: calculations (+6), tool_usage (+3)             │  │
+│ │ • Estimated cost: ~$0.15                                          │  │
+│ └───────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│                                    [Cancel] [Generate]                  │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Modal States by Entry Point
+
+**From Coverage Dashboard:**
+```
+┌─── SOURCE RECORDS ────────────────────────────────────────────────┐
+│ ● Auto-select from topics with coverage gaps          ← SELECTED  │
+│   Topics: calculations (-1,400), tool_usage (-200)                │
+│   Will select: ~534 diverse records                               │
+│                                                                   │
+│ ○ Use selected records (0 records)                                │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+**From Single Record [Generate Variations]:**
+```
+┌─── SOURCE RECORDS ────────────────────────────────────────────────┐
+│ ○ Auto-select from topics with coverage gaps                      │
+│                                                                   │
+│ ● Use selected records (1 record)                     ← SELECTED  │
+│   rec_001  │ calculations │ "Calculate monthly payment..."        │
+│   [Add more records...]                                           │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+**From Bulk Selection:**
+```
+┌─── SOURCE RECORDS ────────────────────────────────────────────────┐
+│ ○ Auto-select from topics with coverage gaps                      │
+│                                                                   │
+│ ● Use selected records (10 records)                   ← SELECTED  │
+│   rec_001, rec_005, rec_012, rec_023, +6 more                     │
+│   [Add more records...]                                           │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Generation Progress
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Generating Variations...                                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│ Source: 3 records × 3 variations each                                  │
+│                                                                         │
+│ Progress: ████████████████░░░░ 7 / 9                                   │
+│                                                                         │
+│ By topic:                                                              │
+│ • calculations: +6 generated (5 valid)                                 │
+│ • tool_usage: +1 generated (1 valid)                                   │
+│                                                                         │
+│ Sample:                                                                │
+│ ┌─────────────────────────────────────────────────────────────────────┐ │
+│ │ Source:    "Calculate monthly payment for $300k mortgage at 6.5%"  │ │
+│ │ Variation: "What's the total interest on a $250k loan at 5.5%?"    │ │
+│ └─────────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+│ [Stop]                                                                  │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Review Generated Variations
+
+After generation completes:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Review Generated Variations                                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│ Generated: 9 variations from 3 source records                          │
+│                                                                         │
+│ ┌─── FROM: rec_001 (calculations) ──────────────────────────────────┐  │
+│ │ Context: [system] Financial calc... [user] Balance? [asst] $5,432 │  │
+│ │                                                                   │  │
+│ │ ☑ 1. "Total interest on $250k loan at 5.5% for 30yr?"    ⭐⭐⭐⭐⭐ │  │
+│ │ ☑ 2. "Payments for $400k mortgage, 15yr term, 7% rate"   ⭐⭐⭐⭐⭐ │  │
+│ │ ☐ 3. "mortgage" ⚠️ too short                             ⭐      │  │
+│ └───────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│ ┌─── FROM: rec_005 (calculations) ──────────────────────────────────┐  │
+│ │ ☑ 1. "What's compound interest on $15k at 4.5%?"         ⭐⭐⭐⭐⭐ │  │
+│ │ ☑ 2. "Calculate ROI on $5,000 investment over 5 years"   ⭐⭐⭐⭐  │  │
+│ │ ☑ 3. "How long to double $10k at 6% interest rate?"      ⭐⭐⭐⭐⭐ │  │
+│ └───────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│ ┌─── FROM: rec_012 (tool_usage) ────────────────────────────────────┐  │
+│ │ ☑ 1. "Look up Tesla's current stock price"               ⭐⭐⭐⭐⭐ │  │
+│ │ ☑ 2. "What's Apple's market cap right now?"              ⭐⭐⭐⭐  │  │
+│ │ ☑ 3. "Get the latest Bitcoin price in USD"               ⭐⭐⭐⭐⭐ │  │
+│ └───────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│ Summary: 8/9 selected (1 rejected)                                     │
+│ Coverage impact: calculations (+5), tool_usage (+3)                    │
+│                                                                         │
+│ [Regenerate Rejected] [Discard All]              [Add 8 to Dataset]    │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## User Can Always Switch Modes
+
+**Scenario:** User came from record row, but decides to fill all gaps instead:
+
+```
+1. Click [Generate Variations] on rec_001
+2. Modal opens with "Use selected records (1)" selected
+3. User thinks: "Actually, let me fill all gaps"
+4. User clicks "Auto-select from topics with coverage gaps"
+5. Modal updates to show coverage mode
+6. User clicks [Generate]
+```
+
+**Scenario:** User came from coverage dashboard, but wants specific records:
+
+```
+1. Click [Generate to Fill Gaps] on Coverage Dashboard
+2. Modal opens with "Auto-select" selected
+3. User thinks: "I want only my best records"
+4. User clicks "Use selected records"
+5. User clicks [Add more records...] to pick specific ones
+6. User clicks [Generate]
+```
+
+---
+
+## Code: Unified Generation
 
 ```typescript
 function createGenerationPlan(
@@ -1062,6 +1278,179 @@ async function generateForTopicWithVariation(
 }
 ```
 
+---
+
+## Code: Selected Records Mode
+
+When user selects "Use selected records" in the modal:
+
+```typescript
+// Entry point for selected records mode
+interface SelectedRecordsGenerationRequest {
+  recordIds: string[];           // Records to generate from
+  variationsPerRecord: number;   // How many variations per record
+  preserveIntent: boolean;       // Stay within same topic
+  temperature: number;
+}
+
+interface SelectedRecordsGenerationResult {
+  sourceRecordId: string;
+  variations: DatasetRecord[];
+  stats: {
+    requested: number;
+    generated: number;
+    valid: number;
+    rejected: number;
+    rejectionReasons: Record<string, number>;
+  };
+}
+
+async function generateFromSelectedRecords(
+  request: SelectedRecordsGenerationRequest,
+  allRecords: DatasetRecord[],
+  datasetId: string
+): Promise<{
+  results: SelectedRecordsGenerationResult[];
+  totalGenerated: number;
+  totalValid: number;
+}> {
+  const config: GenerationConfig = {
+    ...DEFAULT_GENERATION_CONFIG,
+    strategy: 'message_variation',
+    variationsPerRecord: request.variationsPerRecord,
+    preserveIntent: request.preserveIntent,
+    temperature: request.temperature,
+  };
+  
+  const results: SelectedRecordsGenerationResult[] = [];
+  let totalGenerated = 0;
+  let totalValid = 0;
+  
+  // Get source records
+  const sourceRecords = allRecords.filter(r => request.recordIds.includes(r.id));
+  
+  for (const record of sourceRecords) {
+    const rejectionReasons: Record<string, number> = {};
+    
+    try {
+      // Check if multi-turn (can use message variation)
+      const messages = (record.data as DataInfo).input?.messages || [];
+      
+      let variations: DatasetRecord[] = [];
+      
+      if (messages.length >= 2) {
+        // Multi-turn: use message variation
+        variations = await generateMessageVariations(record, config, datasetId);
+      } else {
+        // Single-turn: use few-shot with this record as example
+        variations = await generateFewShotFromRecord(record, config, datasetId);
+      }
+      
+      totalGenerated += variations.length;
+      
+      // Validate variations
+      const validVariations: DatasetRecord[] = [];
+      for (const variation of variations) {
+        const validation = validateSyntheticRecord(variation, allRecords, validVariations, config);
+        
+        if (validation.valid) {
+          validVariations.push(variation);
+        } else {
+          const reason = validation.error || 'unknown';
+          rejectionReasons[reason] = (rejectionReasons[reason] || 0) + 1;
+        }
+      }
+      
+      totalValid += validVariations.length;
+      
+      results.push({
+        sourceRecordId: record.id,
+        variations: validVariations,
+        stats: {
+          requested: request.variationsPerRecord,
+          generated: variations.length,
+          valid: validVariations.length,
+          rejected: variations.length - validVariations.length,
+          rejectionReasons,
+        },
+      });
+      
+    } catch (error) {
+      results.push({
+        sourceRecordId: record.id,
+        variations: [],
+        stats: {
+          requested: request.variationsPerRecord,
+          generated: 0,
+          valid: 0,
+          rejected: 0,
+          rejectionReasons: { 'generation_error': 1 },
+        },
+      });
+    }
+  }
+  
+  return { results, totalGenerated, totalValid };
+}
+
+// Helper for single-turn records
+async function generateFewShotFromRecord(
+  record: DatasetRecord,
+  config: GenerationConfig,
+  datasetId: string
+): Promise<DatasetRecord[]> {
+  const dataInfo = record.data as DataInfo;
+  const messages = dataInfo.input?.messages || [];
+  
+  const prompt = `You are generating training data variations.
+
+Here is an example prompt:
+${JSON.stringify(messages, null, 2)}
+
+Generate ${config.variationsPerRecord} similar but different prompts that:
+1. Match the style and complexity
+2. Are realistic user requests
+3. ${config.preserveIntent ? 'Stay within the same topic/intent' : 'Can explore related topics'}
+4. Are meaningfully different (not just rephrased)
+
+IMPORTANT:
+- Output ONLY a JSON array of message arrays
+- Each item is an array of message objects with "role" and "content"
+
+Output format:
+[
+  [{"role": "user", "content": "..."}],
+  [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}]
+]`;
+
+  const response = await llmComplete(prompt, {
+    responseFormat: 'json',
+    temperature: config.temperature,
+  });
+  
+  const generatedPrompts: Message[][] = JSON.parse(response);
+  
+  return generatedPrompts.map((msgs, i) => ({
+    id: `fewshot_${record.id}_${Date.now()}_${i}`,
+    datasetId,
+    data: {
+      input: { messages: msgs },
+      output: {},
+    } as DataInfo,
+    metadata: {
+      generatedAt: new Date().toISOString(),
+      generationStrategy: 'few_shot',
+      sourceRecordId: record.id,
+      variationIndex: i,
+    },
+    topic: record.topic,
+    is_generated: true,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  }));
+}
+```
+
 ### Validate Synthetic Records
 
 ```typescript
@@ -1157,7 +1546,7 @@ function extractUserContent(record: DatasetRecord): string {
 
 ---
 
-## Step F — Review Final Distribution
+## Step 3 — Review Final Distribution
 
 **Purpose:** Confirm combined dataset is balanced and create train/validation split.
 
@@ -1344,7 +1733,7 @@ function generateFinalReport(
 
 ## UI Mockups
 
-### Step E: Generation Progress
+### Step 3: Generation Progress
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -1372,7 +1761,7 @@ function generateFinalReport(
 └─────────────────────────────────────────────┘
 ```
 
-### Step F: Final Distribution Review
+### Step 3: Final Distribution Review
 
 ```
 ┌─────────────────────────────────────────────┐

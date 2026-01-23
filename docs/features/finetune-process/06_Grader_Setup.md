@@ -4,10 +4,7 @@
 
 ---
 
-## Action G — Define Grader
-
-**Trigger:** `[Define Grader]` button in Dataset Details  
-**Can Repeat:** ✅ Yes - iterate on grader configuration anytime
+## Step 4 — Define Grader
 
 **Purpose:** Configure how model outputs will be scored during training and dry run.
 
@@ -15,7 +12,6 @@
 - Before running dry run
 - After dry run shows grader issues  
 - When changing evaluation criteria
-- To test different grader configurations
 
 ---
 
@@ -30,158 +26,238 @@ prompt → model generates response → grader scores (0.0-1.0) → update weigh
 
 ---
 
-## Grader Types (OpenAI)
+## Grader Types
 
-| Type | Use Case | Example |
-|------|----------|---------|
-| `string_check` | Exact/contains match | Check for keywords |
-| `text_similarity` | Fuzzy matching | Compare to reference |
-| `score_model` | LLM-as-judge | Quality assessment |
-| `python` | Custom logic | Code execution, JSON validation |
-| `multi` | Combine graders | Weighted average of dimensions |
+We support **2 types** of graders:
 
----
-
-## Preset Configurations
-
-### Preset: Correctness
-
-```json
-{
-  "type": "multi",
-  "graders": {
-    "accuracy": {
-      "type": "score_model",
-      "model": "gpt-4o-mini",
-      "input": [
-        {
-          "role": "user",
-          "content": "Rate the factual accuracy of this response (0-1):\n\nQuestion: {{item.user_message}}\nResponse: {{sample.output_text}}"
-        }
-      ],
-      "range": [0, 1]
-    },
-    "completeness": {
-      "type": "score_model",
-      "model": "gpt-4o-mini",
-      "input": [
-        {
-          "role": "user",
-          "content": "Does this response fully address the question? Rate 0-1:\n\n{{sample.output_text}}"
-        }
-      ],
-      "range": [0, 1]
-    }
-  },
-  "calculate_output": "0.7 * accuracy + 0.3 * completeness"
-}
-```
-
-### Preset: Format Compliance
-
-```json
-{
-  "type": "multi",
-  "graders": {
-    "valid_json": {
-      "type": "python",
-      "source": "import json\ntry:\n    json.loads(sample['output_text'])\n    return 1.0\nexcept:\n    return 0.0"
-    },
-    "has_required_fields": {
-      "type": "python",
-      "source": "import json\ntry:\n    obj = json.loads(sample['output_text'])\n    required = ['result', 'status']\n    return 1.0 if all(k in obj for k in required) else 0.5\nexcept:\n    return 0.0"
-    }
-  },
-  "calculate_output": "0.5 * valid_json + 0.5 * has_required_fields"
-}
-```
-
-### Preset: Tool Usage
-
-```json
-{
-  "type": "multi",
-  "graders": {
-    "tool_selected": {
-      "type": "python",
-      "source": "tools = sample.get('output_tools', [])\nreturn 1.0 if len(tools) > 0 else 0.0"
-    },
-    "tool_params_valid": {
-      "type": "python",
-      "source": "# Check if tool parameters are valid JSON\nimport json\nfor tool in sample.get('output_tools', []):\n    try:\n        json.loads(tool.get('arguments', '{}'))\n    except:\n        return 0.0\nreturn 1.0"
-    },
-    "result_used": {
-      "type": "score_model",
-      "model": "gpt-4o-mini",
-      "input": [
-        {
-          "role": "user",
-          "content": "Did the assistant appropriately use the tool results in its response? Rate 0-1.\n\nResponse: {{sample.output_text}}"
-        }
-      ],
-      "range": [0, 1]
-    }
-  },
-  "calculate_output": "0.3 * tool_selected + 0.3 * tool_params_valid + 0.4 * result_used"
-}
-```
-
-### Preset: Conciseness
-
-```json
-{
-  "type": "multi",
-  "graders": {
-    "answers_question": {
-      "type": "score_model",
-      "model": "gpt-4o-mini",
-      "input": [
-        {
-          "role": "user",
-          "content": "Does this response answer the question? Rate 0-1.\n\nQuestion: {{item.user_message}}\nResponse: {{sample.output_text}}"
-        }
-      ],
-      "range": [0, 1]
-    },
-    "conciseness": {
-      "type": "python",
-      "source": "length = len(sample['output_text'])\nif length < 50:\n    return 0.5  # Too short\nelif length < 500:\n    return 1.0  # Good\nelif length < 1000:\n    return 0.7  # Acceptable\nelse:\n    return 0.3  # Too long"
-    }
-  },
-  "calculate_output": "0.6 * answers_question + 0.4 * conciseness"
-}
-```
+| Type | Use Case | Configuration |
+|------|----------|---------------|
+| **LLM as a Judge** | Quality assessment, correctness, style | Prompt + JSON schema + model config |
+| **Script** | Deterministic checks, format validation | JavaScript code |
 
 ---
 
-## Custom Grader Builder
+## Type 1: LLM as a Judge
 
-For advanced users who need custom dimensions:
+Uses an LLM to evaluate model outputs. Best for subjective quality assessment.
 
-### Multi-Grader Structure
+### Configuration
 
-```json
-{
-  "type": "multi",
-  "graders": {
-    "dimension_1": { ... },
-    "dimension_2": { ... },
-    "dimension_3": { ... }
-  },
-  "calculate_output": "w1 * dimension_1 + w2 * dimension_2 + w3 * dimension_3"
-}
-```
+| Field | Required | Description |
+|-------|----------|-------------|
+| **Prompt** | ✅ | Evaluation prompt with mustache variables |
+| **Output Schema** | ✅ | JSON schema defining expected response structure |
+| **Model** | ✅ | Which model to use (e.g., `gpt-4o-mini`) |
+| **Temperature** | Optional | Model temperature (default: 0) |
+| **Max Tokens** | Optional | Max response tokens (default: 256) |
 
-### Template Variables
+### Mustache Variables
+
+Use these in your prompt to inject data:
 
 | Variable | Description |
 |----------|-------------|
-| `{{sample.output_text}}` | Model's generated text |
-| `{{sample.output_json}}` | Parsed JSON (if valid) |
-| `{{sample.output_tools}}` | Tool calls made |
-| `{{item.user_message}}` | Last user message |
-| `{{item.reference_answer}}` | Reference (if provided) |
-| `{{item.field_name}}` | Any custom field |
+| `{{messages}}` | Full conversation history (JSON array) |
+| `{{response}}` | Model's generated response text |
+| `{{lastUserMessage}}` | The last user message only |
+| `{{tools}}` | Available tools (if any) |
+| `{{toolCalls}}` | Tool calls made by model (if any) |
+| `{{systemPrompt}}` | System prompt (if present) |
+
+### Output Schema
+
+The grader LLM must return structured JSON. Define the schema to extract the score.
+
+**Example schema:**
+```json
+{
+  "type": "object",
+  "properties": {
+    "score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Overall quality score from 0 to 1"
+    },
+    "reasoning": {
+      "type": "string",
+      "description": "Explanation for the score"
+    }
+  },
+  "required": ["score", "reasoning"]
+}
+```
+
+### Example: Quality Grader
+
+**Prompt:**
+```
+You are evaluating an AI assistant's response.
+
+## Conversation
+{{messages}}
+
+## Assistant's Response
+{{response}}
+
+## Task
+Rate the response quality on a scale of 0 to 1:
+- 1.0 = Excellent: Accurate, helpful, well-formatted
+- 0.7 = Good: Mostly correct with minor issues
+- 0.4 = Fair: Partially addresses the question
+- 0.1 = Poor: Wrong, unhelpful, or off-topic
+- 0.0 = Fail: Completely wrong or harmful
+
+Consider: accuracy, helpfulness, clarity, and relevance.
+```
+
+**Output Schema:**
+```json
+{
+  "type": "object",
+  "properties": {
+    "score": { "type": "number", "minimum": 0, "maximum": 1 },
+    "reasoning": { "type": "string" }
+  },
+  "required": ["score"]
+}
+```
+
+**Model Config:**
+- Model: `gpt-4o-mini`
+- Temperature: `0`
+- Max Tokens: `256`
+
+### Example: Tool Usage Grader
+
+**Prompt:**
+```
+You are evaluating whether an AI assistant correctly used tools.
+
+## Available Tools
+{{tools}}
+
+## User Request
+{{lastUserMessage}}
+
+## Assistant's Tool Calls
+{{toolCalls}}
+
+## Assistant's Response
+{{response}}
+
+## Evaluation Criteria
+1. Did the assistant select the appropriate tool(s)?
+2. Were the tool parameters correct and complete?
+3. Did the assistant properly use the tool results in the response?
+
+Rate from 0 to 1:
+- 1.0 = All tools used correctly with proper parameters
+- 0.5 = Correct tools but some parameter issues
+- 0.0 = Wrong tools or completely incorrect usage
+```
+
+---
+
+## Type 2: Script (JavaScript)
+
+Write JavaScript code for deterministic checks. Best for format validation, keyword checks, or measurable criteria.
+
+### Interface
+
+```javascript
+/**
+ * @param {Object} input - The evaluation input
+ * @param {Array} input.messages - Conversation history
+ * @param {string} input.response - Model's response text
+ * @param {Array} input.toolCalls - Tool calls made (if any)
+ * @param {Object} input.metadata - Record metadata
+ * @returns {number} Score from 0.0 to 1.0
+ */
+function grade(input) {
+  // Your logic here
+  return score;
+}
+```
+
+### Example: JSON Validity Check
+
+```javascript
+function grade(input) {
+  try {
+    JSON.parse(input.response);
+    return 1.0;
+  } catch (e) {
+    return 0.0;
+  }
+}
+```
+
+### Example: Length Check
+
+```javascript
+function grade(input) {
+  const length = input.response.length;
+  
+  if (length < 50) return 0.3;      // Too short
+  if (length < 500) return 1.0;     // Good
+  if (length < 1000) return 0.7;    // Acceptable  
+  return 0.4;                        // Too long
+}
+```
+
+### Example: Required Keywords
+
+```javascript
+function grade(input) {
+  const response = input.response.toLowerCase();
+  const required = ['conclusion', 'recommendation'];
+  
+  let found = 0;
+  for (const keyword of required) {
+    if (response.includes(keyword)) found++;
+  }
+  
+  return found / required.length;
+}
+```
+
+### Example: Tool Call Validation
+
+```javascript
+function grade(input) {
+  const toolCalls = input.toolCalls || [];
+  
+  if (toolCalls.length === 0) {
+    return 0.0; // Expected tool usage
+  }
+  
+  // Check each tool call has valid JSON arguments
+  for (const call of toolCalls) {
+    try {
+      JSON.parse(call.function.arguments);
+    } catch (e) {
+      return 0.5; // Tool used but invalid args
+    }
+  }
+  
+  return 1.0; // All good
+}
+```
+
+---
+
+## Combining Graders
+
+You can use **multiple graders** with weighted averaging:
+
+| Grader | Type | Weight |
+|--------|------|--------|
+| Quality | LLM Judge | 60% |
+| Format Valid | Script | 20% |
+| Length Check | Script | 20% |
+
+**Final Score:** `0.6 * quality + 0.2 * format + 0.2 * length`
 
 ---
 
@@ -189,37 +265,58 @@ For advanced users who need custom dimensions:
 
 | Problem | Symptom | Fix |
 |---------|---------|-----|
-| Too lenient | All scores > 0.9 | Add stricter criteria |
-| Too strict | All scores < 0.1 | Relax criteria or use SFT first |
-| No variance | Std < 0.1 | Add discriminating dimensions |
-| Reward hacking | High scores, bad outputs | Add multiple orthogonal dimensions |
-| Expensive | Slow training | Use cheaper models for some dimensions |
+| Too lenient | All scores > 0.9 | Add stricter criteria in prompt |
+| Too strict | All scores < 0.1 | Relax criteria or lower expectations |
+| No variance | Std < 0.1 | LLM judge may be too vague — be specific |
+| Expensive | Slow dry run | Use `gpt-4o-mini` instead of `gpt-4o` |
+| Inconsistent | Same input, different scores | Lower temperature to 0 |
 
 ---
 
-## UI Mockup
+## Testing Your Grader
 
-```
-┌─────────────────────────────────────────────┐
-│ Define Evaluation Function                  │
-├─────────────────────────────────────────────┤
-│ How should model outputs be scored?         │
-│                                             │
-│ ● Use Preset                                │
-│   [Tool Usage ▼]                            │
-│                                             │
-│   This preset measures:                     │
-│   • tool_selected (30%) - Correct tool?     │
-│   • tool_params (30%) - Valid parameters?   │
-│   • result_used (40%) - Used appropriately? │
-│                                             │
-│ ○ Custom Configuration                      │
-│   Build your own multi-grader               │
-│                                             │
-│ [Preview Grader] [Test on Sample]           │
-│                                             │
-│                            [Continue →]     │
-└─────────────────────────────────────────────┘
+Before running a full dry run, test on a few samples:
+
+1. Click **[🧪 Test Sample]** in Step 4
+2. System runs grader on 5 random records
+3. Review scores and reasoning
+4. Adjust prompt/script if needed
+
+---
+
+## Data Structures
+
+```typescript
+// Grader configuration stored in Dataset
+interface GraderConfig {
+  type: 'llm-judge' | 'script';
+  
+  // For LLM Judge
+  prompt?: string;              // Mustache template
+  outputSchema?: JSONSchema;    // Expected response structure
+  model?: string;               // e.g., "gpt-4o-mini"
+  temperature?: number;         // Default: 0
+  maxTokens?: number;           // Default: 256
+  
+  // For Script
+  script?: string;              // JavaScript code
+  
+  // Common
+  weight?: number;              // For multi-grader (0-1)
+}
+
+// Multi-grader config
+interface MultiGraderConfig {
+  graders: GraderConfig[];
+  weights: number[];            // Must sum to 1
+}
+
+// Grader result
+interface GraderResult {
+  score: number;                // 0.0 - 1.0
+  reasoning?: string;           // From LLM judge
+  error?: string;               // If grader failed
+}
 ```
 
 ---

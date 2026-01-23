@@ -6,20 +6,21 @@
 
 ## Overview
 
-When user clicks `[Start RFT]`, they enter a linear wizard:
+This module covers the final pipeline steps:
 
-- **Step 1:** Configure Train/Validation Split
-- **Step 2:** Train RFT Model
-- **Step 3:** Deploy Model
+- **Step 6:** Train Model — Configure split and execute RFT training
+- **Step 7:** Deploy Model — Push to production gateway
 
 **Prerequisites before starting:**
-- ✅ Dataset has valid records
-- ✅ Grader is configured
-- ✅ Dry run passed (recommended)
+- ✅ Dataset has valid records (Health Indicator shows healthy)
+- ✅ Grader is configured (Step 4 complete)
+- ✅ Dry run passed (Step 5 shows GO)
 
 ---
 
-## Step 1 — Configure Split
+## Step 6 — Train Model
+
+### Configure Split
 
 **Purpose:** Define how to split records for training.
 
@@ -69,7 +70,7 @@ function createSplit(
 
 ---
 
-## Step 2 — Train RFT Model
+### Execute RFT Training
 
 **Purpose:** Execute reinforcement fine-tuning with validated dataset and grader.
 
@@ -146,7 +147,7 @@ Track these metrics:
 
 ---
 
-## Step 3 — Results & Deploy
+## Step 7 — Results & Deploy
 
 **Purpose:** Review training results and deploy the improved model.
 
@@ -231,7 +232,7 @@ Recommended checks:
 
 ## UI Mockups
 
-### Step I: Training Progress
+### Step 6: Training Progress
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -263,7 +264,7 @@ Recommended checks:
 └─────────────────────────────────────────────┘
 ```
 
-### Step J: Results
+### Step 7: Results & Deploy
 
 ```
 ┌─────────────────────────────────────────────┐
