@@ -5,10 +5,17 @@
  * Used in the dataset creation flow.
  */
 
+import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Database, Loader2 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Database, Loader2, AlertCircle } from "lucide-react";
 
 export interface DatasetInfoSidebarProps {
   datasetName: string;
@@ -17,6 +24,8 @@ export interface DatasetInfoSidebarProps {
   onFinetuneObjectiveChange: (objective: string) => void;
   selectionCount: number;
   isCreating: boolean;
+  /** Optional status message to show during creation (e.g., "Fetching spans...") */
+  creatingStatus?: string;
   onCreateDataset: () => void;
 }
 
@@ -27,8 +36,44 @@ export function DatasetInfoSidebar({
   onFinetuneObjectiveChange,
   selectionCount,
   isCreating,
+  creatingStatus,
   onCreateDataset,
 }: DatasetInfoSidebarProps) {
+  // Determine why the button is disabled
+  const disabledReason = useMemo(() => {
+    if (isCreating) return null; // Not disabled, just loading
+    if (!datasetName.trim()) return "Please enter a dataset name";
+    if (selectionCount === 0) return "Please select at least one record";
+    return null;
+  }, [datasetName, selectionCount, isCreating]);
+
+  const isDisabled = !!disabledReason || isCreating;
+
+  const buttonContent = (
+    <Button
+      className="w-full gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white disabled:bg-muted disabled:text-muted-foreground"
+      disabled={isDisabled}
+      onClick={onCreateDataset}
+    >
+      {isCreating ? (
+        <>
+          <Loader2 className="h-4 w-4 animate-spin" />
+          {creatingStatus || "Creating..."}
+        </>
+      ) : disabledReason ? (
+        <>
+          <AlertCircle className="h-4 w-4" />
+          Create Dataset
+        </>
+      ) : (
+        <>
+          <Database className="h-4 w-4" />
+          Create Dataset
+        </>
+      )}
+    </Button>
+  );
+
   return (
     <div className="col-span-1 h-full flex flex-col min-h-0">
       <div className="border border-border rounded-lg bg-card flex flex-col h-full">
@@ -77,23 +122,20 @@ export function DatasetInfoSidebar({
             <span className="font-medium">{selectionCount}</span>
           </div>
 
-          <Button
-            className="w-full gap-2"
-            disabled={!datasetName.trim() || selectionCount === 0 || isCreating}
-            onClick={onCreateDataset}
-          >
-            {isCreating ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              <>
-                <Database className="h-4 w-4" />
-                Create Dataset
-              </>
-            )}
-          </Button>
+          {disabledReason ? (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="w-full">{buttonContent}</span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{disabledReason}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            buttonContent
+          )}
         </div>
       </div>
     </div>

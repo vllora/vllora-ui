@@ -1,82 +1,68 @@
 /**
  * DatasetsListHeader
  *
- * Header for the datasets list view with title, search, and actions.
+ * Header for the datasets grid view with search bar and filter tabs.
  */
 
-import { Link } from "react-router";
-import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Database, Search, Upload, Plus } from "lucide-react";
-import { CreateDatasetPopover } from "./CreateDatasetPopover";
+import { Search } from "lucide-react";
+import { DATASET_STATE_CONFIG } from "@/types/dataset-types";
+import type { DatasetState } from "@/types/dataset-types";
+
+export type DatasetFilter = "all" | DatasetState;
 
 interface DatasetsListHeaderProps {
   searchQuery: string;
-  datasetCount: number;
+  activeFilter: DatasetFilter;
   onSearchChange: (query: string) => void;
-  onImportClick: () => void;
-  onCreateDataset: (name: string) => Promise<void>;
+  onFilterChange: (filter: DatasetFilter) => void;
 }
+
+// Build filters from shared config, with "All" prepended
+const FILTERS: { value: DatasetFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  ...DATASET_STATE_CONFIG.map((config) => ({
+    value: config.value as DatasetFilter,
+    label: config.label,
+  })),
+];
 
 export function DatasetsListHeader({
   searchQuery,
-  datasetCount,
+  activeFilter,
   onSearchChange,
-  onImportClick,
-  onCreateDataset,
+  onFilterChange,
 }: DatasetsListHeaderProps) {
   return (
-    <div className="flex items-start justify-between mb-6">
-      <div className="flex items-center gap-3">
-        <div className="p-2 rounded-lg bg-[rgb(var(--theme-500))]/10">
-          <Database className="w-6 h-6 text-[rgb(var(--theme-500))]" />
-        </div>
-        <div>
-          <h1 className="text-xl font-semibold">Datasets</h1>
-          <p className="text-sm text-muted-foreground">
-            {datasetCount} {datasetCount === 1 ? "dataset" : "datasets"}
-          </p>
-        </div>
+    <div className="flex items-center justify-between mb-6 border border-border rounded-lg bg-card px-4 py-3">
+      {/* Search input */}
+      <div className="relative flex-1 max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder="Search datasets by name or ID..."
+          className="pl-9 bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+        />
       </div>
-      <div className="flex items-center gap-3">
-        {/* Search input */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search datasets..."
-            className="pl-9 w-56 bg-muted/50 border-border/50"
-          />
-        </div>
-        <TooltipProvider delayDuration={300}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onImportClick}
-                className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-              >
-                <Upload className="w-4 h-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Import data</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <CreateDatasetPopover onCreateDataset={onCreateDataset} />
-        <Button asChild size="sm" className="gap-2">
-          <Link to="/datasets/new">
-            <Plus className="w-4 h-4" />
-            Create from Traces
-          </Link>
-        </Button>
+
+      {/* Filter tabs */}
+      <div className="flex items-center gap-1">
+        {FILTERS.map((filter) => (
+          <button
+            key={filter.value}
+            onClick={() => onFilterChange(filter.value)}
+            className={cn(
+              "px-4 py-1.5 rounded-full text-sm font-medium transition-colors",
+              activeFilter === filter.value
+                ? "bg-[rgb(var(--theme-500))] text-white"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+            )}
+          >
+            {filter.label}
+          </button>
+        ))}
       </div>
     </div>
   );

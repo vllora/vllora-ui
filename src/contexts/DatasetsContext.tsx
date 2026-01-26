@@ -27,7 +27,7 @@ interface DatasetsContextType {
   getDatasetWithRecords: (datasetId: string) => Promise<DatasetWithRecords | null>;
   getRecordCount: (datasetId: string) => Promise<number>;
   getTopicCoverageStats: (datasetId: string) => Promise<{ total: number; withTopic: number }>;
-  createDataset: (name: string) => Promise<Dataset>;
+  createDataset: (name: string, datasetObjective?: string) => Promise<Dataset>;
   addSpansToDataset: (datasetId: string, spans: Span[], topic?: string) => Promise<number>;
   importRecords: (datasetId: string, records: Array<{ data: unknown; topic?: string; evaluation?: DatasetEvaluation }>, defaultTopic?: string) => Promise<number>;
   clearDatasetRecords: (datasetId: string) => Promise<number>;
@@ -112,8 +112,8 @@ export function DatasetsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Create a new dataset
-  const createDataset = useCallback(async (name: string): Promise<Dataset> => {
-    const newDataset = await datasetsDB.createDataset(name);
+  const createDataset = useCallback(async (name: string, datasetObjective?: string): Promise<Dataset> => {
+    const newDataset = await datasetsDB.createDataset(name, datasetObjective);
     setDatasets(prev => [newDataset, ...prev]);
     return newDataset;
   }, []);

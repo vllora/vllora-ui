@@ -1,7 +1,7 @@
 /**
- * DatasetsTable
+ * DatasetsGrid
  *
- * Displays the list of all datasets in a table view.
+ * Displays the list of all datasets in a grid card view.
  */
 
 import { useState, useMemo, useEffect } from "react";
@@ -12,17 +12,18 @@ import {
   DeleteConfirmationDialog,
   type DeleteConfirmation,
 } from "../DeleteConfirmationDialog";
-import { DatasetTableRow } from "./DatasetTableRow";
+import { DatasetCard } from "./DatasetCard";
+import { AddDatasetCard } from "./AddDatasetCard";
 import { DatasetsEmptyState } from "./DatasetsEmptyState";
-import { DatasetsListHeader } from "./DatasetsListHeader";
+import { DatasetsListHeader, type DatasetFilter } from "./DatasetsListHeader";
 import { DatasetsNoResultsState } from "./DatasetsNoResultsState";
 import { IngestDataDialog, type ImportResult } from "../IngestDataDialog";
 
-interface DatasetsTableProps {
+interface DatasetsGridProps {
   onSelectDataset: (datasetId: string) => void;
 }
 
-export function DatasetsTable({ onSelectDataset }: DatasetsTableProps) {
+export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
   const {
     datasets,
     isLoading,
@@ -39,41 +40,77 @@ export function DatasetsTable({ onSelectDataset }: DatasetsTableProps) {
 
   // State
   const [recordCounts, setRecordCounts] = useState<Record<string, number>>({});
-  const [topicCoverageStats, setTopicCoverageStats] = useState<
-    Record<string, { total: number; withTopic: number }>
+  const [topicStats, setTopicStats] = useState<
+    Record<string, { total: number; withTopic: number; topicCount: number }>
   >({});
   const [editingDatasetId, setEditingDatasetId] = useState<string | null>(null);
   const [editingDatasetName, setEditingDatasetName] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmation | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeFilter, setActiveFilter] = useState<DatasetFilter>("all");
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [importTargetDatasetId, setImportTargetDatasetId] = useState<string | null>(null);
 
-  // Filter datasets by search query
+  // Filter datasets by search query and active filter
   const filteredDatasets = useMemo(() => {
-    if (!searchQuery.trim()) return datasets;
-    const query = searchQuery.toLowerCase();
-    return datasets.filter((ds) => ds.name.toLowerCase().includes(query));
-  }, [datasets, searchQuery]);
+    let result = datasets;
 
-  // Load record counts and topic coverage stats for all datasets
+    // Search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(
+        (ds) =>
+          ds.name.toLowerCase().includes(query) ||
+          ds.id.toLowerCase().includes(query)
+      );
+    }
+
+    // State filter
+    if (activeFilter !== "all") {
+      result = result.filter((ds) => {
+        const state = ds.state ?? "draft"; // Default to draft if no state
+        return state === activeFilter;
+      });
+    }
+
+    return result;
+  }, [datasets, searchQuery, activeFilter]);
+
+  // Load record counts and topic stats for all datasets
   useEffect(() => {
     const loadStats = async () => {
       const counts: Record<string, number> = {};
-      const coverage: Record<string, { total: number; withTopic: number }> = {};
+      const stats: Record<string, { total: number; withTopic: number; topicCount: number }> = {};
       await Promise.all(
         datasets.map(async (ds) => {
           counts[ds.id] = await getRecordCount(ds.id);
-          coverage[ds.id] = await getTopicCoverageStats(ds.id);
+          const coverage = await getTopicCoverageStats(ds.id);
+          // Count unique topics from the hierarchy
+          const topicCount = ds.topicHierarchy?.hierarchy
+            ? countTopics(ds.topicHierarchy.hierarchy)
+            : 0;
+          stats[ds.id] = { ...coverage, topicCount };
         })
       );
       setRecordCounts(counts);
-      setTopicCoverageStats(coverage);
+      setTopicStats(stats);
     };
     if (datasets.length > 0) {
       loadStats();
     }
   }, [datasets, getRecordCount, getTopicCoverageStats]);
+
+  // Count topics in hierarchy
+  function countTopics(nodes: { children?: unknown[] }[]): number {
+    let count = 0;
+    for (const node of nodes) {
+      count += 1;
+      if (node.children && Array.isArray(node.children)) {
+        count += countTopics(node.children as { children?: unknown[] }[]);
+      }
+    }
+    return count;
+  }
 
   // Handlers
   const handleRenameDataset = async (datasetId: string) => {
@@ -98,15 +135,6 @@ export function DatasetsTable({ onSelectDataset }: DatasetsTableProps) {
       toast.error("Failed to delete dataset");
     }
     setDeleteConfirm(null);
-  };
-
-  const handleCreateDataset = async (name: string) => {
-    try {
-      await createDataset(name);
-      toast.success("Dataset created");
-    } catch {
-      toast.error("Failed to create dataset");
-    }
   };
 
   const handleImportToDataset = async (result: ImportResult) => {
@@ -201,96 +229,93 @@ export function DatasetsTable({ onSelectDataset }: DatasetsTableProps) {
 
   return (
     <>
-      <div className="flex-1 overflow-auto">
-        <div className="w-full mx-auto px-6 py-6">
-          <DatasetsListHeader
-            searchQuery={searchQuery}
-            datasetCount={datasets.length}
-            onSearchChange={setSearchQuery}
-            onImportClick={() => setShowImportDialog(true)}
-            onCreateDataset={handleCreateDataset}
-          />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Scrollable content area */}
+        <div className="flex-1 overflow-auto">
+          <div className="w-full mx-auto px-6 py-6">
+            <DatasetsListHeader
+              searchQuery={searchQuery}
+              activeFilter={activeFilter}
+              onSearchChange={setSearchQuery}
+              onFilterChange={setActiveFilter}
+            />
 
-          {/* Loading state */}
-          {isLoading && (
-            <div className="flex items-center justify-center py-12">
-              <div className="flex items-center space-x-2">
-                <Loader2 className="h-5 w-5 animate-spin" />
-                <span className="text-muted-foreground">Loading datasets...</span>
+            {/* Loading state */}
+            {isLoading && (
+              <div className="flex items-center justify-center py-12">
+                <div className="flex items-center space-x-2">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span className="text-muted-foreground">Loading datasets...</span>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Error state */}
-          {error && (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-red-500">Error: {error.message}</div>
-            </div>
-          )}
-
-          {/* Empty state */}
-          {!isLoading && !error && datasets.length === 0 && <DatasetsEmptyState />}
-
-          {/* No results state */}
-          {!isLoading && !error && datasets.length > 0 && filteredDatasets.length === 0 && (
-            <DatasetsNoResultsState searchQuery={searchQuery} />
-          )}
-
-          {/* Dataset table */}
-          {!isLoading && !error && filteredDatasets.length > 0 && (
-            <div className="border border-border rounded-lg overflow-hidden bg-card">
-              {/* Table header */}
-              <div className="grid grid-cols-[1fr_120px_200px_160px_48px] items-center px-6 py-3 border-b border-border bg-muted/30">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Dataset Name
-                </span>
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Records
-                </span>
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Topic Coverage
-                </span>
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Last Modified
-                </span>
-                <span />
+            {/* Error state */}
+            {error && (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-red-500">Error: {error.message}</div>
               </div>
+            )}
 
-              {/* Table rows */}
-              {filteredDatasets.map((dataset) => {
-                const isEditing = editingDatasetId === dataset.id;
+            {/* Empty state */}
+            {!isLoading && !error && datasets.length === 0 && <DatasetsEmptyState />}
 
-                return (
-                  <DatasetTableRow
-                    key={dataset.id}
-                    datasetId={dataset.id}
-                    name={dataset.name}
-                    recordCount={recordCounts[dataset.id] ?? "..."}
-                    topicCoverage={topicCoverageStats[dataset.id] ?? null}
-                    hasTopicHierarchy={!!dataset.topicHierarchy?.hierarchy}
-                    updatedAt={dataset.updatedAt}
-                    isEditing={isEditing}
-                    editingName={editingDatasetName}
-                    onSelect={() => onSelectDataset(dataset.id)}
-                    onEditNameChange={setEditingDatasetName}
-                    onSaveRename={() => handleRenameDataset(dataset.id)}
-                    onCancelRename={() => setEditingDatasetId(null)}
-                    onStartRename={() => {
-                      setEditingDatasetId(dataset.id);
-                      setEditingDatasetName(dataset.name);
-                    }}
-                    onImport={() => {
-                      setImportTargetDatasetId(dataset.id);
-                      setShowImportDialog(true);
-                    }}
-                    onDownload={() => handleDownloadDataset(dataset.id)}
-                    onDelete={() => setDeleteConfirm({ type: "dataset", id: dataset.id })}
-                  />
-                );
-              })}
-            </div>
-          )}
+            {/* No results state */}
+            {!isLoading && !error && datasets.length > 0 && filteredDatasets.length === 0 && (
+              <DatasetsNoResultsState searchQuery={searchQuery} />
+            )}
+
+            {/* Dataset grid */}
+            {!isLoading && !error && filteredDatasets.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                {filteredDatasets.map((dataset) => {
+                  const isEditing = editingDatasetId === dataset.id;
+                  const stats = topicStats[dataset.id];
+
+                  return (
+                    <DatasetCard
+                      key={dataset.id}
+                      name={dataset.name}
+                      state={dataset.state ?? "draft"}
+                      recordCount={recordCounts[dataset.id] ?? "..."}
+                      topicCount={stats?.topicCount ?? 0}
+                      hasTopicHierarchy={!!dataset.topicHierarchy?.hierarchy}
+                      updatedAt={dataset.updatedAt}
+                      isEditing={isEditing}
+                      editingName={editingDatasetName}
+                      onSelect={() => onSelectDataset(dataset.id)}
+                      onEditNameChange={setEditingDatasetName}
+                      onSaveRename={() => handleRenameDataset(dataset.id)}
+                      onCancelRename={() => setEditingDatasetId(null)}
+                      onStartRename={() => {
+                        setEditingDatasetId(dataset.id);
+                        setEditingDatasetName(dataset.name);
+                      }}
+                      onImport={() => {
+                        setImportTargetDatasetId(dataset.id);
+                        setShowImportDialog(true);
+                      }}
+                      onDownload={() => handleDownloadDataset(dataset.id)}
+                      onDelete={() => setDeleteConfirm({ type: "dataset", id: dataset.id })}
+                    />
+                  );
+                })}
+
+                {/* Add new dataset card */}
+                <AddDatasetCard />
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Footer - fixed at bottom */}
+        {!isLoading && !error && datasets.length > 0 && (
+          <div className="border-t border-border px-6 py-3 text-center flex-shrink-0">
+            <p className="text-sm text-muted-foreground">
+              Showing {filteredDatasets.length} of {datasets.length} datasets
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Delete confirmation dialog */}

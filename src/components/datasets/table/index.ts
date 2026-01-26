@@ -1,12 +1,12 @@
 /**
  * Datasets Table components
  *
- * Components for displaying the list of datasets in a table view.
+ * Components for displaying the list of datasets in a grid card view.
  */
 
-export { DatasetsTable } from "./DatasetsTable";
-export { DatasetTableRow } from "./DatasetTableRow";
-export { DatasetsListHeader } from "./DatasetsListHeader";
+export { DatasetsGrid } from "./DatasetsGrid";
+export { DatasetCard } from "./DatasetCard";
+export { AddDatasetCard } from "./AddDatasetCard";
+export { DatasetsListHeader, type DatasetFilter } from "./DatasetsListHeader";
 export { DatasetsEmptyState } from "./DatasetsEmptyState";
 export { DatasetsNoResultsState } from "./DatasetsNoResultsState";
-export { CreateDatasetPopover } from "./CreateDatasetPopover";

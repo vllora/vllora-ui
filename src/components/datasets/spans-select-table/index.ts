@@ -1,4 +1,4 @@
-export { SpansSelectTable, useSpansSelection } from "./SpansSelectTable";
+export { SpansSelectTable } from "./SpansSelectTable";
 export type { SpansSelectTableProps } from "./SpansSelectTable";
 
 export { SpansFilterToolbar, PROVIDER_OPTIONS, TIME_RANGE_OPTIONS, ALL_PROVIDERS } from "./SpansFilterToolbar";

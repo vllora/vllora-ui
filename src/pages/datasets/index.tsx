@@ -1,6 +1,6 @@
 import { Navigate } from "react-router";
 import { DatasetsUIProvider, DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
-import { DatasetsTable } from "@/components/datasets/table";
+import { DatasetsGrid } from "@/components/datasets/table";
 import { DatasetDetailView } from "@/components/datasets/DatasetDetailView";
 import { FinetuneDatasetPage } from "@/components/finetune/FinetuneDatasetPage";
 import { EmptyDatasetsState } from "@/components/datasets/EmptyDatasetsState";
@@ -59,7 +59,7 @@ function DatasetsPageContent() {
             />
           )
         ) : (
-          <DatasetsTable onSelectDataset={navigateToDataset} />
+          <DatasetsGrid onSelectDataset={navigateToDataset} />
         )}
       </div>
     </section>

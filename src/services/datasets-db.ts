@@ -153,7 +153,7 @@ export async function getTopicCoverageStats(datasetId: string): Promise<{ total:
 }
 
 // Create a new dataset
-export async function createDataset(name: string): Promise<Dataset> {
+export async function createDataset(name: string, datasetObjective?: string): Promise<Dataset> {
   const db = await getDB();
   const now = Date.now();
   const dataset: Dataset = {
@@ -161,6 +161,7 @@ export async function createDataset(name: string): Promise<Dataset> {
     name: name.trim(),
     createdAt: now,
     updatedAt: now,
+    ...(datasetObjective?.trim() && { datasetObjective: datasetObjective.trim() }),
   };
 
   return new Promise((resolve, reject) => {

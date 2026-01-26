@@ -119,12 +119,49 @@ export interface BackendJsEvaluator {
 // Union type for backend evaluator
 export type BackendEvaluator = BackendLlmAsJudgeEvaluator | BackendJsEvaluator;
 
+// Dataset state for tracking finetune progress
+export type DatasetState = 'draft' | 'in_finetune' | 'completed';
+
+// Consolidated state configuration for UI display
+export interface DatasetStateConfig {
+  value: DatasetState;
+  label: string;
+  className: string;
+}
+
+export const DATASET_STATE_CONFIG: DatasetStateConfig[] = [
+  {
+    value: 'draft',
+    label: 'Draft',
+    className: 'bg-muted text-muted-foreground',
+  },
+  {
+    value: 'in_finetune',
+    label: 'Processing',
+    className: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+  },
+  {
+    value: 'completed',
+    label: 'Completed',
+    className: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+  },
+];
+
+// Helper to get config by state value
+export function getDatasetStateConfig(state: DatasetState): DatasetStateConfig {
+  return DATASET_STATE_CONFIG.find((c) => c.value === state) ?? DATASET_STATE_CONFIG[0];
+}
+
 // Stored in 'datasets' object store (metadata only, no records array)
 export interface Dataset {
   id: string;
   name: string;
   createdAt: number;
   updatedAt: number;
+  // Dataset state: draft (default), in_finetune, or completed
+  state?: DatasetState;
+  // Training objective describing specific behaviors to reinforce or suppress
+  datasetObjective?: string;
   // Backend dataset ID from the cloud provider (set after first finetune upload)
   backendDatasetId?: string;
   // Topic hierarchy configuration

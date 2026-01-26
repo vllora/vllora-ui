@@ -35,6 +35,8 @@ export interface SpansSelectTableProps {
   onSpansLoaded?: (spans: Span[]) => void;
   /** Callback when "select all matching" state changes */
   onAllMatchingSelectedChange?: (isAllMatchingSelected: boolean, totalCount: number) => void;
+  /** Callback that provides a function to fetch all matching spans */
+  onProvideFetchAllMatching?: (fetchFn: () => Promise<Span[]>) => void;
 }
 
 export function SpansSelectTable({
@@ -43,6 +45,7 @@ export function SpansSelectTable({
   onSelectionChange,
   onSpansLoaded,
   onAllMatchingSelectedChange,
+  onProvideFetchAllMatching,
 }: SpansSelectTableProps) {
   // Spans data
   const [spans, setSpans] = useState<Span[]>([]);
@@ -181,6 +184,35 @@ export function SpansSelectTable({
   useEffect(() => {
     fetchLabels();
   }, [fetchLabels]);
+
+  // Function to fetch all matching spans (used by parent for "select all matching")
+  const fetchAllMatchingSpans = useCallback(async (): Promise<Span[]> => {
+    if (!projectId) return [];
+
+    const allSpans: Span[] = [];
+    let offset = 0;
+    const batchSize = 500;
+
+    while (offset < pagination.total) {
+      const params = buildFilterParams(offset);
+      params.limit = batchSize;
+
+      const response = await listSpans({
+        projectId,
+        params,
+      });
+
+      allSpans.push(...response.data);
+      offset += batchSize;
+    }
+
+    return allSpans;
+  }, [projectId, pagination.total, buildFilterParams]);
+
+  // Provide the fetch function to the parent
+  useEffect(() => {
+    onProvideFetchAllMatching?.(fetchAllMatchingSpans);
+  }, [onProvideFetchAllMatching, fetchAllMatchingSpans]);
 
   // Sort spans (search filtering is now done server-side)
   const filteredSpans = useMemo(() => {
@@ -440,24 +472,4 @@ export function SpansSelectTable({
       )}
     </div>
   );
-}
-
-/**
- * Get selected spans from the table's internal state
- */
-export function useSpansSelection() {
-  const [selectedSpanIds, setSelectedSpanIds] = useState<Set<string>>(new Set());
-  const [spans, setSpans] = useState<Span[]>([]);
-
-  const getSelectedSpans = useCallback(() => {
-    return spans.filter((s) => selectedSpanIds.has(s.span_id));
-  }, [spans, selectedSpanIds]);
-
-  return {
-    selectedSpanIds,
-    setSelectedSpanIds,
-    spans,
-    setSpans,
-    getSelectedSpans,
-  };
 }
