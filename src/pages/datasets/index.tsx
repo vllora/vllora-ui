@@ -1,9 +1,9 @@
+import { Navigate } from "react-router";
 import { DatasetsUIProvider, DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
 import { DatasetsTable } from "@/components/datasets/table";
 import { DatasetDetailView } from "@/components/datasets/DatasetDetailView";
 import { FinetuneDatasetPage } from "@/components/finetune/FinetuneDatasetPage";
 import { EmptyDatasetsState } from "@/components/datasets/EmptyDatasetsState";
-import { SelectSpansOrUploadFile } from "@/components/datasets/SelectSpansOrUploadFile";
 import { Loader2 } from "lucide-react";
 
 // Inner component that uses the UI context
@@ -43,7 +43,7 @@ function DatasetsPageContent() {
         ) : showEmptyState ? (
           <EmptyDatasetsState />
         ) : showSpanSelection ? (
-          <SelectSpansOrUploadFile />
+          <Navigate to="/datasets/new" replace />
         ) : selectedDatasetId ? (
           viewMode === 'finetune' ? (
             <FinetuneDatasetPage

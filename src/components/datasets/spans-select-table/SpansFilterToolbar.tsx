@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, ArrowUpDown, X } from "lucide-react";
+import { Search, ArrowUpDown, X, Download, Loader2 } from "lucide-react";
 import { LabelFilter } from "@/components/label-filter/LabelFilter";
 import type { LabelInfo } from "@/services/labels-api";
 
@@ -62,6 +62,12 @@ export interface SpansFilterToolbarProps {
   isLabelsLoading?: boolean;
   sortDirection: "asc" | "desc";
   onSortDirectionChange: (direction: "asc" | "desc") => void;
+  /** Number of selected records for export button */
+  selectedCount?: number;
+  /** Callback to export selected records */
+  onExport?: () => void;
+  /** Whether export is in progress */
+  isExporting?: boolean;
 }
 
 export function SpansFilterToolbar({
@@ -77,6 +83,9 @@ export function SpansFilterToolbar({
   isLabelsLoading = false,
   sortDirection,
   onSortDirectionChange,
+  selectedCount = 0,
+  onExport,
+  isExporting = false,
 }: SpansFilterToolbarProps) {
   const hasActiveFilters = selectedProvider !== "all" || selectedTimeRange !== "all" || selectedLabels.length > 0;
 
@@ -155,12 +164,30 @@ export function SpansFilterToolbar({
         </Button>
       )}
 
+      {/* Export Button - shows when records are selected */}
+      {selectedCount > 0 && onExport && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onExport}
+          disabled={isExporting}
+          className="gap-2 ml-auto"
+        >
+          {isExporting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Download className="h-4 w-4" />
+          )}
+          {isExporting ? "Exporting..." : `Export ${selectedCount} record${selectedCount !== 1 ? "s" : ""}`}
+        </Button>
+      )}
+
       {/* Sort Button */}
       <Button
         variant="outline"
         size="sm"
         onClick={() => onSortDirectionChange(sortDirection === "desc" ? "asc" : "desc")}
-        className="gap-2 ml-auto"
+        className={selectedCount > 0 && onExport ? "gap-2" : "gap-2 ml-auto"}
       >
         <ArrowUpDown className="h-4 w-4" />
         {sortDirection === "desc" ? "Newest first" : "Oldest first"}

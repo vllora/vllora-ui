@@ -5,35 +5,64 @@
  * Allows users to select spans or upload files to create a new dataset.
  */
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Database, Upload } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Database, Upload, ArrowLeft } from "lucide-react";
 import { ProjectsConsumer } from "@/contexts/ProjectContext";
 import { DatasetsConsumer } from "@/contexts/DatasetsContext";
 import type { Span } from "@/types/common-type";
 import { toast } from "sonner";
 import { extractDataInfoFromSpan } from "@/utils/modelUtils";
+import { parseJsonlChunked, type ParseProgress } from "@/utils/jsonl-parser";
+import {
+  saveUploadSession,
+  loadUploadSession,
+  clearUploadSession,
+} from "@/services/upload-session-db";
 import { SpansSelectTable } from "./spans-select-table";
-import { type UploadedRecord } from "./UploadedRecordsList";
-import { FileUploadSection } from "./FileUploadSection";
+import { FileUploadSection, type UploadedRecord } from "./upload-records-section";
 import { DatasetInfoSidebar } from "./DatasetInfoSidebar";
 
+type TabValue = "traces" | "upload";
+
 export function SelectSpansOrUploadFile() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { currentProjectId } = ProjectsConsumer();
   const { createDataset, importRecords } = DatasetsConsumer();
 
-  // Active tab
-  const [activeTab, setActiveTab] = useState<"traces" | "upload">("traces");
+  // Active tab - read from URL, default to "traces"
+  const tabFromUrl = searchParams.get("tab");
+  const activeTab: TabValue = tabFromUrl === "upload" ? "upload" : "traces";
+
+  const handleTabChange = (value: string) => {
+    const newTab = value as TabValue;
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (newTab === "traces") {
+        next.delete("tab"); // Default tab, no need to show in URL
+      } else {
+        next.set("tab", newTab);
+      }
+      return next;
+    });
+  };
 
   // Spans selection state
   const [selectedSpanIds, setSelectedSpanIds] = useState<Set<string>>(new Set());
   const [spans, setSpans] = useState<Span[]>([]);
+  const [isAllMatchingSelected, setIsAllMatchingSelected] = useState(false);
+  const [totalMatchingCount, setTotalMatchingCount] = useState(0);
 
   // Upload file state
   const [uploadedRecords, setUploadedRecords] = useState<UploadedRecord[]>([]);
   const [selectedUploadIds, setSelectedUploadIds] = useState<Set<string>>(new Set());
   const [uploadFileName, setUploadFileName] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<ParseProgress | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Dataset info
   const [datasetName, setDatasetName] = useState("");
@@ -41,6 +70,39 @@ export function SelectSpansOrUploadFile() {
 
   // Creating state
   const [isCreating, setIsCreating] = useState(false);
+
+  // Load upload session from IndexedDB on mount
+  useEffect(() => {
+    const loadSession = async () => {
+      try {
+        const session = await loadUploadSession();
+        if (session) {
+          setUploadedRecords(session.records);
+          setUploadFileName(session.fileName);
+          setSelectedUploadIds(new Set(session.selectedIds));
+        }
+      } catch (err) {
+        console.error("Failed to load upload session:", err);
+      }
+    };
+    loadSession();
+  }, []);
+
+  // Save upload session to IndexedDB when records or selection changes
+  const saveSession = useCallback(async (
+    fileName: string | null,
+    records: UploadedRecord[],
+    selectedIds: Set<string>
+  ) => {
+    if (!fileName || records.length === 0) {
+      return;
+    }
+    try {
+      await saveUploadSession(fileName, records, Array.from(selectedIds));
+    } catch (err) {
+      console.error("Failed to save upload session:", err);
+    }
+  }, []);
 
   // Upload selection handlers
   const toggleUploadSelection = (id: string) => {
@@ -63,43 +125,55 @@ export function SelectSpansOrUploadFile() {
     }
   };
 
-  // File upload handlers
+  // File upload handlers - uses chunked parsing for large files
   const handleFileUpload = async (file: File) => {
     if (!file.name.endsWith(".jsonl")) {
       toast.error("Please upload a .jsonl file");
       return;
     }
 
+    setIsUploading(true);
+    setUploadProgress(null);
+
     try {
-      const text = await file.text();
-      const lines = text.trim().split("\n");
-      const records: UploadedRecord[] = [];
+      // Use chunked parsing with progress reporting
+      const result = await parseJsonlChunked(file, (progress) => {
+        setUploadProgress(progress);
+      });
 
-      for (let i = 0; i < lines.length; i++) {
-        try {
-          const parsed = JSON.parse(lines[i]);
-          records.push({
-            id: `upload-${i}`,
-            messages: parsed.messages || [],
-            tools: parsed.tools,
-          });
-        } catch {
-          console.warn(`Skipping invalid JSON at line ${i + 1}`);
-        }
-      }
-
-      if (records.length === 0) {
+      if (result.records.length === 0) {
         toast.error("No valid records found in file");
+        setIsUploading(false);
+        setUploadProgress(null);
         return;
       }
 
-      setUploadedRecords(records);
+      const allSelectedIds = new Set(result.records.map((r) => r.id));
+      setUploadedRecords(result.records);
       setUploadFileName(file.name);
-      setSelectedUploadIds(new Set(records.map((r) => r.id)));
-      toast.success(`Loaded ${records.length} records from ${file.name}`);
+      setSelectedUploadIds(allSelectedIds);
+
+      // Persist to IndexedDB
+      await saveSession(file.name, result.records, allSelectedIds);
+
+      // Show success with format info
+      const formatInfo = result.detectedFormat === "datainfo"
+        ? "(DataInfo format)"
+        : result.detectedFormat === "export"
+          ? "(messages/tools format)"
+          : "";
+
+      const errorInfo = result.errorLines.length > 0
+        ? ` (${result.errorLines.length} invalid lines skipped)`
+        : "";
+
+      toast.success(`Loaded ${result.records.length} records from ${file.name} ${formatInfo}${errorInfo}`);
     } catch (err) {
       console.error("Failed to parse file:", err);
       toast.error("Failed to parse file");
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -121,10 +195,16 @@ export function SelectSpansOrUploadFile() {
     setIsDragging(false);
   };
 
-  const clearUploadedFile = () => {
+  const clearUploadedFile = async () => {
     setUploadedRecords([]);
     setUploadFileName(null);
     setSelectedUploadIds(new Set());
+    // Clear from IndexedDB
+    try {
+      await clearUploadSession();
+    } catch (err) {
+      console.error("Failed to clear upload session:", err);
+    }
   };
 
   // Create dataset
@@ -159,31 +239,28 @@ export function SelectSpansOrUploadFile() {
           };
         });
       } else {
-        // Convert selected uploads to records
+        // Convert selected uploads to records - already in DataInfo format
         const selectedUploads = uploadedRecords.filter((r) => selectedUploadIds.has(r.id));
         records = selectedUploads.map((record) => ({
-          data: {
-            input: {
-              messages: record.messages.slice(0, -1),
-              tools: record.tools,
-            },
-            output: { messages: record.messages.slice(-1) },
-            metadata: {
-              finetuneObjective: finetuneObjective.trim() || undefined,
-              importedAt: Date.now(),
-            },
-          },
+          // record.data is already normalized to DataInfo format by the parser
+          data: record.data,
         }));
       }
 
       await importRecords(dataset.id, records);
       toast.success(`Created dataset "${datasetName}" with ${records.length} records`);
 
-      // Reset state
-      setDatasetName("");
-      setFinetuneObjective("");
-      setSelectedSpanIds(new Set());
-      setSelectedUploadIds(new Set());
+      // Clear upload session from IndexedDB if we used uploaded records
+      if (activeTab === "upload") {
+        try {
+          await clearUploadSession();
+        } catch (err) {
+          console.error("Failed to clear upload session:", err);
+        }
+      }
+
+      // Navigate to datasets list
+      navigate("/datasets");
     } catch (err) {
       console.error("Failed to create dataset:", err);
       toast.error("Failed to create dataset");
@@ -192,17 +269,37 @@ export function SelectSpansOrUploadFile() {
     }
   };
 
+  // Handle "select all matching" state changes
+  const handleAllMatchingSelectedChange = (allSelected: boolean, totalCount: number) => {
+    setIsAllMatchingSelected(allSelected);
+    setTotalMatchingCount(totalCount);
+  };
+
   // Get selection count based on active tab
-  const selectionCount = activeTab === "traces" ? selectedSpanIds.size : selectedUploadIds.size;
+  // When "all matching" is selected, use total count instead of just loaded spans
+  const selectionCount = activeTab === "traces"
+    ? (isAllMatchingSelected ? totalMatchingCount : selectedSpanIds.size)
+    : selectedUploadIds.size;
 
   return (
     <div className="h-full w-full max-w-full flex flex-col p-6 overflow-hidden box-border">
       {/* Header row with title and tabs */}
       <div className="flex items-center justify-between mb-4 shrink-0">
-        <h1 className="text-2xl font-bold">Create New Dataset</h1>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate("/datasets")}
+            className="gap-1"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
+          <h1 className="text-2xl font-bold">Create New Dataset</h1>
+        </div>
         <Tabs
           value={activeTab}
-          onValueChange={(v) => setActiveTab(v as "traces" | "upload")}
+          onValueChange={handleTabChange}
         >
           <TabsList className="w-fit">
             <TabsTrigger value="traces" className="gap-2">
@@ -232,6 +329,7 @@ export function SelectSpansOrUploadFile() {
               selectedSpanIds={selectedSpanIds}
               onSelectionChange={setSelectedSpanIds}
               onSpansLoaded={setSpans}
+              onAllMatchingSelectedChange={handleAllMatchingSelectedChange}
             />
           ) : (
             <FileUploadSection
@@ -239,6 +337,8 @@ export function SelectSpansOrUploadFile() {
               uploadFileName={uploadFileName}
               selectedIds={selectedUploadIds}
               isDragging={isDragging}
+              isUploading={isUploading}
+              uploadProgress={uploadProgress}
               onDrop={handleDrop}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}

@@ -12,6 +12,8 @@ import { listSpans, type PaginatedSpansResponse, type ListSpansQuery } from "@/s
 import { listLabels, type LabelInfo } from "@/services/labels-api";
 import type { Span } from "@/types/common-type";
 import { formatDistanceToNow } from "date-fns";
+import { toast } from "sonner";
+import { extractDataInfoFromSpan } from "@/utils/modelUtils";
 import { SpansFilterToolbar, TIME_RANGE_OPTIONS, ALL_PROVIDERS } from "./SpansFilterToolbar";
 import { SpansList } from "./SpansList";
 
@@ -23,6 +25,8 @@ export interface SpansSelectTableProps {
   onSelectionChange: (selectedIds: Set<string>) => void;
   /** Callback when spans are loaded, provides the full spans array */
   onSpansLoaded?: (spans: Span[]) => void;
+  /** Callback when "select all matching" state changes */
+  onAllMatchingSelectedChange?: (isAllMatchingSelected: boolean, totalCount: number) => void;
 }
 
 export function SpansSelectTable({
@@ -30,6 +34,7 @@ export function SpansSelectTable({
   selectedSpanIds,
   onSelectionChange,
   onSpansLoaded,
+  onAllMatchingSelectedChange,
 }: SpansSelectTableProps) {
   // Spans data
   const [spans, setSpans] = useState<Span[]>([]);
@@ -167,6 +172,11 @@ export function SpansSelectTable({
     const next = new Set(selectedSpanIds);
     if (next.has(spanId)) {
       next.delete(spanId);
+      // If user manually deselects, they're no longer selecting "all matching"
+      if (isAllMatchingSelected) {
+        setIsAllMatchingSelected(false);
+        onAllMatchingSelectedChange?.(false, pagination.total);
+      }
     } else {
       next.add(spanId);
     }
@@ -177,6 +187,7 @@ export function SpansSelectTable({
     if (selectedSpanIds.size === filteredSpans.length) {
       onSelectionChange(new Set());
       setIsAllMatchingSelected(false);
+      onAllMatchingSelectedChange?.(false, pagination.total);
     } else {
       onSelectionChange(new Set(filteredSpans.map((s) => s.span_id)));
     }
@@ -185,6 +196,7 @@ export function SpansSelectTable({
   const selectAllMatching = () => {
     // Mark that all matching spans are selected (even those not loaded)
     setIsAllMatchingSelected(true);
+    onAllMatchingSelectedChange?.(true, pagination.total);
     // Select all currently loaded spans
     onSelectionChange(new Set(filteredSpans.map((s) => s.span_id)));
   };
@@ -192,6 +204,85 @@ export function SpansSelectTable({
   const clearSelection = () => {
     onSelectionChange(new Set());
     setIsAllMatchingSelected(false);
+    onAllMatchingSelectedChange?.(false, pagination.total);
+  };
+
+  // Export state
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Helper to convert spans to JSONL content
+  const spansToJsonl = (spansToExport: Span[]): string => {
+    return spansToExport
+      .map((span) => {
+        const dataInfo = extractDataInfoFromSpan(span);
+        const inputMessages = (dataInfo.input?.messages as unknown[]) || [];
+        const outputMessage = dataInfo.output?.messages;
+        const messages = outputMessage
+          ? [...inputMessages, outputMessage]
+          : inputMessages;
+        const tools = (dataInfo.input?.tools as unknown[]) || [];
+
+        return JSON.stringify({ messages, tools });
+      })
+      .join("\n");
+  };
+
+  // Export selected spans as JSONL
+  const handleExport = async () => {
+    if (isExporting) return;
+
+    try {
+      let spansToExport: Span[];
+
+      if (isAllMatchingSelected) {
+        // Fetch ALL matching spans from the server
+        setIsExporting(true);
+        toast.info("Fetching all matching spans...");
+
+        const allSpans: Span[] = [];
+        let offset = 0;
+        const batchSize = 500; // Fetch in larger batches for efficiency
+
+        while (offset < pagination.total) {
+          const params = buildFilterParams(offset);
+          params.limit = batchSize;
+
+          const response = await listSpans({
+            projectId: projectId!,
+            params,
+          });
+
+          allSpans.push(...response.data);
+          offset += batchSize;
+        }
+
+        spansToExport = allSpans;
+      } else {
+        // Export only selected spans from current page
+        spansToExport = filteredSpans.filter((s) => selectedSpanIds.has(s.span_id));
+      }
+
+      if (spansToExport.length === 0) {
+        toast.error("No spans selected");
+        return;
+      }
+
+      const jsonlContent = spansToJsonl(spansToExport);
+
+      const blob = new Blob([jsonlContent], { type: "application/jsonl" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `spans-export-${new Date().toISOString().split("T")[0]}.jsonl`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${spansToExport.length} record${spansToExport.length !== 1 ? "s" : ""} as JSONL`);
+    } catch (err) {
+      console.error("Failed to export spans:", err);
+      toast.error("Failed to export spans");
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   // Pagination handlers
@@ -232,6 +323,9 @@ export function SpansSelectTable({
         isLabelsLoading={isLabelsLoading}
         sortDirection={sortDirection}
         onSortDirectionChange={setSortDirection}
+        selectedCount={isAllMatchingSelected ? pagination.total : selectedSpanIds.size}
+        onExport={handleExport}
+        isExporting={isExporting}
       />
 
       {/* Spans list */}

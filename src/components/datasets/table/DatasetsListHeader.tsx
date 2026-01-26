@@ -4,6 +4,7 @@
  * Header for the datasets list view with title, search, and actions.
  */
 
+import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -12,7 +13,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Database, Search, Upload } from "lucide-react";
+import { Database, Search, Upload, Plus } from "lucide-react";
 import { CreateDatasetPopover } from "./CreateDatasetPopover";
 
 interface DatasetsListHeaderProps {
@@ -70,6 +71,12 @@ export function DatasetsListHeader({
           </Tooltip>
         </TooltipProvider>
         <CreateDatasetPopover onCreateDataset={onCreateDataset} />
+        <Button asChild size="sm" className="gap-2">
+          <Link to="/datasets/new">
+            <Plus className="w-4 h-4" />
+            Create from Traces
+          </Link>
+        </Button>
       </div>
     </div>
   );
