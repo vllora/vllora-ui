@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, ArrowUpDown, X, Filter } from "lucide-react";
+import { Search, ArrowUpDown, X } from "lucide-react";
 import { LabelFilter } from "@/components/label-filter/LabelFilter";
 import type { LabelInfo } from "@/services/labels-api";
 
@@ -136,6 +136,7 @@ export function SpansFilterToolbar({
           isLoading={isLabelsLoading}
           placeholder="Labels"
           showCounts={false}
+          maxVisibleLabels={100}
           size="sm"
           className="!space-y-0 [&>div:nth-child(2)]:hidden"
         />

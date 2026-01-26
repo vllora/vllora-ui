@@ -59,6 +59,9 @@ export function SpansSelectTable({
   const [availableLabels, setAvailableLabels] = useState<LabelInfo[]>([]);
   const [isLabelsLoading, setIsLabelsLoading] = useState(false);
 
+  // Track "select all matching" mode (all spans across all pages)
+  const [isAllMatchingSelected, setIsAllMatchingSelected] = useState(false);
+
   // Build filter params from current filter state
   const buildFilterParams = useCallback((offset: number): ListSpansQuery => {
     const params: ListSpansQuery = {
@@ -137,6 +140,8 @@ export function SpansSelectTable({
   // Load spans on mount and when filters change
   useEffect(() => {
     fetchSpans(0);
+    // Reset "select all matching" when filters change
+    setIsAllMatchingSelected(false);
   }, [fetchSpans]);
 
   // Load labels on mount
@@ -171,9 +176,22 @@ export function SpansSelectTable({
   const toggleSelectAll = () => {
     if (selectedSpanIds.size === filteredSpans.length) {
       onSelectionChange(new Set());
+      setIsAllMatchingSelected(false);
     } else {
       onSelectionChange(new Set(filteredSpans.map((s) => s.span_id)));
     }
+  };
+
+  const selectAllMatching = () => {
+    // Mark that all matching spans are selected (even those not loaded)
+    setIsAllMatchingSelected(true);
+    // Select all currently loaded spans
+    onSelectionChange(new Set(filteredSpans.map((s) => s.span_id)));
+  };
+
+  const clearSelection = () => {
+    onSelectionChange(new Set());
+    setIsAllMatchingSelected(false);
   };
 
   // Pagination handlers
@@ -224,8 +242,12 @@ export function SpansSelectTable({
           searchQuery={searchQuery}
           filteredSpans={filteredSpans}
           selectedSpanIds={selectedSpanIds}
+          totalCount={pagination.total}
+          isAllMatchingSelected={isAllMatchingSelected}
           onRetry={() => fetchSpans(0)}
           onToggleSelectAll={toggleSelectAll}
+          onSelectAllMatching={selectAllMatching}
+          onClearSelection={clearSelection}
           onToggleSpanSelection={toggleSpanSelection}
           formatTime={formatTime}
         />

@@ -7,19 +7,14 @@
 
 import { useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  ChevronRight,
-  ChevronDown,
-  Loader2,
-  Copy,
-  Check,
-} from "lucide-react";
+import { Loader2 } from "lucide-react";
 import type { Span } from "@/types/common-type";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { extractDataInfoFromSpan } from "@/utils/modelUtils";
 import { cn } from "@/lib/utils";
-import { ConversationThreadCell, SelectionCheckbox, StatsBadge, FormattedThreadPanel } from "../records-table/cells";
-import { LabelTag } from "@/components/chat/traces/TraceRow/new-timeline/timeline-row/label-tag";
+import { SelectionCheckbox, FormattedThreadPanel } from "../records-table/cells";
+import { SpanRow } from "./SpanRow";
+import { SelectionBanner } from "./SelectionBanner";
 
 const ROW_HEIGHT = 100;
 
@@ -29,8 +24,12 @@ export interface SpansListProps {
   searchQuery: string;
   filteredSpans: Span[];
   selectedSpanIds: Set<string>;
+  totalCount: number;
+  isAllMatchingSelected: boolean;
   onRetry: () => void;
   onToggleSelectAll: () => void;
+  onSelectAllMatching: () => void;
+  onClearSelection: () => void;
   onToggleSpanSelection: (spanId: string) => void;
   formatTime: (microseconds: number) => string;
 }
@@ -41,8 +40,12 @@ export function SpansList({
   searchQuery,
   filteredSpans,
   selectedSpanIds,
+  totalCount,
+  isAllMatchingSelected,
   onRetry,
   onToggleSelectAll,
+  onSelectAllMatching,
+  onClearSelection,
   onToggleSpanSelection,
   formatTime,
 }: SpansListProps) {
@@ -115,6 +118,16 @@ export function SpansList({
         <span className="text-sm font-medium flex-1 min-w-0 px-2 text-right">Time</span>
       </div>
 
+      {/* Gmail-style selection banner */}
+      <SelectionBanner
+        selectedCount={selectedSpanIds.size}
+        pageCount={filteredSpans.length}
+        totalCount={totalCount}
+        isAllMatchingSelected={isAllMatchingSelected}
+        onSelectAllMatching={onSelectAllMatching}
+        onClearSelection={onClearSelection}
+      />
+
       {/* Virtualized rows */}
       <div ref={parentRef} className="flex-1 overflow-y-auto">
         <div
@@ -147,61 +160,15 @@ export function SpansList({
                 )}
               >
                 {/* Main row */}
-                <div
-                  className={cn(
-                    "flex items-center px-3 py-2 cursor-pointer transition-colors",
-                    !isExpanded && "hover:bg-muted/20",
-                    selectedSpanIds.has(span.span_id) && "bg-[rgb(var(--theme-500))]/5",
-                    isExpanded && "bg-zinc-800/50"
-                  )}
-                  onClick={() => onToggleSpanSelection(span.span_id)}
-                >
-                  {/* Expand/Collapse toggle */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleExpand(span.span_id);
-                    }}
-                    className="w-6 h-6 flex items-center justify-center shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {isExpanded ? (
-                      <ChevronDown className="w-4 h-4" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4" />
-                    )}
-                  </button>
-
-                  <div className="w-6 shrink-0 flex justify-center">
-                    <SelectionCheckbox
-                      checked={selectedSpanIds.has(span.span_id)}
-                      onChange={() => onToggleSpanSelection(span.span_id)}
-                    />
-                  </div>
-                  <div className="flex-[3] min-w-0 px-2">
-                    <ConversationThreadCell data={dataInfo} />
-                  </div>
-                  <div className="flex-1 min-w-0 px-2 flex items-center justify-center">
-                    <StatsBadge data={dataInfo} />
-                  </div>
-                  <div className="flex-1 min-w-0 px-2 flex items-center justify-center">
-                    {span.attribute && 'label' in span.attribute && span.attribute.label ? (
-                      <LabelTag label={span.attribute.label} maxWidth={100} />
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0 px-2 flex items-center justify-center">
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-muted text-xs font-medium truncate">
-                      {span.operation_name}
-                    </span>
-                  </div>
-                  <div className="flex-1 min-w-0 px-2 flex items-center justify-center">
-                    <SpanIdCell spanId={span.span_id} />
-                  </div>
-                  <div className="flex-1 min-w-0 px-2 flex items-center justify-end text-sm text-muted-foreground">
-                    {formatTime(span.start_time_us)}
-                  </div>
-                </div>
+                <SpanRow
+                  span={span}
+                  dataInfo={dataInfo}
+                  isExpanded={isExpanded}
+                  isSelected={selectedSpanIds.has(span.span_id)}
+                  onToggleExpand={() => toggleExpand(span.span_id)}
+                  onToggleSelection={() => onToggleSpanSelection(span.span_id)}
+                  formatTime={formatTime}
+                />
 
                 {/* Expanded detail */}
                 {isExpanded && (
@@ -217,42 +184,5 @@ export function SpansList({
         </div>
       </div>
     </div>
-  );
-}
-
-/**
- * SpanId cell with truncated display and copy functionality
- */
-function SpanIdCell({ spanId }: { spanId: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const truncatedId = spanId.length > 8
-    ? `${spanId.slice(0, 4)}...${spanId.slice(-4)}`
-    : spanId;
-
-  const handleCopy = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      await navigator.clipboard.writeText(spanId);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy:", err);
-    }
-  };
-
-  return (
-    <button
-      onClick={handleCopy}
-      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/50 hover:bg-muted text-xs font-mono text-muted-foreground hover:text-foreground transition-colors"
-      title={`Click to copy: ${spanId}`}
-    >
-      {truncatedId}
-      {copied ? (
-        <Check className="w-3 h-3 text-emerald-500" />
-      ) : (
-        <Copy className="w-3 h-3" />
-      )}
-    </button>
   );
 }

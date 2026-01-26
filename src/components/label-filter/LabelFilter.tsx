@@ -96,19 +96,19 @@ export function LabelFilter({
             size={size}
             className={cn(
               'w-full justify-between font-normal',
-              size === 'sm' ? 'h-8 text-xs' : 'h-10 text-sm',
+              size === 'sm' ? 'h-9 text-sm' : 'h-10 text-sm',
               !hasSelection && 'text-muted-foreground'
             )}
           >
             <span className="flex items-center gap-1.5">
-              <Tag className={cn(size === 'sm' ? 'h-3 w-3' : 'h-3.5 w-3.5')} />
+              <Tag className={cn(size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4')} />
               {hasSelection
                 ? `${selectedLabels.length} label${selectedLabels.length > 1 ? 's' : ''} selected`
                 : placeholder}
             </span>
             <ChevronDown className={cn(
               'opacity-50 transition-transform',
-              size === 'sm' ? 'h-3 w-3' : 'h-4 w-4',
+              size === 'sm' ? 'h-4 w-4' : 'h-4 w-4',
               open && 'rotate-180'
             )} />
           </Button>
