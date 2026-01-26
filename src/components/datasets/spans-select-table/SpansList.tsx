@@ -19,6 +19,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { extractDataInfoFromSpan } from "@/utils/modelUtils";
 import { cn } from "@/lib/utils";
 import { ConversationThreadCell, SelectionCheckbox, StatsBadge, FormattedThreadPanel } from "../records-table/cells";
+import { LabelTag } from "@/components/chat/traces/TraceRow/new-timeline/timeline-row/label-tag";
 
 const ROW_HEIGHT = 100;
 
@@ -108,6 +109,7 @@ export function SpansList({
         </div>
         <span className="text-sm font-medium flex-[3] min-w-0 px-2">Message Preview</span>
         <span className="text-sm font-medium flex-1 min-w-0 px-2 text-center">Stats</span>
+        <span className="text-sm font-medium flex-1 min-w-0 px-2 text-center">Label</span>
         <span className="text-sm font-medium flex-1 min-w-0 px-2 text-center">Provider</span>
         <span className="text-sm font-medium flex-1 min-w-0 px-2 text-center">Span ID</span>
         <span className="text-sm font-medium flex-1 min-w-0 px-2 text-right">Time</span>
@@ -180,6 +182,13 @@ export function SpansList({
                   </div>
                   <div className="flex-1 min-w-0 px-2 flex items-center justify-center">
                     <StatsBadge data={dataInfo} />
+                  </div>
+                  <div className="flex-1 min-w-0 px-2 flex items-center justify-center">
+                    {span.attribute && 'label' in span.attribute && span.attribute.label ? (
+                      <LabelTag label={span.attribute.label} maxWidth={100} />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
                   </div>
                   <div className="flex-1 min-w-0 px-2 flex items-center justify-center">
                     <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-muted text-xs font-medium truncate">

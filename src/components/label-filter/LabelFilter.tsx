@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { LabelInfo } from '@/services/labels-api';
 import { LabelBadge } from './LabelBadge';
+import { LabelTag } from '@/components/chat/traces/TraceRow/new-timeline/timeline-row/label-tag';
 
 export interface LabelFilterProps {
   /** Selected labels */
@@ -161,11 +162,9 @@ export function LabelFilter({
                         onCheckedChange={() => toggleLabel(label.name)}
                         className="h-3.5 w-3.5"
                       />
-                      <span className="flex-1 text-xs truncate" title={label.name}>
-                        {label.name}
-                      </span>
+                      <LabelTag label={label.name} maxWidth={120} />
                       {showCounts && (
-                        <span className="text-[10px] text-muted-foreground tabular-nums">
+                        <span className="text-[10px] text-muted-foreground tabular-nums ml-auto">
                           ({label.count})
                         </span>
                       )}

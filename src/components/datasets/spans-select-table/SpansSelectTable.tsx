@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { listSpans, type PaginatedSpansResponse, type ListSpansQuery } from "@/services/spans-api";
+import { listLabels, type LabelInfo } from "@/services/labels-api";
 import type { Span } from "@/types/common-type";
 import { formatDistanceToNow } from "date-fns";
 import { SpansFilterToolbar, TIME_RANGE_OPTIONS, ALL_PROVIDERS } from "./SpansFilterToolbar";
@@ -38,11 +39,25 @@ export function SpansSelectTable({
 
   // Search and sort
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Filters
   const [selectedProvider, setSelectedProvider] = useState<string>("all");
   const [selectedTimeRange, setSelectedTimeRange] = useState<string>("all");
+  const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
+
+  // Labels
+  const [availableLabels, setAvailableLabels] = useState<LabelInfo[]>([]);
+  const [isLabelsLoading, setIsLabelsLoading] = useState(false);
 
   // Build filter params from current filter state
   const buildFilterParams = useCallback((offset: number): ListSpansQuery => {
@@ -64,8 +79,18 @@ export function SpansSelectTable({
       params.startTime = Date.now() * 1000 - timeOption.microseconds;
     }
 
+    // Labels filter
+    if (selectedLabels.length > 0) {
+      params.labels = selectedLabels.join(",");
+    }
+
+    // Search filter (uses debounced value)
+    if (debouncedSearch.trim()) {
+      params.search = debouncedSearch.trim();
+    }
+
     return params;
-  }, [selectedProvider, selectedTimeRange]);
+  }, [selectedProvider, selectedTimeRange, selectedLabels, debouncedSearch]);
 
   // Fetch spans
   const fetchSpans = useCallback(
@@ -94,24 +119,34 @@ export function SpansSelectTable({
     [projectId, onSpansLoaded, buildFilterParams]
   );
 
+  // Fetch available labels
+  const fetchLabels = useCallback(async () => {
+    if (!projectId) return;
+
+    setIsLabelsLoading(true);
+    try {
+      const response = await listLabels({ projectId });
+      setAvailableLabels(response.labels);
+    } catch (err) {
+      console.error("Failed to fetch labels:", err);
+    } finally {
+      setIsLabelsLoading(false);
+    }
+  }, [projectId]);
+
   // Load spans on mount and when filters change
   useEffect(() => {
     fetchSpans(0);
   }, [fetchSpans]);
 
-  // Filter and sort spans
-  const filteredSpans = useMemo(() => {
-    let result = [...spans];
+  // Load labels on mount
+  useEffect(() => {
+    fetchLabels();
+  }, [fetchLabels]);
 
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        (span) =>
-          span.operation_name.toLowerCase().includes(query) ||
-          span.thread_id?.toLowerCase().includes(query) ||
-          span.span_id.toLowerCase().includes(query)
-      );
-    }
+  // Sort spans (search filtering is now done server-side)
+  const filteredSpans = useMemo(() => {
+    const result = [...spans];
 
     result.sort((a, b) => {
       const timeA = a.start_time_us;
@@ -120,7 +155,7 @@ export function SpansSelectTable({
     });
 
     return result;
-  }, [spans, searchQuery, sortDirection]);
+  }, [spans, sortDirection]);
 
   // Selection handlers
   const toggleSpanSelection = (spanId: string) => {
@@ -173,6 +208,10 @@ export function SpansSelectTable({
         onProviderChange={setSelectedProvider}
         selectedTimeRange={selectedTimeRange}
         onTimeRangeChange={setSelectedTimeRange}
+        selectedLabels={selectedLabels}
+        onLabelsChange={setSelectedLabels}
+        availableLabels={availableLabels}
+        isLabelsLoading={isLabelsLoading}
         sortDirection={sortDirection}
         onSortDirectionChange={setSortDirection}
       />

@@ -2,7 +2,7 @@
  * SpansFilterToolbar
  *
  * Toolbar component for filtering and sorting spans.
- * Includes search, provider filter, time range filter, and sort controls.
+ * Includes search, provider filter, time range filter, labels filter, and sort controls.
  */
 
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Search, ArrowUpDown, X, Filter } from "lucide-react";
+import { LabelFilter } from "@/components/label-filter/LabelFilter";
+import type { LabelInfo } from "@/services/labels-api";
 
 // Operation names to include (LLM provider spans)
 export const PROVIDER_OPTIONS = [
@@ -54,6 +56,10 @@ export interface SpansFilterToolbarProps {
   onProviderChange: (provider: string) => void;
   selectedTimeRange: string;
   onTimeRangeChange: (timeRange: string) => void;
+  selectedLabels: string[];
+  onLabelsChange: (labels: string[]) => void;
+  availableLabels: LabelInfo[];
+  isLabelsLoading?: boolean;
   sortDirection: "asc" | "desc";
   onSortDirectionChange: (direction: "asc" | "desc") => void;
 }
@@ -65,14 +71,19 @@ export function SpansFilterToolbar({
   onProviderChange,
   selectedTimeRange,
   onTimeRangeChange,
+  selectedLabels,
+  onLabelsChange,
+  availableLabels,
+  isLabelsLoading = false,
   sortDirection,
   onSortDirectionChange,
 }: SpansFilterToolbarProps) {
-  const hasActiveFilters = selectedProvider !== "all" || selectedTimeRange !== "all";
+  const hasActiveFilters = selectedProvider !== "all" || selectedTimeRange !== "all" || selectedLabels.length > 0;
 
   const clearFilters = () => {
     onProviderChange("all");
     onTimeRangeChange("all");
+    onLabelsChange([]);
   };
 
   return (
@@ -90,8 +101,7 @@ export function SpansFilterToolbar({
 
       {/* Provider Filter */}
       <Select value={selectedProvider} onValueChange={onProviderChange}>
-        <SelectTrigger className="w-[140px] focus:ring-0 focus:ring-offset-0">
-          <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
+        <SelectTrigger className="w-[150px] focus:ring-0 focus:ring-offset-0">
           <SelectValue placeholder="Provider" />
         </SelectTrigger>
         <SelectContent>
@@ -116,6 +126,20 @@ export function SpansFilterToolbar({
           ))}
         </SelectContent>
       </Select>
+
+      {/* Labels Filter */}
+      <div className="w-[160px]">
+        <LabelFilter
+          selectedLabels={selectedLabels}
+          onLabelsChange={onLabelsChange}
+          availableLabels={availableLabels}
+          isLoading={isLabelsLoading}
+          placeholder="Labels"
+          showCounts={false}
+          size="sm"
+          className="!space-y-0 [&>div:nth-child(2)]:hidden"
+        />
+      </div>
 
       {/* Clear Filters */}
       {hasActiveFilters && (
