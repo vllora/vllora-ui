@@ -1,7 +1,7 @@
 /**
- * SpansList
+ * SpansTable
  *
- * Virtualized list component for displaying and selecting spans.
+ * Virtualized table component for displaying and selecting spans.
  * Supports expandable rows, selection, and virtual scrolling.
  */
 
@@ -12,43 +12,53 @@ import type { Span } from "@/types/common-type";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { extractDataInfoFromSpan } from "@/utils/modelUtils";
 import { cn } from "@/lib/utils";
-import { SelectionCheckbox, FormattedThreadPanel } from "../records-table/cells";
+import { SelectionCheckbox } from "../records-table/cells";
+import { DataInfoExpandedDetail, NoMatchingRecordsState } from "../shared";
 import { SpanRow } from "./SpanRow";
 import { SelectionBanner } from "./SelectionBanner";
 
 const ROW_HEIGHT = 100;
 
-export interface SpansListProps {
+export interface SpansTableProps {
   isLoading: boolean;
   error: string | null;
   searchQuery: string;
   filteredSpans: Span[];
   selectedSpanIds: Set<string>;
   totalCount: number;
+  /** Total count before any filters (for empty state display) */
+  unfilteredTotalCount?: number;
   isAllMatchingSelected: boolean;
+  /** Whether any filters are currently active */
+  hasActiveFilters?: boolean;
   onRetry: () => void;
   onToggleSelectAll: () => void;
   onSelectAllMatching: () => void;
   onClearSelection: () => void;
   onToggleSpanSelection: (spanId: string) => void;
+  /** Callback to clear all filters */
+  onClearFilters?: () => void;
   formatTime: (microseconds: number) => string;
 }
 
-export function SpansList({
+export function SpansTable({
   isLoading,
   error,
   searchQuery,
   filteredSpans,
   selectedSpanIds,
   totalCount,
+  unfilteredTotalCount,
   isAllMatchingSelected,
+  hasActiveFilters = false,
   onRetry,
   onToggleSelectAll,
   onSelectAllMatching,
   onClearSelection,
   onToggleSpanSelection,
+  onClearFilters,
   formatTime,
-}: SpansListProps) {
+}: SpansTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [expandedSpanIds, setExpandedSpanIds] = useState<Set<string>>(new Set());
 
@@ -92,9 +102,22 @@ export function SpansList({
   }
 
   if (filteredSpans.length === 0) {
+    const showFilteredEmptyState = hasActiveFilters || searchQuery;
+    const displayTotalCount = unfilteredTotalCount ?? totalCount;
+
     return (
-      <div className="h-full border border-border rounded-lg bg-card flex items-center justify-center text-muted-foreground">
-        {searchQuery ? "No spans match your search." : "No spans found."}
+      <div className="h-full border border-border rounded-lg bg-card flex flex-col items-center justify-center">
+        {showFilteredEmptyState ? (
+          <NoMatchingRecordsState
+            title="No traces match your filters"
+            description="We couldn't find any traces matching the current criteria. Try removing filters or adjusting the time range to see more results."
+            totalCount={displayTotalCount}
+            totalLabel="traces"
+            onClearFilters={onClearFilters}
+          />
+        ) : (
+          <p className="text-muted-foreground">No spans found.</p>
+        )}
       </div>
     );
   }
@@ -172,11 +195,7 @@ export function SpansList({
 
                 {/* Expanded detail */}
                 {isExpanded && (
-                  <div className="bg-zinc-900/40 border-t border-border/30">
-                    <div className="p-4">
-                      <FormattedThreadPanel data={dataInfo} />
-                    </div>
-                  </div>
+                  <DataInfoExpandedDetail data={dataInfo} />
                 )}
               </div>
             );

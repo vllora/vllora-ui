@@ -7,6 +7,13 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { listSpans, type PaginatedSpansResponse, type ListSpansQuery } from "@/services/spans-api";
 import { listLabels, type LabelInfo } from "@/services/labels-api";
@@ -15,9 +22,10 @@ import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { extractDataInfoFromSpan } from "@/utils/modelUtils";
 import { SpansFilterToolbar, TIME_RANGE_OPTIONS, ALL_PROVIDERS } from "./SpansFilterToolbar";
-import { SpansList } from "./SpansList";
+import { SpansTable } from "./SpansTable";
 
-const PAGE_SIZE = 100;
+const DEFAULT_PAGE_SIZE = 100;
+const PAGE_SIZE_OPTIONS = [100, 200, 300, 500, 1000];
 
 export interface SpansSelectTableProps {
   projectId: string | null;
@@ -38,7 +46,8 @@ export function SpansSelectTable({
 }: SpansSelectTableProps) {
   // Spans data
   const [spans, setSpans] = useState<Span[]>([]);
-  const [pagination, setPagination] = useState({ total: 0, offset: 0, limit: PAGE_SIZE });
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [pagination, setPagination] = useState({ total: 0, offset: 0, limit: DEFAULT_PAGE_SIZE });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,10 +76,24 @@ export function SpansSelectTable({
   // Track "select all matching" mode (all spans across all pages)
   const [isAllMatchingSelected, setIsAllMatchingSelected] = useState(false);
 
+  // Track unfiltered total count for empty state display
+  const [unfilteredTotalCount, setUnfilteredTotalCount] = useState<number | undefined>(undefined);
+
+  // Determine if any filters are active
+  const hasActiveFilters = selectedProvider !== "all" || selectedTimeRange !== "all" || selectedLabels.length > 0 || debouncedSearch.trim() !== "";
+
+  // Clear all filters
+  const clearFilters = () => {
+    setSelectedProvider("all");
+    setSelectedTimeRange("all");
+    setSelectedLabels([]);
+    setSearchQuery("");
+  };
+
   // Build filter params from current filter state
   const buildFilterParams = useCallback((offset: number): ListSpansQuery => {
     const params: ListSpansQuery = {
-      limit: PAGE_SIZE,
+      limit: pageSize,
       offset,
     };
 
@@ -98,7 +121,7 @@ export function SpansSelectTable({
     }
 
     return params;
-  }, [selectedProvider, selectedTimeRange, selectedLabels, debouncedSearch]);
+  }, [selectedProvider, selectedTimeRange, selectedLabels, debouncedSearch, pageSize]);
 
   // Fetch spans
   const fetchSpans = useCallback(
@@ -117,6 +140,11 @@ export function SpansSelectTable({
         setSpans(response.data);
         setPagination(response.pagination);
         onSpansLoaded?.(response.data);
+
+        // Track unfiltered total on initial load (when no filters are active)
+        if (!hasActiveFilters && unfilteredTotalCount === undefined) {
+          setUnfilteredTotalCount(response.pagination.total);
+        }
       } catch (err) {
         console.error("Failed to fetch spans:", err);
         setError("Failed to load spans. Please try again.");
@@ -124,7 +152,7 @@ export function SpansSelectTable({
         setIsLoading(false);
       }
     },
-    [projectId, onSpansLoaded, buildFilterParams]
+    [projectId, onSpansLoaded, buildFilterParams, hasActiveFilters, unfilteredTotalCount]
   );
 
   // Fetch available labels
@@ -288,18 +316,25 @@ export function SpansSelectTable({
   // Pagination handlers
   const handlePrevPage = () => {
     if (pagination.offset > 0) {
-      fetchSpans(Math.max(0, pagination.offset - PAGE_SIZE));
+      fetchSpans(Math.max(0, pagination.offset - pageSize));
     }
   };
 
   const handleNextPage = () => {
-    if (pagination.offset + PAGE_SIZE < pagination.total) {
-      fetchSpans(pagination.offset + PAGE_SIZE);
+    if (pagination.offset + pageSize < pagination.total) {
+      fetchSpans(pagination.offset + pageSize);
     }
   };
 
-  const currentPage = Math.floor(pagination.offset / PAGE_SIZE) + 1;
-  const totalPages = Math.ceil(pagination.total / PAGE_SIZE);
+  const handlePageSizeChange = (newSize: string) => {
+    const size = parseInt(newSize, 10);
+    setPageSize(size);
+    // Reset to first page when page size changes
+    fetchSpans(0);
+  };
+
+  const currentPage = Math.floor(pagination.offset / pageSize) + 1;
+  const totalPages = Math.ceil(pagination.total / pageSize);
 
   // Format timestamp
   const formatTime = (microseconds: number) => {
@@ -330,51 +365,76 @@ export function SpansSelectTable({
 
       {/* Spans list */}
       <div className="flex-1 min-h-0 overflow-hidden">
-        <SpansList
+        <SpansTable
           isLoading={isLoading}
           error={error}
           searchQuery={searchQuery}
           filteredSpans={filteredSpans}
           selectedSpanIds={selectedSpanIds}
           totalCount={pagination.total}
+          unfilteredTotalCount={unfilteredTotalCount}
           isAllMatchingSelected={isAllMatchingSelected}
+          hasActiveFilters={hasActiveFilters}
           onRetry={() => fetchSpans(0)}
           onToggleSelectAll={toggleSelectAll}
           onSelectAllMatching={selectAllMatching}
           onClearSelection={clearSelection}
           onToggleSpanSelection={toggleSpanSelection}
+          onClearFilters={clearFilters}
           formatTime={formatTime}
         />
       </div>
 
       {/* Pagination */}
-      {!isLoading && totalPages > 1 && (
+      {pagination.total > 0 && (
         <div className="flex items-center justify-between mt-4 flex-shrink-0">
           <p className="text-sm text-muted-foreground">
             Showing {pagination.offset + 1}-
-            {Math.min(pagination.offset + PAGE_SIZE, pagination.total)} of{" "}
+            {Math.min(pagination.offset + pageSize, pagination.total)} of{" "}
             {pagination.total}
           </p>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handlePrevPage}
-              disabled={pagination.offset === 0}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="text-sm">
-              Page {currentPage} of {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleNextPage}
-              disabled={pagination.offset + PAGE_SIZE >= pagination.total}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+          <div className="flex items-center gap-4">
+            {/* Page navigation */}
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePrevPage}
+                  disabled={isLoading || pagination.offset === 0}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-sm">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleNextPage}
+                  disabled={isLoading || pagination.offset + pageSize >= pagination.total}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+
+            {/* Page size selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Per page:</span>
+              <Select value={pageSize.toString()} onValueChange={handlePageSizeChange} disabled={isLoading}>
+                <SelectTrigger className="w-20 h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <SelectItem key={size} value={size.toString()}>
+                      {size}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
       )}

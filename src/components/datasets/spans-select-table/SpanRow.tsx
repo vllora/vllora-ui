@@ -1,7 +1,7 @@
 /**
  * SpanRow
  *
- * Row component for displaying a single span in the SpansList.
+ * Row component for displaying a single span in the SpansTable.
  * Includes expand toggle, selection checkbox, and data cells.
  */
 

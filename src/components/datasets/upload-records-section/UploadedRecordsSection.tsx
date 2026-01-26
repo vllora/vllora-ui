@@ -9,11 +9,20 @@
 import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { FileJson, X, ChevronLeft, ChevronRight, Search, Download } from "lucide-react";
 import { toast } from "sonner";
-import { UploadedRecordsList, type UploadedRecord } from "./UploadedRecordsList";
+import { UploadedRecordsTable, type UploadedRecord } from "./UploadedRecordsTable";
+import { NoMatchingRecordsState } from "../shared";
 
-const PAGE_SIZE = 100;
+const DEFAULT_PAGE_SIZE = 100;
+const PAGE_SIZE_OPTIONS = [100, 200, 300, 500, 1000];
 
 export interface UploadedRecordsSectionProps {
   fileName: string;
@@ -33,6 +42,7 @@ export function UploadedRecordsSection({
   onClear,
 }: UploadedRecordsSectionProps) {
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
@@ -65,12 +75,12 @@ export function UploadedRecordsSection({
     });
   }, [records, debouncedSearch]);
 
-  const totalPages = Math.ceil(filteredRecords.length / PAGE_SIZE);
-  const offset = (currentPage - 1) * PAGE_SIZE;
+  const totalPages = Math.ceil(filteredRecords.length / pageSize);
+  const offset = (currentPage - 1) * pageSize;
 
   // Paginated records for current page
   const paginatedRecords = useMemo(() => {
-    return filteredRecords.slice(offset, offset + PAGE_SIZE);
+    return filteredRecords.slice(offset, offset + pageSize);
   }, [filteredRecords, offset]);
 
   const handlePrevPage = () => {
@@ -83,6 +93,12 @@ export function UploadedRecordsSection({
     if (currentPage < totalPages) {
       setCurrentPage(currentPage + 1);
     }
+  };
+
+  const handlePageSizeChange = (newSize: string) => {
+    const size = parseInt(newSize, 10);
+    setPageSize(size);
+    setCurrentPage(1); // Reset to first page when page size changes
   };
 
   // Export selected records as JSONL
@@ -172,43 +188,78 @@ export function UploadedRecordsSection({
         )}
       </div>
 
-      {/* Records table */}
-      <UploadedRecordsList
-        records={paginatedRecords}
-        selectedIds={selectedIds}
-        onToggleSelectAll={onToggleSelectAll}
-        onToggleSelection={onToggleSelection}
-        pageOffset={offset}
-      />
+      {/* Records table or empty state */}
+      {filteredRecords.length === 0 && debouncedSearch ? (
+        <div className="flex-1 border border-border rounded-lg bg-card flex flex-col items-center justify-center">
+          <NoMatchingRecordsState
+            title="No records match your search"
+            description="We couldn't find any records matching your search criteria. Try adjusting your search terms."
+            totalCount={records.length}
+            totalLabel="records"
+            onClearFilters={() => setSearchQuery("")}
+            clearButtonText="Clear Search"
+          />
+        </div>
+      ) : (
+        <UploadedRecordsTable
+          records={paginatedRecords}
+          selectedIds={selectedIds}
+          onToggleSelectAll={onToggleSelectAll}
+          onToggleSelection={onToggleSelection}
+          pageOffset={offset}
+        />
+      )}
 
       {/* Pagination */}
-      {totalPages > 1 && (
+      {filteredRecords.length > 0 && (
         <div className="flex items-center justify-between mt-4 flex-shrink-0">
           <p className="text-sm text-muted-foreground">
-            Showing {offset + 1}-{Math.min(offset + PAGE_SIZE, filteredRecords.length)} of{" "}
+            Showing {offset + 1}-{Math.min(offset + pageSize, filteredRecords.length)} of{" "}
             {filteredRecords.length}
             {debouncedSearch && ` (filtered from ${records.length})`}
           </p>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handlePrevPage}
-              disabled={currentPage === 1}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="text-sm">
-              Page {currentPage} of {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleNextPage}
-              disabled={currentPage >= totalPages}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+          <div className="flex items-center gap-4">
+            {/* Page navigation */}
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePrevPage}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-sm">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleNextPage}
+                  disabled={currentPage >= totalPages}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+
+            {/* Page size selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Per page:</span>
+              <Select value={pageSize.toString()} onValueChange={handlePageSizeChange}>
+                <SelectTrigger className="w-20 h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <SelectItem key={size} value={size.toString()}>
+                      {size}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
       )}

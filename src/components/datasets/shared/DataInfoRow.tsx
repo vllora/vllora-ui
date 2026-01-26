@@ -2,7 +2,7 @@
  * DataInfoRow
  *
  * Shared row component for displaying DataInfo records.
- * Used by both SpansSelectTable and UploadedRecordsList.
+ * Used by both SpansSelectTable and UploadedRecordsTable.
  */
 
 import { ChevronRight, ChevronDown } from "lucide-react";

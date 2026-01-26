@@ -8,7 +8,7 @@
 import { Button } from "@/components/ui/button";
 import { FileJson, Loader2 } from "lucide-react";
 import { UploadedRecordsSection } from "./UploadedRecordsSection";
-import { type UploadedRecord } from "./UploadedRecordsList";
+import { type UploadedRecord } from "./UploadedRecordsTable";
 import type { ParseProgress } from "@/utils/jsonl-parser";
 
 export interface FileUploadSectionProps {

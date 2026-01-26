@@ -1,23 +1,24 @@
 /**
- * UploadedRecordsList
+ * UploadedRecordsTable
  *
- * Virtualized list component for displaying uploaded JSONL records.
+ * Virtualized table component for displaying uploaded JSONL records.
  * Uses shared components with SpansSelectTable for consistent styling.
- * Supports both export format ({messages, tools}) and DataInfo format ({input, output}).
+ * Supports expandable rows to show full conversation details.
  */
 
-import { useRef } from "react";
+import { useRef, useState, useCallback } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ParsedJsonlRecord } from "@/utils/jsonl-parser";
+import { cn } from "@/lib/utils";
 import { SelectionCheckbox } from "../records-table/cells";
-import { DataInfoRow } from "../shared";
+import { DataInfoRow, DataInfoExpandedDetail } from "../shared";
 
 const ROW_HEIGHT = 80;
 
 // Re-export the type for backwards compatibility
 export type UploadedRecord = ParsedJsonlRecord;
 
-export interface UploadedRecordsListProps {
+export interface UploadedRecordsTableProps {
   records: UploadedRecord[];
   selectedIds: Set<string>;
   onToggleSelectAll: () => void;
@@ -26,14 +27,27 @@ export interface UploadedRecordsListProps {
   pageOffset?: number;
 }
 
-export function UploadedRecordsList({
+export function UploadedRecordsTable({
   records,
   selectedIds,
   onToggleSelectAll,
   onToggleSelection,
   pageOffset = 0,
-}: UploadedRecordsListProps) {
+}: UploadedRecordsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  const toggleExpand = useCallback((id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
 
   const virtualizer = useVirtualizer({
     count: records.length,
@@ -70,6 +84,7 @@ export function UploadedRecordsList({
         >
           {virtualizer.getVirtualItems().map((virtualRow) => {
             const record = records[virtualRow.index];
+            const isExpanded = expandedIds.has(record.id);
 
             return (
               <div
@@ -83,16 +98,27 @@ export function UploadedRecordsList({
                   width: "100%",
                   transform: `translateY(${virtualRow.start}px)`,
                 }}
-                className="border-b border-border"
+                className={cn(
+                  "flex flex-col border-b border-border",
+                  isExpanded && "border-border/60 shadow-md"
+                )}
               >
+                {/* Main row */}
                 <DataInfoRow
                   id={record.id}
                   index={pageOffset + virtualRow.index}
                   data={record.data}
+                  isExpanded={isExpanded}
                   isSelected={selectedIds.has(record.id)}
+                  showExpandToggle={true}
+                  onToggleExpand={() => toggleExpand(record.id)}
                   onToggleSelection={() => onToggleSelection(record.id)}
-                  showExpandToggle={false}
                 />
+
+                {/* Expanded detail */}
+                {isExpanded && (
+                  <DataInfoExpandedDetail data={record.data} />
+                )}
               </div>
             );
           })}

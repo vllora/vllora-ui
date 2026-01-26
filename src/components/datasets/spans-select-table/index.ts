@@ -4,8 +4,8 @@ export type { SpansSelectTableProps } from "./SpansSelectTable";
 export { SpansFilterToolbar, PROVIDER_OPTIONS, TIME_RANGE_OPTIONS, ALL_PROVIDERS } from "./SpansFilterToolbar";
 export type { SpansFilterToolbarProps } from "./SpansFilterToolbar";
 
-export { SpansList } from "./SpansList";
-export type { SpansListProps } from "./SpansList";
+export { SpansTable } from "./SpansTable";
+export type { SpansTableProps } from "./SpansTable";
 
 export { SpanIdCell } from "./SpanIdCell";
 export type { SpanIdCellProps } from "./SpanIdCell";
