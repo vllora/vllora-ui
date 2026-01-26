@@ -17,7 +17,7 @@ The RFT product uses a **visual canvas** showing an 7-step pipeline as connected
 
 ## Entry Points
 
-### 1. Datasets List (`/optimization`)
+### 1. Datasets List (`/finetune`)
 
 View all datasets, each showing:
 - Record count, topic count, balance score
@@ -26,7 +26,7 @@ View all datasets, each showing:
 
 **Actions:** Create new, open existing, duplicate, export, delete
 
-### 2. Create Dataset (`/optimization/new`)
+### 2. Create Dataset (`/finetune/new`)
 
 Two modes:
 - **From Gateway Traces** — Filter and select traces from your LLM gateway
@@ -34,7 +34,7 @@ Two modes:
 
 ---
 
-## Dataset Canvas (`/optimization/:id`)
+## Dataset Canvas (`/finetune/:id`)
 
 The main view for working with a dataset.
 
@@ -186,178 +186,173 @@ The Health Indicator bar shows validation status at all times. **This is NOT a p
 
 ## Step-by-Step Details
 
-### Step 1 — Extract Records
+### Step 1 — Extract Data
 
 **Purpose:** Create initial dataset from traces or uploaded file.
 
-**On Canvas:**
+**Node Card:**
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ 1. Extract Records                                          ✅ Complete │
-│                                                                         │
-│ 1,042 records extracted from gateway traces                             │
-│ Source: Last 7 days • Model: gpt-4o                                    │
-│                                                                         │
-│ [↻ Pull New Traces] [📋 View Records]                                  │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────┐
+│  ①  Extract Data                │
+│     INGESTION                   │
+│                                 │
+│  Source: Gateway Traces         │
+│                       Active ●  │
+└─────────────────────────────────┘
 ```
 
-**Actions:**
+**Click to open:** Records Viewer modal
+
+**Modal Actions:**
 | Action | Description |
 |--------|-------------|
-| Pull New Traces | Extract new traces since last pull (append) |
-| View Records | Open records overlay |
+| Pull New Traces | Extract new traces since last pull |
+| View Records | Browse all extracted records |
+| Import File | Upload JSONL file |
 
 **Re-trigger:** Can pull new traces anytime. New records get validated automatically.
 
 ---
 
-### Step 2 — Topics & Categorization
+### Step 2 — Topics & Category
 
 **Purpose:** Define topic hierarchy AND assign each record to a topic.
 
-**On Canvas (Complete state):**
+**Node Card (Complete):**
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ 2. Topics & Categorization                                  ✅ Complete │
-│                                                                         │
-│ 7 topics • 1,008 records categorized (100%)                            │
-│ High confidence: 892 (88%) • Medium: 98 (10%) • Low: 18 (2%)           │
-│                                                                         │
-│ [✏️ Edit Topics] [↻ Regenerate] [📋 Low Confidence]                    │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-**On Canvas (In Progress state):**
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ 2. Topics & Categorization                                  ⏳ Running  │
-│                                                                         │
-│ 7 topics defined                                                        │
-│ Categorizing... ████████████████░░░░░░░░░░░░░░  52%                    │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────┐
+│  ②  Topics & Category           │
+│     CLASSIFICATION              │
+│                                 │
+│  7 topics • 1,008 records       │
+│                    Complete ●   │
+└─────────────────────────────────┘
 ```
 
-**On Canvas (Attention state):**
+**Node Card (Processing):**
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ 2. Topics & Categorization                                 ⚠️ Attention │
-│                                                                         │
-│ 7 topics • 1,008 records categorized                                   │
-│ ⚠️ 89 records (9%) have low confidence — review recommended            │
-│                                                                         │
-│ [✏️ Edit Topics] [↻ Regenerate] [📋 Low Confidence]                    │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────┐
+│  ②  Topics & Category           │
+│     CLASSIFICATION              │
+│                                 │
+│  Categorizing... 52%            │
+│                  Processing ●   │
+└─────────────────────────────────┘
 ```
+
+**Click to open:** Topics Editor modal
+
+**Modal Actions:**
+| Action | Description |
+|--------|-------------|
+| Edit Topics | Modify topic hierarchy |
+| Regenerate | Re-generate topics from data (clears assignments) |
+| View Low Confidence | Show records with confidence < 0.7 |
 
 **Topic Generation Options:**
 1. **Auto-generate** — System clusters and labels topics using embeddings
 2. **Use template** — Start from predefined industry templates  
 3. **Manual define** — User creates custom hierarchy
 
-**Actions:**
-| Action | Description |
-|--------|-------------|
-| Edit Topics | Open topic editor modal |
-| Regenerate | Warning, then regenerate topics + re-categorize |
-| Low Confidence | View records with confidence < 0.7 |
-
 **Auto-behavior:**
 - After topics defined → Categorization runs automatically
 - After topics edited → Re-categorization prompt offered
 
 **Status Logic:**
-| Condition | Status |
-|-----------|--------|
-| No topics defined | ⬜ Waiting |
-| Topics defined, categorizing... | ⏳ Running |
-| All categorized, low confidence < 5% | ✅ Complete |
-| All categorized, low confidence ≥ 5% | ⚠️ Attention |
+| Condition | Status Badge |
+|-----------|--------------|
+| No topics defined | Waiting |
+| Topics defined, categorizing... | Processing |
+| All categorized, low confidence < 5% | Complete |
+| All categorized, low confidence ≥ 5% | Attention |
 
 ---
 
-### Step 3 — Review Coverage
+### Step 3 — Coverage Analysis
 
 **Purpose:** Analyze topic distribution and identify gaps.
 
-**On Canvas (Attention state):**
+**Node Card (Complete):**
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ 3. Review Coverage                                      ⚠️ Attention    │
-│                                                                         │
-│ Balance Score: 0.35 (Poor)                                              │
-│                                                                         │
-│ Topic Distribution:                                                     │
-│ openings   ████████████████░░░░  38%  (target: 25%)                    │
-│ tactics    ████░░░░░░░░░░░░░░░░   8%  (target: 20%)  🔴 -120 records   │
-│ endgames   ██████████████░░░░░░  27%  (target: 25%)                    │
-│ strategy   ██████████░░░░░░░░░░  18%  (target: 20%)  🟡 -20 records    │
-│                                                                         │
-│ [📊 Full Dashboard] [✨ Generate] [📋 View Gaps] [Skip →]              │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────┐
+│  ③  Coverage Analysis           │
+│     DISTRIBUTION                │
+│                                 │
+│  Balance: 0.72                  │
+│                    Complete ●   │
+└─────────────────────────────────┘
+```
+
+**Node Card (Attention):**
+```
+┌─────────────────────────────────┐
+│  ③  Coverage Analysis           │
+│     DISTRIBUTION                │
+│                                 │
+│  Balance: 0.35 (Poor)           │
+│                   Attention ●   │
+└─────────────────────────────────┘
 ```
 
 **Auto-runs:** After categorization completes.
 
-**Actions:**
+**Click to open:** Coverage Dashboard modal
+
+**Modal Actions:**
 | Action | Description |
 |--------|-------------|
-| Full Dashboard | Open coverage modal with detailed charts |
-| Generate | Open generation modal (pre-filled for gap topics) |
-| View Gaps | Show records from under-represented topics |
-| Skip | Continue to grader (if imbalance is acceptable) |
+| View Dashboard | Detailed distribution charts |
+| Generate | Open generation modal for gap topics |
+| View Gaps | Show under-represented records |
+| Skip | Continue to grader |
 
 **Balance Score:**
-- `1.0` = Perfect balance
-- `> 0.6` = Good
+- `> 0.6` = Good (Complete)
 - `0.3–0.6` = Attention needed
 - `< 0.3` = Poor (generate recommended)
 
 ---
 
-### Step 4 — Define Grader
+### Step 4 — Grader Config
 
 **Purpose:** Configure how model outputs will be scored during training.
 
-**On Canvas (LLM Judge configured):**
+**Node Card (LLM Judge):**
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ 4. Define Grader                                            ✅ Complete │
-│                                                                         │
-│ Type: LLM as a Judge                                                    │
-│ Model: gpt-4o-mini • Temperature: 0                                     │
-│                                                                         │
-│ Prompt: "Rate the response quality from 0 to 1..."                      │
-│                                                                         │
-│ [✏️ Edit Grader] [🧪 Test Sample]                                      │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────┐
+│  ④  Grader Config               │
+│     EVALUATION RULES            │
+│                                 │
+│  Judge: GPT-4o                  │
+│                  Configured ●   │
+└─────────────────────────────────┘
 ```
 
-**On Canvas (Script configured):**
+**Node Card (Script):**
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ 4. Define Grader                                            ✅ Complete │
-│                                                                         │
-│ Type: Script (JavaScript)                                               │
-│ Code: function grade(input) { ... }                                     │
-│                                                                         │
-│ [✏️ Edit Grader] [🧪 Test Sample]                                      │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────┐
+│  ④  Grader Config               │
+│     EVALUATION RULES            │
+│                                 │
+│  Type: JavaScript Script        │
+│                  Configured ●   │
+└─────────────────────────────────┘
 ```
 
 **Does NOT auto-run:** Requires user configuration.
 
-**Grader Types:**
-| Type | Best For | Configuration |
-|------|----------|---------------|
-| LLM as a Judge | Subjective quality assessment | Prompt + JSON schema + model config |
-| Script | Format validation, deterministic checks | JavaScript code |
+**Click to open:** Configure Grader modal
 
-**Actions:**
+**Grader Types:**
+| Type | Best For |
+|------|----------|
+| LLM as a Judge | Subjective quality assessment |
+| Script | Format validation, deterministic checks |
+
+**Modal Actions:**
 | Action | Description |
 |--------|-------------|
-| Edit Grader | Open grader configuration modal |
+| Edit Grader | Configure grader type and settings |
 | Test Sample | Run grader on 5 random records |
 
 ---
@@ -366,40 +361,29 @@ The Health Indicator bar shows validation status at all times. **This is NOT a p
 
 **Purpose:** Test dataset + grader quality before training.
 
-**On Canvas (GO state):**
+**Node Card (Passed):**
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ 5. Dry Run                                              ✅ 🟢 GO        │
-│                                                                         │
-│ Tested 300 samples • Mean: 0.45 • Std: 0.18                            │
-│                                                                         │
-│ Score Distribution:                                                     │
-│      ██                                                                 │
-│     ████                                                                │
-│    ██████  ██                                                           │
-│   ████████████████                                                      │
-│   0.0   0.2   0.4   0.6   0.8   1.0                                    │
-│                                                                         │
-│ [📊 Full Results] [↻ Re-run] [🚀 Start Training]                       │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────┐
+│  ⑤  Dry Run                     │
+│     VALIDATION                  │
+│                                 │
+│  Mean: 0.45 • GO               │
+│                      Passed ●   │
+└─────────────────────────────────┘
 ```
 
-**On Canvas (NO-GO state):**
+**Node Card (Failed):**
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ 5. Dry Run                                              ❌ 🔴 NO-GO     │
-│                                                                         │
-│ Tested 300 samples • Mean: 0.08 • Std: 0.09                            │
-│                                                                         │
-│ ⚠️ Problem: Scores too low                                              │
-│                                                                         │
-│ Likely causes:                                                          │
-│ 1. Dataset too hard — base model can't perform tasks                   │
-│ 2. Grader too strict — valid outputs scored as failures                │
-│                                                                         │
-│ [📊 Full Results] [✏️ Adjust Grader] [↻ Re-run]                        │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────┐
+│  ⑤  Dry Run                     │
+│     VALIDATION                  │
+│                                 │
+│  Mean: 0.08 • NO-GO            │
+│                      Failed ●   │
+└─────────────────────────────────┘
 ```
+
+**Click to open:** Dry Run Results modal
 
 **GO/NO-GO Criteria:**
 | Metric | GO | CAUTION | NO-GO |
@@ -408,47 +392,65 @@ The Health Indicator bar shows validation status at all times. **This is NOT a p
 | % Scoring > 0 | > 70% | 50–70% | < 50% |
 | Std Dev | > 0.10 | 0.05–0.10 | < 0.05 |
 
+**Modal Actions:**
+| Action | Description |
+|--------|-------------|
+| Full Results | View detailed score distribution |
+| Re-run | Run dry run again |
+| Adjust Grader | Go back to grader config |
+
 ---
 
 ### Step 6 — Train Model
 
 **Purpose:** Execute RFT training.
 
-**On Canvas (Ready state):**
+**Node Card (Ready):**
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ 6. Train Model                                              ⬜ Ready    │
-│                                                                         │
-│ Ready to start training                                                 │
-│                                                                         │
-│ Dataset: 1,008 valid records                                            │
-│ Grader: Tool Usage                                                      │
-│ Dry Run: 🟢 GO (mean: 0.45)                                            │
-│                                                                         │
-│                        [🚀 Start Training →]                           │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────┐
+│  ⑥  Train Model                 │
+│     RFT TRAINING                │
+│                                 │
+│  Ready to start                 │
+│                       Ready ○   │
+└─────────────────────────────────┘
 ```
 
-**On Canvas (Training state):**
+**Node Card (Training):**
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ 6. Train Model                                           ⏳ Training    │
-│                                                                         │
-│ ████████████████░░░░░░░░░░░░░░  45%                                    │
-│                                                                         │
-│ Epoch: 1 / 2                                                            │
-│ Train Reward: 0.52 (+24%)                                               │
-│ Valid Reward: 0.48 (+14%)                                               │
-│ ETA: ~2 hours                                                           │
-│                                                                         │
-│ [Cancel Training]                                                       │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────┐
+│  ⑥  Train Model                 │
+│     RFT TRAINING                │
+│                                 │
+│  Training... 45%                │
+│                   Training ●   │
+└─────────────────────────────────┘
 ```
 
-**Training Configuration (in Start Training modal):**
+**Node Card (Complete):**
+```
+┌─────────────────────────────────┐
+│  ⑥  Train Model                 │
+│     RFT TRAINING                │
+│                                 │
+│  +49% improvement               │
+│                    Complete ●   │
+└─────────────────────────────────┘
+```
+
+**Click to open:** Start Training modal
+
+**Training Configuration (in modal):**
 - Base model selection
 - Train/validation split (default 90/10)
 - Stratify by topic option
+
+**Modal Actions:**
+| Action | Description |
+|--------|-------------|
+| Start Training | Begin RFT training |
+| Cancel | Cancel in-progress training |
+| View Logs | See training progress |
 
 ---
 
@@ -456,22 +458,41 @@ The Health Indicator bar shows validation status at all times. **This is NOT a p
 
 **Purpose:** Ship trained model to production.
 
-**On Canvas:**
+**Node Card (Waiting):**
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ 7. Deploy                                                   ⬜ Ready    │
-│                                                                         │
-│ Model ready: ft:gpt-4o:chess-tutor:abc123                              │
-│ Improvement: 0.45 → 0.67 (+49%)                                        │
-│                                                                         │
-│ [Run Benchmarks] [Test Playground] [🚀 Deploy →]                       │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────┐
+│  ⑦  Deploy                      │
+│     DEPLOYMENT                  │
+│                                 │
+│  Waiting for training           │
+│                     Waiting ○   │
+└─────────────────────────────────┘
 ```
+
+**Node Card (Ready):**
+```
+┌─────────────────────────────────┐
+│  ⑦  Deploy                      │
+│     DEPLOYMENT                  │
+│                                 │
+│  Model ready to deploy          │
+│                       Ready ●   │
+└─────────────────────────────────┘
+```
+
+**Click to open:** Deploy modal
 
 **Deployment Options:**
 - **Replace in gateway** — All traffic routes to fine-tuned model
 - **New endpoint only** — Access via explicit model ID
 - **A/B test** — Split traffic between base and fine-tuned
+
+**Modal Actions:**
+| Action | Description |
+|--------|-------------|
+| Run Benchmarks | Test model against test set |
+| Test Playground | Interactive testing |
+| Deploy | Push to production |
 
 ---
 

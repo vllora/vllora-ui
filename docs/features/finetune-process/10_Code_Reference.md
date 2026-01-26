@@ -34,8 +34,10 @@ def validate_structure(record: dict) -> tuple[bool, str]:
         if "content" not in msg and "tool_calls" not in msg:
             return False, f"message_{i}_missing_content"
     
-    if messages[-1]["role"] != "user":
-        return False, "last_message_not_user"
+    # Check for at least one user message
+    has_user = any(msg["role"] == "user" for msg in messages)
+    if not has_user:
+        return False, "no_user_message"
     
     return True, "ok"
 ```
