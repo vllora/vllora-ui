@@ -1,0 +1,96 @@
+/**
+ * DatasetInfoSidebar
+ *
+ * Sidebar component for entering dataset metadata and creating the dataset.
+ * Used in the dataset creation flow.
+ */
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Database, Loader2 } from "lucide-react";
+
+export interface DatasetInfoSidebarProps {
+  datasetName: string;
+  onDatasetNameChange: (name: string) => void;
+  finetuneObjective: string;
+  onFinetuneObjectiveChange: (objective: string) => void;
+  selectionCount: number;
+  isCreating: boolean;
+  onCreateDataset: () => void;
+}
+
+export function DatasetInfoSidebar({
+  datasetName,
+  onDatasetNameChange,
+  finetuneObjective,
+  onFinetuneObjectiveChange,
+  selectionCount,
+  isCreating,
+  onCreateDataset,
+}: DatasetInfoSidebarProps) {
+  return (
+    <div className="col-span-1 overflow-auto">
+      <div className="border border-border rounded-lg p-6 bg-card">
+        <h2 className="text-lg font-semibold mb-6">Dataset Info</h2>
+
+        <div className="space-y-6">
+          {/* Dataset Name */}
+          <div>
+            <label className="block text-sm font-medium mb-2">
+              Dataset Name
+            </label>
+            <Input
+              placeholder="my-training-dataset"
+              value={datasetName}
+              onChange={(e) => onDatasetNameChange(e.target.value)}
+            />
+          </div>
+
+          {/* Finetune Objective */}
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Training Objective
+              <span className="text-muted-foreground font-normal ml-2">(Optional)</span>
+            </label>
+            <Textarea
+              placeholder="Describe specific behaviors you want to reinforce or suppress..."
+              value={finetuneObjective}
+              onChange={(e) => onFinetuneObjectiveChange(e.target.value)}
+              className="min-h-[120px] resize-none"
+            />
+            <p className="text-xs text-muted-foreground mt-2">
+              This helps the optimizer refine the RFT model weights during training.
+            </p>
+          </div>
+
+          {/* Selection summary */}
+          <div className="pt-4 border-t border-border">
+            <div className="flex items-center justify-between text-sm mb-4">
+              <span className="text-muted-foreground">Selected records</span>
+              <span className="font-medium">{selectionCount}</span>
+            </div>
+
+            <Button
+              className="w-full gap-2"
+              disabled={!datasetName.trim() || selectionCount === 0 || isCreating}
+              onClick={onCreateDataset}
+            >
+              {isCreating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Database className="h-4 w-4" />
+                  Create Dataset
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

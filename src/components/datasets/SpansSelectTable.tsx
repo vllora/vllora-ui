@@ -15,6 +15,8 @@ import {
   Loader2,
   Search,
   ArrowUpDown,
+  Copy,
+  Check,
 } from "lucide-react";
 import { listSpans, type PaginatedSpansResponse } from "@/services/spans-api";
 import type { Span } from "@/types/common-type";
@@ -155,9 +157,9 @@ export function SpansSelectTable({
   };
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+    <div className="flex-1 flex flex-col min-h-0 max-w-full overflow-hidden">
       {/* Toolbar */}
-      <div className="flex items-center gap-3 mb-4 flex-shrink-0">
+      <div className="flex items-center gap-3 mb-4 shrink-0">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -323,18 +325,21 @@ function SpansList({
   }
 
   return (
-    <div className="h-full border border-border rounded-lg bg-card overflow-hidden flex flex-col">
+    <div className="h-full max-w-full border border-border rounded-lg bg-card overflow-hidden flex flex-col">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-muted/30 flex-shrink-0">
-        <div className="w-6" /> {/* Spacer for expand button */}
-        <SelectionCheckbox
-          checked={selectedSpanIds.size === filteredSpans.length && filteredSpans.length > 0}
-          onChange={onToggleSelectAll}
-        />
-        <span className="text-sm font-medium flex-1">Message Preview</span>
-        <span className="text-sm font-medium w-20">Stats</span>
-        <span className="text-sm font-medium w-20">Provider</span>
-        <span className="text-sm font-medium w-24 text-right">Time</span>
+      <div className="flex items-center px-3 py-3 border-b border-border bg-muted/30 flex-shrink-0">
+        <div className="w-6 shrink-0" /> {/* Spacer for expand button */}
+        <div className="w-6 shrink-0 flex justify-center">
+          <SelectionCheckbox
+            checked={selectedSpanIds.size === filteredSpans.length && filteredSpans.length > 0}
+            onChange={onToggleSelectAll}
+          />
+        </div>
+        <span className="text-sm font-medium flex-[3] min-w-0 px-2">Message Preview</span>
+        <span className="text-sm font-medium flex-1 min-w-0 px-2 text-center">Stats</span>
+        <span className="text-sm font-medium flex-1 min-w-0 px-2 text-center">Provider</span>
+        <span className="text-sm font-medium flex-1 min-w-0 px-2 text-center">Span ID</span>
+        <span className="text-sm font-medium flex-1 min-w-0 px-2 text-right">Time</span>
       </div>
 
       {/* Virtualized rows */}
@@ -371,7 +376,7 @@ function SpansList({
                 {/* Main row */}
                 <div
                   className={cn(
-                    "flex items-center gap-3 px-4 py-2 cursor-pointer transition-colors",
+                    "flex items-center px-3 py-2 cursor-pointer transition-colors",
                     !isExpanded && "hover:bg-muted/20",
                     selectedSpanIds.has(span.span_id) && "bg-[rgb(var(--theme-500))]/5",
                     isExpanded && "bg-zinc-800/50"
@@ -393,20 +398,27 @@ function SpansList({
                     )}
                   </button>
 
-                  <SelectionCheckbox
-                    checked={selectedSpanIds.has(span.span_id)}
-                    onChange={() => onToggleSpanSelection(span.span_id)}
-                  />
-                  <ConversationThreadCell data={dataInfo} />
-                  <div className="w-20">
+                  <div className="w-6 shrink-0 flex justify-center">
+                    <SelectionCheckbox
+                      checked={selectedSpanIds.has(span.span_id)}
+                      onChange={() => onToggleSpanSelection(span.span_id)}
+                    />
+                  </div>
+                  <div className="flex-[3] min-w-0 px-2">
+                    <ConversationThreadCell data={dataInfo} />
+                  </div>
+                  <div className="flex-1 min-w-0 px-2 flex items-center justify-center">
                     <StatsBadge data={dataInfo} />
                   </div>
-                  <div className="w-20">
-                    <span className="inline-flex items-center px-2 py-1 rounded-md bg-muted text-xs font-medium">
+                  <div className="flex-1 min-w-0 px-2 flex items-center justify-center">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-muted text-xs font-medium truncate">
                       {span.operation_name}
                     </span>
                   </div>
-                  <div className="w-24 text-right text-sm text-muted-foreground">
+                  <div className="flex-1 min-w-0 px-2 flex items-center justify-center">
+                    <SpanIdCell spanId={span.span_id} />
+                  </div>
+                  <div className="flex-1 min-w-0 px-2 flex items-center justify-end text-sm text-muted-foreground">
                     {formatTime(span.start_time_us)}
                   </div>
                 </div>
@@ -425,5 +437,42 @@ function SpansList({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * SpanId cell with truncated display and copy functionality
+ */
+function SpanIdCell({ spanId }: { spanId: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const truncatedId = spanId.length > 8
+    ? `${spanId.slice(0, 4)}...${spanId.slice(-4)}`
+    : spanId;
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(spanId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/50 hover:bg-muted text-xs font-mono text-muted-foreground hover:text-foreground transition-colors"
+      title={`Click to copy: ${spanId}`}
+    >
+      {truncatedId}
+      {copied ? (
+        <Check className="w-3 h-3 text-emerald-500" />
+      ) : (
+        <Copy className="w-3 h-3" />
+      )}
+    </button>
   );
 }
