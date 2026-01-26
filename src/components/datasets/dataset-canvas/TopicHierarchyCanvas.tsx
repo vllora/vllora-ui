@@ -5,23 +5,23 @@
  * - If no hierarchy: Shows a single "Raw Data" root node
  * - If hierarchy exists: Shows the full tree structure with connections
  * - Nodes can expand to show embedded table with records
+ * - Uses dagre for automatic tree layout
  * - Uses TopicCanvasContext for state management
  */
 
-import { useMemo } from "react";
+import { useMemo, useEffect, useRef } from "react";
 import {
   ReactFlow,
   Background,
   Controls,
   useNodesState,
   useEdgesState,
-  MarkerType,
   ConnectionLineType,
-  type Edge,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { TopicNodeComponent, type TopicNode } from "./TopicNodeComponent";
+import { TopicNodeComponent } from "./TopicNodeComponent";
 import { TopicCanvasProvider, useTopicCanvas } from "./TopicCanvasContext";
+import { useDagreLayout } from "./useDagreLayout";
 import type { TopicHierarchyNode, DatasetRecord } from "@/types/dataset-types";
 
 // Custom node types with proper typing
@@ -54,12 +54,6 @@ interface TopicHierarchyCanvasProps {
   onSaveRecord?: (recordId: string, data: unknown) => Promise<void>;
 }
 
-// Layout constants
-const NODE_WIDTH = 280;
-const NODE_WIDTH_EXPANDED = 750; // Must match TopicNodeComponent's DEFAULT_EXPANDED_WIDTH
-const HORIZONTAL_SPACING = 100;
-const VERTICAL_SPACING = 120;
-
 // Inner component that uses the context
 function TopicHierarchyCanvasInner({
   hierarchy,
@@ -79,106 +73,35 @@ function TopicHierarchyCanvasInner({
     return counts;
   }, [records]);
 
-  // Convert hierarchy to React Flow nodes and edges
-  const { initialNodes, initialEdges } = useMemo(() => {
-    const nodes: TopicNode[] = [];
-    const edges: Edge[] = [];
-    const hasHierarchy = hierarchy && hierarchy.length > 0;
-    const isRootExpanded = expandedNodes.has("root");
+  // Use dagre for automatic tree layout
+  const { nodes: layoutedNodes, edges: layoutedEdges } = useDagreLayout(
+    hierarchy,
+    recordCountsByTopic,
+    records.length,
+    expandedNodes
+  );
 
-    // Root node
-    nodes.push({
-      id: "root",
-      type: "topic",
-      position: { x: 0, y: 0 },
-      data: {
-        name: hasHierarchy ? "All Data" : "Uncategorized Data",
-        topicKey: "__all__",
-        nodeId: "root",
-        recordCount: records.length,
-        isRoot: true,
-      },
-    });
+  const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
 
-    if (hasHierarchy) {
-      const processLevel = (
-        levelNodes: TopicHierarchyNode[],
-        parentId: string,
-        depth: number,
-        startX: number
-      ): number => {
-        let totalWidth = 0;
-        const levelY = depth * VERTICAL_SPACING;
+  // Track layout version to avoid infinite update loops
+  const layoutVersionRef = useRef(0);
+  const prevExpandedNodesRef = useRef(expandedNodes);
 
-        levelNodes.forEach((node) => {
-          const nodeId = `topic-${node.id}`;
-          const hasChildren = node.children && node.children.length > 0;
-          const recordCount = recordCountsByTopic[node.name] || 0;
-          const isNodeExpanded = expandedNodes.has(nodeId);
-          const currentNodeWidth = isNodeExpanded ? NODE_WIDTH_EXPANDED : NODE_WIDTH;
+  // Update nodes when layout changes (e.g., when nodes expand/collapse)
+  useEffect(() => {
+    // Only update if expandedNodes actually changed (Set comparison)
+    const expandedNodesChanged =
+      prevExpandedNodesRef.current.size !== expandedNodes.size ||
+      ![...prevExpandedNodesRef.current].every(id => expandedNodes.has(id));
 
-          // Calculate children width first for proper centering
-          let childrenWidth = 0;
-          if (hasChildren) {
-            childrenWidth = processLevel(
-              node.children!,
-              nodeId,
-              depth + 1,
-              startX + totalWidth
-            );
-          }
-
-          const nodeWidth = Math.max(currentNodeWidth, childrenWidth);
-          const nodeX = startX + totalWidth + (nodeWidth - currentNodeWidth) / 2;
-
-          nodes.push({
-            id: nodeId,
-            type: "topic",
-            position: { x: nodeX, y: levelY },
-            data: {
-              name: node.name,
-              topicKey: node.name,
-              nodeId: nodeId,
-              recordCount,
-              isRoot: false,
-              hasChildren,
-            },
-          });
-
-          // Edge from parent
-          edges.push({
-            id: `edge-${parentId}-${nodeId}`,
-            source: parentId,
-            target: nodeId,
-            type: "smoothstep",
-            markerEnd: { type: MarkerType.ArrowClosed },
-            style: { stroke: "hsl(var(--border))", strokeWidth: 2 },
-          });
-
-          totalWidth += nodeWidth + HORIZONTAL_SPACING;
-        });
-
-        return totalWidth - HORIZONTAL_SPACING; // Remove last spacing
-      };
-
-      const totalWidth = processLevel(hierarchy, "root", 1, 0);
-
-      // Center root node above children
-      const rootNodeWidth = isRootExpanded ? NODE_WIDTH_EXPANDED : NODE_WIDTH;
-      nodes[0].position.x = (totalWidth - rootNodeWidth) / 2;
+    if (expandedNodesChanged || layoutVersionRef.current === 0) {
+      prevExpandedNodesRef.current = expandedNodes;
+      layoutVersionRef.current++;
+      setNodes(layoutedNodes);
+      setEdges(layoutedEdges);
     }
-
-    return { initialNodes: nodes, initialEdges: edges };
-  }, [hierarchy, records.length, recordCountsByTopic, expandedNodes]);
-
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-
-  // Update nodes when props change
-  useMemo(() => {
-    setNodes(initialNodes);
-    setEdges(initialEdges);
-  }, [initialNodes, initialEdges, setNodes, setEdges]);
+  }, [layoutedNodes, layoutedEdges, setNodes, setEdges, expandedNodes]);
 
   return (
     <div className="flex-1 w-full h-full">
@@ -190,13 +113,12 @@ function TopicHierarchyCanvasInner({
         nodeTypes={nodeTypes}
         connectionLineType={ConnectionLineType.SmoothStep}
         fitView
-        fitViewOptions={{ padding: 0.01 }}
+        fitViewOptions={{ padding: 0.1 }}
         minZoom={0.3}
         maxZoom={1.5}
-        nodesDraggable={false} // Layout is automatic, don't allow manual dragging
-        nodesConnectable={false} // Hierarchy is managed via dialog, not by drawing edges
-        elementsSelectable={true} // Required for NodeResizer to work
-        selectNodesOnDrag={false}
+        nodesDraggable={true}
+        nodesConnectable={false}
+        elementsSelectable={true}
         panOnDrag
         zoomOnScroll
         proOptions={{ hideAttribution: true }}

@@ -28,14 +28,15 @@ export type TopicNode = Node<TopicNodeData, "topic">;
 
 // Default sizes
 const COLLAPSED_WIDTH = 280;
-const DEFAULT_EXPANDED_WIDTH = 750;
+const DEFAULT_EXPANDED_WIDTH = 700;
 const DEFAULT_EXPANDED_HEIGHT = 500;
-const MIN_WIDTH = 650; // RecordRow needs ~630px minimum for all columns
+const MIN_WIDTH = 450; // Flex-based columns scale down better
 const MIN_HEIGHT = 300;
 const HEADER_HEIGHT = 60;
 
 export const TopicNodeComponent = memo(function TopicNodeComponent({
   data,
+  selected = false,
 }: NodeProps<TopicNode>) {
   const {
     name,
@@ -85,7 +86,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
   return (
     <div
       className={cn(
-        "relative rounded-xl border-2 bg-card shadow-md transition-all nopan",
+        "relative rounded border bg-card shadow-md transition-all nopan",
         isSelected
           ? "border-[rgb(var(--theme-500))] shadow-[rgb(var(--theme-500))]/20 shadow-lg"
           : "border-border hover:border-[rgb(var(--theme-500))]/50",
@@ -96,13 +97,13 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
         height: isExpanded ? expandedSize.height : 'auto',
       }}
     >
-      {/* Resizer - only when expanded */}
+      {/* Resizer - visible only when node is selected and expanded */}
       {isExpanded && (
         <NodeResizer
           minWidth={MIN_WIDTH}
           minHeight={MIN_HEIGHT}
           onResize={handleResize}
-          isVisible={isExpanded}
+          isVisible={selected}
           lineClassName="!border-[rgb(var(--theme-500))]"
           handleClassName="!w-2 !h-2 !bg-[rgb(var(--theme-500))] !border-none"
         />

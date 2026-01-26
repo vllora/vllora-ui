@@ -26,7 +26,6 @@ import {
   computeCompletedSteps,
 } from "./dataset-canvas/DatasetStepper";
 import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
-import { RecordsTable } from "./records-table";
 import { DatasetDetailHeader } from "./DatasetDetailHeader";
 
 export function DatasetDetailContentV2() {
@@ -42,7 +41,6 @@ export function DatasetDetailContentV2() {
 
     // Selection
     selectedRecordIds,
-    setSelectedRecordIds,
 
     // Dialog states
     deleteConfirm,
@@ -123,12 +121,6 @@ export function DatasetDetailContentV2() {
       isDeployed: false, // TODO: Check actual deployment status
     });
   }, [dataset, sortedRecords.length]);
-
-  // Get records for selected topic (or all records if none selected)
-  const filteredRecords = useMemo(() => {
-    if (!selectedTopic) return sortedRecords;
-    return sortedRecords.filter((record) => record.topic === selectedTopic);
-  }, [sortedRecords, selectedTopic]);
 
   // Wrapper for auto-tagging that closes the dialog when done
   const handleAutoTagSelected = async () => {
@@ -235,39 +227,6 @@ export function DatasetDetailContentV2() {
               onSaveRecord={handleSaveRecordData}
             />
           </div>
-
-          {/* Records table sidebar - shows when topic is selected */}
-          {selectedTopic && (
-            <div className="w-[500px] border-l border-border flex flex-col overflow-hidden">
-              <div className="px-4 py-3 border-b border-border bg-card/50">
-                <h3 className="font-medium text-sm">
-                  {selectedTopic === "__root__" ? "All Records" : selectedTopic}
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  {filteredRecords.length} record{filteredRecords.length !== 1 ? "s" : ""}
-                </p>
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <RecordsTable
-                  records={filteredRecords}
-                  datasetId={datasetId}
-                  showHeader
-                  showFooter
-                  selectable
-                  selectedIds={selectedRecordIds}
-                  onSelectionChange={setSelectedRecordIds}
-                  emptyMessage="No records in this topic"
-                  onUpdateTopic={handleUpdateRecordTopic}
-                  onDelete={(recordId: string) =>
-                    setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
-                  }
-                  onSave={handleSaveRecordData}
-                  availableTopics={availableTopics}
-                  topicHierarchy={dataset?.topicHierarchy?.hierarchy}
-                />
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
