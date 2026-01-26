@@ -119,6 +119,7 @@ export function LucyChat({
 
   // Voice input state
   const [isStreamingVoice, setIsStreamingVoice] = useState(false);
+
   const {
     messages,
     isStreaming,
@@ -367,7 +368,7 @@ export function LucyChat({
               ))}
 
               {/* Render external tool calls that need user approval */}
-              <LucyToolCalls />
+              <LucyToolCalls tools={externalTools} />
 
               {/* Render streaming indicator (typing/thinking) */}
               <LucyStreamingIndicator />

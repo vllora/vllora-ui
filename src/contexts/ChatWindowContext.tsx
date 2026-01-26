@@ -81,6 +81,13 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     setHoverSpanId,
     collapsedSpans,
     setCollapsedSpans,
+    isSpanSelectModeEnabled,
+    setIsSpanSelectModeEnabled,
+    selectedSpanIdsForActions,
+    setSelectedSpanIdsForActions,
+    toggleSpanSelection,
+    clearSpanSelection,
+    selectAllSpans,
   } = useWrapperHook({ projectId, threadId, labels: labelFilter.selectedLabels });
 
   const { selectedThread, setThreads } = ThreadsConsumer()
@@ -431,6 +438,14 @@ export function useChatWindow({ threadId, projectId, selectedModel }: ChatWindow
     threadId,
     // Label filter
     labelFilter,
+    // Span selection for actions
+    isSpanSelectModeEnabled,
+    setIsSpanSelectModeEnabled,
+    selectedSpanIdsForActions,
+    setSelectedSpanIdsForActions,
+    toggleSpanSelection,
+    clearSpanSelection,
+    selectAllSpans,
   };
 }
 export function ChatWindowProvider({ children, threadId, projectId, selectedModel }: { children: ReactNode, threadId: string, projectId: string, selectedModel: string }) {

@@ -126,7 +126,7 @@ import { uiTools } from '@/lib/distri-ui-tools';
 import { dataTools } from '@/lib/distri-data-tools';
 
 export function AgentPanel({ isOpen, onClose }: AgentPanelProps) {
-  const agentName = 'vllora_main_agent';
+  const agentName = 'vllora_orchestration';
   const { agent, loading } = useAgent({ agentIdOrDef: agentName });
   const [threadId, setThreadId] = useState<string>(getThreadId());
 

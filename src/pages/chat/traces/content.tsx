@@ -3,13 +3,17 @@ import { SpanDetailPanel } from "@/components/debug/SpanDetailPanel";
 import { RunTable } from "./run-table";
 import { TracesPageConsumer } from "@/contexts/TracesPageContext";
 import { GroupingSelector } from "@/components/traces/GroupingSelector";
-import { useEffect } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { ProjectsConsumer } from "@/lib";
 import { useSearchParams, useNavigate, useLocation } from "react-router";
 import { X } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { LabelFilter } from "@/components/label-filter";
 import { CurrentAppConsumer } from "@/contexts/CurrentAppContext";
+import { FloatingActionBar } from "@/components/chat/traces/components/FloatingActionBar";
+import { SelectModeToggle } from "@/components/chat/traces/components/SelectModeToggle";
+import { AddToDatasetDialog } from "@/components/datasets/AddToDatasetDialog";
+import { isActualModelCall } from "@/utils/span-to-message";
 
 export function TracesPageContent() {
   const {
@@ -22,7 +26,23 @@ export function TracesPageContent() {
     duration,
     setDuration,
     labelFilter,
+    isSpanSelectModeEnabled,
+    setIsSpanSelectModeEnabled,
+    selectedSpanIdsForActions,
+    setSelectedSpanIdsForActions,
+    clearSpanSelection,
+    flattenSpans,
   } = TracesPageConsumer();
+
+  const [showAddToDatasetDialog, setShowAddToDatasetDialog] = useState(false);
+
+  const actualModelCallSpans = useMemo(() => {
+    return flattenSpans.filter(span => isActualModelCall(span));
+  }, [flattenSpans]);
+  // Resolve selected span IDs to full Span objects
+  const selectedSpans = useMemo(() => {
+    return actualModelCallSpans.filter(span => selectedSpanIdsForActions.includes(span.span_id));
+  }, [actualModelCallSpans, selectedSpanIdsForActions]);
 
   const { currentProjectId } = ProjectsConsumer();
   const { app_mode } = CurrentAppConsumer();
@@ -64,27 +84,50 @@ export function TracesPageContent() {
     </div>
   ) : undefined;
 
-  return <div className="flex flex-col flex-1 h-full overflow-hidden">
+  const handleToggleSelectMode = () => {
+    if (isSpanSelectModeEnabled) {
+      clearSpanSelection();
+    } else {
+      setIsSpanSelectModeEnabled(true);
+    }
+  };
+
+  const handleSelectAll = () => {
+    const allSpanIds = flattenSpans.filter(span => isActualModelCall(span)).map(span => span.span_id);
+    setSelectedSpanIdsForActions(allSpanIds);
+  };
+
+  return <div className="flex flex-col flex-1 h-full overflow-hidden relative">
     {/* Grouping Controls */}
     <div className="px-6 py-3 border-b border-border">
-      <div className="flex items-center gap-4">
-        <GroupingSelector
-          groupByMode={groupByMode}
-          onGroupByModeChange={setGroupByMode}
-          duration={duration}
-          onDurationChange={setDuration}
-          filterBadge={threadFilterBadge}
-        />
-        {app_mode === "vllora" && <div className="w-64">
-          <LabelFilter
-            selectedLabels={labelFilter.selectedLabels}
-            onLabelsChange={labelFilter.setLabels}
-            availableLabels={labelFilter.availableLabels}
-            isLoading={labelFilter.isLoading}
-            placeholder="Filter labels..."
-            size="sm"
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <GroupingSelector
+            groupByMode={groupByMode}
+            onGroupByModeChange={setGroupByMode}
+            duration={duration}
+            onDurationChange={setDuration}
+            filterBadge={threadFilterBadge}
           />
-        </div>}
+          {app_mode === "vllora" && <div className="w-64">
+            <LabelFilter
+              selectedLabels={labelFilter.selectedLabels}
+              onLabelsChange={labelFilter.setLabels}
+              availableLabels={labelFilter.availableLabels}
+              isLoading={labelFilter.isLoading}
+              placeholder="Filter labels..."
+              size="sm"
+            />
+          </div>}
+        </div>
+        {/* Select mode toggle button */}
+        <SelectModeToggle
+          isEnabled={isSpanSelectModeEnabled}
+          onToggle={handleToggleSelectMode}
+          selectedCount={selectedSpanIdsForActions.length}
+          totalCount={actualModelCallSpans?.length || 0}
+          onSelectAll={handleSelectAll}
+        />
       </div>
     </div>
 
@@ -105,6 +148,22 @@ export function TracesPageContent() {
         </div>
       )}
     </div>
+
+    {/* Floating Action Bar for selected spans */}
+    <FloatingActionBar
+      selectedCount={selectedSpanIdsForActions.length}
+      onClearSelection={clearSpanSelection}
+      onAddToDataset={() => setShowAddToDatasetDialog(true)}
+      isVisible={isSpanSelectModeEnabled}
+    />
+
+    {/* Add to Dataset Dialog */}
+    <AddToDatasetDialog
+      open={showAddToDatasetDialog}
+      onOpenChange={setShowAddToDatasetDialog}
+      spans={selectedSpans}
+      onSuccess={clearSpanSelection}
+    />
   </div>;
 }
 

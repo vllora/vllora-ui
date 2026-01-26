@@ -10,6 +10,7 @@ import { BreakpointIcon } from "@/components/Icons/BreakpointIcon";
 import { BreakpointTooltipContent } from "./breakpoint-tooltip-content";
 import { BreakpointsConsumer } from "@/lib";
 import { EditRequestDialog } from "./EditRequestDialog";
+import { SpanSelectionCheckbox } from "../../../components/SpanSelectionCheckbox";
 
 // Base props for timeline content components
 export interface TimelineContentBaseProps {
@@ -49,6 +50,10 @@ export interface TimelineRowProps {
     onHoverSpanChange?: (spanId: string | undefined) => void;
     showHighlightButton?: boolean;
     selectedLabels?: string[];
+    // Multi-select props
+    isSelectModeEnabled?: boolean;
+    isSelectedForAction?: boolean;
+    onToggleSelection?: (spanId: string) => void;
 }
 
 // Main TimelineRow component that uses the sub-components
@@ -73,7 +78,10 @@ export const TimelineRow = (props: TimelineRowProps) => {
         onHoverSpanChange,
         isInSidebar = true,
         showHighlightButton = false,
-        selectedLabels = []
+        selectedLabels = [],
+        isSelectModeEnabled = false,
+        isSelectedForAction = false,
+        onToggleSelection,
     } = props;
     const { continueBreakpoint, breakpoints } = BreakpointsConsumer();
 
@@ -207,9 +215,18 @@ export const TimelineRow = (props: TimelineRowProps) => {
                 }
             }}
         >
-            <div className={classNames(`flex w-full divide-x divide-border/50 ${!showHighlightButton ? "px-1" : ""}`)}>
-                {/* Eye icon for highlighting - only shown in threads tab */}
-                {showHighlightButton && !currentSpan.isInDebug && (
+            <div className={classNames(`flex w-full divide-x divide-border/50 ${!showHighlightButton && !isSelectModeEnabled ? "px-1" : ""}`)}>
+                {/* Checkbox for multi-select - shown when select mode is enabled */}
+                {isSelectModeEnabled && onToggleSelection && (
+                     span.operation_name !== 'tools'? 
+                    <SpanSelectionCheckbox
+                        spanId={span.span_id}
+                        isSelected={isSelectedForAction}
+                        onToggle={onToggleSelection}
+                    /> : <div className="w-6 h-6 shrink-0"></div>
+                )}
+                {/* Eye icon for highlighting - only shown in threads tab when not in select mode */}
+                {showHighlightButton && !currentSpan.isInDebug && !isSelectModeEnabled && (
                     <TooltipProvider delayDuration={300}>
                         <Tooltip>
                             <TooltipTrigger asChild>

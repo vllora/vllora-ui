@@ -26,6 +26,7 @@ export * from './LucyToolCalls';
 export * from './LucyToolRenderer';
 export * from './LucyToolCallCard';
 export * from './LucyToolExecutionRenderer';
+export * from './LucyToolActions';
 
 // Streaming and pending components
 export * from './LucyPendingMessage';

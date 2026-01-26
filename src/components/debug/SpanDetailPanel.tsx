@@ -9,6 +9,7 @@ import { StandaloneSpanUIDetailsDisplay } from './StandaloneSpanUIDetailsDisplay
 import { SpanHeader } from '../chat/traces/TraceRow/span-info/SpanHeader';
 import { getClientSDKName } from '@/utils/graph-utils';
 import { getModelCallSpans, getStatus } from '../chat/traces/TraceRow/span-info/DetailView';
+import { SpanFooter } from '../chat/traces/TraceRow/span-info/SpanFooter';
 
 interface SpanDetailPanelProps {
   span: Span;
@@ -42,6 +43,7 @@ export const SpanDetailPanel: React.FC<SpanDetailPanelProps> = ({ span, relatedS
         />
       </div>
       <StandaloneSpanUIDetailsDisplay span={span} relatedSpans={relatedSpans} />
+      <SpanFooter span={span} />
 
     </div>
   );
