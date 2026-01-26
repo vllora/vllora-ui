@@ -13,7 +13,7 @@ import { DatasetsConsumer } from "@/contexts/DatasetsContext";
 import type { Span } from "@/types/common-type";
 import { toast } from "sonner";
 import { extractDataInfoFromSpan } from "@/utils/modelUtils";
-import { SpansSelectTable } from "./SpansSelectTable";
+import { SpansSelectTable } from "./spans-select-table";
 import { type UploadedRecord } from "./UploadedRecordsList";
 import { FileUploadSection } from "./FileUploadSection";
 import { DatasetInfoSidebar } from "./DatasetInfoSidebar";

@@ -1,269 +1,28 @@
 /**
- * SpansSelectTable
+ * SpansList
  *
- * A reusable component for selecting spans from the gateway.
- * Includes search, sort, pagination, and virtual scrolling.
+ * Virtualized list component for displaying and selecting spans.
+ * Supports expandable rows, selection, and virtual scrolling.
  */
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
-  ChevronLeft,
   ChevronRight,
   ChevronDown,
   Loader2,
-  Search,
-  ArrowUpDown,
   Copy,
   Check,
 } from "lucide-react";
-import { listSpans, type PaginatedSpansResponse } from "@/services/spans-api";
 import type { Span } from "@/types/common-type";
-import { formatDistanceToNow } from "date-fns";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { extractDataInfoFromSpan } from "@/utils/modelUtils";
 import { cn } from "@/lib/utils";
-import { ConversationThreadCell, SelectionCheckbox, StatsBadge, FormattedThreadPanel } from "./records-table/cells";
+import { ConversationThreadCell, SelectionCheckbox, StatsBadge, FormattedThreadPanel } from "../records-table/cells";
 
-const PAGE_SIZE = 100;
 const ROW_HEIGHT = 100;
 
-// Operation names to include (LLM provider spans)
-const INCLUDED_OPERATION_NAMES = ["openai", "gemini", "anthropic", "bedrock"];
-
-export interface SpansSelectTableProps {
-  projectId: string | null;
-  selectedSpanIds: Set<string>;
-  onSelectionChange: (selectedIds: Set<string>) => void;
-  /** Callback when spans are loaded, provides the full spans array */
-  onSpansLoaded?: (spans: Span[]) => void;
-}
-
-export function SpansSelectTable({
-  projectId,
-  selectedSpanIds,
-  onSelectionChange,
-  onSpansLoaded,
-}: SpansSelectTableProps) {
-  // Spans data
-  const [spans, setSpans] = useState<Span[]>([]);
-  const [pagination, setPagination] = useState({ total: 0, offset: 0, limit: PAGE_SIZE });
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // Search and sort
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-
-  // Fetch spans
-  const fetchSpans = useCallback(
-    async (offset = 0) => {
-      if (!projectId) return;
-
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const response: PaginatedSpansResponse = await listSpans({
-          projectId,
-          params: {
-            limit: PAGE_SIZE,
-            offset,
-            operationNames: INCLUDED_OPERATION_NAMES.join(","),
-          },
-        });
-
-        setSpans(response.data);
-        setPagination(response.pagination);
-        onSpansLoaded?.(response.data);
-      } catch (err) {
-        console.error("Failed to fetch spans:", err);
-        setError("Failed to load spans. Please try again.");
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [projectId, onSpansLoaded]
-  );
-
-  // Load spans on mount
-  useEffect(() => {
-    fetchSpans(0);
-  }, [fetchSpans]);
-
-  // Filter and sort spans
-  const filteredSpans = useMemo(() => {
-    let result = [...spans];
-
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        (span) =>
-          span.operation_name.toLowerCase().includes(query) ||
-          span.thread_id?.toLowerCase().includes(query) ||
-          span.span_id.toLowerCase().includes(query)
-      );
-    }
-
-    result.sort((a, b) => {
-      const timeA = a.start_time_us;
-      const timeB = b.start_time_us;
-      return sortDirection === "desc" ? timeB - timeA : timeA - timeB;
-    });
-
-    return result;
-  }, [spans, searchQuery, sortDirection]);
-
-  // Selection handlers
-  const toggleSpanSelection = (spanId: string) => {
-    const next = new Set(selectedSpanIds);
-    if (next.has(spanId)) {
-      next.delete(spanId);
-    } else {
-      next.add(spanId);
-    }
-    onSelectionChange(next);
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedSpanIds.size === filteredSpans.length) {
-      onSelectionChange(new Set());
-    } else {
-      onSelectionChange(new Set(filteredSpans.map((s) => s.span_id)));
-    }
-  };
-
-  // Pagination handlers
-  const handlePrevPage = () => {
-    if (pagination.offset > 0) {
-      fetchSpans(Math.max(0, pagination.offset - PAGE_SIZE));
-    }
-  };
-
-  const handleNextPage = () => {
-    if (pagination.offset + PAGE_SIZE < pagination.total) {
-      fetchSpans(pagination.offset + PAGE_SIZE);
-    }
-  };
-
-  const currentPage = Math.floor(pagination.offset / PAGE_SIZE) + 1;
-  const totalPages = Math.ceil(pagination.total / PAGE_SIZE);
-
-  // Format timestamp
-  const formatTime = (microseconds: number) => {
-    const date = new Date(microseconds / 1000);
-    return formatDistanceToNow(date, { addSuffix: true });
-  };
-
-  return (
-    <div className="flex-1 flex flex-col min-h-0 max-w-full overflow-hidden">
-      {/* Toolbar */}
-      <div className="flex items-center gap-3 mb-4 shrink-0">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by operation or thread ID..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setSortDirection((d) => (d === "desc" ? "asc" : "desc"))}
-          className="gap-2"
-        >
-          <ArrowUpDown className="h-4 w-4" />
-          {sortDirection === "desc" ? "Newest first" : "Oldest first"}
-        </Button>
-      </div>
-
-      {/* Spans list */}
-      <div className="flex-1 min-h-0 overflow-hidden">
-        <SpansList
-          isLoading={isLoading}
-          error={error}
-          searchQuery={searchQuery}
-          filteredSpans={filteredSpans}
-          selectedSpanIds={selectedSpanIds}
-          onRetry={() => fetchSpans(0)}
-          onToggleSelectAll={toggleSelectAll}
-          onToggleSpanSelection={toggleSpanSelection}
-          formatTime={formatTime}
-        />
-      </div>
-
-      {/* Pagination */}
-      {!isLoading && totalPages > 1 && (
-        <div className="flex items-center justify-between mt-4 flex-shrink-0">
-          <p className="text-sm text-muted-foreground">
-            Showing {pagination.offset + 1}-
-            {Math.min(pagination.offset + PAGE_SIZE, pagination.total)} of{" "}
-            {pagination.total}
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handlePrevPage}
-              disabled={pagination.offset === 0}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="text-sm">
-              Page {currentPage} of {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleNextPage}
-              disabled={pagination.offset + PAGE_SIZE >= pagination.total}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * Get selected spans from the table's internal state
- */
-export function useSpansSelection() {
-  const [selectedSpanIds, setSelectedSpanIds] = useState<Set<string>>(new Set());
-  const [spans, setSpans] = useState<Span[]>([]);
-
-  const getSelectedSpans = useCallback(() => {
-    return spans.filter((s) => selectedSpanIds.has(s.span_id));
-  }, [spans, selectedSpanIds]);
-
-  return {
-    selectedSpanIds,
-    setSelectedSpanIds,
-    spans,
-    setSpans,
-    getSelectedSpans,
-  };
-}
-
-/**
- * Virtualized spans list component
- */
-function SpansList({
-  isLoading,
-  error,
-  searchQuery,
-  filteredSpans,
-  selectedSpanIds,
-  onRetry,
-  onToggleSelectAll,
-  onToggleSpanSelection,
-  formatTime,
-}: {
+export interface SpansListProps {
   isLoading: boolean;
   error: string | null;
   searchQuery: string;
@@ -273,7 +32,19 @@ function SpansList({
   onToggleSelectAll: () => void;
   onToggleSpanSelection: (spanId: string) => void;
   formatTime: (microseconds: number) => string;
-}) {
+}
+
+export function SpansList({
+  isLoading,
+  error,
+  searchQuery,
+  filteredSpans,
+  selectedSpanIds,
+  onRetry,
+  onToggleSelectAll,
+  onToggleSpanSelection,
+  formatTime,
+}: SpansListProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [expandedSpanIds, setExpandedSpanIds] = useState<Set<string>>(new Set());
 
