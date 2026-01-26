@@ -7,7 +7,7 @@
 
 import { DatasetDetailProvider } from "@/contexts/DatasetDetailContext";
 import { FinetuneJobsProvider } from "@/contexts/FinetuneJobsContext";
-import { DatasetDetailContent } from "./DatasetDetailContent";
+import { DatasetDetailContentV2 } from "./DatasetDetailContentV2";
 
 interface DatasetDetailViewProps {
   datasetId: string;
@@ -24,7 +24,7 @@ export function DatasetDetailView({ datasetId, onBack, onSelectDataset }: Datase
       onSelectDataset={onSelectDataset}
     >
       <FinetuneJobsProvider>
-        <DatasetDetailContent />
+        <DatasetDetailContentV2 />
       </FinetuneJobsProvider>
     </DatasetDetailProvider>
   );
