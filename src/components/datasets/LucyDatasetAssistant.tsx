@@ -6,6 +6,7 @@
  */
 
 import { useMemo, useCallback, useEffect, useState } from "react";
+import { useParams } from "react-router";
 import { Plus, Loader2, PanelLeftClose, PanelLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -67,15 +68,23 @@ const DATASET_QUICK_ACTIONS: QuickAction[] = [
 export function LucyDatasetAssistant() {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
+  // Get dataset ID from URL params (for detail page)
+  const { datasetId: selectedDatasetId } = useParams<{ datasetId: string }>();
+
   const { datasets } = DatasetsConsumer();
   const {
-    selectedDatasetId,
-    currentDataset,
     selectedRecordIds,
     searchQuery,
     sortConfig,
     expandedDatasetIds,
   } = DatasetsUIConsumer();
+
+  // Derive current dataset from datasets list and URL param
+  const currentDataset = useMemo(() => {
+    if (!selectedDatasetId) return null;
+    const dataset = datasets.find(d => d.id === selectedDatasetId);
+    return dataset ? { id: dataset.id, name: dataset.name } : null;
+  }, [datasets, selectedDatasetId]);
 
   // Lucy agent state
   const { isConnected, reconnect } = useDistriConnection();

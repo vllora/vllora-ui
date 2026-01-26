@@ -5,8 +5,8 @@
  * Handles navigation, selection, search, sort, and Lucy tool events.
  */
 
-import { createContext, useContext, ReactNode, useCallback, useState, useEffect, useMemo, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { createContext, useContext, ReactNode, useCallback, useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router';
 import { DatasetsConsumer } from './DatasetsContext';
 import { emitter } from '@/utils/eventEmitter';
 import type { SortConfig } from '@/components/datasets/RecordsToolbar';
@@ -18,8 +18,6 @@ import type { ProjectEventUnion, CustomEvent } from '@/contexts/project-events/d
 // Types
 // ============================================================================
 
-export type DatasetViewMode = 'standard' | 'finetune';
-
 interface DatasetsUIContextType {
   // Data state
   datasets: { id: string; name: string }[];
@@ -29,14 +27,6 @@ interface DatasetsUIContextType {
   hasBackendSpans: boolean;
   isCheckingSpans: boolean;
   checkBackendSpans: () => Promise<void>;
-
-  // Navigation state
-  selectedDatasetId: string | null;
-  currentDataset: { id: string; name: string } | null;
-
-  // View mode
-  viewMode: DatasetViewMode;
-  setViewMode: (mode: DatasetViewMode) => void;
 
   // Selection state
   selectedRecordIds: Set<string>;
@@ -77,17 +67,13 @@ const DatasetsUIContext = createContext<DatasetsUIContextType | undefined>(undef
 export function DatasetsUIProvider({ children }: { children: ReactNode }) {
   const { datasets, loadDatasets, isLoading } = DatasetsConsumer();
   const { subscribe, projectId } = ProjectEventsConsumer();
-
-  // URL params for dataset detail view
-  const [searchParams, setSearchParams] = useSearchParams();
-  const selectedDatasetId = searchParams.get('id');
+  const navigate = useNavigate();
 
   // UI state
   const [selectedRecordIds, setSelectedRecordIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [sortConfig, setSortConfig] = useState<SortConfig | undefined>();
   const [expandedDatasetIds, setExpandedDatasetIds] = useState<Set<string>>(new Set());
-  const [viewMode, setViewMode] = useState<DatasetViewMode>('standard');
 
   // Backend spans state
   const [hasBackendSpans, setHasBackendSpans] = useState(false);
@@ -152,28 +138,21 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
     return unsubscribe;
   }, [projectId, subscribe, hasBackendSpans]);
 
-  // Derived state
-  const currentDataset = useMemo(() => {
-    if (!selectedDatasetId) return null;
-    const dataset = datasets.find(d => d.id === selectedDatasetId);
-    return dataset ? { id: dataset.id, name: dataset.name } : null;
-  }, [datasets, selectedDatasetId]);
-
-  // Navigation actions
+  // Navigation actions - use path-based routing
   const navigateToDataset = useCallback((datasetId: string) => {
-    setSearchParams({ id: datasetId });
+    navigate(`/datasets/${datasetId}`);
     // Clear selection when navigating
     setSelectedRecordIds(new Set());
     setSearchQuery('');
     setSortConfig(undefined);
-  }, [setSearchParams]);
+  }, [navigate]);
 
   const navigateToList = useCallback(() => {
-    setSearchParams({});
+    navigate('/datasets');
     setSelectedRecordIds(new Set());
     setSearchQuery('');
     setSortConfig(undefined);
-  }, [setSearchParams]);
+  }, [navigate]);
 
   // Selection actions
   const selectRecords = useCallback((recordIds: string[]) => {
@@ -219,8 +198,8 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
     // Selection handlers
     const handleSelectRecords = (data: { datasetId: string; recordIds: string[] }) => {
       // Navigate to the dataset first, then select records
-      if (data.datasetId && data.datasetId !== selectedDatasetId) {
-        setSearchParams({ id: data.datasetId });
+      if (data.datasetId) {
+        navigate(`/datasets/${data.datasetId}`);
       }
       selectRecords(data.recordIds);
     };
@@ -266,7 +245,7 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
       emitter.off('vllora_dataset_set_sort' as any, handleSetSort);
       emitter.off('vllora_dataset_refresh' as any, handleRefresh);
     };
-  }, [navigateToDataset, navigateToList, expandDataset, collapseDataset, selectRecords, clearSelection, loadDatasets, selectedDatasetId, setSearchParams]);
+  }, [navigateToDataset, navigateToList, expandDataset, collapseDataset, selectRecords, clearSelection, loadDatasets, navigate]);
 
   const value: DatasetsUIContextType = {
     // Data state
@@ -277,14 +256,6 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
     hasBackendSpans,
     isCheckingSpans,
     checkBackendSpans,
-
-    // Navigation state
-    selectedDatasetId,
-    currentDataset,
-
-    // View mode
-    viewMode,
-    setViewMode,
 
     // Selection state
     selectedRecordIds,

@@ -25,16 +25,8 @@ import { updateDatasetEvaluationConfig } from '@/services/datasets-db';
 import { toast } from 'sonner';
 import type { EvaluationConfig } from '@/types/dataset-types';
 import { Button } from '@/components/ui/button';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { ArrowLeft, Settings, Workflow } from 'lucide-react';
-import { Switch } from '@/components/ui/switch';
+import { ArrowLeft, Settings } from 'lucide-react';
 import { getLeafTopicsFromHierarchy } from '@/components/datasets/record-utils';
-import { DatasetsUIConsumer } from '@/contexts/DatasetsUIContext';
 
 interface FinetuneDatasetPageProps {
   datasetId: string;
@@ -66,7 +58,6 @@ export function FinetuneDatasetPage({
  */
 function FinetuneDatasetPageContent() {
   const ctx = FinetuneProcessConsumer();
-  const { viewMode, setViewMode } = DatasetsUIConsumer();
   const {
     dataset,
     records,
@@ -217,24 +208,6 @@ function FinetuneDatasetPageContent() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {/* View mode toggle */}
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={viewMode === 'finetune'}
-                    onCheckedChange={(checked) => setViewMode(checked ? 'finetune' : 'standard')}
-                  />
-                  <Workflow className="h-4 w-4 text-muted-foreground" />
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{viewMode === 'finetune' ? 'Switch to Standard view' : 'Switch to RFT Pipeline view'}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
           <Button variant="outline" size="sm">
             <Settings className="h-4 w-4 mr-2" />
             Settings

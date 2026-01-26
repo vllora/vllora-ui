@@ -8,10 +8,8 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChevronRight, Pencil, Check, X, Database, PanelRightOpen, PanelRightClose, Workflow } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
+import { ChevronRight, Pencil, Check, X, Database, PanelRightOpen, PanelRightClose } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
-import { DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
 import { useFinetuneJobs } from "@/contexts/FinetuneJobsContext";
 import { DatasetSelector } from "./DatasetSelector";
 import { DatasetActions } from "./DatasetActions";
@@ -35,7 +33,6 @@ export function DatasetDetailHeader() {
     handleRenameDataset,
   } = DatasetDetailConsumer();
 
-  const { viewMode, setViewMode } = DatasetsUIConsumer();
   const { isSidebarOpen, setIsSidebarOpen, filteredJobs, setCurrentBackendDatasetId } = useFinetuneJobs();
   const hasActiveJobs = filteredJobs.some(j => j.status === 'pending' || j.status === 'running');
 
@@ -161,24 +158,6 @@ export function DatasetDetailHeader() {
 
         {/* Actions */}
         <div className="flex items-center gap-2">
-          {/* View mode toggle */}
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={viewMode === 'finetune'}
-                    onCheckedChange={(checked) => setViewMode(checked ? 'finetune' : 'standard')}
-                  />
-                  <Workflow className="h-4 w-4 text-muted-foreground" />
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{viewMode === 'finetune' ? 'Switch to Standard view' : 'Switch to RFT Pipeline view'}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
           {/* Dataset actions - consumes context directly */}
           <DatasetActions />
 
