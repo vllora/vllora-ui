@@ -30,6 +30,7 @@
 | [09 - UI Screens](./09_UI_Screens.md) | Canvas-based UI specification | Design/Frontend |
 | [10 - Code Reference](./10_Code_Reference.md) | Implementation code examples | Engineering |
 | [11 - Appendix](./11_Appendix.md) | Presets, platform notes, sources | Reference |
+| [12 - Implementation Plan](./12_Implementation_Plan.md) | Detailed development plan with DatasetDetailContext reuse | Engineering |
 
 ---
 

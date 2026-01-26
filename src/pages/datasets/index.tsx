@@ -1,7 +1,10 @@
 import { DatasetsUIProvider, DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
 import { DatasetsTable } from "@/components/datasets/table";
 import { DatasetDetailView } from "@/components/datasets/DatasetDetailView";
-import { LucyDatasetAssistant } from "@/components/datasets/LucyDatasetAssistant";
+import { FinetuneDatasetPage } from "@/components/finetune/FinetuneDatasetPage";
+import { EmptyDatasetsState } from "@/components/datasets/EmptyDatasetsState";
+import { SelectSpansOrUploadFile } from "@/components/datasets/SelectSpansOrUploadFile";
+import { Loader2 } from "lucide-react";
 
 // Inner component that uses the UI context
 function DatasetsPageContent() {
@@ -9,21 +12,52 @@ function DatasetsPageContent() {
     selectedDatasetId,
     navigateToDataset,
     navigateToList,
+    viewMode,
+    setViewMode,
+    datasets,
+    isLoading,
+    hasBackendSpans,
+    isCheckingSpans,
   } = DatasetsUIConsumer();
 
-  return (
-    <section className="flex-1 flex overflow-hidden bg-background text-foreground">
-      {/* Left Panel - Lucy Chat */}
-      <LucyDatasetAssistant />
+  // Handler to go back and reset view mode
+  const handleBack = () => {
+    setViewMode('standard');
+    navigateToList();
+  };
 
-      {/* Right Panel - Datasets List or Detail View */}
+  // Show empty state when no datasets exist AND no spans in backend
+  // Show span selection when spans exist but no datasets
+  const noDatasets = datasets.length === 0 && !selectedDatasetId;
+  const showLoadingState = isLoading || isCheckingSpans;
+  const showEmptyState = !showLoadingState && noDatasets && !hasBackendSpans;
+  const showSpanSelection = !showLoadingState && noDatasets && hasBackendSpans;
+
+  return (
+    <section className="flex-1 flex overflow-hidden bg-background text-foreground relative">
       <div className="flex-1 flex flex-col overflow-hidden">
-        {selectedDatasetId ? (
-          <DatasetDetailView
-            datasetId={selectedDatasetId}
-            onBack={navigateToList}
-            onSelectDataset={navigateToDataset}
-          />
+        {showLoadingState && noDatasets ? (
+          <div className="flex-1 flex items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : showEmptyState ? (
+          <EmptyDatasetsState />
+        ) : showSpanSelection ? (
+          <SelectSpansOrUploadFile />
+        ) : selectedDatasetId ? (
+          viewMode === 'finetune' ? (
+            <FinetuneDatasetPage
+              datasetId={selectedDatasetId}
+              onBack={handleBack}
+              onSelectDataset={navigateToDataset}
+            />
+          ) : (
+            <DatasetDetailView
+              datasetId={selectedDatasetId}
+              onBack={navigateToList}
+              onSelectDataset={navigateToDataset}
+            />
+          )
         ) : (
           <DatasetsTable onSelectDataset={navigateToDataset} />
         )}

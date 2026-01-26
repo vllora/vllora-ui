@@ -5,20 +5,38 @@
  * Handles navigation, selection, search, sort, and Lucy tool events.
  */
 
-import { createContext, useContext, ReactNode, useCallback, useState, useEffect, useMemo } from 'react';
+import { createContext, useContext, ReactNode, useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { DatasetsConsumer } from './DatasetsContext';
 import { emitter } from '@/utils/eventEmitter';
 import type { SortConfig } from '@/components/datasets/RecordsToolbar';
+import { listSpans } from '@/services/spans-api';
+import { ProjectEventsConsumer } from '@/contexts/project-events';
+import type { ProjectEventUnion, CustomEvent } from '@/contexts/project-events/dto';
 
 // ============================================================================
 // Types
 // ============================================================================
 
+export type DatasetViewMode = 'standard' | 'finetune';
+
 interface DatasetsUIContextType {
+  // Data state
+  datasets: { id: string; name: string }[];
+  isLoading: boolean;
+
+  // Backend spans state
+  hasBackendSpans: boolean;
+  isCheckingSpans: boolean;
+  checkBackendSpans: () => Promise<void>;
+
   // Navigation state
   selectedDatasetId: string | null;
   currentDataset: { id: string; name: string } | null;
+
+  // View mode
+  viewMode: DatasetViewMode;
+  setViewMode: (mode: DatasetViewMode) => void;
 
   // Selection state
   selectedRecordIds: Set<string>;
@@ -57,7 +75,8 @@ const DatasetsUIContext = createContext<DatasetsUIContextType | undefined>(undef
 // ============================================================================
 
 export function DatasetsUIProvider({ children }: { children: ReactNode }) {
-  const { datasets, loadDatasets } = DatasetsConsumer();
+  const { datasets, loadDatasets, isLoading } = DatasetsConsumer();
+  const { subscribe, projectId } = ProjectEventsConsumer();
 
   // URL params for dataset detail view
   const [searchParams, setSearchParams] = useSearchParams();
@@ -68,6 +87,70 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortConfig, setSortConfig] = useState<SortConfig | undefined>();
   const [expandedDatasetIds, setExpandedDatasetIds] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<DatasetViewMode>('standard');
+
+  // Backend spans state
+  const [hasBackendSpans, setHasBackendSpans] = useState(false);
+  const [isCheckingSpans, setIsCheckingSpans] = useState(false);
+  const hasCheckedSpansRef = useRef(false);
+
+  // Function to check if spans exist in backend
+  const checkBackendSpans = useCallback(async () => {
+    if (!projectId) return;
+
+    setIsCheckingSpans(true);
+    try {
+      const response = await listSpans({
+        projectId,
+        params: { limit: 1 }
+      });
+      setHasBackendSpans(response.pagination.total > 0);
+    } catch (error) {
+      console.error('Failed to check backend spans:', error);
+      setHasBackendSpans(false);
+    } finally {
+      setIsCheckingSpans(false);
+    }
+  }, [projectId]);
+
+  // Check for spans on mount and when projectId changes
+  useEffect(() => {
+    if (projectId && !hasCheckedSpansRef.current) {
+      hasCheckedSpansRef.current = true;
+      checkBackendSpans();
+    }
+  }, [projectId, checkBackendSpans]);
+
+  // Reset check flag when projectId changes
+  useEffect(() => {
+    hasCheckedSpansRef.current = false;
+  }, [projectId]);
+
+  // Subscribe to span events from ProjectEventsContext
+  useEffect(() => {
+    if (!projectId) return;
+
+    // Filter for span_end events (indicates a complete span)
+    const unsubscribe = subscribe(
+      'datasets-ui-span-listener',
+      () => {
+        // When we receive a span event, we know spans exist
+        if (!hasBackendSpans) {
+          setHasBackendSpans(true);
+        }
+      },
+      (event: ProjectEventUnion) => {
+        // Filter for Custom events that are span_start or span_end
+        if (event.type === 'Custom') {
+          const customEvent = event as CustomEvent;
+          return customEvent.event?.type === 'span_start' || customEvent.event?.type === 'span_end';
+        }
+        return false;
+      }
+    );
+
+    return unsubscribe;
+  }, [projectId, subscribe, hasBackendSpans]);
 
   // Derived state
   const currentDataset = useMemo(() => {
@@ -186,9 +269,22 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
   }, [navigateToDataset, navigateToList, expandDataset, collapseDataset, selectRecords, clearSelection, loadDatasets, selectedDatasetId, setSearchParams]);
 
   const value: DatasetsUIContextType = {
+    // Data state
+    datasets,
+    isLoading,
+
+    // Backend spans state
+    hasBackendSpans,
+    isCheckingSpans,
+    checkBackendSpans,
+
     // Navigation state
     selectedDatasetId,
     currentDataset,
+
+    // View mode
+    viewMode,
+    setViewMode,
 
     // Selection state
     selectedRecordIds,

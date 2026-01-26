@@ -10,3 +10,4 @@ export { RecordExpandedDetail } from "./RecordExpandedDetail";
 export { FormattedThreadPanel } from "./FormattedThreadPanel";
 export { MetadataPanel } from "./MetadataPanel";
 export { RecordActions } from "./RecordActions";
+export { SelectionCheckbox } from "./SelectionCheckbox";

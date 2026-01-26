@@ -1,6 +1,6 @@
-import { DataInfo, Dataset, DatasetEvaluation, DatasetRecord, TopicHierarchyConfig } from '@/types/dataset-types';
+import { Dataset, DatasetEvaluation, DatasetRecord, TopicHierarchyConfig } from '@/types/dataset-types';
 import { Span } from '@/types/common-type';
-import { tryParseJson } from '@/utils/modelUtils';
+import { extractDataInfoFromSpan } from '@/utils/modelUtils';
 import { emitter } from '@/utils/eventEmitter';
 
 // Event type for dataset changes - context listens for this to refresh
@@ -202,29 +202,7 @@ export async function addSpansToDataset(
     // Add records
     let addedCount = 0;
     spans.forEach((span) => {
-      let spanAttributes = span.attribute as Record<string, unknown>;
-      let requestStr  = spanAttributes.request as string;
-      let outputStr = spanAttributes.output as string;
-      let finishReason = spanAttributes.finish_reason as string;
-      let requestJson = tryParseJson(requestStr);
-      let outputJson = tryParseJson(outputStr);
-      let inputMessages = requestJson?.messages as any[] || [];
-      let outputMessage = outputJson?.choices?.[0]?.message as any;
-
-      let dataInfo:DataInfo = {input: {messages: inputMessages}, output: {messages: outputMessage}}
-
-      // Note: keep DataInfo limited to request/response shape; avoid embedding metadata in data
-
-
-      if(finishReason){
-        dataInfo.output.finish_reason = finishReason;
-      }
-      if(requestJson?.tools){
-        dataInfo.input.tools = requestJson.tools;
-      }
-      if(outputJson?.choices?.[0]?.tool_calls){
-        dataInfo.output.tool_calls = outputJson.choices[0].tool_calls;
-      }
+      const dataInfo = extractDataInfoFromSpan(span);
 
       const record: DatasetRecord = {
         id: crypto.randomUUID(),
@@ -842,6 +820,37 @@ export async function updateDatasetTopicHierarchy(
       const dataset = getRequest.result;
       if (dataset) {
         dataset.topicHierarchy = topicHierarchy;
+        dataset.updatedAt = now;
+        store.put(dataset);
+      }
+    };
+
+    tx.oncomplete = () => {
+      // Emit refresh event so context auto-syncs with IndexedDB
+      emitter.emit(DATASET_REFRESH_EVENT as any, { datasetId });
+      resolve();
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// Update a dataset's evaluation configuration (grader)
+export async function updateDatasetEvaluationConfig(
+  datasetId: string,
+  evaluationConfig: import('@/types/dataset-types').EvaluationConfig
+): Promise<void> {
+  const db = await getDB();
+  const now = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('datasets', 'readwrite');
+    const store = tx.objectStore('datasets');
+
+    const getRequest = store.get(datasetId);
+    getRequest.onsuccess = () => {
+      const dataset = getRequest.result;
+      if (dataset) {
+        dataset.evaluationConfig = evaluationConfig;
         dataset.updatedAt = now;
         store.put(dataset);
       }

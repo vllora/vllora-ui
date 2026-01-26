@@ -7,9 +7,9 @@
 
 import { useState, forwardRef } from "react";
 import { DatasetRecord } from "@/types/dataset-types";
-import { Check, ChevronRight, ChevronDown } from "lucide-react";
+import { ChevronRight, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ConversationThreadCell, ToolsBadge, StatsBadge, TopicCell, RecordExpandedDetail, RecordActions } from "./cells";
+import { ConversationThreadCell, ToolsBadge, StatsBadge, TopicCell, RecordExpandedDetail, RecordActions, SelectionCheckbox } from "./cells";
 import { RecordDataDialog } from "./RecordDataDialog";
 import { COLUMN_WIDTHS } from "../table-columns";
 import type { AvailableTopic } from "../record-utils";
@@ -95,25 +95,11 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
 
         {/* Checkbox */}
         {selectable && (
-          <div
-            className={cn("flex items-center justify-center", COLUMN_WIDTHS.checkbox)}
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelect?.(!selected);
-            }}
-          >
-            <div
-              className={cn(
-                "h-4 w-4 rounded flex items-center justify-center cursor-pointer transition-all duration-150",
-                "border",
-                selected
-                  ? "bg-[rgb(var(--theme-500))] border-[rgb(var(--theme-500))]"
-                  : "bg-transparent border-muted-foreground/50 hover:border-muted-foreground"
-              )}
-            >
-              {selected && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
-            </div>
-          </div>
+          <SelectionCheckbox
+            checked={selected}
+            onChange={(checked) => onSelect?.(checked)}
+            className={COLUMN_WIDTHS.checkbox}
+          />
         )}
 
         {/* Conversational Thread */}
