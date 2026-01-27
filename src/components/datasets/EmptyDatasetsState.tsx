@@ -2,13 +2,21 @@
  * EmptyDatasetsState
  *
  * Empty state component displayed when no datasets exist.
- * This is the first landing page users see - designed to be professional and inviting.
+ * Shows a simple curl command to get started with the LLM Gateway.
  */
 
 import { Radio } from "lucide-react";
-import { ConnectGatewayCard } from "./ConnectGatewayCard";
-import { ImportFileCard } from "./ImportFileCard";
-import { StepsPreview } from "./StepsPreview";
+import { CodeBlock } from "@/components/chat/traces/components/CodeBlock";
+
+const CURL_COMMAND = `curl http://localhost:9090/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "gpt-4o-mini",
+    "messages": [
+      {"role": "system", "content": "You are a friendly chess tutor."},
+      {"role": "user", "content": "FEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1\\n\\nWhat are the best responses for black?"}
+    ]
+  }'`;
 
 export function EmptyDatasetsState() {
   return (
@@ -19,7 +27,7 @@ export function EmptyDatasetsState() {
       </div>
 
       {/* Main content */}
-      <div className="flex flex-col items-center max-w-2xl text-center relative z-10">
+      <div className="flex flex-col items-center max-w-xl text-center relative z-10">
         {/* Status indicator */}
         <div className="mb-8">
           <div className="relative inline-flex items-center justify-center">
@@ -38,20 +46,20 @@ export function EmptyDatasetsState() {
 
         {/* Title */}
         <h1 className="text-3xl font-semibold mb-3 text-foreground">
-          Get started with your first dataset
+          Waiting for traces
         </h1>
-        <p className="text-muted-foreground mb-10">
-          Choose how you want to begin building your fine-tuning dataset
+        <p className="text-muted-foreground mb-6">
+          Copy and run this command in your terminal
         </p>
 
-        {/* Two options side by side */}
-        <div className="w-full grid grid-cols-2 gap-5 mb-8">
-          <ConnectGatewayCard />
-          <ImportFileCard />
+        {/* Curl command box */}
+        <div className="w-full">
+          <CodeBlock
+            title="Terminal"
+            code={CURL_COMMAND}
+            language="bash"
+          />
         </div>
-
-        {/* Steps preview */}
-        <StepsPreview activeStep={1} />
       </div>
     </div>
   );

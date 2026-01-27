@@ -15,7 +15,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Database, Loader2, AlertCircle } from "lucide-react";
+import { Database, Loader2, AlertCircle, HelpCircle } from "lucide-react";
 
 export interface DatasetInfoSidebarProps {
   datasetName: string;
@@ -77,12 +77,12 @@ export function DatasetInfoSidebar({
   return (
     <div className="col-span-1 h-full flex flex-col min-h-0">
       <div className="border border-border rounded-lg bg-card flex flex-col h-full">
-        <div className="p-6 pb-0">
-          <h2 className="text-lg font-semibold mb-6">Dataset Info</h2>
+        <div className="p-6 pb-0 flex-1 flex flex-col min-h-0">
+          <h2 className="text-lg font-semibold mb-6 shrink-0">Dataset Info</h2>
 
-          <div className="space-y-6">
+          <div className="flex flex-col flex-1 min-h-0 gap-6">
             {/* Dataset Name */}
-            <div>
+            <div className="shrink-0">
               <label className="block text-sm font-medium mb-2">
                 Dataset Name
               </label>
@@ -93,30 +93,33 @@ export function DatasetInfoSidebar({
               />
             </div>
 
-            {/* Finetune Objective */}
-            <div>
-              <label className="block text-sm font-medium mb-1">
+            {/* Finetune Objective - grows to fill available space */}
+            <div className="flex flex-col flex-1 min-h-0">
+              <label className="flex items-center gap-1 text-sm font-medium mb-1 shrink-0">
                 Training Objective
-                <span className="text-muted-foreground font-normal ml-2">(Optional)</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[240px]">
+                      <p>Describes the desired behaviors and capabilities you want the model to learn.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </label>
               <Textarea
                 placeholder="Describe specific behaviors you want to reinforce or suppress..."
                 value={finetuneObjective}
                 onChange={(e) => onFinetuneObjectiveChange(e.target.value)}
-                className="min-h-[120px] resize-none"
+                className="flex-1 min-h-[120px] resize-none"
               />
-              <p className="text-xs text-muted-foreground mt-2">
-                This helps the optimizer refine the RFT model weights during training.
-              </p>
             </div>
           </div>
         </div>
 
-        {/* Spacer to push button to bottom */}
-        <div className="flex-1" />
-
         {/* Selection summary and button at bottom */}
-        <div className="p-6 pt-4 border-t border-border mt-auto">
+        <div className="p-6 pt-4 border-t border-border shrink-0">
           <div className="flex items-center justify-between text-sm mb-4">
             <span className="text-muted-foreground">Selected records</span>
             <span className="font-medium">{selectionCount}</span>

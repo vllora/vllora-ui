@@ -26,9 +26,8 @@ function DatasetsPageContent() {
   // Show span selection only for first-time users when spans exist but no datasets
   const noDatasets = datasets.length === 0;
   const showLoadingState = isLoading || isCheckingSpans;
-  const showSpanSelection = !showLoadingState && noDatasets && hasBackendSpans && isFirstVisit;
-  const showEmptyState = !showLoadingState && noDatasets && !showSpanSelection;
-
+  const navigateToNewDataset = hasBackendSpans || isFirstVisit;
+  const showEmptyState = !showLoadingState && noDatasets && !navigateToNewDataset;
   // Mark as visited once user has datasets
   useEffect(() => {
     if (datasets.length > 0 && isFirstVisit) {
@@ -39,10 +38,10 @@ function DatasetsPageContent() {
 
   // Mark as visited when auto-navigating to prevent repeat navigation
   useEffect(() => {
-    if (showSpanSelection && isFirstVisit) {
+    if (navigateToNewDataset && isFirstVisit) {
       localStorage.setItem(DATASETS_VISITED_KEY, "true");
     }
-  }, [showSpanSelection, isFirstVisit]);
+  }, [navigateToNewDataset, isFirstVisit]);
 
   return (
     <section className="flex-1 flex overflow-hidden bg-background text-foreground relative">
@@ -53,7 +52,7 @@ function DatasetsPageContent() {
           </div>
         ) : showEmptyState ? (
           <EmptyDatasetsState />
-        ) : showSpanSelection ? (
+        ) : navigateToNewDataset ? (
           <Navigate to="/datasets/new" replace />
         ) : (
           <DatasetsGrid onSelectDataset={navigateToDataset} />

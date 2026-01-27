@@ -78,7 +78,7 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
   // Backend spans state
   const [hasBackendSpans, setHasBackendSpans] = useState(false);
   const [isCheckingSpans, setIsCheckingSpans] = useState(false);
-  const hasCheckedSpansRef = useRef(false);
+  const hasBackendSpansRef = useRef(hasBackendSpans);
 
   // Function to check if spans exist in backend
   const checkBackendSpans = useCallback(async () => {
@@ -101,32 +101,33 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
 
   // Check for spans on mount and when projectId changes
   useEffect(() => {
-    if (projectId && !hasCheckedSpansRef.current) {
-      hasCheckedSpansRef.current = true;
-      checkBackendSpans();
-    }
+    if (!projectId) return;
+    checkBackendSpans();
   }, [projectId, checkBackendSpans]);
 
-  // Reset check flag when projectId changes
+  // Keep ref in sync with state
   useEffect(() => {
-    hasCheckedSpansRef.current = false;
-  }, [projectId]);
+    hasBackendSpansRef.current = hasBackendSpans;
+  }, [hasBackendSpans]);
 
   // Subscribe to span events from ProjectEventsContext
   useEffect(() => {
     if (!projectId) return;
-
-    // Filter for span_end events (indicates a complete span)
     const unsubscribe = subscribe(
       'datasets-ui-span-listener',
-      () => {
+      (event: ProjectEventUnion) => {
         // When we receive a span event, we know spans exist
-        if (!hasBackendSpans) {
+        // Use ref to avoid re-subscribing when state changes
+        if (!hasBackendSpansRef.current) {
+          console.log('===== setHasBackendSpans to true')
           setHasBackendSpans(true);
         }
       },
       (event: ProjectEventUnion) => {
-        // Filter for Custom events that are span_start or span_end
+        // Filter for StateSnapshot with span_id or Custom span events
+        if (event.type === 'StateSnapshot') {
+          return !!event.span_id;
+        }
         if (event.type === 'Custom') {
           const customEvent = event as CustomEvent;
           return customEvent.event?.type === 'span_start' || customEvent.event?.type === 'span_end';
@@ -136,7 +137,7 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
     );
 
     return unsubscribe;
-  }, [projectId, subscribe, hasBackendSpans]);
+  }, [projectId, subscribe]);
 
   // Navigation actions - use path-based routing
   const navigateToDataset = useCallback((datasetId: string) => {

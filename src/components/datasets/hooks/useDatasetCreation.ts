@@ -48,9 +48,37 @@ export function useDatasetCreation() {
   // Spans selection state
   const [selectedSpanIds, setSelectedSpanIds] = useState<Set<string>>(new Set());
   const [spans, setSpans] = useState<Span[]>([]);
+  const [hasAutoSelected, setHasAutoSelected] = useState(false);
   const [isAllMatchingSelected, setIsAllMatchingSelected] = useState(false);
   const [totalMatchingCount, setTotalMatchingCount] = useState(0);
   const [fetchAllMatchingSpans, setFetchAllMatchingSpans] = useState<(() => Promise<Span[]>) | null>(null);
+
+  // Auto-select first 100 spans when loaded for the first time
+  // Also auto-generate dataset name and objective if spans match the chess tutor sample
+  useEffect(() => {
+    if (spans.length > 0 && !hasAutoSelected) {
+      const first100 = spans.slice(0, 100).map((s) => s.span_id);
+      setSelectedSpanIds(new Set(first100));
+      setHasAutoSelected(true);
+
+      // Check if spans are from the chess tutor sample
+      const firstSpan = spans[0];
+      const spanContent = JSON.stringify(firstSpan.attribute || {});
+      const isChessTutorSample = spanContent.includes("chess tutor") ||
+                                  spanContent.includes("FEN:") ||
+                                  spanContent.includes("rnbqkbnr");
+
+      if (isChessTutorSample) {
+        setDatasetName("Chess Tutor Dataset");
+        setFinetuneObjective(
+          "Train a chess tutor assistant that can analyze board positions from FEN notation, " +
+          "suggest optimal moves with clear explanations of the strategic reasoning behind each recommendation, " +
+          "teach opening theory, middlegame tactics, and endgame techniques, " +
+          "and adapt explanations to the player's skill level from beginner to advanced."
+        );
+      }
+    }
+  }, [spans, hasAutoSelected]);
 
   // Upload file state
   const [uploadedRecords, setUploadedRecords] = useState<UploadedRecord[]>([]);
