@@ -6,7 +6,7 @@
  */
 
 import { cn } from "@/lib/utils";
-import { TopicNodeHeader } from "./TopicNodeHeader";
+import { TopicNodeHeader } from "../TopicNodeHeader";
 
 interface CollapsedTopicNodeProps {
   name: string;
@@ -14,6 +14,7 @@ interface CollapsedTopicNodeProps {
   isRoot: boolean;
   isSelected: boolean;
   onToggleExpansion: () => void;
+  onRename?: (newName: string) => void;
 }
 
 // Fixed width for collapsed state
@@ -25,6 +26,7 @@ export function CollapsedTopicNode({
   isRoot,
   isSelected,
   onToggleExpansion,
+  onRename,
 }: CollapsedTopicNodeProps) {
   return (
     <div
@@ -47,6 +49,7 @@ export function CollapsedTopicNode({
         isRoot={isRoot}
         isExpanded={false}
         onToggleExpansion={onToggleExpansion}
+        onRename={onRename}
       />
     </div>
   );

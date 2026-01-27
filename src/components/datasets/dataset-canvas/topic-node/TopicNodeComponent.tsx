@@ -9,8 +9,8 @@
 import { memo } from "react";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { Plus } from "lucide-react";
-import { TopicCanvasConsumer } from "./TopicCanvasContext";
-import { TopicNodeToolbar } from "./TopicNodeToolbar";
+import { TopicCanvasConsumer } from "../TopicCanvasContext";
+import { TopicNodeToolbar } from "../TopicNodeToolbar";
 import { CollapsedTopicNode } from "./CollapsedTopicNode";
 import { ExpandedTopicNode } from "./ExpandedTopicNode";
 
@@ -76,17 +76,22 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
     setNodeSize(nodeId, width, height);
   };
 
+  const handleRename = (newName: string) => {
+    if (onRenameTopic && !isRoot) {
+      // Pass both old name and new name for the rename operation
+      onRenameTopic(name, newName);
+    }
+  };
+
   return (
     <div onClick={handleSelect} className="relative nopan cursor-pointer">
       {/* Floating toolbar - appears above selected node */}
       {isSelected && (
         <TopicNodeToolbar
           name={name}
-          topicKey={topicKey}
           nodeId={nodeId}
           isRoot={isRoot}
           isExpanded={isExpanded}
-          onRenameTopic={onRenameTopic}
           onDeleteTopic={onDeleteTopic}
           onToggleExpansion={toggleNodeExpansion}
         />
@@ -139,6 +144,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
           availableTopics={availableTopics}
           onToggleExpansion={handleToggleExpansion}
           onResize={handleResize}
+          onRename={handleRename}
           onUpdateRecordTopic={onUpdateRecordTopic}
           onDeleteRecord={onDeleteRecord}
           onSaveRecord={onSaveRecord}
@@ -150,6 +156,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
           isRoot={isRoot}
           isSelected={isSelected}
           onToggleExpansion={handleToggleExpansion}
+          onRename={handleRename}
         />
       )}
     </div>

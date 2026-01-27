@@ -22,7 +22,8 @@ export interface TopicCanvasProviderProps {
   selectedTopic?: string | null;
   onSelectTopic?: (topicName: string | null) => void;
   onAddTopic?: (parentTopicName: string | null) => void;
-  onRenameTopic?: (topicName: string) => void;
+  /** Called when renaming a topic inline. Receives old name and new name. */
+  onRenameTopic?: (oldName: string, newName: string) => void;
   onDeleteTopic?: (topicName: string) => void;
   onUpdateRecordTopic?: (recordId: string, topic: string, isNew?: boolean) => Promise<void>;
   onDeleteRecord?: (recordId: string) => void;

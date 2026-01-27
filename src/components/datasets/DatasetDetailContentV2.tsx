@@ -163,10 +163,46 @@ export function DatasetDetailContentV2() {
     // TODO: Pass the parent topic to pre-select in the dialog
   };
 
-  // Handle rename topic from canvas
-  const handleRenameTopic = (_topicName: string) => {
-    // TODO: Open rename dialog for the specific topic
-    setTopicHierarchyDialog(true);
+  // Handle rename topic from canvas (inline rename)
+  const handleRenameTopic = (oldName: string, newName: string) => {
+    if (!dataset) return;
+
+    // Helper to rename a node in the hierarchy
+    const renameNodeInHierarchy = (
+      nodes: TopicHierarchyNode[],
+      targetName: string,
+      newNodeName: string
+    ): TopicHierarchyNode[] => {
+      return nodes.map((node) => {
+        if (node.name === targetName) {
+          return { ...node, name: newNodeName };
+        }
+        if (node.children && node.children.length > 0) {
+          return {
+            ...node,
+            children: renameNodeInHierarchy(node.children, targetName, newNodeName),
+          };
+        }
+        return node;
+      });
+    };
+
+    // Update records with new topic name
+    handleRenameTopicInRecords(oldName, newName);
+
+    // Update hierarchy if it exists
+    if (dataset.topicHierarchy?.hierarchy) {
+      const updatedHierarchy = renameNodeInHierarchy(
+        JSON.parse(JSON.stringify(dataset.topicHierarchy.hierarchy)) as TopicHierarchyNode[],
+        oldName,
+        newName
+      );
+
+      handleApplyTopicHierarchy({
+        ...dataset.topicHierarchy,
+        hierarchy: updatedHierarchy,
+      });
+    }
   };
 
   // Handle create child topic from canvas inline input

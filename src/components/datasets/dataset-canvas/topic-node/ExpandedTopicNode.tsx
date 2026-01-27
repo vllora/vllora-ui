@@ -8,10 +8,10 @@
 import { useState } from "react";
 import { NodeResizer } from "@xyflow/react";
 import { cn } from "@/lib/utils";
-import { RecordsTable } from "../records-table";
-import { TopicNodeHeader, HEADER_HEIGHT } from "./TopicNodeHeader";
+import { RecordsTable } from "../../records-table";
+import { TopicNodeHeader, HEADER_HEIGHT } from "../TopicNodeHeader";
 import type { DatasetRecord } from "@/types/dataset-types";
-import type { AvailableTopic } from "../record-utils";
+import type { AvailableTopic } from "../../record-utils";
 
 interface ExpandedTopicNodeProps {
   name: string;
@@ -24,6 +24,7 @@ interface ExpandedTopicNodeProps {
   availableTopics: AvailableTopic[];
   onToggleExpansion: () => void;
   onResize: (width: number, height: number) => void;
+  onRename?: (newName: string) => void;
   onUpdateRecordTopic?: (recordId: string, topic: string, isNew?: boolean) => Promise<void>;
   onDeleteRecord?: (recordId: string) => void;
   onSaveRecord?: (recordId: string, data: unknown) => Promise<void>;
@@ -46,6 +47,7 @@ export function ExpandedTopicNode({
   availableTopics,
   onToggleExpansion,
   onResize,
+  onRename,
   onUpdateRecordTopic,
   onDeleteRecord,
   onSaveRecord,
@@ -99,6 +101,7 @@ export function ExpandedTopicNode({
         isRoot={isRoot}
         isExpanded={true}
         onToggleExpansion={onToggleExpansion}
+        onRename={onRename}
       />
 
       {/* RecordsTable */}

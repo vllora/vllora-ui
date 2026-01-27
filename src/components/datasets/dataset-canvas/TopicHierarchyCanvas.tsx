@@ -20,7 +20,7 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { TopicNodeComponent } from "./TopicNodeComponent";
+import { TopicNodeComponent } from "./topic-node/TopicNodeComponent";
 import { TopicInputNodeComponent } from "./TopicInputNode";
 import { RootNodeComponent } from "./RootNodeComponent";
 import { CanvasToolbar } from "./CanvasToolbar";
@@ -54,8 +54,8 @@ interface TopicHierarchyCanvasProps {
   selectedTopic?: string | null;
   /** Called when adding a new topic */
   onAddTopic?: (parentTopicName: string | null) => void;
-  /** Called when renaming a topic */
-  onRenameTopic?: (topicName: string) => void;
+  /** Called when renaming a topic inline. Receives old name and new name. */
+  onRenameTopic?: (oldName: string, newName: string) => void;
   /** Called when deleting a topic */
   onDeleteTopic?: (topicName: string) => void;
   /** Called when updating a record's topic */

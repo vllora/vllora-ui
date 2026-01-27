@@ -8,7 +8,7 @@
 import { useMemo } from "react";
 import dagre from "@dagrejs/dagre";
 import { Position, type Edge } from "@xyflow/react";
-import type { TopicNode } from "./TopicNodeComponent";
+import type { TopicNode } from "./topic-node/TopicNodeComponent";
 import type { TopicInputNode } from "./TopicInputNode";
 import type { RootNode } from "./RootNodeComponent";
 import type { TopicHierarchyNode } from "@/types/dataset-types";
