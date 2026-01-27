@@ -13,7 +13,6 @@ import type { TopicHierarchyNode } from "@/types/dataset-types";
 
 // Layout constants
 const NODE_WIDTH_COLLAPSED = 280;
-const NODE_WIDTH_EXPANDED = 700;
 const NODE_HEIGHT_COLLAPSED = 80;
 const NODE_HEIGHT_EXPANDED = 500;
 const NODE_SPACING = 50;
@@ -51,31 +50,36 @@ function getLayoutedElements(
   const { direction = "TB", nodeSpacing = NODE_SPACING, rankSpacing = RANK_SPACING } = options;
   const isHorizontal = direction === "LR";
 
-  // Calculate dynamic rank spacing based on whether any node is expanded
-  // When a node is expanded, we need more space between levels
+  // Calculate dynamic spacing based on whether any node is expanded
   const hasExpandedNode = expandedNodes.size > 0;
-  const dynamicRankSpacing = hasExpandedNode
+
+  // For vertical (TB) layout: expanded nodes grow downward, so increase rank spacing
+  const dynamicRankSpacing = !isHorizontal && hasExpandedNode
     ? rankSpacing + NODE_HEIGHT_EXPANDED - NODE_HEIGHT_COLLAPSED
     : rankSpacing;
+
+  // For horizontal (LR) layout: expanded nodes grow downward, so increase node spacing (vertical gap between siblings)
+  const dynamicNodeSpacing = isHorizontal && hasExpandedNode
+    ? nodeSpacing + NODE_HEIGHT_EXPANDED - NODE_HEIGHT_COLLAPSED
+    : nodeSpacing;
 
   // Create a new dagre graph for each layout calculation
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
   dagreGraph.setGraph({
     rankdir: direction,
-    nodesep: nodeSpacing,
+    nodesep: dynamicNodeSpacing,
     ranksep: dynamicRankSpacing,
     marginx: 20,
     marginy: 20,
   });
 
   // Add nodes with dimensions:
-  // - Use actual width (expanded or collapsed) to prevent horizontal overlap
-  // - Use COLLAPSED height for ALL nodes to maintain vertical alignment among siblings
+  // - Always use collapsed dimensions for dagre (keeps siblings aligned at same position)
+  // - Expanded nodes will visually grow right and downward without affecting layout
   nodes.forEach((node) => {
-    const isExpanded = expandedNodes.has(node.id);
     dagreGraph.setNode(node.id, {
-      width: isExpanded ? NODE_WIDTH_EXPANDED : NODE_WIDTH_COLLAPSED,
+      width: NODE_WIDTH_COLLAPSED, // Always use collapsed width for alignment
       height: NODE_HEIGHT_COLLAPSED, // Always use collapsed height for alignment
     });
   });
@@ -90,20 +94,17 @@ function getLayoutedElements(
 
   // Map positions back to nodes
   // Position is calculated from dagre's center point, converted to top-left
+  // Always use collapsed dimensions for offset to keep siblings aligned
   const layoutedNodes = nodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
-    const isExpanded = expandedNodes.has(node.id);
-    const nodeWidth = isExpanded ? NODE_WIDTH_EXPANDED : NODE_WIDTH_COLLAPSED;
 
-    // Always use collapsed height for Y positioning to maintain alignment
-    // Nodes will visually grow downward when expanded
     return {
       ...node,
       targetPosition: isHorizontal ? Position.Left : Position.Top,
       sourcePosition: isHorizontal ? Position.Right : Position.Bottom,
       position: {
-        x: nodeWithPosition.x - nodeWidth / 2,
-        y: nodeWithPosition.y - NODE_HEIGHT_COLLAPSED / 2,
+        x: nodeWithPosition.x - NODE_WIDTH_COLLAPSED / 2, // Always use collapsed width for alignment
+        y: nodeWithPosition.y - NODE_HEIGHT_COLLAPSED / 2, // Always use collapsed height for alignment
       },
     };
   });

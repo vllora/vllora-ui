@@ -66,7 +66,7 @@ function TopicHierarchyCanvasInner({
 }: {
   hierarchy?: TopicHierarchyNode[];
 }) {
-  const { records, expandedNodes, selectedTopic } = TopicCanvasConsumer();
+  const { records, expandedNodes, selectedTopic, setSelectedTopic } = TopicCanvasConsumer();
 
   // Compute record counts by topic
   const recordCountsByTopic = useMemo(() => {
@@ -79,7 +79,7 @@ function TopicHierarchyCanvasInner({
     return counts;
   }, [records]);
 
-  // Use dagre for automatic tree layout (no selectedTopic dependency)
+  // Use dagre for automatic tree layout (horizontal left-to-right)
   const {
     nodes: layoutedNodes,
     edges: layoutedEdges,
@@ -89,7 +89,8 @@ function TopicHierarchyCanvasInner({
     hierarchy,
     recordCountsByTopic,
     records.length,
-    expandedNodes
+    expandedNodes,
+    { direction: "LR" }
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
@@ -102,15 +103,20 @@ function TopicHierarchyCanvasInner({
   const layoutVersionRef = useRef(0);
   const prevExpandedNodesRef = useRef(expandedNodes);
   const prevSelectedTopicRef = useRef(selectedTopic);
+  const prevNodeCountRef = useRef(layoutedNodes.length);
 
-  // Update nodes only when expansion changes (layout recalculation)
+  // Update nodes when expansion changes or hierarchy changes (layout recalculation)
   useEffect(() => {
     const expandedNodesChanged =
       prevExpandedNodesRef.current.size !== expandedNodes.size ||
       ![...prevExpandedNodesRef.current].every(id => expandedNodes.has(id));
 
-    if (expandedNodesChanged || layoutVersionRef.current === 0) {
+    // Detect hierarchy changes by comparing node count
+    const hierarchyChanged = prevNodeCountRef.current !== layoutedNodes.length;
+
+    if (expandedNodesChanged || hierarchyChanged || layoutVersionRef.current === 0) {
       prevExpandedNodesRef.current = expandedNodes;
+      prevNodeCountRef.current = layoutedNodes.length;
       layoutVersionRef.current++;
       setNodes(layoutedNodes);
 
@@ -121,8 +127,8 @@ function TopicHierarchyCanvasInner({
         style: highlightedEdgeIds.has(edge.id) ? HIGHLIGHTED_EDGE_STYLE : DEFAULT_EDGE_STYLE,
       })));
 
-      // Fit view after layout update when expansion changes
-      if (expandedNodesChanged && reactFlowInstance.current) {
+      // Fit view after layout update when hierarchy or expansion changes
+      if ((expandedNodesChanged || hierarchyChanged) && reactFlowInstance.current) {
         setTimeout(() => {
           reactFlowInstance.current?.fitView({
             padding: 0.2,
@@ -153,6 +159,11 @@ function TopicHierarchyCanvasInner({
     reactFlowInstance.current = instance;
   };
 
+  // Clear selection when clicking on the canvas background
+  const onPaneClick = () => {
+    setSelectedTopic(null);
+  };
+
   return (
     <div className="flex-1 w-full h-full">
       <ReactFlow
@@ -161,6 +172,7 @@ function TopicHierarchyCanvasInner({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onInit={onInit}
+        onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
         connectionLineType={ConnectionLineType.SmoothStep}
         fitView

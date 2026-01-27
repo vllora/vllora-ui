@@ -9,17 +9,11 @@
 
 import { memo, useState } from "react";
 import { Handle, Position, type Node, type NodeProps, NodeResizer } from "@xyflow/react";
-import { Table2, ChevronDown, ChevronUp, Plus, Pencil, Trash2, MoreHorizontal } from "lucide-react";
+import { Table2, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TopicCanvasConsumer } from "./TopicCanvasContext";
 import { RecordsTable } from "../records-table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { TopicNodeToolbar } from "./TopicNodeToolbar";
 
 export interface TopicNodeData extends Record<string, unknown> {
   name: string;
@@ -77,12 +71,14 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
   } = TopicCanvasConsumer();
 
   const isExpanded = isNodeExpanded(nodeId);
-  const isSelected = isRoot ? selectedTopic === null : selectedTopic === name;
+  // Use "__root__" as special value for root selection, null means nothing selected
+  const isSelected = isRoot ? selectedTopic === "__root__" : selectedTopic === name;
   const records = recordsByTopic[topicKey] || [];
 
   // Handlers
   const handleSelect = () => {
-    setSelectedTopic(isRoot ? null : name);
+    // Use "__root__" as special value for root selection
+    setSelectedTopic(isRoot ? "__root__" : name);
   };
 
   const handleResize = (_event: unknown, params: { width: number; height: number }) => {
@@ -98,10 +94,11 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
     <div
       onClick={handleSelect}
       className={cn(
-        "relative rounded-xl border-[0.5px] bg-card transition-all nopan cursor-pointer",
+        "relative rounded-xl border-[0.5px]  transition-all nopan cursor-pointer",
         isSelected
           ? "border-[rgb(var(--theme-500))]"
           : "border-border hover:border-emerald-500/50",
+        !isExpanded ? "bg-[#111113]" : "bg-background"
       )}
       style={{
         width: isExpanded ? expandedSize.width : COLLAPSED_WIDTH,
@@ -113,73 +110,16 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
     >
       {/* Floating toolbar - appears above selected node */}
       {isSelected && (
-        <div
-          className="absolute left-1/2 -translate-x-1/2 -top-12 z-10 nodrag nopan"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-popover border border-border shadow-lg">
-            {/* Add subtopic button */}
-            {onAddTopic && (
-              <button
-                type="button"
-                onClick={() => onAddTopic(isRoot ? null : name)}
-                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                title="Add subtopic"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add</span>
-              </button>
-            )}
-
-            {/* Rename button (not for root) */}
-            {!isRoot && onRenameTopic && (
-              <button
-                type="button"
-                onClick={() => onRenameTopic(name)}
-                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                title="Rename topic"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                <span>Rename</span>
-              </button>
-            )}
-
-            {/* Delete button (not for root) */}
-            {!isRoot && onDeleteTopic && (
-              <button
-                type="button"
-                onClick={() => onDeleteTopic(name)}
-                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive"
-                title="Delete topic"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete</span>
-              </button>
-            )}
-
-            {/* More options dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                  title="More options"
-                >
-                  <MoreHorizontal className="w-4 h-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-[160px]">
-                <DropdownMenuItem onClick={() => toggleNodeExpansion(nodeId)}>
-                  {isExpanded ? "Collapse" : "Expand"} node
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem disabled>
-                  Export records...
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
+        <TopicNodeToolbar
+          name={name}
+          nodeId={nodeId}
+          isRoot={isRoot}
+          isExpanded={isExpanded}
+          onAddTopic={onAddTopic}
+          onRenameTopic={onRenameTopic}
+          onDeleteTopic={onDeleteTopic}
+          onToggleExpansion={toggleNodeExpansion}
+        />
       )}
 
       {/* Resizer - visible only when node is selected and expanded */}
@@ -190,25 +130,25 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
           onResize={handleResize}
           isVisible={selected}
           lineClassName="!border-transparent"
-          handleClassName="!w-3 !h-3 !rounded-full !bg-[rgb(var(--theme-500))] !border-2 !border-background !shadow-md"
+          handleClassName="!w-3 !h-3 !rounded-full !bg-[rgb(var(--theme-500))] !border-1 !border-background !shadow-md"
         />
       )}
 
-      {/* Input handle (not for root) */}
+      {/* Input handle (not for root) - Left side for horizontal layout */}
       {!isRoot && (
         <Handle
           type="target"
-          position={Position.Top}
-          className="!w-3 !h-3 !bg-border !border-2 !border-background"
+          position={Position.Left}
+          className="!w-3 !h-3 !bg-border !border-1 !border-background"
         />
       )}
 
-      {/* Output handle (only if node has children) */}
+      {/* Output handle (only if node has children) - Right side for horizontal layout */}
       {hasChildren && (
         <Handle
           type="source"
-          position={Position.Bottom}
-          className="!w-3 !h-3 !bg-border !border-2 !border-background"
+          position={Position.Right}
+          className="!w-3 !h-3 !bg-border !border-1 !border-background"
         />
       )}
 
@@ -259,7 +199,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
             e.preventDefault();
             toggleNodeExpansion(nodeId);
           }}
-          className="flex-shrink-0 p-1 rounded-md hover:bg-muted transition-colors cursor-pointer nodrag nopan text-muted-foreground hover:text-foreground"
+          className="flex-shrink-0 p-1 rounded-md hover:bg-muted transition-colors cursor-pointer nodrag text-muted-foreground hover:text-foreground"
           style={{ pointerEvents: 'auto' }}
           title={isExpanded ? "Collapse" : "Expand"}
         >
@@ -275,7 +215,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
       {isExpanded && (
         <div
           onClick={(e) => e.stopPropagation()}
-          className="nodrag nopan nowheel overflow-hidden"
+          className="nowheel overflow-hidden"
           style={{ height: tableHeight, minWidth: 0 }}
         >
           <RecordsTable
