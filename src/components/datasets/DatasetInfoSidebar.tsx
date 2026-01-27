@@ -43,9 +43,10 @@ export function DatasetInfoSidebar({
   const disabledReason = useMemo(() => {
     if (isCreating) return null; // Not disabled, just loading
     if (!datasetName.trim()) return "Please enter a dataset name";
+    if (!finetuneObjective.trim()) return "Please enter a training objective";
     if (selectionCount === 0) return "Please select at least one record";
     return null;
-  }, [datasetName, selectionCount, isCreating]);
+  }, [datasetName, finetuneObjective, selectionCount, isCreating]);
 
   const isDisabled = !!disabledReason || isCreating;
 
@@ -95,7 +96,7 @@ export function DatasetInfoSidebar({
 
             {/* Finetune Objective - grows to fill available space */}
             <div className="flex flex-col flex-1 min-h-0">
-              <label className="flex items-center gap-1 text-sm font-medium mb-1 shrink-0">
+              <label className="flex items-center gap-1.5 text-sm font-medium mb-1 shrink-0">
                 Training Objective
                 <TooltipProvider>
                   <Tooltip>
