@@ -29,7 +29,7 @@ import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
 import { DatasetDetailHeader } from "./DatasetDetailHeader";
 import { EvaluationConfigDialog } from "./evaluation-dialog/EvaluationConfigDialog";
 import { updateDatasetEvaluationConfig } from "@/services/datasets-db";
-import type { EvaluationConfig } from "@/types/dataset-types";
+import type { EvaluationConfig, TopicHierarchyNode } from "@/types/dataset-types";
 
 export function DatasetDetailContentV2() {
   const {
@@ -173,6 +173,57 @@ export function DatasetDetailContentV2() {
     handleDeleteTopicFromRecords([topicName]);
   };
 
+  // Handle create child topic from canvas inline input
+  const handleCreateChildTopic = (parentTopicName: string | null, childTopicName: string) => {
+    if (!dataset) return;
+
+    // Helper to find and add child to a node by name
+    const addChildToNode = (
+      nodes: TopicHierarchyNode[],
+      parentName: string,
+      newChild: TopicHierarchyNode
+    ): TopicHierarchyNode[] => {
+      return nodes.map((node) => {
+        if (node.name === parentName) {
+          return {
+            ...node,
+            children: [...(node.children || []), newChild],
+          };
+        }
+        if (node.children && node.children.length > 0) {
+          return {
+            ...node,
+            children: addChildToNode(node.children, parentName, newChild),
+          };
+        }
+        return node;
+      });
+    };
+
+    // Create new node with unique ID
+    const newNode: TopicHierarchyNode = {
+      id: `topic-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      name: childTopicName,
+    };
+
+    // Clone current hierarchy or create empty array
+    const currentHierarchy = dataset.topicHierarchy?.hierarchy
+      ? JSON.parse(JSON.stringify(dataset.topicHierarchy.hierarchy)) as TopicHierarchyNode[]
+      : [];
+
+    // Add to root level or find parent and add as child
+    const updatedHierarchy = parentTopicName === null
+      ? [...currentHierarchy, newNode]
+      : addChildToNode(currentHierarchy, parentTopicName, newNode);
+
+    // Apply the updated hierarchy
+    handleApplyTopicHierarchy({
+      ...dataset.topicHierarchy,
+      depth: dataset.topicHierarchy?.depth ?? 3,
+      hierarchy: updatedHierarchy,
+    });
+  };
+
   // Handle save evaluation config
   const handleSaveEvaluationConfig = async (config: EvaluationConfig) => {
     if (!dataset) return;
@@ -235,6 +286,7 @@ export function DatasetDetailContentV2() {
                 setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
               }
               onSaveRecord={handleSaveRecordData}
+              onCreateChildTopic={handleCreateChildTopic}
             />
           </div>
         </div>

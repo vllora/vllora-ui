@@ -24,6 +24,8 @@ export interface TopicCanvasProviderProps {
   onUpdateRecordTopic?: (recordId: string, topic: string, isNew?: boolean) => Promise<void>;
   onDeleteRecord?: (recordId: string) => void;
   onSaveRecord?: (recordId: string, data: unknown) => Promise<void>;
+  /** Called when creating a new child topic via inline input */
+  onCreateChildTopic?: (parentTopicName: string | null, childTopicName: string) => void;
 }
 
 // ============================================================================
@@ -42,6 +44,7 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     onUpdateRecordTopic,
     onDeleteRecord,
     onSaveRecord,
+    onCreateChildTopic,
   } = props;
 
   // Internal selected topic state (controlled or uncontrolled)
@@ -73,6 +76,27 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
       return next;
     });
   }, []);
+
+  // Track pending inline topic creation (stores parent topic name, null for root)
+  const [pendingAddParentId, setPendingAddParentId] = useState<string | null | undefined>(undefined);
+
+  const startAddingTopic = useCallback((parentTopicName: string | null) => {
+    setPendingAddParentId(parentTopicName);
+  }, []);
+
+  const cancelAddingTopic = useCallback(() => {
+    setPendingAddParentId(undefined);
+  }, []);
+
+  const confirmAddingTopic = useCallback(
+    (topicName: string) => {
+      if (pendingAddParentId !== undefined && onCreateChildTopic) {
+        onCreateChildTopic(pendingAddParentId, topicName);
+      }
+      setPendingAddParentId(undefined);
+    },
+    [pendingAddParentId, onCreateChildTopic]
+  );
 
   const isNodeExpanded = useCallback(
     (nodeId: string) => expandedNodes.has(nodeId),
@@ -110,6 +134,11 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     onUpdateRecordTopic,
     onDeleteRecord,
     onSaveRecord,
+    // Inline topic creation
+    pendingAddParentId,
+    startAddingTopic,
+    cancelAddingTopic,
+    confirmAddingTopic,
   };
 }
 

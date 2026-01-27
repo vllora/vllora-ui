@@ -20,8 +20,10 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { TopicNodeComponent, type TopicNode } from "./TopicNodeComponent";
+import { TopicNodeComponent } from "./TopicNodeComponent";
+import { TopicInputNodeComponent } from "./TopicInputNode";
 import { TopicCanvasProvider, TopicCanvasConsumer } from "./TopicCanvasContext";
+import type { CanvasNode } from "./useDagreLayout";
 import {
   useDagreLayout,
   getHighlightedEdgeIds,
@@ -33,6 +35,7 @@ import type { TopicHierarchyNode, DatasetRecord } from "@/types/dataset-types";
 // Custom node types with proper typing
 const nodeTypes = {
   topic: TopicNodeComponent,
+  topicInput: TopicInputNodeComponent,
 } as const;
 
 interface TopicHierarchyCanvasProps {
@@ -58,6 +61,8 @@ interface TopicHierarchyCanvasProps {
   onDeleteRecord?: (recordId: string) => void;
   /** Called when saving record data */
   onSaveRecord?: (recordId: string, data: unknown) => Promise<void>;
+  /** Called when creating a new child topic via inline input */
+  onCreateChildTopic?: (parentTopicName: string | null, childTopicName: string) => void;
 }
 
 // Inner component that uses the context
@@ -66,7 +71,7 @@ function TopicHierarchyCanvasInner({
 }: {
   hierarchy?: TopicHierarchyNode[];
 }) {
-  const { records, expandedNodes, selectedTopic, setSelectedTopic } = TopicCanvasConsumer();
+  const { records, expandedNodes, selectedTopic, setSelectedTopic, pendingAddParentId } = TopicCanvasConsumer();
 
   // Compute record counts by topic
   const recordCountsByTopic = useMemo(() => {
@@ -90,14 +95,15 @@ function TopicHierarchyCanvasInner({
     recordCountsByTopic,
     records.length,
     expandedNodes,
-    { direction: "LR" }
+    { direction: "LR" },
+    pendingAddParentId
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
 
   // Store React Flow instance for programmatic control
-  const reactFlowInstance = useRef<ReactFlowInstance<TopicNode> | null>(null);
+  const reactFlowInstance = useRef<ReactFlowInstance<CanvasNode> | null>(null);
 
   // Track changes to avoid unnecessary updates
   const layoutVersionRef = useRef(0);
@@ -121,11 +127,18 @@ function TopicHierarchyCanvasInner({
       setNodes(layoutedNodes);
 
       // Apply edge highlighting based on current selection
+      // Preserve original style for input node edges (dashed style)
       const highlightedEdgeIds = getHighlightedEdgeIds(selectedTopic, topicNameToNodeId, nodeIdToParentId);
-      setEdges(layoutedEdges.map(edge => ({
-        ...edge,
-        style: highlightedEdgeIds.has(edge.id) ? HIGHLIGHTED_EDGE_STYLE : DEFAULT_EDGE_STYLE,
-      })));
+      setEdges(layoutedEdges.map(edge => {
+        // Keep original style for input node edge (has strokeDasharray)
+        if (edge.target === "__input_node__") {
+          return edge;
+        }
+        return {
+          ...edge,
+          style: highlightedEdgeIds.has(edge.id) ? HIGHLIGHTED_EDGE_STYLE : DEFAULT_EDGE_STYLE,
+        };
+      }));
 
       // Fit view after layout update when hierarchy or expansion changes
       if ((expandedNodesChanged || hierarchyChanged) && reactFlowInstance.current) {
@@ -145,23 +158,33 @@ function TopicHierarchyCanvasInner({
       prevSelectedTopicRef.current = selectedTopic;
 
       // Recompute edge highlighting without changing positions
+      // Preserve original style for input node edges (dashed style)
       const highlightedEdgeIds = getHighlightedEdgeIds(selectedTopic, topicNameToNodeId, nodeIdToParentId);
       setEdges(currentEdges =>
-        currentEdges.map(edge => ({
-          ...edge,
-          style: highlightedEdgeIds.has(edge.id) ? HIGHLIGHTED_EDGE_STYLE : DEFAULT_EDGE_STYLE,
-        }))
+        currentEdges.map(edge => {
+          // Keep original style for input node edge (has strokeDasharray)
+          if (edge.target === "__input_node__") {
+            return edge;
+          }
+          return {
+            ...edge,
+            style: highlightedEdgeIds.has(edge.id) ? HIGHLIGHTED_EDGE_STYLE : DEFAULT_EDGE_STYLE,
+          };
+        })
       );
     }
   }, [selectedTopic, topicNameToNodeId, nodeIdToParentId, setEdges]);
 
-  const onInit = (instance: ReactFlowInstance<TopicNode>) => {
+  const onInit = (instance: ReactFlowInstance<CanvasNode>) => {
     reactFlowInstance.current = instance;
   };
 
   // Clear selection when clicking on the canvas background
+  // Don't clear if there's a pending add (to avoid accidentally canceling)
   const onPaneClick = () => {
-    setSelectedTopic(null);
+    if (pendingAddParentId === undefined) {
+      setSelectedTopic(null);
+    }
   };
 
   return (
@@ -207,6 +230,7 @@ export function TopicHierarchyCanvas({
   onUpdateRecordTopic,
   onDeleteRecord,
   onSaveRecord,
+  onCreateChildTopic,
 }: TopicHierarchyCanvasProps) {
   return (
     <TopicCanvasProvider
@@ -220,6 +244,7 @@ export function TopicHierarchyCanvas({
       onUpdateRecordTopic={onUpdateRecordTopic}
       onDeleteRecord={onDeleteRecord}
       onSaveRecord={onSaveRecord}
+      onCreateChildTopic={onCreateChildTopic}
     >
       <TopicHierarchyCanvasInner hierarchy={hierarchy} />
     </TopicCanvasProvider>

@@ -9,7 +9,11 @@ import { useMemo } from "react";
 import dagre from "@dagrejs/dagre";
 import { Position, type Edge } from "@xyflow/react";
 import type { TopicNode } from "./TopicNodeComponent";
+import type { TopicInputNode } from "./TopicInputNode";
 import type { TopicHierarchyNode } from "@/types/dataset-types";
+
+// Union type for all canvas node types
+export type CanvasNode = TopicNode | TopicInputNode;
 
 // Layout constants
 const NODE_WIDTH_COLLAPSED = 280;
@@ -25,7 +29,7 @@ interface DagreLayoutOptions {
 }
 
 interface DagreLayoutResult {
-  nodes: TopicNode[];
+  nodes: CanvasNode[];
   edges: Edge[];
   /** Mapping from topic name to node ID (for edge highlighting) */
   topicNameToNodeId: Record<string, string>;
@@ -40,7 +44,7 @@ interface DagreLayoutResult {
  * Nodes grow downward when expanded.
  */
 function getLayoutedElements(
-  nodes: TopicNode[],
+  nodes: CanvasNode[],
   edges: Edge[],
   expandedNodes: Set<string>,
   topicNameToNodeId: Record<string, string>,
@@ -95,7 +99,7 @@ function getLayoutedElements(
   // Map positions back to nodes
   // Position is calculated from dagre's center point, converted to top-left
   // Always use collapsed dimensions for offset to keep siblings aligned
-  const layoutedNodes = nodes.map((node) => {
+  const layoutedNodes: CanvasNode[] = nodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
 
     return {
@@ -128,16 +132,20 @@ const HIGHLIGHTED_EDGE_STYLE = {
  * Hook to generate layouted nodes and edges from topic hierarchy.
  * Does NOT include selection-based edge highlighting - that should be
  * computed separately to avoid layout recalculation on selection change.
+ *
+ * @param pendingAddParentId - When defined, adds a temporary input node as child of this parent.
+ *                             null means root, undefined means no pending add.
  */
 export function useDagreLayout(
   hierarchy: TopicHierarchyNode[] | undefined,
   recordCountsByTopic: Record<string, number>,
   totalRecordCount: number,
   expandedNodes: Set<string>,
-  options?: DagreLayoutOptions
+  options?: DagreLayoutOptions,
+  pendingAddParentId?: string | null
 ): DagreLayoutResult {
   return useMemo(() => {
-    const nodes: TopicNode[] = [];
+    const nodes: CanvasNode[] = [];
     const edges: Edge[] = [];
     const hasHierarchy = hierarchy && hierarchy.length > 0;
 
@@ -215,9 +223,41 @@ export function useDagreLayout(
       });
     }
 
+    // Add temporary input node if pending add is active
+    if (pendingAddParentId !== undefined) {
+      const inputNodeId = "__input_node__";
+      // Determine parent node ID: null means root, otherwise look up by topic name
+      const parentNodeId = pendingAddParentId === null
+        ? "root"
+        : topicNameToNodeId[pendingAddParentId] || "root";
+
+      nodes.push({
+        id: inputNodeId,
+        type: "topicInput",
+        position: { x: 0, y: 0 }, // Will be updated by dagre
+        data: {
+          parentTopicName: pendingAddParentId,
+        },
+      } as CanvasNode);
+
+      edges.push({
+        id: `edge-${parentNodeId}-${inputNodeId}`,
+        source: parentNodeId,
+        target: inputNodeId,
+        type: "smoothstep",
+        style: {
+          ...HIGHLIGHTED_EDGE_STYLE,
+          strokeDasharray: "5 5", // Dashed line for pending connection
+        },
+      });
+
+      // Track parent relationship for the input node
+      nodeIdToParentId[inputNodeId] = parentNodeId;
+    }
+
     // Apply dagre layout
     return getLayoutedElements(nodes, edges, expandedNodes, topicNameToNodeId, nodeIdToParentId, options);
-  }, [hierarchy, recordCountsByTopic, totalRecordCount, expandedNodes, options]);
+  }, [hierarchy, recordCountsByTopic, totalRecordCount, expandedNodes, options, pendingAddParentId]);
 }
 
 /**

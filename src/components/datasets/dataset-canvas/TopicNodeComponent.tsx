@@ -9,7 +9,7 @@
 
 import { memo, useState } from "react";
 import { Handle, Position, type Node, type NodeProps, NodeResizer } from "@xyflow/react";
-import { Table2, ChevronDown, ChevronUp } from "lucide-react";
+import { Table2, ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TopicCanvasConsumer } from "./TopicCanvasContext";
 import { RecordsTable } from "../records-table";
@@ -68,6 +68,8 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
     onUpdateRecordTopic,
     onDeleteRecord,
     onSaveRecord,
+    startAddingTopic,
+    pendingAddParentId,
   } = TopicCanvasConsumer();
 
   const isExpanded = isNodeExpanded(nodeId);
@@ -143,13 +145,29 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
         />
       )}
 
-      {/* Output handle (only if node has children) - Right side for horizontal layout */}
-      {hasChildren && (
+      {/* Output handle - Right side for horizontal layout
+          Show when: has children OR is parent of pending input node */}
+      {(hasChildren || (isRoot ? pendingAddParentId === null : pendingAddParentId === name)) && (
         <Handle
           type="source"
           position={Position.Right}
           className="!w-3 !h-3 !bg-border !border-1 !border-background"
         />
+      )}
+
+      {/* Floating + button for adding child topic - shows on right side when selected and no pending add */}
+      {isSelected && pendingAddParentId === undefined && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            startAddingTopic(isRoot ? null : name);
+          }}
+          className="absolute -right-3 top-1/2 -translate-y-1/2 translate-x-full w-6 h-6 rounded-md border border-border bg-background text-muted-foreground flex items-center justify-center hover:border-[rgb(var(--theme-500))] hover:text-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-500))]/10 transition-colors nodrag nopan"
+          title="Add child topic"
+        >
+          <Plus className="w-3.5 h-3.5" />
+        </button>
       )}
 
       {/* Header */}
