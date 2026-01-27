@@ -28,6 +28,10 @@ interface DagreLayoutOptions {
 interface DagreLayoutResult {
   nodes: TopicNode[];
   edges: Edge[];
+  /** Mapping from topic name to node ID (for edge highlighting) */
+  topicNameToNodeId: Record<string, string>;
+  /** Mapping from node ID to parent node ID (for edge highlighting) */
+  nodeIdToParentId: Record<string, string>;
 }
 
 /**
@@ -40,6 +44,8 @@ function getLayoutedElements(
   nodes: TopicNode[],
   edges: Edge[],
   expandedNodes: Set<string>,
+  topicNameToNodeId: Record<string, string>,
+  nodeIdToParentId: Record<string, string>,
   options: DagreLayoutOptions = {}
 ): DagreLayoutResult {
   const { direction = "TB", nodeSpacing = NODE_SPACING, rankSpacing = RANK_SPACING } = options;
@@ -102,7 +108,7 @@ function getLayoutedElements(
     };
   });
 
-  return { nodes: layoutedNodes, edges };
+  return { nodes: layoutedNodes, edges, topicNameToNodeId, nodeIdToParentId };
 }
 
 // Edge styles
@@ -118,14 +124,15 @@ const HIGHLIGHTED_EDGE_STYLE = {
 };
 
 /**
- * Hook to generate layouted nodes and edges from topic hierarchy
+ * Hook to generate layouted nodes and edges from topic hierarchy.
+ * Does NOT include selection-based edge highlighting - that should be
+ * computed separately to avoid layout recalculation on selection change.
  */
 export function useDagreLayout(
   hierarchy: TopicHierarchyNode[] | undefined,
   recordCountsByTopic: Record<string, number>,
   totalRecordCount: number,
   expandedNodes: Set<string>,
-  selectedTopic: string | null | undefined,
   options?: DagreLayoutOptions
 ): DagreLayoutResult {
   return useMemo(() => {
@@ -133,7 +140,7 @@ export function useDagreLayout(
     const edges: Edge[] = [];
     const hasHierarchy = hierarchy && hierarchy.length > 0;
 
-    // Maps for path highlighting
+    // Maps for path highlighting (returned for use by caller)
     const topicNameToNodeId: Record<string, string> = {};
     const nodeIdToParentId: Record<string, string> = {};
 
@@ -184,7 +191,7 @@ export function useDagreLayout(
           },
         });
 
-        // Edge from parent (style will be applied after path computation)
+        // Edge from parent
         edges.push({
           id: `edge-${parentId}-${nodeId}`,
           source: parentId,
@@ -205,29 +212,37 @@ export function useDagreLayout(
       hierarchy.forEach((topLevelNode) => {
         processNode(topLevelNode, "root");
       });
-
-      // Compute highlighted path if a topic is selected (not root)
-      if (selectedTopic) {
-        const highlightedEdgeIds = new Set<string>();
-        let currentNodeId = topicNameToNodeId[selectedTopic];
-
-        // Walk up the tree from selected node to root
-        while (currentNodeId && nodeIdToParentId[currentNodeId]) {
-          const parentId = nodeIdToParentId[currentNodeId];
-          highlightedEdgeIds.add(`edge-${parentId}-${currentNodeId}`);
-          currentNodeId = parentId;
-        }
-
-        // Apply highlighted style to path edges
-        edges.forEach((edge) => {
-          if (highlightedEdgeIds.has(edge.id)) {
-            edge.style = HIGHLIGHTED_EDGE_STYLE;
-          }
-        });
-      }
     }
 
     // Apply dagre layout
-    return getLayoutedElements(nodes, edges, expandedNodes, options);
-  }, [hierarchy, recordCountsByTopic, totalRecordCount, expandedNodes, selectedTopic, options]);
+    return getLayoutedElements(nodes, edges, expandedNodes, topicNameToNodeId, nodeIdToParentId, options);
+  }, [hierarchy, recordCountsByTopic, totalRecordCount, expandedNodes, options]);
 }
+
+/**
+ * Compute highlighted edge IDs for the path from root to selected topic.
+ * Returns a Set of edge IDs that should be highlighted.
+ */
+export function getHighlightedEdgeIds(
+  selectedTopic: string | null | undefined,
+  topicNameToNodeId: Record<string, string>,
+  nodeIdToParentId: Record<string, string>
+): Set<string> {
+  const highlightedEdgeIds = new Set<string>();
+
+  if (selectedTopic && topicNameToNodeId[selectedTopic]) {
+    let currentNodeId = topicNameToNodeId[selectedTopic];
+
+    // Walk up the tree from selected node to root
+    while (currentNodeId && nodeIdToParentId[currentNodeId]) {
+      const parentId = nodeIdToParentId[currentNodeId];
+      highlightedEdgeIds.add(`edge-${parentId}-${currentNodeId}`);
+      currentNodeId = parentId;
+    }
+  }
+
+  return highlightedEdgeIds;
+}
+
+/** Default edge style */
+export { DEFAULT_EDGE_STYLE, HIGHLIGHTED_EDGE_STYLE };

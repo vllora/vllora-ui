@@ -27,6 +27,9 @@ import {
 } from "./dataset-canvas/DatasetStepper";
 import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
 import { DatasetDetailHeader } from "./DatasetDetailHeader";
+import { EvaluationConfigDialog } from "./evaluation-dialog/EvaluationConfigDialog";
+import { updateDatasetEvaluationConfig } from "@/services/datasets-db";
+import type { EvaluationConfig } from "@/types/dataset-types";
 
 export function DatasetDetailContentV2() {
   const {
@@ -91,6 +94,7 @@ export function DatasetDetailContentV2() {
   // State for canvas view
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState<DatasetStep>("extract_data");
+  const [evaluationConfigDialog, setEvaluationConfigDialog] = useState(false);
 
   // Compute available topics from hierarchy for topic selection
   const availableTopics = useMemo(
@@ -140,7 +144,7 @@ export function DatasetDetailContentV2() {
         setTopicHierarchyDialog(true);
         break;
       case "evaluation_config":
-        // TODO: Open evaluation config dialog
+        setEvaluationConfigDialog(true);
         break;
       case "finetune":
         // TODO: Open finetune dialog
@@ -167,6 +171,12 @@ export function DatasetDetailContentV2() {
   // Handle delete topic from canvas
   const handleDeleteTopic = (topicName: string) => {
     handleDeleteTopicFromRecords([topicName]);
+  };
+
+  // Handle save evaluation config
+  const handleSaveEvaluationConfig = async (config: EvaluationConfig) => {
+    if (!dataset) return;
+    await updateDatasetEvaluationConfig(dataset.id, config);
   };
 
   if (isLoading) {
@@ -338,6 +348,14 @@ export function DatasetDetailContentV2() {
             recommendations: mean < 0.3 ? ["Consider using SFT first to bootstrap capability"] : [],
           };
         }}
+      />
+
+      {/* Evaluation config dialog */}
+      <EvaluationConfigDialog
+        open={evaluationConfigDialog}
+        onOpenChange={setEvaluationConfigDialog}
+        config={dataset?.evaluationConfig}
+        onSave={handleSaveEvaluationConfig}
       />
     </>
   );

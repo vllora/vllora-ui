@@ -22,7 +22,12 @@ import {
 import "@xyflow/react/dist/style.css";
 import { TopicNodeComponent, type TopicNode } from "./TopicNodeComponent";
 import { TopicCanvasProvider, TopicCanvasConsumer } from "./TopicCanvasContext";
-import { useDagreLayout } from "./useDagreLayout";
+import {
+  useDagreLayout,
+  getHighlightedEdgeIds,
+  DEFAULT_EDGE_STYLE,
+  HIGHLIGHTED_EDGE_STYLE,
+} from "./useDagreLayout";
 import type { TopicHierarchyNode, DatasetRecord } from "@/types/dataset-types";
 
 // Custom node types with proper typing
@@ -74,13 +79,17 @@ function TopicHierarchyCanvasInner({
     return counts;
   }, [records]);
 
-  // Use dagre for automatic tree layout
-  const { nodes: layoutedNodes, edges: layoutedEdges } = useDagreLayout(
+  // Use dagre for automatic tree layout (no selectedTopic dependency)
+  const {
+    nodes: layoutedNodes,
+    edges: layoutedEdges,
+    topicNameToNodeId,
+    nodeIdToParentId,
+  } = useDagreLayout(
     hierarchy,
     recordCountsByTopic,
     records.length,
-    expandedNodes,
-    selectedTopic
+    expandedNodes
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
@@ -89,30 +98,31 @@ function TopicHierarchyCanvasInner({
   // Store React Flow instance for programmatic control
   const reactFlowInstance = useRef<ReactFlowInstance<TopicNode> | null>(null);
 
-  // Track layout version to avoid infinite update loops
+  // Track changes to avoid unnecessary updates
   const layoutVersionRef = useRef(0);
   const prevExpandedNodesRef = useRef(expandedNodes);
   const prevSelectedTopicRef = useRef(selectedTopic);
 
-  // Update nodes when layout changes (e.g., when nodes expand/collapse or selection changes)
+  // Update nodes only when expansion changes (layout recalculation)
   useEffect(() => {
-    // Only update if expandedNodes actually changed (Set comparison)
     const expandedNodesChanged =
       prevExpandedNodesRef.current.size !== expandedNodes.size ||
       ![...prevExpandedNodesRef.current].every(id => expandedNodes.has(id));
 
-    const selectedTopicChanged = prevSelectedTopicRef.current !== selectedTopic;
-
-    if (expandedNodesChanged || selectedTopicChanged || layoutVersionRef.current === 0) {
+    if (expandedNodesChanged || layoutVersionRef.current === 0) {
       prevExpandedNodesRef.current = expandedNodes;
-      prevSelectedTopicRef.current = selectedTopic;
       layoutVersionRef.current++;
       setNodes(layoutedNodes);
-      setEdges(layoutedEdges);
+
+      // Apply edge highlighting based on current selection
+      const highlightedEdgeIds = getHighlightedEdgeIds(selectedTopic, topicNameToNodeId, nodeIdToParentId);
+      setEdges(layoutedEdges.map(edge => ({
+        ...edge,
+        style: highlightedEdgeIds.has(edge.id) ? HIGHLIGHTED_EDGE_STYLE : DEFAULT_EDGE_STYLE,
+      })));
 
       // Fit view after layout update when expansion changes
       if (expandedNodesChanged && reactFlowInstance.current) {
-        // Small delay to allow React Flow to update positions
         setTimeout(() => {
           reactFlowInstance.current?.fitView({
             padding: 0.2,
@@ -121,7 +131,23 @@ function TopicHierarchyCanvasInner({
         }, 50);
       }
     }
-  }, [layoutedNodes, layoutedEdges, setNodes, setEdges, expandedNodes, selectedTopic]);
+  }, [layoutedNodes, layoutedEdges, setNodes, setEdges, expandedNodes, selectedTopic, topicNameToNodeId, nodeIdToParentId]);
+
+  // Update only edge styles when selection changes (no layout recalculation)
+  useEffect(() => {
+    if (prevSelectedTopicRef.current !== selectedTopic) {
+      prevSelectedTopicRef.current = selectedTopic;
+
+      // Recompute edge highlighting without changing positions
+      const highlightedEdgeIds = getHighlightedEdgeIds(selectedTopic, topicNameToNodeId, nodeIdToParentId);
+      setEdges(currentEdges =>
+        currentEdges.map(edge => ({
+          ...edge,
+          style: highlightedEdgeIds.has(edge.id) ? HIGHLIGHTED_EDGE_STYLE : DEFAULT_EDGE_STYLE,
+        }))
+      );
+    }
+  }, [selectedTopic, topicNameToNodeId, nodeIdToParentId, setEdges]);
 
   const onInit = (instance: ReactFlowInstance<TopicNode>) => {
     reactFlowInstance.current = instance;
