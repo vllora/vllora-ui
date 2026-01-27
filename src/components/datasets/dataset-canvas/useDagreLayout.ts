@@ -7,7 +7,7 @@
 
 import { useMemo } from "react";
 import dagre from "@dagrejs/dagre";
-import { MarkerType, Position, type Edge } from "@xyflow/react";
+import { Position, type Edge } from "@xyflow/react";
 import type { TopicNode } from "./TopicNodeComponent";
 import type { TopicHierarchyNode } from "@/types/dataset-types";
 
@@ -155,8 +155,10 @@ export function useDagreLayout(
           source: parentId,
           target: nodeId,
           type: "smoothstep",
-          markerEnd: { type: MarkerType.ArrowClosed },
-          style: { stroke: "hsl(var(--border))", strokeWidth: 2 },
+          style: {
+            stroke: "rgba(16, 185, 129, 0.4)",
+            strokeWidth: 1,
+          },
         });
 
         // Process children recursively
