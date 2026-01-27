@@ -34,11 +34,6 @@ interface SyntheticTraceRecord {
   messages: SyntheticMessage[];
 }
 
-interface AssistantTurnOutput {
-  content: string;
-  tool_calls: SyntheticToolCall[] | null;
-}
-
 export interface GenerateTracesResult {
   success: boolean;
   error?: string;
@@ -65,7 +60,6 @@ export interface GenerateTracesParams {
   on_records_added?: (records: DatasetRecord[]) => void | Promise<void>;
 }
 
-const DEFAULT_MAX_TURNS = 3;
 const DEFAULT_PERSONA_GUIDANCE = 'Diverse and realistic';
 
 const SIMULATED_PERSONA_BATCH_PROMPT = `Create a JSON list of 10 diverse user personas who would be interested in the following topic.
@@ -93,26 +87,7 @@ Output Format:
 
 Ensure the list is diverse and creative. Return ONLY the JSON array of strings.`;
 
-const SIMULATED_USER_PROMPT = `You are a regular user interacting with an AI assistant.
-Your goal is to initiate a natural and realistic conversation about a specific topic. Keep it brief and to the point.
-
-Topic context: {{subtopics}}
-System Persona the assistant follows: {{system_prompt}}
-Your Persona: {{persona}}
-
-Based on the context and topic, write your first message as the user.
-Do not provide the assistant's response.
-Just write the initial user prompt.`;
-
-const SIMULATED_TOOL_RESULT_PROMPT = `The AI assistant is trying to help you. It decided to call the tool '{{tool_name}}' with these arguments:
-{{tool_arguments}}
-
-Based on the domain context ({{subtopics}}) and the tool's purpose, simulate a realistic and helpful result that this tool would return.
-The result should be concise and formatted as it would appear in a real system (e.g., JSON, a status message, or data output).
-Your simulated result will be shown to the assistant so it can continue the task.
-Just provide the simulated output.`;
-
-const SIMULATED_USER_SYSTEM_PROMPT = `You are a user interacting with an AI assistant.
+const FINAL_USER_MESSAGE_VARIATION_PROMPT = `You are a user in an ongoing conversation with an AI assistant.
 
 Your Persona:
 {{persona}}
@@ -120,95 +95,20 @@ Your Persona:
 Topic Context:
 {{subtopics}}
 
-Your Goal:
-{{instructions}}
+Conversation History:
+{{conversation_history}}
 
-Instructions:
-- The conversation history is provided using <user_prompt> and <assistant_response> tags.
-- Provide the next message as the user based on the conversation history, strictly in plain text and without any tags.
-- Keep it concise and natural, within 1-3 sentences.
-- If the assistant asks for information, provide it consistent with your persona.
-- If the task is effectively complete or the conversation has reached a natural conclusion, respond with [END].
-- Do not repeat previous messages verbatim.`;
+Original Last User Message:
+{{original_user_message}}
 
-const SIMULATED_SYSTEM_PROMPT_GENERATION_PROMPT = `You are an expert in defining AI assistant personas for high-quality synthetic data generation.
-Your task is to generate a comprehensive system prompt for an AI assistant based on a specific topic.
+Your task is to create a VARIATION of the original last user message above.
+- Keep the same intent and topic as the original
+- Rephrase it in a way that fits your persona
+- Keep it natural and concise (1-3 sentences)
+- It should still make sense in the conversation context
+- Do NOT copy the original verbatim - create a meaningful variation
 
-Topic context: {{subtopics}}
-Seed Example Context: {{seed_context}}
-
-Requirements:
-1. The system prompt should define the assistant's expertise, tone, and specific responsibilities related to the Topic Context.
-2. The tone should be consistent with the Seed Example Context provided.
-3. Explicitly mention that the assistant should use appropriate tools when needed or if available to complete tasks effectively.
-4. Output ONLY the system prompt text. Do not include any tags like <system_prompt> or extra commentary.
-`;
-
-const ASSISTANT_RESPONSE_INSTRUCTIONS = `You are continuing a multi-turn conversation as the assistant.
-
-Return a JSON object with exactly:
-{
-  "content": "...",
-  "tool_calls": [
-    {
-      "id": "unique_id",
-      "type": "function",
-      "function": {
-        "name": "tool_name",
-        "arguments": "{\\"arg\\": \\"value\\"}"
-      }
-    }
-  ]
-}
-
-Rules:
-- If no tool is needed, set tool_calls to null.
-- tool_calls may ONLY reference the available tools.
-- Tool arguments must be valid JSON and include required fields.
-- Never output "records", "metadata", or any extra keys.
-- Keep the assistant content concise and helpful.`;
-
-const ASSISTANT_TURN_SCHEMA = {
-  type: 'json_schema',
-  json_schema: {
-    name: 'assistant_turn',
-    strict: true,
-    schema: {
-      type: 'object',
-      properties: {
-        content: { type: 'string' },
-        tool_calls: {
-          anyOf: [
-            { type: 'null' },
-            {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string' },
-                  type: { type: 'string', enum: ['function'] },
-                  function: {
-                    type: 'object',
-                    properties: {
-                      name: { type: 'string' },
-                      arguments: { type: 'string' },
-                    },
-                    required: ['name', 'arguments'],
-                    additionalProperties: false,
-                  },
-                },
-                required: ['id', 'type', 'function'],
-                additionalProperties: false,
-              },
-            },
-          ],
-        },
-      },
-      required: ['content', 'tool_calls'],
-      additionalProperties: false,
-    },
-  },
-};
+Write only the new user message, nothing else.`;
 
 function initMessage(role: 'system' | 'user' | 'assistant', content: string): DistriMessage {
   return DistriClient.initDistriMessage(role, [{ part_type: 'text', data: content }]);
@@ -289,29 +189,6 @@ function extractSeedMessages(record?: DatasetRecord): any[] {
   return Array.isArray(data?.input?.messages) ? data.input.messages : [];
 }
 
-function extractSeedSystemPrompt(messages: any[]): string | null {
-  if (!Array.isArray(messages)) return null;
-  const systemMsg = messages.find((m: any) => m?.role === 'system');
-  if (systemMsg && typeof systemMsg.content === 'string') {
-    return systemMsg.content;
-  }
-  return null;
-}
-
-function condenseToolsForPrompt(tools: any[]): Array<{ name: string; required: string[]; properties: string[] }> {
-  const out: Array<{ name: string; required: string[]; properties: string[] }> = [];
-  for (const t of tools) {
-    const fn = t?.function;
-    const name = fn?.name;
-    const params = fn?.parameters;
-    if (typeof name !== 'string') continue;
-    const required = Array.isArray(params?.required) ? params.required : [];
-    const properties = params?.properties && typeof params.properties === 'object' ? Object.keys(params.properties) : [];
-    out.push({ name, required, properties });
-  }
-  return out;
-}
-
 function normalizeAssistantToolCalls(toolCalls: unknown, toolNames: Set<string>): SyntheticToolCall[] | null {
   if (!Array.isArray(toolCalls) || toolNames.size === 0) return null;
 
@@ -382,84 +259,14 @@ function buildSyntheticTraceDataInfo(rec: SyntheticTraceRecord, tools: any[]): D
   );
 
   const normalizedMessages = normalizeAndValidateMessages(rec.messages, toolNames);
-  const lastAssistant = [...normalizedMessages].reverse().find((m) => m.role === 'assistant');
-  const lastToolCalls = Array.isArray((lastAssistant as any)?.tool_calls) ? (lastAssistant as any).tool_calls : null;
-  const finishReason = lastToolCalls && lastToolCalls.length > 0 ? 'tool_calls' : 'stop';
 
   return {
     input: {
       messages: normalizedMessages,
       tools,
     },
-    output: {
-      messages: lastAssistant || { role: 'assistant', content: '' },
-      finish_reason: finishReason,
-    },
+    output: {},
   };
-}
-
-function formatSeedExcerpt(messages: any[]): string {
-  if (!Array.isArray(messages) || messages.length === 0) return 'N/A';
-  const excerpt = messages.slice(Math.max(0, messages.length - 8)).map((m: any) => ({
-    role: m?.role,
-    content: typeof m?.content === 'string' ? m.content : JSON.stringify(m?.content ?? ''),
-  }));
-  return JSON.stringify(excerpt, null, 2);
-}
-
-function buildAssistantSystemPrompt(systemPrompt: string, tools: any[]): string {
-  const toolInstruction = tools.length > 0
-    ? '\nYou have available tools where needed to complete the user\'s request.'
-    : '';
-  const condensedTools = condenseToolsForPrompt(tools);
-  return `${systemPrompt}${toolInstruction}\n\n${ASSISTANT_RESPONSE_INSTRUCTIONS}\n\nAvailable tools:\n${JSON.stringify(condensedTools, null, 2)}`;
-}
-
-function buildAssistantMessages(messages: SyntheticMessage[], toolCallNameById: Map<string, string>): DistriMessage[] {
-  const out: DistriMessage[] = [];
-  for (const message of messages) {
-    if (message.role === 'system') continue;
-    if (message.role === 'user') {
-      out.push(initMessage('user', message.content ?? ''));
-      continue;
-    }
-    if (message.role === 'assistant') {
-      out.push(initMessage('assistant', message.content ?? ''));
-      continue;
-    }
-    if (message.role === 'tool') {
-      const toolName = message.tool_call_id ? toolCallNameById.get(message.tool_call_id) : undefined;
-      const content = toolName
-        ? `Tool '${toolName}' returned: ${message.content ?? ''}`
-        : `Tool returned: ${message.content ?? ''}`;
-      out.push(initMessage('assistant', content));
-    }
-  }
-  return out;
-}
-
-function buildUserHistory(messages: SyntheticMessage[], toolCallNameById: Map<string, string>): string {
-  const historyParts: string[] = [];
-  for (const message of messages) {
-    if (message.role === 'system') continue;
-    const content = message.content ?? '';
-    if (message.role === 'user') {
-      historyParts.push(`<user_prompt>: ${content}`);
-      continue;
-    }
-    if (message.role === 'assistant') {
-      historyParts.push(`<assistant_response>: ${content}`);
-      continue;
-    }
-    if (message.role === 'tool') {
-      const toolName = message.tool_call_id ? toolCallNameById.get(message.tool_call_id) : undefined;
-      const toolContent = toolName
-        ? `Tool '${toolName}' returned: ${content}`
-        : `Tool returned: ${content}`;
-      historyParts.push(`<assistant_response>: ${toolContent}`);
-    }
-  }
-  return historyParts.join('\n');
 }
 
 async function sleep(ms: number): Promise<void> {
@@ -527,15 +334,6 @@ async function callLLMText(prompt: string, systemPrompt?: string): Promise<strin
   return callLLM(messages);
 }
 
-async function callLLMJson<T>(messages: DistriMessage[], responseFormat: unknown): Promise<T> {
-  const content = await callLLM(messages, { responseFormat });
-  const parsed = tryParseJson<T>(content);
-  if (!parsed) {
-    throw new Error('Failed to parse JSON response');
-  }
-  return parsed;
-}
-
 async function ensurePersona(
   personaCache: Map<string, string[]>,
   topicKey: string,
@@ -559,177 +357,78 @@ async function ensurePersona(
   return next.shift() || 'A curious user interested in the topic.';
 }
 
-async function generateSystemPrompt(topicPath: string[], seedMessages: any[]): Promise<string> {
-  const topicStr = topicPath.join(' -> ');
-  const seedContext = formatSeedExcerpt(seedMessages);
-  const fallbackPrompt = `You are a helpful assistant specializing in ${topicStr}.`;
-  const prompt = SIMULATED_SYSTEM_PROMPT_GENERATION_PROMPT
-    .replace('{{subtopics}}', topicStr)
-    .replace('{{seed_context}}', seedContext);
-
-  try {
-    const content = await callLLMText(prompt);
-    return content.trim() || fallbackPrompt;
-  } catch {
-    return fallbackPrompt;
-  }
-}
-
-async function generateFirstUserMessage(
+async function generateFinalUserMessage(
   contextStr: string,
   persona: string,
-  systemPrompt: string
+  existingMessages: SyntheticMessage[],
+  originalUserMessage: string
 ): Promise<string> {
-  const prompt = SIMULATED_USER_PROMPT
+  // Build conversation history string (excluding the last user message we're replacing)
+  const historyParts: string[] = [];
+  for (const msg of existingMessages) {
+    if (msg.role === 'system') continue;
+    if (msg.role === 'user') historyParts.push(`User: ${msg.content}`);
+    if (msg.role === 'assistant') historyParts.push(`Assistant: ${msg.content}`);
+    if (msg.role === 'tool') historyParts.push(`[Tool result]: ${msg.content}`);
+  }
+
+  const prompt = FINAL_USER_MESSAGE_VARIATION_PROMPT
     .replace('{{subtopics}}', contextStr)
     .replace('{{persona}}', persona)
-    .replace('{{system_prompt}}', systemPrompt);
+    .replace('{{conversation_history}}', historyParts.join('\n'))
+    .replace('{{original_user_message}}', originalUserMessage);
+
   const content = await callLLMText(prompt);
-  return content.trim();
-}
-
-async function generateAssistantTurn(
-  messages: SyntheticMessage[],
-  systemPrompt: string,
-  tools: any[],
-  toolCallNameById: Map<string, string>
-): Promise<AssistantTurnOutput> {
-  const assistantSystemPrompt = buildAssistantSystemPrompt(systemPrompt, tools);
-  const conversationMessages = buildAssistantMessages(messages, toolCallNameById);
-  const raw = await callLLMJson<AssistantTurnOutput>(
-    [initMessage('system', assistantSystemPrompt), ...conversationMessages],
-    ASSISTANT_TURN_SCHEMA
-  );
-
-  if (!raw || typeof raw !== 'object') {
-    throw new Error('LLM returned invalid assistant_turn payload');
-  }
-
-  const rawRecord = raw as unknown as Record<string, unknown>;
-  if ('records' in rawRecord) {
-    throw new Error('LLM returned legacy records payload; expected assistant_turn JSON');
-  }
-
-  if (typeof rawRecord.content !== 'string') {
-    throw new Error('LLM returned assistant_turn without content');
-  }
-
-  if (rawRecord.tool_calls !== null && !Array.isArray(rawRecord.tool_calls)) {
-    throw new Error('LLM returned assistant_turn tool_calls in invalid format');
-  }
-
-  const toolNames = new Set(
-    tools
-      .map((t: any) => t?.function?.name)
-      .filter((n: any) => typeof n === 'string')
-  );
-  return {
-    content: rawRecord.content,
-    tool_calls: normalizeAssistantToolCalls(rawRecord.tool_calls, toolNames),
-  };
-}
-
-async function simulateToolResult(toolName: string, args: string, contextStr: string): Promise<string> {
-  const prompt = SIMULATED_TOOL_RESULT_PROMPT
-    .replace('{{tool_name}}', toolName)
-    .replace('{{tool_arguments}}', args)
-    .replace('{{subtopics}}', contextStr);
-  const content = await callLLMText(prompt);
-  return content.trim();
-}
-
-async function generateUserResponse(
-  messages: SyntheticMessage[],
-  contextStr: string,
-  instructions: string,
-  persona: string,
-  toolCallNameById: Map<string, string>
-): Promise<string> {
-  const simSystemPrompt = SIMULATED_USER_SYSTEM_PROMPT
-    .replace('{{subtopics}}', contextStr)
-    .replace('{{instructions}}', instructions)
-    .replace('{{persona}}', persona);
-
-  const historyStr = buildUserHistory(messages, toolCallNameById);
-  const content = await callLLMText(historyStr, simSystemPrompt);
   return content.trim();
 }
 
 async function simulateConversation(
   topicPath: string[],
-  seedSystemPrompt: string | null,
   seedMessages: any[],
   tools: any[],
-  maxTurns: number,
   personaCache: Map<string, string[]>
 ): Promise<SyntheticTraceRecord | null> {
   const topicStr = topicPath.join(' -> ');
   const topicKey = topicPath.join('/');
   const contextStr = topicStr;
 
-  // Use seed system prompt if available, otherwise use a fallback
   const persona = await ensurePersona(personaCache, topicKey, contextStr);
-  const systemPrompt = seedSystemPrompt || `You are a helpful assistant specializing in ${topicStr}.`;
-  const firstUserMsg = await generateFirstUserMessage(contextStr, persona, systemPrompt);
 
-  const messages: SyntheticMessage[] = [
-    {
-      role: 'system',
-      content: systemPrompt,
-      tool_calls: null,
-      tool_call_id: null,
-    },
-    {
+  // Copy seed messages
+  const messages: SyntheticMessage[] = seedMessages.map(m => ({
+    role: m.role,
+    content: m.content ?? null,
+    tool_calls: m.tool_calls ?? null,
+    tool_call_id: m.tool_call_id ?? null,
+  }));
+
+  // Find last user message index
+  const lastUserIndex = messages.map((m, i) => m.role === 'user' ? i : -1)
+    .filter(i => i !== -1)
+    .pop();
+
+  if (lastUserIndex !== undefined && lastUserIndex >= 0) {
+    // Get original user message content
+    const originalUserMessage = messages[lastUserIndex].content || '';
+
+    // Get conversation history BEFORE the last user message (for context)
+    const historyBeforeLastUser = messages.slice(0, lastUserIndex);
+
+    // Generate variation of the last user message
+    const newUserMsg = await generateFinalUserMessage(
+      contextStr,
+      persona,
+      historyBeforeLastUser,
+      originalUserMessage
+    );
+
+    // Replace the last user message with the variation
+    messages[lastUserIndex] = {
       role: 'user',
-      content: firstUserMsg,
+      content: newUserMsg,
       tool_calls: null,
       tool_call_id: null,
-    },
-  ];
-
-  let userMessageCount = 1;
-  const toolCallNameById = new Map<string, string>();
-
-  while (userMessageCount < maxTurns) {
-    const assistant = await generateAssistantTurn(messages, systemPrompt, tools, toolCallNameById);
-    messages.push({
-      role: 'assistant',
-      content: assistant.content,
-      tool_calls: assistant.tool_calls,
-      tool_call_id: null,
-    });
-
-    if (assistant.tool_calls) {
-      // Simulate all tool results in parallel
-      const toolResults = await Promise.all(
-        assistant.tool_calls.map(async (toolCall) => ({
-          toolCall,
-          result: await simulateToolResult(toolCall.function.name, toolCall.function.arguments, contextStr),
-        }))
-      );
-      for (const { toolCall, result } of toolResults) {
-        toolCallNameById.set(toolCall.id, toolCall.function.name);
-        messages.push({
-          role: 'tool',
-          content: result,
-          tool_calls: null,
-          tool_call_id: toolCall.id,
-        });
-      }
-    }
-
-    const userResponse = await generateUserResponse(messages, contextStr, firstUserMsg, persona, toolCallNameById);
-    if (!userResponse || userResponse.includes('[END]')) {
-      break;
-    }
-
-    messages.push({
-      role: 'user',
-      content: userResponse,
-      tool_calls: null,
-      tool_call_id: null,
-    });
-    userMessageCount += 1;
+    };
   }
 
   return { topic_path: topicPath, persona, messages };
@@ -777,21 +476,17 @@ interface GenerationCallbacks {
 async function generateSingleRecord(
   task: TopicGenerationTask,
   recordIndex: number,
-  turns: number,
   personaCache: Map<string, string[]>,
   callbacks: GenerationCallbacks
 ): Promise<{ record: TopicGenerationResult['records'][0]; error?: string } | { record: null; error: string }> {
   try {
     const seedRecord = task.seedRecords[recordIndex % task.seedRecords.length];
     const seedMessages = extractSeedMessages(seedRecord);
-    const seedSystemPrompt = extractSeedSystemPrompt(seedMessages);
 
     const simulated = await simulateConversation(
       task.topicPath,
-      seedSystemPrompt,
       seedMessages,
       task.tools,
-      turns,
       personaCache
     );
 
@@ -851,13 +546,12 @@ async function generateSingleRecord(
  */
 async function generateRecordsForTopic(
   task: TopicGenerationTask,
-  turns: number,
   personaCache: Map<string, string[]>,
   callbacks: GenerationCallbacks
 ): Promise<TopicGenerationResult> {
   // Generate all records for this topic in parallel
   const recordPromises = Array.from({ length: task.recordsToGenerate }, (_, i) =>
-    generateSingleRecord(task, i, turns, personaCache, callbacks)
+    generateSingleRecord(task, i, personaCache, callbacks)
   );
 
   const results = await Promise.allSettled(recordPromises);
@@ -883,7 +577,7 @@ async function generateRecordsForTopic(
 
 export async function generateTraces(params: GenerateTracesParams): Promise<GenerateTracesResult> {
   try {
-    const { dataset_id, record_ids, count, max_turns, concurrency, target_topics, selected_topics, on_progress, on_records_added } =
+    const { dataset_id, record_ids, count, concurrency, target_topics, selected_topics, on_progress, on_records_added } =
       params;
 
     const resolvedDatasetId = dataset_id;
@@ -931,7 +625,6 @@ export async function generateTraces(params: GenerateTracesParams): Promise<Gene
     const recordsPerTopic = typeof count === 'number' && count > 0 ? count : DEFAULT_RECORDS_PER_TOPIC;
     const totalExpectedRecords = targetLeafTopics.length * recordsPerTopic;
 
-    const turns = typeof max_turns === 'number' ? max_turns : DEFAULT_MAX_TURNS;
     const effectiveConcurrency = typeof concurrency === 'number' && concurrency > 0
       ? Math.min(concurrency, 10)
       : DEFAULT_CONCURRENCY;
@@ -971,7 +664,7 @@ export async function generateTraces(params: GenerateTracesParams): Promise<Gene
 
       // Run topic tasks in parallel - each task handles DB writes and progress updates internally
       const batchResults = await Promise.allSettled(
-        batchTasks.map(task => generateRecordsForTopic(task, turns, personaCache, callbacks))
+        batchTasks.map(task => generateRecordsForTopic(task, personaCache, callbacks))
       );
       // Collect errors from completed tasks
       for (let j = 0; j < batchResults.length; j++) {
