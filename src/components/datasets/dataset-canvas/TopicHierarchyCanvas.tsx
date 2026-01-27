@@ -17,9 +17,10 @@ import {
   useNodesState,
   useEdgesState,
   ConnectionLineType,
+  type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { TopicNodeComponent } from "./TopicNodeComponent";
+import { TopicNodeComponent, type TopicNode } from "./TopicNodeComponent";
 import { TopicCanvasProvider, TopicCanvasConsumer } from "./TopicCanvasContext";
 import { useDagreLayout } from "./useDagreLayout";
 import type { TopicHierarchyNode, DatasetRecord } from "@/types/dataset-types";
@@ -60,7 +61,7 @@ function TopicHierarchyCanvasInner({
 }: {
   hierarchy?: TopicHierarchyNode[];
 }) {
-  const { records, expandedNodes } = TopicCanvasConsumer();
+  const { records, expandedNodes, selectedTopic } = TopicCanvasConsumer();
 
   // Compute record counts by topic
   const recordCountsByTopic = useMemo(() => {
@@ -78,30 +79,53 @@ function TopicHierarchyCanvasInner({
     hierarchy,
     recordCountsByTopic,
     records.length,
-    expandedNodes
+    expandedNodes,
+    selectedTopic
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
 
+  // Store React Flow instance for programmatic control
+  const reactFlowInstance = useRef<ReactFlowInstance<TopicNode> | null>(null);
+
   // Track layout version to avoid infinite update loops
   const layoutVersionRef = useRef(0);
   const prevExpandedNodesRef = useRef(expandedNodes);
+  const prevSelectedTopicRef = useRef(selectedTopic);
 
-  // Update nodes when layout changes (e.g., when nodes expand/collapse)
+  // Update nodes when layout changes (e.g., when nodes expand/collapse or selection changes)
   useEffect(() => {
     // Only update if expandedNodes actually changed (Set comparison)
     const expandedNodesChanged =
       prevExpandedNodesRef.current.size !== expandedNodes.size ||
       ![...prevExpandedNodesRef.current].every(id => expandedNodes.has(id));
 
-    if (expandedNodesChanged || layoutVersionRef.current === 0) {
+    const selectedTopicChanged = prevSelectedTopicRef.current !== selectedTopic;
+
+    if (expandedNodesChanged || selectedTopicChanged || layoutVersionRef.current === 0) {
       prevExpandedNodesRef.current = expandedNodes;
+      prevSelectedTopicRef.current = selectedTopic;
       layoutVersionRef.current++;
       setNodes(layoutedNodes);
       setEdges(layoutedEdges);
+
+      // Fit view after layout update when expansion changes
+      if (expandedNodesChanged && reactFlowInstance.current) {
+        // Small delay to allow React Flow to update positions
+        setTimeout(() => {
+          reactFlowInstance.current?.fitView({
+            padding: 0.2,
+            duration: 300,
+          });
+        }, 50);
+      }
     }
-  }, [layoutedNodes, layoutedEdges, setNodes, setEdges, expandedNodes]);
+  }, [layoutedNodes, layoutedEdges, setNodes, setEdges, expandedNodes, selectedTopic]);
+
+  const onInit = (instance: ReactFlowInstance<TopicNode>) => {
+    reactFlowInstance.current = instance;
+  };
 
   return (
     <div className="flex-1 w-full h-full">
@@ -110,11 +134,12 @@ function TopicHierarchyCanvasInner({
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onInit={onInit}
         nodeTypes={nodeTypes}
         connectionLineType={ConnectionLineType.SmoothStep}
         fitView
-        fitViewOptions={{ padding: 0.1 }}
-        minZoom={0.3}
+        fitViewOptions={{ padding: 0.2 }}
+        minZoom={0.2}
         maxZoom={1.5}
         nodesDraggable={true}
         nodesConnectable={false}

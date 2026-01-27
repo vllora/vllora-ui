@@ -31,7 +31,10 @@ interface DagreLayoutResult {
 }
 
 /**
- * Applies dagre layout to nodes and edges
+ * Applies dagre layout to nodes and edges.
+ * Uses collapsed height for layout calculation to keep siblings aligned,
+ * but uses actual width to prevent horizontal overlap.
+ * Nodes grow downward when expanded.
  */
 function getLayoutedElements(
   nodes: TopicNode[],
@@ -42,23 +45,32 @@ function getLayoutedElements(
   const { direction = "TB", nodeSpacing = NODE_SPACING, rankSpacing = RANK_SPACING } = options;
   const isHorizontal = direction === "LR";
 
+  // Calculate dynamic rank spacing based on whether any node is expanded
+  // When a node is expanded, we need more space between levels
+  const hasExpandedNode = expandedNodes.size > 0;
+  const dynamicRankSpacing = hasExpandedNode
+    ? rankSpacing + NODE_HEIGHT_EXPANDED - NODE_HEIGHT_COLLAPSED
+    : rankSpacing;
+
   // Create a new dagre graph for each layout calculation
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
   dagreGraph.setGraph({
     rankdir: direction,
     nodesep: nodeSpacing,
-    ranksep: rankSpacing,
+    ranksep: dynamicRankSpacing,
     marginx: 20,
     marginy: 20,
   });
 
-  // Add nodes with their dimensions based on expanded state
+  // Add nodes with dimensions:
+  // - Use actual width (expanded or collapsed) to prevent horizontal overlap
+  // - Use COLLAPSED height for ALL nodes to maintain vertical alignment among siblings
   nodes.forEach((node) => {
     const isExpanded = expandedNodes.has(node.id);
     dagreGraph.setNode(node.id, {
       width: isExpanded ? NODE_WIDTH_EXPANDED : NODE_WIDTH_COLLAPSED,
-      height: isExpanded ? NODE_HEIGHT_EXPANDED : NODE_HEIGHT_COLLAPSED,
+      height: NODE_HEIGHT_COLLAPSED, // Always use collapsed height for alignment
     });
   });
 
@@ -71,25 +83,39 @@ function getLayoutedElements(
   dagre.layout(dagreGraph);
 
   // Map positions back to nodes
+  // Position is calculated from dagre's center point, converted to top-left
   const layoutedNodes = nodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
     const isExpanded = expandedNodes.has(node.id);
     const nodeWidth = isExpanded ? NODE_WIDTH_EXPANDED : NODE_WIDTH_COLLAPSED;
-    const nodeHeight = isExpanded ? NODE_HEIGHT_EXPANDED : NODE_HEIGHT_COLLAPSED;
 
+    // Always use collapsed height for Y positioning to maintain alignment
+    // Nodes will visually grow downward when expanded
     return {
       ...node,
       targetPosition: isHorizontal ? Position.Left : Position.Top,
       sourcePosition: isHorizontal ? Position.Right : Position.Bottom,
       position: {
         x: nodeWithPosition.x - nodeWidth / 2,
-        y: nodeWithPosition.y - nodeHeight / 2,
+        y: nodeWithPosition.y - NODE_HEIGHT_COLLAPSED / 2,
       },
     };
   });
 
   return { nodes: layoutedNodes, edges };
 }
+
+// Edge styles
+const DEFAULT_EDGE_STYLE = {
+  stroke: "rgba(16, 185, 129, 0.4)",
+  strokeWidth: 1,
+};
+
+const HIGHLIGHTED_EDGE_STYLE = {
+  stroke: "rgba(16, 185, 129, 0.6)",
+  strokeWidth: 1,
+  filter: "drop-shadow(0 0 4px rgba(16, 185, 129, 0.7))",
+};
 
 /**
  * Hook to generate layouted nodes and edges from topic hierarchy
@@ -99,12 +125,17 @@ export function useDagreLayout(
   recordCountsByTopic: Record<string, number>,
   totalRecordCount: number,
   expandedNodes: Set<string>,
+  selectedTopic: string | null | undefined,
   options?: DagreLayoutOptions
 ): DagreLayoutResult {
   return useMemo(() => {
     const nodes: TopicNode[] = [];
     const edges: Edge[] = [];
     const hasHierarchy = hierarchy && hierarchy.length > 0;
+
+    // Maps for path highlighting
+    const topicNameToNodeId: Record<string, string> = {};
+    const nodeIdToParentId: Record<string, string> = {};
 
     // Compute unassigned count (total - sum of topic counts)
     const assignedCount = Object.values(recordCountsByTopic).reduce((sum, c) => sum + c, 0);
@@ -135,6 +166,10 @@ export function useDagreLayout(
         const hasChildren = node.children && node.children.length > 0;
         const recordCount = recordCountsByTopic[node.name] || 0;
 
+        // Track mappings for path highlighting
+        topicNameToNodeId[node.name] = nodeId;
+        nodeIdToParentId[nodeId] = parentId;
+
         nodes.push({
           id: nodeId,
           type: "topic",
@@ -149,16 +184,13 @@ export function useDagreLayout(
           },
         });
 
-        // Edge from parent
+        // Edge from parent (style will be applied after path computation)
         edges.push({
           id: `edge-${parentId}-${nodeId}`,
           source: parentId,
           target: nodeId,
           type: "smoothstep",
-          style: {
-            stroke: "rgba(16, 185, 129, 0.4)",
-            strokeWidth: 1,
-          },
+          style: DEFAULT_EDGE_STYLE,
         });
 
         // Process children recursively
@@ -173,9 +205,29 @@ export function useDagreLayout(
       hierarchy.forEach((topLevelNode) => {
         processNode(topLevelNode, "root");
       });
+
+      // Compute highlighted path if a topic is selected (not root)
+      if (selectedTopic) {
+        const highlightedEdgeIds = new Set<string>();
+        let currentNodeId = topicNameToNodeId[selectedTopic];
+
+        // Walk up the tree from selected node to root
+        while (currentNodeId && nodeIdToParentId[currentNodeId]) {
+          const parentId = nodeIdToParentId[currentNodeId];
+          highlightedEdgeIds.add(`edge-${parentId}-${currentNodeId}`);
+          currentNodeId = parentId;
+        }
+
+        // Apply highlighted style to path edges
+        edges.forEach((edge) => {
+          if (highlightedEdgeIds.has(edge.id)) {
+            edge.style = HIGHLIGHTED_EDGE_STYLE;
+          }
+        });
+      }
     }
 
     // Apply dagre layout
     return getLayoutedElements(nodes, edges, expandedNodes, options);
-  }, [hierarchy, recordCountsByTopic, totalRecordCount, expandedNodes, options]);
+  }, [hierarchy, recordCountsByTopic, totalRecordCount, expandedNodes, selectedTopic, options]);
 }
