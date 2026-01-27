@@ -68,35 +68,55 @@ Return a JSON object that matches the provided schema. Follow these rules:
 - Produce the requested number of short user-message variations (≤15 words) that sound like a casual human request/command, not an AI analysis.
 - Do not evaluate, praise, or analyze; avoid robotic phrasing.
 - Keep language simple and natural.
-- Keep each variation aligned to the style/format of the original user message (preserve any mode markers, brevity, and intent).
+- Keep each variation aligned to the style/format of the original user message (preserve markers, brevity, and constraints).
 - Match the requested batch size exactly for both personas and variations.
+- Each variation must have a different intent category and sentence structure; do not just paraphrase.
+- Identify and preserve instruction-specific or structured blocks unchanged (e.g., headings, lists, key:value metadata lines, and code blocks). Only rewrite the freeform user intent.
+- Do not change factual values inside structured blocks. If a fact appears only in freeform text and is not constrained by structured blocks, you may change it to vary intent, but keep internal consistency.
+
+Example (preserve structure, vary intent):
+Original:
+[MODE] Level: advanced
+Task ID: 123
+Input: foo=1, bar=2
+Question: What should I do next?
+
+Good variations (structure preserved, intent changes only in the freeform question):
+- [MODE] Level: advanced\nTask ID: 123\nInput: foo=1, bar=2\nQuestion: Can you evaluate this setup?
+- [MODE] Level: advanced\nTask ID: 123\nInput: foo=1, bar=2\nQuestion: What are the next steps?
+- [MODE] Level: advanced\nTask ID: 123\nInput: foo=1, bar=2\nQuestion: What alternatives should I consider?
 
 Always respond with JSON only.`;
 
-const TRACE_CONTEXT_SCHEMA = {
-  type: 'json_schema',
-  json_schema: {
-    name: 'trace_context_batch',
-    strict: true,
-    schema: {
-      type: 'object',
-      properties: {
-        personas: {
-          type: 'array',
-          items: { type: 'string' },
-          minItems: 1,
+function buildTraceContextSchema(requestedCount: number) {
+  const count = Math.max(1, Math.floor(requestedCount));
+  return {
+    type: 'json_schema',
+    json_schema: {
+      name: 'trace_context_batch',
+      strict: true,
+      schema: {
+        type: 'object',
+        properties: {
+          personas: {
+            type: 'array',
+            items: { type: 'string' },
+            minItems: count,
+            maxItems: count,
+          },
+          variations: {
+            type: 'array',
+            items: { type: 'string' },
+            minItems: count,
+            maxItems: count,
+          },
         },
-        variations: {
-          type: 'array',
-          items: { type: 'string' },
-          minItems: 1,
-        },
+        required: ['personas', 'variations'],
+        additionalProperties: false,
       },
-      required: ['personas', 'variations'],
-      additionalProperties: false,
     },
-  },
-};
+  };
+}
 
 const TRACE_CONTEXT_IN_FLIGHT = new Map<string, Promise<void>>();
 const DEFAULT_PERSONA_FALLBACK = 'A curious user interested in the topic.';
@@ -230,7 +250,8 @@ function buildTraceContextPrompt(
     `Original user message (full):\n${originalUserMessage}`,
     `Requested batch size (this call): ${requestedCount}`,
     'Task: Return JSON only with the requested number of personas and user-message variations that follow the rules.',
-    'Formatting rule: Keep each variation aligned to the style/format of the original user message (e.g., retain mode markers, brevity, and intent).',
+    'Formatting rule: Keep each variation aligned to the style/format of the original user message (e.g., retain markers, brevity, and constraints).',
+    'Diversity rule: Each variation must use a different intent category (ask for evaluation, ask for next step, ask for alternatives, ask to verify correctness, ask for summary, etc.) and a different sentence structure.',
   ].join('\n\n');
 }
 
@@ -256,7 +277,8 @@ async function fetchTraceContextBatch(
     initMessage('user', userPrompt),
   ];
 
-  const raw = await callLLM(messages, { responseFormat: TRACE_CONTEXT_SCHEMA, temperature: 0.7 });
+  const responseFormat = buildTraceContextSchema(requestedCount);
+  const raw = await callLLM(messages, { responseFormat, temperature: 0.7 });
   const parsed = tryParseJson<{ personas: string[]; variations: string[] }>(raw);
   const personas = parsed?.personas?.filter(p => typeof p === 'string') || [];
   const variations = parsed?.variations?.filter(v => typeof v === 'string') || [];
