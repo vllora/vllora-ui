@@ -20,7 +20,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { TopicNodeComponent } from "./TopicNodeComponent";
-import { TopicCanvasProvider, useTopicCanvas } from "./TopicCanvasContext";
+import { TopicCanvasProvider, TopicCanvasConsumer } from "./TopicCanvasContext";
 import { useDagreLayout } from "./useDagreLayout";
 import type { TopicHierarchyNode, DatasetRecord } from "@/types/dataset-types";
 
@@ -60,7 +60,7 @@ function TopicHierarchyCanvasInner({
 }: {
   hierarchy?: TopicHierarchyNode[];
 }) {
-  const { records, expandedNodes } = useTopicCanvas();
+  const { records, expandedNodes } = TopicCanvasConsumer();
 
   // Compute record counts by topic
   const recordCountsByTopic = useMemo(() => {

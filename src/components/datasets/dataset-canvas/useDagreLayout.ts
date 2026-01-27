@@ -106,17 +106,22 @@ export function useDagreLayout(
     const edges: Edge[] = [];
     const hasHierarchy = hierarchy && hierarchy.length > 0;
 
-    // Root node (always present)
+    // Compute unassigned count (total - sum of topic counts)
+    const assignedCount = Object.values(recordCountsByTopic).reduce((sum, c) => sum + c, 0);
+    const unassignedCount = totalRecordCount - assignedCount;
+
+    // Root node (always present) - shows unassigned records
     nodes.push({
       id: "root",
       type: "topic",
       position: { x: 0, y: 0 }, // Will be updated by dagre
       data: {
-        name: hasHierarchy ? "All Data" : "Uncategorized Data",
-        topicKey: "__all__",
+        name: hasHierarchy ? "Unassigned" : "Uncategorized Data",
+        topicKey: "__unassigned__",
         nodeId: "root",
-        recordCount: totalRecordCount,
+        recordCount: unassignedCount,
         isRoot: true,
+        hasChildren: hasHierarchy,
       },
     });
 

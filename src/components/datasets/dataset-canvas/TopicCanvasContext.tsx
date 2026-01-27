@@ -12,52 +12,7 @@ import type { DatasetRecord } from "@/types/dataset-types";
 // Types
 // ============================================================================
 
-export interface TopicRecord {
-  id: string;
-  input?: string;
-  output?: string;
-  topic?: string;
-}
-
-interface TopicCanvasContextType {
-  // Records data
-  records: DatasetRecord[];
-  recordsByTopic: Record<string, TopicRecord[]>;
-  /** Full DatasetRecord objects grouped by topic (for RecordsTable) */
-  fullRecordsByTopic: Record<string, DatasetRecord[]>;
-  datasetId?: string;
-
-  // Selection state
-  selectedTopic: string | null;
-  setSelectedTopic: (topic: string | null) => void;
-
-  // Expanded state
-  expandedNodes: Set<string>;
-  toggleNodeExpansion: (nodeId: string) => void;
-  isNodeExpanded: (nodeId: string) => boolean;
-
-  // Topic handlers
-  onAddTopic?: (parentTopicName: string | null) => void;
-  onRenameTopic?: (topicName: string) => void;
-  onDeleteTopic?: (topicName: string) => void;
-
-  // Record handlers (for RecordsTable)
-  onUpdateRecordTopic?: (recordId: string, topic: string, isNew?: boolean) => Promise<void>;
-  onDeleteRecord?: (recordId: string) => void;
-  onSaveRecord?: (recordId: string, data: unknown) => Promise<void>;
-}
-
-// ============================================================================
-// Context
-// ============================================================================
-
-const TopicCanvasContext = createContext<TopicCanvasContextType | undefined>(undefined);
-
-// ============================================================================
-// Provider
-// ============================================================================
-
-interface TopicCanvasProviderProps {
+export interface TopicCanvasProviderProps {
   children: ReactNode;
   records: DatasetRecord[];
   datasetId?: string;
@@ -66,25 +21,29 @@ interface TopicCanvasProviderProps {
   onAddTopic?: (parentTopicName: string | null) => void;
   onRenameTopic?: (topicName: string) => void;
   onDeleteTopic?: (topicName: string) => void;
-  // Record handlers
   onUpdateRecordTopic?: (recordId: string, topic: string, isNew?: boolean) => Promise<void>;
   onDeleteRecord?: (recordId: string) => void;
   onSaveRecord?: (recordId: string, data: unknown) => Promise<void>;
 }
 
-export function TopicCanvasProvider({
-  children,
-  records,
-  datasetId,
-  selectedTopic: externalSelectedTopic,
-  onSelectTopic,
-  onAddTopic,
-  onRenameTopic,
-  onDeleteTopic,
-  onUpdateRecordTopic,
-  onDeleteRecord,
-  onSaveRecord,
-}: TopicCanvasProviderProps) {
+// ============================================================================
+// Hook - Core logic
+// ============================================================================
+
+function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
+  const {
+    records,
+    datasetId,
+    selectedTopic: externalSelectedTopic,
+    onSelectTopic,
+    onAddTopic,
+    onRenameTopic,
+    onDeleteTopic,
+    onUpdateRecordTopic,
+    onDeleteRecord,
+    onSaveRecord,
+  } = props;
+
   // Internal selected topic state (controlled or uncontrolled)
   const [internalSelectedTopic, setInternalSelectedTopic] = useState<string | null>(null);
   const selectedTopic = externalSelectedTopic ?? internalSelectedTopic;
@@ -120,53 +79,25 @@ export function TopicCanvasProvider({
     [expandedNodes]
   );
 
-  // Group records by topic (simplified TopicRecord for quick preview)
+  // Group records by topic (__unassigned__ for records without a topic)
   const recordsByTopic = useMemo(() => {
-    const grouped: Record<string, TopicRecord[]> = { __all__: [] };
-    for (const record of records) {
-      // Extract input/output from record.data if it's a DataInfo object
-      const data = record.data as {
-        input?: { messages?: Array<{ content?: string }> };
-        output?: { content?: string };
-      } | undefined;
-      const inputContent = data?.input?.messages?.[0]?.content;
-      const outputContent = data?.output?.content;
-
-      const topicRecord: TopicRecord = {
-        id: record.id,
-        input: inputContent,
-        output: outputContent,
-        topic: record.topic,
-      };
-      grouped.__all__.push(topicRecord);
-      if (record.topic) {
-        if (!grouped[record.topic]) {
-          grouped[record.topic] = [];
-        }
-        grouped[record.topic].push(topicRecord);
-      }
-    }
-    return grouped;
-  }, [records]);
-
-  // Group full DatasetRecord objects by topic (for RecordsTable)
-  const fullRecordsByTopic = useMemo(() => {
-    const grouped: Record<string, DatasetRecord[]> = { __all__: [...records] };
+    const grouped: Record<string, DatasetRecord[]> = { __unassigned__: [] };
     for (const record of records) {
       if (record.topic) {
         if (!grouped[record.topic]) {
           grouped[record.topic] = [];
         }
         grouped[record.topic].push(record);
+      } else {
+        grouped.__unassigned__.push(record);
       }
     }
     return grouped;
   }, [records]);
 
-  const value: TopicCanvasContextType = {
+  return {
     records,
     recordsByTopic,
-    fullRecordsByTopic,
     datasetId,
     selectedTopic,
     setSelectedTopic,
@@ -180,7 +111,22 @@ export function TopicCanvasProvider({
     onDeleteRecord,
     onSaveRecord,
   };
+}
 
+// ============================================================================
+// Context - Type inferred from hook
+// ============================================================================
+
+export type TopicCanvasContextType = ReturnType<typeof useTopicCanvas>;
+
+const TopicCanvasContext = createContext<TopicCanvasContextType | undefined>(undefined);
+
+// ============================================================================
+// Provider
+// ============================================================================
+
+export function TopicCanvasProvider({ children, ...props }: TopicCanvasProviderProps) {
+  const value = useTopicCanvas(props);
   return (
     <TopicCanvasContext.Provider value={value}>
       {children}
@@ -192,10 +138,10 @@ export function TopicCanvasProvider({
 // Consumer
 // ============================================================================
 
-export function useTopicCanvas() {
+export function TopicCanvasConsumer() {
   const context = useContext(TopicCanvasContext);
   if (context === undefined) {
-    throw new Error("useTopicCanvas must be used within a TopicCanvasProvider");
+    throw new Error("TopicCanvasConsumer must be used within a TopicCanvasProvider");
   }
   return context;
 }

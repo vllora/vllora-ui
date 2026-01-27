@@ -7,5 +7,5 @@
 export { DatasetStepper, computeCompletedSteps, type DatasetStep } from "./DatasetStepper";
 export { TopicHierarchyCanvas } from "./TopicHierarchyCanvas";
 export { TopicNodeComponent, type TopicNodeData, type TopicNode } from "./TopicNodeComponent";
-export { TopicCanvasProvider, useTopicCanvas, type TopicRecord } from "./TopicCanvasContext";
+export { TopicCanvasProvider, TopicCanvasConsumer } from "./TopicCanvasContext";
 export { useDagreLayout } from "./useDagreLayout";

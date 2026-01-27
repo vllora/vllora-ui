@@ -11,7 +11,7 @@ import { memo, useState } from "react";
 import { Handle, Position, type Node, type NodeProps, NodeResizer } from "@xyflow/react";
 import { Table2, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useTopicCanvas } from "./TopicCanvasContext";
+import { TopicCanvasConsumer } from "./TopicCanvasContext";
 import { RecordsTable } from "../records-table";
 
 export interface TopicNodeData extends Record<string, unknown> {
@@ -44,6 +44,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
     nodeId,
     recordCount,
     isRoot = false,
+    hasChildren = false,
   } = data;
 
   // Track expanded size
@@ -54,7 +55,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
 
   // Get state and handlers from context
   const {
-    fullRecordsByTopic,
+    recordsByTopic,
     datasetId,
     selectedTopic,
     setSelectedTopic,
@@ -63,11 +64,11 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
     onUpdateRecordTopic,
     onDeleteRecord,
     onSaveRecord,
-  } = useTopicCanvas();
+  } = TopicCanvasConsumer();
 
   const isExpanded = isNodeExpanded(nodeId);
   const isSelected = isRoot ? selectedTopic === null : selectedTopic === name;
-  const records = fullRecordsByTopic[topicKey] || [];
+  const records = recordsByTopic[topicKey] || [];
 
   // Handlers
   const handleSelect = () => {
@@ -85,16 +86,19 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
 
   return (
     <div
+      onClick={handleSelect}
       className={cn(
-        "relative rounded border bg-card shadow-md transition-all nopan",
+        "relative rounded-xl border-[0.5px] bg-card transition-all nopan cursor-pointer",
         isSelected
-          ? "border-[rgb(var(--theme-500))] shadow-[rgb(var(--theme-500))]/20 shadow-lg"
-          : "border-border hover:border-[rgb(var(--theme-500))]/50",
-        isRoot && "border-[rgb(var(--theme-500))]"
+          ? "border-[rgb(var(--theme-500))]"
+          : "border-border hover:border-emerald-500/50",
       )}
       style={{
         width: isExpanded ? expandedSize.width : COLLAPSED_WIDTH,
         height: isExpanded ? expandedSize.height : 'auto',
+        boxShadow: isSelected
+          ? '0 0 15px rgba(16, 185, 129, 0.2), 0 0 30px rgba(16, 185, 129, 0.1)'
+          : undefined,
       }}
     >
       {/* Resizer - visible only when node is selected and expanded */}
@@ -104,8 +108,8 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
           minHeight={MIN_HEIGHT}
           onResize={handleResize}
           isVisible={selected}
-          lineClassName="!border-[rgb(var(--theme-500))]"
-          handleClassName="!w-2 !h-2 !bg-[rgb(var(--theme-500))] !border-none"
+          lineClassName="!border-transparent"
+          handleClassName="!w-3 !h-3 !rounded-full !bg-[rgb(var(--theme-500))] !border-2 !border-background !shadow-md"
         />
       )}
 
@@ -118,12 +122,14 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
         />
       )}
 
-      {/* Output handle */}
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        className="!w-3 !h-3 !bg-border !border-2 !border-background"
-      />
+      {/* Output handle (only if node has children) */}
+      {hasChildren && (
+        <Handle
+          type="source"
+          position={Position.Bottom}
+          className="!w-3 !h-3 !bg-border !border-2 !border-background"
+        />
+      )}
 
       {/* Header */}
       <div
@@ -145,20 +151,18 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
           <Table2 className="w-4 h-4" />
         </div>
 
-        {/* Title - nopan nodrag allows clicks on non-draggable nodes */}
-        <div className="flex-1 min-w-0 nodrag nopan">
-          <button
-            type="button"
-            onClick={handleSelect}
+        {/* Title - draggable area */}
+        <div className="flex-1 min-w-0">
+          <span
             className={cn(
-              "font-semibold text-sm transition-colors truncate block text-left w-full cursor-pointer",
+              "font-semibold text-sm transition-colors truncate block text-left w-full",
               isRoot
                 ? "text-[rgb(var(--theme-500))]"
-                : "text-foreground hover:text-[rgb(var(--theme-500))]"
+                : "text-foreground"
             )}
           >
             {name}
-          </button>
+          </span>
           {!isExpanded && (
             <p className="text-xs text-muted-foreground">
               {recordCount.toLocaleString()} record{recordCount !== 1 ? "s" : ""}
@@ -189,6 +193,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
       {/* Expanded RecordsTable */}
       {isExpanded && (
         <div
+          onClick={(e) => e.stopPropagation()}
           className="nodrag nopan nowheel overflow-hidden"
           style={{ height: tableHeight, minWidth: 0 }}
         >
