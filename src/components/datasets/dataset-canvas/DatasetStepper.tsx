@@ -9,7 +9,7 @@
  * - deployed requires: finetune
  */
 
-import { Check, Database, FolderTree, Settings, Zap, Rocket, AlertTriangle } from "lucide-react";
+import { Check, Database, FolderTree, Settings, Zap, Rocket, AlertTriangle, Scale } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -59,7 +59,7 @@ const STEPS: StepConfig[] = [
   {
     id: "evaluation_config",
     label: "Evaluation Config",
-    icon: Settings,
+    icon: Scale,
     required: true,
     incompleteTooltip: "Configure evaluation function for scoring",
     completeTooltip: "Evaluation config set",

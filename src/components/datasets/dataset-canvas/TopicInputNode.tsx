@@ -74,7 +74,7 @@ export const TopicInputNodeComponent = memo(function TopicInputNodeComponent({
       <Handle
         type="target"
         position={Position.Left}
-        className="!w-3 !h-3 !bg-[rgb(var(--theme-500))] !border-1 !border-background"
+        className="!w-1.5 !h-1.5 !bg-emerald-500/50 !border-0 !min-w-0 !min-h-0"
       />
 
       {/* Content */}

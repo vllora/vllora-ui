@@ -144,7 +144,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
         <Handle
           type="target"
           position={Position.Left}
-          className="!w-3 !h-3 !bg-border !border-1 !border-background"
+          className="!w-1.5 !h-1.5 !bg-emerald-500/50 !border-0 !min-w-0 !min-h-0"
         />
       )}
 
@@ -154,7 +154,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
         <Handle
           type="source"
           position={Position.Right}
-          className="!w-3 !h-3 !bg-border !border-1 !border-background"
+          className="!w-1.5 !h-1.5 !bg-emerald-500/50 !border-0 !min-w-0 !min-h-0"
         />
       )}
 
