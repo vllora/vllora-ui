@@ -88,6 +88,7 @@ export function DatasetDetailContentV2() {
     handleClearSelectedRecordTopics,
     handleRenameTopicInRecords,
     handleDeleteTopicFromRecords,
+    handleDeleteTopic,
     recordsWithTopicsCount,
   } = DatasetDetailConsumer();
 
@@ -166,11 +167,6 @@ export function DatasetDetailContentV2() {
   const handleRenameTopic = (_topicName: string) => {
     // TODO: Open rename dialog for the specific topic
     setTopicHierarchyDialog(true);
-  };
-
-  // Handle delete topic from canvas
-  const handleDeleteTopic = (topicName: string) => {
-    handleDeleteTopicFromRecords([topicName]);
   };
 
   // Handle create child topic from canvas inline input

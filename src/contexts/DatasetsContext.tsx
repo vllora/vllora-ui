@@ -5,7 +5,7 @@
  * Single source of truth for all dataset-related data.
  */
 
-import { createContext, useContext, ReactNode, useCallback, useState, useEffect } from 'react';
+import { createContext, useContext, useCallback, useState, useEffect, type ReactNode } from 'react';
 import { Dataset, DatasetEvaluation, DatasetWithRecords } from '@/types/dataset-types';
 import { Span } from '@/types/common-type';
 import * as datasetsDB from '@/services/datasets-db';
@@ -13,33 +13,10 @@ import { emitter } from '@/utils/eventEmitter';
 import { toast } from 'sonner';
 
 // ============================================================================
-// Types
+// Types - Auto-inferred from hook return type
 // ============================================================================
 
-interface DatasetsContextType {
-  // State
-  datasets: Dataset[];
-  isLoading: boolean;
-  error: Error | null;
-
-  // Actions
-  loadDatasets: () => Promise<void>;
-  getDatasetWithRecords: (datasetId: string) => Promise<DatasetWithRecords | null>;
-  getRecordCount: (datasetId: string) => Promise<number>;
-  getTopicCoverageStats: (datasetId: string) => Promise<{ total: number; withTopic: number }>;
-  createDataset: (name: string, datasetObjective?: string) => Promise<Dataset>;
-  addSpansToDataset: (datasetId: string, spans: Span[], topic?: string) => Promise<number>;
-  importRecords: (datasetId: string, records: Array<{ data: unknown; topic?: string; evaluation?: DatasetEvaluation }>, defaultTopic?: string) => Promise<number>;
-  clearDatasetRecords: (datasetId: string) => Promise<number>;
-  deleteDataset: (datasetId: string) => Promise<void>;
-  deleteRecord: (datasetId: string, recordId: string) => Promise<void>;
-  updateRecordTopic: (datasetId: string, recordId: string, topic: string) => Promise<void>;
-  updateRecordData: (datasetId: string, recordId: string, data: unknown) => Promise<void>;
-  updateRecordEvaluation: (datasetId: string, recordId: string, score: number | undefined) => Promise<void>;
-  renameDataset: (datasetId: string, newName: string) => Promise<void>;
-  spanExistsInDataset: (datasetId: string, spanId: string) => Promise<boolean>;
-  getDatasetsBySpanId: (spanId: string) => Promise<Dataset[]>;
-}
+export type DatasetsContextType = ReturnType<typeof useDatasets>;
 
 // ============================================================================
 // Context
@@ -48,10 +25,10 @@ interface DatasetsContextType {
 const DatasetsContext = createContext<DatasetsContextType | undefined>(undefined);
 
 // ============================================================================
-// Provider
+// Hook - Core logic
 // ============================================================================
 
-export function DatasetsProvider({ children }: { children: ReactNode }) {
+function useDatasets() {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -263,7 +240,7 @@ export function DatasetsProvider({ children }: { children: ReactNode }) {
     };
   }, [loadDatasets]);
 
-  const value: DatasetsContextType = {
+  return {
     datasets,
     isLoading,
     error,
@@ -284,7 +261,14 @@ export function DatasetsProvider({ children }: { children: ReactNode }) {
     spanExistsInDataset,
     getDatasetsBySpanId,
   };
+}
 
+// ============================================================================
+// Provider
+// ============================================================================
+
+export function DatasetsProvider({ children }: { children: ReactNode }) {
+  const value = useDatasets();
   return <DatasetsContext.Provider value={value}>{children}</DatasetsContext.Provider>;
 }
 

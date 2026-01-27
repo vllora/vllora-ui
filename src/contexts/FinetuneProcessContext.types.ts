@@ -4,7 +4,7 @@
  * Extends DatasetDetailContext with finetune-specific state and handlers.
  */
 
-import type { DatasetDetailContextType } from './DatasetDetailContext.types';
+import type { DatasetDetailContextType } from './DatasetDetailContext';
 import type {
   HygieneReport,
   ValidationError,
