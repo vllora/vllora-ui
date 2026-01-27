@@ -1,99 +1,58 @@
 /**
  * EmptyDatasetsState
  *
- * Empty state component displayed when no datasets exist in IndexedDB.
- * Shows a waiting state for gateway traces and provides import options.
+ * Empty state component displayed when no datasets exist.
+ * This is the first landing page users see - designed to be professional and inviting.
  */
 
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { FileJson, Radio, BookOpen, Copy, Check } from "lucide-react";
-import { IngestDataDialog } from "./IngestDataDialog";
-import { DatasetsConsumer } from "@/contexts/DatasetsContext";
+import { Radio } from "lucide-react";
+import { ConnectGatewayCard } from "./ConnectGatewayCard";
+import { ImportFileCard } from "./ImportFileCard";
+import { StepsPreview } from "./StepsPreview";
 
 export function EmptyDatasetsState() {
-  const [importDialogOpen, setImportDialogOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const { importRecords, createDataset } = DatasetsConsumer();
-
-  const handleCopyApiKey = async () => {
-    // TODO: Get actual API key from settings
-    await navigator.clipboard.writeText("your-api-key-here");
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-8">
-      {/* Import button - top right */}
-      <div className="absolute top-4 right-4">
-        <Button
-          variant="outline"
-          onClick={() => setImportDialogOpen(true)}
-          className="gap-2"
-        >
-          <FileJson className="h-4 w-4" />
-          Import .jsonl dataset
-        </Button>
+    <div className="flex-1 flex flex-col items-center justify-center p-8 relative overflow-hidden">
+      {/* Subtle background glow */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-[rgba(var(--theme-500),0.03)] rounded-full blur-3xl" />
       </div>
 
       {/* Main content */}
-      <div className="flex flex-col items-center max-w-lg text-center">
-        <h1 className="text-4xl font-bold mb-8">No traces found yet.</h1>
-
-        {/* Waiting card */}
-        <div className="w-full bg-card border border-border rounded-lg p-6 mb-6 flex items-center justify-between">
-          <div className="text-left">
-            <p className="text-muted-foreground">
-              Waiting for traces from your LLM Gateway...
-            </p>
-            <div className="flex gap-1 mt-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50 animate-pulse" />
-              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50 animate-pulse [animation-delay:150ms]" />
-              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50 animate-pulse [animation-delay:300ms]" />
+      <div className="flex flex-col items-center max-w-2xl text-center relative z-10">
+        {/* Status indicator */}
+        <div className="mb-8">
+          <div className="relative inline-flex items-center justify-center">
+            {/* Outer rotating ring */}
+            <div className="absolute h-24 w-24 rounded-full border border-border/50 border-t-[rgba(var(--theme-500),0.4)] animate-spin [animation-duration:8s]" />
+            {/* Pulsing ring */}
+            <div className="absolute h-24 w-24 rounded-full border border-[rgba(var(--theme-500),0.15)] animate-ping [animation-duration:3s]" />
+            {/* Middle counter-rotating ring */}
+            <div className="absolute h-20 w-20 rounded-full border border-border/60 border-b-[rgba(var(--theme-500),0.3)] animate-spin [animation-duration:6s] [animation-direction:reverse]" />
+            {/* Inner pulsing circle */}
+            <div className="h-14 w-14 rounded-full bg-gradient-to-br from-[rgba(var(--theme-400),0.2)] to-[rgba(var(--theme-600),0.2)] border border-[rgba(var(--theme-500),0.3)] flex items-center justify-center backdrop-blur-sm animate-pulse [animation-duration:2s]">
+              <Radio className="h-6 w-6 text-[rgb(var(--theme-500))]" />
             </div>
           </div>
-          <div className="h-12 w-12 rounded-full border-2 border-emerald-500/30 flex items-center justify-center">
-            <Radio className="h-5 w-5 text-emerald-500" />
-          </div>
         </div>
 
-        {/* Description */}
-        <p className="text-muted-foreground mb-8">
-          Send your first chat completion request through our gateway to start building
-          your optimization dataset. The platform is listening for incoming logs.
+        {/* Title */}
+        <h1 className="text-3xl font-semibold mb-3 text-foreground">
+          Get started with your first dataset
+        </h1>
+        <p className="text-muted-foreground mb-10">
+          Choose how you want to begin building your fine-tuning dataset
         </p>
 
-        {/* Action buttons */}
-        <div className="flex gap-3">
-          <Button className="gap-2 bg-emerald-600 hover:bg-emerald-700">
-            <BookOpen className="h-4 w-4" />
-            View Setup Guide
-          </Button>
-          <Button variant="outline" className="gap-2" onClick={handleCopyApiKey}>
-            {copied ? (
-              <Check className="h-4 w-4" />
-            ) : (
-              <Copy className="h-4 w-4" />
-            )}
-            {copied ? "Copied!" : "Copy API Key"}
-          </Button>
+        {/* Two options side by side */}
+        <div className="w-full grid grid-cols-2 gap-5 mb-8">
+          <ConnectGatewayCard />
+          <ImportFileCard />
         </div>
-      </div>
 
-      {/* Import dialog */}
-      <IngestDataDialog
-        open={importDialogOpen}
-        onOpenChange={setImportDialogOpen}
-        datasets={[]}
-        onImportToDataset={async (result) => {
-          if (result.target === "new" && result.newDatasetName) {
-            const dataset = await createDataset(result.newDatasetName);
-            await importRecords(dataset.id, result.records, result.defaultTopic);
-          }
-          setImportDialogOpen(false);
-        }}
-      />
+        {/* Steps preview */}
+        <StepsPreview activeStep={1} />
+      </div>
     </div>
   );
 }
