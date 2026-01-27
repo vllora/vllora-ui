@@ -65,6 +65,9 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
   // Track which nodes are expanded
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
+  // Track actual sizes of expanded nodes (for layout calculation after resize)
+  const [nodeSizes, setNodeSizes] = useState<Record<string, { width: number; height: number }>>({});
+
   const toggleNodeExpansion = useCallback((nodeId: string) => {
     setExpandedNodes((prev) => {
       const next = new Set(prev);
@@ -75,6 +78,14 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
       }
       return next;
     });
+  }, []);
+
+  // Update the size of a node (called when node is resized)
+  const setNodeSize = useCallback((nodeId: string, width: number, height: number) => {
+    setNodeSizes((prev) => ({
+      ...prev,
+      [nodeId]: { width, height },
+    }));
   }, []);
 
   // Track pending inline topic creation (stores parent topic name, null for root)
@@ -128,6 +139,9 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     expandedNodes,
     toggleNodeExpansion,
     isNodeExpanded,
+    // Node sizes for layout calculation
+    nodeSizes,
+    setNodeSize,
     onAddTopic,
     onRenameTopic,
     onDeleteTopic,

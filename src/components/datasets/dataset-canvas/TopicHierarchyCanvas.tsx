@@ -71,7 +71,7 @@ function TopicHierarchyCanvasInner({
 }: {
   hierarchy?: TopicHierarchyNode[];
 }) {
-  const { records, expandedNodes, selectedTopic, setSelectedTopic, pendingAddParentId } = TopicCanvasConsumer();
+  const { records, expandedNodes, nodeSizes, selectedTopic, setSelectedTopic, pendingAddParentId } = TopicCanvasConsumer();
 
   // Compute record counts by topic
   const recordCountsByTopic = useMemo(() => {
@@ -96,7 +96,8 @@ function TopicHierarchyCanvasInner({
     records.length,
     expandedNodes,
     { direction: "LR" },
-    pendingAddParentId
+    pendingAddParentId,
+    nodeSizes
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);

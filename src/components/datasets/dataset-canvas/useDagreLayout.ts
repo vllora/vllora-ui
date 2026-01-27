@@ -49,7 +49,8 @@ function getLayoutedElements(
   expandedNodes: Set<string>,
   topicNameToNodeId: Record<string, string>,
   nodeIdToParentId: Record<string, string>,
-  options: DagreLayoutOptions = {}
+  options: DagreLayoutOptions = {},
+  nodeSizes?: Record<string, { width: number; height: number }>
 ): DagreLayoutResult {
   const { direction = "TB", nodeSpacing = NODE_SPACING, rankSpacing = RANK_SPACING } = options;
   const isHorizontal = direction === "LR";
@@ -69,12 +70,29 @@ function getLayoutedElements(
   // For LR layout: expanded nodes grow both wider and taller
   // - Width affects horizontal spacing (rank separation)
   // - Height affects vertical spacing (node separation between siblings)
+  // Use actual sizes from nodeSizes if available (from user resizing)
   nodes.forEach((node) => {
     const isExpanded = expandedNodes.has(node.id);
-    dagreGraph.setNode(node.id, {
-      width: isExpanded ? NODE_WIDTH_EXPANDED : NODE_WIDTH_COLLAPSED,
-      height: isExpanded ? NODE_HEIGHT_EXPANDED : NODE_HEIGHT_COLLAPSED,
-    });
+    const actualSize = nodeSizes?.[node.id];
+
+    let width: number;
+    let height: number;
+
+    if (isExpanded && actualSize) {
+      // Use actual resized dimensions
+      width = actualSize.width;
+      height = actualSize.height;
+    } else if (isExpanded) {
+      // Use default expanded dimensions
+      width = NODE_WIDTH_EXPANDED;
+      height = NODE_HEIGHT_EXPANDED;
+    } else {
+      // Collapsed dimensions
+      width = NODE_WIDTH_COLLAPSED;
+      height = NODE_HEIGHT_COLLAPSED;
+    }
+
+    dagreGraph.setNode(node.id, { width, height });
   });
 
   // Add edges
@@ -91,8 +109,21 @@ function getLayoutedElements(
   const layoutedNodes: CanvasNode[] = nodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
     const isExpanded = expandedNodes.has(node.id);
-    const nodeWidth = isExpanded ? NODE_WIDTH_EXPANDED : NODE_WIDTH_COLLAPSED;
-    const nodeHeight = isExpanded ? NODE_HEIGHT_EXPANDED : NODE_HEIGHT_COLLAPSED;
+    const actualSize = nodeSizes?.[node.id];
+
+    let nodeWidth: number;
+    let nodeHeight: number;
+
+    if (isExpanded && actualSize) {
+      nodeWidth = actualSize.width;
+      nodeHeight = actualSize.height;
+    } else if (isExpanded) {
+      nodeWidth = NODE_WIDTH_EXPANDED;
+      nodeHeight = NODE_HEIGHT_EXPANDED;
+    } else {
+      nodeWidth = NODE_WIDTH_COLLAPSED;
+      nodeHeight = NODE_HEIGHT_COLLAPSED;
+    }
 
     return {
       ...node,
@@ -127,6 +158,7 @@ const HIGHLIGHTED_EDGE_STYLE = {
  *
  * @param pendingAddParentId - When defined, adds a temporary input node as child of this parent.
  *                             null means root, undefined means no pending add.
+ * @param nodeSizes - Actual sizes of nodes (from resizing). Falls back to defaults if not provided.
  */
 export function useDagreLayout(
   hierarchy: TopicHierarchyNode[] | undefined,
@@ -134,7 +166,8 @@ export function useDagreLayout(
   totalRecordCount: number,
   expandedNodes: Set<string>,
   options?: DagreLayoutOptions,
-  pendingAddParentId?: string | null
+  pendingAddParentId?: string | null,
+  nodeSizes?: Record<string, { width: number; height: number }>
 ): DagreLayoutResult {
   return useMemo(() => {
     const nodes: CanvasNode[] = [];
@@ -248,8 +281,8 @@ export function useDagreLayout(
     }
 
     // Apply dagre layout
-    return getLayoutedElements(nodes, edges, expandedNodes, topicNameToNodeId, nodeIdToParentId, options);
-  }, [hierarchy, recordCountsByTopic, totalRecordCount, expandedNodes, options, pendingAddParentId]);
+    return getLayoutedElements(nodes, edges, expandedNodes, topicNameToNodeId, nodeIdToParentId, options, nodeSizes);
+  }, [hierarchy, recordCountsByTopic, totalRecordCount, expandedNodes, options, pendingAddParentId, nodeSizes]);
 }
 
 /**

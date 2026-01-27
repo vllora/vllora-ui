@@ -62,6 +62,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
     setSelectedTopic,
     isNodeExpanded,
     toggleNodeExpansion,
+    setNodeSize,
     onAddTopic,
     onRenameTopic,
     onDeleteTopic,
@@ -88,6 +89,8 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
       width: params.width,
       height: params.height,
     });
+    // Report size change to context for layout recalculation
+    setNodeSize(nodeId, params.width, params.height);
   };
 
   const tableHeight = expandedSize.height - HEADER_HEIGHT;
