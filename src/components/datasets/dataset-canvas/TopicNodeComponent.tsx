@@ -9,10 +9,17 @@
 
 import { memo, useState } from "react";
 import { Handle, Position, type Node, type NodeProps, NodeResizer } from "@xyflow/react";
-import { Table2, ChevronDown, ChevronUp } from "lucide-react";
+import { Table2, ChevronDown, ChevronUp, Plus, Pencil, Trash2, MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TopicCanvasConsumer } from "./TopicCanvasContext";
 import { RecordsTable } from "../records-table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export interface TopicNodeData extends Record<string, unknown> {
   name: string;
@@ -61,6 +68,9 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
     setSelectedTopic,
     isNodeExpanded,
     toggleNodeExpansion,
+    onAddTopic,
+    onRenameTopic,
+    onDeleteTopic,
     onUpdateRecordTopic,
     onDeleteRecord,
     onSaveRecord,
@@ -101,6 +111,77 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
           : undefined,
       }}
     >
+      {/* Floating toolbar - appears above selected node */}
+      {isSelected && (
+        <div
+          className="absolute left-1/2 -translate-x-1/2 -top-12 z-10 nodrag nopan"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-popover border border-border shadow-lg">
+            {/* Add subtopic button */}
+            {onAddTopic && (
+              <button
+                type="button"
+                onClick={() => onAddTopic(isRoot ? null : name)}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                title="Add subtopic"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add</span>
+              </button>
+            )}
+
+            {/* Rename button (not for root) */}
+            {!isRoot && onRenameTopic && (
+              <button
+                type="button"
+                onClick={() => onRenameTopic(name)}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                title="Rename topic"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                <span>Rename</span>
+              </button>
+            )}
+
+            {/* Delete button (not for root) */}
+            {!isRoot && onDeleteTopic && (
+              <button
+                type="button"
+                onClick={() => onDeleteTopic(name)}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive"
+                title="Delete topic"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete</span>
+              </button>
+            )}
+
+            {/* More options dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                  title="More options"
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-[160px]">
+                <DropdownMenuItem onClick={() => toggleNodeExpansion(nodeId)}>
+                  {isExpanded ? "Collapse" : "Expand"} node
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem disabled>
+                  Export records...
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+      )}
+
       {/* Resizer - visible only when node is selected and expanded */}
       {isExpanded && (
         <NodeResizer
