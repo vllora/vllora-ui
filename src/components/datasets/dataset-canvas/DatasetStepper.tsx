@@ -9,7 +9,7 @@
  * - deployed requires: finetune
  */
 
-import { Check, Database, FolderTree, Settings, Zap, Rocket, AlertTriangle, Scale } from "lucide-react";
+import { Check, Database, FolderTree, Zap, Rocket, AlertTriangle, Scale } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
