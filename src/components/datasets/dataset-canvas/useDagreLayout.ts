@@ -15,8 +15,9 @@ import type { TopicHierarchyNode } from "@/types/dataset-types";
 // Union type for all canvas node types
 export type CanvasNode = TopicNode | TopicInputNode;
 
-// Layout constants
+// Layout constants - must match TopicNodeComponent sizes
 const NODE_WIDTH_COLLAPSED = 280;
+const NODE_WIDTH_EXPANDED = 700;
 const NODE_HEIGHT_COLLAPSED = 80;
 const NODE_HEIGHT_EXPANDED = 500;
 const NODE_SPACING = 50;
@@ -39,9 +40,8 @@ interface DagreLayoutResult {
 
 /**
  * Applies dagre layout to nodes and edges.
- * Uses collapsed height for layout calculation to keep siblings aligned,
- * but uses actual width to prevent horizontal overlap.
- * Nodes grow downward when expanded.
+ * Uses actual node dimensions based on expansion state so dagre can
+ * properly space nodes to prevent overlap when expanded.
  */
 function getLayoutedElements(
   nodes: CanvasNode[],
@@ -54,37 +54,26 @@ function getLayoutedElements(
   const { direction = "TB", nodeSpacing = NODE_SPACING, rankSpacing = RANK_SPACING } = options;
   const isHorizontal = direction === "LR";
 
-  // Calculate dynamic spacing based on whether any node is expanded
-  const hasExpandedNode = expandedNodes.size > 0;
-
-  // For vertical (TB) layout: expanded nodes grow downward, so increase rank spacing
-  const dynamicRankSpacing = !isHorizontal && hasExpandedNode
-    ? rankSpacing + NODE_HEIGHT_EXPANDED - NODE_HEIGHT_COLLAPSED
-    : rankSpacing;
-
-  // For horizontal (LR) layout: expanded nodes grow downward, so increase node spacing (vertical gap between siblings)
-  const dynamicNodeSpacing = isHorizontal && hasExpandedNode
-    ? nodeSpacing + NODE_HEIGHT_EXPANDED - NODE_HEIGHT_COLLAPSED
-    : nodeSpacing;
-
   // Create a new dagre graph for each layout calculation
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
   dagreGraph.setGraph({
     rankdir: direction,
-    nodesep: dynamicNodeSpacing,
-    ranksep: dynamicRankSpacing,
+    nodesep: nodeSpacing,
+    ranksep: rankSpacing,
     marginx: 20,
     marginy: 20,
   });
 
-  // Add nodes with dimensions:
-  // - Always use collapsed dimensions for dagre (keeps siblings aligned at same position)
-  // - Expanded nodes will visually grow right and downward without affecting layout
+  // Add nodes with dimensions based on their expansion state
+  // For LR layout: expanded nodes grow both wider and taller
+  // - Width affects horizontal spacing (rank separation)
+  // - Height affects vertical spacing (node separation between siblings)
   nodes.forEach((node) => {
+    const isExpanded = expandedNodes.has(node.id);
     dagreGraph.setNode(node.id, {
-      width: NODE_WIDTH_COLLAPSED, // Always use collapsed width for alignment
-      height: NODE_HEIGHT_COLLAPSED, // Always use collapsed height for alignment
+      width: isExpanded ? NODE_WIDTH_EXPANDED : NODE_WIDTH_COLLAPSED,
+      height: isExpanded ? NODE_HEIGHT_EXPANDED : NODE_HEIGHT_COLLAPSED,
     });
   });
 
@@ -98,17 +87,20 @@ function getLayoutedElements(
 
   // Map positions back to nodes
   // Position is calculated from dagre's center point, converted to top-left
-  // Always use collapsed dimensions for offset to keep siblings aligned
+  // Use actual dimensions based on expansion state
   const layoutedNodes: CanvasNode[] = nodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
+    const isExpanded = expandedNodes.has(node.id);
+    const nodeWidth = isExpanded ? NODE_WIDTH_EXPANDED : NODE_WIDTH_COLLAPSED;
+    const nodeHeight = isExpanded ? NODE_HEIGHT_EXPANDED : NODE_HEIGHT_COLLAPSED;
 
     return {
       ...node,
       targetPosition: isHorizontal ? Position.Left : Position.Top,
       sourcePosition: isHorizontal ? Position.Right : Position.Bottom,
       position: {
-        x: nodeWithPosition.x - NODE_WIDTH_COLLAPSED / 2, // Always use collapsed width for alignment
-        y: nodeWithPosition.y - NODE_HEIGHT_COLLAPSED / 2, // Always use collapsed height for alignment
+        x: nodeWithPosition.x - nodeWidth / 2,
+        y: nodeWithPosition.y - nodeHeight / 2,
       },
     };
   });
