@@ -10,10 +10,11 @@ import dagre from "@dagrejs/dagre";
 import { Position, type Edge } from "@xyflow/react";
 import type { TopicNode } from "./TopicNodeComponent";
 import type { TopicInputNode } from "./TopicInputNode";
+import type { RootNode } from "./RootNodeComponent";
 import type { TopicHierarchyNode } from "@/types/dataset-types";
 
 // Union type for all canvas node types
-export type CanvasNode = TopicNode | TopicInputNode;
+export type CanvasNode = TopicNode | TopicInputNode | RootNode;
 
 // Layout constants - must match TopicNodeComponent sizes
 const NODE_WIDTH_COLLAPSED = 280;
@@ -22,6 +23,10 @@ const NODE_HEIGHT_COLLAPSED = 80;
 const NODE_HEIGHT_EXPANDED = 500;
 const NODE_SPACING = 50;
 const RANK_SPACING = 100;
+
+// Root node size (circle with label below)
+const ROOT_NODE_WIDTH = 64;
+const ROOT_NODE_HEIGHT = 90;
 
 interface DagreLayoutOptions {
   direction?: "TB" | "LR";
@@ -66,30 +71,36 @@ function getLayoutedElements(
     marginy: 20,
   });
 
-  // Add nodes with dimensions based on their expansion state
+  // Add nodes with dimensions based on their type and expansion state
   // For LR layout: expanded nodes grow both wider and taller
   // - Width affects horizontal spacing (rank separation)
   // - Height affects vertical spacing (node separation between siblings)
   // Use actual sizes from nodeSizes if available (from user resizing)
   nodes.forEach((node) => {
-    const isExpanded = expandedNodes.has(node.id);
-    const actualSize = nodeSizes?.[node.id];
-
     let width: number;
     let height: number;
 
-    if (isExpanded && actualSize) {
-      // Use actual resized dimensions
-      width = actualSize.width;
-      height = actualSize.height;
-    } else if (isExpanded) {
-      // Use default expanded dimensions
-      width = NODE_WIDTH_EXPANDED;
-      height = NODE_HEIGHT_EXPANDED;
+    // Simple root node has fixed compact size
+    if (node.type === "root") {
+      width = ROOT_NODE_WIDTH;
+      height = ROOT_NODE_HEIGHT;
     } else {
-      // Collapsed dimensions
-      width = NODE_WIDTH_COLLAPSED;
-      height = NODE_HEIGHT_COLLAPSED;
+      const isExpanded = expandedNodes.has(node.id);
+      const actualSize = nodeSizes?.[node.id];
+
+      if (isExpanded && actualSize) {
+        // Use actual resized dimensions
+        width = actualSize.width;
+        height = actualSize.height;
+      } else if (isExpanded) {
+        // Use default expanded dimensions
+        width = NODE_WIDTH_EXPANDED;
+        height = NODE_HEIGHT_EXPANDED;
+      } else {
+        // Collapsed dimensions
+        width = NODE_WIDTH_COLLAPSED;
+        height = NODE_HEIGHT_COLLAPSED;
+      }
     }
 
     dagreGraph.setNode(node.id, { width, height });
@@ -120,21 +131,28 @@ function getLayoutedElements(
   // First pass: convert dagre positions to top-left using actual dimensions
   const nodesWithPositions = nodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
-    const isExpanded = expandedNodes.has(node.id);
-    const actualSize = nodeSizes?.[node.id];
 
     let nodeWidth: number;
     let nodeHeight: number;
 
-    if (isExpanded && actualSize) {
-      nodeWidth = actualSize.width;
-      nodeHeight = actualSize.height;
-    } else if (isExpanded) {
-      nodeWidth = NODE_WIDTH_EXPANDED;
-      nodeHeight = NODE_HEIGHT_EXPANDED;
+    // Simple root node has fixed compact size
+    if (node.type === "root") {
+      nodeWidth = ROOT_NODE_WIDTH;
+      nodeHeight = ROOT_NODE_HEIGHT;
     } else {
-      nodeWidth = NODE_WIDTH_COLLAPSED;
-      nodeHeight = NODE_HEIGHT_COLLAPSED;
+      const isExpanded = expandedNodes.has(node.id);
+      const actualSize = nodeSizes?.[node.id];
+
+      if (isExpanded && actualSize) {
+        nodeWidth = actualSize.width;
+        nodeHeight = actualSize.height;
+      } else if (isExpanded) {
+        nodeWidth = NODE_WIDTH_EXPANDED;
+        nodeHeight = NODE_HEIGHT_EXPANDED;
+      } else {
+        nodeWidth = NODE_WIDTH_COLLAPSED;
+        nodeHeight = NODE_HEIGHT_COLLAPSED;
+      }
     }
 
     return {
@@ -215,20 +233,35 @@ export function useDagreLayout(
     const assignedCount = Object.values(recordCountsByTopic).reduce((sum, c) => sum + c, 0);
     const unassignedCount = totalRecordCount - assignedCount;
 
-    // Root node (always present) - shows unassigned records
-    nodes.push({
-      id: "root",
-      type: "topic",
-      position: { x: 0, y: 0 }, // Will be updated by dagre
-      data: {
-        name: hasHierarchy ? "Unassigned" : "Uncategorized Data",
-        topicKey: "__unassigned__",
-        nodeId: "root",
-        recordCount: unassignedCount,
-        isRoot: true,
-        hasChildren: hasHierarchy,
-      },
-    });
+    // Root node - use simple "root" type when empty, otherwise "topic" type
+    const isEmptyRoot = hasHierarchy && unassignedCount === 0;
+
+    if (isEmptyRoot) {
+      // Simple root node (circle with label)
+      nodes.push({
+        id: "root",
+        type: "root",
+        position: { x: 0, y: 0 }, // Will be updated by dagre
+        data: {
+          hasChildren: true,
+        },
+      } as CanvasNode);
+    } else {
+      // Full topic node for unassigned records
+      nodes.push({
+        id: "root",
+        type: "topic",
+        position: { x: 0, y: 0 }, // Will be updated by dagre
+        data: {
+          name: hasHierarchy ? "Unassigned" : "Uncategorized Data",
+          topicKey: "__unassigned__",
+          nodeId: "root",
+          recordCount: unassignedCount,
+          isRoot: true,
+          hasChildren: hasHierarchy,
+        },
+      } as CanvasNode);
+    }
 
     if (hasHierarchy) {
       // Recursively process hierarchy

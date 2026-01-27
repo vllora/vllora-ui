@@ -24,6 +24,9 @@ export function TopicNodeHeader({
   isExpanded,
   onToggleExpansion,
 }: TopicNodeHeaderProps) {
+  // Root node with no records is just a simple node (no expand ability)
+  const isEmptyRoot = isRoot && recordCount === 0;
+
   return (
     <div
       className={cn(
@@ -58,29 +61,33 @@ export function TopicNodeHeader({
         </span>
         {!isExpanded && (
           <p className="text-xs text-muted-foreground">
-            {recordCount.toLocaleString()} record{recordCount !== 1 ? "s" : ""}
+            {isEmptyRoot
+              ? "All records assigned"
+              : `${recordCount.toLocaleString()} record${recordCount !== 1 ? "s" : ""}`}
           </p>
         )}
       </div>
 
-      {/* Expand/Collapse chevron */}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          e.preventDefault();
-          onToggleExpansion();
-        }}
-        className="flex-shrink-0 p-1 rounded-md hover:bg-muted transition-colors cursor-pointer nodrag text-muted-foreground hover:text-foreground"
-        style={{ pointerEvents: 'auto' }}
-        title={isExpanded ? "Collapse" : "Expand"}
-      >
-        {isExpanded ? (
-          <ChevronUp className="w-4 h-4" />
-        ) : (
-          <ChevronDown className="w-4 h-4" />
-        )}
-      </button>
+      {/* Expand/Collapse chevron - hide when no records */}
+      {recordCount > 0 && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            onToggleExpansion();
+          }}
+          className="flex-shrink-0 p-1 rounded-md hover:bg-muted transition-colors cursor-pointer nodrag text-muted-foreground hover:text-foreground"
+          style={{ pointerEvents: 'auto' }}
+          title={isExpanded ? "Collapse" : "Expand"}
+        >
+          {isExpanded ? (
+            <ChevronUp className="w-4 h-4" />
+          ) : (
+            <ChevronDown className="w-4 h-4" />
+          )}
+        </button>
+      )}
     </div>
   );
 }

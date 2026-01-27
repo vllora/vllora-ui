@@ -22,6 +22,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { TopicNodeComponent } from "./TopicNodeComponent";
 import { TopicInputNodeComponent } from "./TopicInputNode";
+import { RootNodeComponent } from "./RootNodeComponent";
 import { CanvasToolbar } from "./CanvasToolbar";
 import { TopicCanvasProvider, TopicCanvasConsumer } from "./TopicCanvasContext";
 import type { CanvasNode } from "./useDagreLayout";
@@ -37,6 +38,7 @@ import type { TopicHierarchyNode, DatasetRecord } from "@/types/dataset-types";
 const nodeTypes = {
   topic: TopicNodeComponent,
   topicInput: TopicInputNodeComponent,
+  root: RootNodeComponent,
 } as const;
 
 interface TopicHierarchyCanvasProps {
@@ -113,9 +115,10 @@ function TopicHierarchyCanvasInner({
   const prevExpandedNodesRef = useRef(expandedNodes);
   const prevSelectedTopicRef = useRef(selectedTopic);
   const prevNodeCountRef = useRef(layoutedNodes.length);
+  const prevRecordCountsByTopicRef = useRef(recordCountsByTopic);
   const isFirstRenderRef = useRef(true);
 
-  // Update nodes when expansion changes, hierarchy changes, or manual relayout triggered
+  // Update nodes when expansion changes, hierarchy changes, record counts change, or manual relayout triggered
   useEffect(() => {
     const expandedNodesChanged =
       prevExpandedNodesRef.current.size !== expandedNodes.size ||
@@ -127,10 +130,14 @@ function TopicHierarchyCanvasInner({
     // Detect manual relayout trigger
     const manualRelayoutTriggered = prevLayoutVersionRef.current !== layoutVersion;
 
-    if (expandedNodesChanged || hierarchyChanged || manualRelayoutTriggered || isFirstRenderRef.current) {
+    // Detect record count changes (when records are assigned/unassigned to topics)
+    const recordCountsChanged = JSON.stringify(prevRecordCountsByTopicRef.current) !== JSON.stringify(recordCountsByTopic);
+
+    if (expandedNodesChanged || hierarchyChanged || manualRelayoutTriggered || recordCountsChanged || isFirstRenderRef.current) {
       prevExpandedNodesRef.current = expandedNodes;
       prevNodeCountRef.current = layoutedNodes.length;
       prevLayoutVersionRef.current = layoutVersion;
+      prevRecordCountsByTopicRef.current = recordCountsByTopic;
       isFirstRenderRef.current = false;
       setNodes(layoutedNodes);
 
@@ -158,7 +165,7 @@ function TopicHierarchyCanvasInner({
         }, 50);
       }
     }
-  }, [layoutedNodes, layoutedEdges, setNodes, setEdges, expandedNodes, selectedTopic, topicNameToNodeId, nodeIdToParentId, layoutVersion]);
+  }, [layoutedNodes, layoutedEdges, setNodes, setEdges, expandedNodes, selectedTopic, topicNameToNodeId, nodeIdToParentId, layoutVersion, recordCountsByTopic]);
 
   // Update only edge styles when selection changes (no layout recalculation)
   useEffect(() => {

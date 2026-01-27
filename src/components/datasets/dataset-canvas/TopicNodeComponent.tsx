@@ -2,19 +2,17 @@
  * TopicNodeComponent
  *
  * Custom React Flow node for displaying a topic in the hierarchy canvas.
- * Shows topic name, record count, and can expand to show RecordsTable.
- * Supports resizing when expanded.
- * Uses TopicCanvasContext for state and handlers.
+ * Acts as a wrapper that handles shared logic (selection, handles, toolbar)
+ * and delegates rendering to CollapsedTopicNode or ExpandedTopicNode.
  */
 
-import { memo, useState } from "react";
-import { Handle, Position, type Node, type NodeProps, NodeResizer } from "@xyflow/react";
+import { memo } from "react";
+import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { Plus } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { TopicCanvasConsumer } from "./TopicCanvasContext";
-import { RecordsTable } from "../records-table";
 import { TopicNodeToolbar } from "./TopicNodeToolbar";
-import { TopicNodeHeader, HEADER_HEIGHT } from "./TopicNodeHeader";
+import { CollapsedTopicNode } from "./CollapsedTopicNode";
+import { ExpandedTopicNode } from "./ExpandedTopicNode";
 
 export interface TopicNodeData extends Record<string, unknown> {
   name: string;
@@ -28,13 +26,6 @@ export interface TopicNodeData extends Record<string, unknown> {
 // Define the full node type for React Flow
 export type TopicNode = Node<TopicNodeData, "topic">;
 
-// Default sizes
-const COLLAPSED_WIDTH = 280;
-const DEFAULT_EXPANDED_WIDTH = 700;
-const DEFAULT_EXPANDED_HEIGHT = 500;
-const MIN_WIDTH = 450; // Flex-based columns scale down better
-const MIN_HEIGHT = 300;
-
 export const TopicNodeComponent = memo(function TopicNodeComponent({
   data,
   selected = false,
@@ -47,12 +38,6 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
     isRoot = false,
     hasChildren = false,
   } = data;
-
-  // Track expanded size
-  const [expandedSize, setExpandedSize] = useState({
-    width: DEFAULT_EXPANDED_WIDTH,
-    height: DEFAULT_EXPANDED_HEIGHT,
-  });
 
   // Get state and handlers from context
   const {
@@ -80,39 +65,19 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
 
   // Handlers
   const handleSelect = () => {
-    // Use "__root__" as special value for root selection
     setSelectedTopic(isRoot ? "__root__" : name);
   };
 
-  const handleResize = (_event: unknown, params: { width: number; height: number }) => {
-    setExpandedSize({
-      width: params.width,
-      height: params.height,
-    });
-    // Report size change to context for layout recalculation
-    setNodeSize(nodeId, params.width, params.height);
+  const handleToggleExpansion = () => {
+    toggleNodeExpansion(nodeId);
   };
 
-  const tableHeight = expandedSize.height - HEADER_HEIGHT;
+  const handleResize = (width: number, height: number) => {
+    setNodeSize(nodeId, width, height);
+  };
 
   return (
-    <div
-      onClick={handleSelect}
-      className={cn(
-        "relative rounded-xl border-[0.5px]  transition-all nopan cursor-pointer",
-        isSelected
-          ? "border-[rgb(var(--theme-500))]"
-          : "border-border hover:border-emerald-500/50",
-        !isExpanded ? "bg-[#111113]" : "bg-background"
-      )}
-      style={{
-        width: isExpanded ? expandedSize.width : COLLAPSED_WIDTH,
-        height: isExpanded ? expandedSize.height : 'auto',
-        boxShadow: isSelected
-          ? '0 0 15px rgba(16, 185, 129, 0.2), 0 0 30px rgba(16, 185, 129, 0.1)'
-          : undefined,
-      }}
-    >
+    <div onClick={handleSelect} className="relative nopan cursor-pointer">
       {/* Floating toolbar - appears above selected node */}
       {isSelected && (
         <TopicNodeToolbar
@@ -124,18 +89,6 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
           onRenameTopic={onRenameTopic}
           onDeleteTopic={onDeleteTopic}
           onToggleExpansion={toggleNodeExpansion}
-        />
-      )}
-
-      {/* Resizer - visible only when node is selected and expanded */}
-      {isExpanded && (
-        <NodeResizer
-          minWidth={MIN_WIDTH}
-          minHeight={MIN_HEIGHT}
-          onResize={handleResize}
-          isVisible={selected}
-          lineClassName="!border-transparent"
-          handleClassName="!w-3 !h-3 !rounded-full !bg-[rgb(var(--theme-500))] !border-1 !border-background !shadow-md"
         />
       )}
 
@@ -158,7 +111,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
         />
       )}
 
-      {/* Floating + button for adding child topic - shows on right side when selected and no pending add */}
+      {/* Floating + button for adding child topic */}
       {isSelected && pendingAddParentId === undefined && (
         <button
           type="button"
@@ -166,41 +119,38 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
             e.stopPropagation();
             startAddingTopic(isRoot ? null : name);
           }}
-          className="absolute -right-3 top-1/2 -translate-y-1/2 translate-x-full w-6 h-6 rounded-md border border-border bg-background text-muted-foreground flex items-center justify-center hover:border-[rgb(var(--theme-500))] hover:text-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-500))]/10 transition-colors nodrag nopan"
+          className="absolute -right-3 top-1/2 -translate-y-1/2 translate-x-full w-6 h-6 rounded-md border border-border bg-background text-muted-foreground flex items-center justify-center hover:border-[rgb(var(--theme-500))] hover:text-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-500))]/10 transition-colors nodrag nopan z-10"
           title="Add child topic"
         >
           <Plus className="w-3.5 h-3.5" />
         </button>
       )}
 
-      {/* Header */}
-      <TopicNodeHeader
-        name={name}
-        recordCount={recordCount}
-        isRoot={isRoot}
-        isExpanded={isExpanded}
-        onToggleExpansion={() => toggleNodeExpansion(nodeId)}
-      />
-
-      {/* Expanded RecordsTable */}
-      {isExpanded && (
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className="nowheel overflow-hidden"
-          style={{ height: tableHeight, minWidth: 0 }}
-        >
-          <RecordsTable
-            records={records}
-            datasetId={datasetId}
-            height={tableHeight}
-            showFooter
-            emptyMessage="No records in this topic"
-            onUpdateTopic={onUpdateRecordTopic || (async () => {})}
-            onDelete={onDeleteRecord || (() => {})}
-            onSave={onSaveRecord}
-            availableTopics={availableTopics}
-          />
-        </div>
+      {/* Render collapsed or expanded state */}
+      {isExpanded ? (
+        <ExpandedTopicNode
+          name={name}
+          recordCount={recordCount}
+          isRoot={isRoot}
+          isSelected={isSelected}
+          isReactFlowSelected={selected}
+          records={records}
+          datasetId={datasetId}
+          availableTopics={availableTopics}
+          onToggleExpansion={handleToggleExpansion}
+          onResize={handleResize}
+          onUpdateRecordTopic={onUpdateRecordTopic}
+          onDeleteRecord={onDeleteRecord}
+          onSaveRecord={onSaveRecord}
+        />
+      ) : (
+        <CollapsedTopicNode
+          name={name}
+          recordCount={recordCount}
+          isRoot={isRoot}
+          isSelected={isSelected}
+          onToggleExpansion={handleToggleExpansion}
+        />
       )}
     </div>
   );
