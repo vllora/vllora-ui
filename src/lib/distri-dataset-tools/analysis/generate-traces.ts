@@ -48,6 +48,12 @@ export interface GenerateTracesParams {
   record_ids?: string[];
   count?: number;
   max_turns?: number;
+  /** Optional model override for trace generation (e.g., gpt-4o, gpt-4.1, gpt-4.1-mini) */
+  model?: string;
+  /** Optional diversity level (0-100) mapped to temperature */
+  diversity_level?: number;
+  /** Backward-compatible alias for diversity level */
+  diversityLevel?: number;
   /** Number of parallel generation requests (default: 5) */
   concurrency?: number;
   /** Whether to generate for all topics or only selected ones */
@@ -122,6 +128,13 @@ const TRACE_CONTEXT_IN_FLIGHT = new Map<string, Promise<void>>();
 const DEFAULT_PERSONA_FALLBACK = 'A curious user interested in the topic.';
 const DEFAULT_SUMMARY_MAX_LEN = 200;
 const MAX_TRACE_CONTEXT_BATCH = 10;
+const TRACE_DEFAULT_TEMPERATURE = 1.0;
+const TRACE_DEFAULT_MAX_TOKENS = 4000;
+const TRACE_MODEL_ALLOWLIST = new Set([
+  'openai/gpt-4o',
+  'openai/gpt-4.1',
+  'openai/gpt-4.1-mini',
+]);
 
 interface TraceContextBatch {
   personas: string[];
@@ -135,6 +148,26 @@ function hashString(value: string): string {
     hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
   }
   return (hash >>> 0).toString(16);
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function normalizeTraceModel(model?: string): string | undefined {
+  if (!model) return undefined;
+  const trimmed = model.trim();
+  if (!trimmed) return undefined;
+  const normalized = trimmed.includes('/') ? trimmed : `openai/${trimmed}`;
+  return TRACE_MODEL_ALLOWLIST.has(normalized) ? normalized : undefined;
+}
+
+function mapDiversityToTopP(diversityLevel?: number): number | undefined {
+  if (typeof diversityLevel !== 'number' || Number.isNaN(diversityLevel)) return undefined;
+  const clamped = clampNumber(diversityLevel, 0, 100) / 100;
+  const minTopP = 0.6;
+  const maxTopP = 1.0;
+  return minTopP + (maxTopP - minTopP) * clamped;
 }
 
 function normalizeSeedMessages(seedMessages: any[]): SyntheticMessage[] {
@@ -260,7 +293,11 @@ async function fetchTraceContextBatch(
   existingMessages: SyntheticMessage[],
   originalUserMessage: string,
   tools: any[],
-  requestedCount: number
+  requestedCount: number,
+  model?: string,
+  temperature?: number,
+  topP?: number,
+  maxTokens?: number
 ): Promise<TraceContextBatch> {
   const toolDetails = buildToolDetails(tools);
   const conversationSummary = buildConversationSummary(existingMessages);
@@ -278,7 +315,7 @@ async function fetchTraceContextBatch(
   ];
 
   const responseFormat = buildTraceContextSchema(requestedCount);
-  const raw = await callLLM(messages, { responseFormat, temperature: 0.7 });
+  const raw = await callLLM(messages, { responseFormat, temperature, model, topP, maxTokens });
   const parsed = tryParseJson<{ personas: string[]; variations: string[] }>(raw);
   const personas = parsed?.personas?.filter(p => typeof p === 'string') || [];
   const variations = parsed?.variations?.filter(v => typeof v === 'string') || [];
@@ -295,6 +332,10 @@ async function prefetchTraceContextBatch(params: {
   originalUserMessage: string;
   tools: any[];
   batchCount: number;
+  model?: string;
+  temperature?: number;
+  topP?: number;
+  maxTokens?: number;
 }): Promise<void> {
   const requestedCount = Math.max(1, Math.floor(params.batchCount));
 
@@ -318,7 +359,11 @@ async function prefetchTraceContextBatch(params: {
         params.existingMessages,
         params.originalUserMessage,
         params.tools,
-        requestCount
+        requestCount,
+        params.model,
+        params.temperature,
+        params.topP,
+        params.maxTokens
       );
       const nextPersonas = (params.personaCache.get(params.contextKey) || []).concat(batch.personas);
       const nextVariations = (params.variationsCache.get(params.contextKey) || []).concat(batch.variations);
@@ -487,21 +532,34 @@ async function sleep(ms: number): Promise<void> {
 
 async function callLLM(
   messages: DistriMessage[],
-  options?: { responseFormat?: unknown; temperature?: number }
+  options?: { responseFormat?: unknown; temperature?: number; model?: string; topP?: number; maxTokens?: number }
 ): Promise<string> {
   const lucyConfig = await fetchLucyConfigCached();
   const rawUrl = lucyConfig.distri_url || getDistriUrl();
   const baseUrl = `${rawUrl.replace(/\/$/, '')}/v1`;
   const distriClient = DistriClient.create({ baseUrl });
   const modelSettingsFromConfig = lucyConfig.model_settings || {};
-  const { response_format: _ignoredResponseFormat, ...modelSettingsBase } = modelSettingsFromConfig as Record<string, unknown>;
+  const { response_format: _ignoredResponseFormat, ...modelSettingsBase } =
+    modelSettingsFromConfig as Record<string, unknown>;
 
-  const modelSettings = {
+  const modelSettings: Record<string, unknown> = {
     ...modelSettingsBase,
-    model: modelSettingsFromConfig.model || 'openai/gpt-4.1-mini',
-    temperature: options?.temperature ?? modelSettingsFromConfig.temperature ?? 0.5,
+    model: options?.model || modelSettingsFromConfig.model || 'openai/gpt-4.1-mini',
     ...(options?.responseFormat ? { response_format: options.responseFormat } : {}),
   };
+
+  const configTemperature = typeof modelSettingsFromConfig.temperature === 'number'
+    ? modelSettingsFromConfig.temperature
+    : undefined;
+  modelSettings.temperature = options?.temperature ?? configTemperature ?? 0.5;
+
+  if (typeof options?.topP === 'number') {
+    modelSettings.top_p = options.topP;
+  }
+
+  if (typeof options?.maxTokens === 'number') {
+    modelSettings.max_tokens = options.maxTokens;
+  }
 
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -530,7 +588,11 @@ async function ensurePersonaAndUserMessageVariation(
   existingMessages: SyntheticMessage[],
   originalUserMessage: string,
   tools: any[],
-  batchCount: number
+  batchCount: number,
+  model?: string,
+  temperature?: number,
+  topP?: number,
+  maxTokens?: number
 ): Promise<{ persona: string; userMessage: string }> {
   const contextKey = buildSeedContextKey(topicKey, existingMessages, originalUserMessage);
   const cachedPersonas = personaCache.get(contextKey) || [];
@@ -552,6 +614,10 @@ async function ensurePersonaAndUserMessageVariation(
     originalUserMessage,
     tools,
     batchCount,
+    model,
+    temperature,
+    topP,
+    maxTokens,
   });
 
   const personaPool = personaCache.get(contextKey) || [];
@@ -569,7 +635,11 @@ async function simulateConversation(
   tools: any[],
   personaCache: Map<string, string[]>,
   variationsCache: Map<string, string[]>,
-  batchCount = 1
+  batchCount = 1,
+  model?: string,
+  temperature?: number,
+  topP?: number,
+  maxTokens?: number
 ): Promise<SyntheticTraceRecord | null> {
   const topicStr = topicPath.join(' -> ');
   const topicKey = topicPath.join('/');
@@ -591,7 +661,11 @@ async function simulateConversation(
       historyBeforeLastUser,
       originalUserMessage,
       tools,
-      batchCount
+      batchCount,
+      model,
+      temperature,
+      topP,
+      maxTokens
     );
     personaForTrace = persona;
 
@@ -619,6 +693,10 @@ interface TopicGenerationTask {
   recordsToGenerate: number;
   seedRecords: (DatasetRecord | undefined)[];
   tools: any[];
+  model?: string;
+  temperature?: number;
+  topP?: number;
+  maxTokens?: number;
 }
 
 interface TopicGenerationResult {
@@ -693,6 +771,10 @@ async function prefetchTraceContextsForTopic(
       originalUserMessage: entry.originalUserMessage,
       tools: task.tools,
       batchCount: entry.count,
+      model: task.model,
+      temperature: task.temperature,
+      topP: task.topP,
+      maxTokens: task.maxTokens,
     })
   );
 
@@ -719,7 +801,12 @@ async function generateSingleRecord(
       seedMessages,
       task.tools,
       personaCache,
-      variationsCache
+      variationsCache,
+      1,
+      task.model,
+      task.temperature,
+      task.topP,
+      task.maxTokens
     );
 
     if (!simulated) {
@@ -812,8 +899,19 @@ async function generateRecordsForTopic(
 
 export async function generateTraces(params: GenerateTracesParams): Promise<GenerateTracesResult> {
   try {
-    const { dataset_id, record_ids, count, concurrency, target_topics, selected_topics, on_progress, on_records_added } =
-      params;
+    const {
+      dataset_id,
+      record_ids,
+      count,
+      concurrency,
+      target_topics,
+      selected_topics,
+      on_progress,
+      on_records_added,
+      model,
+      diversity_level,
+      diversityLevel,
+    } = params;
 
     const resolvedDatasetId = dataset_id;
     if (!resolvedDatasetId) {
@@ -864,6 +962,12 @@ export async function generateTraces(params: GenerateTracesParams): Promise<Gene
       ? Math.min(concurrency, 10)
       : DEFAULT_CONCURRENCY;
 
+    const resolvedModel = normalizeTraceModel(model);
+    const resolvedDiversity = typeof diversity_level === 'number' ? diversity_level : diversityLevel;
+    const resolvedTopP = mapDiversityToTopP(resolvedDiversity);
+    const resolvedTemperature = TRACE_DEFAULT_TEMPERATURE;
+    const resolvedMaxTokens = TRACE_DEFAULT_MAX_TOKENS;
+
     // Extract tools from seed records (use first available or fallback to catalog)
     const seedTools = seedRecords.find(r => r !== undefined) ? extractSeedTools(seedRecords.find(r => r !== undefined)) : [];
     const effectiveTools = seedTools.length > 0
@@ -877,6 +981,10 @@ export async function generateTraces(params: GenerateTracesParams): Promise<Gene
       recordsToGenerate: recordsPerTopic,
       seedRecords,
       tools: effectiveTools,
+      model: resolvedModel,
+      temperature: resolvedTemperature,
+      topP: resolvedTopP,
+      maxTokens: resolvedMaxTokens,
     }));
     const personaCache = new Map<string, string[]>();
     const variationsCache = new Map<string, string[]>();
@@ -952,6 +1060,8 @@ export const generateTracesTool: DistriFnTool = {
       record_ids: { type: 'array', items: { type: 'string' }, description: 'Optional: seed from selected records' },
       count: { type: 'number', description: 'Total traces to generate (default 5).' },
       max_turns: { type: 'number', description: 'Max user turns per trace (default 3)' },
+      model: { type: 'string', description: 'Optional model override (gpt-4o, gpt-4.1, gpt-4.1-mini)' },
+      diversity_level: { type: 'number', description: 'Optional diversity level (0-100) mapped to temperature' },
     },
     required: ['dataset_id'],
   },

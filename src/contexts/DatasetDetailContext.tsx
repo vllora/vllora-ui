@@ -451,6 +451,8 @@ export function DatasetDetailProvider({
     const count = config?.recordsPerTopic ?? 5;
     const targetTopics = config?.targetTopics ?? 'all';
     const selectedTopicsList = config?.selectedTopics ?? [];
+    const model = config?.model;
+    const diversityLevel = config?.diversityLevel;
 
     // Close dialog immediately and show starting toast
     setGenerateDataDialog(false);
@@ -468,6 +470,8 @@ export function DatasetDetailProvider({
         concurrency: 5, // Run 5 generations in parallel
         target_topics: targetTopics,
         selected_topics: selectedTopicsList,
+        model,
+        diversity_level: diversityLevel,
         on_records_added: (newRecords: DatasetRecord[]) => {
           // Instantly append new records to state for immediate UI update
           setRecords((prev) => [...prev, ...newRecords]);
