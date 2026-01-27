@@ -26,7 +26,7 @@ function DatasetsPageContent() {
   // Show span selection only for first-time users when spans exist but no datasets
   const noDatasets = datasets.length === 0;
   const showLoadingState = isLoading || isCheckingSpans;
-  const navigateToNewDataset = hasBackendSpans || isFirstVisit;
+  const navigateToNewDataset = (hasBackendSpans || isFirstVisit) && noDatasets;
   const showEmptyState = !showLoadingState && noDatasets && !navigateToNewDataset;
   // Mark as visited once user has datasets
   useEffect(() => {
