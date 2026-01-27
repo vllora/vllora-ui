@@ -58,12 +58,12 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
   const {
     recordsByTopic,
     datasetId,
+    availableTopics,
     selectedTopic,
     setSelectedTopic,
     isNodeExpanded,
     toggleNodeExpansion,
     setNodeSize,
-    onAddTopic,
     onRenameTopic,
     onDeleteTopic,
     onUpdateRecordTopic,
@@ -117,10 +117,10 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
       {isSelected && (
         <TopicNodeToolbar
           name={name}
+          topicKey={topicKey}
           nodeId={nodeId}
           isRoot={isRoot}
           isExpanded={isExpanded}
-          onAddTopic={onAddTopic}
           onRenameTopic={onRenameTopic}
           onDeleteTopic={onDeleteTopic}
           onToggleExpansion={toggleNodeExpansion}
@@ -198,6 +198,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
             onUpdateTopic={onUpdateRecordTopic || (async () => {})}
             onDelete={onDeleteRecord || (() => {})}
             onSave={onSaveRecord}
+            availableTopics={availableTopics}
           />
         </div>
       )}

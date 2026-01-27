@@ -256,6 +256,7 @@ export function TopicHierarchyCanvas({
     <TopicCanvasProvider
       records={records}
       datasetId={datasetId}
+      hierarchy={hierarchy}
       selectedTopic={selectedTopic}
       onSelectTopic={onSelectTopic}
       onAddTopic={onAddTopic}

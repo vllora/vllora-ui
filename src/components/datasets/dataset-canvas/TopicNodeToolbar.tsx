@@ -2,10 +2,10 @@
  * TopicNodeToolbar
  *
  * Floating toolbar that appears above a selected topic node.
- * Provides actions: Add subtopic, Rename, Delete, and More options.
+ * Provides actions: Rename, Delete, and More options.
  */
 
-import { Plus, Pencil, Trash2, MoreHorizontal } from "lucide-react";
+import { Pencil, Trash2, MoreHorizontal } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,14 +17,14 @@ import {
 interface TopicNodeToolbarProps {
   /** Topic name (used for rename/delete) */
   name: string;
+  /** Topic key for looking up records (e.g., "__unassigned__" for uncategorized) */
+  topicKey: string;
   /** Node ID for expansion tracking */
   nodeId: string;
   /** Whether this is the root node */
   isRoot: boolean;
   /** Whether the node is currently expanded */
   isExpanded: boolean;
-  /** Handler for adding a subtopic */
-  onAddTopic?: (parentTopicName: string | null) => void;
   /** Handler for renaming the topic */
   onRenameTopic?: (topicName: string) => void;
   /** Handler for deleting the topic */
@@ -35,35 +35,24 @@ interface TopicNodeToolbarProps {
 
 export function TopicNodeToolbar({
   name,
+  topicKey,
   nodeId,
   isRoot,
   isExpanded,
-  onAddTopic,
   onRenameTopic,
   onDeleteTopic,
   onToggleExpansion,
 }: TopicNodeToolbarProps) {
+  // Check if this is an actual topic (not the special unassigned bucket)
+  const isActualTopic = topicKey !== "__unassigned__";
   return (
     <div
       className="absolute left-1/2 -translate-x-1/2 -top-12 z-10 nodrag nopan"
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-popover border border-border shadow-lg">
-        {/* Add subtopic button */}
-        {onAddTopic && (
-          <button
-            type="button"
-            onClick={() => onAddTopic(isRoot ? null : name)}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-            title="Add subtopic"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add</span>
-          </button>
-        )}
-
-        {/* Rename button (not for root) */}
-        {!isRoot && onRenameTopic && (
+        {/* Rename button - only show for actual topics (not unassigned bucket) */}
+        {onRenameTopic && isActualTopic && (
           <button
             type="button"
             onClick={() => onRenameTopic(name)}

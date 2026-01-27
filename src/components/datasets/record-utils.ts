@@ -40,6 +40,36 @@ export function getLeafTopicsFromHierarchy(
   return topics;
 }
 
+/**
+ * Extract ALL topics from a topic hierarchy (not just leaves).
+ * Used for topic selection in canvas where any node can have records.
+ */
+export function getAllTopicsFromHierarchy(
+  nodes: TopicHierarchyNode[] | undefined,
+  parentPath: string[] = []
+): AvailableTopic[] {
+  if (!nodes || nodes.length === 0) return [];
+
+  const topics: AvailableTopic[] = [];
+
+  for (const node of nodes) {
+    const currentPath = [...parentPath, node.name];
+
+    // Add this topic
+    topics.push({
+      name: node.name,
+      path: currentPath,
+    });
+
+    // Recurse into children if any
+    if (node.children && node.children.length > 0) {
+      topics.push(...getAllTopicsFromHierarchy(node.children, currentPath));
+    }
+  }
+
+  return topics;
+}
+
 // Helper to safely access record data as object
 export const getDataAsObject = (record: DatasetRecord): Record<string, unknown> => {
   return (record.data as Record<string, unknown>) || {};

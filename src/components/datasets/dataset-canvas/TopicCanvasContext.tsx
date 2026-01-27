@@ -6,7 +6,8 @@
  */
 
 import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from "react";
-import type { DatasetRecord } from "@/types/dataset-types";
+import type { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
+import { getAllTopicsFromHierarchy } from "../record-utils";
 
 // ============================================================================
 // Types
@@ -16,6 +17,8 @@ export interface TopicCanvasProviderProps {
   children: ReactNode;
   records: DatasetRecord[];
   datasetId?: string;
+  /** Topic hierarchy for computing available topics */
+  hierarchy?: TopicHierarchyNode[];
   selectedTopic?: string | null;
   onSelectTopic?: (topicName: string | null) => void;
   onAddTopic?: (parentTopicName: string | null) => void;
@@ -36,6 +39,7 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
   const {
     records,
     datasetId,
+    hierarchy,
     selectedTopic: externalSelectedTopic,
     onSelectTopic,
     onAddTopic,
@@ -46,6 +50,12 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     onSaveRecord,
     onCreateChildTopic,
   } = props;
+
+  // Compute available topics from hierarchy
+  const availableTopics = useMemo(
+    () => getAllTopicsFromHierarchy(hierarchy),
+    [hierarchy]
+  );
 
   // Internal selected topic state (controlled or uncontrolled)
   const [internalSelectedTopic, setInternalSelectedTopic] = useState<string | null>(null);
@@ -141,6 +151,7 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     records,
     recordsByTopic,
     datasetId,
+    availableTopics,
     selectedTopic,
     setSelectedTopic,
     expandedNodes,
