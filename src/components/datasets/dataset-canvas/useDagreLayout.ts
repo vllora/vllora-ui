@@ -103,10 +103,22 @@ function getLayoutedElements(
   // Run dagre layout
   dagre.layout(dagreGraph);
 
-  // Map positions back to nodes
-  // Position is calculated from dagre's center point, converted to top-left
-  // Use actual dimensions based on expansion state
-  const layoutedNodes: CanvasNode[] = nodes.map((node) => {
+  // Calculate depth (rank) of each node from parent relationships
+  const nodeDepths: Record<string, number> = {};
+  const calculateDepth = (nodeId: string): number => {
+    if (nodeDepths[nodeId] !== undefined) return nodeDepths[nodeId];
+    const parentId = nodeIdToParentId[nodeId];
+    if (!parentId) {
+      nodeDepths[nodeId] = 0;
+      return 0;
+    }
+    nodeDepths[nodeId] = calculateDepth(parentId) + 1;
+    return nodeDepths[nodeId];
+  };
+  nodes.forEach((node) => calculateDepth(node.id));
+
+  // First pass: convert dagre positions to top-left using actual dimensions
+  const nodesWithPositions = nodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
     const isExpanded = expandedNodes.has(node.id);
     const actualSize = nodeSizes?.[node.id];
@@ -126,12 +138,31 @@ function getLayoutedElements(
     }
 
     return {
+      node,
+      depth: nodeDepths[node.id],
+      x: nodeWithPosition.x - nodeWidth / 2,
+      y: nodeWithPosition.y - nodeHeight / 2,
+    };
+  });
+
+  // Second pass: align nodes at the same depth by their left edge
+  // Find minimum x for each depth level
+  const minXByDepth: Record<number, number> = {};
+  nodesWithPositions.forEach(({ depth, x }) => {
+    if (minXByDepth[depth] === undefined || x < minXByDepth[depth]) {
+      minXByDepth[depth] = x;
+    }
+  });
+
+  // Apply aligned positions
+  const layoutedNodes: CanvasNode[] = nodesWithPositions.map(({ node, depth, y }) => {
+    return {
       ...node,
       targetPosition: isHorizontal ? Position.Left : Position.Top,
       sourcePosition: isHorizontal ? Position.Right : Position.Bottom,
       position: {
-        x: nodeWithPosition.x - nodeWidth / 2,
-        y: nodeWithPosition.y - nodeHeight / 2,
+        x: minXByDepth[depth], // Align left edge with minimum x at this depth
+        y,
       },
     };
   });
@@ -159,6 +190,7 @@ const HIGHLIGHTED_EDGE_STYLE = {
  * @param pendingAddParentId - When defined, adds a temporary input node as child of this parent.
  *                             null means root, undefined means no pending add.
  * @param nodeSizes - Actual sizes of nodes (from resizing). Falls back to defaults if not provided.
+ * @param layoutVersion - Version number to trigger manual relayout when changed.
  */
 export function useDagreLayout(
   hierarchy: TopicHierarchyNode[] | undefined,
@@ -167,7 +199,8 @@ export function useDagreLayout(
   expandedNodes: Set<string>,
   options?: DagreLayoutOptions,
   pendingAddParentId?: string | null,
-  nodeSizes?: Record<string, { width: number; height: number }>
+  nodeSizes?: Record<string, { width: number; height: number }>,
+  layoutVersion?: number
 ): DagreLayoutResult {
   return useMemo(() => {
     const nodes: CanvasNode[] = [];
@@ -282,7 +315,8 @@ export function useDagreLayout(
 
     // Apply dagre layout
     return getLayoutedElements(nodes, edges, expandedNodes, topicNameToNodeId, nodeIdToParentId, options, nodeSizes);
-  }, [hierarchy, recordCountsByTopic, totalRecordCount, expandedNodes, options, pendingAddParentId, nodeSizes]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hierarchy, recordCountsByTopic, totalRecordCount, expandedNodes, options, pendingAddParentId, nodeSizes, layoutVersion]);
 }
 
 /**

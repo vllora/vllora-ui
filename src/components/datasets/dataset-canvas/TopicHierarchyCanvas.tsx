@@ -22,6 +22,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { TopicNodeComponent } from "./TopicNodeComponent";
 import { TopicInputNodeComponent } from "./TopicInputNode";
+import { CanvasToolbar } from "./CanvasToolbar";
 import { TopicCanvasProvider, TopicCanvasConsumer } from "./TopicCanvasContext";
 import type { CanvasNode } from "./useDagreLayout";
 import {
@@ -71,7 +72,7 @@ function TopicHierarchyCanvasInner({
 }: {
   hierarchy?: TopicHierarchyNode[];
 }) {
-  const { records, expandedNodes, nodeSizes, selectedTopic, setSelectedTopic, pendingAddParentId } = TopicCanvasConsumer();
+  const { records, expandedNodes, nodeSizes, selectedTopic, setSelectedTopic, pendingAddParentId, layoutVersion } = TopicCanvasConsumer();
 
   // Compute record counts by topic
   const recordCountsByTopic = useMemo(() => {
@@ -97,7 +98,8 @@ function TopicHierarchyCanvasInner({
     expandedNodes,
     { direction: "LR" },
     pendingAddParentId,
-    nodeSizes
+    nodeSizes,
+    layoutVersion
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
@@ -107,12 +109,13 @@ function TopicHierarchyCanvasInner({
   const reactFlowInstance = useRef<ReactFlowInstance<CanvasNode> | null>(null);
 
   // Track changes to avoid unnecessary updates
-  const layoutVersionRef = useRef(0);
+  const prevLayoutVersionRef = useRef(layoutVersion);
   const prevExpandedNodesRef = useRef(expandedNodes);
   const prevSelectedTopicRef = useRef(selectedTopic);
   const prevNodeCountRef = useRef(layoutedNodes.length);
+  const isFirstRenderRef = useRef(true);
 
-  // Update nodes when expansion changes or hierarchy changes (layout recalculation)
+  // Update nodes when expansion changes, hierarchy changes, or manual relayout triggered
   useEffect(() => {
     const expandedNodesChanged =
       prevExpandedNodesRef.current.size !== expandedNodes.size ||
@@ -121,10 +124,14 @@ function TopicHierarchyCanvasInner({
     // Detect hierarchy changes by comparing node count
     const hierarchyChanged = prevNodeCountRef.current !== layoutedNodes.length;
 
-    if (expandedNodesChanged || hierarchyChanged || layoutVersionRef.current === 0) {
+    // Detect manual relayout trigger
+    const manualRelayoutTriggered = prevLayoutVersionRef.current !== layoutVersion;
+
+    if (expandedNodesChanged || hierarchyChanged || manualRelayoutTriggered || isFirstRenderRef.current) {
       prevExpandedNodesRef.current = expandedNodes;
       prevNodeCountRef.current = layoutedNodes.length;
-      layoutVersionRef.current++;
+      prevLayoutVersionRef.current = layoutVersion;
+      isFirstRenderRef.current = false;
       setNodes(layoutedNodes);
 
       // Apply edge highlighting based on current selection
@@ -141,8 +148,8 @@ function TopicHierarchyCanvasInner({
         };
       }));
 
-      // Fit view after layout update when hierarchy or expansion changes
-      if ((expandedNodesChanged || hierarchyChanged) && reactFlowInstance.current) {
+      // Fit view after layout update
+      if ((expandedNodesChanged || hierarchyChanged || manualRelayoutTriggered) && reactFlowInstance.current) {
         setTimeout(() => {
           reactFlowInstance.current?.fitView({
             padding: 0.2,
@@ -151,7 +158,7 @@ function TopicHierarchyCanvasInner({
         }, 50);
       }
     }
-  }, [layoutedNodes, layoutedEdges, setNodes, setEdges, expandedNodes, selectedTopic, topicNameToNodeId, nodeIdToParentId]);
+  }, [layoutedNodes, layoutedEdges, setNodes, setEdges, expandedNodes, selectedTopic, topicNameToNodeId, nodeIdToParentId, layoutVersion]);
 
   // Update only edge styles when selection changes (no layout recalculation)
   useEffect(() => {
@@ -188,8 +195,17 @@ function TopicHierarchyCanvasInner({
     }
   };
 
+  // Fit view callback for toolbar
+  const handleFitView = () => {
+    reactFlowInstance.current?.fitView({
+      padding: 0.2,
+      duration: 300,
+    });
+  };
+
   return (
-    <div className="flex-1 w-full h-full">
+    <div className="flex-1 w-full h-full relative">
+      <CanvasToolbar onFitView={handleFitView} />
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -212,7 +228,10 @@ function TopicHierarchyCanvasInner({
         className="bg-background"
       >
         <Background gap={20} size={1} color="hsl(var(--border) / 0.3)" />
-        <Controls showInteractive={false} />
+        <Controls
+          showInteractive={false}
+          className="!bg-background/95 !border-border !shadow-lg [&>button]:!bg-background [&>button]:!border-border [&>button]:!text-foreground [&>button:hover]:!bg-muted"
+        />
       </ReactFlow>
     </div>
   );

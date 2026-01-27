@@ -88,6 +88,13 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     }));
   }, []);
 
+  // Layout version to trigger manual relayout
+  const [layoutVersion, setLayoutVersion] = useState(0);
+
+  const triggerRelayout = useCallback(() => {
+    setLayoutVersion((v) => v + 1);
+  }, []);
+
   // Track pending inline topic creation (stores parent topic name, null for root)
   const [pendingAddParentId, setPendingAddParentId] = useState<string | null | undefined>(undefined);
 
@@ -142,6 +149,9 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     // Node sizes for layout calculation
     nodeSizes,
     setNodeSize,
+    // Manual relayout trigger
+    layoutVersion,
+    triggerRelayout,
     onAddTopic,
     onRenameTopic,
     onDeleteTopic,
