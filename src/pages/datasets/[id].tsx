@@ -30,15 +30,6 @@ function DatasetDetailPageContent() {
     navigate(`/datasets/${newDatasetId}`);
   };
 
-  if (viewMode === "finetune") {
-    return (
-      <FinetuneDatasetPage
-        datasetId={datasetId}
-        onBack={handleBack}
-        onSelectDataset={handleSelectDataset}
-      />
-    );
-  }
 
   return (
     <DatasetDetailView

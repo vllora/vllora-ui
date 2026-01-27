@@ -5,10 +5,19 @@
  * Consumes DatasetDetailContext to avoid prop drilling.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChevronRight, Pencil, Check, X, Database, PanelRightOpen, PanelRightClose } from "lucide-react";
+import {
+  ChevronRight,
+  Pencil,
+  Check,
+  X,
+  Database,
+  PanelRightOpen,
+  PanelRightClose,
+  Circle,
+} from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { useFinetuneJobs } from "@/contexts/FinetuneJobsContext";
 import { DatasetSelector } from "./DatasetSelector";
@@ -19,8 +28,28 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import type { DatasetStep } from "./dataset-canvas/DatasetStepper";
+import { computeCompletedSteps } from "./dataset-canvas/DatasetStepper";
 
-export function DatasetDetailHeader() {
+// Checklist items configuration
+const CHECKLIST_ITEMS: {
+  id: DatasetStep;
+  label: string;
+  tooltip: string;
+}[] = [
+  { id: "extract_data", label: "Data", tooltip: "Add data records" },
+  { id: "topics_categorize", label: "Topics", tooltip: "Define topic hierarchy" },
+  { id: "evaluation_config", label: "Evaluator", tooltip: "Configure evaluation" },
+  { id: "finetune", label: "Finetune", tooltip: "Run finetuning" },
+  { id: "deployed", label: "Deploy", tooltip: "Deploy model" },
+];
+
+interface DatasetDetailHeaderProps {
+  onStepClick?: (step: DatasetStep) => void;
+}
+
+export function DatasetDetailHeader({ onStepClick }: DatasetDetailHeaderProps) {
   const {
     dataset,
     datasetId,
@@ -35,6 +64,18 @@ export function DatasetDetailHeader() {
 
   const { isSidebarOpen, setIsSidebarOpen, filteredJobs, setCurrentBackendDatasetId } = useFinetuneJobs();
   const hasActiveJobs = filteredJobs.some(j => j.status === 'pending' || j.status === 'running');
+
+  // Compute completed steps
+  const completedSteps = useMemo(() => {
+    if (!dataset) return new Set<DatasetStep>();
+    return computeCompletedSteps({
+      recordCount: records.length,
+      hasTopicHierarchy: !!dataset.topicHierarchy?.hierarchy,
+      hasEvaluationConfig: !!dataset.evaluationConfig,
+      hasFinetuneJob: false, // TODO: Check actual finetune job status
+      isDeployed: false, // TODO: Check actual deployment status
+    });
+  }, [dataset, records.length]);
 
   // Set the backend dataset ID for filtering finetune jobs
   // Uses the backend dataset ID stored in the local dataset after upload
@@ -154,6 +195,73 @@ export function DatasetDetailHeader() {
               </>
             )}
           </p>
+
+          {/* Training Objective + Checklist row */}
+          <div className="flex items-start gap-6 mt-3">
+            {/* Training Objective */}
+            {dataset?.datasetObjective && (
+              <p className="text-sm text-muted-foreground max-w-xl flex-1">
+                <span className="font-medium text-foreground">Training Objective:</span>{" "}
+                {dataset.datasetObjective}
+              </p>
+            )}
+
+            {/* Compact Checklist */}
+            <TooltipProvider delayDuration={200}>
+              <div className="flex items-center gap-1 shrink-0">
+                {CHECKLIST_ITEMS.map((item, index) => {
+                  const isCompleted = completedSteps.has(item.id);
+
+                  return (
+                    <div key={item.id} className="flex items-center">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={() => onStepClick?.(item.id)}
+                            className={cn(
+                              "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-all",
+                              isCompleted
+                                ? "text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
+                                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                            )}
+                          >
+                            <div
+                              className={cn(
+                                "w-4 h-4 rounded-full flex items-center justify-center",
+                                isCompleted
+                                  ? "bg-emerald-500 text-white"
+                                  : "border border-muted-foreground/30"
+                              )}
+                            >
+                              {isCompleted ? (
+                                <Check className="w-2.5 h-2.5" strokeWidth={3} />
+                              ) : (
+                                <Circle className="w-2 h-2 text-muted-foreground/30" />
+                              )}
+                            </div>
+                            <span className="hidden lg:inline">{item.label}</span>
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">
+                          <p>{isCompleted ? `${item.label} complete` : item.tooltip}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      {index < CHECKLIST_ITEMS.length - 1 && (
+                        <div
+                          className={cn(
+                            "w-3 h-px mx-0.5",
+                            isCompleted && completedSteps.has(CHECKLIST_ITEMS[index + 1].id)
+                              ? "bg-emerald-500/60"
+                              : "bg-border"
+                          )}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </TooltipProvider>
+          </div>
         </div>
 
         {/* Actions */}

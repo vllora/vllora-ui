@@ -20,11 +20,7 @@ import { SanitizeDataDialog } from "./SanitizeDataDialog";
 import { DryRunDialog } from "./DryRunDialog";
 import { getLeafTopicsFromHierarchy } from "./record-utils";
 import { getTopicCounts } from "./topic-hierarchy-utils";
-import {
-  DatasetStepper,
-  DatasetStep,
-  computeCompletedSteps,
-} from "./dataset-canvas/DatasetStepper";
+import type { DatasetStep } from "./dataset-canvas/DatasetStepper";
 import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
 import { DatasetDetailHeader } from "./DatasetDetailHeader";
 import { EvaluationConfigDialog } from "./evaluation-dialog/EvaluationConfigDialog";
@@ -95,7 +91,6 @@ export function DatasetDetailContentV2() {
 
   // State for canvas view
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
-  const [activeStep, setActiveStep] = useState<DatasetStep>("extract_data");
   const [evaluationConfigDialog, setEvaluationConfigDialog] = useState(false);
 
   // Compute available topics from hierarchy for topic selection
@@ -116,28 +111,14 @@ export function DatasetDetailContentV2() {
     [sortedRecords, selectedRecordIds]
   );
 
-  // Compute completed steps based on dataset state
-  const completedSteps = useMemo(() => {
-    if (!dataset) return new Set<DatasetStep>();
-    return computeCompletedSteps({
-      recordCount: sortedRecords.length,
-      hasTopicHierarchy: !!dataset.topicHierarchy?.hierarchy,
-      hasEvaluationConfig: !!dataset.evaluationConfig,
-      hasFinetuneJob: false, // TODO: Check actual finetune job status
-      isDeployed: false, // TODO: Check actual deployment status
-    });
-  }, [dataset, sortedRecords.length]);
-
   // Wrapper for auto-tagging that closes the dialog when done
   const handleAutoTagSelected = async () => {
     await handleAutoTagRecords();
     setAssignTopicDialog(false);
   };
 
-  // Handle step click
+  // Handle step click from header checklist
   const handleStepClick = (step: DatasetStep) => {
-    setActiveStep(step);
-    // Open relevant dialog based on step
     switch (step) {
       case "extract_data":
         setImportDialog(true);
@@ -289,17 +270,10 @@ export function DatasetDetailContentV2() {
   return (
     <>
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
+        {/* Header with integrated checklist */}
         <div className="px-4 py-2 border-b border-border">
-          <DatasetDetailHeader />
+          <DatasetDetailHeader onStepClick={handleStepClick} />
         </div>
-
-        {/* Stepper */}
-        <DatasetStepper
-          completedSteps={completedSteps}
-          activeStep={activeStep}
-          onStepClick={handleStepClick}
-        />
 
         {/* Main content area - Canvas with expandable nodes */}
         <div className="flex-1 flex overflow-hidden">
