@@ -11,14 +11,13 @@
  * - List mode: Create new dataset or select existing (no datasetId)
  */
 
-import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, Upload, Plus, Database } from "lucide-react";
-import { FileDropZone, type ParseStatus } from "./FileDropZone";
+import { FileDropZone } from "./FileDropZone";
 import {
   Dialog,
   DialogContent,
@@ -36,29 +35,18 @@ import {
 } from "@/components/ui/select";
 import { SpansSelectTable } from "./spans-select-table";
 import { ProjectsConsumer } from "@/contexts/ProjectContext";
-import { extractDataInfoFromSpan } from "@/utils/modelUtils";
-import type { Span } from "@/types/common-type";
-import { Dataset, DatasetEvaluation } from "@/types/dataset-types";
+import { Dataset } from "@/types/dataset-types";
+import {
+  useIngestData,
+  type ParsedRecord,
+  type ImportMode,
+  type ImportResult,
+  type DataSourceTab,
+  type DatasetTarget,
+} from "./hooks/useIngestData";
 
-interface ParsedRecord {
-  data: unknown;
-  topic?: string;
-  evaluation?: DatasetEvaluation;
-}
-
-export type ImportMode = "append" | "replace";
-export type DatasetTarget = "new" | "existing";
-export type DataSourceTab = "traces" | "upload";
-
-export interface ImportResult {
-  records: ParsedRecord[];
-  mode: ImportMode;
-  defaultTopic?: string;
-  // For list mode
-  target?: DatasetTarget;
-  newDatasetName?: string;
-  existingDatasetId?: string;
-}
+// Re-export types for consumers
+export type { ParsedRecord, ImportMode, ImportResult, DataSourceTab, DatasetTarget };
 
 // Props for detail mode (importing into a specific dataset)
 interface DetailModeProps {
@@ -97,62 +85,56 @@ export function IngestDataDialog(props: IngestDataDialogProps) {
   const currentRecordCount = !isListMode ? (props as DetailModeProps).currentRecordCount ?? 0 : 0;
   const preselectedDatasetId = isListMode ? (props as ListModeProps).preselectedDatasetId : undefined;
 
-  // Tab state
-  const [activeTab, setActiveTab] = useState<DataSourceTab>("traces");
+  // Use the ingest data hook for all state and logic
+  const {
+    // Tab state
+    activeTab,
+    setActiveTab,
 
-  // File upload state
-  const [file, setFile] = useState<File | null>(null);
-  const [records, setRecords] = useState<ParsedRecord[]>([]);
-  const [parseStatus, setParseStatus] = useState<ParseStatus>("idle");
-  const [parseError, setParseError] = useState<string | null>(null);
+    // File upload state
+    file,
+    records,
+    parseStatus,
+    parseError,
+    handleFileSelect,
 
-  // Spans selection state
-  const [selectedSpanIds, setSelectedSpanIds] = useState<Set<string>>(new Set());
-  const [spans, setSpans] = useState<Span[]>([]);
-  const [isAllMatchingSelected, setIsAllMatchingSelected] = useState(false);
-  const [totalMatchingCount, setTotalMatchingCount] = useState(0);
-  const [fetchAllMatchingSpans, setFetchAllMatchingSpans] = useState<(() => Promise<Span[]>) | null>(null);
+    // Spans selection state
+    selectedSpanIds,
+    setSelectedSpanIds,
+    setSpans,
+    handleAllMatchingSelectedChange,
+    handleProvideFetchAllMatching,
 
-  // Common state
-  const [topic, setTopic] = useState("");
-  const [importMode, setImportMode] = useState<ImportMode>("append");
-  const [isImporting, setIsImporting] = useState(false);
+    // Common state
+    topic,
+    setTopic,
+    importMode,
+    setImportMode,
+    isImporting,
+    setIsImporting,
 
-  // List mode specific state - use preselected dataset if provided
-  const [datasetTarget, setDatasetTarget] = useState<DatasetTarget>(
-    preselectedDatasetId ? "existing" : "new"
-  );
-  const [newDatasetName, setNewDatasetName] = useState("");
-  const [selectedDatasetId, setSelectedDatasetId] = useState<string>(
-    preselectedDatasetId ?? ""
-  );
+    // List mode state
+    datasetTarget,
+    handleDatasetTargetChange,
+    newDatasetName,
+    setNewDatasetName,
+    selectedDatasetId,
+    setSelectedDatasetId,
 
-  const resetState = () => {
-    setActiveTab("traces");
-    setFile(null);
-    setRecords([]);
-    setParseStatus("idle");
-    setParseError(null);
-    setSelectedSpanIds(new Set());
-    setSpans([]);
-    setIsAllMatchingSelected(false);
-    setTotalMatchingCount(0);
-    setTopic("");
-    setImportMode("append");
-    setIsImporting(false);
-    // Reset to preselected dataset if provided, otherwise default to "new"
-    setDatasetTarget(preselectedDatasetId ? "existing" : "new");
-    setNewDatasetName("");
-    setSelectedDatasetId(preselectedDatasetId ?? "");
-  };
+    // Computed values
+    selectionCount,
+    hasSelection,
+    canImport,
 
-  // Sync state when preselectedDatasetId changes (e.g., opening dialog for different dataset)
-  useEffect(() => {
-    if (preselectedDatasetId) {
-      setDatasetTarget("existing");
-      setSelectedDatasetId(preselectedDatasetId);
-    }
-  }, [preselectedDatasetId]);
+    // Actions
+    resetState,
+    buildImportRecords,
+    buildImportResult,
+  } = useIngestData({
+    preselectedDatasetId,
+    isListMode,
+    currentRecordCount,
+  });
 
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
@@ -161,172 +143,16 @@ export function IngestDataDialog(props: IngestDataDialogProps) {
     onOpenChange(newOpen);
   };
 
-  const extractRecord = (item: Record<string, unknown>): ParsedRecord => {
-    // Check if item has a 'data' field (exported format with full record structure)
-    if (item.data !== undefined) {
-      return {
-        data: item.data,
-        topic: item.topic as string | undefined,
-        evaluation: item.evaluation as ParsedRecord['evaluation'],
-      };
-    }
-
-    // Check if item is in JSONL export format: { messages, tools }
-    // Reconstruct back to DataInfo structure
-    if (item.messages !== undefined && Array.isArray(item.messages)) {
-      const messages = item.messages as Array<Record<string, unknown>>;
-      const tools = (item.tools as unknown[]) || [];
-
-      // Split messages: all except last go to input, last goes to output
-      if (messages.length > 0) {
-        const inputMessages = messages.slice(0, -1);
-        const outputMessage = messages[messages.length - 1];
-
-        return {
-          data: {
-            input: {
-              messages: inputMessages,
-              ...(tools.length > 0 ? { tools } : {}),
-            },
-            output: {
-              messages: outputMessage,
-            },
-          },
-        };
-      }
-
-      // If no messages, just store tools in input
-      return {
-        data: {
-          input: {
-            messages: [],
-            ...(tools.length > 0 ? { tools } : {}),
-          },
-          output: {},
-        },
-      };
-    }
-
-    // Otherwise treat the whole item as data
-    return { data: item };
-  };
-
-  const parseJsonFile = async (content: string): Promise<ParsedRecord[]> => {
-    // Try parsing as a single JSON object or array
-    const parsed = JSON.parse(content);
-
-    if (Array.isArray(parsed)) {
-      // Array of records
-      return parsed.map(extractRecord);
-    } else if (parsed.records && Array.isArray(parsed.records)) {
-      // Exported dataset format: { name, records: [...] }
-      return parsed.records.map(extractRecord);
-    } else {
-      // Single object - treat as one record
-      return [extractRecord(parsed)];
-    }
-  };
-
-  const parseJsonlFile = (content: string): ParsedRecord[] => {
-    const lines = content.split("\n").filter(line => line.trim());
-    return lines.map((line, index) => {
-      try {
-        const parsed = JSON.parse(line);
-        return extractRecord(parsed);
-      } catch {
-        throw new Error(`Invalid JSON on line ${index + 1}`);
-      }
-    });
-  };
-
-  const handleFileSelect = async (selectedFile: File) => {
-    setFile(selectedFile);
-    setParseStatus("parsing");
-    setParseError(null);
-    setRecords([]);
-
-    try {
-      const content = await selectedFile.text();
-      let parsedRecords: ParsedRecord[];
-
-      if (selectedFile.name.endsWith(".jsonl")) {
-        parsedRecords = parseJsonlFile(content);
-      } else {
-        parsedRecords = await parseJsonFile(content);
-      }
-
-      if (parsedRecords.length === 0) {
-        throw new Error("No records found in file");
-      }
-
-      setRecords(parsedRecords);
-      setParseStatus("success");
-    } catch (err) {
-      setParseError(err instanceof Error ? err.message : "Failed to parse file");
-      setParseStatus("error");
-    }
-  };
-
-  // Get selection count based on active tab
-  const selectionCount = activeTab === "traces"
-    ? (isAllMatchingSelected ? totalMatchingCount : selectedSpanIds.size)
-    : records.length;
-
-  // Check if import is ready
-  const hasSelection = activeTab === "traces"
-    ? (selectedSpanIds.size > 0 || isAllMatchingSelected)
-    : parseStatus === "success";
-
   const handleImport = async () => {
-    if (!hasSelection) return;
-
-    // Validation for list mode
-    if (isListMode) {
-      if (datasetTarget === "new" && !newDatasetName.trim()) {
-        return;
-      }
-      if (datasetTarget === "existing" && !selectedDatasetId) {
-        return;
-      }
-    }
+    if (!canImport()) return;
 
     setIsImporting(true);
     try {
-      let importRecords: ParsedRecord[];
-
-      if (activeTab === "traces") {
-        let spansToConvert: Span[];
-
-        if (isAllMatchingSelected && fetchAllMatchingSpans) {
-          // Fetch ALL matching spans from the server
-          spansToConvert = await fetchAllMatchingSpans();
-        } else {
-          // Use only selected spans from the current page
-          spansToConvert = spans.filter((s) => selectedSpanIds.has(s.span_id));
-        }
-
-        // Convert spans to records using the shared utility
-        importRecords = spansToConvert.map((span) => {
-          const dataInfo = extractDataInfoFromSpan(span);
-          return { data: dataInfo };
-        });
-      } else {
-        // Use parsed file records
-        importRecords = records;
-      }
-
       if (isListMode && onImportToDataset) {
-        // List mode: pass full import result
-        await onImportToDataset({
-          records: importRecords,
-          mode: datasetTarget === "new" ? "append" : importMode,
-          defaultTopic: topic.trim() || undefined,
-          target: datasetTarget,
-          newDatasetName: datasetTarget === "new" ? newDatasetName.trim() : undefined,
-          existingDatasetId: datasetTarget === "existing" ? selectedDatasetId : undefined,
-        });
+        const result = await buildImportResult();
+        await onImportToDataset(result);
       } else if (onImport) {
-        // Detail mode: use original callback
+        const importRecords = await buildImportRecords();
         await onImport(importRecords, importMode, topic.trim() || undefined);
       }
       handleOpenChange(false);
@@ -336,26 +162,6 @@ export function IngestDataDialog(props: IngestDataDialogProps) {
       setIsImporting(false);
     }
   };
-
-  // Check if import button should be enabled
-  const canImport = () => {
-    if (!hasSelection) return false;
-    if (isListMode) {
-      if (datasetTarget === "new") return newDatasetName.trim().length > 0;
-      if (datasetTarget === "existing") return !!selectedDatasetId;
-    }
-    return true;
-  };
-
-  // Spans selection handlers
-  const handleAllMatchingSelectedChange = useCallback((allSelected: boolean, totalCount: number) => {
-    setIsAllMatchingSelected(allSelected);
-    setTotalMatchingCount(totalCount);
-  }, []);
-
-  const handleProvideFetchAllMatching = useCallback((fetchFn: () => Promise<Span[]>) => {
-    setFetchAllMatchingSpans(() => fetchFn);
-  }, []);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -434,13 +240,7 @@ export function IngestDataDialog(props: IngestDataDialogProps) {
                 <Label>Destination</Label>
                 <RadioGroup
                   value={datasetTarget}
-                  onValueChange={(value) => {
-                    setDatasetTarget(value as DatasetTarget);
-                    if (value === "new") {
-                      setSelectedDatasetId("");
-                      setImportMode("append");
-                    }
-                  }}
+                  onValueChange={(value) => handleDatasetTargetChange(value as DatasetTarget)}
                   className="flex flex-col gap-3"
                 >
                   {/* Create new dataset option */}
