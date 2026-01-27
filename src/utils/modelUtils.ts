@@ -140,6 +140,7 @@ export const extractDataInfoFromSpan = (span: Span): DataInfo => {
   if (outputJson?.choices?.[0]?.tool_calls) {
     dataInfo.output.tool_calls = outputJson.choices[0].tool_calls;
   }
+  
 
   return dataInfo;
 }

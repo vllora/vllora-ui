@@ -245,6 +245,7 @@ export function useDatasetCreation() {
           const dataInfo = extractDataInfoFromSpan(span);
           return {
             data: dataInfo,
+            spanId: span.span_id,
           };
         });
       } else {
