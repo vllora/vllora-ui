@@ -23,6 +23,7 @@ import { getTopicCounts } from "./topic-hierarchy-utils";
 import type { DatasetStep } from "./dataset-canvas/DatasetStepper";
 import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
 import { DatasetDetailHeader } from "./DatasetDetailHeader";
+import { LucyDatasetAssistant } from "./LucyDatasetAssistant";
 import { EvaluationConfigDialog } from "./evaluation-dialog/EvaluationConfigDialog";
 import { updateDatasetEvaluationConfig } from "@/services/datasets-db";
 import type { EvaluationConfig, TopicHierarchyNode } from "@/types/dataset-types";
@@ -268,38 +269,39 @@ export function DatasetDetailContentV2() {
   }
 
   return (
-    <>
+    <div className="flex-1 flex overflow-hidden">
+      {/* Lucy Assistant on the left */}
+      <LucyDatasetAssistant />
+
+      {/* Main content on the right */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header with integrated checklist */}
         <div className="px-4 py-2 border-b border-border">
           <DatasetDetailHeader onStepClick={handleStepClick} />
         </div>
 
-        {/* Main content area - Canvas with expandable nodes */}
-        <div className="flex-1 flex overflow-hidden">
-          {/* Canvas view */}
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <TopicHierarchyCanvas
-              hierarchy={dataset.topicHierarchy?.hierarchy}
-              records={sortedRecords}
-              datasetId={datasetId}
-              onSelectTopic={setSelectedTopic}
-              selectedTopic={selectedTopic}
-              onAddTopic={handleAddTopic}
-              onRenameTopic={handleRenameTopic}
-              onDeleteTopic={handleDeleteTopic}
-              onUpdateRecordTopic={handleUpdateRecordTopic}
-              onDeleteRecord={(recordId) =>
-                setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
-              }
-              onSaveRecord={handleSaveRecordData}
-              onCreateChildTopic={handleCreateChildTopic}
-            />
-          </div>
+        {/* Main content area - Canvas */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <TopicHierarchyCanvas
+            hierarchy={dataset.topicHierarchy?.hierarchy}
+            records={sortedRecords}
+            datasetId={datasetId}
+            onSelectTopic={setSelectedTopic}
+            selectedTopic={selectedTopic}
+            onAddTopic={handleAddTopic}
+            onRenameTopic={handleRenameTopic}
+            onDeleteTopic={handleDeleteTopic}
+            onUpdateRecordTopic={handleUpdateRecordTopic}
+            onDeleteRecord={(recordId) =>
+              setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
+            }
+            onSaveRecord={handleSaveRecordData}
+            onCreateChildTopic={handleCreateChildTopic}
+          />
         </div>
       </div>
 
-      {/* Delete confirmation dialog */}
+      {/* Dialogs */}
       <DeleteConfirmationDialog
         confirmation={deleteConfirm}
         onOpenChange={() => setDeleteConfirm(null)}
@@ -414,6 +416,6 @@ export function DatasetDetailContentV2() {
         config={dataset?.evaluationConfig}
         onSave={handleSaveEvaluationConfig}
       />
-    </>
+    </div>
   );
 }
