@@ -20,7 +20,7 @@ import {
 import { JsonEditor } from "@/components/chat/conversation/model-config/json-editor";
 import { FormattedThreadPanel } from "./cells/FormattedThreadPanel";
 import { MetadataPanel } from "./cells/MetadataPanel";
-import type { AvailableTopic } from "./record-utils";
+import type { AvailableTopic } from "../record-utils";
 import type { DatasetRecord } from "@/types/dataset-types";
 
 interface RecordDataDialogProps {

@@ -22,8 +22,8 @@ import {
 } from "@/components/ui/tooltip";
 import { Check, X, Tag, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getTopicColor, type AvailableTopic } from "../record-utils";
-import { COLUMN_WIDTHS } from "../table-columns";
+import { getTopicColor, type AvailableTopic } from "../../record-utils";
+import { COLUMN_WIDTHS } from "../../table-columns";
 
 interface TopicCellProps {
   topic?: string;

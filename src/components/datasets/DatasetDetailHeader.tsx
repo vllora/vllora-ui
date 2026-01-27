@@ -81,7 +81,7 @@ export function DatasetDetailHeader() {
   };
 
   return (
-    <div className="mb-6">
+    <div className="mb-2">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm mb-5">
         <button

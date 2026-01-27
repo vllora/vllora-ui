@@ -18,11 +18,13 @@ import { AssignTopicDialog } from "./AssignTopicDialog";
 import { IngestDataDialog } from "./IngestDataDialog";
 import { DatasetDetailHeader } from "./DatasetDetailHeader";
 import { RecordsToolbar } from "./RecordsToolbar";
-import { RecordsTable } from "./RecordsTable";
+import { RecordsTable } from "./records-table";
 import { CreateDatasetDialog } from "./CreateDatasetDialog";
 import { FinetuneJobsPanel } from "@/components/finetune/FinetuneJobsPanel";
-import { TopicHierarchyDialog } from "./TopicHierarchyDialog";
+import { TopicHierarchyDialog } from "./topics-dialog";
 import { GenerateSyntheticDataDialog } from "./GenerateSyntheticDataDialog";
+import { SanitizeDataDialog } from "./SanitizeDataDialog";
+import { DryRunDialog } from "./DryRunDialog";
 import { getLeafTopicsFromHierarchy } from "./record-utils";
 import { getTopicCounts } from "./topic-hierarchy-utils";
 
@@ -100,6 +102,14 @@ function DatasetDetailContent() {
     generateDataDialog,
     setGenerateDataDialog,
 
+    // Sanitize data dialog
+    sanitizeDataDialog,
+    setSanitizeDataDialog,
+
+    // Dry run dialog
+    dryRunDialog,
+    setDryRunDialog,
+
     // Handlers
     handleUpdateRecordTopic,
     handleDeleteConfirm,
@@ -171,7 +181,7 @@ function DatasetDetailContent() {
       <div className="flex-1 flex overflow-hidden">
         {/* Main content */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="px-6 pt-6 pb-4 shrink-0">
+          <div className="px-3 shrink-0 pt-2">
             {/* Header - consumes context directly */}
             <DatasetDetailHeader />
 
@@ -199,7 +209,7 @@ function DatasetDetailContent() {
           </div>
 
           {/* Records table - fills remaining space */}
-          <div className="flex-1 mx-6 mb-6 border border-border rounded-lg overflow-hidden bg-card">
+          <div className="flex-1 mx-6 mb-2 border border-border  overflow-hidden bg-card">
             <RecordsTable
               records={sortedRecords}
               datasetId={datasetId}
@@ -285,6 +295,53 @@ function DatasetDetailContent() {
         sampleRecords={selectedRecords}
         onGenerate={handleGenerateTraces}
         isGenerating={isGeneratingTraces}
+      />
+
+      {/* Sanitize data dialog */}
+      <SanitizeDataDialog
+        open={sanitizeDataDialog}
+        onOpenChange={setSanitizeDataDialog}
+        records={sortedRecords}
+      />
+
+      {/* Dry run validation dialog */}
+      <DryRunDialog
+        open={dryRunDialog}
+        onOpenChange={setDryRunDialog}
+        recordCount={sortedRecords.length}
+        hasGraderConfig={!!dataset?.evaluationConfig}
+        onRunDryRun={async (sampleSize) => {
+          // TODO: Implement actual dry run logic
+          // For now, return mock data
+          const mockScores = Array.from({ length: sampleSize }, () =>
+            Math.random() * 0.6 + 0.2 // Random scores between 0.2 and 0.8
+          );
+          const mean = mockScores.reduce((a, b) => a + b, 0) / mockScores.length;
+          const variance = mockScores.reduce((sum, s) => sum + Math.pow(s - mean, 2), 0) / mockScores.length;
+          const std = Math.sqrt(variance);
+
+          return {
+            samples: mockScores.map((score, i) => ({
+              prompt: `Sample prompt ${i + 1}...`,
+              response: `Sample response ${i + 1}...`,
+              score,
+              topic: availableTopics[i % availableTopics.length]?.name || "uncategorized",
+            })),
+            statistics: {
+              mean,
+              std,
+              min: Math.min(...mockScores),
+              max: Math.max(...mockScores),
+              median: mockScores.sort((a, b) => a - b)[Math.floor(mockScores.length / 2)],
+            },
+            byTopic: availableTopics.reduce((acc, topic) => {
+              acc[topic.name] = { mean: Math.random() * 0.5 + 0.3, count: Math.floor(sampleSize / availableTopics.length) };
+              return acc;
+            }, {} as Record<string, { mean: number; count: number }>),
+            verdict: mean > 0.2 && mean < 0.8 && std > 0.1 ? "GO" : mean < 0.1 ? "NO-GO" : "WARNING",
+            recommendations: mean < 0.3 ? ["Consider using SFT first to bootstrap capability"] : [],
+          };
+        }}
       />
     </>
   );

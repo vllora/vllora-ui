@@ -1,20 +1,14 @@
 /**
- * ConversationThreadCell
+ * Utility functions for ConversationThreadCell
  *
- * Displays conversation thread preview with SYS/USR/AST message labels.
+ * Handles message extraction and formatting for conversation display.
  */
 
-import { cn } from "@/lib/utils";
 import { DataInfo } from "@/types/dataset-types";
 
-interface MessagePreview {
+export interface MessagePreview {
   role: string;
   content: string;
-}
-
-interface ConversationThreadCellProps {
-  data: unknown;
-  className?: string;
 }
 
 /**
@@ -31,7 +25,7 @@ function extractContent(content: unknown): string {
         if (typeof item === "string") return item;
         if (item?.text) return item.text;
         if (item?.content) return extractContent(item.content);
-        return "";
+        return JSON.stringify(item);
       })
       .filter(Boolean)
       .join(" ");
@@ -58,11 +52,13 @@ export function extractMessages(data: unknown): MessagePreview[] {
     for (const msg of dataInfo.input.messages) {
       if (msg && typeof msg === "object") {
         const role = (msg as Record<string, unknown>).role;
-        const content = (msg as Record<string, unknown>).content;
+        const content = (msg as Record<string, unknown>).content || msg.toolCalls;
         if (role && content !== undefined) {
+          let contentExtracted = extractContent(content);
+          
           messages.push({
             role: String(role),
-            content: extractContent(content),
+            content: contentExtracted,
           });
         }
       }
@@ -79,7 +75,8 @@ export function extractMessages(data: unknown): MessagePreview[] {
       if (msg && typeof msg === "object") {
         const msgObj = msg as Record<string, unknown>;
         const role = msgObj.role || "assistant";
-        const content = msgObj.content ?? msg;
+        const content = msgObj.content || msgObj.tool_calls || msg;
+       
         messages.push({
           role: String(role),
           content: extractContent(content),
@@ -99,7 +96,7 @@ export function extractMessages(data: unknown): MessagePreview[] {
 /**
  * Get role label abbreviation
  */
-function getRoleLabel(role: string): string {
+export function getRoleLabel(role: string): string {
   const normalizedRole = role.toLowerCase();
   switch (normalizedRole) {
     case "system":
@@ -121,7 +118,7 @@ function getRoleLabel(role: string): string {
 /**
  * Get role styling classes (badge style with opacity)
  */
-function getRoleStyle(role: string): { badgeClass: string; contentClass: string } {
+export function getRoleStyle(role: string): { badgeClass: string; contentClass: string } {
   const normalizedRole = role.toLowerCase();
   switch (normalizedRole) {
     case "system":
@@ -158,50 +155,6 @@ function getRoleStyle(role: string): { badgeClass: string; contentClass: string 
 /**
  * Clean text by normalizing whitespace
  */
-function cleanText(text: string): string {
+export function cleanText(text: string): string {
   return text.replace(/\s+/g, " ").trim();
-}
-
-export function ConversationThreadCell({ data, className }: ConversationThreadCellProps) {
-  const messages = extractMessages(data);
-
-  if (messages.length === 0) {
-    return (
-      <div className={cn("flex-1 min-w-0", className)}>
-        <span className="text-xs text-muted-foreground italic">No messages</span>
-      </div>
-    );
-  }
-
-  // Show up to 3 messages (typically system, user, assistant)
-  const displayMessages = messages.slice(0, 3);
-
-  return (
-    <div className={cn("flex-1 min-w-0 flex flex-col gap-1.5", className)}>
-      {displayMessages.map((msg, idx) => {
-        const roleLabel = getRoleLabel(msg.role);
-        const { badgeClass, contentClass } = getRoleStyle(msg.role);
-        const cleanedContent = cleanText(msg.content);
-
-        return (
-          <div key={idx} className="flex items-center gap-2.5 text-sm min-w-0">
-            <span className={cn(
-              "shrink-0 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide",
-              badgeClass
-            )}>
-              {roleLabel}
-            </span>
-            <span className={cn("truncate min-w-0", contentClass)}>
-              "{cleanedContent}"
-            </span>
-          </div>
-        );
-      })}
-      {messages.length > 3 && (
-        <span className="text-xs text-muted-foreground/60 pl-12">
-          +{messages.length - 3} more...
-        </span>
-      )}
-    </div>
-  );
 }

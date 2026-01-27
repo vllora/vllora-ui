@@ -1,8 +1,8 @@
 /**
  * EvaluationConfigDialog
  *
- * Dialog for configuring LLM-as-a-Judge evaluation settings.
- * Allows users to define system instructions and structured output schema.
+ * Dialog for configuring evaluation settings.
+ * Supports both LLM-as-a-Judge and JavaScript evaluator types.
  */
 
 import { useState, useEffect } from "react";
@@ -13,7 +13,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -21,23 +20,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { JsonEditor } from "@/components/chat/conversation/model-config/json-editor";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Loader2,
-  Sparkles,
   Scale,
-  BookOpen,
   CheckCircle2,
-  AlertCircle,
-  Copy,
   Zap,
+  Code2,
 } from "lucide-react";
-
-interface EvaluationConfig {
-  promptTemplate: string;
-  outputSchema: string;
-  model: string;
-}
+import { JudgeInstructionsPanel } from "./JudgeInstructionsPanel";
+import { OutputSchemaPanel } from "./OutputSchemaPanel";
+import { JavaScriptPanel, DEFAULT_SCRIPT } from "./JavaScriptPanel";
+import type { EvaluationConfig, EvaluatorType } from "@/types/dataset-types";
 
 interface EvaluationConfigDialogProps {
   open: boolean;
@@ -99,54 +95,90 @@ const AVAILABLE_MODELS = [
   { value: "claude-3-haiku", label: "Claude 3 Haiku", cost: "$0.01" },
 ];
 
-// Available template variables that can be used in the prompt template
-const AVAILABLE_VARIABLES = [
-  { name: "messages", description: "The conversation messages (input)" },
-  { name: "response", description: "The assistant's response (output)" },
-];
-
 export function EvaluationConfigDialog({
   open,
   onOpenChange,
   config,
   onSave,
 }: EvaluationConfigDialogProps) {
+  // Evaluator type tab
+  const [evaluatorType, setEvaluatorType] = useState<EvaluatorType>("llm_as_judge");
+
+  // LLM Judge specific state
   const [promptTemplate, setPromptTemplate] = useState(DEFAULT_PROMPT_TEMPLATE);
   const [outputSchema, setOutputSchema] = useState(DEFAULT_OUTPUT_SCHEMA);
+  const [schemaError, setSchemaError] = useState<string | null>(null);
+
+  // JavaScript evaluator specific state
+  const [script, setScript] = useState(DEFAULT_SCRIPT);
+
+  // Shared completion params
   const [selectedModel, setSelectedModel] = useState("gpt-4o");
+  const [temperature, setTemperature] = useState(0.0);
+  const [maxTokens, setMaxTokens] = useState(2048);
+
+  // UI state
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
-  const [schemaError, setSchemaError] = useState<string | null>(null);
 
   // Initialize from config when dialog opens
   useEffect(() => {
     if (open && config) {
-      setPromptTemplate(config.promptTemplate || DEFAULT_PROMPT_TEMPLATE);
-      setOutputSchema(config.outputSchema || DEFAULT_OUTPUT_SCHEMA);
-      setSelectedModel(config.model || "gpt-4o");
+      setEvaluatorType(config.type);
+      setSelectedModel(config.completionParams.model || "gpt-4o");
+      setTemperature(config.completionParams.temperature ?? 0.0);
+      setMaxTokens(config.completionParams.maxTokens ?? 2048);
+
+      if (config.type === "llm_as_judge") {
+        setPromptTemplate(config.promptTemplate || DEFAULT_PROMPT_TEMPLATE);
+        setOutputSchema(config.outputSchema || DEFAULT_OUTPUT_SCHEMA);
+      } else {
+        setScript(config.script || DEFAULT_SCRIPT);
+      }
     }
   }, [open, config]);
 
-  // Validate JSON schema
+  // Validate JSON schema (only for LLM Judge)
   useEffect(() => {
-    try {
-      JSON.parse(outputSchema);
+    if (evaluatorType === "llm_as_judge") {
+      try {
+        JSON.parse(outputSchema);
+        setSchemaError(null);
+      } catch (e) {
+        setSchemaError((e as Error).message);
+      }
+    } else {
       setSchemaError(null);
-    } catch (e) {
-      setSchemaError((e as Error).message);
     }
-  }, [outputSchema]);
+  }, [outputSchema, evaluatorType]);
 
   const handleSave = async () => {
-    if (schemaError) return;
+    if (evaluatorType === "llm_as_judge" && schemaError) return;
 
     setIsSaving(true);
     try {
-      await onSave({
-        promptTemplate,
-        outputSchema,
-        model: selectedModel,
-      });
+      if (evaluatorType === "llm_as_judge") {
+        await onSave({
+          type: "llm_as_judge",
+          promptTemplate,
+          outputSchema,
+          completionParams: {
+            model: selectedModel,
+            temperature,
+            maxTokens,
+          },
+        });
+      } else {
+        await onSave({
+          type: "js",
+          script,
+          completionParams: {
+            model: selectedModel,
+            temperature,
+            maxTokens,
+          },
+        });
+      }
       onOpenChange(false);
     } catch {
       // Error handled by parent
@@ -157,7 +189,7 @@ export function EvaluationConfigDialog({
 
   const handleTest = async () => {
     setIsTesting(true);
-    // Simulate test - in real implementation, this would call the LLM
+    // Simulate test - in real implementation, this would call the evaluator
     await new Promise((resolve) => setTimeout(resolve, 2000));
     setIsTesting(false);
   };
@@ -172,6 +204,7 @@ export function EvaluationConfigDialog({
   };
 
   const selectedModelInfo = AVAILABLE_MODELS.find((m) => m.value === selectedModel);
+  const hasError = evaluatorType === "llm_as_judge" && !!schemaError;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -185,114 +218,61 @@ export function EvaluationConfigDialog({
               </div>
               <div>
                 <DialogTitle className="text-xl font-semibold">
-                  LLM-as-a-Judge Configuration
+                  Evaluator Configuration
                 </DialogTitle>
                 <p className="text-sm text-muted-foreground mt-0.5">
-                  Define the system instructions and the structured output format for automated evaluation.
+                  Configure the evaluation function for scoring training samples.
                 </p>
               </div>
             </div>
-            <Button variant="outline" size="sm" className="gap-2">
-              <BookOpen className="w-4 h-4" />
-              Best Practices
-            </Button>
+
+            {/* Evaluator Type Tabs */}
+            <Tabs
+              value={evaluatorType}
+              onValueChange={(v) => setEvaluatorType(v as EvaluatorType)}
+            >
+              <TabsList className="bg-muted/50">
+                <TabsTrigger value="llm_as_judge" className="gap-2">
+                  <Scale className="w-4 h-4" />
+                  LLM Judge
+                </TabsTrigger>
+                <TabsTrigger value="js" className="gap-2">
+                  <Code2 className="w-4 h-4" />
+                  JavaScript
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
         </DialogHeader>
 
-        {/* Main Content - Two Panel Layout */}
-        <div className="flex-1 grid grid-cols-2 divide-x divide-border overflow-hidden">
-          {/* Left Panel - Judge Instructions */}
-          <div className="flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-muted/30">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Judge Instructions</span>
-              </div>
-              <span className="text-xs text-muted-foreground">Prompt Template</span>
-            </div>
-
-            <div className="flex-1 flex flex-col overflow-hidden">
-              <Textarea
+        {/* Main Content */}
+        <div className="flex-1 overflow-hidden">
+          {evaluatorType === "llm_as_judge" ? (
+            <div className="h-full grid grid-cols-2 divide-x divide-border">
+              <JudgeInstructionsPanel
                 value={promptTemplate}
-                onChange={(e) => setPromptTemplate(e.target.value)}
-                placeholder="Enter the evaluation prompt template..."
-                className="flex-1 resize-none bg-transparent border-0 focus-visible:ring-0 text-sm font-mono p-5"
+                onChange={setPromptTemplate}
               />
-
-              <div className="flex items-center px-5 py-2.5 border-t border-border bg-muted/30">
-                <p className="text-xs text-muted-foreground">
-                  Variables:{" "}
-                  {AVAILABLE_VARIABLES.map((v, i) => (
-                    <span key={v.name}>
-                      <code className="text-[rgb(var(--theme-400))]">{`{{${v.name}}}`}</code>
-                      {i < AVAILABLE_VARIABLES.length - 1 && ", "}
-                    </span>
-                  ))}
-                </p>
-              </div>
+              <OutputSchemaPanel
+                value={outputSchema}
+                onChange={setOutputSchema}
+                error={schemaError}
+                onPrettify={handlePrettify}
+              />
             </div>
-          </div>
-
-          {/* Right Panel - Structured Output Schema */}
-          <div className="flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-muted/30">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Structured Output Schema</span>
-              </div>
-              <span className="text-xs text-muted-foreground">JSON Schema</span>
-            </div>
-
-            <div className="flex-1 flex flex-col overflow-hidden relative">
-              {/* Copy button */}
-              <button
-                onClick={() => navigator.clipboard.writeText(outputSchema)}
-                className="absolute top-3 right-3 z-10 p-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <Copy className="w-4 h-4" />
-              </button>
-
-              <div className="flex-1 overflow-hidden">
-                <JsonEditor
-                  value={outputSchema}
-                  onChange={setOutputSchema}
-                  hideValidation
-                />
-              </div>
-
-              {/* Footer with validation status */}
-              <div className="flex items-center justify-between px-5 py-2.5 border-t border-border bg-muted/30">
-                <div className="flex items-center gap-2">
-                  {schemaError ? (
-                    <>
-                      <AlertCircle className="w-4 h-4 text-red-500" />
-                      <span className="text-xs text-red-500">Invalid JSON Schema</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-                      <span className="text-xs text-[rgb(var(--theme-500))]">VALID JSON SCHEMA</span>
-                    </>
-                  )}
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs gap-1.5"
-                  onClick={handlePrettify}
-                >
-                  <Zap className="w-3.5 h-3.5" />
-                  Prettify
-                </Button>
-              </div>
-            </div>
-          </div>
+          ) : (
+            <JavaScriptPanel
+              value={script}
+              onChange={setScript}
+            />
+          )}
         </div>
 
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-border bg-muted/20 shrink-0">
-          {/* Model selector */}
-          <div className="flex items-center gap-3">
+          {/* Model and parameters */}
+          <div className="flex items-center gap-6">
+            {/* Model selector */}
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-md bg-amber-500/10">
                 <Zap className="w-4 h-4 text-amber-500" />
@@ -321,6 +301,40 @@ export function EvaluationConfigDialog({
                 </p>
               </div>
             </div>
+
+            {/* Temperature */}
+            <div className="flex items-center gap-2">
+              <Label htmlFor="temperature" className="text-sm font-medium whitespace-nowrap">
+                Temperature:
+              </Label>
+              <Input
+                id="temperature"
+                type="number"
+                min={0}
+                max={2}
+                step={0.1}
+                value={temperature}
+                onChange={(e) => setTemperature(parseFloat(e.target.value) || 0)}
+                className="h-7 w-16 text-xs"
+              />
+            </div>
+
+            {/* Max Tokens */}
+            <div className="flex items-center gap-2">
+              <Label htmlFor="maxTokens" className="text-sm font-medium whitespace-nowrap">
+                Max Tokens:
+              </Label>
+              <Input
+                id="maxTokens"
+                type="number"
+                min={1}
+                max={8192}
+                step={256}
+                value={maxTokens}
+                onChange={(e) => setMaxTokens(parseInt(e.target.value) || 2048)}
+                className="h-7 w-20 text-xs"
+              />
+            </div>
           </div>
 
           {/* Action buttons */}
@@ -329,7 +343,7 @@ export function EvaluationConfigDialog({
               variant="outline"
               size="sm"
               onClick={handleTest}
-              disabled={isTesting || !!schemaError}
+              disabled={isTesting || hasError}
               className="gap-2"
             >
               {isTesting ? (
@@ -337,12 +351,12 @@ export function EvaluationConfigDialog({
               ) : (
                 <Scale className="w-4 h-4" />
               )}
-              Test Judge
+              Test Evaluator
             </Button>
             <Button
               size="sm"
               onClick={handleSave}
-              disabled={isSaving || !!schemaError}
+              disabled={isSaving || hasError}
               className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
             >
               {isSaving ? (
@@ -350,7 +364,7 @@ export function EvaluationConfigDialog({
               ) : (
                 <CheckCircle2 className="w-4 h-4" />
               )}
-              Save Judge Config
+              Save Config
             </Button>
           </div>
         </div>

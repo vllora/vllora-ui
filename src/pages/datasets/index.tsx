@@ -1,5 +1,5 @@
 import { DatasetsUIProvider, DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
-import { DatasetsListView } from "@/components/datasets/DatasetsListView";
+import { DatasetsTable } from "@/components/datasets/table";
 import { DatasetDetailView } from "@/components/datasets/DatasetDetailView";
 import { LucyDatasetAssistant } from "@/components/datasets/LucyDatasetAssistant";
 
@@ -25,7 +25,7 @@ function DatasetsPageContent() {
             onSelectDataset={navigateToDataset}
           />
         ) : (
-          <DatasetsListView onSelectDataset={navigateToDataset} />
+          <DatasetsTable onSelectDataset={navigateToDataset} />
         )}
       </div>
     </section>

@@ -9,7 +9,7 @@ import { useMemo } from "react";
 import { MessageSquare, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DatasetRecord } from "@/types/dataset-types";
-import type { AvailableTopic } from "../record-utils";
+import type { AvailableTopic } from "../../record-utils";
 import { FormattedThreadPanel } from "./FormattedThreadPanel";
 import { MetadataPanel } from "./MetadataPanel";
 

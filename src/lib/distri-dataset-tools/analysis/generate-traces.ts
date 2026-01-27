@@ -46,7 +46,7 @@ export interface GenerateTracesParams {
   dataset_id?: string;
   dataset_name?: string;
   record_ids?: string[];
-  count?: number; 
+  count?: number;
   max_turns?: number;
   /** Number of parallel generation requests (default: 5) */
   concurrency?: number;
@@ -60,55 +60,259 @@ export interface GenerateTracesParams {
   on_records_added?: (records: DatasetRecord[]) => void | Promise<void>;
 }
 
-const DEFAULT_PERSONA_GUIDANCE = 'Diverse and realistic';
+const TRACE_CONTEXT_SYSTEM_PROMPT = `You generate synthetic user seeds for chat traces.
 
-const SIMULATED_PERSONA_BATCH_PROMPT = `Create a JSON list of 10 diverse user personas who would be interested in the following topic.
+Return a JSON object that matches the provided schema. Follow these rules:
+- Produce the requested number of concise personas for the topic; each is 1-2 sentences describing personality, goals, and chatting style.
+- Personas must differ in tone and expertise (formal/casual/technical; novice/intermediate/expert).
+- Produce the requested number of short user-message variations (≤15 words) that sound like a casual human request/command, not an AI analysis.
+- Do not evaluate, praise, or analyze; avoid robotic phrasing.
+- Keep language simple and natural.
+- Keep each variation aligned to the style/format of the original user message (preserve any mode markers, brevity, and intent).
+- Match the requested batch size exactly for both personas and variations.
 
-Topic: {{subtopics}}
-Topic Guidance: {{persona_guidance}}
+Always respond with JSON only.`;
 
-For each persona, provide:
-1. A short, catchy name for the persona (e.g., "The Curious Child", "The Skeptical Debater").
-2. A 1–2 sentence description of the persona's personality, goals, typical behavior and chatting style.
+const TRACE_CONTEXT_SCHEMA = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'trace_context_batch',
+    strict: true,
+    schema: {
+      type: 'object',
+      properties: {
+        personas: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 1,
+        },
+        variations: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 1,
+        },
+      },
+      required: ['personas', 'variations'],
+      additionalProperties: false,
+    },
+  },
+};
 
-Make the personas highly varied across dimensions such as:
-- Age and life stage (child, teenager, adult, elderly)
-- Attitude toward the AI (trusting, skeptical, playful, commanding, fearful, worshipful)
-- Communication style (formal, casual, poetic, terse, overly polite, rude)
-- Goals or intent (seeking knowledge, entertainment, emotional support, debate, creative collaboration, practical help, testing limits)
-- Background or archetype (scientist, artist, detective, conspiracy theorist, etc.)
+const TRACE_CONTEXT_IN_FLIGHT = new Map<string, Promise<void>>();
+const DEFAULT_PERSONA_FALLBACK = 'A curious user interested in the topic.';
+const DEFAULT_SUMMARY_MAX_LEN = 200;
+const MAX_TRACE_CONTEXT_BATCH = 10;
 
-Output Format:
-[
-  "Persona Description 1...",
-  "Persona Description 2...",
-  ...
-]
+interface TraceContextBatch {
+  personas: string[];
+  variations: string[];
+}
 
-Ensure the list is diverse and creative. Return ONLY the JSON array of strings.`;
+function hashString(value: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+  }
+  return (hash >>> 0).toString(16);
+}
 
-const FINAL_USER_MESSAGE_VARIATION_PROMPT = `You are a user in an ongoing conversation with an AI assistant.
+function normalizeSeedMessages(seedMessages: any[]): SyntheticMessage[] {
+  return seedMessages.map(m => ({
+    role: m.role,
+    content: m.content ?? null,
+    tool_calls: m.tool_calls ?? null,
+    tool_call_id: m.tool_call_id ?? null,
+  }));
+}
 
-Your Persona:
-{{persona}}
+function extractLastUserContext(messages: SyntheticMessage[]): {
+  lastUserIndex: number;
+  originalUserMessage: string;
+  historyBeforeLastUser: SyntheticMessage[];
+} | null {
+  const lastUserIndex = messages
+    .map((m, i) => m.role === 'user' ? i : -1)
+    .filter(i => i !== -1)
+    .pop();
 
-Topic Context:
-{{subtopics}}
+  if (lastUserIndex === undefined || lastUserIndex < 0) return null;
 
-Conversation History:
-{{conversation_history}}
+  return {
+    lastUserIndex,
+    originalUserMessage: messages[lastUserIndex].content || '',
+    historyBeforeLastUser: messages.slice(0, lastUserIndex),
+  };
+}
 
-Original Last User Message:
-{{original_user_message}}
+function buildSeedContextKey(
+  topicKey: string,
+  historyMessages: SyntheticMessage[],
+  originalUserMessage: string
+): string {
+  const historySignature = historyMessages
+    .map(msg => {
+      const toolCalls = msg.tool_calls ? JSON.stringify(msg.tool_calls) : '';
+      const toolCallId = msg.tool_call_id ?? '';
+      return `${msg.role}:${msg.content ?? ''}:${toolCallId}:${toolCalls}`;
+    })
+    .join('\n');
+  const keyInput = `${historySignature}|${originalUserMessage}`;
+  return `${topicKey}:${hashString(keyInput)}`;
+}
 
-Your task is to create a VARIATION of the original last user message above.
-- Keep the same intent and topic as the original
-- Rephrase it in a way that fits your persona
-- Keep it natural and concise (1-3 sentences)
-- It should still make sense in the conversation context
-- Do NOT copy the original verbatim - create a meaningful variation
+function summarizeText(text: string | null, maxLen = DEFAULT_SUMMARY_MAX_LEN): string {
+  if (!text) return '';
+  if (text.length <= maxLen) return text;
+  return `${text.slice(0, maxLen)}...`;
+}
 
-Write only the new user message, nothing else.`;
+function buildConversationSummary(messages: SyntheticMessage[]): string {
+  if (messages.length === 0) return 'None';
+  const parts: string[] = [];
+  for (const msg of messages) {
+    if (msg.role === 'system') {
+      parts.push(`System: ${summarizeText(msg.content)}`);
+      continue;
+    }
+    if (msg.role === 'user') parts.push(`User: ${summarizeText(msg.content)}`);
+    if (msg.role === 'assistant') parts.push(`Assistant: ${summarizeText(msg.content)}`);
+    if (msg.role === 'tool') parts.push(`[Tool result]: ${summarizeText(msg.content)}`);
+  }
+  return parts.join('\n') || 'None';
+}
+
+function buildToolDetails(tools: any[]): string {
+  if (tools.length === 0) return 'None';
+  return tools
+    .map((t: any) => {
+      const name = t?.function?.name || 'unknown_tool';
+      const desc = t?.function?.description ? ` - ${t.function.description}` : '';
+      const paramKeys = Object.keys(t?.function?.parameters?.properties || {});
+      const params = paramKeys.length > 0 ? ` (params: ${paramKeys.join(', ')})` : '';
+      return `- ${name}${desc}${params}`;
+    })
+    .join('\n');
+}
+
+function normalizeTraceContextBatch(
+  personas: string[],
+  variations: string[],
+  requestedCount: number,
+  originalUserMessage: string
+): TraceContextBatch {
+  const cleanPersonas = personas.filter(p => typeof p === 'string');
+  const cleanVariations = variations.filter(v => typeof v === 'string');
+  while (cleanPersonas.length < requestedCount) {
+    cleanPersonas.push(DEFAULT_PERSONA_FALLBACK);
+  }
+  while (cleanVariations.length < requestedCount) {
+    cleanVariations.push(originalUserMessage);
+  }
+  return {
+    personas: cleanPersonas.slice(0, requestedCount),
+    variations: cleanVariations.slice(0, requestedCount),
+  };
+}
+
+function buildTraceContextPrompt(
+  contextStr: string,
+  toolDetails: string,
+  conversationSummary: string,
+  originalUserMessage: string,
+  requestedCount: number
+): string {
+  return [
+    'Context for synthetic trace persona + user-message variations:',
+    `Topic: ${contextStr}`,
+    `Available tools:\n${toolDetails}`,
+    `Conversation summary:\n${conversationSummary}`,
+    `Original user message (full):\n${originalUserMessage}`,
+    `Requested batch size (this call): ${requestedCount}`,
+    'Task: Return JSON only with the requested number of personas and user-message variations that follow the rules.',
+    'Formatting rule: Keep each variation aligned to the style/format of the original user message (e.g., retain mode markers, brevity, and intent).',
+  ].join('\n\n');
+}
+
+async function fetchTraceContextBatch(
+  contextStr: string,
+  existingMessages: SyntheticMessage[],
+  originalUserMessage: string,
+  tools: any[],
+  requestedCount: number
+): Promise<TraceContextBatch> {
+  const toolDetails = buildToolDetails(tools);
+  const conversationSummary = buildConversationSummary(existingMessages);
+  const userPrompt = buildTraceContextPrompt(
+    contextStr,
+    toolDetails,
+    conversationSummary,
+    originalUserMessage,
+    requestedCount
+  );
+
+  const messages = [
+    initMessage('system', TRACE_CONTEXT_SYSTEM_PROMPT),
+    initMessage('user', userPrompt),
+  ];
+
+  const raw = await callLLM(messages, { responseFormat: TRACE_CONTEXT_SCHEMA, temperature: 0.7 });
+  const parsed = tryParseJson<{ personas: string[]; variations: string[] }>(raw);
+  const personas = parsed?.personas?.filter(p => typeof p === 'string') || [];
+  const variations = parsed?.variations?.filter(v => typeof v === 'string') || [];
+
+  return normalizeTraceContextBatch(personas, variations, requestedCount, originalUserMessage);
+}
+
+async function prefetchTraceContextBatch(params: {
+  personaCache: Map<string, string[]>;
+  variationsCache: Map<string, string[]>;
+  contextKey: string;
+  contextStr: string;
+  existingMessages: SyntheticMessage[];
+  originalUserMessage: string;
+  tools: any[];
+  batchCount: number;
+}): Promise<void> {
+  const requestedCount = Math.max(1, Math.floor(params.batchCount));
+
+  while (true) {
+    const existingPersonas = params.personaCache.get(params.contextKey) || [];
+    const existingVariations = params.variationsCache.get(params.contextKey) || [];
+    const existingPairs = Math.min(existingPersonas.length, existingVariations.length);
+    const needed = Math.max(0, requestedCount - existingPairs);
+    if (needed === 0) return;
+
+    const inFlight = TRACE_CONTEXT_IN_FLIGHT.get(params.contextKey);
+    if (inFlight) {
+      await inFlight;
+      continue;
+    }
+
+    const requestCount = Math.min(needed, MAX_TRACE_CONTEXT_BATCH);
+    const fetchPromise = (async () => {
+      const batch = await fetchTraceContextBatch(
+        params.contextStr,
+        params.existingMessages,
+        params.originalUserMessage,
+        params.tools,
+        requestCount
+      );
+      const nextPersonas = (params.personaCache.get(params.contextKey) || []).concat(batch.personas);
+      const nextVariations = (params.variationsCache.get(params.contextKey) || []).concat(batch.variations);
+      const sharedLen = Math.min(nextPersonas.length, nextVariations.length);
+      params.personaCache.set(params.contextKey, nextPersonas.slice(0, sharedLen));
+      params.variationsCache.set(params.contextKey, nextVariations.slice(0, sharedLen));
+    })();
+
+    TRACE_CONTEXT_IN_FLIGHT.set(params.contextKey, fetchPromise);
+    try {
+      await fetchPromise;
+    } finally {
+      TRACE_CONTEXT_IN_FLIGHT.delete(params.contextKey);
+    }
+  }
+}
 
 function initMessage(role: 'system' | 'user' | 'assistant', content: string): DistriMessage {
   return DistriClient.initDistriMessage(role, [{ part_type: 'text', data: content }]);
@@ -124,18 +328,6 @@ function tryParseJson<T>(raw: string): T | null {
   } catch {
     return null;
   }
-}
-
-function parsePersonaList(raw: string): string[] {
-  const parsed = tryParseJson<unknown>(raw);
-  if (Array.isArray(parsed)) {
-    return parsed.map((p) => (typeof p === 'string' ? p : JSON.stringify(p)));
-  }
-  if (typeof parsed === 'string') {
-    return [parsed];
-  }
-  const cleaned = cleanJsonString(raw);
-  return cleaned ? [cleaned] : [];
 }
 
 interface TopicHierarchyNode {
@@ -154,10 +346,8 @@ function extractLeafTopicsFromHierarchy(nodes: TopicHierarchyNode[], parentPath:
   for (const node of nodes) {
     const currentPath = [...parentPath, node.name];
     if (node.children && node.children.length > 0) {
-      // Recurse into children with current path
       leaves.push(...extractLeafTopicsFromHierarchy(node.children, currentPath));
     } else {
-      // Leaf node - add with full path
       leaves.push({ name: node.name, path: currentPath });
     }
   }
@@ -273,22 +463,6 @@ async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function ensureResponseFormat(format?: unknown): unknown | undefined {
-  if (!format || typeof format !== 'object') return undefined;
-  const jsonSchema = (format as { json_schema?: { name?: unknown } }).json_schema;
-  if (!jsonSchema || typeof jsonSchema !== 'object') return format;
-  const name = (jsonSchema as { name?: unknown }).name;
-  if (typeof name !== 'string') {
-    return { ...(format as object), json_schema: { ...jsonSchema, name: 'assistant_turn' } };
-  }
-  const normalized = name.replace(/[^a-zA-Z0-9_-]/g, '_');
-  const safeName = normalized.length > 0 ? normalized : 'assistant_turn';
-  if (safeName !== name) {
-    return { ...(format as object), json_schema: { ...jsonSchema, name: safeName } };
-  }
-  return format;
-}
-
 async function callLLM(
   messages: DistriMessage[],
   options?: { responseFormat?: unknown; temperature?: number }
@@ -299,13 +473,12 @@ async function callLLM(
   const distriClient = DistriClient.create({ baseUrl });
   const modelSettingsFromConfig = lucyConfig.model_settings || {};
   const { response_format: _ignoredResponseFormat, ...modelSettingsBase } = modelSettingsFromConfig as Record<string, unknown>;
-  const responseFormat = ensureResponseFormat(options?.responseFormat);
 
   const modelSettings = {
     ...modelSettingsBase,
     model: modelSettingsFromConfig.model || 'openai/gpt-4.1-mini',
     temperature: options?.temperature ?? modelSettingsFromConfig.temperature ?? 0.5,
-    ...(responseFormat ? { response_format: responseFormat } : {}),
+    ...(options?.responseFormat ? { response_format: options.responseFormat } : {}),
   };
 
   let lastError: unknown;
@@ -327,111 +500,92 @@ async function callLLM(
   throw lastError instanceof Error ? lastError : new Error('LLM call failed');
 }
 
-async function callLLMText(prompt: string, systemPrompt?: string): Promise<string> {
-  const messages = systemPrompt
-    ? [initMessage('system', systemPrompt), initMessage('user', prompt)]
-    : [initMessage('user', prompt)];
-  return callLLM(messages);
-}
-
-async function ensurePersona(
+async function ensurePersonaAndUserMessageVariation(
   personaCache: Map<string, string[]>,
+  variationsCache: Map<string, string[]>,
   topicKey: string,
-  contextStr: string
-): Promise<string> {
-  const cached = personaCache.get(topicKey) || [];
-  if (cached.length === 0) {
-    const prompt = SIMULATED_PERSONA_BATCH_PROMPT
-      .replace('{{subtopics}}', contextStr)
-      .replace('{{persona_guidance}}', DEFAULT_PERSONA_GUIDANCE);
-    const raw = await callLLMText(prompt);
-    const personas = parsePersonaList(raw);
-    if (personas.length > 0) {
-      personaCache.set(topicKey, personas);
-    } else {
-      personaCache.set(topicKey, ['A curious user interested in the topic.']);
-    }
-  }
-
-  const next = personaCache.get(topicKey) || [];
-  return next.shift() || 'A curious user interested in the topic.';
-}
-
-async function generateFinalUserMessage(
   contextStr: string,
-  persona: string,
   existingMessages: SyntheticMessage[],
-  originalUserMessage: string
-): Promise<string> {
-  // Build conversation history string (excluding the last user message we're replacing)
-  const historyParts: string[] = [];
-  for (const msg of existingMessages) {
-    if (msg.role === 'system') continue;
-    if (msg.role === 'user') historyParts.push(`User: ${msg.content}`);
-    if (msg.role === 'assistant') historyParts.push(`Assistant: ${msg.content}`);
-    if (msg.role === 'tool') historyParts.push(`[Tool result]: ${msg.content}`);
+  originalUserMessage: string,
+  tools: any[],
+  batchCount: number
+): Promise<{ persona: string; userMessage: string }> {
+  const contextKey = buildSeedContextKey(topicKey, existingMessages, originalUserMessage);
+  const cachedPersonas = personaCache.get(contextKey) || [];
+  const cachedVariations = variationsCache.get(contextKey) || [];
+
+  if (cachedPersonas.length > 0 && cachedVariations.length > 0) {
+    return {
+      persona: cachedPersonas.shift() || DEFAULT_PERSONA_FALLBACK,
+      userMessage: cachedVariations.shift() || originalUserMessage,
+    };
   }
 
-  const prompt = FINAL_USER_MESSAGE_VARIATION_PROMPT
-    .replace('{{subtopics}}', contextStr)
-    .replace('{{persona}}', persona)
-    .replace('{{conversation_history}}', historyParts.join('\n'))
-    .replace('{{original_user_message}}', originalUserMessage);
+  await prefetchTraceContextBatch({
+    personaCache,
+    variationsCache,
+    contextKey,
+    contextStr,
+    existingMessages,
+    originalUserMessage,
+    tools,
+    batchCount,
+  });
 
-  const content = await callLLMText(prompt);
-  return content.trim();
+  const personaPool = personaCache.get(contextKey) || [];
+  const variationPool = variationsCache.get(contextKey) || [];
+
+  return {
+    persona: personaPool.shift() || DEFAULT_PERSONA_FALLBACK,
+    userMessage: variationPool.shift() || originalUserMessage,
+  };
 }
 
 async function simulateConversation(
   topicPath: string[],
   seedMessages: any[],
   tools: any[],
-  personaCache: Map<string, string[]>
+  personaCache: Map<string, string[]>,
+  variationsCache: Map<string, string[]>,
+  batchCount = 1
 ): Promise<SyntheticTraceRecord | null> {
   const topicStr = topicPath.join(' -> ');
   const topicKey = topicPath.join('/');
   const contextStr = topicStr;
-
-  const persona = await ensurePersona(personaCache, topicKey, contextStr);
+  let personaForTrace = DEFAULT_PERSONA_FALLBACK;
 
   // Copy seed messages
-  const messages: SyntheticMessage[] = seedMessages.map(m => ({
-    role: m.role,
-    content: m.content ?? null,
-    tool_calls: m.tool_calls ?? null,
-    tool_call_id: m.tool_call_id ?? null,
-  }));
+  const messages: SyntheticMessage[] = normalizeSeedMessages(seedMessages);
 
-  // Find last user message index
-  const lastUserIndex = messages.map((m, i) => m.role === 'user' ? i : -1)
-    .filter(i => i !== -1)
-    .pop();
+  const context = extractLastUserContext(messages);
+  if (context) {
+    const { lastUserIndex, originalUserMessage, historyBeforeLastUser } = context;
 
-  if (lastUserIndex !== undefined && lastUserIndex >= 0) {
-    // Get original user message content
-    const originalUserMessage = messages[lastUserIndex].content || '';
-
-    // Get conversation history BEFORE the last user message (for context)
-    const historyBeforeLastUser = messages.slice(0, lastUserIndex);
-
-    // Generate variation of the last user message
-    const newUserMsg = await generateFinalUserMessage(
+    const { persona, userMessage: newUserMsg } = await ensurePersonaAndUserMessageVariation(
+      personaCache,
+      variationsCache,
+      topicKey,
       contextStr,
-      persona,
       historyBeforeLastUser,
-      originalUserMessage
+      originalUserMessage,
+      tools,
+      batchCount
     );
+    personaForTrace = persona;
 
-    // Replace the last user message with the variation
-    messages[lastUserIndex] = {
+    // Truncate messages to only include up to (but not including) the last user message
+    // Then add our new variation - this removes any assistant/tool responses that were
+    // based on the original user message
+    messages.length = lastUserIndex;
+    messages.push({
       role: 'user',
       content: newUserMsg,
       tool_calls: null,
       tool_call_id: null,
-    };
+    });
   }
 
-  return { topic_path: topicPath, persona, messages };
+  return { topic_path: topicPath, persona: personaForTrace, messages };
 }
 
 const DEFAULT_CONCURRENCY = 5;
@@ -469,6 +623,60 @@ interface GenerationCallbacks {
   on_records_added?: (records: DatasetRecord[]) => void | Promise<void>;
 }
 
+async function prefetchTraceContextsForTopic(
+  task: TopicGenerationTask,
+  personaCache: Map<string, string[]>,
+  variationsCache: Map<string, string[]>
+): Promise<void> {
+  if (task.recordsToGenerate <= 0) return;
+  const topicKey = task.topicPath.join('/');
+  const contextStr = task.topicPath.join(' -> ');
+  const contextRequests = new Map<string, {
+    count: number;
+    historyBeforeLastUser: SyntheticMessage[];
+    originalUserMessage: string;
+  }>();
+
+  for (let i = 0; i < task.recordsToGenerate; i++) {
+    const seedRecord = task.seedRecords[i % task.seedRecords.length];
+    const seedMessages = extractSeedMessages(seedRecord);
+    const normalizedMessages = normalizeSeedMessages(seedMessages);
+    const context = extractLastUserContext(normalizedMessages);
+    if (!context) continue;
+
+    const { historyBeforeLastUser, originalUserMessage } = context;
+    const contextKey = buildSeedContextKey(topicKey, historyBeforeLastUser, originalUserMessage);
+    const existing = contextRequests.get(contextKey);
+
+    if (existing) {
+      existing.count += 1;
+    } else {
+      contextRequests.set(contextKey, {
+        count: 1,
+        historyBeforeLastUser,
+        originalUserMessage,
+      });
+    }
+  }
+
+  if (contextRequests.size === 0) return;
+
+  const prefetchPromises = Array.from(contextRequests.entries()).map(([contextKey, entry]) =>
+    prefetchTraceContextBatch({
+      personaCache,
+      variationsCache,
+      contextKey,
+      contextStr,
+      existingMessages: entry.historyBeforeLastUser,
+      originalUserMessage: entry.originalUserMessage,
+      tools: task.tools,
+      batchCount: entry.count,
+    })
+  );
+
+  await Promise.allSettled(prefetchPromises);
+}
+
 /**
  * Generate a single record for a topic
  * Returns the record data or null if generation failed
@@ -477,6 +685,7 @@ async function generateSingleRecord(
   task: TopicGenerationTask,
   recordIndex: number,
   personaCache: Map<string, string[]>,
+  variationsCache: Map<string, string[]>,
   callbacks: GenerationCallbacks
 ): Promise<{ record: TopicGenerationResult['records'][0]; error?: string } | { record: null; error: string }> {
   try {
@@ -487,7 +696,8 @@ async function generateSingleRecord(
       task.topicPath,
       seedMessages,
       task.tools,
-      personaCache
+      personaCache,
+      variationsCache
     );
 
     if (!simulated) {
@@ -547,11 +757,14 @@ async function generateSingleRecord(
 async function generateRecordsForTopic(
   task: TopicGenerationTask,
   personaCache: Map<string, string[]>,
+  variationsCache: Map<string, string[]>,
   callbacks: GenerationCallbacks
 ): Promise<TopicGenerationResult> {
+  await prefetchTraceContextsForTopic(task, personaCache, variationsCache);
+
   // Generate all records for this topic in parallel
   const recordPromises = Array.from({ length: task.recordsToGenerate }, (_, i) =>
-    generateSingleRecord(task, i, personaCache, callbacks)
+    generateSingleRecord(task, i, personaCache, variationsCache, callbacks)
   );
 
   const results = await Promise.allSettled(recordPromises);
@@ -644,6 +857,7 @@ export async function generateTraces(params: GenerateTracesParams): Promise<Gene
       tools: effectiveTools,
     }));
     const personaCache = new Map<string, string[]>();
+    const variationsCache = new Map<string, string[]>();
     const allErrors: string[] = [];
 
     // Shared progress counter for real-time tracking across parallel topics
@@ -664,7 +878,7 @@ export async function generateTraces(params: GenerateTracesParams): Promise<Gene
 
       // Run topic tasks in parallel - each task handles DB writes and progress updates internally
       const batchResults = await Promise.allSettled(
-        batchTasks.map(task => generateRecordsForTopic(task, personaCache, callbacks))
+        batchTasks.map(task => generateRecordsForTopic(task, personaCache, variationsCache, callbacks))
       );
       // Collect errors from completed tasks
       for (let j = 0; j < batchResults.length; j++) {

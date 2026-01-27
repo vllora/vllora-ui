@@ -7,7 +7,7 @@
 import { DatasetEvaluation } from "@/types/dataset-types";
 import { cn } from "@/lib/utils";
 import { Star } from "lucide-react";
-import { COLUMN_WIDTHS } from "../table-columns";
+import { COLUMN_WIDTHS } from "../../table-columns";
 
 interface EvaluationCellProps {
   evaluation?: DatasetEvaluation;

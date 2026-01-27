@@ -1,5 +1,5 @@
 /**
- * DatasetsListView
+ * DatasetsTable
  *
  * Displays the list of all datasets in a table view.
  */
@@ -11,18 +11,18 @@ import { toast } from "sonner";
 import {
   DeleteConfirmationDialog,
   type DeleteConfirmation,
-} from "./DeleteConfirmationDialog";
+} from "../DeleteConfirmationDialog";
 import { DatasetTableRow } from "./DatasetTableRow";
 import { DatasetsEmptyState } from "./DatasetsEmptyState";
 import { DatasetsListHeader } from "./DatasetsListHeader";
 import { DatasetsNoResultsState } from "./DatasetsNoResultsState";
-import { IngestDataDialog, type ImportResult } from "./IngestDataDialog";
+import { IngestDataDialog, type ImportResult } from "../IngestDataDialog";
 
-interface DatasetsListViewProps {
+interface DatasetsTableProps {
   onSelectDataset: (datasetId: string) => void;
 }
 
-export function DatasetsListView({ onSelectDataset }: DatasetsListViewProps) {
+export function DatasetsTable({ onSelectDataset }: DatasetsTableProps) {
   const {
     datasets,
     isLoading,

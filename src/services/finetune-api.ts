@@ -1,6 +1,6 @@
 import { apiClient, handleApiResponse, getAuthToken } from "@/lib/api-client";
 import { getBackendUrl } from "@/config/api";
-import { DatasetWithRecords, DatasetRecord, DataInfo } from "@/types/dataset-types";
+import { DatasetWithRecords, DatasetRecord, DataInfo, EvaluationConfig, BackendEvaluator } from "@/types/dataset-types";
 
 // ============================================================================
 // Types
@@ -163,20 +163,69 @@ export function datasetToJsonl(records: DatasetRecord[]): string {
   return lines.join('\n');
 }
 
+/**
+ * Convert FE EvaluationConfig to backend Evaluator format
+ */
+export function evaluationConfigToBackendEvaluator(config: EvaluationConfig): BackendEvaluator {
+  if (config.type === 'llm_as_judge') {
+    return {
+      type: 'llm_as_judge',
+      config: {
+        prompt_template: config.promptTemplate,
+        output_schema: config.outputSchema,
+        completion_params: {
+          model_name: config.completionParams.model,
+          temperature: config.completionParams.temperature,
+          max_tokens: config.completionParams.maxTokens,
+        },
+      },
+    };
+  } else {
+    return {
+      type: 'js',
+      config: {
+        script: config.script,
+        completion_params: {
+          model_name: config.completionParams.model,
+          temperature: config.completionParams.temperature,
+          max_tokens: config.completionParams.maxTokens,
+        },
+      },
+    };
+  }
+}
+
 // ============================================================================
 // API Functions
 // ============================================================================
 
 /**
  * Upload a dataset file (JSONL format) to the provider
+ * @param jsonlContent - JSONL content for training
+ * @param topicHierarchy - Optional topic hierarchy JSON string
+ * @param evaluator - Optional evaluator config JSON string
  */
-export async function uploadDataset(jsonlContent: string): Promise<DatasetUploadResponse> {
+export async function uploadDataset(
+  jsonlContent: string,
+  topicHierarchy?: string,
+  evaluator?: string
+): Promise<DatasetUploadResponse> {
   const apiUrl = getBackendUrl();
   const formData = new FormData();
 
   // Create a Blob from the JSONL content
   const blob = new Blob([jsonlContent], { type: 'application/x-ndjson' });
   formData.append('file', blob, 'training.jsonl');
+
+  // Add topic hierarchy if provided
+  if (topicHierarchy) {
+    formData.append('topic_hierarchy', topicHierarchy);
+  }
+
+  // Add evaluator if provided
+  if (evaluator) {
+    formData.append('evaluator', evaluator);
+  }
 
   // Build headers
   const headers: Record<string, string> = {};
@@ -257,8 +306,18 @@ export async function uploadDatasetForFinetune(
     throw new Error('No valid training records found in dataset');
   }
 
-  // Upload dataset
-  const uploadResult = await uploadDataset(jsonlContent);
+  // Extract topic hierarchy if available
+  const topicHierarchy = dataset.topicHierarchy?.hierarchy
+    ? JSON.stringify(dataset.topicHierarchy.hierarchy)
+    : undefined;
+
+  // Extract evaluator config if available
+  const evaluator = dataset.evaluationConfig
+    ? JSON.stringify(evaluationConfigToBackendEvaluator(dataset.evaluationConfig))
+    : undefined;
+
+  // Upload dataset with topic hierarchy and evaluator
+  const uploadResult = await uploadDataset(jsonlContent, topicHierarchy, evaluator);
 
   return {
     backendDatasetId: uploadResult.dataset_id,
