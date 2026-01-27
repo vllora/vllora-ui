@@ -89,6 +89,7 @@ export function DatasetDetailContentV2() {
     handleRenameTopicInRecords,
     handleDeleteTopicFromRecords,
     handleDeleteTopic,
+    handleImportRecords,
     recordsWithTopicsCount,
   } = DatasetDetailConsumer();
 
@@ -349,9 +350,7 @@ export function DatasetDetailContentV2() {
         open={importDialog}
         onOpenChange={setImportDialog}
         datasetId={dataset.id}
-        onImport={async () => {
-          // Refresh will happen automatically via context
-        }}
+        onImport={handleImportRecords}
         currentRecordCount={sortedRecords.length}
       />
 
