@@ -26,7 +26,7 @@ import { DatasetDetailHeader } from "./DatasetDetailHeader";
 import { LucyDatasetAssistant } from "./LucyDatasetAssistant";
 import { EvaluationConfigDialog } from "./evaluation-dialog/EvaluationConfigDialog";
 import { updateDatasetEvaluationConfig } from "@/services/datasets-db";
-import type { EvaluationConfig, TopicHierarchyNode } from "@/types/dataset-types";
+import type { CoverageStats, EvaluationConfig, TopicHierarchyNode } from "@/types/dataset-types";
 
 export function DatasetDetailContentV2() {
   const {
@@ -111,6 +111,27 @@ export function DatasetDetailContentV2() {
     () => sortedRecords.filter((record) => selectedRecordIds.has(record.id)),
     [sortedRecords, selectedRecordIds]
   );
+
+  // Compute coverage stats for canvas - use dataset.coverageStats if available,
+  // otherwise derive from dataset.stats (which has the same topicDistribution data)
+  const canvasCoverageStats = useMemo((): CoverageStats | undefined => {
+    // Prefer explicit coverageStats from analyze_coverage
+    if (dataset?.coverageStats) {
+      return dataset.coverageStats;
+    }
+    // Fallback to stats from get_dataset_stats
+    if (dataset?.stats) {
+      return {
+        balanceScore: 0, // Not computed in stats, default to 0
+        balanceRating: 'fair', // Default rating
+        topicDistribution: dataset.stats.topicDistribution,
+        uncategorizedCount: dataset.stats.uncategorizedCount,
+        totalRecords: dataset.stats.totalRecords,
+        lastCalculatedAt: dataset.stats.lastCalculatedAt,
+      };
+    }
+    return undefined;
+  }, [dataset?.coverageStats, dataset?.stats]);
 
   // Wrapper for auto-tagging that closes the dialog when done
   const handleAutoTagSelected = async () => {
@@ -286,7 +307,7 @@ export function DatasetDetailContentV2() {
             hierarchy={dataset.topicHierarchy?.hierarchy}
             records={sortedRecords}
             datasetId={datasetId}
-            coverageStats={dataset.coverageStats}
+            coverageStats={canvasCoverageStats}
             onSelectTopic={setSelectedTopic}
             selectedTopic={selectedTopic}
             onAddTopic={handleAddTopic}

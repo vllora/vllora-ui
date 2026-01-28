@@ -163,20 +163,40 @@ export function TopicNodeHeader({
           </div>
         )}
         {!isExpanded && !isEditing && (
-          <p className="text-xs text-muted-foreground">
-            {isEmptyRoot
-              ? "All records assigned"
-              : (
-                <>
-                  {recordCount.toLocaleString()} record{recordCount !== 1 ? "s" : ""}
-                  {coveragePercentage !== undefined && (
-                    <span className="ml-1.5 text-emerald-500/80">
-                      ({coveragePercentage.toFixed(1)}%)
-                    </span>
-                  )}
-                </>
-              )}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-muted-foreground">
+              {isEmptyRoot
+                ? "All records assigned"
+                : `${recordCount.toLocaleString()} record${recordCount !== 1 ? "s" : ""}`}
+            </p>
+            {coveragePercentage !== undefined && !isEmptyRoot && (
+              <div className="flex items-center gap-1.5">
+                {/* Progress bar */}
+                <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all",
+                      coveragePercentage >= 20 ? "bg-emerald-500" :
+                      coveragePercentage >= 10 ? "bg-yellow-500" :
+                      coveragePercentage >= 5 ? "bg-orange-500" :
+                      "bg-red-500"
+                    )}
+                    style={{ width: `${Math.min(coveragePercentage * 5, 100)}%` }}
+                  />
+                </div>
+                {/* Percentage text */}
+                <span className={cn(
+                  "text-[10px] font-medium tabular-nums",
+                  coveragePercentage >= 20 ? "text-emerald-500" :
+                  coveragePercentage >= 10 ? "text-yellow-500" :
+                  coveragePercentage >= 5 ? "text-orange-500" :
+                  "text-red-500"
+                )}>
+                  {coveragePercentage.toFixed(1)}%
+                </span>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
