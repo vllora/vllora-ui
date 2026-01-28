@@ -29,6 +29,8 @@ export const getDatasetRecordsHandler: ToolHandler = async (params) => {
     const off = typeof offset === 'number' ? offset : 0;
     const paginatedRecords = records.slice(off, off + lim);
 
+    const hasMore = off + lim < records.length;
+
     return {
       success: true,
       records: paginatedRecords.map((r) => {
@@ -43,8 +45,12 @@ export const getDatasetRecordsHandler: ToolHandler = async (params) => {
         };
       }),
       total: records.length,
+      returned: paginatedRecords.length,
       limit: lim,
       offset: off,
+      has_more: hasMore,
+      // Hint to agent: use get_dataset_stats for counts, this is just for sampling content
+      note: hasMore ? `Showing ${paginatedRecords.length} of ${records.length} records. Use get_dataset_stats for full counts - do NOT paginate through all records.` : undefined,
     };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to get records' };
@@ -53,7 +59,7 @@ export const getDatasetRecordsHandler: ToolHandler = async (params) => {
 
 export const getDatasetRecordsTool: DistriFnTool = {
   name: 'get_dataset_records',
-  description: 'Get dataset records with optional filtering and pagination.',
+  description: 'Get sample records to preview content. Use limit=10-20 for representative samples. Do NOT paginate through all records - use get_dataset_stats for counts.',
   type: 'function',
   parameters: {
     type: 'object',

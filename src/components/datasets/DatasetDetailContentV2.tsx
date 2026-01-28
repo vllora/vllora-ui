@@ -286,6 +286,7 @@ export function DatasetDetailContentV2() {
             hierarchy={dataset.topicHierarchy?.hierarchy}
             records={sortedRecords}
             datasetId={datasetId}
+            coverageStats={dataset.coverageStats}
             onSelectTopic={setSelectedTopic}
             selectedTopic={selectedTopic}
             onAddTopic={handleAddTopic}

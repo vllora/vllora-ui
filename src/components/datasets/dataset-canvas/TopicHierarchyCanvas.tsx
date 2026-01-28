@@ -32,7 +32,7 @@ import {
   DEFAULT_EDGE_STYLE,
   HIGHLIGHTED_EDGE_STYLE,
 } from "./useDagreLayout";
-import type { TopicHierarchyNode, DatasetRecord } from "@/types/dataset-types";
+import type { TopicHierarchyNode, DatasetRecord, CoverageStats } from "@/types/dataset-types";
 
 // Custom node types with proper typing
 const nodeTypes = {
@@ -48,6 +48,8 @@ interface TopicHierarchyCanvasProps {
   records: DatasetRecord[];
   /** Dataset ID */
   datasetId?: string;
+  /** Coverage stats for showing distribution info on nodes */
+  coverageStats?: CoverageStats;
   /** Called when a topic node is selected to view its data */
   onSelectTopic?: (topicName: string | null) => void;
   /** Currently selected topic (null = root/all) */
@@ -249,6 +251,7 @@ export function TopicHierarchyCanvas({
   hierarchy,
   records,
   datasetId,
+  coverageStats,
   onSelectTopic,
   selectedTopic,
   onAddTopic,
@@ -264,6 +267,7 @@ export function TopicHierarchyCanvas({
       records={records}
       datasetId={datasetId}
       hierarchy={hierarchy}
+      coverageStats={coverageStats}
       selectedTopic={selectedTopic}
       onSelectTopic={onSelectTopic}
       onAddTopic={onAddTopic}

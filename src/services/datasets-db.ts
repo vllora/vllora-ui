@@ -930,3 +930,36 @@ export async function updateDatasetDryRunStats(
   });
 }
 
+/**
+ * Update dataset statistics
+ */
+export async function updateDatasetStats(
+  datasetId: string,
+  stats: import('@/types/dataset-types').DatasetStats
+): Promise<void> {
+  const db = await getDB();
+  const now = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('datasets', 'readwrite');
+    const store = tx.objectStore('datasets');
+
+    const getRequest = store.get(datasetId);
+    getRequest.onsuccess = () => {
+      const dataset = getRequest.result;
+      if (dataset) {
+        dataset.stats = stats;
+        dataset.updatedAt = now;
+        store.put(dataset);
+      }
+    };
+
+    tx.oncomplete = () => {
+      // Emit refresh event so context auto-syncs with IndexedDB
+      emitter.emit(DATASET_REFRESH_EVENT as any, { datasetId });
+      resolve();
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+

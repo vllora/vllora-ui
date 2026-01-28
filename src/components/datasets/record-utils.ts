@@ -6,8 +6,9 @@ import { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 
 /** Available topic for selection in TopicCell */
 export interface AvailableTopic {
-  name: string;
-  path: string[]; // Full path from root to this topic
+  id: string;     // Unique identifier (matches record.topic)
+  name: string;   // Display name
+  path: string[]; // Full path from root to this topic (names)
 }
 
 /**
@@ -31,6 +32,7 @@ export function getLeafTopicsFromHierarchy(
     } else {
       // Leaf node - add as available topic
       topics.push({
+        id: node.id || node.name,  // Use id for matching with record.topic
         name: node.name,
         path: currentPath,
       });
@@ -57,6 +59,7 @@ export function getAllTopicsFromHierarchy(
 
     // Add this topic
     topics.push({
+      id: node.id || node.name,  // Use id for matching with record.topic
       name: node.name,
       path: currentPath,
     });

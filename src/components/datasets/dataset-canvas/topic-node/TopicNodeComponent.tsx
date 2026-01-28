@@ -44,6 +44,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
     recordsByTopic,
     datasetId,
     availableTopics,
+    coverageStats,
     selectedTopic,
     setSelectedTopic,
     isNodeExpanded,
@@ -62,6 +63,12 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
   // Use "__root__" as special value for root selection, null means nothing selected
   const isSelected = isRoot ? selectedTopic === "__root__" : selectedTopic === name;
   const records = recordsByTopic[topicKey] || [];
+
+  // Compute coverage percentage from coverageStats
+  // coverageStats.topicDistribution has counts per topic, totalRecords has total
+  const coveragePercentage = coverageStats && coverageStats.totalRecords > 0 && !isRoot
+    ? ((coverageStats.topicDistribution[topicKey] || 0) / coverageStats.totalRecords) * 100
+    : undefined;
 
   // Handlers
   const handleSelect = () => {
@@ -155,6 +162,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
           recordCount={recordCount}
           isRoot={isRoot}
           isSelected={isSelected}
+          coveragePercentage={coveragePercentage}
           onToggleExpansion={handleToggleExpansion}
           onRename={handleRename}
         />

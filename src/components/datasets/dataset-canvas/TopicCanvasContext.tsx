@@ -6,7 +6,7 @@
  */
 
 import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from "react";
-import type { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
+import type { DatasetRecord, TopicHierarchyNode, CoverageStats } from "@/types/dataset-types";
 import { getAllTopicsFromHierarchy } from "../record-utils";
 
 // ============================================================================
@@ -19,6 +19,8 @@ export interface TopicCanvasProviderProps {
   datasetId?: string;
   /** Topic hierarchy for computing available topics */
   hierarchy?: TopicHierarchyNode[];
+  /** Coverage stats for showing distribution info on nodes */
+  coverageStats?: CoverageStats;
   selectedTopic?: string | null;
   onSelectTopic?: (topicName: string | null) => void;
   onAddTopic?: (parentTopicName: string | null) => void;
@@ -41,6 +43,7 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     records,
     datasetId,
     hierarchy,
+    coverageStats,
     selectedTopic: externalSelectedTopic,
     onSelectTopic,
     onAddTopic,
@@ -153,6 +156,7 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     recordsByTopic,
     datasetId,
     availableTopics,
+    coverageStats,
     selectedTopic,
     setSelectedTopic,
     expandedNodes,

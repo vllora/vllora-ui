@@ -14,6 +14,8 @@ interface TopicNodeHeaderProps {
   recordCount: number;
   isRoot: boolean;
   isExpanded: boolean;
+  /** Coverage percentage from coverageStats (0-100) */
+  coveragePercentage?: number;
   onToggleExpansion: () => void;
   /** Called when the topic is renamed. Only available for non-root nodes. */
   onRename?: (newName: string) => void;
@@ -26,6 +28,7 @@ export function TopicNodeHeader({
   recordCount,
   isRoot,
   isExpanded,
+  coveragePercentage,
   onToggleExpansion,
   onRename,
 }: TopicNodeHeaderProps) {
@@ -163,7 +166,16 @@ export function TopicNodeHeader({
           <p className="text-xs text-muted-foreground">
             {isEmptyRoot
               ? "All records assigned"
-              : `${recordCount.toLocaleString()} record${recordCount !== 1 ? "s" : ""}`}
+              : (
+                <>
+                  {recordCount.toLocaleString()} record{recordCount !== 1 ? "s" : ""}
+                  {coveragePercentage !== undefined && (
+                    <span className="ml-1.5 text-emerald-500/80">
+                      ({coveragePercentage.toFixed(1)}%)
+                    </span>
+                  )}
+                </>
+              )}
           </p>
         )}
       </div>

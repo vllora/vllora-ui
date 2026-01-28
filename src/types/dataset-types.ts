@@ -119,6 +119,39 @@ export interface BackendJsEvaluator {
 // Union type for backend evaluator
 export type BackendEvaluator = BackendLlmAsJudgeEvaluator | BackendJsEvaluator;
 
+// Sanitization hygiene report (subset of HygieneReport for storage)
+export interface SanitizationStats {
+  validRecords: number;
+  invalidRecords: number;
+  duplicateRecords: number;
+  validationRate: number; // 0-1
+  errorsByType: Record<string, number>;
+  recommendations: string[];
+}
+
+// Dataset statistics computed by get_dataset_stats tool
+// Stored on dataset for UI display and agent reference
+export interface DatasetStats {
+  // Record counts
+  totalRecords: number;
+  generatedRecords: number;
+  originalRecords: number;
+  // Message stats
+  totalMessages: number;
+  averageMessagesPerRecord: number;
+  // Topic info
+  topicDistribution: Record<string, number>;
+  topicCount: number;
+  uncategorizedCount: number;
+  // Configuration flags
+  hasTopicHierarchy: boolean;
+  hasEvaluationConfig: boolean;
+  // Sanitization/validation stats
+  sanitization?: SanitizationStats;
+  // When stats were last calculated
+  lastCalculatedAt: number;
+}
+
 // Coverage statistics stored on dataset for UI display
 export interface CoverageStats {
   // Balance score (0-1, where 1 is perfectly balanced)
@@ -280,6 +313,8 @@ export interface Dataset {
   coverageStats?: CoverageStats;
   // Dry run statistics for UI display (updated by run_dry_run)
   dryRunStats?: DryRunStats;
+  // Dataset statistics for UI display (updated by get_dataset_stats)
+  stats?: DatasetStats;
 }
 
 // Combined view for UI (dataset + its records)

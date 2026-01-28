@@ -90,6 +90,7 @@ export function DatasetDetailHeader({ onStepClick }: DatasetDetailHeaderProps) {
   const name = dataset?.name ?? "";
   const recordCount = records.length;
   const updatedAt = dataset?.updatedAt;
+  const stats = dataset?.stats;
 
   const handleStartEdit = () => {
     setEditingName(name);
@@ -186,6 +187,32 @@ export function DatasetDetailHeader({ onStepClick }: DatasetDetailHeaderProps) {
           )}
           <p className="text-xs italic text-muted-foreground">
             {recordCount.toLocaleString()} total records
+            {stats && stats.generatedRecords > 0 && (
+              <>
+                <span className="mx-2">•</span>
+                <span>{stats.generatedRecords.toLocaleString()} generated</span>
+              </>
+            )}
+            {stats && stats.topicCount > 0 && (
+              <>
+                <span className="mx-2">•</span>
+                <span>{stats.topicCount} topics</span>
+              </>
+            )}
+            {stats && stats.uncategorizedCount > 0 && (
+              <>
+                <span className="mx-2">•</span>
+                <span className="text-amber-500">{stats.uncategorizedCount} uncategorized</span>
+              </>
+            )}
+            {stats?.sanitization && (
+              <>
+                <span className="mx-2">•</span>
+                <span className={stats.sanitization.validationRate >= 0.9 ? "text-emerald-500" : stats.sanitization.validationRate >= 0.7 ? "text-amber-500" : "text-red-500"}>
+                  {Math.round(stats.sanitization.validationRate * 100)}% valid
+                </span>
+              </>
+            )}
             {updatedAt && (
               <>
                 <span className="mx-2">•</span>

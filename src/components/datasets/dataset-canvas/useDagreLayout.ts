@@ -292,7 +292,9 @@ export function useDagreLayout(
         }
         const nodeId = `topic-${node.id || node.name}`;
         const hasChildren = node.children && node.children.length > 0;
-        const recordCount = node.name ? (recordCountsByTopic[node.name] || 0) : 0;
+        // Look up by node.id (records store topic as ID, not name)
+        const nodeTopicId = node.id || node.name;
+        const recordCount = nodeTopicId ? (recordCountsByTopic[nodeTopicId] || 0) : 0;
 
         // Track mappings for path highlighting
         if (node.name) {
@@ -307,7 +309,7 @@ export function useDagreLayout(
           position: { x: 0, y: 0 }, // Will be updated by dagre
           data: {
             name: nodeName,
-            topicKey: nodeName,
+            topicKey: nodeTopicId, // Use ID for lookup (records store topic as ID)
             nodeId: nodeId,
             recordCount,
             isRoot: false,
