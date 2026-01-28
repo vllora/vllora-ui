@@ -5,26 +5,20 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import * as workflowDB from '@/services/finetune-workflow-db';
 import * as datasetsDB from '@/services/datasets-db';
 import type { ToolHandler } from '../types';
 
 export const getDatasetStatsHandler: ToolHandler = async (params) => {
   try {
-    const { workflow_id } = params;
+    const { dataset_id } = params;
 
-    if (!workflow_id || typeof workflow_id !== 'string') {
-      return { success: false, error: 'workflow_id is required' };
-    }
-
-    const workflow = await workflowDB.getWorkflow(workflow_id);
-    if (!workflow) {
-      return { success: false, error: 'Workflow not found' };
+    if (!dataset_id || typeof dataset_id !== 'string') {
+      return { success: false, error: 'dataset_id is required' };
     }
 
     // Get records and dataset
-    const records = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);
-    const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
+    const records = await datasetsDB.getRecordsByDatasetId(dataset_id);
+    const dataset = await datasetsDB.getDatasetById(dataset_id);
 
     // Calculate stats
     const byTopic: Record<string, number> = {};
@@ -60,15 +54,14 @@ export const getDatasetStatsHandler: ToolHandler = async (params) => {
 
 export const getDatasetStatsTool: DistriFnTool = {
   name: 'get_dataset_stats',
-  description: 'Get statistics about the dataset.',
+  description: 'Get statistics about the dataset including record counts, topic distribution, and message stats.',
   type: 'function',
   parameters: {
     type: 'object',
     properties: {
-      workflow_id: { type: 'string', description: 'The workflow ID' },
+      dataset_id: { type: 'string', description: 'The dataset ID' },
     },
-    required: ['workflow_id'],
+    required: ['dataset_id'],
   },
-  autoExecute: true,
   handler: async (input) => JSON.stringify(await getDatasetStatsHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

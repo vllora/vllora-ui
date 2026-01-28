@@ -93,6 +93,5 @@ export const updateRecordTool: DistriFnTool = {
     },
     required: ['workflow_id', 'record_id', 'updates'],
   },
-  autoExecute: true,
   handler: async (input) => JSON.stringify(await updateRecordHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

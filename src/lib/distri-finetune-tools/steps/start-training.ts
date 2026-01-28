@@ -95,6 +95,5 @@ export const startTrainingTool: DistriFnTool = {
     },
     required: ['workflow_id'],
   },
-  autoExecute: true,
   handler: async (input) => JSON.stringify(await startTrainingHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

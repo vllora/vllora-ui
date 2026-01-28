@@ -98,6 +98,5 @@ export const analyzeCoverageTool: DistriFnTool = {
     },
     required: ['workflow_id'],
   },
-  autoExecute: true,
   handler: async (input) => JSON.stringify(await analyzeCoverageHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

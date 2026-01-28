@@ -95,6 +95,5 @@ export const validateRecordsTool: DistriFnTool = {
     },
     required: ['workflow_id'],
   },
-  autoExecute: true,
   handler: async (input) => JSON.stringify(await validateRecordsHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

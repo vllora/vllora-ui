@@ -152,7 +152,6 @@ export const startFinetuneWorkflowTool: DistriFnTool = {
     },
     required: ['dataset_id', 'training_goals'],
   },
-  autoExecute: true,
   handler: async (input) => JSON.stringify(await startFinetuneWorkflowHandler(input as Record<string, unknown>)),
 } as DistriFnTool;
 
@@ -201,7 +200,6 @@ export const getWorkflowStatusTool: DistriFnTool = {
     },
     required: [],
   },
-  autoExecute: true,
   handler: async (input) => JSON.stringify(await getWorkflowStatusHandler(input as Record<string, unknown>)),
 } as DistriFnTool;
 
@@ -275,7 +273,6 @@ export const advanceToStepTool: DistriFnTool = {
     },
     required: ['workflow_id', 'step'],
   },
-  autoExecute: true,
   handler: async (input) => JSON.stringify(await advanceToStepHandler(input as Record<string, unknown>)),
 } as DistriFnTool;
 
@@ -399,7 +396,6 @@ export const rollbackToStepTool: DistriFnTool = {
     },
     required: ['workflow_id'],
   },
-  autoExecute: true,
   handler: async (input) => JSON.stringify(await rollbackToStepHandler(input as Record<string, unknown>)),
 } as DistriFnTool;
 

@@ -93,6 +93,5 @@ export const uploadDatasetTool: DistriFnTool = {
     },
     required: ['workflow_id'],
   },
-  autoExecute: true,
   handler: async (input) => JSON.stringify(await uploadDatasetHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

@@ -71,6 +71,5 @@ export const deployModelTool: DistriFnTool = {
     },
     required: ['workflow_id'],
   },
-  autoExecute: true,
   handler: async (input) => JSON.stringify(await deployModelHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

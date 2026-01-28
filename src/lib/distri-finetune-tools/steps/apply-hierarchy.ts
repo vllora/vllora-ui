@@ -83,6 +83,5 @@ export const applyTopicHierarchyTool: DistriFnTool = {
     },
     required: ['workflow_id', 'hierarchy'],
   },
-  autoExecute: true,
   handler: async (input) => JSON.stringify(await applyTopicHierarchyHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

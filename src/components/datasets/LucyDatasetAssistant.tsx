@@ -105,15 +105,15 @@ export function LucyDatasetAssistant() {
     trainingGoals: currentDataset?.datasetObjective,
   });
 
-  // Track if we've triggered proactive analysis for this session
-  const hasTriggeredProactiveRef = useRef(false);
-  const [proactivePrompt, setProactivePrompt] = useState<string | null>(null);
+  // Auto-trigger prompt for proactive analysis
+  const [autoTriggerPrompt, setAutoTriggerPrompt] = useState<string | null>(null);
+  const hasSetAutoTriggerRef = useRef(false);
 
-  // Proactive behavior: when no workflow exists and no messages, suggest starting
+  // Proactive behavior: when no workflow exists and no messages, auto-trigger analysis
   useEffect(() => {
-    // Only trigger once per session, when everything is loaded
+    // Only set once per dataset session, when everything is loaded
     if (
-      hasTriggeredProactiveRef.current ||
+      hasSetAutoTriggerRef.current ||
       workflowLoading ||
       agentLoading ||
       !agent ||
@@ -123,26 +123,27 @@ export function LucyDatasetAssistant() {
       return;
     }
 
-    // If no workflow and no existing messages, trigger proactive analysis
+    // If no workflow and no existing messages, auto-trigger analysis
     if (!workflow && messages.length === 0) {
-      hasTriggeredProactiveRef.current = true;
-      // Set a proactive prompt that will be shown as a suggestion
-      setProactivePrompt(
-        `I see you've opened the "${currentDataset?.name || 'dataset'}" dataset. Would you like me to analyze it and help you start a fine-tuning workflow?`
+      hasSetAutoTriggerRef.current = true;
+      // This will automatically send a message to the agent
+      // NOTE: Only ask for analysis - do NOT ask to start workflow or apply changes
+      setAutoTriggerPrompt(
+        `I just opened the "${currentDataset?.name || 'dataset'}" dataset. Please analyze it and give me an overview of what I have. Do NOT start a workflow or make any changes yet - just show me the analysis and wait for my feedback.`
       );
     } else if (workflow && messages.length === 0) {
-      // Workflow exists but no messages - remind user of current status
-      hasTriggeredProactiveRef.current = true;
-      setProactivePrompt(
-        `Welcome back! Your fine-tuning workflow is currently at the "${workflow.currentStep}" step. Would you like me to show you the status or help you continue?`
+      // Workflow exists but no messages - auto-trigger status check
+      hasSetAutoTriggerRef.current = true;
+      setAutoTriggerPrompt(
+        `I'm returning to my fine-tuning workflow for "${currentDataset?.name || 'dataset'}". The workflow is at the "${workflow.currentStep}" step. Please show me the current status and help me continue.`
       );
     }
   }, [workflow, workflowLoading, agentLoading, agent, isConnected, messages.length, selectedDatasetId, currentDataset?.name]);
 
-  // Reset proactive trigger when dataset changes
+  // Reset auto-trigger when dataset changes
   useEffect(() => {
-    hasTriggeredProactiveRef.current = false;
-    setProactivePrompt(null);
+    hasSetAutoTriggerRef.current = false;
+    setAutoTriggerPrompt(null);
   }, [selectedDatasetId]);
 
   const isOpenAIConfigured = useMemo(() => {
@@ -199,7 +200,7 @@ export function LucyDatasetAssistant() {
           beforeSendMessage={handleBeforeSendMessage}
           toolRenderers={toolRenderers}
           quickActions={FINETUNE_QUICK_ACTIONS}
-          proactivePrompt={proactivePrompt}
+          autoTriggerPrompt={autoTriggerPrompt}
         />
       ) : (
         <div className="flex items-center justify-center h-full">

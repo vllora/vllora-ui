@@ -93,6 +93,5 @@ export const generateTopicsTool: DistriFnTool = {
     },
     required: ['workflow_id'],
   },
-  autoExecute: true,
   handler: async (input) => JSON.stringify(await generateTopicsHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

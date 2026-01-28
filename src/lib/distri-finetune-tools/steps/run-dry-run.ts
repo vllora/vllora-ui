@@ -150,6 +150,5 @@ export const runDryRunTool: DistriFnTool = {
     },
     required: ['workflow_id'],
   },
-  autoExecute: true,
   handler: async (input) => JSON.stringify(await runDryRunHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

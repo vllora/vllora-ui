@@ -112,6 +112,5 @@ export const configureGraderTool: DistriFnTool = {
     },
     required: ['workflow_id', 'grader_type', 'config'],
   },
-  autoExecute: true,
   handler: async (input) => JSON.stringify(await configureGraderHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

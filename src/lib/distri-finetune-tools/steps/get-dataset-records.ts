@@ -5,25 +5,19 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import * as workflowDB from '@/services/finetune-workflow-db';
 import * as datasetsDB from '@/services/datasets-db';
 import type { ToolHandler } from '../types';
 
 export const getDatasetRecordsHandler: ToolHandler = async (params) => {
   try {
-    const { workflow_id, limit = 100, offset = 0, topic_filter } = params;
+    const { dataset_id, limit = 100, offset = 0, topic_filter } = params;
 
-    if (!workflow_id || typeof workflow_id !== 'string') {
-      return { success: false, error: 'workflow_id is required' };
-    }
-
-    const workflow = await workflowDB.getWorkflow(workflow_id);
-    if (!workflow) {
-      return { success: false, error: 'Workflow not found' };
+    if (!dataset_id || typeof dataset_id !== 'string') {
+      return { success: false, error: 'dataset_id is required' };
     }
 
     // Get records
-    let records = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);
+    let records = await datasetsDB.getRecordsByDatasetId(dataset_id);
 
     // Apply topic filter if provided
     if (topic_filter && typeof topic_filter === 'string') {
@@ -64,13 +58,12 @@ export const getDatasetRecordsTool: DistriFnTool = {
   parameters: {
     type: 'object',
     properties: {
-      workflow_id: { type: 'string', description: 'The workflow ID' },
+      dataset_id: { type: 'string', description: 'The dataset ID' },
       limit: { type: 'number', default: 100, description: 'Maximum records to return' },
       offset: { type: 'number', default: 0, description: 'Offset for pagination' },
       topic_filter: { type: 'string', description: 'Filter by topic' },
     },
-    required: ['workflow_id'],
+    required: ['dataset_id'],
   },
-  autoExecute: true,
   handler: async (input) => JSON.stringify(await getDatasetRecordsHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

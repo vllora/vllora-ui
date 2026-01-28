@@ -74,6 +74,5 @@ export const testGraderSampleTool: DistriFnTool = {
     },
     required: ['workflow_id'],
   },
-  autoExecute: true,
   handler: async (input) => JSON.stringify(await testGraderSampleHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

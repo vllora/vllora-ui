@@ -67,6 +67,8 @@ export interface LucyChatProps {
   quickActions?: QuickAction[];
   /** Proactive prompt shown as Lucy's initial suggestion (displayed above quick actions) */
   proactivePrompt?: string | null;
+  /** Auto-trigger prompt - automatically sends this message when chat is empty */
+  autoTriggerPrompt?: string | null;
 }
 
 // ============================================================================
@@ -109,6 +111,7 @@ export function LucyChat({
   className,
   quickActions = DEFAULT_QUICK_ACTIONS,
   proactivePrompt,
+  autoTriggerPrompt,
 }: LucyChatProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState('');
@@ -175,6 +178,32 @@ export function LucyChat({
       setExpandedTools(newExpanded);
     }
   }, [toolCalls, expandedTools]);
+
+  // Track if auto-trigger has been fired
+  const hasAutoTriggeredRef = useRef(false);
+
+  // Auto-trigger prompt - send message automatically when chat is empty
+  useEffect(() => {
+    if (
+      autoTriggerPrompt &&
+      !hasAutoTriggeredRef.current &&
+      messages.length === 0 &&
+      !isStreaming &&
+      !isLoading
+    ) {
+      hasAutoTriggeredRef.current = true;
+      // Small delay to ensure component is fully mounted
+      const timer = setTimeout(() => {
+        sendMessage([{ part_type: 'text', data: autoTriggerPrompt }]);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [autoTriggerPrompt, messages.length, isStreaming, isLoading, sendMessage]);
+
+  // Reset auto-trigger when threadId changes (new chat)
+  useEffect(() => {
+    hasAutoTriggeredRef.current = false;
+  }, [threadId]);
 
   // Auto-send pending message when streaming ends
   useEffect(() => {

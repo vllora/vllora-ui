@@ -92,6 +92,5 @@ export const categorizeRecordsTool: DistriFnTool = {
     },
     required: ['workflow_id'],
   },
-  autoExecute: true,
   handler: async (input) => JSON.stringify(await categorizeRecordsHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

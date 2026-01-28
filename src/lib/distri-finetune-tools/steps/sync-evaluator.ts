@@ -76,6 +76,5 @@ export const syncEvaluatorTool: DistriFnTool = {
     },
     required: ['workflow_id'],
   },
-  autoExecute: true,
   handler: async (input) => JSON.stringify(await syncEvaluatorHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

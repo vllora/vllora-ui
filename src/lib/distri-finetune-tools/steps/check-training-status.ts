@@ -64,6 +64,5 @@ export const checkTrainingStatusTool: DistriFnTool = {
     },
     required: ['workflow_id'],
   },
-  autoExecute: true,
   handler: async (input) => JSON.stringify(await checkTrainingStatusHandler(input as Record<string, unknown>)),
 } as DistriFnTool;
