@@ -65,6 +65,8 @@ export interface LucyChatProps {
   className?: string;
   /** Custom quick actions */
   quickActions?: QuickAction[];
+  /** Proactive prompt shown as Lucy's initial suggestion (displayed above quick actions) */
+  proactivePrompt?: string | null;
 }
 
 // ============================================================================
@@ -106,6 +108,7 @@ export function LucyChat({
   toolRenderers,
   className,
   quickActions = DEFAULT_QUICK_ACTIONS,
+  proactivePrompt,
 }: LucyChatProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState('');
@@ -352,7 +355,11 @@ export function LucyChat({
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl mx-auto px-4 py-4 space-y-4">
           {showWelcome ? (
-            <LucyWelcome quickActions={quickActions} onQuickAction={handleQuickAction} />
+            <LucyWelcome
+              quickActions={quickActions}
+              onQuickAction={handleQuickAction}
+              proactivePrompt={proactivePrompt}
+            />
           ) : (
             <>
               {/* Render messages using LucyMessageRenderer */}

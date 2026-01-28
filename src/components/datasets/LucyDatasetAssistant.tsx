@@ -2,10 +2,16 @@
  * LucyDatasetAssistant
  *
  * Lucy AI assistant sidebar for the datasets page.
- * Handles chat with dataset-specific context and quick actions.
+ * Handles finetune workflow guidance with process-focused context.
+ *
+ * Key Features:
+ * - Proactive analysis when opening a dataset
+ * - Guided finetune workflow (topics → categorize → coverage → grader → dry run → train → deploy)
+ * - Workflow state persistence in IndexedDB
+ * - Back-and-forth refinement of suggestions
  */
 
-import { useMemo, useCallback, useEffect, useState } from "react";
+import { useMemo, useCallback, useState, useEffect, useRef } from "react";
 import { useParams } from "react-router";
 import { Plus, Loader2, PanelLeftClose, PanelLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,8 +25,7 @@ import { DistriMessage } from "@distri/core";
 import { useDistriConnection } from "@/providers/DistriProvider";
 import { ProviderKeysConsumer } from "@/contexts/ProviderKeysContext";
 import { DatasetsConsumer } from "@/contexts/DatasetsContext";
-import { DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
-import { useDatasetAgentChat } from "@/hooks/useDatasetAgentChat";
+import { useFineTuneAgentChat } from "@/hooks/useFineTuneAgentChat";
 import {
   LucyChat,
   LucyProviderCheck,
@@ -28,40 +33,39 @@ import {
   LucyAvatar,
 } from "@/components/agent/lucy-agent";
 import type { QuickAction } from "@/components/agent/lucy-agent/LucyWelcome";
-import { setDatasetContext, clearDatasetContext } from "@/lib/distri-dataset-tools";
 import { cn } from "@/lib/utils";
 
-// Dataset-specific quick actions for Lucy
-const DATASET_QUICK_ACTIONS: QuickAction[] = [
+// Finetune-focused quick actions for Lucy
+const FINETUNE_QUICK_ACTIONS: QuickAction[] = [
   {
-    id: "list-datasets",
-    icon: "📋",
-    label: "List all my datasets",
+    id: "start-finetune",
+    icon: "🚀",
+    label: "Start finetune workflow",
   },
   {
-    id: "create-dataset",
-    icon: "➕",
-    label: "Create a new dataset",
+    id: "check-status",
+    icon: "📊",
+    label: "Check workflow status",
   },
   {
-    id: "analyze-current",
-    icon: "🔍",
-    label: "Analyze current dataset",
+    id: "analyze-coverage",
+    icon: "📈",
+    label: "Analyze topic coverage",
   },
   {
-    id: "suggest-topics",
-    icon: "🗂",
-    label: "Suggest topics for records",
+    id: "generate-data",
+    icon: "✨",
+    label: "Generate synthetic data",
   },
   {
-    id: "find-duplicates",
-    icon: "🔄",
-    label: "Find duplicate records",
+    id: "configure-grader",
+    icon: "⚖️",
+    label: "Configure evaluation grader",
   },
   {
-    id: "export-dataset",
-    icon: "📤",
-    label: "Export this dataset",
+    id: "run-dry-run",
+    icon: "🧪",
+    label: "Run dry run validation",
   },
 ];
 
@@ -72,31 +76,74 @@ export function LucyDatasetAssistant() {
   const { datasetId: selectedDatasetId } = useParams<{ datasetId: string }>();
 
   const { datasets } = DatasetsConsumer();
-  const {
-    selectedRecordIds,
-    searchQuery,
-    sortConfig,
-    expandedDatasetIds,
-  } = DatasetsUIConsumer();
 
   // Derive current dataset from datasets list and URL param
   const currentDataset = useMemo(() => {
     if (!selectedDatasetId) return null;
     const dataset = datasets.find(d => d.id === selectedDatasetId);
-    return dataset ? { id: dataset.id, name: dataset.name } : null;
+    return dataset ? { id: dataset.id, name: dataset.name, datasetObjective: dataset.datasetObjective } : null;
   }, [datasets, selectedDatasetId]);
 
   // Lucy agent state
   const { isConnected, reconnect } = useDistriConnection();
   const { providers, loading: providersLoading } = ProviderKeysConsumer();
+
+  // Use finetune agent when viewing a specific dataset
   const {
     agent,
     agentLoading,
-    selectedThreadId,
+    threadId,
     tools,
     messages,
+    workflow,
+    workflowLoading,
     handleNewChat,
-  } = useDatasetAgentChat();
+    prepareMessage,
+  } = useFineTuneAgentChat({
+    datasetId: selectedDatasetId || '',
+    datasetName: currentDataset?.name,
+    trainingGoals: currentDataset?.datasetObjective,
+  });
+
+  // Track if we've triggered proactive analysis for this session
+  const hasTriggeredProactiveRef = useRef(false);
+  const [proactivePrompt, setProactivePrompt] = useState<string | null>(null);
+
+  // Proactive behavior: when no workflow exists and no messages, suggest starting
+  useEffect(() => {
+    // Only trigger once per session, when everything is loaded
+    if (
+      hasTriggeredProactiveRef.current ||
+      workflowLoading ||
+      agentLoading ||
+      !agent ||
+      !isConnected ||
+      !selectedDatasetId
+    ) {
+      return;
+    }
+
+    // If no workflow and no existing messages, trigger proactive analysis
+    if (!workflow && messages.length === 0) {
+      hasTriggeredProactiveRef.current = true;
+      // Set a proactive prompt that will be shown as a suggestion
+      setProactivePrompt(
+        `I see you've opened the "${currentDataset?.name || 'dataset'}" dataset. Would you like me to analyze it and help you start a fine-tuning workflow?`
+      );
+    } else if (workflow && messages.length === 0) {
+      // Workflow exists but no messages - remind user of current status
+      hasTriggeredProactiveRef.current = true;
+      setProactivePrompt(
+        `Welcome back! Your fine-tuning workflow is currently at the "${workflow.currentStep}" step. Would you like me to show you the status or help you continue?`
+      );
+    }
+  }, [workflow, workflowLoading, agentLoading, agent, isConnected, messages.length, selectedDatasetId, currentDataset?.name]);
+
+  // Reset proactive trigger when dataset changes
+  useEffect(() => {
+    hasTriggeredProactiveRef.current = false;
+    setProactivePrompt(null);
+  }, [selectedDatasetId]);
 
   const isOpenAIConfigured = useMemo(() => {
     const openaiProvider = providers.find(p => p.name.toLowerCase() === "openai");
@@ -110,51 +157,15 @@ export function LucyDatasetAssistant() {
     []
   );
 
-  // Attach rich dataset context to messages before sending
+  // Attach finetune workflow context to messages before sending
   const handleBeforeSendMessage = useCallback(
     async (message: DistriMessage): Promise<DistriMessage> => {
-      const ctx = {
-        page: "datasets",
-        current_view: selectedDatasetId ? "detail" : "list",
-        current_dataset_id: selectedDatasetId,
-        current_dataset_name: currentDataset?.name,
-        datasets_count: datasets.length,
-        dataset_names: datasets.map(d => ({ id: d.id, name: d.name })),
-        selected_records_count: selectedRecordIds.size,
-        selected_record_ids: selectedRecordIds.size > 0 ? [...selectedRecordIds] : undefined,
-        search_query: searchQuery || undefined,
-        sort_config: sortConfig,
-        expanded_dataset_ids: expandedDatasetIds.size > 0 ? [...expandedDatasetIds] : undefined,
-      };
-
-      const contextText = `Context:\n\`\`\`json\n${JSON.stringify(ctx, null, 2)}\n\`\`\``;
-      const contextPart = { part_type: "text" as const, data: contextText };
-
-      return { ...message, parts: [contextPart, ...message.parts] };
+      // The prepareMessage function handles context injection
+      const userText = message.parts.find(p => p.part_type === 'text')?.data || '';
+      return prepareMessage(userText);
     },
-    [datasets, selectedDatasetId, currentDataset, selectedRecordIds, searchQuery, sortConfig, expandedDatasetIds]
+    [prepareMessage]
   );
-
-  // Keep the context store updated for composite tools to read from
-  useEffect(() => {
-    setDatasetContext({
-      page: "datasets",
-      current_view: selectedDatasetId ? "detail" : "list",
-      current_dataset_id: selectedDatasetId ?? undefined,
-      current_dataset_name: currentDataset?.name,
-      datasets_count: datasets.length,
-      dataset_names: datasets.map(d => ({ id: d.id, name: d.name })),
-      selected_records_count: selectedRecordIds.size,
-      selected_record_ids: selectedRecordIds.size > 0 ? [...selectedRecordIds] : undefined,
-      search_query: searchQuery || undefined,
-      sort_config: sortConfig ?? { field: "timestamp", direction: "desc" },
-      expanded_dataset_ids: expandedDatasetIds.size > 0 ? [...expandedDatasetIds] : undefined,
-    });
-
-    return () => {
-      clearDatasetContext();
-    };
-  }, [datasets, selectedDatasetId, currentDataset, selectedRecordIds, searchQuery, sortConfig, expandedDatasetIds]);
 
   // Render chat content (always mounted to preserve state)
   const chatContent = (
@@ -181,13 +192,14 @@ export function LucyDatasetAssistant() {
         </div>
       ) : isConnected && agent ? (
         <LucyChat
-          threadId={selectedThreadId}
+          threadId={threadId}
           agent={agent}
           externalTools={tools}
           initialMessages={messages}
           beforeSendMessage={handleBeforeSendMessage}
           toolRenderers={toolRenderers}
-          quickActions={DATASET_QUICK_ACTIONS}
+          quickActions={FINETUNE_QUICK_ACTIONS}
+          proactivePrompt={proactivePrompt}
         />
       ) : (
         <div className="flex items-center justify-center h-full">
