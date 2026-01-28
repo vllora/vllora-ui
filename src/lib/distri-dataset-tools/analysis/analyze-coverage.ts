@@ -17,14 +17,16 @@ import {
 import { getDatasetById, getRecordsByDatasetId, updateDatasetCoverageStats } from '@/services/datasets-db';
 
 /**
- * Extract all leaf topic names from a hierarchy
+ * Extract all leaf topic IDs from a hierarchy.
+ * Returns IDs (not names) to match how records store topics.
  */
 export function extractLeafTopics(nodes: TopicHierarchyNode[]): string[] {
   const leafTopics: string[] = [];
 
   function traverse(node: TopicHierarchyNode) {
     if (!node.children || node.children.length === 0) {
-      leafTopics.push(node.name);
+      // Use ID (fallback to name) - this matches how records store topics
+      leafTopics.push(node.id || node.name);
     } else {
       node.children.forEach(traverse);
     }

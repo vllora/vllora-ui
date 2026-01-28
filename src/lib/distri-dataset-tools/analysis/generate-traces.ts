@@ -245,7 +245,8 @@ interface TopicHierarchyNode {
 }
 
 interface LeafTopic {
-  name: string;
+  id: string;   // Topic ID for storing in records
+  name: string; // Topic name for display/matching
   path: string[];
 }
 
@@ -257,8 +258,9 @@ function extractLeafTopicsFromHierarchy(nodes: TopicHierarchyNode[], parentPath:
       // Recurse into children with current path
       leaves.push(...extractLeafTopicsFromHierarchy(node.children, currentPath));
     } else {
-      // Leaf node - add with full path
-      leaves.push({ name: node.name, path: currentPath });
+      // Leaf node - add with full path and ID
+      // Use node.id if available, otherwise fallback to node.name
+      leaves.push({ id: node.id || node.name, name: node.name, path: currentPath });
     }
   }
   return leaves;
@@ -739,7 +741,8 @@ const DEFAULT_CONCURRENCY = 5;
 const DEFAULT_RECORDS_PER_TOPIC = 5;
 
 interface TopicGenerationTask {
-  topicName: string;
+  topicId: string;    // Topic ID for storing in records
+  topicName: string;  // Topic name for display
   topicPath: string[];
   recordsToGenerate: number;
   seedRecords: (DatasetRecord | undefined)[];
@@ -800,7 +803,6 @@ async function generateSingleRecord(
     }
 
     const data = buildSyntheticTraceDataInfo(simulated, task.tools);
-    const leafTopic = task.topicPath.length > 0 ? task.topicPath[task.topicPath.length - 1] : undefined;
 
     const recordData = {
       data,
@@ -810,7 +812,7 @@ async function generateSingleRecord(
         seed_topic_path: task.topicPath,
         generated_at_ms: Date.now(),
       },
-      topic: leafTopic,
+      topic: task.topicId, // Use topic ID (not name) for consistent lookup in UI
       is_generated: true,
       evaluation: undefined,
     };
@@ -912,9 +914,13 @@ export async function generateTraces(params: GenerateTracesParams): Promise<Gene
 
     let targetLeafTopics: LeafTopic[] = [];
     if (target_topics === 'selected' && selected_topics && selected_topics.length > 0) {
-      // Find the full paths for selected topic names from hierarchy
+      // Find the full paths for selected topics from hierarchy
+      // Match by ID first (from coverage analysis), fallback to name
       targetLeafTopics = selected_topics
-        .map(name => hierarchyLeafTopics.find(t => t.name === name))
+        .map(topicIdOrName =>
+          hierarchyLeafTopics.find(t => t.id === topicIdOrName) ||
+          hierarchyLeafTopics.find(t => t.name === topicIdOrName)
+        )
         .filter((t): t is LeafTopic => t !== undefined);
     } else {
       targetLeafTopics = hierarchyLeafTopics;
@@ -942,8 +948,9 @@ export async function generateTraces(params: GenerateTracesParams): Promise<Gene
       ? seedTools
       : [];
 
-    // Create one task per topic with full path
+    // Create one task per topic with full path and ID
     const topicTasks: TopicGenerationTask[] = targetLeafTopics.map(topic => ({
+      topicId: topic.id,
       topicName: topic.name,
       topicPath: topic.path,
       recordsToGenerate: recordsPerTopic,

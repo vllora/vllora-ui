@@ -19,6 +19,7 @@ export interface TopicNodeData extends Record<string, unknown> {
   topicKey: string; // Key for looking up in context (e.g., "root" or topic name)
   nodeId: string; // Node ID for expansion tracking
   recordCount: number;
+  aggregatedRecordCount?: number; // Sum of all descendants (for non-leaf coverage display)
   isRoot?: boolean;
   hasChildren?: boolean;
 }
@@ -35,6 +36,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
     topicKey,
     nodeId,
     recordCount,
+    aggregatedRecordCount,
     isRoot = false,
     hasChildren = false,
   } = data;
@@ -42,9 +44,9 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
   // Get state and handlers from context
   const {
     recordsByTopic,
+    totalRecordCount,
     datasetId,
     availableTopics,
-    coverageStats,
     selectedTopic,
     setSelectedTopic,
     isNodeExpanded,
@@ -64,10 +66,12 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
   const isSelected = isRoot ? selectedTopic === "__root__" : selectedTopic === name;
   const records = recordsByTopic[topicKey] || [];
 
-  // Compute coverage percentage from coverageStats
-  // coverageStats.topicDistribution has counts per topic, totalRecords has total
-  const coveragePercentage = coverageStats && coverageStats.totalRecords > 0 && !isRoot
-    ? ((coverageStats.topicDistribution[topicKey] || 0) / coverageStats.totalRecords) * 100
+  // Compute coverage percentage:
+  // - For leaf topics: use direct record count (records assigned to this topic)
+  // - For non-leaf topics: use aggregated count (sum of all descendant leaves)
+  // This ensures non-leaf topics show meaningful coverage instead of always 0%
+  const coveragePercentage = totalRecordCount > 0 && !isRoot
+    ? ((hasChildren ? (aggregatedRecordCount ?? 0) : records.length) / totalRecordCount) * 100
     : undefined;
 
   // Handlers

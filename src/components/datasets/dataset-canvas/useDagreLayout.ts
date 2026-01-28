@@ -34,6 +34,44 @@ interface DagreLayoutOptions {
   rankSpacing?: number;
 }
 
+/**
+ * Compute aggregated record counts for all nodes in the hierarchy.
+ * For leaf nodes, this equals the direct count.
+ * For non-leaf nodes, this is the sum of all descendant leaves.
+ */
+function computeAggregatedCounts(
+  nodes: TopicHierarchyNode[],
+  recordCountsByTopic: Record<string, number>
+): Record<string, number> {
+  const aggregated: Record<string, number> = {};
+
+  function traverse(node: TopicHierarchyNode): number {
+    const nodeTopicId = node.id || node.name;
+    const directCount = recordCountsByTopic[nodeTopicId] || 0;
+
+    if (!node.children || node.children.length === 0) {
+      // Leaf node: aggregated = direct count
+      aggregated[nodeTopicId] = directCount;
+      return directCount;
+    }
+
+    // Non-leaf node: sum of children totals only (leaf-only assignment rule)
+    // Records should only be assigned to leaves, so directCount should be 0 here
+    const childrenSum = node.children.reduce(
+      (sum, child) => sum + traverse(child),
+      0
+    );
+    aggregated[nodeTopicId] = childrenSum;
+    return childrenSum;
+  }
+
+  for (const node of nodes) {
+    traverse(node);
+  }
+
+  return aggregated;
+}
+
 interface DagreLayoutResult {
   nodes: CanvasNode[];
   edges: Edge[];
@@ -249,6 +287,11 @@ export function useDagreLayout(
     const assignedCount = Object.values(recordCountsByTopic).reduce((sum, c) => sum + c, 0);
     const unassignedCount = totalRecordCount - assignedCount;
 
+    // Compute aggregated counts for all topics (for non-leaf coverage display)
+    const aggregatedCounts = hasHierarchy
+      ? computeAggregatedCounts(hierarchy, recordCountsByTopic)
+      : {};
+
     // Root node - use simple "root" type when empty, otherwise "topic" type
     const isEmptyRoot = hasHierarchy && unassignedCount === 0;
 
@@ -295,6 +338,8 @@ export function useDagreLayout(
         // Look up by node.id (records store topic as ID, not name)
         const nodeTopicId = node.id || node.name;
         const recordCount = nodeTopicId ? (recordCountsByTopic[nodeTopicId] || 0) : 0;
+        // Aggregated count includes all descendants (for non-leaf coverage display)
+        const aggregatedRecordCount = nodeTopicId ? (aggregatedCounts[nodeTopicId] || 0) : 0;
 
         // Track mappings for path highlighting
         if (node.name) {
@@ -312,6 +357,7 @@ export function useDagreLayout(
             topicKey: nodeTopicId, // Use ID for lookup (records store topic as ID)
             nodeId: nodeId,
             recordCount,
+            aggregatedRecordCount, // For coverage display on non-leaf topics
             isRoot: false,
             hasChildren,
           },

@@ -7,7 +7,7 @@
 
 import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from "react";
 import type { DatasetRecord, TopicHierarchyNode, CoverageStats } from "@/types/dataset-types";
-import { getAllTopicsFromHierarchy } from "../record-utils";
+import { getLeafTopicsFromHierarchy } from "../record-utils";
 
 // ============================================================================
 // Types
@@ -55,9 +55,9 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     onCreateChildTopic,
   } = props;
 
-  // Compute available topics from hierarchy
+  // Compute available topics from hierarchy (only leaf topics for assignment)
   const availableTopics = useMemo(
-    () => getAllTopicsFromHierarchy(hierarchy),
+    () => getLeafTopicsFromHierarchy(hierarchy),
     [hierarchy]
   );
 
@@ -151,9 +151,13 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     return grouped;
   }, [records]);
 
+  // Total record count for computing coverage percentages
+  const totalRecordCount = records.length;
+
   return {
     records,
     recordsByTopic,
+    totalRecordCount,
     datasetId,
     availableTopics,
     coverageStats,

@@ -81,6 +81,7 @@ export function DatasetDetailContentV2() {
     handleGenerateHierarchy,
     handleApplyTopicHierarchy,
     handleAutoTagRecords,
+    handleMigrateRecordsToChildren,
     handleClearRecordTopics,
     handleClearSelectedRecordTopics,
     handleRenameTopicInRecords,
@@ -210,8 +211,28 @@ export function DatasetDetailContentV2() {
   };
 
   // Handle create child topic from canvas inline input
-  const handleCreateChildTopic = (parentTopicName: string | null, childTopicName: string) => {
+  const handleCreateChildTopic = async (parentTopicName: string | null, childTopicName: string) => {
     if (!dataset) return;
+
+    // Helper to find a node by name and return its ID and whether it was a leaf
+    const findNodeInfo = (
+      nodes: TopicHierarchyNode[],
+      targetName: string
+    ): { id: string; wasLeaf: boolean } | null => {
+      for (const node of nodes) {
+        if (node.name === targetName) {
+          return {
+            id: node.id || node.name,
+            wasLeaf: !node.children || node.children.length === 0,
+          };
+        }
+        if (node.children && node.children.length > 0) {
+          const found = findNodeInfo(node.children, targetName);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
 
     // Helper to find and add child to a node by name
     const addChildToNode = (
@@ -236,6 +257,17 @@ export function DatasetDetailContentV2() {
       });
     };
 
+    // Check if parent was a leaf with records (needs migration)
+    let parentInfo: { id: string; wasLeaf: boolean } | null = null;
+    let recordsNeedMigration = false;
+    if (parentTopicName !== null && dataset.topicHierarchy?.hierarchy) {
+      parentInfo = findNodeInfo(dataset.topicHierarchy.hierarchy, parentTopicName);
+      if (parentInfo?.wasLeaf) {
+        // Check if any records are assigned to this topic
+        recordsNeedMigration = sortedRecords.some(r => r.topic === parentInfo!.id);
+      }
+    }
+
     // Create new node with unique ID
     const newNode: TopicHierarchyNode = {
       id: `topic-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -253,11 +285,19 @@ export function DatasetDetailContentV2() {
       : addChildToNode(currentHierarchy, parentTopicName, newNode);
 
     // Apply the updated hierarchy
-    handleApplyTopicHierarchy({
+    await handleApplyTopicHierarchy({
       ...dataset.topicHierarchy,
       depth: dataset.topicHierarchy?.depth ?? 3,
       hierarchy: updatedHierarchy,
     });
+
+    // Auto-migrate records if parent was a leaf with records
+    if (recordsNeedMigration && parentInfo) {
+      // Small delay to ensure hierarchy is saved before migration
+      setTimeout(() => {
+        handleMigrateRecordsToChildren(parentInfo!.id, updatedHierarchy);
+      }, 100);
+    }
   };
 
   // Handle save evaluation config

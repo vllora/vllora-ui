@@ -44,7 +44,8 @@ export function getLeafTopicsFromHierarchy(
 
 /**
  * Extract ALL topics from a topic hierarchy (not just leaves).
- * Used for topic selection in canvas where any node can have records.
+ * Used for display/filtering purposes only - NOT for record assignment.
+ * Records should only be assigned to leaf topics.
  */
 export function getAllTopicsFromHierarchy(
   nodes: TopicHierarchyNode[] | undefined,

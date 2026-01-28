@@ -720,6 +720,52 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     }
   }, [dataset, records, selectedRecordIds, refreshDataset]);
 
+  /**
+   * Migrate records from a parent topic to appropriate children after hierarchy change.
+   * Called when a child is added to a topic that has records assigned to it.
+   */
+  const handleMigrateRecordsToChildren = useCallback(async (
+    parentTopicId: string,
+    newHierarchy: TopicHierarchyNode[]
+  ) => {
+    if (!dataset) return;
+
+    // Find records currently assigned to the parent topic
+    const recordsToMigrate = records.filter(r => r.topic === parentTopicId);
+    if (recordsToMigrate.length === 0) return;
+
+    setIsAutoTagging(true);
+    setAutoTagProgress({ completed: 0, total: recordsToMigrate.length });
+
+    try {
+      const result = await classifyRecords({
+        hierarchy: newHierarchy,
+        records: recordsToMigrate,
+        onProgress: (progress) => {
+          setAutoTagProgress(progress);
+        },
+      });
+
+      if (!result.success || !result.classifications) {
+        toast.error(result.error || "Failed to migrate records");
+        return;
+      }
+
+      // Batch update all records' topics
+      const updatedCount = await updateRecordTopicsBatch(dataset.id, result.classifications);
+
+      // Refresh records
+      await refreshDataset();
+      toast.success(`Auto-migrated ${updatedCount} record${updatedCount !== 1 ? 's' : ''} to child topics`);
+    } catch (err) {
+      console.error("Failed to migrate records:", err);
+      toast.error("Failed to migrate records to child topics");
+    } finally {
+      setIsAutoTagging(false);
+      setAutoTagProgress(null);
+    }
+  }, [dataset, records, refreshDataset]);
+
   const handleClearRecordTopics = useCallback(async () => {
     if (!dataset) return;
     try {
@@ -984,6 +1030,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     handleGenerateHierarchy,
     handleApplyTopicHierarchy,
     handleAutoTagRecords,
+    handleMigrateRecordsToChildren,
     handleClearRecordTopics,
     handleClearSelectedRecordTopics,
     handleRenameTopicInRecords,

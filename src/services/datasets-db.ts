@@ -751,7 +751,11 @@ export async function addRecordsToDataset(
       recordsStore.add(record);
     });
 
-    tx.oncomplete = () => resolve(createdRecords);
+    tx.oncomplete = () => {
+      // Emit refresh event so UI updates with new records
+      emitter.emit(DATASET_REFRESH_EVENT as any, { datasetId });
+      resolve(createdRecords);
+    };
     tx.onerror = () => reject(tx.error);
   });
 }
