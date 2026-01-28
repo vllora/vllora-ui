@@ -13,7 +13,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Download, Upload, Sparkles, Loader2, ListTree, AlertCircle, Scale, ShieldCheck, FlaskConical } from "lucide-react";
+import { Download, Upload, Sparkles, Loader2, ShieldCheck, FlaskConical } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { EvaluationConfigDialog } from "./evaluation-dialog/EvaluationConfigDialog";
 import type { EvaluationConfig } from "@/types/dataset-types";
@@ -23,7 +23,6 @@ export function DatasetActions() {
     dataset,
     handleExport,
     setImportDialog,
-    setTopicHierarchyDialog,
     setSanitizeDataDialog,
     setDryRunDialog,
     handleStartFinetune,
@@ -31,12 +30,6 @@ export function DatasetActions() {
   } = DatasetDetailConsumer();
 
   const [evaluationDialogOpen, setEvaluationDialogOpen] = useState(false);
-
-  // Check if topic hierarchy is configured
-  const hasTopicHierarchy = dataset?.topicHierarchy?.hierarchy && dataset.topicHierarchy.hierarchy.length > 0;
-
-  // Check if evaluation config exists
-  const hasEvaluationConfig = !!dataset?.evaluationConfig;
 
   const handleSaveEvaluationConfig = async (config: EvaluationConfig) => {
     // TODO: Save evaluation config to dataset

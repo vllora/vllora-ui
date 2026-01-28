@@ -190,6 +190,7 @@ interface FinetuneWorkflowState {
   } | null;
 
   // Coverage & Generation (combined step)
+  // Note: Full CoverageStats is stored on Dataset.coverageStats for UI visualization
   coverageGeneration: {
     balanceScore: number;
     topicDistribution: Record<string, number>;
@@ -207,6 +208,8 @@ interface FinetuneWorkflowState {
 
   graderConfig: EvaluationConfig | null;
 
+  // Note: dryRun in workflow is a summary for state tracking.
+  // Full DryRunStats with percentiles, distribution, diagnosis is stored on Dataset.dryRunStats
   dryRun: {
     mean: number;
     std: number;
@@ -272,6 +275,61 @@ interface FinetuneInput {
   datasetName?: string;
 }
 ```
+
+### Dataset-Level Stats (For UI Visualization)
+
+Some stats are stored directly on the `Dataset` entity (not just workflow) so they can be displayed in the UI consistently:
+
+```typescript
+// On Dataset entity (dataset-types.ts)
+interface Dataset {
+  // ... other fields ...
+
+  // Coverage stats - calculated by analyze_coverage, displayed in UI
+  coverageStats?: CoverageStats;
+
+  // Dry run stats - calculated by run_dry_run, displayed in UI
+  dryRunStats?: DryRunStats;
+
+  // Backend dataset ID - set after upload_dataset
+  backendDatasetId?: string;
+}
+
+interface CoverageStats {
+  balanceScore: number;
+  balanceRating: 'excellent' | 'good' | 'fair' | 'poor' | 'critical';
+  topicDistribution: Record<string, number>;
+  uncategorizedCount: number;
+  totalRecords: number;
+  lastCalculatedAt: number;
+}
+
+interface DryRunStats {
+  evaluationRunId: string;
+  lastRunAt: number;
+  samplesEvaluated: number;
+  samplePercentage: number;
+  statistics: {
+    mean: number;
+    std: number;
+    median: number;
+    min: number;
+    max: number;
+    percentiles: { p10, p25, p50, p75, p90 };
+    percentAboveZero: number;
+    percentPerfect: number;
+  };
+  distribution: ScoreDistribution;
+  byTopic: Record<string, TopicDryRunStats>;
+  diagnosis: DryRunDiagnosis;
+  sampleResults: { highest, lowest, aroundMean };
+}
+```
+
+This ensures:
+1. **Consistency** - Lucy agent and UI components read from the same source
+2. **Persistence** - Stats survive across sessions without workflow context
+3. **Decoupling** - UI can display stats without needing workflow state
 
 ---
 
@@ -596,6 +654,8 @@ external = [
   "generate_synthetic_data",
   "configure_grader",
   "test_grader_sample",
+  "upload_dataset",
+  "sync_evaluator",
   "run_dry_run",
   "start_training",
   "check_training_status",
@@ -681,10 +741,12 @@ The finetune process has 7 main steps (input is records + training goals):
 - Test on sample before proceeding
 
 ## Step 5: Dry Run
+- Before dry run, upload dataset to backend: call `upload_dataset`
+- If grader is updated after upload, use `sync_evaluator` instead of re-uploading
 - ALWAYS run dry run before training
-- Explain metrics: mean, std, percentages
-- Make GO/NO-GO recommendation
-- If NO-GO, diagnose and suggest fixes (may need to go back to step 3)
+- Explain metrics: mean, std, percentiles, distribution, per-topic breakdown
+- Make GO/NO-GO/WARNING recommendation with diagnosis
+- If NO-GO, diagnose dataset vs grader issues and suggest fixes
 
 ## Step 6: Training
 - Confirm training parameters with user
@@ -955,23 +1017,77 @@ The finetune process has 7 main steps (input is records + training goals):
 // Returns: { samples: [{ prompt, response, score, reasoning }] }
 ```
 
+### Upload Tools (Before Dry Run)
+
+#### `upload_dataset`
+```typescript
+{
+  name: "upload_dataset",
+  description: "Upload dataset to backend for evaluation and training. Must be called before dry run.",
+  parameters: {
+    type: "object",
+    properties: {
+      workflow_id: { type: "string" },
+      force_reupload: { type: "boolean", default: false }
+    },
+    required: ["workflow_id"]
+  }
+}
+// Returns: { backend_dataset_id, record_count, has_evaluator, has_topic_hierarchy }
+```
+
+#### `sync_evaluator`
+```typescript
+{
+  name: "sync_evaluator",
+  description: "Sync evaluator config to backend without re-uploading entire dataset. Use after updating grader.",
+  parameters: {
+    type: "object",
+    properties: {
+      workflow_id: { type: "string" }
+    },
+    required: ["workflow_id"]
+  }
+}
+// Returns: { backend_dataset_id, evaluator_type }
+```
+
 ### Step 5: Dry Run Tools
 
 #### `run_dry_run`
 ```typescript
 {
   name: "run_dry_run",
-  description: "Execute dry run validation to test dataset + grader quality. Critical step before training!",
+  description: "Execute dry run validation to test dataset + grader quality. Critical step before training! Dataset must be uploaded first.",
   parameters: {
     type: "object",
     properties: {
       workflow_id: { type: "string" },
-      sample_size: { type: "number", default: 200 }
+      sample_percentage: { type: "number", default: 10, description: "Percentage of records to test (1-100)" }
     },
     required: ["workflow_id"]
   }
 }
-// Returns: { verdict: 'GO'|'NO-GO'|'WARNING', mean, std, percent_above_zero, percent_perfect, samples, diagnosis }
+// Returns comprehensive diagnostics:
+// {
+//   evaluation_run_id, sample_size, sample_percentage,
+//   // Core statistics
+//   mean, std, median, min, max,
+//   // Percentiles
+//   percentiles: { p10, p25, p50, p75, p90 },
+//   // Score fractions
+//   percent_above_zero, percent_perfect,
+//   // Distribution buckets
+//   distribution: { '0.0-0.2': %, '0.2-0.4': %, ... },
+//   // Diagnosis
+//   verdict: 'GO'|'NO-GO'|'WARNING',
+//   dataset_quality: 'good'|'warning'|'problem',
+//   grader_quality: 'good'|'warning'|'problem',
+//   warnings: [...], recommendations: [...], issues: [...],
+//   // Per-topic breakdown
+//   by_topic: { topic: { mean, std, count, status } },
+//   ready_for_training: boolean
+// }
 ```
 
 ### Step 6: Training Tools

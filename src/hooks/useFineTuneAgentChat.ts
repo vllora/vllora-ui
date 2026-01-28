@@ -102,7 +102,7 @@ interface UseFineTuneAgentChatReturn {
 export function useFineTuneAgentChat(
   options: UseFineTuneAgentChatOptions
 ): UseFineTuneAgentChatReturn {
-  const { datasetId, datasetName, trainingGoals } = options;
+  const { datasetId } = options;
 
   // Agent state
   const { agent, loading: agentLoading } = useAgent({

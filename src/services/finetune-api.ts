@@ -107,6 +107,54 @@ export interface DatasetUploadResult {
 }
 
 // ============================================================================
+// Evaluation Types
+// ============================================================================
+
+export interface EvaluationCompletionParams {
+  model?: string;
+  temperature?: number;
+  [key: string]: unknown;
+}
+
+export interface CreateEvaluationRequest {
+  dataset_id: string;
+  model_params: EvaluationCompletionParams;
+  offset?: number;
+  limit?: number;
+}
+
+export interface CreateEvaluationResponse {
+  evaluation_run_id: string;
+  status: string;
+  total_rows: number;
+}
+
+export interface RowEvaluationResult {
+  dataset_row_id: string;
+  row_index: number;
+  status: string;
+  score?: number;
+  reason?: string;
+  error_message?: string;
+}
+
+export interface EvaluationSummary {
+  average_score?: number;
+  passed_count: number;
+  failed_count: number;
+}
+
+export interface EvaluationResultResponse {
+  evaluation_run_id: string;
+  status: string;
+  total_rows: number;
+  completed_rows: number;
+  failed_rows: number;
+  results: RowEvaluationResult[];
+  summary: EvaluationSummary;
+}
+
+// ============================================================================
 // Helper Functions
 // ============================================================================
 
@@ -397,4 +445,88 @@ export async function createFinetuningJob(
     body: JSON.stringify(request),
   });
   return handleApiResponse<FinetuningJob>(response);
+}
+
+// ============================================================================
+// Evaluation API Functions
+// ============================================================================
+
+/**
+ * Create an evaluation run for a dataset
+ * This runs the configured evaluator/grader on the dataset rows
+ * @param request - Evaluation request with dataset_id and model params
+ */
+export async function createEvaluation(
+  request: CreateEvaluationRequest
+): Promise<CreateEvaluationResponse> {
+  const response = await apiClient('/finetune/evaluations', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+  return handleApiResponse<CreateEvaluationResponse>(response);
+}
+
+/**
+ * Get evaluation results for a given evaluation run
+ * @param evaluationRunId - The evaluation run ID
+ */
+export async function getEvaluationResult(
+  evaluationRunId: string
+): Promise<EvaluationResultResponse> {
+  const response = await apiClient(`/finetune/evaluations/${evaluationRunId}`, {
+    method: 'GET',
+  });
+  return handleApiResponse<EvaluationResultResponse>(response);
+}
+
+/**
+ * Poll for evaluation completion
+ * @param evaluationRunId - The evaluation run ID
+ * @param maxAttempts - Maximum polling attempts (default 60)
+ * @param intervalMs - Polling interval in ms (default 2000)
+ */
+export async function waitForEvaluationComplete(
+  evaluationRunId: string,
+  maxAttempts: number = 60,
+  intervalMs: number = 2000
+): Promise<EvaluationResultResponse> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const result = await getEvaluationResult(evaluationRunId);
+
+    // Check if evaluation is complete
+    if (result.status === 'completed' || result.status === 'failed') {
+      return result;
+    }
+
+    // Wait before next poll
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  throw new Error(`Evaluation ${evaluationRunId} did not complete within timeout`);
+}
+
+// ============================================================================
+// Dataset Evaluator Update API Functions
+// ============================================================================
+
+export interface UpdateEvaluatorResponse {
+  dataset_id: string;
+  updated: boolean;
+}
+
+/**
+ * Update the evaluator config for an existing backend dataset
+ * This allows changing the grader without re-uploading the entire dataset
+ * @param datasetId - The backend dataset ID
+ * @param evaluator - The evaluator config (BackendEvaluator format)
+ */
+export async function updateDatasetEvaluator(
+  datasetId: string,
+  evaluator: BackendEvaluator
+): Promise<UpdateEvaluatorResponse> {
+  const response = await apiClient(`/finetune/datasets/${datasetId}/evaluator`, {
+    method: 'PATCH',
+    body: JSON.stringify({ evaluator }),
+  });
+  return handleApiResponse<UpdateEvaluatorResponse>(response);
 }

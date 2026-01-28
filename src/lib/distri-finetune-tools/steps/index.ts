@@ -30,6 +30,12 @@ export { testGraderSampleHandler, testGraderSampleTool } from './test-grader';
 // Validation
 export { validateRecordsHandler, validateRecordsTool } from './validate-records';
 
+// Upload Dataset (before dry run)
+export { uploadDatasetHandler, uploadDatasetTool } from './upload-dataset';
+
+// Sync Evaluator (update grader without re-uploading)
+export { syncEvaluatorHandler, syncEvaluatorTool } from './sync-evaluator';
+
 // Dry Run (Step 5)
 export { runDryRunHandler, runDryRunTool } from './run-dry-run';
 
@@ -60,6 +66,8 @@ import { generateSyntheticDataHandler, generateSyntheticDataTool } from './gener
 import { configureGraderHandler, configureGraderTool } from './configure-grader';
 import { testGraderSampleHandler, testGraderSampleTool } from './test-grader';
 import { validateRecordsHandler, validateRecordsTool } from './validate-records';
+import { uploadDatasetHandler, uploadDatasetTool } from './upload-dataset';
+import { syncEvaluatorHandler, syncEvaluatorTool } from './sync-evaluator';
 import { runDryRunHandler, runDryRunTool } from './run-dry-run';
 import { startTrainingHandler, startTrainingTool } from './start-training';
 import { checkTrainingStatusHandler, checkTrainingStatusTool } from './check-training-status';
@@ -81,6 +89,8 @@ export const STEP_TOOL_NAMES = [
   'configure_grader',
   'validate_records',
   'test_grader_sample',
+  'upload_dataset',
+  'sync_evaluator',
   'run_dry_run',
   'start_training',
   'check_training_status',
@@ -105,6 +115,8 @@ export const stepTools: DistriFnTool[] = [
   configureGraderTool,
   validateRecordsTool,
   testGraderSampleTool,
+  uploadDatasetTool,
+  syncEvaluatorTool,
   runDryRunTool,
   startTrainingTool,
   checkTrainingStatusTool,
@@ -123,6 +135,8 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   configure_grader: configureGraderHandler,
   validate_records: validateRecordsHandler,
   test_grader_sample: testGraderSampleHandler,
+  upload_dataset: uploadDatasetHandler,
+  sync_evaluator: syncEvaluatorHandler,
   run_dry_run: runDryRunHandler,
   start_training: startTrainingHandler,
   check_training_status: checkTrainingStatusHandler,

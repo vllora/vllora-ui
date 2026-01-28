@@ -1,16 +1,19 @@
 /**
  * Start Training Tool
  *
- * Starts the fine-tuning training job.
+ * Starts the fine-tuning training job using the backend API.
+ * Requires dataset to be uploaded to backend first.
  */
 
 import type { DistriFnTool } from '@distri/core';
 import * as workflowDB from '@/services/finetune-workflow-db';
+import * as datasetsDB from '@/services/datasets-db';
+import { createFinetuneJobFromUpload } from '@/services/finetune-api';
 import type { ToolHandler } from '../types';
 
 export const startTrainingHandler: ToolHandler = async (params) => {
   try {
-    const { workflow_id, base_model = 'gpt-4o-mini', training_params } = params;
+    const { workflow_id, base_model = 'llama-v3-8b-instruct', training_params } = params;
 
     if (!workflow_id || typeof workflow_id !== 'string') {
       return { success: false, error: 'workflow_id is required' };
@@ -29,29 +32,48 @@ export const startTrainingHandler: ToolHandler = async (params) => {
       return { success: false, error: 'Dry run must pass before starting training' };
     }
 
-    // TODO: Actually start training via API
-    // For now, return mock job
-    const jobId = `ft-job-${Date.now()}`;
-    const model = typeof base_model === 'string' ? base_model : 'gpt-4o-mini';
+    // Get dataset to check backend ID
+    const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
+    if (!dataset) {
+      return { success: false, error: 'Dataset not found' };
+    }
 
-    // Update workflow
+    if (!dataset.backendDatasetId) {
+      return { success: false, error: 'Dataset must be uploaded to backend first. Use upload_dataset tool.' };
+    }
+
+    const model = typeof base_model === 'string' ? base_model : 'llama-v3-8b-instruct';
+
+    // Create the finetune job via backend API
+    const job = await createFinetuneJobFromUpload(
+      dataset.backendDatasetId,
+      dataset.name,
+      {
+        baseModel: model,
+        displayName: `${dataset.name} Fine-tune`,
+      }
+    );
+
+    // Update workflow with training job info
     await workflowDB.updateStepData(workflow_id, 'training', {
-      jobId,
+      jobId: job.provider_job_id,
       baseModel: model,
-      status: 'queued',
+      status: job.status as 'pending' | 'queued' | 'running' | 'completed' | 'failed',
       startedAt: Date.now(),
       progress: 0,
       metrics: null,
-      modelId: null,
+      modelId: job.fine_tuned_model || null,
     });
 
     return {
       success: true,
       training: {
-        job_id: jobId,
-        status: 'queued',
+        job_id: job.provider_job_id,
+        internal_id: job.id,
+        status: job.status,
         base_model: model,
-        estimated_duration: '30-60 minutes',
+        fine_tuned_model: job.fine_tuned_model,
+        training_config: job.training_config,
         training_params: training_params || {},
       },
     };
@@ -62,13 +84,13 @@ export const startTrainingHandler: ToolHandler = async (params) => {
 
 export const startTrainingTool: DistriFnTool = {
   name: 'start_training',
-  description: 'Start the fine-tuning training job.',
+  description: 'Start the fine-tuning training job. Requires dataset to be uploaded to backend first.',
   type: 'function',
   parameters: {
     type: 'object',
     properties: {
       workflow_id: { type: 'string', description: 'The workflow ID' },
-      base_model: { type: 'string', default: 'gpt-4o-mini', description: 'Base model to fine-tune' },
+      base_model: { type: 'string', default: 'llama-v3-8b-instruct', description: 'Base model to fine-tune' },
       training_params: { type: 'object', description: 'Optional training parameters' },
     },
     required: ['workflow_id'],

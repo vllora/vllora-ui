@@ -2,6 +2,7 @@
  * Analyze Coverage Tool
  *
  * Analyzes topic distribution and calculates balance score.
+ * Uses the shared calculateAndSaveCoverageStats function for consistency.
  */
 
 import type { DistriFnTool } from '@distri/core';
@@ -9,8 +10,11 @@ import * as workflowDB from '@/services/finetune-workflow-db';
 import * as datasetsDB from '@/services/datasets-db';
 import type { ToolHandler, AnalyzeCoverageResult } from '../types';
 
-// Import existing analysis tools
-import { analyzeCoverage as existingAnalyzeCoverage } from '@/lib/distri-dataset-tools/analysis/analyze-coverage';
+// Import shared analysis function
+import {
+  analyzeCoverage as existingAnalyzeCoverage,
+  calculateAndSaveCoverageStats,
+} from '@/lib/distri-dataset-tools/analysis/analyze-coverage';
 
 export const analyzeCoverageHandler: ToolHandler = async (params): Promise<AnalyzeCoverageResult> => {
   try {
@@ -29,17 +33,15 @@ export const analyzeCoverageHandler: ToolHandler = async (params): Promise<Analy
       return { success: false, error: `Cannot analyze coverage in step ${workflow.currentStep}. Must be in coverage_generation step.` };
     }
 
-    // Get records and dataset
+    // Use shared function to calculate and save coverage stats to dataset
+    const coverageStats = await calculateAndSaveCoverageStats(workflow.datasetId);
+
+    // Get full coverage report for response (includes distribution details)
     const records = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);
     const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
+    const coverageReport = existingAnalyzeCoverage(records, dataset?.topicHierarchy || null);
 
-    // Analyze coverage using existing tool
-    const coverageReport = existingAnalyzeCoverage(
-      records,
-      dataset?.topicHierarchy || null
-    );
-
-    // Convert distribution to expected format
+    // Convert distribution to expected format for response
     const distribution: Record<string, {
       count: number;
       percentage: number;
@@ -58,12 +60,10 @@ export const analyzeCoverageHandler: ToolHandler = async (params): Promise<Analy
       };
     }
 
-    // Update workflow
+    // Update workflow with process-related data (generation history, synthetic counts)
     await workflowDB.updateStepData(workflow_id, 'coverageGeneration', {
-      balanceScore: coverageReport.balanceScore,
-      topicDistribution: Object.fromEntries(
-        Object.entries(coverageReport.distribution).map(([k, v]) => [k, v.count])
-      ),
+      balanceScore: coverageStats.balanceScore,
+      topicDistribution: coverageStats.topicDistribution,
       recommendations: coverageReport.recommendations,
       generationRounds: workflow.coverageGeneration?.generationRounds || [],
       syntheticCount: records.filter((r) => r.is_generated).length,
@@ -75,11 +75,11 @@ export const analyzeCoverageHandler: ToolHandler = async (params): Promise<Analy
     return {
       success: true,
       coverage: {
-        balance_score: coverageReport.balanceScore,
-        balance_rating: coverageReport.balanceRating,
+        balance_score: coverageStats.balanceScore,
+        balance_rating: coverageStats.balanceRating,
         distribution,
         recommendations: coverageReport.recommendations,
-        uncategorized_count: coverageReport.uncategorizedCount,
+        uncategorized_count: coverageStats.uncategorizedCount,
       },
     };
   } catch (error) {

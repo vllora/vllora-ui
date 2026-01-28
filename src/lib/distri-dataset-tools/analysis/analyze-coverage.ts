@@ -5,7 +5,7 @@
  * Provides recommendations for synthetic data generation.
  */
 
-import { DatasetRecord, TopicHierarchyConfig, TopicHierarchyNode } from '@/types/dataset-types';
+import { DatasetRecord, TopicHierarchyConfig, TopicHierarchyNode, CoverageStats } from '@/types/dataset-types';
 import {
   CoverageReport,
   TopicDistribution,
@@ -14,6 +14,7 @@ import {
   GenerationTargets,
   getBalanceRating,
 } from '@/types/coverage-types';
+import { getDatasetById, getRecordsByDatasetId, updateDatasetCoverageStats } from '@/services/datasets-db';
 
 /**
  * Extract all leaf topic names from a hierarchy
@@ -312,4 +313,38 @@ export function getTopicsPrioritizedForGeneration(
   return targets.recommendations
     .filter((r) => r.gap > 0)
     .map((r) => r.topic);
+}
+
+/**
+ * Calculate coverage and save to dataset
+ *
+ * This is the shared function used by both Lucy agent and UI.
+ * It calculates coverage stats and persists them to the dataset.
+ */
+export async function calculateAndSaveCoverageStats(
+  datasetId: string
+): Promise<CoverageStats> {
+  // Fetch dataset and records
+  const dataset = await getDatasetById(datasetId);
+  const records = await getRecordsByDatasetId(datasetId);
+
+  // Calculate coverage
+  const coverageReport = analyzeCoverage(records, dataset?.topicHierarchy || null);
+
+  // Convert to CoverageStats format for storage
+  const coverageStats: CoverageStats = {
+    balanceScore: coverageReport.balanceScore,
+    balanceRating: coverageReport.balanceRating,
+    topicDistribution: Object.fromEntries(
+      Object.entries(coverageReport.distribution).map(([topic, dist]) => [topic, dist.count])
+    ),
+    uncategorizedCount: coverageReport.uncategorizedCount,
+    totalRecords: coverageReport.totalRecords,
+    lastCalculatedAt: Date.now(),
+  };
+
+  // Save to dataset
+  await updateDatasetCoverageStats(datasetId, coverageStats);
+
+  return coverageStats;
 }

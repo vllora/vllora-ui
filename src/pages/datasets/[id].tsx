@@ -8,14 +8,10 @@
 import { useParams, useNavigate } from "react-router";
 import { DatasetsUIProvider } from "@/contexts/DatasetsUIContext";
 import { DatasetDetailView } from "@/components/datasets/DatasetDetailView";
-import { FinetuneDatasetPage } from "@/components/finetune/FinetuneDatasetPage";
-import { useSearchParams } from "react-router-dom";
 
 function DatasetDetailPageContent() {
   const { datasetId } = useParams<{ datasetId: string }>();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const viewMode = searchParams.get("mode");
 
   if (!datasetId) {
     navigate("/datasets");

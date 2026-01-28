@@ -866,3 +866,67 @@ export async function updateDatasetEvaluationConfig(
   });
 }
 
+// Update a dataset's coverage statistics
+export async function updateDatasetCoverageStats(
+  datasetId: string,
+  coverageStats: import('@/types/dataset-types').CoverageStats
+): Promise<void> {
+  const db = await getDB();
+  const now = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('datasets', 'readwrite');
+    const store = tx.objectStore('datasets');
+
+    const getRequest = store.get(datasetId);
+    getRequest.onsuccess = () => {
+      const dataset = getRequest.result;
+      if (dataset) {
+        dataset.coverageStats = coverageStats;
+        dataset.updatedAt = now;
+        store.put(dataset);
+      }
+    };
+
+    tx.oncomplete = () => {
+      // Emit refresh event so context auto-syncs with IndexedDB
+      emitter.emit(DATASET_REFRESH_EVENT as any, { datasetId });
+      resolve();
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/**
+ * Update dry run statistics for a dataset
+ */
+export async function updateDatasetDryRunStats(
+  datasetId: string,
+  dryRunStats: import('@/types/dataset-types').DryRunStats
+): Promise<void> {
+  const db = await getDB();
+  const now = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('datasets', 'readwrite');
+    const store = tx.objectStore('datasets');
+
+    const getRequest = store.get(datasetId);
+    getRequest.onsuccess = () => {
+      const dataset = getRequest.result;
+      if (dataset) {
+        dataset.dryRunStats = dryRunStats;
+        dataset.updatedAt = now;
+        store.put(dataset);
+      }
+    };
+
+    tx.oncomplete = () => {
+      // Emit refresh event so context auto-syncs with IndexedDB
+      emitter.emit(DATASET_REFRESH_EVENT as any, { datasetId });
+      resolve();
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+

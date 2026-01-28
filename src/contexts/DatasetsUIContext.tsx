@@ -115,7 +115,7 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
     if (!projectId) return;
     const unsubscribe = subscribe(
       'datasets-ui-span-listener',
-      (event: ProjectEventUnion) => {
+      (_event: ProjectEventUnion) => {
         // When we receive a span event, we know spans exist
         // Use ref to avoid re-subscribing when state changes
         if (!hasBackendSpansRef.current) {
