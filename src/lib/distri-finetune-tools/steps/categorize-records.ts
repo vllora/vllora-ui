@@ -8,6 +8,8 @@
 import type { DistriFnTool } from '@distri/core';
 import * as workflowDB from '@/services/finetune-workflow-db';
 import * as datasetsDB from '@/services/datasets-db';
+import { DATASET_REFRESH_EVENT } from '@/services/datasets-db';
+import { emitter } from '@/utils/eventEmitter';
 import type { ToolHandler, CategorizeRecordsResult } from '../types';
 
 // Import the CORRECT classification tool that uses existing hierarchy
@@ -36,6 +38,7 @@ export const categorizeRecordsHandler: ToolHandler = async (params): Promise<Cat
       return { success: false, error: 'Topic hierarchy must be configured first. Use generate_topics or apply_hierarchy.' };
     }
 
+    console.log('===== dataset?.topicHierarchy?.hierarchy', JSON.stringify(dataset?.topicHierarchy?.hierarchy))
     // Get all records to classify
     const records = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);
     if (records.length === 0) {
@@ -47,6 +50,11 @@ export const categorizeRecordsHandler: ToolHandler = async (params): Promise<Cat
       hierarchy: dataset.topicHierarchy.hierarchy,
       records,
     });
+    console.log('===== classifyRecords result', {
+      success: result.success,
+      classifiedCount: result.classifiedCount,
+      classifications: result.classifications ? Array.from(result.classifications.entries()) : null,
+    })
 
     if (!result.success || !result.classifications) {
       return { success: false, error: result.error || 'Failed to categorize records' };
@@ -58,6 +66,9 @@ export const categorizeRecordsHandler: ToolHandler = async (params): Promise<Cat
       await datasetsDB.updateRecordTopic(workflow.datasetId, recordId, topic);
       assignedCount++;
     }
+
+    // Emit refresh event so UI updates with new topic assignments
+    emitter.emit(DATASET_REFRESH_EVENT as any, {});
 
     const threshold = typeof confidence_threshold === 'number' ? confidence_threshold : 0.7;
 

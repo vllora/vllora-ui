@@ -150,6 +150,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
           isRoot={isRoot}
           isSelected={isSelected}
           isReactFlowSelected={selected}
+          coveragePercentage={coveragePercentage}
           records={records}
           datasetId={datasetId}
           availableTopics={availableTopics}

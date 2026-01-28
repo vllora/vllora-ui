@@ -1,5 +1,6 @@
 import { DistriFnTool } from '@distri/core';
 import * as datasetsDB from '@/services/datasets-db';
+import { DATASET_REFRESH_EVENT } from '@/services/datasets-db';
 import { emitter } from '@/utils/eventEmitter';
 import type { ToolHandler } from '../types';
 import type { TopicHierarchyNode } from '@/types/dataset-types';
@@ -41,7 +42,7 @@ export const updateRecordTopicHandler: ToolHandler = async ({ dataset_id, record
   if (!topicStr) {
     try {
       await datasetsDB.updateRecordTopic(dataset_id as string, record_id as string, '');
-      emitter.emit('vllora_dataset_refresh' as any, {});
+      emitter.emit(DATASET_REFRESH_EVENT as any, {});
       return { success: true, updated_topic: '(cleared)' };
     } catch (error) {
       return {
@@ -64,7 +65,7 @@ export const updateRecordTopicHandler: ToolHandler = async ({ dataset_id, record
     }
 
     await datasetsDB.updateRecordTopic(dataset_id as string, record_id as string, topicStr);
-    emitter.emit('vllora_dataset_refresh' as any, {});
+    emitter.emit(DATASET_REFRESH_EVENT as any, {});
     return { success: true, updated_topic: topicStr };
   } catch (error) {
     return {

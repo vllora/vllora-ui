@@ -19,6 +19,8 @@ interface ExpandedTopicNodeProps {
   isRoot: boolean;
   isSelected: boolean;
   isReactFlowSelected: boolean;
+  /** Coverage percentage from coverageStats (0-100) */
+  coveragePercentage?: number;
   records: DatasetRecord[];
   datasetId?: string;
   availableTopics: AvailableTopic[];
@@ -42,6 +44,7 @@ export function ExpandedTopicNode({
   isRoot,
   isSelected,
   isReactFlowSelected,
+  coveragePercentage,
   records,
   datasetId,
   availableTopics,
@@ -100,6 +103,7 @@ export function ExpandedTopicNode({
         recordCount={recordCount}
         isRoot={isRoot}
         isExpanded={true}
+        coveragePercentage={coveragePercentage}
         onToggleExpansion={onToggleExpansion}
         onRename={onRename}
       />

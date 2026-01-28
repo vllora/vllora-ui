@@ -4,7 +4,7 @@ import { extractDataInfoFromSpan } from '@/utils/modelUtils';
 import { emitter } from '@/utils/eventEmitter';
 
 // Event type for dataset changes - context listens for this to refresh
-const DATASET_REFRESH_EVENT = 'vllora_dataset_refresh';
+export const DATASET_REFRESH_EVENT = 'vllora_dataset_refresh';
 
 const DB_NAME = 'vllora-datasets';
 const DB_VERSION = 3;

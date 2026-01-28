@@ -245,9 +245,14 @@ async function processBatch(
   if (result.classifications) {
     for (const classification of result.classifications) {
       const recordExists = batch.some(r => r.id === classification.record_id);
+      const isValidTopic = classification.topic && validLeafTopicIds.has(classification.topic);
+
       // LLM returns topic IDs directly - validate against valid leaf IDs
-      if (recordExists && classification.topic && validLeafTopicIds.has(classification.topic)) {
+      if (recordExists && isValidTopic) {
         classifications.set(classification.record_id, classification.topic);
+      } else if (!isValidTopic && classification.topic) {
+        // Log when LLM returns invalid topic (helps debug topic ID vs name issues)
+        console.warn(`[classifyRecords] Invalid topic "${classification.topic}" for record ${classification.record_id}. Valid leaf topics:`, Array.from(validLeafTopicIds));
       }
     }
   }

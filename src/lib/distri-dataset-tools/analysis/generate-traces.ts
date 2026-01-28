@@ -669,10 +669,17 @@ async function simulateConversation(
   const topicKey = topicPath.join('/');
   const contextStr = topicStr;
 
+  console.log(`[simulateConversation] Starting for topic: ${topicStr}`);
+
   // Use seed system prompt if available, otherwise use a fallback
+  console.log(`[simulateConversation] Generating persona...`);
   const persona = await ensurePersona(personaCache, topicKey, contextStr);
+  console.log(`[simulateConversation] Persona: ${persona.substring(0, 50)}...`);
+
   const systemPrompt = seedSystemPrompt || `You are a helpful assistant specializing in ${topicStr}.`;
+  console.log(`[simulateConversation] Generating first user message...`);
   const firstUserMsg = await generateFirstUserMessage(contextStr, persona, systemPrompt);
+  console.log(`[simulateConversation] First user message generated (${firstUserMsg.length} chars)`);
 
   const messages: SyntheticMessage[] = [
     {
@@ -693,6 +700,7 @@ async function simulateConversation(
   const toolCallNameById = new Map<string, string>();
 
   while (userMessageCount < maxTurns) {
+    console.log(`[simulateConversation] Turn ${userMessageCount}/${maxTurns} - Generating assistant response...`);
     const assistant = await generateAssistantTurn(messages, systemPrompt, tools, toolCallNameById);
     messages.push({
       role: 'assistant',
@@ -700,8 +708,10 @@ async function simulateConversation(
       tool_calls: assistant.tool_calls,
       tool_call_id: null,
     });
+    console.log(`[simulateConversation] Assistant responded (${assistant.content?.length || 0} chars, ${assistant.tool_calls?.length || 0} tool calls)`);
 
     if (assistant.tool_calls) {
+      console.log(`[simulateConversation] Simulating ${assistant.tool_calls.length} tool call(s)...`);
       // Simulate all tool results in parallel
       const toolResults = await Promise.all(
         assistant.tool_calls.map(async (toolCall) => ({
@@ -717,11 +727,14 @@ async function simulateConversation(
           tool_calls: null,
           tool_call_id: toolCall.id,
         });
+        console.log(`[simulateConversation] Tool ${toolCall.function.name} returned (${result.length} chars)`);
       }
     }
 
+    console.log(`[simulateConversation] Generating user response...`);
     const userResponse = await generateUserResponse(messages, contextStr, firstUserMsg, persona, toolCallNameById);
     if (!userResponse || userResponse.includes('[END]')) {
+      console.log(`[simulateConversation] Conversation ended (user: ${userResponse ? '[END]' : 'empty'})`);
       break;
     }
 
@@ -732,8 +745,10 @@ async function simulateConversation(
       tool_call_id: null,
     });
     userMessageCount += 1;
+    console.log(`[simulateConversation] User message ${userMessageCount} added (${userResponse.length} chars)`);
   }
 
+  console.log(`[simulateConversation] Completed: ${messages.length} total messages`);
   return { topic_path: topicPath, persona, messages };
 }
 
@@ -784,10 +799,12 @@ async function generateSingleRecord(
   personaCache: Map<string, string[]>,
   callbacks: GenerationCallbacks
 ): Promise<{ record: TopicGenerationResult['records'][0]; error?: string } | { record: null; error: string }> {
+  console.log(`[generateSingleRecord] Starting record ${recordIndex + 1} for topic "${task.topicName}"`);
   try {
     const seedRecord = task.seedRecords[recordIndex % task.seedRecords.length];
     const seedMessages = extractSeedMessages(seedRecord);
     const seedSystemPrompt = extractSeedSystemPrompt(seedMessages);
+    console.log(`[generateSingleRecord] Seed: ${seedRecord?.id || 'none'}, messages: ${seedMessages.length}, hasSystemPrompt: ${!!seedSystemPrompt}`);
 
     const simulated = await simulateConversation(
       task.topicPath,
