@@ -1,7 +1,8 @@
 /**
  * Categorize Records Tool
  *
- * Assigns records to topics using hybrid categorization.
+ * Assigns records to topics using the configured topic hierarchy.
+ * Uses LLM to classify records into leaf topics from the hierarchy.
  */
 
 import type { DistriFnTool } from '@distri/core';
@@ -9,8 +10,8 @@ import * as workflowDB from '@/services/finetune-workflow-db';
 import * as datasetsDB from '@/services/datasets-db';
 import type { ToolHandler, CategorizeRecordsResult } from '../types';
 
-// Import existing analysis tools
-import { generateTopics as existingGenerateTopics } from '@/lib/distri-dataset-tools/analysis/generate-topics';
+// Import the CORRECT classification tool that uses existing hierarchy
+import { classifyRecords } from '@/lib/distri-dataset-tools/analysis/classify-records';
 
 export const categorizeRecordsHandler: ToolHandler = async (params): Promise<CategorizeRecordsResult> => {
   try {
@@ -35,16 +36,29 @@ export const categorizeRecordsHandler: ToolHandler = async (params): Promise<Cat
       return { success: false, error: 'Topic hierarchy must be configured first. Use generate_topics or apply_hierarchy.' };
     }
 
-    // Use existing generate_topics which does categorization
-    const result = await existingGenerateTopics({
-      datasetId: workflow.datasetId,
+    // Get all records to classify
+    const records = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);
+    if (records.length === 0) {
+      return { success: false, error: 'No records found in dataset' };
+    }
+
+    // Use classifyRecords which classifies into EXISTING hierarchy topics
+    const result = await classifyRecords({
+      hierarchy: dataset.topicHierarchy.hierarchy,
+      records,
     });
 
-    if (!result.success) {
+    if (!result.success || !result.classifications) {
       return { success: false, error: result.error || 'Failed to categorize records' };
     }
 
-    const assignedCount = result.applied_count || 0;
+    // Apply classifications to records
+    let assignedCount = 0;
+    for (const [recordId, topic] of result.classifications) {
+      await datasetsDB.updateRecordTopic(workflow.datasetId, recordId, topic);
+      assignedCount++;
+    }
+
     const threshold = typeof confidence_threshold === 'number' ? confidence_threshold : 0.7;
 
     // Update workflow
@@ -54,11 +68,11 @@ export const categorizeRecordsHandler: ToolHandler = async (params): Promise<Cat
       confidenceThreshold: threshold,
     });
 
-    // Get topic distribution
-    const records = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);
+    // Get topic distribution after classification
+    const updatedRecords = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);
     const byTopic: Record<string, { count: number; avg_confidence: number }> = {};
 
-    for (const record of records) {
+    for (const record of updatedRecords) {
       const topic = record.topic || '__uncategorized__';
       if (!byTopic[topic]) {
         byTopic[topic] = { count: 0, avg_confidence: 1.0 };
@@ -82,7 +96,7 @@ export const categorizeRecordsHandler: ToolHandler = async (params): Promise<Cat
 
 export const categorizeRecordsTool: DistriFnTool = {
   name: 'categorize_records',
-  description: 'Assign records to topics using hybrid categorization. Must be in categorize step.',
+  description: 'Classify records into the configured topic hierarchy. Uses LLM to assign each record to the most appropriate leaf topic. Must be in categorize step.',
   type: 'function',
   parameters: {
     type: 'object',
