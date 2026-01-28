@@ -115,18 +115,34 @@ function getLayoutedElements(
   dagre.layout(dagreGraph);
 
   // Calculate depth (rank) of each node from parent relationships
+  // Use -1 as a "processing" marker to detect and break cycles
   const nodeDepths: Record<string, number> = {};
-  const calculateDepth = (nodeId: string): number => {
-    if (nodeDepths[nodeId] !== undefined) return nodeDepths[nodeId];
+  const calculateDepth = (nodeId: string, visited: Set<string> = new Set()): number => {
+    // Already calculated
+    if (nodeDepths[nodeId] !== undefined && nodeDepths[nodeId] >= 0) {
+      return nodeDepths[nodeId];
+    }
+
+    // Cycle detection - if we've seen this node in current path, break the cycle
+    if (visited.has(nodeId)) {
+      console.warn(`[useDagreLayout] Cycle detected at node: ${nodeId}`);
+      nodeDepths[nodeId] = 0;
+      return 0;
+    }
+
     const parentId = nodeIdToParentId[nodeId];
     if (!parentId) {
       nodeDepths[nodeId] = 0;
       return 0;
     }
-    nodeDepths[nodeId] = calculateDepth(parentId) + 1;
+
+    // Mark as visited in current path
+    visited.add(nodeId);
+    const parentDepth = calculateDepth(parentId, visited);
+    nodeDepths[nodeId] = parentDepth + 1;
     return nodeDepths[nodeId];
   };
-  nodes.forEach((node) => calculateDepth(node.id));
+  nodes.forEach((node) => calculateDepth(node.id, new Set()));
 
   // First pass: convert dagre positions to top-left using actual dimensions
   const nodesWithPositions = nodes.map((node) => {
@@ -269,21 +285,29 @@ export function useDagreLayout(
         node: TopicHierarchyNode,
         parentId: string
       ) => {
-        const nodeId = `topic-${node.id}`;
+        // Ensure node has valid id and name
+        if (!node || (!node.id && !node.name)) {
+          console.warn('[useDagreLayout] Skipping invalid node:', node);
+          return;
+        }
+        const nodeId = `topic-${node.id || node.name}`;
         const hasChildren = node.children && node.children.length > 0;
-        const recordCount = recordCountsByTopic[node.name] || 0;
+        const recordCount = node.name ? (recordCountsByTopic[node.name] || 0) : 0;
 
         // Track mappings for path highlighting
-        topicNameToNodeId[node.name] = nodeId;
+        if (node.name) {
+          topicNameToNodeId[node.name] = nodeId;
+        }
         nodeIdToParentId[nodeId] = parentId;
 
+        const nodeName = node.name || node.id || 'Unknown';
         nodes.push({
           id: nodeId,
           type: "topic",
           position: { x: 0, y: 0 }, // Will be updated by dagre
           data: {
-            name: node.name,
-            topicKey: node.name,
+            name: nodeName,
+            topicKey: nodeName,
             nodeId: nodeId,
             recordCount,
             isRoot: false,

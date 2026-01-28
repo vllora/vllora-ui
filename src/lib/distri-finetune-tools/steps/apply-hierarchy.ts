@@ -11,6 +11,55 @@ import type { TopicHierarchyNode } from '@/types/dataset-types';
 import type { ToolHandler } from '../types';
 import { countLeafTopics, calculateMaxDepth } from './helpers';
 
+/**
+ * Normalize and validate hierarchy nodes.
+ * - Ensures each node has a unique `id`
+ * - Ensures each node has a `name`
+ * - Recursively processes children
+ */
+function normalizeHierarchy(
+  nodes: unknown[],
+  parentPath: string = ''
+): TopicHierarchyNode[] {
+  const result: TopicHierarchyNode[] = [];
+  const seenIds = new Set<string>();
+
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i] as Record<string, unknown>;
+    if (!node || typeof node !== 'object') continue;
+
+    // Get name (required) - support various field names the LLM might use
+    const name = (node.name as string) || (node.label as string) || (node.title as string);
+    if (!name || typeof name !== 'string') {
+      console.warn('[apply-hierarchy] Skipping node without name:', node);
+      continue;
+    }
+
+    // Generate or validate id
+    const currentPath = parentPath ? `${parentPath}/${name}` : name;
+    let id = (node.id as string) || currentPath;
+
+    // Ensure unique ID
+    if (seenIds.has(id)) {
+      id = `${id}-${i}`;
+    }
+    seenIds.add(id);
+
+    // Process children recursively
+    const children = Array.isArray(node.children)
+      ? normalizeHierarchy(node.children, currentPath)
+      : undefined;
+
+    result.push({
+      id,
+      name,
+      children: children && children.length > 0 ? children : undefined,
+    });
+  }
+
+  return result;
+}
+
 export const applyTopicHierarchyHandler: ToolHandler = async (params) => {
   try {
     const { workflow_id, hierarchy } = params;
@@ -32,8 +81,8 @@ export const applyTopicHierarchyHandler: ToolHandler = async (params) => {
       return { success: false, error: `Cannot apply hierarchy in step ${workflow.currentStep}` };
     }
 
-    // Validate hierarchy structure
-    const validHierarchy = hierarchy as TopicHierarchyNode[];
+    // Normalize and validate hierarchy structure (ensures IDs exist)
+    const validHierarchy = normalizeHierarchy(hierarchy);
     const topicCount = countLeafTopics(validHierarchy);
 
     if (topicCount === 0) {
