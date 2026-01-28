@@ -12,6 +12,54 @@ const fetchLucyConfigCached = async (): Promise<LucyConfig> => {
   return cachedLucyConfig;
 };
 
+/**
+ * Simple semaphore for limiting concurrent operations
+ */
+class Semaphore {
+  private permits: number;
+  private queue: Array<() => void> = [];
+
+  constructor(permits: number) {
+    this.permits = permits;
+  }
+
+  async acquire(): Promise<void> {
+    if (this.permits > 0) {
+      this.permits--;
+      return;
+    }
+    return new Promise<void>((resolve) => {
+      this.queue.push(resolve);
+    });
+  }
+
+  release(): void {
+    const next = this.queue.shift();
+    if (next) {
+      next();
+    } else {
+      this.permits++;
+    }
+  }
+
+  async run<T>(fn: () => Promise<T>): Promise<T> {
+    await this.acquire();
+    try {
+      return await fn();
+    } finally {
+      this.release();
+    }
+  }
+}
+
+// Global semaphore for LLM requests - will be configured per generateTraces call
+let llmSemaphore: Semaphore | null = null;
+
+function setLLMConcurrency(maxConcurrent: number): void {
+  llmSemaphore = new Semaphore(maxConcurrent);
+  console.log(`[generateTraces] LLM concurrency set to ${maxConcurrent}`);
+}
+
 interface SyntheticToolCall {
   id: string;
   type: 'function';
@@ -51,9 +99,9 @@ export interface GenerateTracesParams {
   dataset_id?: string;
   dataset_name?: string;
   record_ids?: string[];
-  count?: number; 
+  count?: number;
   max_turns?: number;
-  /** Number of parallel generation requests (default: 5) */
+  /** Maximum number of concurrent LLM requests (default: 5, max: 10) */
   concurrency?: number;
   /** Whether to generate for all topics or only selected ones */
   target_topics?: 'all' | 'selected';
@@ -488,38 +536,53 @@ async function callLLM(
   messages: DistriMessage[],
   options?: { responseFormat?: unknown; temperature?: number }
 ): Promise<string> {
-  const lucyConfig = await fetchLucyConfigCached();
-  const rawUrl = lucyConfig.distri_url || getDistriUrl();
-  const baseUrl = `${rawUrl.replace(/\/$/, '')}/v1`;
-  const distriClient = DistriClient.create({ baseUrl });
-  const modelSettingsFromConfig = lucyConfig.model_settings || {};
-  const { response_format: _ignoredResponseFormat, ...modelSettingsBase } = modelSettingsFromConfig as Record<string, unknown>;
-  const responseFormat = ensureResponseFormat(options?.responseFormat);
+  // Use semaphore to limit concurrent LLM requests
+  const executeCall = async (): Promise<string> => {
+    const lucyConfig = await fetchLucyConfigCached();
+    const rawUrl = lucyConfig.distri_url || getDistriUrl();
+    const baseUrl = `${rawUrl.replace(/\/$/, '')}/v1`;
+    const distriClient = DistriClient.create({ baseUrl });
+    const modelSettingsFromConfig = lucyConfig.model_settings || {};
+    const { response_format: _ignoredResponseFormat, ...modelSettingsBase } = modelSettingsFromConfig as Record<string, unknown>;
+    const responseFormat = ensureResponseFormat(options?.responseFormat);
 
-  const modelSettings = {
-    ...modelSettingsBase,
-    model: modelSettingsFromConfig.model || 'openai/gpt-4.1-mini',
-    temperature: options?.temperature ?? modelSettingsFromConfig.temperature ?? 0.5,
-    ...(responseFormat ? { response_format: responseFormat } : {}),
-  };
+    const modelSettings = {
+      ...modelSettingsBase,
+      model: modelSettingsFromConfig.model || 'openai/gpt-4.1-mini',
+      temperature: options?.temperature ?? modelSettingsFromConfig.temperature ?? 0.5,
+      ...(responseFormat ? { response_format: responseFormat } : {}),
+    };
 
-  let lastError: unknown;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const response = await distriClient.llm(messages, [], { model_settings: modelSettings });
-      if (!response.content) {
-        throw new Error('LLM returned empty response');
-      }
-      return response.content.trim();
-    } catch (err) {
-      lastError = err;
-      if (attempt < 2) {
-        await sleep(800 * Math.pow(2, attempt));
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const startTime = Date.now();
+        const response = await distriClient.llm(messages, [], { model_settings: modelSettings });
+        const elapsed = Date.now() - startTime;
+        if (!response.content) {
+          throw new Error('LLM returned empty response');
+        }
+        console.log(`[callLLM] Response received in ${elapsed}ms (${response.content.length} chars)`);
+        return response.content.trim();
+      } catch (err) {
+        lastError = err;
+        console.warn(`[callLLM] Attempt ${attempt + 1}/3 failed:`, err instanceof Error ? err.message : err);
+        if (attempt < 2) {
+          const delay = 800 * Math.pow(2, attempt);
+          console.log(`[callLLM] Retrying in ${delay}ms...`);
+          await sleep(delay);
+        }
       }
     }
-  }
 
-  throw lastError instanceof Error ? lastError : new Error('LLM call failed');
+    throw lastError instanceof Error ? lastError : new Error('LLM call failed');
+  };
+
+  // If semaphore is set, use it to limit concurrency
+  if (llmSemaphore) {
+    return llmSemaphore.run(executeCall);
+  }
+  return executeCall();
 }
 
 async function callLLMText(prompt: string, systemPrompt?: string): Promise<string> {
@@ -816,9 +879,11 @@ async function generateSingleRecord(
     );
 
     if (!simulated) {
+      console.log(`[generateSingleRecord] Simulation returned empty for ${task.topicName}[${recordIndex + 1}]`);
       return { record: null, error: `${task.topicName}[${recordIndex + 1}]: simulation returned empty` };
     }
 
+    console.log(`[generateSingleRecord] Building data info for ${task.topicName}[${recordIndex + 1}]...`);
     const data = buildSyntheticTraceDataInfo(simulated, task.tools);
 
     const recordData = {
@@ -836,10 +901,12 @@ async function generateSingleRecord(
 
     // Add record to DB immediately for real-time UI update
     try {
+      console.log(`[generateSingleRecord] Saving record ${recordIndex + 1} to DB for topic "${task.topicName}"...`);
       const addedRecords = await datasetsDB.addRecordsToDataset(callbacks.datasetId, [recordData]);
 
       // Update shared progress counter atomically
       callbacks.progressCounter.count += addedRecords.length;
+      console.log(`[generateSingleRecord] Record saved! Progress: ${callbacks.progressCounter.count}/${callbacks.totalExpectedRecords}`);
 
       // Notify UI with newly created record
       if (callbacks.on_records_added && addedRecords.length > 0) {
@@ -856,9 +923,11 @@ async function generateSingleRecord(
 
       return { record: recordData };
     } catch (dbErr) {
+      console.error(`[generateSingleRecord] DB add failed for ${task.topicName}[${recordIndex + 1}]:`, dbErr);
       return { record: null, error: `${task.topicName}[${recordIndex + 1}]: DB add failed - ${dbErr instanceof Error ? dbErr.message : String(dbErr)}` };
     }
   } catch (err) {
+    console.error(`[generateSingleRecord] Error for ${task.topicName}[${recordIndex + 1}]:`, err);
     const errorMsg = err instanceof Error ? err.message : String(err);
     return { record: null, error: `${task.topicName}[${recordIndex + 1}]: ${errorMsg}` };
   }
@@ -874,12 +943,15 @@ async function generateRecordsForTopic(
   personaCache: Map<string, string[]>,
   callbacks: GenerationCallbacks
 ): Promise<TopicGenerationResult> {
+  console.log(`[generateRecordsForTopic] Starting topic "${task.topicName}" - generating ${task.recordsToGenerate} records in parallel`);
+
   // Generate all records for this topic in parallel
   const recordPromises = Array.from({ length: task.recordsToGenerate }, (_, i) =>
     generateSingleRecord(task, i, turns, personaCache, callbacks)
   );
 
   const results = await Promise.allSettled(recordPromises);
+  console.log(`[generateRecordsForTopic] Completed topic "${task.topicName}" - all ${task.recordsToGenerate} record promises settled`);
 
   const records: TopicGenerationResult['records'] = [];
   const errors: string[] = [];
@@ -901,19 +973,34 @@ async function generateRecordsForTopic(
 }
 
 export async function generateTraces(params: GenerateTracesParams): Promise<GenerateTracesResult> {
+  console.log('[generateTraces] ========== STARTING TRACE GENERATION ==========');
+  console.log('[generateTraces] Params:', JSON.stringify({
+    dataset_id: params.dataset_id,
+    record_ids: params.record_ids?.length || 0,
+    count: params.count,
+    max_turns: params.max_turns,
+    concurrency: params.concurrency,
+    target_topics: params.target_topics,
+    selected_topics: params.selected_topics,
+  }, null, 2));
+
   try {
     const { dataset_id, record_ids, count, max_turns, concurrency, target_topics, selected_topics, on_progress, on_records_added } =
       params;
 
     const resolvedDatasetId = dataset_id;
     if (!resolvedDatasetId) {
+      console.log('[generateTraces] Error: dataset_id is required');
       return { success: false, error: 'dataset_id is required' };
     }
 
+    console.log('[generateTraces] Fetching dataset:', resolvedDatasetId);
     const dataset = await datasetsDB.getDatasetById(resolvedDatasetId);
     if (!dataset) {
+      console.log('[generateTraces] Error: Dataset not found');
       return { success: false, error: `Dataset ${resolvedDatasetId} not found` };
     }
+    console.log('[generateTraces] Dataset found:', dataset.name);
     const topicHierarchy = dataset.topicHierarchy;
 
     const selectedIds = (record_ids || []).filter(Boolean) as string[];
@@ -945,11 +1032,14 @@ export async function generateTraces(params: GenerateTracesParams): Promise<Gene
 
     // Error if no topics found
     if (targetLeafTopics.length === 0) {
+      console.log('[generateTraces] Error: No topics found');
       return {
         success: false,
         error: 'No topics found. Please configure a topic hierarchy or select specific topics to generate data for.'
       };
     }
+
+    console.log('[generateTraces] Target topics:', targetLeafTopics.map(t => t.name));
 
     const recordsPerTopic = typeof count === 'number' && count > 0 ? count : DEFAULT_RECORDS_PER_TOPIC;
     const totalExpectedRecords = targetLeafTopics.length * recordsPerTopic;
@@ -958,6 +1048,17 @@ export async function generateTraces(params: GenerateTracesParams): Promise<Gene
     const effectiveConcurrency = typeof concurrency === 'number' && concurrency > 0
       ? Math.min(concurrency, 10)
       : DEFAULT_CONCURRENCY;
+
+    console.log('[generateTraces] Generation config:', {
+      topicCount: targetLeafTopics.length,
+      recordsPerTopic,
+      totalExpectedRecords,
+      maxTurns: turns,
+      concurrency: effectiveConcurrency,
+    });
+
+    // Set LLM concurrency limiter - this controls total concurrent LLM requests
+    setLLMConcurrency(effectiveConcurrency);
 
     // Extract tools from seed records (use first available or fallback to catalog)
     const seedTools = seedRecords.find(r => r !== undefined) ? extractSeedTools(seedRecords.find(r => r !== undefined)) : [];
@@ -989,31 +1090,40 @@ export async function generateTraces(params: GenerateTracesParams): Promise<Gene
       on_records_added,
     };
 
-    // Process topics in parallel batches
-    for (let batchStart = 0; batchStart < topicTasks.length; batchStart += effectiveConcurrency) {
-      const batchTasks = topicTasks.slice(batchStart, batchStart + effectiveConcurrency);
+    // Process all topics in parallel - LLM semaphore controls the actual concurrency
+    console.log(`[generateTraces] Processing ${topicTasks.length} topics (LLM concurrency limited to ${effectiveConcurrency})`);
 
-      // Run topic tasks in parallel - each task handles DB writes and progress updates internally
-      const batchResults = await Promise.allSettled(
-        batchTasks.map(task => generateRecordsForTopic(task, turns, personaCache, callbacks))
-      );
-      // Collect errors from completed tasks
-      for (let j = 0; j < batchResults.length; j++) {
-        const result = batchResults[j];
-        const task = batchTasks[j];
+    // Run all topic tasks in parallel - the semaphore limits concurrent LLM requests
+    const allResults = await Promise.allSettled(
+      topicTasks.map(task => generateRecordsForTopic(task, turns, personaCache, callbacks))
+    );
 
-        if (result.status === 'fulfilled') {
-          allErrors.push(...result.value.errors);
-        } else {
-          const errorMsg = result.reason instanceof Error ? result.reason.message : String(result.reason);
-          allErrors.push(`${task.topicName}: ${errorMsg}`);
-        }
+    // Collect errors from completed tasks
+    for (let j = 0; j < allResults.length; j++) {
+      const result = allResults[j];
+      const task = topicTasks[j];
+
+      if (result.status === 'fulfilled') {
+        console.log(`[generateTraces] Topic "${task.topicName}": ${result.value.records.length} records, ${result.value.errors.length} errors`);
+        allErrors.push(...result.value.errors);
+      } else {
+        const errorMsg = result.reason instanceof Error ? result.reason.message : String(result.reason);
+        console.error(`[generateTraces] Topic "${task.topicName}" failed:`, errorMsg);
+        allErrors.push(`${task.topicName}: ${errorMsg}`);
       }
     }
 
     const createdTotal = progressCounter.count;
 
+    console.log('[generateTraces] ========== GENERATION COMPLETE ==========');
+    console.log('[generateTraces] Summary:', {
+      totalCreated: createdTotal,
+      totalExpected: totalExpectedRecords,
+      errorCount: allErrors.length,
+    });
+
     if (createdTotal === 0) {
+      console.log('[generateTraces] No traces generated - returning failure');
       return {
         success: false,
         dataset_name: dataset.name,
@@ -1021,6 +1131,7 @@ export async function generateTraces(params: GenerateTracesParams): Promise<Gene
       };
     }
 
+    console.log('[generateTraces] Success!');
     return {
       success: true,
       dataset_name: dataset.name,
@@ -1028,6 +1139,7 @@ export async function generateTraces(params: GenerateTracesParams): Promise<Gene
       error: allErrors.length > 0 ? `${allErrors.length} error(s): ${allErrors.slice(0, 5).join(' | ')}${allErrors.length > 5 ? '...' : ''}` : undefined,
     };
   } catch (error) {
+    console.error('[generateTraces] Fatal error:', error);
     return { success: false, error: `LLM error: ${error instanceof Error ? error.message : 'Unknown error'}` };
   }
 }
