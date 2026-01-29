@@ -514,6 +514,19 @@ export interface UpdateEvaluatorResponse {
   updated: boolean;
 }
 
+// ============================================================================
+// Dataset Analytics Types
+// ============================================================================
+
+export interface DryRunAnalyticsRequest {
+  rows: unknown[];
+}
+
+export interface DryRunAnalyticsResponse {
+  analytics: Record<string, unknown>;
+  quality: Record<string, unknown>;
+}
+
 /**
  * Update the evaluator config for an existing backend dataset
  * This allows changing the grader without re-uploading the entire dataset
@@ -529,4 +542,23 @@ export async function updateDatasetEvaluator(
     body: JSON.stringify({ evaluator }),
   });
   return handleApiResponse<UpdateEvaluatorResponse>(response);
+}
+
+// ============================================================================
+// Dataset Analytics API Functions
+// ============================================================================
+
+/**
+ * Run dry-run analytics on dataset rows without uploading
+ * Computes quality metrics and analytics for the provided rows
+ * @param rows - Array of dataset rows to analyze
+ */
+export async function getDryRunAnalytics(
+  rows: unknown[]
+): Promise<DryRunAnalyticsResponse> {
+  const response = await apiClient('/finetune/datasets/analytics/dry-run', {
+    method: 'POST',
+    body: JSON.stringify({ rows }),
+  });
+  return handleApiResponse<DryRunAnalyticsResponse>(response);
 }

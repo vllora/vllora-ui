@@ -5,6 +5,12 @@
 // Tool handler function type
 export type ToolHandler = (params: Record<string, unknown>) => Promise<unknown>;
 
+// Server analytics response from /analytics/dry-run endpoint
+export interface ServerAnalyticsInfo {
+  analytics: Record<string, unknown>;
+  quality: Record<string, unknown>;
+}
+
 // Dataset stats result
 export interface DatasetStats {
   dataset_id: string;
@@ -17,6 +23,8 @@ export interface DatasetStats {
   evaluated_count: number;
   created_at: number;
   updated_at: number;
+  // Optional server analytics (only present when include_server_analytics_info=true)
+  server_analytics?: ServerAnalyticsInfo;
 }
 
 // Dataset list item
