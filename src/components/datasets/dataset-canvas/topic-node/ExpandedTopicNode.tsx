@@ -24,7 +24,7 @@ interface ExpandedTopicNodeProps {
   records: DatasetRecord[];
   datasetId?: string;
   availableTopics: AvailableTopic[];
-  onToggleExpansion: () => void;
+  onViewRecords: () => void;
   onResize: (width: number, height: number) => void;
   onRename?: (newName: string) => void;
   onUpdateRecordTopic?: (recordId: string, topic: string, isNew?: boolean) => Promise<void>;
@@ -48,7 +48,7 @@ export function ExpandedTopicNode({
   records,
   datasetId,
   availableTopics,
-  onToggleExpansion,
+  onViewRecords,
   onResize,
   onRename,
   onUpdateRecordTopic,
@@ -104,7 +104,7 @@ export function ExpandedTopicNode({
         isRoot={isRoot}
         isExpanded={true}
         coveragePercentage={coveragePercentage}
-        onToggleExpansion={onToggleExpansion}
+        onViewRecords={onViewRecords}
         onRename={onRename}
       />
 

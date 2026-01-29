@@ -18,6 +18,7 @@ export function TopicRecordsDialogWrapper() {
     onUpdateRecordTopic,
     onDeleteRecord,
     onSaveRecord,
+    
   } = TopicCanvasConsumer();
 
   // Get records for the currently viewing topic

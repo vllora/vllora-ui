@@ -166,6 +166,7 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
   const totalRecordCount = records.length;
 
   return {
+    hierarchy,
     records,
     recordsByTopic,
     totalRecordCount,

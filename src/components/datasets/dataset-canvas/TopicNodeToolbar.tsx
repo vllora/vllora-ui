@@ -19,7 +19,7 @@ interface TopicNodeToolbarProps {
   /** Handler for deleting the topic */
   onDeleteTopic?: (topicName: string) => void;
   /** Handler for toggling node expansion */
-  onToggleExpansion: (nodeId: string) => void;
+  onViewRecords: (nodeId: string) => void;
 }
 
 export function TopicNodeToolbar({
@@ -28,7 +28,7 @@ export function TopicNodeToolbar({
   isRoot,
   // isExpanded,
   onDeleteTopic,
-  // onToggleExpansion,
+  // onViewRecords,
 }: TopicNodeToolbarProps) {
   return (
     <div
@@ -60,7 +60,7 @@ export function TopicNodeToolbar({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-[160px]">
-            <DropdownMenuItem onClick={() => onToggleExpansion(nodeId)}>
+            <DropdownMenuItem onClick={() => onViewRecords(nodeId)}>
               {isExpanded ? "Collapse" : "Expand"} node
             </DropdownMenuItem>
             <DropdownMenuSeparator />

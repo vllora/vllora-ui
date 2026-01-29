@@ -1,12 +1,12 @@
 /**
  * TopicNodeHeader
  *
- * Header section for TopicNodeComponent displaying icon, name, record count, and expand/collapse button.
+ * Header section for TopicNodeComponent displaying icon, name, record count, and view records button.
  * Supports inline renaming on double-click (non-root nodes only).
  */
 
 import { useState, useRef, useEffect } from "react";
-import { Table2, ChevronDown, ChevronUp, Pencil } from "lucide-react";
+import { Table2, Eye, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -24,7 +24,7 @@ interface TopicNodeHeaderProps {
   isExpanded: boolean;
   /** Coverage percentage from coverageStats (0-100) */
   coveragePercentage?: number;
-  onToggleExpansion: () => void;
+  onViewRecords: () => void;
   /** Called when the topic is renamed. Only available for non-root nodes. */
   onRename?: (newName: string) => void;
 }
@@ -117,7 +117,7 @@ export function TopicNodeHeader({
   isRoot,
   isExpanded,
   coveragePercentage,
-  onToggleExpansion,
+  onViewRecords,
   onRename,
 }: TopicNodeHeaderProps) {
   const [isEditing, setIsEditing] = useState(false);
@@ -251,15 +251,32 @@ export function TopicNodeHeader({
           </div>
         )}
         {!isExpanded && !isEditing && (
-          <p className="text-xs text-muted-foreground">
-            {isEmptyRoot
-              ? "All records assigned"
-              : (() => {
-                  // For parent nodes, show aggregated count; for leaf nodes, show direct count
-                  const displayCount = aggregatedRecordCount ?? recordCount;
-                  return `${displayCount.toLocaleString()} record${displayCount !== 1 ? "s" : ""}`;
-                })()}
-          </p>
+          (() => {
+            if (isEmptyRoot) {
+              return <p className="text-xs text-muted-foreground">All records assigned</p>;
+            }
+            // For parent nodes, show aggregated count with tooltip; for leaf nodes, show direct count
+            const isAggregated = aggregatedRecordCount !== undefined && aggregatedRecordCount !== recordCount;
+            const displayCount = aggregatedRecordCount ?? recordCount;
+            const countText = `${displayCount.toLocaleString()} record${displayCount !== 1 ? "s" : ""}`;
+
+            const tooltipText = isAggregated
+              ? "Total records across all child topics"
+              : "Records assigned to this topic";
+
+            return (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <p className="text-xs text-muted-foreground cursor-help">{countText}</p>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p className="text-xs">{tooltipText}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            );
+          })()
         )}
       </div>
 
@@ -308,25 +325,29 @@ export function TopicNodeHeader({
         );
       })()}
 
-      {/* Expand/Collapse chevron - hide when no records */}
+      {/* View records button - hide when no records */}
       {recordCount > 0 && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            onToggleExpansion();
-          }}
-          className="flex-shrink-0 p-1 rounded-md hover:bg-muted transition-colors cursor-pointer nodrag text-muted-foreground hover:text-foreground"
-          style={{ pointerEvents: 'auto' }}
-          title={isExpanded ? "Collapse" : "Expand"}
-        >
-          {isExpanded ? (
-            <ChevronUp className="w-4 h-4" />
-          ) : (
-            <ChevronDown className="w-4 h-4" />
-          )}
-        </button>
+        <TooltipProvider delayDuration={200}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  onViewRecords();
+                }}
+                className="flex-shrink-0 p-1.5 rounded-lg bg-muted/50 hover:bg-[rgb(var(--theme-500))]/15 transition-all cursor-pointer nodrag text-muted-foreground hover:text-[rgb(var(--theme-500))] border border-transparent hover:border-[rgb(var(--theme-500))]/30"
+                style={{ pointerEvents: 'auto' }}
+              >
+                <Eye className="w-4 h-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p className="text-xs">View records</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       )}
     </div>
   );

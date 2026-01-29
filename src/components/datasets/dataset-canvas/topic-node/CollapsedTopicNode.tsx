@@ -17,7 +17,7 @@ interface CollapsedTopicNodeProps {
   isSelected: boolean;
   /** Coverage percentage from coverageStats (0-100) */
   coveragePercentage?: number;
-  onToggleExpansion: () => void;
+  onViewRecords: () => void;
   onRename?: (newName: string) => void;
 }
 
@@ -31,7 +31,7 @@ export function CollapsedTopicNode({
   isRoot,
   isSelected,
   coveragePercentage,
-  onToggleExpansion,
+  onViewRecords,
   onRename,
 }: CollapsedTopicNodeProps) {
   return (
@@ -56,7 +56,7 @@ export function CollapsedTopicNode({
         isRoot={isRoot}
         isExpanded={false}
         coveragePercentage={coveragePercentage}
-        onToggleExpansion={onToggleExpansion}
+        onViewRecords={onViewRecords}
         onRename={onRename}
       />
     </div>

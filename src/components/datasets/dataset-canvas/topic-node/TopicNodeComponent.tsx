@@ -92,7 +92,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
           isRoot={isRoot}
           isExpanded={false}
           onDeleteTopic={onDeleteTopic}
-          onToggleExpansion={handleOpenModal}
+          onViewRecords={handleOpenModal}
         />
       )}
 
@@ -138,7 +138,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
         isRoot={isRoot}
         isSelected={isSelected}
         coveragePercentage={coveragePercentage}
-        onToggleExpansion={handleOpenModal}
+        onViewRecords={handleOpenModal}
         onRename={handleRename}
       />
     </div>
