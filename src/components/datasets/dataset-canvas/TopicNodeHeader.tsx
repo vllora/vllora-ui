@@ -325,8 +325,8 @@ export function TopicNodeHeader({
         );
       })()}
 
-      {/* View records button - hide when no records */}
-      {recordCount > 0 && (
+      {/* View records button - show when there are records (direct or aggregated) */}
+      {(recordCount > 0 || (aggregatedRecordCount ?? 0) > 0) && (
         <TooltipProvider delayDuration={200}>
           <Tooltip>
             <TooltipTrigger asChild>

@@ -161,6 +161,48 @@ const hashString = (str: string): number => {
   return Math.abs(hash);
 };
 
+/**
+ * Find a topic node in the hierarchy by its id/name.
+ * Returns the node if found, undefined otherwise.
+ */
+export function findTopicInHierarchy(
+  nodes: TopicHierarchyNode[] | undefined,
+  topicId: string
+): TopicHierarchyNode | undefined {
+  if (!nodes || nodes.length === 0) return undefined;
+
+  for (const node of nodes) {
+    const nodeId = node.id || node.name;
+    if (nodeId === topicId || node.name === topicId) {
+      return node;
+    }
+    if (node.children && node.children.length > 0) {
+      const found = findTopicInHierarchy(node.children, topicId);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Get all descendant leaf topic IDs for a given topic node.
+ * If the node itself is a leaf, returns just its ID.
+ * Used for aggregating records when viewing a parent topic.
+ */
+export function getDescendantLeafTopicIds(node: TopicHierarchyNode): string[] {
+  if (!node.children || node.children.length === 0) {
+    // Leaf node - return its ID
+    return [node.id || node.name];
+  }
+
+  // Parent node - recurse into children
+  const ids: string[] = [];
+  for (const child of node.children) {
+    ids.push(...getDescendantLeafTopicIds(child));
+  }
+  return ids;
+}
+
 // Get topic badge color based on topic name (hash-based for consistency)
 export const getTopicColor = (topic: string | undefined): string => {
   if (!topic) return "";

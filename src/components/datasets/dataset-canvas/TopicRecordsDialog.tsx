@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { FolderTree } from "lucide-react";
 import { RecordsTable } from "../records-table/RecordsTable";
-import type { DatasetRecord } from "@/types/dataset-types";
+import type { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import type { AvailableTopic } from "../record-utils";
 
 interface TopicRecordsDialogProps {
@@ -26,6 +26,10 @@ interface TopicRecordsDialogProps {
   topicName: string;
   /** Records belonging to this topic */
   records: DatasetRecord[];
+  /** Whether this is a parent topic (shows aggregated records from children) */
+  isParentTopic?: boolean;
+  /** Subtree hierarchy for parent topics (children of the current topic) */
+  subtreeHierarchy?: TopicHierarchyNode[];
   /** Dataset ID */
   datasetId?: string;
   /** Available topics for reassignment */
@@ -43,6 +47,8 @@ export function TopicRecordsDialog({
   onOpenChange,
   topicName,
   records,
+  isParentTopic = false,
+  subtreeHierarchy,
   datasetId,
   availableTopics = [],
   onUpdateRecordTopic,
@@ -53,6 +59,12 @@ export function TopicRecordsDialog({
   const handleUpdateTopic = onUpdateRecordTopic ?? (async () => {});
   const handleDelete = onDeleteRecord ?? (() => {});
 
+  // Description varies based on whether this is a parent topic or leaf topic
+  const recordCountText = `${records.length} record${records.length !== 1 ? "s" : ""}`;
+  const description = isParentTopic
+    ? `${recordCountText} across all child topics`
+    : `${recordCountText} in this topic`;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[90vw] h-[95vh] overflow-hidden flex flex-col">
@@ -62,7 +74,7 @@ export function TopicRecordsDialog({
             {topicName}
           </DialogTitle>
           <DialogDescription>
-            {records.length} record{records.length !== 1 ? "s" : ""} in this topic
+            {description}
           </DialogDescription>
         </DialogHeader>
 
@@ -73,6 +85,8 @@ export function TopicRecordsDialog({
             showHeader={false}
             showFooter={true}
             height="auto"
+            groupByTopic={isParentTopic}
+            topicHierarchy={subtreeHierarchy}
             onUpdateTopic={handleUpdateTopic}
             onDelete={handleDelete}
             onSave={onSaveRecord}
