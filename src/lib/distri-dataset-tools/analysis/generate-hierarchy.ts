@@ -238,15 +238,27 @@ function parseHierarchyResponse(content: string): HierarchyGenerationResult {
   }
 }
 
-function convertToTopicHierarchyNodes(nodes: LLMHierarchyNode[]): TopicHierarchyNode[] {
-  return nodes.map((node) => ({
-    id: crypto.randomUUID(),
-    name: node.name,
-    // Convert empty children arrays to undefined for cleaner tree structure
-    children: node.children && node.children.length > 0
-      ? convertToTopicHierarchyNodes(node.children)
-      : undefined,
-  }));
+/**
+ * Convert LLM-generated hierarchy to TopicHierarchyNode[] with path-based IDs.
+ * IDs are built as "Parent/Child/LeafName" for human readability and LLM compatibility.
+ */
+function convertToTopicHierarchyNodes(
+  nodes: LLMHierarchyNode[],
+  parentPath: string = ''
+): TopicHierarchyNode[] {
+  return nodes.map((node) => {
+    // Build path-based ID: "Parent/Child/NodeName"
+    const nodeId = parentPath ? `${parentPath}/${node.name}` : node.name;
+
+    return {
+      id: nodeId,
+      name: node.name,
+      // Convert empty children arrays to undefined for cleaner tree structure
+      children: node.children && node.children.length > 0
+        ? convertToTopicHierarchyNodes(node.children, nodeId)
+        : undefined,
+    };
+  });
 }
 
 function extractRecordSamples(records: DatasetRecord[]): RecordSample[] {

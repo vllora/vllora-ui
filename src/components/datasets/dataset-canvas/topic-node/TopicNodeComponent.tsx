@@ -3,7 +3,7 @@
  *
  * Custom React Flow node for displaying a topic in the hierarchy canvas.
  * Acts as a wrapper that handles shared logic (selection, handles, toolbar)
- * and delegates rendering to CollapsedTopicNode or ExpandedTopicNode.
+ * and renders CollapsedTopicNode. Clicking expand opens a modal dialog.
  */
 
 import { memo } from "react";
@@ -12,7 +12,6 @@ import { Plus } from "lucide-react";
 import { TopicCanvasConsumer } from "../TopicCanvasContext";
 import { TopicNodeToolbar } from "../TopicNodeToolbar";
 import { CollapsedTopicNode } from "./CollapsedTopicNode";
-import { ExpandedTopicNode } from "./ExpandedTopicNode";
 
 export interface TopicNodeData extends Record<string, unknown> {
   name: string;
@@ -29,7 +28,6 @@ export type TopicNode = Node<TopicNodeData, "topic">;
 
 export const TopicNodeComponent = memo(function TopicNodeComponent({
   data,
-  selected = false,
 }: NodeProps<TopicNode>) {
   const {
     name,
@@ -45,23 +43,15 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
   const {
     recordsByTopic,
     totalRecordCount,
-    datasetId,
-    availableTopics,
     selectedTopic,
     setSelectedTopic,
-    isNodeExpanded,
-    toggleNodeExpansion,
-    setNodeSize,
     onRenameTopic,
     onDeleteTopic,
-    onUpdateRecordTopic,
-    onDeleteRecord,
-    onSaveRecord,
     startAddingTopic,
     pendingAddParentId,
+    openTopicModal,
   } = TopicCanvasConsumer();
 
-  const isExpanded = isNodeExpanded(nodeId);
   // Use "__root__" as special value for root selection, null means nothing selected
   const isSelected = isRoot ? selectedTopic === "__root__" : selectedTopic === name;
   const records = recordsByTopic[topicKey] || [];
@@ -79,12 +69,10 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
     setSelectedTopic(isRoot ? "__root__" : name);
   };
 
-  const handleToggleExpansion = () => {
-    toggleNodeExpansion(nodeId);
-  };
-
-  const handleResize = (width: number, height: number) => {
-    setNodeSize(nodeId, width, height);
+  const handleOpenModal = () => {
+    // Open the modal dialog with records for this topic
+    // Use topicKey for looking up records (name for leaf topics, "__unassigned__" for root)
+    openTopicModal(topicKey);
   };
 
   const handleRename = (newName: string) => {
@@ -102,9 +90,9 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
           name={name}
           nodeId={nodeId}
           isRoot={isRoot}
-          isExpanded={isExpanded}
+          isExpanded={false}
           onDeleteTopic={onDeleteTopic}
-          onToggleExpansion={toggleNodeExpansion}
+          onToggleExpansion={handleOpenModal}
         />
       )}
 
@@ -142,36 +130,16 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
         </button>
       )}
 
-      {/* Render collapsed or expanded state */}
-      {isExpanded ? (
-        <ExpandedTopicNode
-          name={name}
-          recordCount={recordCount}
-          isRoot={isRoot}
-          isSelected={isSelected}
-          isReactFlowSelected={selected}
-          coveragePercentage={coveragePercentage}
-          records={records}
-          datasetId={datasetId}
-          availableTopics={availableTopics}
-          onToggleExpansion={handleToggleExpansion}
-          onResize={handleResize}
-          onRename={handleRename}
-          onUpdateRecordTopic={onUpdateRecordTopic}
-          onDeleteRecord={onDeleteRecord}
-          onSaveRecord={onSaveRecord}
-        />
-      ) : (
-        <CollapsedTopicNode
-          name={name}
-          recordCount={recordCount}
-          isRoot={isRoot}
-          isSelected={isSelected}
-          coveragePercentage={coveragePercentage}
-          onToggleExpansion={handleToggleExpansion}
-          onRename={handleRename}
-        />
-      )}
+      {/* Render collapsed node - clicking expand opens modal dialog */}
+      <CollapsedTopicNode
+        name={name}
+        recordCount={recordCount}
+        isRoot={isRoot}
+        isSelected={isSelected}
+        coveragePercentage={coveragePercentage}
+        onToggleExpansion={handleOpenModal}
+        onRename={handleRename}
+      />
     </div>
   );
 });

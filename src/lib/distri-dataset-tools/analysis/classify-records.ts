@@ -31,7 +31,7 @@ interface RecordForClassification {
 
 interface ClassificationResult {
   record_id: string;
-  topic: string; // Leaf topic ID (e.g., "Openings/Italian Game")
+  topic: string; // Leaf topic ID using path syntax (e.g., "Openings/Italian Game")
 }
 
 interface ClassificationResponse {
@@ -100,7 +100,8 @@ Goal: Classify each record into the most appropriate leaf topic from the provide
 
 Rules:
 - Each record must be assigned to exactly one LEAF topic (nodes without children)
-- Return the topic ID (not the name) - IDs are unique identifiers like "Openings/Italian Game"
+- Return the topic ID exactly as shown in the hierarchy (e.g., "Technical Support/Hardware Issues/Device Malfunction")
+- Topic IDs use path syntax with "/" separators
 - Choose the most specific and relevant topic for each record
 - If a record doesn't fit any topic well, choose the closest match
 - Output MUST be valid JSON that matches the schema (no markdown, no code fences)

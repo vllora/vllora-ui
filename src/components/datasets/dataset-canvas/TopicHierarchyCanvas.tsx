@@ -25,6 +25,7 @@ import { TopicInputNodeComponent } from "./TopicInputNode";
 import { RootNodeComponent } from "./RootNodeComponent";
 import { CanvasToolbar } from "./CanvasToolbar";
 import { TopicCanvasProvider, TopicCanvasConsumer } from "./TopicCanvasContext";
+import { TopicRecordsDialogWrapper } from "./TopicRecordsDialogWrapper";
 import type { CanvasNode } from "./useDagreLayout";
 import {
   useDagreLayout,
@@ -279,6 +280,7 @@ export function TopicHierarchyCanvas({
       onCreateChildTopic={onCreateChildTopic}
     >
       <TopicHierarchyCanvasInner hierarchy={hierarchy} />
+      <TopicRecordsDialogWrapper />
     </TopicCanvasProvider>
   );
 }

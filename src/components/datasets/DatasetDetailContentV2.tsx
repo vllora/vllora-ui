@@ -8,7 +8,7 @@
 
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, LayoutGrid, Table2 } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { DeleteConfirmationDialog } from "./DeleteConfirmationDialog";
 import { AssignTopicDialog } from "./AssignTopicDialog";
@@ -20,8 +20,8 @@ import { SanitizeDataDialog } from "./SanitizeDataDialog";
 import { DryRunDialog } from "./DryRunDialog";
 import { getLeafTopicsFromHierarchy } from "./record-utils";
 import { getTopicCounts } from "./topic-hierarchy-utils";
-import type { DatasetStep } from "./dataset-canvas/DatasetStepper";
 import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
+import { RecordsTable } from "./records-table/RecordsTable";
 import { DatasetDetailHeader } from "./DatasetDetailHeader";
 import { LucyDatasetAssistant } from "./LucyDatasetAssistant";
 import { EvaluationConfigDialog } from "./evaluation-dialog/EvaluationConfigDialog";
@@ -95,6 +95,9 @@ export function DatasetDetailContentV2() {
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [evaluationConfigDialog, setEvaluationConfigDialog] = useState(false);
 
+  // View mode: "canvas" for visual hierarchy, "table" for full data table with hierarchy grouping
+  const [viewMode, setViewMode] = useState<"canvas" | "table">("canvas");
+
   // Compute available topics from hierarchy for topic selection
   const availableTopics = useMemo(
     () => getLeafTopicsFromHierarchy(dataset?.topicHierarchy?.hierarchy),
@@ -138,27 +141,6 @@ export function DatasetDetailContentV2() {
   const handleAutoTagSelected = async () => {
     await handleAutoTagRecords();
     setAssignTopicDialog(false);
-  };
-
-  // Handle step click from header checklist
-  const handleStepClick = (step: DatasetStep) => {
-    switch (step) {
-      case "extract_data":
-        setImportDialog(true);
-        break;
-      case "topics_categorize":
-        setTopicHierarchyDialog(true);
-        break;
-      case "evaluation_config":
-        setEvaluationConfigDialog(true);
-        break;
-      case "finetune":
-        // TODO: Open finetune dialog
-        break;
-      case "deployed":
-        // TODO: Open deployment dialog
-        break;
-    }
   };
 
   // Handle add topic from canvas
@@ -336,30 +318,73 @@ export function DatasetDetailContentV2() {
 
       {/* Main content on the right */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header with integrated checklist */}
+        {/* Header with dataset objective and insights */}
         <div className="px-4 py-2 border-b border-border">
-          <DatasetDetailHeader onStepClick={handleStepClick} />
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <DatasetDetailHeader />
+            </div>
+            {/* View mode toggle */}
+            <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-lg shrink-0">
+              <Button
+                variant={viewMode === "canvas" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 px-2.5 gap-1.5"
+                onClick={() => setViewMode("canvas")}
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span className="text-xs">Canvas</span>
+              </Button>
+              <Button
+                variant={viewMode === "table" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 px-2.5 gap-1.5"
+                onClick={() => setViewMode("table")}
+              >
+                <Table2 className="w-3.5 h-3.5" />
+                <span className="text-xs">Table</span>
+              </Button>
+            </div>
+          </div>
         </div>
 
-        {/* Main content area - Canvas */}
+        {/* Main content area - Canvas or Table based on view mode */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <TopicHierarchyCanvas
-            hierarchy={dataset.topicHierarchy?.hierarchy}
-            records={sortedRecords}
-            datasetId={datasetId}
-            coverageStats={canvasCoverageStats}
-            onSelectTopic={setSelectedTopic}
-            selectedTopic={selectedTopic}
-            onAddTopic={handleAddTopic}
-            onRenameTopic={handleRenameTopic}
-            onDeleteTopic={handleDeleteTopic}
-            onUpdateRecordTopic={handleUpdateRecordTopic}
-            onDeleteRecord={(recordId) =>
-              setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
-            }
-            onSaveRecord={handleSaveRecordData}
-            onCreateChildTopic={handleCreateChildTopic}
-          />
+          {viewMode === "canvas" ? (
+            <TopicHierarchyCanvas
+              hierarchy={dataset.topicHierarchy?.hierarchy}
+              records={sortedRecords}
+              datasetId={datasetId}
+              coverageStats={canvasCoverageStats}
+              onSelectTopic={setSelectedTopic}
+              selectedTopic={selectedTopic}
+              onAddTopic={handleAddTopic}
+              onRenameTopic={handleRenameTopic}
+              onDeleteTopic={handleDeleteTopic}
+              onUpdateRecordTopic={handleUpdateRecordTopic}
+              onDeleteRecord={(recordId) =>
+                setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
+              }
+              onSaveRecord={handleSaveRecordData}
+              onCreateChildTopic={handleCreateChildTopic}
+            />
+          ) : (
+            <RecordsTable
+              records={sortedRecords}
+              datasetId={datasetId}
+              showHeader={true}
+              showFooter={true}
+              height="auto"
+              groupByTopic={true}
+              topicHierarchy={dataset.topicHierarchy?.hierarchy}
+              availableTopics={availableTopics}
+              onUpdateTopic={handleUpdateRecordTopic}
+              onDelete={(recordId) =>
+                setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
+              }
+              onSave={handleSaveRecordData}
+            />
+          )}
         </div>
       </div>
 

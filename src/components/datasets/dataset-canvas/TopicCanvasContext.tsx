@@ -130,6 +130,17 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     [pendingAddParentId, onCreateChildTopic]
   );
 
+  // Modal for viewing topic records
+  const [viewingTopicId, setViewingTopicId] = useState<string | null>(null);
+
+  const openTopicModal = useCallback((topicId: string) => {
+    setViewingTopicId(topicId);
+  }, []);
+
+  const closeTopicModal = useCallback(() => {
+    setViewingTopicId(null);
+  }, []);
+
   const isNodeExpanded = useCallback(
     (nodeId: string) => expandedNodes.has(nodeId),
     [expandedNodes]
@@ -183,6 +194,10 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     startAddingTopic,
     cancelAddingTopic,
     confirmAddingTopic,
+    // Modal for viewing topic records
+    viewingTopicId,
+    openTopicModal,
+    closeTopicModal,
   };
 }
 

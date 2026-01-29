@@ -1,11 +1,11 @@
 /**
  * DatasetDetailHeader
  *
- * Header for the dataset detail view with breadcrumb, title, stats, and actions.
+ * Simplified header showing dataset objective and key statistics in cards.
  * Consumes DatasetDetailContext to avoid prop drilling.
  */
 
-import { useState, useEffect, useMemo } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -14,42 +14,46 @@ import {
   Check,
   X,
   Database,
-  PanelRightOpen,
-  PanelRightClose,
-  Circle,
+  FileText,
+  Sparkles,
+  FolderTree,
+  PieChart,
 } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
-import { useFinetuneJobs } from "@/contexts/FinetuneJobsContext";
 import { DatasetSelector } from "./DatasetSelector";
-import { DatasetActions } from "./DatasetActions";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import type { DatasetStep } from "./dataset-canvas/DatasetStepper";
-import { computeCompletedSteps } from "./dataset-canvas/DatasetStepper";
 
-// Checklist items configuration
-const CHECKLIST_ITEMS: {
-  id: DatasetStep;
+interface StatCardProps {
+  icon: React.ReactNode;
   label: string;
-  tooltip: string;
-}[] = [
-  { id: "extract_data", label: "Data", tooltip: "Add data records" },
-  { id: "topics_categorize", label: "Topics", tooltip: "Define topic hierarchy" },
-  { id: "evaluation_config", label: "Evaluator", tooltip: "Configure evaluation" },
-  { id: "finetune", label: "Finetune", tooltip: "Run finetuning" },
-  { id: "deployed", label: "Deploy", tooltip: "Deploy model" },
-];
-
-interface DatasetDetailHeaderProps {
-  onStepClick?: (step: DatasetStep) => void;
+  value: string | number;
+  subValue?: string;
+  color?: "default" | "violet" | "blue" | "emerald" | "amber" | "red";
 }
 
-export function DatasetDetailHeader({ onStepClick }: DatasetDetailHeaderProps) {
+function StatCard({ icon, label, value, subValue, color = "default" }: StatCardProps) {
+  const colorClasses = {
+    default: "bg-muted/50 text-foreground",
+    violet: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+    blue: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+    emerald: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    amber: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+    red: "bg-red-500/10 text-red-600 dark:text-red-400",
+  };
+
+  return (
+    <div className={cn("flex items-center gap-3 px-4 py-3 rounded-lg", colorClasses[color])}>
+      <div className="shrink-0">{icon}</div>
+      <div className="min-w-0">
+        <div className="text-xs text-muted-foreground">{label}</div>
+        <div className="font-semibold text-lg leading-tight">{value}</div>
+        {subValue && <div className="text-xs text-muted-foreground">{subValue}</div>}
+      </div>
+    </div>
+  );
+}
+
+export function DatasetDetailHeader() {
   const {
     dataset,
     datasetId,
@@ -62,35 +66,37 @@ export function DatasetDetailHeader({ onStepClick }: DatasetDetailHeaderProps) {
     handleRenameDataset,
   } = DatasetDetailConsumer();
 
-  const { isSidebarOpen, setIsSidebarOpen, filteredJobs, setCurrentBackendDatasetId } = useFinetuneJobs();
-  const hasActiveJobs = filteredJobs.some(j => j.status === 'pending' || j.status === 'running');
-
-  // Compute completed steps
-  const completedSteps = useMemo(() => {
-    if (!dataset) return new Set<DatasetStep>();
-    return computeCompletedSteps({
-      recordCount: records.length,
-      hasTopicHierarchy: !!dataset.topicHierarchy?.hierarchy,
-      hasEvaluationConfig: !!dataset.evaluationConfig,
-      hasFinetuneJob: false, // TODO: Check actual finetune job status
-      isDeployed: false, // TODO: Check actual deployment status
-    });
-  }, [dataset, records.length]);
-
-  // Set the backend dataset ID for filtering finetune jobs
-  // Uses the backend dataset ID stored in the local dataset after upload
-  useEffect(() => {
-    setCurrentBackendDatasetId(dataset?.backendDatasetId ?? null);
-    return () => setCurrentBackendDatasetId(null);
-  }, [dataset?.backendDatasetId, setCurrentBackendDatasetId]);
-
   const [isEditing, setIsEditing] = useState(false);
   const [editingName, setEditingName] = useState("");
 
   const name = dataset?.name ?? "";
-  const recordCount = records.length;
-  const updatedAt = dataset?.updatedAt;
   const stats = dataset?.stats;
+  const coverageStats = dataset?.coverageStats;
+
+  // Calculate insights
+  const totalRecords = records.length;
+  const generatedRecords = stats?.generatedRecords ?? records.filter(r => r.is_generated).length;
+  const originalRecords = totalRecords - generatedRecords;
+  const topicCount = stats?.topicCount ?? Object.keys(stats?.topicDistribution ?? {}).length;
+  const uncategorizedCount = stats?.uncategorizedCount ?? records.filter(r => !r.topic).length;
+  const categorizedCount = totalRecords - uncategorizedCount;
+  const categorizedPercent = totalRecords > 0
+    ? Math.round((categorizedCount / totalRecords) * 100)
+    : 0;
+
+  // Balance rating color
+  const getBalanceColor = (): StatCardProps["color"] => {
+    if (!coverageStats) return "default";
+    switch (coverageStats.balanceRating) {
+      case "excellent":
+      case "good":
+        return "emerald";
+      case "fair":
+        return "amber";
+      default:
+        return "red";
+    }
+  };
 
   const handleStartEdit = () => {
     setEditingName(name);
@@ -109,23 +115,10 @@ export function DatasetDetailHeader({ onStepClick }: DatasetDetailHeaderProps) {
     setEditingName("");
   };
 
-  // Format the last updated time
-  const formatLastUpdated = (timestamp?: number) => {
-    if (!timestamp) return null;
-    const now = Date.now();
-    const diff = now - timestamp;
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const days = Math.floor(hours / 24);
-
-    if (days > 0) return `${days} day${days > 1 ? "s" : ""} ago`;
-    if (hours > 0) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
-    return "Just now";
-  };
-
   return (
-    <div className="mb-2">
+    <div className="mb-4">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-2 text-sm mb-5">
+      <nav className="flex items-center gap-2 text-sm mb-4">
         <button
           onClick={onBack}
           className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all"
@@ -144,184 +137,92 @@ export function DatasetDetailHeader({ onStepClick }: DatasetDetailHeaderProps) {
             onCreateNew={() => setCreateDatasetDialog(true)}
           />
         ) : (
-          <span className="px-2.5 py-1 rounded-md bg-muted/50 text-foreground font-medium">{name}</span>
+          <span className="px-2.5 py-1 rounded-md bg-muted/50 text-foreground font-medium">
+            {name}
+          </span>
         )}
-        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />
-        <span className="px-2.5 py-1 text-muted-foreground">Records</span>
       </nav>
 
-      {/* Title and actions */}
-      <div className="flex items-start justify-between">
-        <div>
-          {isEditing ? (
-            <div className="flex items-center gap-2 mb-2">
-              <Input
-                value={editingName}
-                onChange={(e) => setEditingName(e.target.value)}
-                className="h-10 w-80 text-2xl font-bold"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleSave();
-                  if (e.key === "Escape") handleCancel();
-                }}
-              />
-              <Button size="sm" variant="ghost" onClick={handleSave}>
-                <Check className="w-4 h-4" />
-              </Button>
-              <Button size="sm" variant="ghost" onClick={handleCancel}>
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 mb-2">
-              <h1 className="text-2xl font-bold">{name}</h1>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={handleStartEdit}
-              >
-                <Pencil className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-          )}
-          <p className="text-xs italic text-muted-foreground">
-            {recordCount.toLocaleString()} total records
-            {stats && stats.generatedRecords > 0 && (
-              <>
-                <span className="mx-2">•</span>
-                <span>{stats.generatedRecords.toLocaleString()} generated</span>
-              </>
-            )}
-            {stats && stats.topicCount > 0 && (
-              <>
-                <span className="mx-2">•</span>
-                <span>{stats.topicCount} topics</span>
-              </>
-            )}
-            {stats && stats.uncategorizedCount > 0 && (
-              <>
-                <span className="mx-2">•</span>
-                <span className="text-amber-500">{stats.uncategorizedCount} uncategorized</span>
-              </>
-            )}
-            {stats?.sanitization && (
-              <>
-                <span className="mx-2">•</span>
-                <span className={stats.sanitization.validationRate >= 0.9 ? "text-emerald-500" : stats.sanitization.validationRate >= 0.7 ? "text-amber-500" : "text-red-500"}>
-                  {Math.round(stats.sanitization.validationRate * 100)}% valid
-                </span>
-              </>
-            )}
-            {updatedAt && (
-              <>
-                <span className="mx-2">•</span>
-                <span className="">
-                  Last updated: {formatLastUpdated(updatedAt)}
-                </span>
-              </>
-            )}
-          </p>
-
-          {/* Training Objective + Checklist row */}
-          <div className="flex items-start gap-6 mt-3">
-            {/* Training Objective */}
-            {dataset?.datasetObjective && (
-              <p className="text-sm text-muted-foreground max-w-xl flex-1">
-                <span className="font-medium text-foreground">Training Objective:</span>{" "}
-                {dataset.datasetObjective}
-              </p>
-            )}
-
-            {/* Compact Checklist */}
-            <TooltipProvider delayDuration={200}>
-              <div className="flex items-center gap-1 shrink-0">
-                {CHECKLIST_ITEMS.map((item, index) => {
-                  const isCompleted = completedSteps.has(item.id);
-
-                  return (
-                    <div key={item.id} className="flex items-center">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            onClick={() => onStepClick?.(item.id)}
-                            className={cn(
-                              "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-all",
-                              isCompleted
-                                ? "text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
-                                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-                            )}
-                          >
-                            <div
-                              className={cn(
-                                "w-4 h-4 rounded-full flex items-center justify-center",
-                                isCompleted
-                                  ? "bg-emerald-500 text-white"
-                                  : "border border-muted-foreground/30"
-                              )}
-                            >
-                              {isCompleted ? (
-                                <Check className="w-2.5 h-2.5" strokeWidth={3} />
-                              ) : (
-                                <Circle className="w-2 h-2 text-muted-foreground/30" />
-                              )}
-                            </div>
-                            <span className="hidden lg:inline">{item.label}</span>
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom">
-                          <p>{isCompleted ? `${item.label} complete` : item.tooltip}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                      {index < CHECKLIST_ITEMS.length - 1 && (
-                        <div
-                          className={cn(
-                            "w-3 h-px mx-0.5",
-                            isCompleted && completedSteps.has(CHECKLIST_ITEMS[index + 1].id)
-                              ? "bg-emerald-500/60"
-                              : "bg-border"
-                          )}
-                        />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </TooltipProvider>
+      {/* Title and Objective */}
+      <div className="mb-4">
+        {isEditing ? (
+          <div className="flex items-center gap-2 mb-2">
+            <Input
+              value={editingName}
+              onChange={(e) => setEditingName(e.target.value)}
+              className="h-10 w-80 text-2xl font-bold"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSave();
+                if (e.key === "Escape") handleCancel();
+              }}
+            />
+            <Button size="sm" variant="ghost" onClick={handleSave}>
+              <Check className="w-4 h-4" />
+            </Button>
+            <Button size="sm" variant="ghost" onClick={handleCancel}>
+              <X className="w-4 h-4" />
+            </Button>
           </div>
-        </div>
+        ) : (
+          <div className="flex items-center gap-2 mb-2">
+            <h1 className="text-2xl font-bold truncate">{name}</h1>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 shrink-0"
+              onClick={handleStartEdit}
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        )}
 
-        {/* Actions */}
-        <div className="flex items-center gap-2">
-          {/* Dataset actions - consumes context directly */}
-          <DatasetActions />
+        {/* Training Objective */}
+        {dataset?.datasetObjective && (
+          <p className="text-sm text-muted-foreground max-w-3xl">
+            <span className="font-medium text-foreground">Objective:</span>{" "}
+            {dataset.datasetObjective}
+          </p>
+        )}
+      </div>
 
-          {/* Finetune jobs sidebar toggle */}
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                  className="relative"
-                >
-                  {isSidebarOpen ? (
-                    <PanelRightClose className="h-4 w-4" />
-                  ) : (
-                    <PanelRightOpen className="h-4 w-4" />
-                  )}
-                  {hasActiveJobs && !isSidebarOpen && (
-                    <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-blue-500 animate-pulse" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{isSidebarOpen ? "Hide finetune jobs" : "Show finetune jobs"}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {/* Total Records */}
+        <StatCard
+          icon={<FileText className="w-5 h-5" />}
+          label="Total Records"
+          value={totalRecords.toLocaleString()}
+          subValue={originalRecords > 0 ? `${originalRecords} original` : undefined}
+        />
+
+        {/* Generated Records */}
+        <StatCard
+          icon={<Sparkles className="w-5 h-5" />}
+          label="Generated"
+          value={generatedRecords.toLocaleString()}
+          subValue={totalRecords > 0 ? `${Math.round((generatedRecords / totalRecords) * 100)}% of total` : undefined}
+          color={generatedRecords > 0 ? "violet" : "default"}
+        />
+
+        {/* Topics & Coverage */}
+        <StatCard
+          icon={<FolderTree className="w-5 h-5" />}
+          label="Topics"
+          value={topicCount > 0 ? topicCount : "—"}
+          subValue={topicCount > 0 ? `${categorizedPercent}% categorized` : "Not configured"}
+          color={topicCount > 0 ? "blue" : "default"}
+        />
+
+        {/* Balance */}
+        <StatCard
+          icon={<PieChart className="w-5 h-5" />}
+          label="Balance"
+          value={coverageStats?.balanceRating ?? "—"}
+          subValue={coverageStats ? `Score: ${Math.round(coverageStats.balanceScore * 100)}%` : "Run coverage analysis"}
+          color={getBalanceColor()}
+        />
       </div>
     </div>
   );

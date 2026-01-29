@@ -11,7 +11,7 @@ export interface DatasetRecord {
   data: unknown;               // Trace payload (DataInfo) or imported object
   metadata?: Record<string, unknown>; // Record-level metadata (provenance, flags)
   spanId?: string;             // For duplicate detection and keeping track of span (optional - undefined for generated data)
-  topic?: string;              // Leaf topic name (look up full path in dataset's topicHierarchy)
+  topic?: string;              // Leaf topic ID using path syntax (e.g., "Category/Subcategory/Topic")
   is_generated?: boolean;      // True for synthetic/generated traces
   evaluation?: DatasetEvaluation;
   createdAt: number;
