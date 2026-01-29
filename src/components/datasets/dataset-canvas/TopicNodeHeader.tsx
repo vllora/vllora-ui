@@ -337,10 +337,10 @@ export function TopicNodeHeader({
                   e.preventDefault();
                   onViewRecords();
                 }}
-                className="flex-shrink-0 p-1.5 rounded-lg bg-muted/50 hover:bg-[rgb(var(--theme-500))]/15 transition-all cursor-pointer nodrag text-muted-foreground hover:text-[rgb(var(--theme-500))] border border-transparent hover:border-[rgb(var(--theme-500))]/30"
+                className="flex-shrink-0 p-1.5 rounded-lg hover:bg-[rgb(var(--theme-500))]/15 transition-all cursor-pointer nodrag text-muted-foreground hover:text-[rgb(var(--theme-500))]  border-transparent"
                 style={{ pointerEvents: 'auto' }}
               >
-                <Eye className="w-4 h-4" />
+                <Eye className="w-3 h-3" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom">

@@ -2,13 +2,13 @@
  * TopicNodeToolbar
  *
  * Floating toolbar that appears above a selected topic node.
- * Provides actions: Rename, Delete, and More options.
+ * Provides actions: Generate, Delete, and More options.
  */
 
-import { Trash2 } from "lucide-react";
+import { Trash2, Sparkles } from "lucide-react";
 
 interface TopicNodeToolbarProps {
-  /** Topic name (used for delete) */
+  /** Topic name (used for delete and generate) */
   name: string;
   /** Node ID for expansion tracking */
   nodeId: string;
@@ -20,6 +20,8 @@ interface TopicNodeToolbarProps {
   onDeleteTopic?: (topicName: string) => void;
   /** Handler for toggling node expansion */
   onViewRecords: (nodeId: string) => void;
+  /** Handler for generating more data for this topic */
+  onGenerateForTopic?: (topicName: string) => void;
 }
 
 export function TopicNodeToolbar({
@@ -29,6 +31,7 @@ export function TopicNodeToolbar({
   // isExpanded,
   onDeleteTopic,
   // onViewRecords,
+  onGenerateForTopic,
 }: TopicNodeToolbarProps) {
   return (
     <div
@@ -36,6 +39,19 @@ export function TopicNodeToolbar({
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-popover border border-border shadow-lg">
+        {/* Generate button (not for root) */}
+        {!isRoot && onGenerateForTopic && (
+          <button
+            type="button"
+            onClick={() => onGenerateForTopic(name)}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md hover:bg-[rgb(var(--theme-500))]/10 transition-colors text-muted-foreground hover:text-[rgb(var(--theme-500))]"
+            title="Generate more data for this topic"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Generate</span>
+          </button>
+        )}
+
         {/* Delete button (not for root) */}
         {!isRoot && onDeleteTopic && (
           <button

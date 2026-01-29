@@ -15,6 +15,7 @@ import { useMemo, useCallback, useState, useEffect, useRef } from "react";
 import { useParams } from "react-router";
 import { Plus, Loader2, PanelLeftClose, PanelLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { emitter } from "@/utils/eventEmitter";
 import {
   Tooltip,
   TooltipContent,
@@ -145,6 +146,21 @@ export function LucyDatasetAssistant() {
     hasSetAutoTriggerRef.current = false;
     setAutoTriggerPrompt(null);
   }, [selectedDatasetId]);
+
+  // Listen for external prompt triggers (e.g., "Generate for topic" button)
+  useEffect(() => {
+    const handleLucyPrompt = ({ prompt }: { prompt: string }) => {
+      // Expand the sidebar if collapsed
+      setIsCollapsed(false);
+      // Set the prompt to trigger Lucy
+      setAutoTriggerPrompt(prompt);
+    };
+
+    emitter.on("vllora_lucy_prompt", handleLucyPrompt);
+    return () => {
+      emitter.off("vllora_lucy_prompt", handleLucyPrompt);
+    };
+  }, []);
 
   const isOpenAIConfigured = useMemo(() => {
     const openaiProvider = providers.find(p => p.name.toLowerCase() === "openai");

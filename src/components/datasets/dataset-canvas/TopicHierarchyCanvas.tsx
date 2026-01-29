@@ -69,6 +69,8 @@ interface TopicHierarchyCanvasProps {
   onSaveRecord?: (recordId: string, data: unknown) => Promise<void>;
   /** Called when creating a new child topic via inline input */
   onCreateChildTopic?: (parentTopicName: string | null, childTopicName: string) => void;
+  /** Called when user wants to generate more data for a specific topic */
+  onGenerateForTopic?: (topicName: string) => void;
 }
 
 // Inner component that uses the context
@@ -262,6 +264,7 @@ export function TopicHierarchyCanvas({
   onDeleteRecord,
   onSaveRecord,
   onCreateChildTopic,
+  onGenerateForTopic,
 }: TopicHierarchyCanvasProps) {
   return (
     <TopicCanvasProvider
@@ -278,6 +281,7 @@ export function TopicHierarchyCanvas({
       onDeleteRecord={onDeleteRecord}
       onSaveRecord={onSaveRecord}
       onCreateChildTopic={onCreateChildTopic}
+      onGenerateForTopic={onGenerateForTopic}
     >
       <TopicHierarchyCanvasInner hierarchy={hierarchy} />
       <TopicRecordsDialogWrapper />

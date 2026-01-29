@@ -32,6 +32,8 @@ export interface TopicCanvasProviderProps {
   onSaveRecord?: (recordId: string, data: unknown) => Promise<void>;
   /** Called when creating a new child topic via inline input */
   onCreateChildTopic?: (parentTopicName: string | null, childTopicName: string) => void;
+  /** Called when user wants to generate more data for a specific topic */
+  onGenerateForTopic?: (topicName: string) => void;
 }
 
 // ============================================================================
@@ -53,6 +55,7 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     onDeleteRecord,
     onSaveRecord,
     onCreateChildTopic,
+    onGenerateForTopic,
   } = props;
 
   // Compute available topics from hierarchy (only leaf topics for assignment)
@@ -190,6 +193,7 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     onUpdateRecordTopic,
     onDeleteRecord,
     onSaveRecord,
+    onGenerateForTopic,
     // Inline topic creation
     pendingAddParentId,
     startAddingTopic,
