@@ -22,6 +22,7 @@ import { getLeafTopicsFromHierarchy } from "./record-utils";
 import { getTopicCounts } from "./topic-hierarchy-utils";
 import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
 import { RecordsTable } from "./records-table/RecordsTable";
+import { RecordDetailSidebar } from "./records-table/RecordDetailSidebar";
 import { DatasetDetailHeader } from "./DatasetDetailHeader";
 import { LucyDatasetAssistant } from "./LucyDatasetAssistant";
 import { EvaluationConfigDialog } from "./evaluation-dialog/EvaluationConfigDialog";
@@ -97,6 +98,13 @@ export function DatasetDetailContentV2() {
 
   // View mode: "canvas" for visual hierarchy, "table" for full data table with hierarchy grouping
   const [viewMode, setViewMode] = useState<"canvas" | "table">("canvas");
+
+  // Selected record for sidebar detail view (table mode only)
+  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
+  const selectedRecord = useMemo(
+    () => sortedRecords.find((r) => r.id === selectedRecordId) ?? null,
+    [sortedRecords, selectedRecordId]
+  );
 
   // Compute available topics from hierarchy for topic selection
   const availableTopics = useMemo(
@@ -369,21 +377,39 @@ export function DatasetDetailContentV2() {
               onCreateChildTopic={handleCreateChildTopic}
             />
           ) : (
-            <RecordsTable
-              records={sortedRecords}
-              datasetId={datasetId}
-              showHeader={true}
-              showFooter={true}
-              height="auto"
-              groupByTopic={true}
-              topicHierarchy={dataset.topicHierarchy?.hierarchy}
-              availableTopics={availableTopics}
-              onUpdateTopic={handleUpdateRecordTopic}
-              onDelete={(recordId) =>
-                setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
-              }
-              onSave={handleSaveRecordData}
-            />
+            <>
+              {/* Records Table */}
+              <RecordsTable
+                records={sortedRecords}
+                datasetId={datasetId}
+                showHeader={true}
+                showFooter={true}
+                height="auto"
+                groupByTopic={true}
+                topicHierarchy={dataset.topicHierarchy?.hierarchy}
+                availableTopics={availableTopics}
+                onUpdateTopic={handleUpdateRecordTopic}
+                onDelete={(recordId) =>
+                  setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
+                }
+                onSave={handleSaveRecordData}
+                onExpand={(record) => setSelectedRecordId(record.id)}
+                viewingRecordId={selectedRecordId}
+              />
+
+              {/* Record Detail Sidebar (Sheet - renders via portal) */}
+              <RecordDetailSidebar
+                record={selectedRecord}
+                onClose={() => setSelectedRecordId(null)}
+                availableTopics={availableTopics}
+                onUpdateTopic={handleUpdateRecordTopic}
+                onDelete={(recordId) => {
+                  setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id });
+                  setSelectedRecordId(null);
+                }}
+                onSave={handleSaveRecordData}
+              />
+            </>
           )}
         </div>
       </div>

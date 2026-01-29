@@ -25,6 +25,7 @@ export interface TopicTreeNodeRowProps {
   selectedIds: Set<string>;
   onSelectRecord: (recordId: string, checked: boolean) => void;
   onExpand?: (record: DatasetRecord) => void;
+  viewingRecordId?: string | null;
   availableTopics: AvailableTopic[];
 }
 
@@ -41,6 +42,7 @@ export function TopicTreeNodeRow({
   selectedIds,
   onSelectRecord,
   onExpand,
+  viewingRecordId,
   availableTopics,
 }: TopicTreeNodeRowProps) {
   const [isExpanded, setIsExpanded] = useState(true); // Expand all by default
@@ -131,6 +133,7 @@ export function TopicTreeNodeRow({
                 selectedIds={selectedIds}
                 onSelectRecord={onSelectRecord}
                 onExpand={onExpand}
+                viewingRecordId={viewingRecordId}
                 availableTopics={availableTopics}
               />
             ))}
@@ -149,6 +152,7 @@ export function TopicTreeNodeRow({
                   selected={selectedIds.has(record.id)}
                   onSelect={(checked) => onSelectRecord(record.id, checked)}
                   onExpand={onExpand}
+                  isViewing={viewingRecordId === record.id}
                   availableTopics={availableTopics}
                   hideTopic
                 />

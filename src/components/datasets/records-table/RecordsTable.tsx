@@ -47,6 +47,8 @@ interface RecordsTableProps {
   onSelectionChange?: (selectedIds: Set<string>) => void;
   /** Callback when expand is clicked */
   onExpand?: (record: DatasetRecord) => void;
+  /** ID of record currently being viewed in sidebar */
+  viewingRecordId?: string | null;
   /** Group records by topic */
   groupByTopic?: boolean;
   /** Available topics from hierarchy for selection */
@@ -82,6 +84,7 @@ export function RecordsTable({
   selectedIds: controlledSelectedIds,
   onSelectionChange,
   onExpand,
+  viewingRecordId,
   groupByTopic = false,
   availableTopics = [],
   topicHierarchy,
@@ -260,6 +263,7 @@ export function RecordsTable({
             selectedIds={selectedIds}
             onSelectRecord={handleSelectRecord}
             onExpand={onExpand}
+            viewingRecordId={viewingRecordId}
             availableTopics={availableTopics}
           />
         </div>
