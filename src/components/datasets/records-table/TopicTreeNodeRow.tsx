@@ -46,7 +46,7 @@ export function TopicTreeNodeRow({
   const [isExpanded, setIsExpanded] = useState(true); // Expand all by default
 
   const hasChildren = node.children && node.children.length > 0;
-  const records = recordsByTopic.get(node.name) || [];
+  const records = recordsByTopic.get(node.id) || [];
   const hasRecords = records.length > 0;
   const hasContent = hasChildren || hasRecords;
   const totalCount = descendantCounts.get(node.id) || 0;
