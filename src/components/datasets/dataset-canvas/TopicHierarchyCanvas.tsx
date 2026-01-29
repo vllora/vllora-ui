@@ -71,6 +71,8 @@ interface TopicHierarchyCanvasProps {
   onCreateChildTopic?: (parentTopicName: string | null, childTopicName: string) => void;
   /** Called when user wants to generate more data for a specific topic */
   onGenerateForTopic?: (topicName: string) => void;
+  /** Called when user wants to generate subtopics for a topic (null = root level) */
+  onGenerateSubtopics?: (topicId: string | null) => void;
 }
 
 // Inner component that uses the context
@@ -265,6 +267,7 @@ export function TopicHierarchyCanvas({
   onSaveRecord,
   onCreateChildTopic,
   onGenerateForTopic,
+  onGenerateSubtopics,
 }: TopicHierarchyCanvasProps) {
   return (
     <TopicCanvasProvider
@@ -282,6 +285,7 @@ export function TopicHierarchyCanvas({
       onSaveRecord={onSaveRecord}
       onCreateChildTopic={onCreateChildTopic}
       onGenerateForTopic={onGenerateForTopic}
+      onGenerateSubtopics={onGenerateSubtopics}
     >
       <TopicHierarchyCanvasInner hierarchy={hierarchy} />
       <TopicRecordsDialogWrapper />

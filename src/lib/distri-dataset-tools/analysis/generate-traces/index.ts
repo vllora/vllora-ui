@@ -297,15 +297,6 @@ export async function generateTraces(params: GenerateTracesParams): Promise<Gene
       ? Math.min(concurrency, 10)
       : DEFAULT_CONCURRENCY;
 
-    console.log('[generateTraces] Generation config:', {
-      topicCount: targetLeafTopics.length,
-      recordsPerTopic,
-      totalExpectedRecords,
-      maxTurns: turns,
-      concurrency: effectiveConcurrency,
-      generationMode: generation_mode,
-    });
-
     // Set LLM concurrency limiter - this controls total concurrent LLM requests
     setLLMConcurrency(effectiveConcurrency);
 
@@ -362,7 +353,6 @@ export async function generateTraces(params: GenerateTracesParams): Promise<Gene
     // The semaphore limits concurrent LLM requests, but creating too many promises at once
     // causes memory pressure and excessive queue buildup
     const topicBatchSize = DEFAULT_BATCH_SIZE;
-    console.log(`[generateTraces] Processing ${topicTasks.length} topics in batches of ${topicBatchSize} (LLM concurrency limited to ${effectiveConcurrency})`);
 
     // Process topics in batches
     for (let batchStart = 0; batchStart < topicTasks.length; batchStart += topicBatchSize) {

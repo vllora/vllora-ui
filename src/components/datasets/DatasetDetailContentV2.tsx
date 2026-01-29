@@ -167,6 +167,14 @@ export function DatasetDetailContentV2() {
     });
   }, []);
 
+  // Handle generate subtopics for a topic from canvas toolbar
+  const handleGenerateSubtopics = useCallback((topicName: string) => {
+    // Emit event to trigger Lucy with a subtopics generation prompt
+    emitter.emit("vllora_lucy_prompt", {
+      prompt: `Generate subtopics for the topic "${topicName}". Analyze the existing data and suggest meaningful child categories that would help organize the content better.`,
+    });
+  }, []);
+
   // Handle rename topic from canvas (inline rename)
   const handleRenameTopic = (oldName: string, newName: string) => {
     if (!dataset) return;
@@ -385,6 +393,7 @@ export function DatasetDetailContentV2() {
               onSaveRecord={handleSaveRecordData}
               onCreateChildTopic={handleCreateChildTopic}
               onGenerateForTopic={handleGenerateForTopic}
+              onGenerateSubtopics={handleGenerateSubtopics}
             />
           ) : (
             <>

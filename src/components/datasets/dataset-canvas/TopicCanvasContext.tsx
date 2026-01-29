@@ -34,6 +34,8 @@ export interface TopicCanvasProviderProps {
   onCreateChildTopic?: (parentTopicName: string | null, childTopicName: string) => void;
   /** Called when user wants to generate more data for a specific topic */
   onGenerateForTopic?: (topicName: string) => void;
+  /** Called when user wants to generate subtopics for a topic (null = root level) */
+  onGenerateSubtopics?: (topicId: string | null) => void;
 }
 
 // ============================================================================
@@ -56,6 +58,7 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     onSaveRecord,
     onCreateChildTopic,
     onGenerateForTopic,
+    onGenerateSubtopics,
   } = props;
 
   // Compute available topics from hierarchy (only leaf topics for assignment)
@@ -194,6 +197,7 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     onDeleteRecord,
     onSaveRecord,
     onGenerateForTopic,
+    onGenerateSubtopics,
     // Inline topic creation
     pendingAddParentId,
     startAddingTopic,

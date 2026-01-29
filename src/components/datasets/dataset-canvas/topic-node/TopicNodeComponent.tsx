@@ -48,6 +48,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
     onRenameTopic,
     onDeleteTopic,
     onGenerateForTopic,
+    onGenerateSubtopics,
     startAddingTopic,
     pendingAddParentId,
     openTopicModal,
@@ -95,6 +96,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
           onDeleteTopic={onDeleteTopic}
           onViewRecords={handleOpenModal}
           onGenerateForTopic={onGenerateForTopic}
+          onGenerateSubtopics={onGenerateSubtopics}
         />
       )}
 

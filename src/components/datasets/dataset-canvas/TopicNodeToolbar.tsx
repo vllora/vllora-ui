@@ -2,10 +2,16 @@
  * TopicNodeToolbar
  *
  * Floating toolbar that appears above a selected topic node.
- * Provides actions: Generate, Delete, and More options.
+ * Provides actions: Generate (dropdown), Delete.
  */
 
-import { Trash2, Sparkles } from "lucide-react";
+import { Trash2, Sparkles, ChevronDown, Database, GitBranch, Table2Icon } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface TopicNodeToolbarProps {
   /** Topic name (used for delete and generate) */
@@ -22,6 +28,8 @@ interface TopicNodeToolbarProps {
   onViewRecords: (nodeId: string) => void;
   /** Handler for generating more data for this topic */
   onGenerateForTopic?: (topicName: string) => void;
+  /** Handler for generating subtopics for this topic (null = root level) */
+  onGenerateSubtopics?: (topicId: string | null) => void;
 }
 
 export function TopicNodeToolbar({
@@ -32,29 +40,55 @@ export function TopicNodeToolbar({
   onDeleteTopic,
   // onViewRecords,
   onGenerateForTopic,
+  onGenerateSubtopics,
 }: TopicNodeToolbarProps) {
+  const hasGenerateOptions = (!isRoot && onGenerateForTopic) || onGenerateSubtopics;
+
   return (
     <div
-      className="absolute left-1/2 -translate-x-1/2 -top-12 z-10 nodrag nopan"
+      className="absolute left-1/2 -translate-x-1/2 -top-11 z-10 nodrag nopan"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="flex items-center gap-0.5 px-1.5 py-1 rounded-lg bg-popover border border-border shadow-lg">
-        {/* Generate button (not for root) */}
-        {!isRoot && onGenerateForTopic && (
-          <button
-            type="button"
-            onClick={() => onGenerateForTopic(name)}
-            className="flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-            title="Generate more data for this topic"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Generate</span>
-          </button>
+      <div className="flex items-center gap-1 px-1.5 py-1 rounded-lg bg-popover border border-border shadow-lg">
+        {/* Generate dropdown */}
+        {hasGenerateOptions && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Generate</span>
+                <ChevronDown className="w-3 h-3 opacity-50" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="min-w-[120px] p-1">
+              {!isRoot && onGenerateForTopic && (
+                <DropdownMenuItem
+                  onClick={() => onGenerateForTopic(name)}
+                  className="text-xs py-1.5 px-2"
+                >
+                  <Database className="w-3.5 h-3.5 mr-1.5" />
+                  Records
+                </DropdownMenuItem>
+              )}
+              {onGenerateSubtopics && (
+                <DropdownMenuItem
+                  onClick={() => onGenerateSubtopics(isRoot ? null : name)}
+                  className="text-xs py-1.5 px-2"
+                >
+                  <Table2Icon className="w-3.5 h-3.5 mr-1.5" />
+                  Sub-topics
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
 
         {/* Separator */}
-        {!isRoot && onGenerateForTopic && onDeleteTopic && (
-          <div className="w-px h-5 bg-border mx-0.5" />
+        {hasGenerateOptions && !isRoot && onDeleteTopic && (
+          <div className="w-px h-5 bg-border" />
         )}
 
         {/* Delete button (not for root) */}
@@ -69,7 +103,7 @@ export function TopicNodeToolbar({
           </button>
         )}
 
-        {/* More options dropdown */}
+        {/* Future: More options dropdown */}
         {/* <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
