@@ -299,7 +299,7 @@ export function useDatasetCreation() {
       }
 
       // Navigate to datasets list
-      navigate("/datasets");
+      navigate(`/datasets/${dataset.id}`);
     } catch (err) {
       console.error("Failed to create dataset:", err);
       toast.error("Failed to create dataset");

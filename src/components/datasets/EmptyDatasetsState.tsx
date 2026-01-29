@@ -3,10 +3,14 @@
  *
  * Empty state component displayed when no datasets exist.
  * Shows a simple curl command to get started with the LLM Gateway.
+ * Listens for backend spans and auto-navigates to create dataset when detected.
  */
 
+import { useEffect } from "react";
 import { Radio } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { CodeBlock } from "@/components/chat/traces/components/CodeBlock";
+import { DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
 
 const CURL_COMMAND = `curl http://localhost:9090/v1/chat/completions \\
   -H "Content-Type: application/json" \\
@@ -19,6 +23,18 @@ const CURL_COMMAND = `curl http://localhost:9090/v1/chat/completions \\
   }'`;
 
 export function EmptyDatasetsState() {
+  const navigate = useNavigate();
+  const { hasBackendSpans } = DatasetsUIConsumer();
+
+  console.log("==== hasBackendSpans", hasBackendSpans);
+  // Auto-navigate to create dataset when backend spans are detected
+  useEffect(() => {
+    if (hasBackendSpans) {
+      setTimeout(() => {
+        navigate("/datasets/new", { replace: true });
+      }, 1000);
+    }
+  }, [hasBackendSpans, navigate]);
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-8 relative overflow-hidden">
       {/* Subtle background glow */}
@@ -60,6 +76,14 @@ export function EmptyDatasetsState() {
             language="bash"
           />
         </div>
+
+        {/* Skip button */}
+        <Link
+          to="/datasets/new"
+          className="mt-6 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Skip
+        </Link>
       </div>
     </div>
   );

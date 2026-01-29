@@ -17,9 +17,6 @@ export function AddDatasetCard() {
         <Plus className="w-5 h-5 text-muted-foreground group-hover:text-[rgb(var(--theme-500))] transition-colors" />
       </div>
       <p className="font-semibold text-foreground text-sm">New Dataset</p>
-      <p className="text-xs text-muted-foreground/70 mt-0.5 text-center">
-        Import traces or upload file
-      </p>
     </Link>
   );
 }

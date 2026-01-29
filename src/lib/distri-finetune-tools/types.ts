@@ -134,6 +134,8 @@ export interface GenerateDataResult {
     by_topic: Record<string, { generated: number; valid: number }>;
     balance_score_before: number;
     balance_score_after: number;
+    /** Indicates which workflow mode was used for generation */
+    workflow_mode?: 'data_first' | 'topics_first';
   };
 }
 

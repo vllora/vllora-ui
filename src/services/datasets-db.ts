@@ -746,17 +746,35 @@ export async function addRecordsToDataset(
       }
     };
 
-    // Add records
-    createdRecords.forEach((record) => {
-      recordsStore.add(record);
+    // Add records with error tracking
+    let addedCount = 0;
+    let addErrors: string[] = [];
+    createdRecords.forEach((record, index) => {
+      const addRequest = recordsStore.add(record);
+      addRequest.onsuccess = () => {
+        addedCount++;
+        console.log(`[datasetsDB] Record ${index + 1}/${createdRecords.length} added successfully (id: ${record.id.substring(0, 8)}...)`);
+      };
+      addRequest.onerror = () => {
+        const errMsg = addRequest.error?.message || 'Unknown error';
+        addErrors.push(`Record ${index + 1}: ${errMsg}`);
+        console.error(`[datasetsDB] Failed to add record ${index + 1}:`, addRequest.error);
+      };
     });
 
     tx.oncomplete = () => {
+      console.log(`[datasetsDB] Transaction complete: ${addedCount}/${createdRecords.length} records added`);
+      if (addErrors.length > 0) {
+        console.warn(`[datasetsDB] Add errors:`, addErrors);
+      }
       // Emit refresh event so UI updates with new records
       emitter.emit(DATASET_REFRESH_EVENT as any, { datasetId });
       resolve(createdRecords);
     };
-    tx.onerror = () => reject(tx.error);
+    tx.onerror = () => {
+      console.error(`[datasetsDB] Transaction error:`, tx.error);
+      reject(tx.error);
+    };
   });
 }
 

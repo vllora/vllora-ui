@@ -3,7 +3,7 @@ import * as datasetsDB from '@/services/datasets-db';
 import { getDryRunAnalytics } from '@/services/finetune-api';
 import type { ToolHandler, DatasetStats } from '../types';
 
-export const getDatasetStatsHandler: ToolHandler = async ({ dataset_id, include_server_analytics_info }) => {
+export const getDatasetStatsHandler: ToolHandler = async ({ dataset_id, include_server_analytics_info: _includeServerAnalyticsInfo }) => {
   if (!dataset_id) {
     return { success: false, error: 'dataset_id is required' };
   }
@@ -44,7 +44,7 @@ export const getDatasetStatsHandler: ToolHandler = async ({ dataset_id, include_
     };
 
     // Optionally fetch server analytics if requested
-    if (include_server_analytics_info && records.length > 0) {
+    if (records.length > 0) {
       try {
         // Convert records to the format expected by the analytics API
         const rows = records.map((r) => r.data);

@@ -88,7 +88,7 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
     try {
       const response = await listSpans({
         projectId,
-        params: { limit: 1 }
+        params: { limit: 1, operationNames: 'model_call' }
       });
       setHasBackendSpans(response.pagination.total > 0);
     } catch (error) {
@@ -125,12 +125,9 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
       },
       (event: ProjectEventUnion) => {
         // Filter for StateSnapshot with span_id or Custom span events
-        if (event.type === 'StateSnapshot') {
-          return !!event.span_id;
-        }
         if (event.type === 'Custom') {
           const customEvent = event as CustomEvent;
-          return customEvent.event?.type === 'span_start' || customEvent.event?.type === 'span_end';
+          return (customEvent.event?.type === 'span_end' && customEvent.event?.operation_name === 'model_call');
         }
         return false;
       }

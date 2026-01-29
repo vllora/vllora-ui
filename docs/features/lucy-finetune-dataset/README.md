@@ -156,6 +156,81 @@ This document outlines the architecture and implementation plan for refactoring 
 
 ---
 
+## Two Supported Workflows
+
+The system supports two different approaches for data generation:
+
+### 1. Data-First Workflow (Seed-Based)
+
+Use when users have a few high-quality seed records and want to expand them before organizing into topics.
+
+```
+┌─────────────────┐    ┌─────────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  Raw Seed       │───>│  Generate           │───>│  Create         │───>│  Categorize     │
+│  Records (1-3)  │    │  Variations         │    │  Topics         │    │  All Records    │
+└─────────────────┘    └─────────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+**Steps:**
+1. User provides a small number of raw seed records
+2. `generate_synthetic_data` with `record_ids` parameter - works WITHOUT topic hierarchy
+3. After generating enough data, `generate_topics` to create hierarchy
+4. `categorize_records` to categorize all records (original + generated)
+5. Continue with normal workflow
+
+**When to use:**
+- User has only a few high-quality examples
+- User wants to bootstrap a dataset quickly
+- User prefers to organize topics after seeing the generated data
+
+### 2. Topics-First Workflow (Coverage-Based)
+
+Use when users want to define topic structure first, then fill gaps.
+
+```
+┌─────────────────┐    ┌─────────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  Create         │───>│  Categorize         │───>│  Analyze        │───>│  Generate for   │
+│  Topics         │    │  Records            │    │  Coverage       │    │  Gaps           │
+└─────────────────┘    └─────────────────────┘    └─────────────────┘    └─────────────────┘
+                                                          ↑                      │
+                                                          └──────────────────────┘
+                                                               (repeat)
+```
+
+**Steps:**
+1. `generate_topics` or `apply_topic_hierarchy` to define structure
+2. `categorize_records` to assign records to topics
+3. `analyze_coverage` to identify gaps
+4. `generate_synthetic_data` for under-represented topics
+5. Repeat until balance is satisfactory
+
+**When to use:**
+- User has a clear idea of the topic structure
+- User has a larger initial dataset that needs balancing
+- User wants systematic coverage across defined topics
+
+---
+
+## Generation Modes
+
+The `generate_synthetic_data` tool supports two modes:
+
+### RFT Mode (Default)
+- **Output format**: Input messages only, empty output for rollouts
+- **Use case**: Reinforcement Fine-Tuning where model learns from feedback
+- **How it works**: Varies the last user message with different personas while preserving context
+- **Parameter**: `generation_mode: 'rft'`
+
+### SFT Mode
+- **Output format**: Complete conversations with assistant responses
+- **Use case**: Supervised Fine-Tuning with example responses
+- **How it works**: Simulates full multi-turn conversations
+- **Parameter**: `generation_mode: 'sft'`
+
+**Default is RFT mode** - matches the standard RFT training pipeline.
+
+---
+
 ## Data Structures
 
 ### Workflow State
@@ -256,6 +331,10 @@ type GenerationStrategy =
   | 'topic_description'      // Generate from topic description
   | 'scenario_expansion'     // Expand specific scenarios
   | 'tool_chain';            // Generate tool usage patterns
+
+type GenerationMode =
+  | 'rft'                    // RFT: Varied prompts with empty output (default)
+  | 'sft';                   // SFT: Complete conversations with assistant responses
 ```
 
 ### Input Format
@@ -921,7 +1000,7 @@ The finetune process has 7 main steps (input is records + training goals):
 ```typescript
 {
   name: "generate_data",
-  description: "Generate synthetic records to improve coverage. Main goal: balance under-represented topics.",
+  description: "Generate synthetic records to improve coverage. Supports two workflows: (1) Topics-First: generate for under-represented topics in hierarchy, (2) Data-First: generate variations from seed records without requiring hierarchy.",
   parameters: {
     type: "object",
     properties: {
@@ -931,6 +1010,12 @@ The finetune process has 7 main steps (input is records + training goals):
         enum: ["message_variation", "few_shot", "topic_description", "scenario_expansion", "tool_chain"],
         default: "message_variation",
         description: "Generation strategy. message_variation recommended for multi-turn records."
+      },
+      generation_mode: {
+        type: "string",
+        enum: ["rft", "sft"],
+        default: "rft",
+        description: "Generation mode. RFT: varied prompts with empty output for rollouts. SFT: complete conversations with assistant responses."
       },
       target_topics: {
         type: "array",
@@ -942,10 +1027,10 @@ The finetune process has 7 main steps (input is records + training goals):
         default: 50,
         description: "Number of records to generate per topic"
       },
-      source_record_ids: {
+      record_ids: {
         type: "array",
         items: { type: "string" },
-        description: "Optional: specific records to use as examples/sources for generation"
+        description: "Specific record IDs to use as seed records. When provided, enables Data-First workflow - generates variations from these records without requiring topic hierarchy."
       },
       variations_per_record: {
         type: "number",

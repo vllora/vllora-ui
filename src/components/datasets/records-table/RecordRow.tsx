@@ -7,7 +7,7 @@
 
 import { useState, forwardRef } from "react";
 import { DatasetRecord } from "@/types/dataset-types";
-import { ChevronRight, ChevronDown, Eye, EyeOff } from "lucide-react";
+import { ChevronRight, ChevronDown, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConversationThreadCell, ToolsBadge, StatsBadge, TopicCell, RecordExpandedDetail, RecordActions, SelectionCheckbox } from "./cells";
 import { RecordDataDialog } from "./RecordDataDialog";

@@ -67,7 +67,9 @@ export const getDatasetRecordsHandler: ToolHandler = async ({
     return {
       success: true,
       records: recordSummaries,
-      count: records.length,
+      total: allRecords.length,
+      returned: records.length,
+      limit: typeof limit === 'number' ? limit : null,
     };
   } catch (error) {
     return {
@@ -96,7 +98,7 @@ function getDataPreview(record: DatasetRecord): string {
 
 export const getDatasetRecordsTool: DistriFnTool = {
   name: 'get_dataset_records',
-  description: 'Get records for a specific dataset with optional filtering and sorting. Use ids_only=true to get just record IDs for use with select_records.',
+  description: `Get records from a dataset with optional filtering and sorting. For initial analysis, use limit=10-15 to get a representative sample. Use ids_only=true to get just record IDs (useful for passing to other tools like generate_synthetic_data).`,
   type: 'function',
   parameters: {
     type: 'object',
