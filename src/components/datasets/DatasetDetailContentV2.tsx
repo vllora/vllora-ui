@@ -168,11 +168,12 @@ export function DatasetDetailContentV2() {
   }, []);
 
   // Handle generate subtopics for a topic from canvas toolbar
-  const handleGenerateSubtopics = useCallback((topicName: string) => {
+  const handleGenerateSubtopics = useCallback((topicId: string | null) => {
     // Emit event to trigger Lucy with a subtopics generation prompt
-    emitter.emit("vllora_lucy_prompt", {
-      prompt: `Generate subtopics for the topic "${topicName}". Analyze the existing data and suggest meaningful child categories that would help organize the content better.`,
-    });
+    const prompt = topicId
+      ? `Generate subtopics for the topic "${topicId}". Analyze the existing data and suggest meaningful child categories that would help organize the content better.`
+      : `Generate top-level topics for this dataset. Analyze the existing data and suggest meaningful categories to organize the content.`;
+    emitter.emit("vllora_lucy_prompt", { prompt });
   }, []);
 
   // Handle rename topic from canvas (inline rename)

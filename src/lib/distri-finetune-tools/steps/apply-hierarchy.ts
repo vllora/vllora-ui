@@ -77,8 +77,11 @@ export const applyTopicHierarchyHandler: ToolHandler = async (params) => {
       return { success: false, error: 'Workflow not found' };
     }
 
-    if (workflow.currentStep !== 'topics_config') {
-      return { success: false, error: `Cannot apply hierarchy in step ${workflow.currentStep}` };
+    // Allow hierarchy changes in topics_config or grader_config steps
+    // (users may want to refine topics while configuring the grader)
+    const allowedSteps = ['topics_config', 'grader_config'];
+    if (!allowedSteps.includes(workflow.currentStep)) {
+      return { success: false, error: `Cannot apply hierarchy in step ${workflow.currentStep}. Must be in topics_config or grader_config step.` };
     }
 
     // Normalize and validate hierarchy structure (ensures IDs exist)
@@ -118,7 +121,7 @@ export const applyTopicHierarchyHandler: ToolHandler = async (params) => {
 
 export const applyTopicHierarchyTool: DistriFnTool = {
   name: 'apply_topic_hierarchy',
-  description: 'Apply a user-provided or edited topic hierarchy to the workflow.',
+  description: 'Apply a user-provided or edited topic hierarchy to the workflow. Available in topics_config and grader_config steps.',
   type: 'function',
   parameters: {
     type: 'object',

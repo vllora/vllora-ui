@@ -26,8 +26,11 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
       return { success: false, error: 'Workflow not found' };
     }
 
-    if (workflow.currentStep !== 'topics_config') {
-      return { success: false, error: `Cannot generate topics in step ${workflow.currentStep}. Must be in topics_config step.` };
+    // Allow topic generation in topics_config or grader_config steps
+    // (users may want to refine topics while configuring the grader)
+    const allowedSteps = ['topics_config', 'grader_config'];
+    if (!allowedSteps.includes(workflow.currentStep)) {
+      return { success: false, error: `Cannot generate topics in step ${workflow.currentStep}. Must be in topics_config or grader_config step.` };
     }
 
     // Use existing topic generation
@@ -76,7 +79,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
 
 export const generateTopicsTool: DistriFnTool = {
   name: 'generate_topics',
-  description: 'Auto-generate topic hierarchy from dataset content. Must be in topics_config step.',
+  description: 'Auto-generate topic hierarchy from dataset content. Available in topics_config and grader_config steps.',
   type: 'function',
   parameters: {
     type: 'object',

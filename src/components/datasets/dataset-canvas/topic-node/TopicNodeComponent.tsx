@@ -21,6 +21,7 @@ export interface TopicNodeData extends Record<string, unknown> {
   aggregatedRecordCount?: number; // Sum of all descendants (for non-leaf coverage display)
   isRoot?: boolean;
   hasChildren?: boolean;
+  fullPath?: string; // Full hierarchical path (e.g., "Openings/Principles")
 }
 
 // Define the full node type for React Flow
@@ -37,6 +38,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
     aggregatedRecordCount,
     isRoot = false,
     hasChildren = false,
+    fullPath,
   } = data;
 
   // Get state and handlers from context
@@ -90,6 +92,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
       {isSelected && (
         <TopicNodeToolbar
           name={name}
+          fullPath={fullPath}
           nodeId={nodeId}
           isRoot={isRoot}
           isExpanded={false}

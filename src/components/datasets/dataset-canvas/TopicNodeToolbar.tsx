@@ -14,8 +14,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 interface TopicNodeToolbarProps {
-  /** Topic name (used for delete and generate) */
+  /** Topic name (used for delete) */
   name: string;
+  /** Full hierarchical path (e.g., "Openings/Principles") for prompts */
+  fullPath?: string;
   /** Node ID for expansion tracking */
   nodeId: string;
   /** Whether this is the root node */
@@ -27,13 +29,14 @@ interface TopicNodeToolbarProps {
   /** Handler for toggling node expansion */
   onViewRecords: (nodeId: string) => void;
   /** Handler for generating more data for this topic */
-  onGenerateForTopic?: (topicName: string) => void;
+  onGenerateForTopic?: (topicPath: string) => void;
   /** Handler for generating subtopics for this topic (null = root level) */
-  onGenerateSubtopics?: (topicId: string | null) => void;
+  onGenerateSubtopics?: (topicPath: string | null) => void;
 }
 
 export function TopicNodeToolbar({
   name,
+  fullPath,
   // nodeId,
   isRoot,
   // isExpanded,
@@ -42,6 +45,8 @@ export function TopicNodeToolbar({
   onGenerateForTopic,
   onGenerateSubtopics,
 }: TopicNodeToolbarProps) {
+  // Use fullPath for generate prompts, fallback to name
+  const topicPath = fullPath || name;
   const hasGenerateOptions = (!isRoot && onGenerateForTopic) || onGenerateSubtopics;
 
   return (
@@ -66,7 +71,7 @@ export function TopicNodeToolbar({
             <DropdownMenuContent align="start" className="min-w-[120px] p-1">
               {!isRoot && onGenerateForTopic && (
                 <DropdownMenuItem
-                  onClick={() => onGenerateForTopic(name)}
+                  onClick={() => onGenerateForTopic(topicPath)}
                   className="text-xs py-1.5 px-2"
                 >
                   <Database className="w-3.5 h-3.5 mr-1.5" />
@@ -75,7 +80,7 @@ export function TopicNodeToolbar({
               )}
               {onGenerateSubtopics && (
                 <DropdownMenuItem
-                  onClick={() => onGenerateSubtopics(isRoot ? null : name)}
+                  onClick={() => onGenerateSubtopics(isRoot ? null : topicPath)}
                   className="text-xs py-1.5 px-2"
                 >
                   <Table2Icon className="w-3.5 h-3.5 mr-1.5" />

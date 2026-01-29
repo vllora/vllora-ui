@@ -326,7 +326,8 @@ export function useDagreLayout(
       // Recursively process hierarchy
       const processNode = (
         node: TopicHierarchyNode,
-        parentId: string
+        parentId: string,
+        parentPath: string // Track the full path from root
       ) => {
         // Ensure node has valid id and name
         if (!node || (!node.id && !node.name)) {
@@ -348,6 +349,9 @@ export function useDagreLayout(
         nodeIdToParentId[nodeId] = parentId;
 
         const nodeName = node.name || node.id || 'Unknown';
+        // Build full path: "Parent/Child/GrandChild"
+        const fullPath = parentPath ? `${parentPath}/${nodeName}` : nodeName;
+
         nodes.push({
           id: nodeId,
           type: "topic",
@@ -360,6 +364,7 @@ export function useDagreLayout(
             aggregatedRecordCount, // For coverage display on non-leaf topics
             isRoot: false,
             hasChildren,
+            fullPath, // Full hierarchical path for prompts
           },
         });
 
@@ -375,14 +380,14 @@ export function useDagreLayout(
         // Process children recursively
         if (hasChildren) {
           node.children!.forEach((child) => {
-            processNode(child, nodeId);
+            processNode(child, nodeId, fullPath);
           });
         }
       };
 
-      // Process all top-level topics
+      // Process all top-level topics (start with empty parent path)
       hierarchy.forEach((topLevelNode) => {
-        processNode(topLevelNode, "root");
+        processNode(topLevelNode, "root", "");
       });
     }
 
