@@ -134,6 +134,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
       <CollapsedTopicNode
         name={name}
         recordCount={recordCount}
+        aggregatedRecordCount={hasChildren ? aggregatedRecordCount : undefined}
         isRoot={isRoot}
         isSelected={isSelected}
         coveragePercentage={coveragePercentage}

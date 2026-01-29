@@ -11,6 +11,8 @@ import { TopicNodeHeader } from "../TopicNodeHeader";
 interface CollapsedTopicNodeProps {
   name: string;
   recordCount: number;
+  /** For parent nodes: aggregated count of all descendants (used for coverage calculation) */
+  aggregatedRecordCount?: number;
   isRoot: boolean;
   isSelected: boolean;
   /** Coverage percentage from coverageStats (0-100) */
@@ -25,6 +27,7 @@ export const COLLAPSED_WIDTH = 280;
 export function CollapsedTopicNode({
   name,
   recordCount,
+  aggregatedRecordCount,
   isRoot,
   isSelected,
   coveragePercentage,
@@ -49,6 +52,7 @@ export function CollapsedTopicNode({
       <TopicNodeHeader
         name={name}
         recordCount={recordCount}
+        aggregatedRecordCount={aggregatedRecordCount}
         isRoot={isRoot}
         isExpanded={false}
         coveragePercentage={coveragePercentage}

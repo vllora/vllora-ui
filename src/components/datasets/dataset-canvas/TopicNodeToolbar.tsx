@@ -5,14 +5,7 @@
  * Provides actions: Rename, Delete, and More options.
  */
 
-import { Trash2, MoreHorizontal } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Trash2 } from "lucide-react";
 
 interface TopicNodeToolbarProps {
   /** Topic name (used for delete) */
@@ -31,11 +24,11 @@ interface TopicNodeToolbarProps {
 
 export function TopicNodeToolbar({
   name,
-  nodeId,
+  // nodeId,
   isRoot,
-  isExpanded,
+  // isExpanded,
   onDeleteTopic,
-  onToggleExpansion,
+  // onToggleExpansion,
 }: TopicNodeToolbarProps) {
   return (
     <div
@@ -52,12 +45,11 @@ export function TopicNodeToolbar({
             title="Delete topic"
           >
             <Trash2 className="w-3.5 h-3.5" />
-            <span>Delete</span>
           </button>
         )}
 
         {/* More options dropdown */}
-        <DropdownMenu>
+        {/* <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
@@ -76,7 +68,7 @@ export function TopicNodeToolbar({
               Export records...
             </DropdownMenuItem>
           </DropdownMenuContent>
-        </DropdownMenu>
+        </DropdownMenu> */}
       </div>
     </div>
   );

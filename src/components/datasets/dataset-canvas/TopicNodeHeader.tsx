@@ -18,6 +18,8 @@ import {
 interface TopicNodeHeaderProps {
   name: string;
   recordCount: number;
+  /** For parent nodes: aggregated count of all descendants (used for coverage calculation) */
+  aggregatedRecordCount?: number;
   isRoot: boolean;
   isExpanded: boolean;
   /** Coverage percentage from coverageStats (0-100) */
@@ -111,6 +113,7 @@ const HEADER_HEIGHT = 60;
 export function TopicNodeHeader({
   name,
   recordCount,
+  aggregatedRecordCount,
   isRoot,
   isExpanded,
   coveragePercentage,
@@ -251,16 +254,22 @@ export function TopicNodeHeader({
           <p className="text-xs text-muted-foreground">
             {isEmptyRoot
               ? "All records assigned"
-              : `${recordCount.toLocaleString()} record${recordCount !== 1 ? "s" : ""}`}
+              : (() => {
+                  // For parent nodes, show aggregated count; for leaf nodes, show direct count
+                  const displayCount = aggregatedRecordCount ?? recordCount;
+                  return `${displayCount.toLocaleString()} record${displayCount !== 1 ? "s" : ""}`;
+                })()}
           </p>
         )}
       </div>
 
       {/* Coverage indicator - show in both expanded and collapsed states */}
       {coveragePercentage !== undefined && !isEmptyRoot && !isRoot && (() => {
+        // Use aggregated count for parent nodes (which have 0 direct records but children with records)
+        const effectiveCount = aggregatedRecordCount ?? recordCount;
         // Get color based on both percentage AND absolute count
-        const coverageColor = getCoverageColor(coveragePercentage, recordCount);
-        const tooltip = getCoverageTooltip(coverageColor, coveragePercentage, recordCount);
+        const coverageColor = getCoverageColor(coveragePercentage, effectiveCount);
+        const tooltip = getCoverageTooltip(coverageColor, coveragePercentage, effectiveCount);
         return (
           <TooltipProvider delayDuration={200}>
             <Tooltip>
