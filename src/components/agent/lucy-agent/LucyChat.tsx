@@ -179,30 +179,35 @@ export function LucyChat({
     }
   }, [toolCalls, expandedTools]);
 
-  // Track if auto-trigger has been fired
-  const hasAutoTriggeredRef = useRef(false);
+  // Track the last auto-triggered prompt to prevent duplicate sends
+  const lastAutoTriggeredPromptRef = useRef<string | null>(null);
 
-  // Auto-trigger prompt - send message automatically when chat is empty
+  // Auto-trigger prompt - send message automatically
+  // Works for both initial proactive prompts and external triggers (like "Generate for topic")
   useEffect(() => {
+    // When prompt is cleared, reset tracking to allow re-trigger of same prompt
+    if (!autoTriggerPrompt) {
+      lastAutoTriggeredPromptRef.current = null;
+      return;
+    }
+
     if (
-      autoTriggerPrompt &&
-      !hasAutoTriggeredRef.current &&
-      messages.length === 0 &&
+      autoTriggerPrompt !== lastAutoTriggeredPromptRef.current &&
       !isStreaming &&
       !isLoading
     ) {
-      hasAutoTriggeredRef.current = true;
+      lastAutoTriggeredPromptRef.current = autoTriggerPrompt;
       // Small delay to ensure component is fully mounted
       const timer = setTimeout(() => {
         sendMessage([{ part_type: 'text', data: autoTriggerPrompt }]);
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [autoTriggerPrompt, messages.length, isStreaming, isLoading, sendMessage]);
+  }, [autoTriggerPrompt, isStreaming, isLoading, sendMessage]);
 
-  // Reset auto-trigger when threadId changes (new chat)
+  // Reset auto-trigger tracking when threadId changes (new chat)
   useEffect(() => {
-    hasAutoTriggeredRef.current = false;
+    lastAutoTriggeredPromptRef.current = null;
   }, [threadId]);
 
   // Auto-send pending message when streaming ends
@@ -434,7 +439,7 @@ export function LucyChat({
             isStreaming={isStreaming}
             disabled={isLoading || hasPendingToolCalls()}
             placeholder={
-              isStreaming ? 'Message will be queued...' : 'Ask Lucy to analyze traces or optimize...'
+              isStreaming ? 'Message will be queued...' : 'Ask Lucy to analyze your dataset'
             }
             // Image attachments
             attachedImages={attachedImages}

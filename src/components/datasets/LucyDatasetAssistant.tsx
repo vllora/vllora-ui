@@ -152,8 +152,12 @@ export function LucyDatasetAssistant() {
     const handleLucyPrompt = ({ prompt }: { prompt: string }) => {
       // Expand the sidebar if collapsed
       setIsCollapsed(false);
-      // Set the prompt to trigger Lucy
-      setAutoTriggerPrompt(prompt);
+      // Clear first, then set - ensures re-trigger even if same prompt
+      setAutoTriggerPrompt(null);
+      // Use setTimeout to ensure the clear happens before setting new value
+      setTimeout(() => {
+        setAutoTriggerPrompt(prompt);
+      }, 0);
     };
 
     emitter.on("vllora_lucy_prompt", handleLucyPrompt);

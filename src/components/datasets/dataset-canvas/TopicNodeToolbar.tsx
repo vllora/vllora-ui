@@ -38,13 +38,13 @@ export function TopicNodeToolbar({
       className="absolute left-1/2 -translate-x-1/2 -top-12 z-10 nodrag nopan"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-popover border border-border shadow-lg">
+      <div className="flex items-center gap-0.5 px-1.5 py-1 rounded-lg bg-popover border border-border shadow-lg">
         {/* Generate button (not for root) */}
         {!isRoot && onGenerateForTopic && (
           <button
             type="button"
             onClick={() => onGenerateForTopic(name)}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md hover:bg-[rgb(var(--theme-500))]/10 transition-colors text-muted-foreground hover:text-[rgb(var(--theme-500))]"
+            className="flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
             title="Generate more data for this topic"
           >
             <Sparkles className="w-3.5 h-3.5" />
@@ -52,12 +52,17 @@ export function TopicNodeToolbar({
           </button>
         )}
 
+        {/* Separator */}
+        {!isRoot && onGenerateForTopic && onDeleteTopic && (
+          <div className="w-px h-5 bg-border mx-0.5" />
+        )}
+
         {/* Delete button (not for root) */}
         {!isRoot && onDeleteTopic && (
           <button
             type="button"
             onClick={() => onDeleteTopic(name)}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive"
+            className="flex items-center justify-center w-7 h-7 rounded-md hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive"
             title="Delete topic"
           >
             <Trash2 className="w-3.5 h-3.5" />

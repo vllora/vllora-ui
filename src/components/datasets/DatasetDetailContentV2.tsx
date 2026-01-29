@@ -6,10 +6,11 @@
  * - Canvas view showing topic hierarchy visualization
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Loader2, LayoutGrid, Table2 } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
+import { emitter } from "@/utils/eventEmitter";
 import { DeleteConfirmationDialog } from "./DeleteConfirmationDialog";
 import { AssignTopicDialog } from "./AssignTopicDialog";
 import { IngestDataDialog } from "./IngestDataDialog";
@@ -157,6 +158,14 @@ export function DatasetDetailContentV2() {
     setTopicHierarchyDialog(true);
     // TODO: Pass the parent topic to pre-select in the dialog
   };
+
+  // Handle generate for specific topic from canvas toolbar
+  const handleGenerateForTopic = useCallback((topicName: string) => {
+    // Emit event to trigger Lucy with a generate prompt for this topic
+    emitter.emit("vllora_lucy_prompt", {
+      prompt: `Generate more synthetic data for the topic "${topicName}". Focus on creating diverse examples that fit this topic category.`,
+    });
+  }, []);
 
   // Handle rename topic from canvas (inline rename)
   const handleRenameTopic = (oldName: string, newName: string) => {
@@ -375,6 +384,7 @@ export function DatasetDetailContentV2() {
               }
               onSaveRecord={handleSaveRecordData}
               onCreateChildTopic={handleCreateChildTopic}
+              onGenerateForTopic={handleGenerateForTopic}
             />
           ) : (
             <>
