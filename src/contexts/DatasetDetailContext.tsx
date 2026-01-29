@@ -855,28 +855,31 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     if (!dataset) return;
 
     // Helper to recursively remove a topic node by name
-    // Returns [filtered nodes, all removed topic names (including children)]
+    // Returns [filtered nodes, all removed topic IDs (including children)]
+    // Note: Topic IDs use path syntax (e.g., "Openings/Italian Game") matching how records store topics
     const removeTopicNode = (
       nodes: TopicHierarchyNode[],
       nameToRemove: string
     ): [TopicHierarchyNode[], string[]] => {
-      const removedNames: string[] = [];
+      const removedIds: string[] = [];
 
-      // Helper to collect all topic names in a subtree
-      const collectNames = (node: TopicHierarchyNode): string[] => {
-        const names = [node.name];
+      // Helper to collect all topic IDs in a subtree
+      // Uses node.id (which is the full path) to match how records store topics
+      const collectTopicIds = (node: TopicHierarchyNode): string[] => {
+        // Use node.id (full path like "Openings/Italian Game") or fallback to name
+        const ids = [node.id || node.name];
         if (node.children) {
           for (const child of node.children) {
-            names.push(...collectNames(child));
+            ids.push(...collectTopicIds(child));
           }
         }
-        return names;
+        return ids;
       };
 
       const filtered = nodes.filter((node) => {
         if (node.name === nameToRemove) {
-          // Collect this node and all its children's names
-          removedNames.push(...collectNames(node));
+          // Collect this node and all its children's IDs (full paths)
+          removedIds.push(...collectTopicIds(node));
           return false;
         }
         return true;
@@ -885,8 +888,8 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
       // Recursively process remaining nodes' children
       const result = filtered.map((node) => {
         if (node.children && node.children.length > 0) {
-          const [filteredChildren, childRemovedNames] = removeTopicNode(node.children, nameToRemove);
-          removedNames.push(...childRemovedNames);
+          const [filteredChildren, childRemovedIds] = removeTopicNode(node.children, nameToRemove);
+          removedIds.push(...childRemovedIds);
           return {
             ...node,
             children: filteredChildren.length > 0 ? filteredChildren : undefined,
@@ -895,7 +898,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
         return node;
       });
 
-      return [result, removedNames];
+      return [result, removedIds];
     };
 
     // Clone current hierarchy
@@ -903,8 +906,9 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
       ? JSON.parse(JSON.stringify(dataset.topicHierarchy.hierarchy)) as TopicHierarchyNode[]
       : [];
 
-    // Remove the topic and get all affected topic names (including children)
-    const [newHierarchy, removedTopicNames] = removeTopicNode(currentHierarchy, topicName);
+    // Remove the topic and get all affected topic IDs (including children)
+    // Topic IDs are full paths like "Openings/Italian Game"
+    const [newHierarchy, removedTopicIds] = removeTopicNode(currentHierarchy, topicName);
 
     // Update the hierarchy (preserve existing config, just update the hierarchy array)
     const updatedConfig = {
@@ -918,15 +922,15 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
       await updateDatasetTopicHierarchy(dataset.id, updatedConfig);
       setDataset((prev) => (prev ? { ...prev, topicHierarchy: updatedConfig } : null));
 
-      // Clear topics from records for all removed topics (the deleted topic and its children)
-      if (removedTopicNames.length > 0) {
+      // Clear topics from records for all removed topic IDs (the deleted topic and its children)
+      if (removedTopicIds.length > 0) {
         let totalCleared = 0;
-        for (const name of removedTopicNames) {
-          const clearedCount = await clearTopicFromRecords(dataset.id, name);
+        for (const topicId of removedTopicIds) {
+          const clearedCount = await clearTopicFromRecords(dataset.id, topicId);
           totalCleared += clearedCount;
         }
         if (totalCleared > 0) {
-          const topicSet = new Set(removedTopicNames);
+          const topicSet = new Set(removedTopicIds);
           setRecords((prev) =>
             prev.map((r) => (r.topic && topicSet.has(r.topic) ? { ...r, topic: undefined, updatedAt: Date.now() } : r))
           );
