@@ -136,22 +136,7 @@ isValidating: boolean;
 handleValidateRecords: () => Promise<void>;
 ```
 
-### 1.4 Create Health Indicator Component
-
-**File:** `src/components/finetune/HealthIndicator.tsx`
-
-```typescript
-interface HealthIndicatorProps {
-  validCount: number;
-  invalidCount: number;
-  rejectionRate: string;
-  onViewIssues: () => void;
-}
-
-// Shows: "✓ 1,008 valid records    ⚠ 34 invalid (3%)    [View Issues]"
-```
-
-### 1.5 Integration Points
+### 1.4 Integration Points
 
 - Run validation on initial dataset load
 - Run validation after importing records
@@ -231,17 +216,6 @@ targetDistribution: TargetDistribution | null;
 handleAnalyzeCoverage: () => void;
 handleSetTargetDistribution: (targets: TargetDistribution) => void;
 ```
-
-### 2.4 Create Coverage Dashboard Component
-
-**File:** `src/components/finetune/CoverageDashboard.tsx`
-
-Features:
-- Bar chart showing current vs target distribution
-- Balance score with rating badge
-- Topic list with status indicators
-- Recommendations section
-- "Generate to Fill Gaps" button
 
 **Reused from DatasetDetailContext:**
 - `records` state
@@ -379,15 +353,6 @@ handleSetGraderConfig: (config: GraderConfig | MultiGraderConfig) => void;
 handleTestGrader: () => Promise<void>;
 ```
 
-### 3.5 Create Grader Configuration UI
-
-**Files:**
-- `src/components/finetune/GraderConfigDialog.tsx` - Main dialog
-- `src/components/finetune/LLMJudgeEditor.tsx` - Prompt + schema editor
-- `src/components/finetune/ScriptGraderEditor.tsx` - JS code editor
-- `src/components/finetune/GraderPresetSelector.tsx` - Preset dropdown
-- `src/components/finetune/GraderTestResults.tsx` - Test results display
-
 ---
 
 ## Phase 4: Dry Run Validation
@@ -515,18 +480,9 @@ handleRunDryRun: (config?: DryRunConfig) => Promise<void>;
 handleCancelDryRun: () => void;
 ```
 
-### 4.4 Create Dry Run UI
-
-**Files:**
-- `src/components/finetune/DryRunDialog.tsx` - Main dialog with config
-- `src/components/finetune/DryRunProgress.tsx` - Progress indicator
-- `src/components/finetune/DryRunResults.tsx` - Results display
-- `src/components/finetune/ScoreDistributionChart.tsx` - Histogram
-- `src/components/finetune/SampleInspector.tsx` - View high/low scores
-
 ---
 
-## Phase 5: Pipeline State & Canvas UI
+## Phase 5: Pipeline State
 
 **Goal:** Create the visual pipeline canvas with step tracking.
 
@@ -605,25 +561,6 @@ export function computeTrainStepStatus(...): PipelineStep;
 export function computeDeployStepStatus(...): PipelineStep;
 ```
 
-### 5.3 Create Canvas Components
-
-**Files:**
-- `src/components/finetune/PipelineCanvas.tsx` - Main canvas layout
-- `src/components/finetune/PipelineStepCard.tsx` - Individual step node
-- `src/components/finetune/PipelineConnector.tsx` - Lines between nodes
-- `src/components/finetune/StepDetailPanel.tsx` - Bottom panel for selected step
-
-### 5.4 Create Step-Specific Detail Panels
-
-**Files:**
-- `src/components/finetune/steps/ExtractStepPanel.tsx`
-- `src/components/finetune/steps/TopicsStepPanel.tsx`
-- `src/components/finetune/steps/CoverageStepPanel.tsx`
-- `src/components/finetune/steps/GraderStepPanel.tsx`
-- `src/components/finetune/steps/DryRunStepPanel.tsx`
-- `src/components/finetune/steps/TrainStepPanel.tsx`
-- `src/components/finetune/steps/DeployStepPanel.tsx`
-
 ---
 
 ## Phase 6: Integration & Polish
@@ -675,38 +612,7 @@ export function FinetuneProcessProvider({ children, datasetId, onBack }) {
 }
 ```
 
-### 6.2 Create Main Page Component
-
-**File:** `src/pages/FinetuneDatasetPage.tsx`
-
-```typescript
-export function FinetuneDatasetPage({ datasetId }: { datasetId: string }) {
-  return (
-    <FinetuneProcessProvider datasetId={datasetId} onBack={...}>
-      <div className="flex flex-col h-full">
-        {/* Header with dataset name + Health Indicator */}
-        <FinetuneHeader />
-
-        {/* Main canvas area */}
-        <div className="flex-1 flex">
-          <PipelineCanvas />
-        </div>
-
-        {/* Detail panel at bottom */}
-        <StepDetailPanel />
-
-        {/* Dialogs */}
-        <GraderConfigDialog />
-        <DryRunDialog />
-        <GenerateSyntheticDataDialog />
-        {/* ... other dialogs */}
-      </div>
-    </FinetuneProcessProvider>
-  );
-}
-```
-
-### 6.3 Add Persistence
+### 6.2 Add Persistence
 
 **File:** `src/services/finetune-db.ts`
 
@@ -728,7 +634,7 @@ export async function getDryRunReport(
 ): Promise<DryRunReport | null>;
 ```
 
-### 6.4 Update Routing
+### 6.3 Update Routing
 
 **File:** Update `src/App.tsx` or router config
 
@@ -766,30 +672,6 @@ src/
 ├── contexts/
 │   ├── DatasetDetailContext.tsx     # (existing - minimal changes)
 │   └── FinetuneProcessContext.tsx   # Phase 6
-│
-├── components/finetune/
-│   ├── HealthIndicator.tsx          # Phase 1
-│   ├── CoverageDashboard.tsx        # Phase 2
-│   ├── GraderConfigDialog.tsx       # Phase 3
-│   ├── LLMJudgeEditor.tsx           # Phase 3
-│   ├── ScriptGraderEditor.tsx       # Phase 3
-│   ├── DryRunDialog.tsx             # Phase 4
-│   ├── DryRunResults.tsx            # Phase 4
-│   ├── ScoreDistributionChart.tsx   # Phase 4
-│   ├── PipelineCanvas.tsx           # Phase 5
-│   ├── PipelineStepCard.tsx         # Phase 5
-│   ├── StepDetailPanel.tsx          # Phase 5
-│   └── steps/
-│       ├── ExtractStepPanel.tsx     # Phase 5
-│       ├── TopicsStepPanel.tsx      # Phase 5
-│       ├── CoverageStepPanel.tsx    # Phase 5
-│       ├── GraderStepPanel.tsx      # Phase 5
-│       ├── DryRunStepPanel.tsx      # Phase 5
-│       ├── TrainStepPanel.tsx       # Phase 5
-│       └── DeployStepPanel.tsx      # Phase 5
-│
-├── pages/
-│   └── FinetuneDatasetPage.tsx      # Phase 6
 │
 └── services/
     └── finetune-db.ts               # Phase 6

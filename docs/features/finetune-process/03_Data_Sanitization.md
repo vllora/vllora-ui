@@ -14,18 +14,10 @@ Data sanitization is **NOT a pipeline step**. It runs **automatically** in the b
 - Generating synthetic data
 - Editing records
 
-**Results shown in:** Health Indicator bar (always visible on canvas)
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ ✓ 1,008 valid records    ⚠ 34 invalid (3%)            [View Issues]   │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
 **Invalid records are:**
 - Excluded from training
 - Kept in database for review/fixing
-- Viewable via "View Issues" button
+- Can be viewed for manual review
 
 ---
 
@@ -497,34 +489,6 @@ async function prepareDataset(records: DatasetRecord[]) {
   
   return validRecords;
 }
-```
-
----
-
-## UI Display
-
-```
-┌─────────────────────────────────────────────┐
-│ Data Sanitization                           │
-├─────────────────────────────────────────────┤
-│ Input: 12,453 records                       │
-│                                             │
-│ Processing... ████████████████████ 100%     │
-│                                             │
-│ Results:                                    │
-│ ┌─────────────────────────────────────────┐ │
-│ │ ✓ Valid records:     11,892 (95.5%)     │ │
-│ │ ✗ Rejected:             473 (3.8%)      │ │
-│ │   - Last not user:      156             │ │
-│ │   - Empty message:       98             │ │
-│ │   - Tool chain error:    79             │ │
-│ │   - Too short:           52             │ │
-│ │   - Other:               88             │ │
-│ │ ⊘ Duplicates removed:    88 (0.7%)      │ │
-│ └─────────────────────────────────────────┘ │
-│                                             │
-│ [View Rejected] [Download Report] [Next →]  │
-└─────────────────────────────────────────────┘
 ```
 
 ---
