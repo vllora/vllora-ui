@@ -65,6 +65,10 @@ export interface LucyChatProps {
   className?: string;
   /** Custom quick actions */
   quickActions?: QuickAction[];
+  /** Proactive prompt shown as Lucy's initial suggestion (displayed above quick actions) */
+  proactivePrompt?: string | null;
+  /** Auto-trigger prompt - automatically sends this message when chat is empty */
+  autoTriggerPrompt?: string | null;
 }
 
 // ============================================================================
@@ -106,6 +110,8 @@ export function LucyChat({
   toolRenderers,
   className,
   quickActions = DEFAULT_QUICK_ACTIONS,
+  proactivePrompt,
+  autoTriggerPrompt,
 }: LucyChatProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState('');
@@ -119,6 +125,7 @@ export function LucyChat({
 
   // Voice input state
   const [isStreamingVoice, setIsStreamingVoice] = useState(false);
+
   const {
     messages,
     isStreaming,
@@ -171,6 +178,37 @@ export function LucyChat({
       setExpandedTools(newExpanded);
     }
   }, [toolCalls, expandedTools]);
+
+  // Track the last auto-triggered prompt to prevent duplicate sends
+  const lastAutoTriggeredPromptRef = useRef<string | null>(null);
+
+  // Auto-trigger prompt - send message automatically
+  // Works for both initial proactive prompts and external triggers (like "Generate for topic")
+  useEffect(() => {
+    // When prompt is cleared, reset tracking to allow re-trigger of same prompt
+    if (!autoTriggerPrompt) {
+      lastAutoTriggeredPromptRef.current = null;
+      return;
+    }
+
+    if (
+      autoTriggerPrompt !== lastAutoTriggeredPromptRef.current &&
+      !isStreaming &&
+      !isLoading
+    ) {
+      lastAutoTriggeredPromptRef.current = autoTriggerPrompt;
+      // Small delay to ensure component is fully mounted
+      const timer = setTimeout(() => {
+        sendMessage([{ part_type: 'text', data: autoTriggerPrompt }]);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [autoTriggerPrompt, isStreaming, isLoading, sendMessage]);
+
+  // Reset auto-trigger tracking when threadId changes (new chat)
+  useEffect(() => {
+    lastAutoTriggeredPromptRef.current = null;
+  }, [threadId]);
 
   // Auto-send pending message when streaming ends
   useEffect(() => {
@@ -351,7 +389,11 @@ export function LucyChat({
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl mx-auto px-4 py-4 space-y-4">
           {showWelcome ? (
-            <LucyWelcome quickActions={quickActions} onQuickAction={handleQuickAction} />
+            <LucyWelcome
+              quickActions={quickActions}
+              onQuickAction={handleQuickAction}
+              proactivePrompt={proactivePrompt}
+            />
           ) : (
             <>
               {/* Render messages using LucyMessageRenderer */}
@@ -367,7 +409,7 @@ export function LucyChat({
               ))}
 
               {/* Render external tool calls that need user approval */}
-              <LucyToolCalls />
+              <LucyToolCalls tools={externalTools} />
 
               {/* Render streaming indicator (typing/thinking) */}
               <LucyStreamingIndicator />
@@ -397,7 +439,7 @@ export function LucyChat({
             isStreaming={isStreaming}
             disabled={isLoading || hasPendingToolCalls()}
             placeholder={
-              isStreaming ? 'Message will be queued...' : 'Ask Lucy to analyze traces or optimize...'
+              isStreaming ? 'Message will be queued...' : 'Ask Lucy to analyze your dataset'
             }
             // Image attachments
             attachedImages={attachedImages}

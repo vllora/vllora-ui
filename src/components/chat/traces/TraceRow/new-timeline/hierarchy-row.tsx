@@ -20,10 +20,14 @@ export interface HierarchyRowProps {
     onToggle?: (spanId: string) => void;
     showHighlightButton?: boolean;
     selectedLabels?: string[];
+    // Multi-select props
+    isSelectModeEnabled?: boolean;
+    selectedSpanIdsForActions?: string[];
+    onToggleSelection?: (spanId: string) => void;
 }
 
 export const HierarchyRow = (props: HierarchyRowProps) => {
-    const { hierarchy, totalDuration, startTime, level, titleWidth: propTitleWidth = TIMELINE_DYNAMIC_TITLE_WIDTH_IN_SIDEBAR, relatedSpans = [], selectedSpanId, onSpanSelect, isInSidebar = true, hoverSpanId, onHoverSpanChange, collapsedSpans, onToggle, showHighlightButton, selectedLabels } = props;
+    const { hierarchy, totalDuration, startTime, level, titleWidth: propTitleWidth = TIMELINE_DYNAMIC_TITLE_WIDTH_IN_SIDEBAR, relatedSpans = [], selectedSpanId, onSpanSelect, isInSidebar = true, hoverSpanId, onHoverSpanChange, collapsedSpans, onToggle, showHighlightButton, selectedLabels, isSelectModeEnabled, selectedSpanIdsForActions, onToggleSelection } = props;
     // In ellora-ui, we're always in sidebar mode (chat sidebar)
     const titleWidth: string | number = `${propTitleWidth}px`.replace('pxpx', 'px');
     let root = hierarchy;
@@ -54,6 +58,9 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                             onToggle={onToggle}
                             showHighlightButton={showHighlightButton}
                             selectedLabels={selectedLabels}
+                            isSelectModeEnabled={isSelectModeEnabled}
+                            selectedSpanIdsForActions={selectedSpanIdsForActions}
+                            onToggleSelection={onToggleSelection}
                         />
                     ))}
                 </div>
@@ -110,6 +117,9 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                 onHoverSpanChange={onHoverSpanChange}
                 showHighlightButton={showHighlightButton}
                 selectedLabels={selectedLabels}
+                isSelectModeEnabled={isSelectModeEnabled}
+                isSelectedForAction={selectedSpanIdsForActions?.includes(root.span_id)}
+                onToggleSelection={onToggleSelection}
             />
         );
     }
@@ -137,6 +147,9 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                 onHoverSpanChange={onHoverSpanChange}
                 showHighlightButton={showHighlightButton}
                 selectedLabels={selectedLabels}
+                isSelectModeEnabled={isSelectModeEnabled}
+                isSelectedForAction={selectedSpanIdsForActions?.includes(root.span_id)}
+                onToggleSelection={onToggleSelection}
             />
             {!(collapsedSpans?.includes(root.span_id)) && (
                 <div className="flex flex-col divide-y divide-border/50">
@@ -158,6 +171,9 @@ export const HierarchyRow = (props: HierarchyRowProps) => {
                             onToggle={(v) => onToggle?.(v)}
                             showHighlightButton={showHighlightButton}
                             selectedLabels={selectedLabels}
+                            isSelectModeEnabled={isSelectModeEnabled}
+                            selectedSpanIdsForActions={selectedSpanIdsForActions}
+                            onToggleSelection={onToggleSelection}
                         />
                     ))}
                 </div>

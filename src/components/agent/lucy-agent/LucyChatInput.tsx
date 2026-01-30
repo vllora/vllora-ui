@@ -235,7 +235,7 @@ export function LucyChatInput({
           placeholder={placeholder}
           disabled={disabled || isStreaming}
           rows={1}
-          className="w-full bg-transparent text-secondary-foreground placeholder-muted-foreground resize-none
+          className="w-full bg-transparent text-secondary-foreground placeholder-text-[9px] placeholder-muted-foreground resize-none
             focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed
             max-h-[200px] overflow-y-auto px-4 pt-3 pb-2"
         />

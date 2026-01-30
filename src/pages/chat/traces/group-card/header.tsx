@@ -1,9 +1,10 @@
 import React from "react";
 import { ExclamationTriangleIcon } from "@heroicons/react/24/outline";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Check, Minus } from "lucide-react";
 import { formatCost } from "@/utils/formatCost";
 import { ListProviders } from "@/components/chat/thread/ListProviders";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 // Grid layout for card stats - matches across all cards for alignment
 const CARD_STATS_GRID = '90px 70px 110px';
@@ -19,6 +20,11 @@ interface GroupCardHeaderProps {
   };
   errors: string[];
   llm_calls: number;
+  // Selection props
+  isSelectModeEnabled?: boolean;
+  selectedCount?: number;
+  totalSelectableCount?: number;
+  onToggleGroupSelection?: () => void;
 }
 
 export const GroupCardHeader: React.FC<GroupCardHeaderProps> = ({
@@ -29,11 +35,38 @@ export const GroupCardHeader: React.FC<GroupCardHeaderProps> = ({
   tokensInfo,
   errors,
   llm_calls,
+  isSelectModeEnabled = false,
+  selectedCount = 0,
+  totalSelectableCount = 0,
+  onToggleGroupSelection,
 }) => {
+  const allSelected = totalSelectableCount > 0 && selectedCount === totalSelectableCount;
+  const someSelected = selectedCount > 0 && selectedCount < totalSelectableCount;
+
   return (
     <div className="flex items-center justify-between gap-6">
       {/* Left: Expand button and Time info */}
       <div className="flex items-center gap-3 min-w-0 flex-1">
+        {/* Selection checkbox - shown when select mode is enabled */}
+        {isSelectModeEnabled && totalSelectableCount > 0 && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleGroupSelection?.();
+            }}
+            className={cn(
+              "w-4 h-4 rounded border-2 flex items-center justify-center transition-all flex-shrink-0",
+              allSelected
+                ? "bg-[rgb(var(--theme-500))] border-[rgb(var(--theme-500))]"
+                : someSelected
+                  ? "bg-[rgb(var(--theme-500))]/50 border-[rgb(var(--theme-500))]"
+                  : "border-muted-foreground/50 hover:border-[rgb(var(--theme-500))]"
+            )}
+          >
+            {allSelected && <Check className="w-3 h-3 text-white" />}
+            {someSelected && <Minus className="w-3 h-3 text-white" />}
+          </button>
+        )}
         {isOpen ? (
           <ChevronDown className="w-5 h-5 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0" />
         ) : (

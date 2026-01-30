@@ -284,7 +284,7 @@ export const ToolDefinitionsViewer = ({
 
   return (
     <ViewerCollapsibleSection
-      title="Tools"
+      title={toolCalls.length > 0 ? `${toolCalls.length} Tools` : "No tools"}
       subtitle={tool_choice}
       collapsed={collapsed}
       onCollapsedChange={onCollapsedChange}

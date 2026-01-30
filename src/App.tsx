@@ -7,6 +7,9 @@ import { AnalyticsPage } from "./pages/analytics"
 import { SettingsPage } from "./pages/settings"
 import { LoginPage } from "./pages/login"
 import { ExperimentPage } from "./pages/experiment"
+import { DatasetsPage } from "./pages/datasets"
+import { NewDatasetPage } from "./pages/datasets/new"
+import { DatasetDetailPage } from "./pages/datasets/[id]"
 import { ThemeProvider } from "./components/theme-provider"
 import { ProjectsProvider } from "./contexts/ProjectContext"
 import { ProjectModelsProvider } from "./contexts/ProjectModelsContext"
@@ -23,6 +26,7 @@ import { ThreadAndTracesPageProvider } from "./contexts/ThreadAndTracesPageConte
 import { DistriProvider } from "./providers/DistriProvider"
 import { AgentPanelWrapper } from "./components/agent"
 import { AgentPanelProvider } from "./contexts/AgentPanelContext"
+import { DatasetsProvider } from "./contexts/DatasetsContext"
 
 // Lazy load the models page
 const ModelsPage = lazy(() => import("./pages/models").then(module => ({ default: module.ModelsPage })))
@@ -54,8 +58,10 @@ function App() {
                           <ProjectModelsProvider>
                             <ProviderKeysProvider>
                               <ProviderModalProvider>
-                                <Layout />
-                                <AgentPanelWrapper />
+                                <DatasetsProvider>
+                                  <Layout />
+                                  <AgentPanelWrapper />
+                                </DatasetsProvider>
                               </ProviderModalProvider>
                             </ProviderKeysProvider>
                           </ProjectModelsProvider>
@@ -88,6 +94,9 @@ function App() {
 
                 {/* Global routes */}
                 <Route path="projects" element={<ProjectsPage />} />
+                <Route path="datasets/new" element={<NewDatasetPage />} />
+                <Route path="datasets/:datasetId" element={<DatasetDetailPage />} />
+                <Route path="datasets" element={<DatasetsPage />} />
                 <Route path="settings" element={<SettingsPage />} />
               </Route>
             </Routes>

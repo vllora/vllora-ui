@@ -194,6 +194,13 @@ export function useTracesPageContext(props: { projectId: string }) {
     updateBySpansArray,
     hoverSpanId,
     setHoverSpanId,
+    isSpanSelectModeEnabled,
+    setIsSpanSelectModeEnabled,
+    selectedSpanIdsForActions,
+    setSelectedSpanIdsForActions,
+    toggleSpanSelection,
+    clearSpanSelection,
+    selectAllSpans,
   } = useWrapperHook({
     projectId,
     onRunsLoaded: (runs) => {
@@ -838,6 +845,7 @@ export function useTracesPageContext(props: { projectId: string }) {
     setHoveredRunId,
     // Span data
     runMap,
+    flattenSpans,
     fetchSpansByRunId,
     loadingSpansById,
     detailSpanId,
@@ -851,6 +859,14 @@ export function useTracesPageContext(props: { projectId: string }) {
     // Hover state
     hoverSpanId,
     setHoverSpanId,
+    // Span selection for actions
+    isSpanSelectModeEnabled,
+    setIsSpanSelectModeEnabled,
+    selectedSpanIdsForActions,
+    setSelectedSpanIdsForActions,
+    toggleSpanSelection,
+    clearSpanSelection,
+    selectAllSpans,
   }
 }
 

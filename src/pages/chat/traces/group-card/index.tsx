@@ -11,6 +11,7 @@ import { TimelineContent } from "@/components/chat/traces/components/TimelineCon
 import { GroupCardHeader } from "./header";
 import { IdWithCopy } from "./id-with-copy";
 import { SpansSkeletonLoader } from "@/components/SpansSkeletonLoader";
+import { isActualModelCall } from "@/utils/span-to-message";
 
 interface GroupCardProps {
   group: GenericGroupDTO;
@@ -36,6 +37,10 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
     collapsedSpans,
     setCollapsedSpans,
     labelFilter,
+    isSpanSelectModeEnabled,
+    selectedSpanIdsForActions,
+    setSelectedSpanIdsForActions,
+    toggleSpanSelection,
   } = TracesPageConsumer();
 
   // Get the appropriate key based on group type
@@ -90,6 +95,33 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
       return spanLabel && selectedLabels.includes(spanLabel);
     });
   }, [rawSpans, labelFilter.selectedLabels]);
+
+  // Get model call spans for this group (for selection)
+  const modelCallSpans = useMemo(() => {
+    return allSpans.filter(span => isActualModelCall(span));
+  }, [allSpans]);
+
+  // Count how many model spans in this group are selected
+  const selectedModelSpansCount = useMemo(() => {
+    return modelCallSpans.filter(span => selectedSpanIdsForActions.includes(span.span_id)).length;
+  }, [modelCallSpans, selectedSpanIdsForActions]);
+
+  // Toggle selection for all model spans in this group
+  const handleToggleGroupSelection = useCallback(() => {
+    const modelSpanIds = modelCallSpans.map(span => span.span_id);
+    const allSelected = modelSpanIds.length > 0 && modelSpanIds.every(id => selectedSpanIdsForActions.includes(id));
+
+    if (allSelected) {
+      // Deselect all model spans in this group
+      setSelectedSpanIdsForActions(prev => prev.filter(id => !modelSpanIds.includes(id)));
+    } else {
+      // Select all model spans in this group
+      setSelectedSpanIdsForActions(prev => {
+        const newIds = modelSpanIds.filter(id => !prev.includes(id));
+        return [...prev, ...newIds];
+      });
+    }
+  }, [modelCallSpans, selectedSpanIdsForActions, setSelectedSpanIdsForActions]);
 
   // Check if this specific group is loading
   const isLoadingSpans = useMemo(() => {
@@ -263,7 +295,7 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
     >
       <div
         onClick={toggleAccordion}
-        className="cursor-pointer py-2 px-5  bg-[#171717]"
+        className={cn("cursor-pointer py-2  bg-[#171717]", isSpanSelectModeEnabled  ? "px-3" : "px-5")}
       >
         <GroupCardHeader
           isOpen={isOpen}
@@ -273,6 +305,10 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
           tokensInfo={tokensInfo}
           errors={errors}
           llm_calls={group.llm_calls}
+          isSelectModeEnabled={isSpanSelectModeEnabled}
+          selectedCount={selectedModelSpansCount}
+          totalSelectableCount={modelCallSpans.length}
+          onToggleGroupSelection={handleToggleGroupSelection}
         />
       </div>
 
@@ -309,6 +345,9 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
                       isInSidebar={false}
                       collapsedSpans={collapsedSpans}
                       selectedLabels={labelFilter.selectedLabels}
+                      isSelectModeEnabled={isSpanSelectModeEnabled}
+                      selectedSpanIdsForActions={selectedSpanIdsForActions}
+                      onToggleSelection={toggleSpanSelection}
                     />
                   </ErrorBoundary>
                 </div>

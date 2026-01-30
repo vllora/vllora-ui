@@ -1,0 +1,290 @@
+/**
+ * DatasetsContext
+ *
+ * Manages dataset state across the application using Provider/Consumer pattern.
+ * Single source of truth for all dataset-related data.
+ */
+
+import { createContext, useContext, useCallback, useState, useEffect, type ReactNode } from 'react';
+import { Dataset, DatasetEvaluation, DatasetWithRecords } from '@/types/dataset-types';
+import { Span } from '@/types/common-type';
+import * as datasetsDB from '@/services/datasets-db';
+import { emitter } from '@/utils/eventEmitter';
+import { toast } from 'sonner';
+
+// ============================================================================
+// Types - Auto-inferred from hook return type
+// ============================================================================
+
+export type DatasetsContextType = ReturnType<typeof useDatasets>;
+
+// ============================================================================
+// Context
+// ============================================================================
+
+const DatasetsContext = createContext<DatasetsContextType | undefined>(undefined);
+
+// ============================================================================
+// Hook - Core logic
+// ============================================================================
+
+function useDatasets() {
+  const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  // Load datasets from IndexedDB
+  const loadDatasets = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await datasetsDB.getAllDatasets();
+      setDatasets(data);
+    } catch (err) {
+      console.error('Failed to load datasets:', err);
+      const error = err instanceof Error ? err : new Error('Failed to load datasets');
+      setError(error);
+      setDatasets([]);
+      toast.error('Failed to load datasets', {
+        description: error.message,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Get a dataset with its records (fetches fresh from IndexedDB)
+  const getDatasetWithRecords = useCallback(async (datasetId: string): Promise<DatasetWithRecords | null> => {
+    try {
+      // Fetch fresh dataset from IndexedDB to get latest data (including topicHierarchy)
+      const dataset = await datasetsDB.getDatasetById(datasetId);
+      if (!dataset) return null;
+
+      const records = await datasetsDB.getRecordsByDatasetId(datasetId);
+      return { ...dataset, records };
+    } catch (err) {
+      console.error('Failed to get dataset with records:', err);
+      return null;
+    }
+  }, []);
+
+  // Get record count for a dataset
+  const getRecordCount = useCallback(async (datasetId: string): Promise<number> => {
+    try {
+      return await datasetsDB.getRecordCount(datasetId);
+    } catch (err) {
+      console.error('Failed to get record count:', err);
+      return 0;
+    }
+  }, []);
+
+  // Get topic coverage stats for a dataset
+  const getTopicCoverageStats = useCallback(async (datasetId: string): Promise<{ total: number; withTopic: number }> => {
+    try {
+      return await datasetsDB.getTopicCoverageStats(datasetId);
+    } catch (err) {
+      console.error('Failed to get topic coverage stats:', err);
+      return { total: 0, withTopic: 0 };
+    }
+  }, []);
+
+  // Create a new dataset
+  const createDataset = useCallback(async (name: string, datasetObjective?: string): Promise<Dataset> => {
+    const newDataset = await datasetsDB.createDataset(name, datasetObjective);
+    setDatasets(prev => [newDataset, ...prev]);
+    return newDataset;
+  }, []);
+
+  // Add spans to an existing dataset
+  const addSpansToDataset = useCallback(async (
+    datasetId: string,
+    spans: Span[],
+    topic?: string
+  ): Promise<number> => {
+    const addedCount = await datasetsDB.addSpansToDataset(datasetId, spans, topic);
+    // Refresh datasets to get updated timestamps
+    await loadDatasets();
+    return addedCount;
+  }, [loadDatasets]);
+
+  // Import raw records to an existing dataset (for file import)
+  const importRecords = useCallback(async (
+    datasetId: string,
+    records: Array<{ data: unknown; topic?: string; evaluation?: DatasetEvaluation }>,
+    defaultTopic?: string
+  ): Promise<number> => {
+    const addedRecords = await datasetsDB.addRecordsToDataset(datasetId, records, defaultTopic);
+    // Refresh datasets to get updated timestamps
+    await loadDatasets();
+    return addedRecords.length;
+  }, [loadDatasets]);
+
+  // Clear all records from a dataset (for replace import)
+  const clearDatasetRecords = useCallback(async (datasetId: string): Promise<number> => {
+    const deletedCount = await datasetsDB.clearDatasetRecords(datasetId);
+    await loadDatasets();
+    return deletedCount;
+  }, [loadDatasets]);
+
+  // Delete a dataset
+  const deleteDataset = useCallback(async (datasetId: string): Promise<void> => {
+    await datasetsDB.deleteDataset(datasetId);
+    setDatasets(prev => prev.filter(ds => ds.id !== datasetId));
+  }, []);
+
+  // Delete a single record from a dataset
+  const deleteRecord = useCallback(async (datasetId: string, recordId: string): Promise<void> => {
+    await datasetsDB.deleteRecord(datasetId, recordId);
+    // Refresh datasets to get updated timestamps
+    await loadDatasets();
+  }, [loadDatasets]);
+
+  // Update a record's topic
+  const updateRecordTopic = useCallback(async (
+    datasetId: string,
+    recordId: string,
+    topic: string
+  ): Promise<void> => {
+    await datasetsDB.updateRecordTopic(datasetId, recordId, topic);
+  }, []);
+
+  // Update a record's data
+  const updateRecordData = useCallback(async (
+    datasetId: string,
+    recordId: string,
+    data: unknown
+  ): Promise<void> => {
+    await datasetsDB.updateRecordData(datasetId, recordId, data);
+  }, []);
+
+  // Update a record's evaluation
+  const updateRecordEvaluation = useCallback(async (
+    datasetId: string,
+    recordId: string,
+    score: number | undefined
+  ): Promise<void> => {
+    await datasetsDB.updateRecordEvaluation(datasetId, recordId, score);
+  }, []);
+
+  // Rename a dataset
+  const renameDataset = useCallback(async (datasetId: string, newName: string): Promise<void> => {
+    await datasetsDB.renameDataset(datasetId, newName);
+    setDatasets(prev => prev.map(ds =>
+      ds.id === datasetId ? { ...ds, name: newName.trim(), updatedAt: Date.now() } : ds
+    ));
+  }, []);
+
+  // Check if span already exists in dataset
+  const spanExistsInDataset = useCallback(async (
+    datasetId: string,
+    spanId: string
+  ): Promise<boolean> => {
+    return await datasetsDB.spanExistsInDataset(datasetId, spanId);
+  }, []);
+
+  // Get all datasets that contain a specific span
+  const getDatasetsBySpanId = useCallback(async (spanId: string): Promise<Dataset[]> => {
+    try {
+      return await datasetsDB.getDatasetsBySpanId(spanId);
+    } catch (err) {
+      console.error('Failed to get datasets by span id:', err);
+      return [];
+    }
+  }, []);
+
+  // Load on mount
+  useEffect(() => {
+    loadDatasets();
+  }, [loadDatasets]);
+
+  // Listen for dataset events from Lucy agent tools
+  useEffect(() => {
+    const handleDatasetCreated = (data: { dataset: Dataset }) => {
+      if (data.dataset) {
+        setDatasets(prev => {
+          // Avoid duplicates
+          if (prev.some(d => d.id === data.dataset.id)) return prev;
+          return [data.dataset, ...prev];
+        });
+      }
+    };
+
+    const handleDatasetDeleted = (data: { datasetId: string }) => {
+      if (data.datasetId) {
+        setDatasets(prev => prev.filter(d => d.id !== data.datasetId));
+      }
+    };
+
+    const handleDatasetRenamed = (data: { datasetId: string; name: string }) => {
+      if (data.datasetId && data.name) {
+        setDatasets(prev => prev.map(d =>
+          d.id === data.datasetId ? { ...d, name: data.name, updatedAt: Date.now() } : d
+        ));
+      }
+    };
+
+    const handleDatasetRefresh = () => {
+      loadDatasets();
+    };
+
+    emitter.on('vllora_dataset_created' as any, handleDatasetCreated);
+    emitter.on('vllora_dataset_deleted' as any, handleDatasetDeleted);
+    emitter.on('vllora_dataset_renamed' as any, handleDatasetRenamed);
+    emitter.on('vllora_dataset_refresh' as any, handleDatasetRefresh);
+
+    return () => {
+      emitter.off('vllora_dataset_created' as any, handleDatasetCreated);
+      emitter.off('vllora_dataset_deleted' as any, handleDatasetDeleted);
+      emitter.off('vllora_dataset_renamed' as any, handleDatasetRenamed);
+      emitter.off('vllora_dataset_refresh' as any, handleDatasetRefresh);
+    };
+  }, [loadDatasets]);
+
+  return {
+    datasets,
+    isLoading,
+    error,
+    loadDatasets,
+    getDatasetWithRecords,
+    getRecordCount,
+    getTopicCoverageStats,
+    createDataset,
+    addSpansToDataset,
+    importRecords,
+    clearDatasetRecords,
+    deleteDataset,
+    deleteRecord,
+    updateRecordTopic,
+    updateRecordData,
+    updateRecordEvaluation,
+    renameDataset,
+    spanExistsInDataset,
+    getDatasetsBySpanId,
+  };
+}
+
+// ============================================================================
+// Provider
+// ============================================================================
+
+export function DatasetsProvider({ children }: { children: ReactNode }) {
+  const value = useDatasets();
+  return <DatasetsContext.Provider value={value}>{children}</DatasetsContext.Provider>;
+}
+
+// ============================================================================
+// Consumer
+// ============================================================================
+
+export function DatasetsConsumer() {
+  const context = useContext(DatasetsContext);
+  if (context === undefined) {
+    throw new Error('DatasetsConsumer must be used within a DatasetsProvider');
+  }
+  return context;
+}
+
+/** Optional consumer that returns null if not inside DatasetsProvider */
+export function useDatasetsOptional() {
+  return useContext(DatasetsContext) ?? null;
+}
