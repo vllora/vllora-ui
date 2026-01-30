@@ -521,7 +521,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
         const data = record.data as Record<string, unknown> | undefined;
         const input = data?.input as Record<string, unknown> | undefined;
         const output = data?.output as Record<string, unknown> | undefined;
-
+        const topic = record?.topic as string | undefined;
         // Combine input.messages with output (output is a single message)
         const inputMessages = (input?.messages as unknown[]) || [];
         const outputMessage = output?.messages
@@ -534,7 +534,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
         // Get tools from input.tools
         const tools = (input?.tools as unknown[]) || [];
 
-        return JSON.stringify({ messages, tools });
+        return JSON.stringify({ messages, tools, topic });
       })
       .join("\n");
     const blob = new Blob([jsonlContent], { type: "application/jsonl" });
