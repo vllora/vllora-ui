@@ -11,7 +11,7 @@ import { computeCoverageStats, computeDatasetInsights } from "../record-utils";
 import { RecordsDonutCard } from "./RecordsDonutCard";
 import { TopicsBarCard } from "./TopicsBarCard";
 import { EvaluationCard } from "./EvaluationCard";
-import { RecordsAnalyticsDialog } from "./RecordsAnalyticsDialog";
+import { RecordsAnalyticsDialog } from "./detail-records-analytics-dialog";
 
 export function DatasetStatsCards() {
   const { dataset, records, setEvaluationConfigDialog } = DatasetDetailConsumer();

@@ -8,20 +8,13 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChevronRight, Pencil, Check, X, Database } from "lucide-react";
+import { Pencil, Check, X } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
-import { DatasetSelector } from "./DatasetSelector";
 import { DatasetStatsCards } from "./DatasetStatsCards";
 
 export function DatasetDetailHeader() {
   const {
     dataset,
-    datasetId,
-    datasets,
-    datasetRecordCounts,
-    onBack,
-    onSelectDataset,
-    setCreateDatasetDialog,
     handleRenameDataset,
   } = DatasetDetailConsumer();
 
@@ -49,31 +42,6 @@ export function DatasetDetailHeader() {
 
   return (
     <div className="w-full flex flex-col">
-      {/* Breadcrumb */}
-      <nav className="flex items-center gap-2 text-sm mb-4">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all"
-        >
-          <Database className="w-3.5 h-3.5" />
-          <span>Datasets</span>
-        </button>
-        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />
-        {datasets && datasets.length > 1 && onSelectDataset ? (
-          <DatasetSelector
-            currentName={name}
-            currentId={datasetId}
-            datasets={datasets}
-            recordCounts={datasetRecordCounts}
-            onSelect={onSelectDataset}
-            onCreateNew={() => setCreateDatasetDialog(true)}
-          />
-        ) : (
-          <span className="px-2.5 py-1 rounded-md bg-muted/50 text-foreground font-medium">
-            {name}
-          </span>
-        )}
-      </nav>
 
       {/* Title and Objective */}
       <div className="mb-4">
