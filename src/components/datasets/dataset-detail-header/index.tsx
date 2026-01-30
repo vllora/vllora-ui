@@ -112,7 +112,7 @@ export function DatasetDetailHeader() {
 
         {/* Training Objective */}
         {dataset?.datasetObjective && (
-          <p className="text-sm text-muted-foreground max-w-3xl">
+          <p className="text-sm text-muted-foreground">
             <span className="font-medium text-foreground">Objective:</span>{" "}
             {dataset.datasetObjective}
           </p>

@@ -346,29 +346,30 @@ export function DatasetDetailContentV2() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header with dataset objective and insights */}
         <div className="px-4 py-2 border-b border-border">
-          <div className="flex flex-1 flex-col items-start justify-between gap-4">
-              <DatasetDetailHeader />
-            {/* View mode toggle */}
-            <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-lg shrink-0">
-              <Button
-                variant={viewMode === "canvas" ? "secondary" : "ghost"}
-                size="sm"
-                className="h-7 px-2.5 gap-1.5"
-                onClick={() => setViewMode("canvas")}
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                <span className="text-xs">Canvas</span>
-              </Button>
-              <Button
-                variant={viewMode === "table" ? "secondary" : "ghost"}
-                size="sm"
-                className="h-7 px-2.5 gap-1.5"
-                onClick={() => setViewMode("table")}
-              >
-                <Table2 className="w-3.5 h-3.5" />
-                <span className="text-xs">Table</span>
-              </Button>
-            </div>
+          <DatasetDetailHeader />
+        </div>
+
+        {/* View mode toolbar */}
+        <div className="px-4 py-2 border-b border-border flex items-center justify-end">
+          <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-lg">
+            <Button
+              variant={viewMode === "canvas" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 px-2.5 gap-1.5"
+              onClick={() => setViewMode("canvas")}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span className="text-xs">Canvas</span>
+            </Button>
+            <Button
+              variant={viewMode === "table" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 px-2.5 gap-1.5"
+              onClick={() => setViewMode("table")}
+            >
+              <Table2 className="w-3.5 h-3.5" />
+              <span className="text-xs">Table</span>
+            </Button>
           </div>
         </div>
 
