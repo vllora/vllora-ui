@@ -2,12 +2,20 @@
  * LucyDatasetAssistant
  *
  * Lucy AI assistant sidebar for the datasets page.
- * Handles chat with dataset-specific context and quick actions.
+ * Handles finetune workflow guidance with process-focused context.
+ *
+ * Key Features:
+ * - Proactive analysis when opening a dataset
+ * - Guided finetune workflow (topics → categorize → coverage → grader → dry run → train → deploy)
+ * - Workflow state persistence in IndexedDB
+ * - Back-and-forth refinement of suggestions
  */
 
-import { useMemo, useCallback, useEffect, useState } from "react";
+import { useMemo, useCallback, useState, useEffect, useRef } from "react";
+import { useParams } from "react-router";
 import { Plus, Loader2, PanelLeftClose, PanelLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { emitter } from "@/utils/eventEmitter";
 import {
   Tooltip,
   TooltipContent,
@@ -18,8 +26,7 @@ import { DistriMessage } from "@distri/core";
 import { useDistriConnection } from "@/providers/DistriProvider";
 import { ProviderKeysConsumer } from "@/contexts/ProviderKeysContext";
 import { DatasetsConsumer } from "@/contexts/DatasetsContext";
-import { DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
-import { useDatasetAgentChat } from "@/hooks/useDatasetAgentChat";
+import { useFineTuneAgentChat } from "@/hooks/useFineTuneAgentChat";
 import {
   LucyChat,
   LucyProviderCheck,
@@ -27,67 +34,137 @@ import {
   LucyAvatar,
 } from "@/components/agent/lucy-agent";
 import type { QuickAction } from "@/components/agent/lucy-agent/LucyWelcome";
-import { setDatasetContext, clearDatasetContext } from "@/lib/distri-dataset-tools";
 import { cn } from "@/lib/utils";
 
-// Dataset-specific quick actions for Lucy
-const DATASET_QUICK_ACTIONS: QuickAction[] = [
+// Finetune-focused quick actions for Lucy
+const FINETUNE_QUICK_ACTIONS: QuickAction[] = [
   {
-    id: "list-datasets",
-    icon: "📋",
-    label: "List all my datasets",
+    id: "start-finetune",
+    icon: "🚀",
+    label: "Start finetune workflow",
   },
   {
-    id: "create-dataset",
-    icon: "➕",
-    label: "Create a new dataset",
+    id: "check-status",
+    icon: "📊",
+    label: "Check workflow status",
   },
   {
-    id: "analyze-current",
-    icon: "🔍",
-    label: "Analyze current dataset",
+    id: "analyze-coverage",
+    icon: "📈",
+    label: "Analyze topic coverage",
   },
   {
-    id: "suggest-topics",
-    icon: "🗂",
-    label: "Suggest topics for records",
+    id: "generate-data",
+    icon: "✨",
+    label: "Generate synthetic data",
   },
   {
-    id: "find-duplicates",
-    icon: "🔄",
-    label: "Find duplicate records",
+    id: "configure-grader",
+    icon: "⚖️",
+    label: "Configure evaluation grader",
   },
   {
-    id: "export-dataset",
-    icon: "📤",
-    label: "Export this dataset",
+    id: "run-dry-run",
+    icon: "🧪",
+    label: "Run dry run validation",
   },
 ];
 
 export function LucyDatasetAssistant() {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
+  // Get dataset ID from URL params (for detail page)
+  const { datasetId: selectedDatasetId } = useParams<{ datasetId: string }>();
+
   const { datasets } = DatasetsConsumer();
-  const {
-    selectedDatasetId,
-    currentDataset,
-    selectedRecordIds,
-    searchQuery,
-    sortConfig,
-    expandedDatasetIds,
-  } = DatasetsUIConsumer();
+
+  // Derive current dataset from datasets list and URL param
+  const currentDataset = useMemo(() => {
+    if (!selectedDatasetId) return null;
+    const dataset = datasets.find(d => d.id === selectedDatasetId);
+    return dataset ? { id: dataset.id, name: dataset.name, datasetObjective: dataset.datasetObjective } : null;
+  }, [datasets, selectedDatasetId]);
 
   // Lucy agent state
   const { isConnected, reconnect } = useDistriConnection();
   const { providers, loading: providersLoading } = ProviderKeysConsumer();
+
+  // Use finetune agent when viewing a specific dataset
   const {
     agent,
     agentLoading,
-    selectedThreadId,
+    threadId,
     tools,
     messages,
+    workflow,
+    workflowLoading,
     handleNewChat,
-  } = useDatasetAgentChat();
+    prepareMessage,
+  } = useFineTuneAgentChat({
+    datasetId: selectedDatasetId || '',
+    datasetName: currentDataset?.name,
+    trainingGoals: currentDataset?.datasetObjective,
+  });
+
+  // Auto-trigger prompt for proactive analysis
+  const [autoTriggerPrompt, setAutoTriggerPrompt] = useState<string | null>(null);
+  const hasSetAutoTriggerRef = useRef(false);
+
+  // Proactive behavior: when no workflow exists and no messages, auto-trigger analysis
+  useEffect(() => {
+    // Only set once per dataset session, when everything is loaded
+    if (
+      hasSetAutoTriggerRef.current ||
+      workflowLoading ||
+      agentLoading ||
+      !agent ||
+      !isConnected ||
+      !selectedDatasetId
+    ) {
+      return;
+    }
+
+    // If no workflow and no existing messages, auto-trigger analysis
+    if (!workflow && messages.length === 0) {
+      hasSetAutoTriggerRef.current = true;
+      // This will automatically send a message to the agent
+      // NOTE: Only ask for analysis - do NOT ask to start workflow or apply changes
+      setAutoTriggerPrompt(
+        `I just opened the "${currentDataset?.name || 'dataset'}" dataset. Please analyze it and give me an overview of what I have. Do NOT start a workflow or make any changes yet - just show me the analysis and wait for my feedback.`
+      );
+    } else if (workflow && messages.length === 0) {
+      // Workflow exists but no messages - auto-trigger status check
+      hasSetAutoTriggerRef.current = true;
+      setAutoTriggerPrompt(
+        `I'm returning to my fine-tuning workflow for "${currentDataset?.name || 'dataset'}". The workflow is at the "${workflow.currentStep}" step. Please show me the current status and help me continue.`
+      );
+    }
+  }, [workflow, workflowLoading, agentLoading, agent, isConnected, messages.length, selectedDatasetId, currentDataset?.name]);
+
+  // Reset auto-trigger when dataset changes
+  useEffect(() => {
+    hasSetAutoTriggerRef.current = false;
+    setAutoTriggerPrompt(null);
+  }, [selectedDatasetId]);
+
+  // Listen for external prompt triggers (e.g., "Generate for topic" button)
+  useEffect(() => {
+    const handleLucyPrompt = ({ prompt }: { prompt: string }) => {
+      // Expand the sidebar if collapsed
+      setIsCollapsed(false);
+      // Clear first, then set - ensures re-trigger even if same prompt
+      setAutoTriggerPrompt(null);
+      // Use setTimeout to ensure the clear happens before setting new value
+      setTimeout(() => {
+        setAutoTriggerPrompt(prompt);
+      }, 0);
+    };
+
+    emitter.on("vllora_lucy_prompt", handleLucyPrompt);
+    return () => {
+      emitter.off("vllora_lucy_prompt", handleLucyPrompt);
+    };
+  }, []);
 
   const isOpenAIConfigured = useMemo(() => {
     const openaiProvider = providers.find(p => p.name.toLowerCase() === "openai");
@@ -101,51 +178,15 @@ export function LucyDatasetAssistant() {
     []
   );
 
-  // Attach rich dataset context to messages before sending
+  // Attach finetune workflow context to messages before sending
   const handleBeforeSendMessage = useCallback(
     async (message: DistriMessage): Promise<DistriMessage> => {
-      const ctx = {
-        page: "datasets",
-        current_view: selectedDatasetId ? "detail" : "list",
-        current_dataset_id: selectedDatasetId,
-        current_dataset_name: currentDataset?.name,
-        datasets_count: datasets.length,
-        dataset_names: datasets.map(d => ({ id: d.id, name: d.name })),
-        selected_records_count: selectedRecordIds.size,
-        selected_record_ids: selectedRecordIds.size > 0 ? [...selectedRecordIds] : undefined,
-        search_query: searchQuery || undefined,
-        sort_config: sortConfig,
-        expanded_dataset_ids: expandedDatasetIds.size > 0 ? [...expandedDatasetIds] : undefined,
-      };
-
-      const contextText = `Context:\n\`\`\`json\n${JSON.stringify(ctx, null, 2)}\n\`\`\``;
-      const contextPart = { part_type: "text" as const, data: contextText };
-
-      return { ...message, parts: [contextPart, ...message.parts] };
+      // The prepareMessage function handles context injection
+      const userText = message.parts.find(p => p.part_type === 'text')?.data || '';
+      return prepareMessage(userText);
     },
-    [datasets, selectedDatasetId, currentDataset, selectedRecordIds, searchQuery, sortConfig, expandedDatasetIds]
+    [prepareMessage]
   );
-
-  // Keep the context store updated for composite tools to read from
-  useEffect(() => {
-    setDatasetContext({
-      page: "datasets",
-      current_view: selectedDatasetId ? "detail" : "list",
-      current_dataset_id: selectedDatasetId ?? undefined,
-      current_dataset_name: currentDataset?.name,
-      datasets_count: datasets.length,
-      dataset_names: datasets.map(d => ({ id: d.id, name: d.name })),
-      selected_records_count: selectedRecordIds.size,
-      selected_record_ids: selectedRecordIds.size > 0 ? [...selectedRecordIds] : undefined,
-      search_query: searchQuery || undefined,
-      sort_config: sortConfig ?? { field: "timestamp", direction: "desc" },
-      expanded_dataset_ids: expandedDatasetIds.size > 0 ? [...expandedDatasetIds] : undefined,
-    });
-
-    return () => {
-      clearDatasetContext();
-    };
-  }, [datasets, selectedDatasetId, currentDataset, selectedRecordIds, searchQuery, sortConfig, expandedDatasetIds]);
 
   // Render chat content (always mounted to preserve state)
   const chatContent = (
@@ -172,13 +213,14 @@ export function LucyDatasetAssistant() {
         </div>
       ) : isConnected && agent ? (
         <LucyChat
-          threadId={selectedThreadId}
+          threadId={threadId}
           agent={agent}
           externalTools={tools}
           initialMessages={messages}
           beforeSendMessage={handleBeforeSendMessage}
           toolRenderers={toolRenderers}
-          quickActions={DATASET_QUICK_ACTIONS}
+          quickActions={FINETUNE_QUICK_ACTIONS}
+          autoTriggerPrompt={autoTriggerPrompt}
         />
       ) : (
         <div className="flex items-center justify-center h-full">

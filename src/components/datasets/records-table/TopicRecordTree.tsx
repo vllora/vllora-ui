@@ -32,6 +32,8 @@ interface TopicRecordTreeProps {
   onSelectRecord: (recordId: string, checked: boolean) => void;
   /** Callback when expand is clicked */
   onExpand?: (record: DatasetRecord) => void;
+  /** ID of record currently being viewed in sidebar */
+  viewingRecordId?: string | null;
   /** Available topics for topic cell */
   availableTopics?: AvailableTopic[];
 }
@@ -67,6 +69,7 @@ export function TopicRecordTree({
   selectedIds,
   onSelectRecord,
   onExpand,
+  viewingRecordId,
   availableTopics = [],
 }: TopicRecordTreeProps) {
   // Group records by topic
@@ -109,6 +112,7 @@ export function TopicRecordTree({
           selectedIds={selectedIds}
           onSelectRecord={onSelectRecord}
           onExpand={onExpand}
+          viewingRecordId={viewingRecordId}
           availableTopics={availableTopics}
         />
       ))}
@@ -124,6 +128,7 @@ export function TopicRecordTree({
           selectedIds={selectedIds}
           onSelectRecord={onSelectRecord}
           onExpand={onExpand}
+          viewingRecordId={viewingRecordId}
           availableTopics={availableTopics}
         />
       )}
@@ -140,6 +145,7 @@ interface UnassignedSectionProps {
   selectedIds: Set<string>;
   onSelectRecord: (recordId: string, checked: boolean) => void;
   onExpand?: (record: DatasetRecord) => void;
+  viewingRecordId?: string | null;
   availableTopics: AvailableTopic[];
 }
 
@@ -152,6 +158,7 @@ function UnassignedSection({
   selectedIds,
   onSelectRecord,
   onExpand,
+  viewingRecordId,
   availableTopics,
 }: UnassignedSectionProps) {
   const [isExpanded, setIsExpanded] = useState(true);
@@ -193,6 +200,7 @@ function UnassignedSection({
               selected={selectedIds.has(record.id)}
               onSelect={(checked) => onSelectRecord(record.id, checked)}
               onExpand={onExpand}
+              isViewing={viewingRecordId === record.id}
               availableTopics={availableTopics}
               hideTopic
             />

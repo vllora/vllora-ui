@@ -1,10 +1,10 @@
-import { DataInfo, Dataset, DatasetEvaluation, DatasetRecord, TopicHierarchyConfig } from '@/types/dataset-types';
+import { Dataset, DatasetEvaluation, DatasetRecord, TopicHierarchyConfig } from '@/types/dataset-types';
 import { Span } from '@/types/common-type';
-import { tryParseJson } from '@/utils/modelUtils';
+import { extractDataInfoFromSpan } from '@/utils/modelUtils';
 import { emitter } from '@/utils/eventEmitter';
 
 // Event type for dataset changes - context listens for this to refresh
-const DATASET_REFRESH_EVENT = 'vllora_dataset_refresh';
+export const DATASET_REFRESH_EVENT = 'vllora_dataset_refresh';
 
 const DB_NAME = 'vllora-datasets';
 const DB_VERSION = 3;
@@ -153,7 +153,7 @@ export async function getTopicCoverageStats(datasetId: string): Promise<{ total:
 }
 
 // Create a new dataset
-export async function createDataset(name: string): Promise<Dataset> {
+export async function createDataset(name: string, datasetObjective?: string): Promise<Dataset> {
   const db = await getDB();
   const now = Date.now();
   const dataset: Dataset = {
@@ -161,6 +161,7 @@ export async function createDataset(name: string): Promise<Dataset> {
     name: name.trim(),
     createdAt: now,
     updatedAt: now,
+    ...(datasetObjective?.trim() && { datasetObjective: datasetObjective.trim() }),
   };
 
   return new Promise((resolve, reject) => {
@@ -202,29 +203,7 @@ export async function addSpansToDataset(
     // Add records
     let addedCount = 0;
     spans.forEach((span) => {
-      let spanAttributes = span.attribute as Record<string, unknown>;
-      let requestStr  = spanAttributes.request as string;
-      let outputStr = spanAttributes.output as string;
-      let finishReason = spanAttributes.finish_reason as string;
-      let requestJson = tryParseJson(requestStr);
-      let outputJson = tryParseJson(outputStr);
-      let inputMessages = requestJson?.messages as any[] || [];
-      let outputMessage = outputJson?.choices?.[0]?.message as any;
-
-      let dataInfo:DataInfo = {input: {messages: inputMessages}, output: {messages: outputMessage}}
-
-      // Note: keep DataInfo limited to request/response shape; avoid embedding metadata in data
-
-
-      if(finishReason){
-        dataInfo.output.finish_reason = finishReason;
-      }
-      if(requestJson?.tools){
-        dataInfo.input.tools = requestJson.tools;
-      }
-      if(outputJson?.choices?.[0]?.tool_calls){
-        dataInfo.output.tool_calls = outputJson.choices[0].tool_calls;
-      }
+      const dataInfo = extractDataInfoFromSpan(span);
 
       const record: DatasetRecord = {
         id: crypto.randomUUID(),
@@ -767,13 +746,35 @@ export async function addRecordsToDataset(
       }
     };
 
-    // Add records
-    createdRecords.forEach((record) => {
-      recordsStore.add(record);
+    // Add records with error tracking
+    let addedCount = 0;
+    let addErrors: string[] = [];
+    createdRecords.forEach((record, index) => {
+      const addRequest = recordsStore.add(record);
+      addRequest.onsuccess = () => {
+        addedCount++;
+        console.log(`[datasetsDB] Record ${index + 1}/${createdRecords.length} added successfully (id: ${record.id.substring(0, 8)}...)`);
+      };
+      addRequest.onerror = () => {
+        const errMsg = addRequest.error?.message || 'Unknown error';
+        addErrors.push(`Record ${index + 1}: ${errMsg}`);
+        console.error(`[datasetsDB] Failed to add record ${index + 1}:`, addRequest.error);
+      };
     });
 
-    tx.oncomplete = () => resolve(createdRecords);
-    tx.onerror = () => reject(tx.error);
+    tx.oncomplete = () => {
+      console.log(`[datasetsDB] Transaction complete: ${addedCount}/${createdRecords.length} records added`);
+      if (addErrors.length > 0) {
+        console.warn(`[datasetsDB] Add errors:`, addErrors);
+      }
+      // Emit refresh event so UI updates with new records
+      emitter.emit(DATASET_REFRESH_EVENT as any, { datasetId });
+      resolve(createdRecords);
+    };
+    tx.onerror = () => {
+      console.error(`[datasetsDB] Transaction error:`, tx.error);
+      reject(tx.error);
+    };
   });
 }
 
@@ -842,6 +843,134 @@ export async function updateDatasetTopicHierarchy(
       const dataset = getRequest.result;
       if (dataset) {
         dataset.topicHierarchy = topicHierarchy;
+        dataset.updatedAt = now;
+        store.put(dataset);
+      }
+    };
+
+    tx.oncomplete = () => {
+      // Emit refresh event so context auto-syncs with IndexedDB
+      emitter.emit(DATASET_REFRESH_EVENT as any, { datasetId });
+      resolve();
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// Update a dataset's evaluation configuration (grader)
+export async function updateDatasetEvaluationConfig(
+  datasetId: string,
+  evaluationConfig: import('@/types/dataset-types').EvaluationConfig
+): Promise<void> {
+  const db = await getDB();
+  const now = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('datasets', 'readwrite');
+    const store = tx.objectStore('datasets');
+
+    const getRequest = store.get(datasetId);
+    getRequest.onsuccess = () => {
+      const dataset = getRequest.result;
+      if (dataset) {
+        dataset.evaluationConfig = evaluationConfig;
+        dataset.updatedAt = now;
+        store.put(dataset);
+      }
+    };
+
+    tx.oncomplete = () => {
+      // Emit refresh event so context auto-syncs with IndexedDB
+      emitter.emit(DATASET_REFRESH_EVENT as any, { datasetId });
+      resolve();
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// Update a dataset's coverage statistics
+export async function updateDatasetCoverageStats(
+  datasetId: string,
+  coverageStats: import('@/types/dataset-types').CoverageStats
+): Promise<void> {
+  const db = await getDB();
+  const now = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('datasets', 'readwrite');
+    const store = tx.objectStore('datasets');
+
+    const getRequest = store.get(datasetId);
+    getRequest.onsuccess = () => {
+      const dataset = getRequest.result;
+      if (dataset) {
+        dataset.coverageStats = coverageStats;
+        dataset.updatedAt = now;
+        store.put(dataset);
+      }
+    };
+
+    tx.oncomplete = () => {
+      // Emit refresh event so context auto-syncs with IndexedDB
+      emitter.emit(DATASET_REFRESH_EVENT as any, { datasetId });
+      resolve();
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/**
+ * Update dry run statistics for a dataset
+ */
+export async function updateDatasetDryRunStats(
+  datasetId: string,
+  dryRunStats: import('@/types/dataset-types').DryRunStats
+): Promise<void> {
+  const db = await getDB();
+  const now = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('datasets', 'readwrite');
+    const store = tx.objectStore('datasets');
+
+    const getRequest = store.get(datasetId);
+    getRequest.onsuccess = () => {
+      const dataset = getRequest.result;
+      if (dataset) {
+        dataset.dryRunStats = dryRunStats;
+        dataset.updatedAt = now;
+        store.put(dataset);
+      }
+    };
+
+    tx.oncomplete = () => {
+      // Emit refresh event so context auto-syncs with IndexedDB
+      emitter.emit(DATASET_REFRESH_EVENT as any, { datasetId });
+      resolve();
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/**
+ * Update dataset statistics
+ */
+export async function updateDatasetStats(
+  datasetId: string,
+  stats: import('@/types/dataset-types').DatasetStats
+): Promise<void> {
+  const db = await getDB();
+  const now = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('datasets', 'readwrite');
+    const store = tx.objectStore('datasets');
+
+    const getRequest = store.get(datasetId);
+    getRequest.onsuccess = () => {
+      const dataset = getRequest.result;
+      if (dataset) {
+        dataset.stats = stats;
         dataset.updatedAt = now;
         store.put(dataset);
       }

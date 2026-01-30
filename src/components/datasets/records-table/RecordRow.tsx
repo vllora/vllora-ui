@@ -7,9 +7,9 @@
 
 import { useState, forwardRef } from "react";
 import { DatasetRecord } from "@/types/dataset-types";
-import { Check, ChevronRight, ChevronDown } from "lucide-react";
+import { ChevronRight, ChevronDown, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ConversationThreadCell, ToolsBadge, StatsBadge, TopicCell, RecordExpandedDetail, RecordActions } from "./cells";
+import { ConversationThreadCell, ToolsBadge, StatsBadge, TopicCell, RecordExpandedDetail, RecordActions, SelectionCheckbox } from "./cells";
 import { RecordDataDialog } from "./RecordDataDialog";
 import { COLUMN_WIDTHS } from "../table-columns";
 import type { AvailableTopic } from "../record-utils";
@@ -32,6 +32,8 @@ interface RecordRowProps {
   onSelect?: (checked: boolean) => void;
   /** Callback when expand is clicked (legacy - for dialog mode) */
   onExpand?: (record: DatasetRecord) => void;
+  /** Whether this record is currently being viewed in the sidebar */
+  isViewing?: boolean;
   /** Available topics from hierarchy for selection */
   availableTopics?: AvailableTopic[];
   /** Hide topic column (used in grouped mode where topic is already shown in tree) */
@@ -51,6 +53,8 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
   selectable = false,
   selected = false,
   onSelect,
+  onExpand,
+  isViewing = false,
   availableTopics = [],
   hideTopic = false,
   isExpanded: controlledExpanded,
@@ -61,8 +65,11 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
   const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   // Use controlled or internal state
-  const isExpanded = controlledExpanded ?? internalExpanded;
-  const handleToggleExpand = onToggleExpand ?? (() => setInternalExpanded(!internalExpanded));
+  // When onExpand is provided, we use sidebar mode (no inline expansion)
+  const isExpanded = onExpand ? false : (controlledExpanded ?? internalExpanded);
+  const handleToggleExpand = onExpand
+    ? () => onExpand(record)
+    : (onToggleExpand ?? (() => setInternalExpanded(!internalExpanded)));
 
   return (
     <div
@@ -81,12 +88,21 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
           isExpanded && "bg-zinc-800/50"
         )}
       >
-        {/* Expand/Collapse toggle */}
+        {/* Expand/Collapse toggle or viewing indicator */}
         <button
           onClick={handleToggleExpand}
-          className="w-6 h-6 flex items-center justify-center shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+          className={cn(
+            "w-6 h-6 flex items-center justify-center shrink-0 transition-colors",
+            isViewing
+              ? "text-[rgb(var(--theme-500))]"
+              : "text-muted-foreground hover:text-foreground"
+          )}
         >
-          {isExpanded ? (
+          {isViewing ? (
+            <Eye className="w-4 h-4" />
+          ) : onExpand ? (
+            <Eye className="w-4 h-4" />
+          ) : isExpanded ? (
             <ChevronDown className="w-4 h-4" />
           ) : (
             <ChevronRight className="w-4 h-4" />
@@ -95,25 +111,11 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
 
         {/* Checkbox */}
         {selectable && (
-          <div
-            className={cn("flex items-center justify-center", COLUMN_WIDTHS.checkbox)}
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelect?.(!selected);
-            }}
-          >
-            <div
-              className={cn(
-                "h-4 w-4 rounded flex items-center justify-center cursor-pointer transition-all duration-150",
-                "border",
-                selected
-                  ? "bg-[rgb(var(--theme-500))] border-[rgb(var(--theme-500))]"
-                  : "bg-transparent border-muted-foreground/50 hover:border-muted-foreground"
-              )}
-            >
-              {selected && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
-            </div>
-          </div>
+          <SelectionCheckbox
+            checked={selected}
+            onChange={(checked) => onSelect?.(checked)}
+            className={COLUMN_WIDTHS.checkbox}
+          />
         )}
 
         {/* Conversational Thread */}

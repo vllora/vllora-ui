@@ -27,7 +27,8 @@ export function RecordExpandedDetail({
   // Get topic path from availableTopics
   const topicPath = useMemo(() => {
     if (!record.topic) return null;
-    const topic = availableTopics.find((t) => t.name === record.topic);
+    // Match by id (record.topic stores the topic ID)
+    const topic = availableTopics.find((t) => t.id === record.topic);
     return topic?.path || [record.topic];
   }, [record.topic, availableTopics]);
 

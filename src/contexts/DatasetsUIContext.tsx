@@ -5,20 +5,28 @@
  * Handles navigation, selection, search, sort, and Lucy tool events.
  */
 
-import { createContext, useContext, ReactNode, useCallback, useState, useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { createContext, useContext, ReactNode, useCallback, useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router';
 import { DatasetsConsumer } from './DatasetsContext';
 import { emitter } from '@/utils/eventEmitter';
 import type { SortConfig } from '@/components/datasets/RecordsToolbar';
+import { listSpans } from '@/services/spans-api';
+import { ProjectEventsConsumer } from '@/contexts/project-events';
+import type { ProjectEventUnion, CustomEvent } from '@/contexts/project-events/dto';
 
 // ============================================================================
 // Types
 // ============================================================================
 
 interface DatasetsUIContextType {
-  // Navigation state
-  selectedDatasetId: string | null;
-  currentDataset: { id: string; name: string } | null;
+  // Data state
+  datasets: { id: string; name: string }[];
+  isLoading: boolean;
+
+  // Backend spans state
+  hasBackendSpans: boolean;
+  isCheckingSpans: boolean;
+  checkBackendSpans: () => Promise<void>;
 
   // Selection state
   selectedRecordIds: Set<string>;
@@ -57,11 +65,9 @@ const DatasetsUIContext = createContext<DatasetsUIContextType | undefined>(undef
 // ============================================================================
 
 export function DatasetsUIProvider({ children }: { children: ReactNode }) {
-  const { datasets, loadDatasets } = DatasetsConsumer();
-
-  // URL params for dataset detail view
-  const [searchParams, setSearchParams] = useSearchParams();
-  const selectedDatasetId = searchParams.get('id');
+  const { datasets, loadDatasets, isLoading } = DatasetsConsumer();
+  const { subscribe, projectId } = ProjectEventsConsumer();
+  const navigate = useNavigate();
 
   // UI state
   const [selectedRecordIds, setSelectedRecordIds] = useState<Set<string>>(new Set());
@@ -69,28 +75,82 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
   const [sortConfig, setSortConfig] = useState<SortConfig | undefined>();
   const [expandedDatasetIds, setExpandedDatasetIds] = useState<Set<string>>(new Set());
 
-  // Derived state
-  const currentDataset = useMemo(() => {
-    if (!selectedDatasetId) return null;
-    const dataset = datasets.find(d => d.id === selectedDatasetId);
-    return dataset ? { id: dataset.id, name: dataset.name } : null;
-  }, [datasets, selectedDatasetId]);
+  // Backend spans state
+  const [hasBackendSpans, setHasBackendSpans] = useState(false);
+  const [isCheckingSpans, setIsCheckingSpans] = useState(false);
+  const hasBackendSpansRef = useRef(hasBackendSpans);
 
-  // Navigation actions
+  // Function to check if spans exist in backend
+  const checkBackendSpans = useCallback(async () => {
+    if (!projectId) return;
+
+    setIsCheckingSpans(true);
+    try {
+      const response = await listSpans({
+        projectId,
+        params: { limit: 1, operationNames: 'model_call' }
+      });
+      setHasBackendSpans(response.pagination.total > 0);
+    } catch (error) {
+      console.error('Failed to check backend spans:', error);
+      setHasBackendSpans(false);
+    } finally {
+      setIsCheckingSpans(false);
+    }
+  }, [projectId]);
+
+  // Check for spans on mount and when projectId changes
+  useEffect(() => {
+    if (!projectId) return;
+    checkBackendSpans();
+  }, [projectId, checkBackendSpans]);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    hasBackendSpansRef.current = hasBackendSpans;
+  }, [hasBackendSpans]);
+
+  // Subscribe to span events from ProjectEventsContext
+  useEffect(() => {
+    if (!projectId) return;
+    const unsubscribe = subscribe(
+      'datasets-ui-span-listener',
+      (_event: ProjectEventUnion) => {
+        // When we receive a span event, we know spans exist
+        // Use ref to avoid re-subscribing when state changes
+        if (!hasBackendSpansRef.current) {
+          console.log('===== setHasBackendSpans to true')
+          setHasBackendSpans(true);
+        }
+      },
+      (event: ProjectEventUnion) => {
+        // Filter for StateSnapshot with span_id or Custom span events
+        if (event.type === 'Custom') {
+          const customEvent = event as CustomEvent;
+          return (customEvent.event?.type === 'span_end' && customEvent.event?.operation_name === 'model_call');
+        }
+        return false;
+      }
+    );
+
+    return unsubscribe;
+  }, [projectId, subscribe]);
+
+  // Navigation actions - use path-based routing
   const navigateToDataset = useCallback((datasetId: string) => {
-    setSearchParams({ id: datasetId });
+    navigate(`/datasets/${datasetId}`);
     // Clear selection when navigating
     setSelectedRecordIds(new Set());
     setSearchQuery('');
     setSortConfig(undefined);
-  }, [setSearchParams]);
+  }, [navigate]);
 
   const navigateToList = useCallback(() => {
-    setSearchParams({});
+    navigate('/datasets');
     setSelectedRecordIds(new Set());
     setSearchQuery('');
     setSortConfig(undefined);
-  }, [setSearchParams]);
+  }, [navigate]);
 
   // Selection actions
   const selectRecords = useCallback((recordIds: string[]) => {
@@ -136,8 +196,8 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
     // Selection handlers
     const handleSelectRecords = (data: { datasetId: string; recordIds: string[] }) => {
       // Navigate to the dataset first, then select records
-      if (data.datasetId && data.datasetId !== selectedDatasetId) {
-        setSearchParams({ id: data.datasetId });
+      if (data.datasetId) {
+        navigate(`/datasets/${data.datasetId}`);
       }
       selectRecords(data.recordIds);
     };
@@ -183,12 +243,17 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
       emitter.off('vllora_dataset_set_sort' as any, handleSetSort);
       emitter.off('vllora_dataset_refresh' as any, handleRefresh);
     };
-  }, [navigateToDataset, navigateToList, expandDataset, collapseDataset, selectRecords, clearSelection, loadDatasets, selectedDatasetId, setSearchParams]);
+  }, [navigateToDataset, navigateToList, expandDataset, collapseDataset, selectRecords, clearSelection, loadDatasets, navigate]);
 
   const value: DatasetsUIContextType = {
-    // Navigation state
-    selectedDatasetId,
-    currentDataset,
+    // Data state
+    datasets,
+    isLoading,
+
+    // Backend spans state
+    hasBackendSpans,
+    isCheckingSpans,
+    checkBackendSpans,
 
     // Selection state
     selectedRecordIds,

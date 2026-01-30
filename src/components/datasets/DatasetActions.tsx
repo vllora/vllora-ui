@@ -13,7 +13,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Download, Upload, Sparkles, Loader2, ListTree, AlertCircle, Scale, ShieldCheck, FlaskConical } from "lucide-react";
+import { Download, Upload, Sparkles, Loader2, ShieldCheck, FlaskConical } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { EvaluationConfigDialog } from "./evaluation-dialog/EvaluationConfigDialog";
 import type { EvaluationConfig } from "@/types/dataset-types";
@@ -23,7 +23,6 @@ export function DatasetActions() {
     dataset,
     handleExport,
     setImportDialog,
-    setTopicHierarchyDialog,
     setSanitizeDataDialog,
     setDryRunDialog,
     handleStartFinetune,
@@ -31,12 +30,6 @@ export function DatasetActions() {
   } = DatasetDetailConsumer();
 
   const [evaluationDialogOpen, setEvaluationDialogOpen] = useState(false);
-
-  // Check if topic hierarchy is configured
-  const hasTopicHierarchy = dataset?.topicHierarchy?.hierarchy && dataset.topicHierarchy.hierarchy.length > 0;
-
-  // Check if evaluation config exists
-  const hasEvaluationConfig = !!dataset?.evaluationConfig;
 
   const handleSaveEvaluationConfig = async (config: EvaluationConfig) => {
     // TODO: Save evaluation config to dataset
@@ -58,52 +51,6 @@ export function DatasetActions() {
             </Button>
           </TooltipTrigger>
           <TooltipContent>Sanitize data</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-      <TooltipProvider delayDuration={300}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground relative"
-              onClick={() => setTopicHierarchyDialog(true)}
-            >
-              <ListTree className="w-4 h-4" />
-              {!hasTopicHierarchy && (
-                <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
-                  <AlertCircle className="relative h-3 w-3 text-amber-500" />
-                </span>
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            {hasTopicHierarchy ? "Configure topic hierarchy" : "Configure topic hierarchy (not set)"}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-      <TooltipProvider delayDuration={300}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground relative"
-              onClick={() => setEvaluationDialogOpen(true)}
-            >
-              <Scale className="w-4 h-4" />
-              {!hasEvaluationConfig && (
-                <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
-                  <AlertCircle className="relative h-3 w-3 text-amber-500" />
-                </span>
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            {hasEvaluationConfig ? "Configure evaluation" : "Configure evaluation (not set)"}
-          </TooltipContent>
         </Tooltip>
       </TooltipProvider>
       <TooltipProvider delayDuration={300}>

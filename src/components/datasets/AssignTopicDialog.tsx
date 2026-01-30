@@ -69,19 +69,21 @@ export function AssignTopicDialog({
 
   // Filter available topics based on search
   const filteredTopics = useMemo(() => {
-    if (!searchValue.trim()) return availableTopics;
+    // Filter out invalid topics first
+    const validTopics = availableTopics.filter((t) => t && t.name);
+    if (!searchValue.trim()) return validTopics;
     const search = searchValue.toLowerCase();
-    return availableTopics.filter(
+    return validTopics.filter(
       (t) =>
         t.name.toLowerCase().includes(search) ||
-        t.path.join(" ").toLowerCase().includes(search)
+        t.path?.join(" ").toLowerCase().includes(search)
     );
   }, [availableTopics, searchValue]);
 
   // Check if search value matches an existing topic
   const isExactMatch = useMemo(() => {
     return availableTopics.some(
-      (t) => t.name.toLowerCase() === searchValue.trim().toLowerCase()
+      (t) => t?.name?.toLowerCase() === searchValue.trim().toLowerCase()
     );
   }, [availableTopics, searchValue]);
 

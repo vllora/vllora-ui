@@ -5,32 +5,32 @@
  */
 
 export const COLUMN_WIDTHS = {
-  /** Row index column */
+  /** Row index column - fixed for small icon */
   index: "w-8 shrink-0",
-  /** Checkbox column */
+  /** Checkbox column - fixed for small icon */
   checkbox: "w-6 shrink-0",
   /** Data column (flex) */
   data: "flex-[2] min-w-0",
-  /** Source column */
-  source: "w-24 shrink-0",
-  /** Topic column */
-  topic: "w-28 shrink-0",
-  /** Evaluation column */
-  evaluation: "w-28 shrink-0",
-  /** Timestamp column */
-  timestamp: "w-36 shrink-0",
-  /** Actions column */
-  actions: "w-16 shrink-0",
-  /** Conversation thread column (new layout) */
-  thread: "flex-1 min-w-0",
-  /** Tools badge column (new layout) */
-  tools: "w-24 shrink-0",
-  /** Strategy/topic column (new layout) */
-  strategy: "w-40 shrink-0",
-  /** Stats column (new layout) */
-  stats: "w-32 shrink-0",
-  /** Actions dropdown column (new layout) */
-  deepDiveActions: "w-14 shrink-0",
+  /** Source column - flex based */
+  source: "flex-[0.8] min-w-0",
+  /** Topic column - flex based */
+  topic: "flex-[1] min-w-0",
+  /** Evaluation column - flex based */
+  evaluation: "flex-[1] min-w-0",
+  /** Timestamp column - flex based */
+  timestamp: "flex-[1.2] min-w-0",
+  /** Actions column - fixed for small icon */
+  actions: "w-12 shrink-0",
+  /** Conversation thread column (new layout) - main content, largest flex */
+  thread: "flex-[3] min-w-0",
+  /** Tools badge column (new layout) - flex based */
+  tools: "flex-[0.8] min-w-0",
+  /** Strategy/topic column (new layout) - flex based */
+  strategy: "flex-[1.2] min-w-0",
+  /** Stats column (new layout) - flex based */
+  stats: "flex-[1] min-w-0",
+  /** Actions dropdown column (new layout) - fixed for small icon */
+  deepDiveActions: "w-10 shrink-0",
 } as const;
 
 /** Columns that can be toggled by the user */

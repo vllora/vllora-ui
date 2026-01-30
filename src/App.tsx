@@ -8,6 +8,8 @@ import { SettingsPage } from "./pages/settings"
 import { LoginPage } from "./pages/login"
 import { ExperimentPage } from "./pages/experiment"
 import { DatasetsPage } from "./pages/datasets"
+import { NewDatasetPage } from "./pages/datasets/new"
+import { DatasetDetailPage } from "./pages/datasets/[id]"
 import { ThemeProvider } from "./components/theme-provider"
 import { ProjectsProvider } from "./contexts/ProjectContext"
 import { ProjectModelsProvider } from "./contexts/ProjectModelsContext"
@@ -92,6 +94,8 @@ function App() {
 
                 {/* Global routes */}
                 <Route path="projects" element={<ProjectsPage />} />
+                <Route path="datasets/new" element={<NewDatasetPage />} />
+                <Route path="datasets/:datasetId" element={<DatasetDetailPage />} />
                 <Route path="datasets" element={<DatasetsPage />} />
                 <Route path="settings" element={<SettingsPage />} />
               </Route>

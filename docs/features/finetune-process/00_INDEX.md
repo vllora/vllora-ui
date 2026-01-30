@@ -27,59 +27,13 @@
 | [06 - Grader Setup](./06_Grader_Setup.md) | Evaluation function configuration | Engineering |
 | [07 - Dry Run Validation](./07_Dry_Run_Validation.md) | Pre-training validation (CRITICAL) | Engineering/QA |
 | [08 - Training & Deploy](./08_Training_Deploy.md) | RFT execution & deployment | Engineering |
-| [09 - UI Screens](./09_UI_Screens.md) | Canvas-based UI specification | Design/Frontend |
 | [10 - Code Reference](./10_Code_Reference.md) | Implementation code examples | Engineering |
 | [11 - Appendix](./11_Appendix.md) | Presets, platform notes, sources | Reference |
+| [12 - Implementation Plan](./12_Implementation_Plan.md) | Detailed development plan with DatasetDetailContext reuse | Engineering |
 
 ---
 
 ## Architecture Overview
-
-### Canvas-Based Pipeline
-
-The RFT product uses a **visual canvas** showing the pipeline as connected nodes in a vertical flow. Click any node to open its configuration modal.
-
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│  ✦ RFT Pipeline                                                  [+] [−]    │
-│  ● SPATIAL MODE • V3.6                                                       │
-├──────────────────────────────────────────────────────────────────────────────┤
-│  HEALTH: ✓ 1,008 valid    ⚠ 34 invalid (3%)               [View Issues]    │
-├──────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│         ┌─────────────────────────────────┐                                 │
-│         │  ①  Extract Data                │                                 │
-│         │     INGESTION                   │                                 │
-│         │  Source: Gateway Traces         │                                 │
-│         │                       Active ●  │                                 │
-│         └───────────────●─────────────────┘                                 │
-│                         │                                                    │
-│         ┌───────────────●─────────────────┐                                 │
-│         │  ②  Topics & Category           │                                 │
-│         │     CLASSIFICATION              │                                 │
-│         │  7 topics • 1,008 records       │                                 │
-│         │                    Complete ●   │                                 │
-│         └───────────────●─────────────────┘                                 │
-│                         │                                                    │
-│         ┌───────────────●─────────────────┐                                 │
-│         │  ③  Coverage Analysis           │                                 │
-│         │     DISTRIBUTION                │                                 │
-│         │  Balance: 0.72                  │                                 │
-│         │                    Complete ●   │                                 │
-│         └───────────────●─────────────────┘                                 │
-│                         │                                                    │
-│         ┌───────────────●─────────────────┐                                 │
-│         │  ④  Grader Config               │                                 │
-│         │     EVALUATION RULES            │                                 │
-│         │  Judge: GPT-4o                  │                                 │
-│         │                  Configured ●   │                                 │
-│         └───────────────●─────────────────┘                                 │
-│                         │                                                    │
-│                        ...                                                   │
-│         (⑤ Dry Run → ⑥ Train → ⑦ Deploy)                                   │
-│                                                                              │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
 
 ### Pipeline Steps (7 Total)
 
@@ -116,24 +70,21 @@ Invalid records are excluded from training but kept in database for review.
 
 ## Key Principles
 
-### 1. Visual Pipeline
-Users see the entire pipeline as a canvas with connected nodes. Click any step to see details and take actions.
-
-### 2. Automatic Validation
+### 1. Automatic Validation
 Data sanitization runs automatically — no manual "Sanitize" button. The Health Indicator shows status at all times.
 
-### 3. Steps Are Re-triggerable
+### 2. Steps Are Re-triggerable
 All pipeline steps can be re-run anytime. Steps that modify data show confirmation dialogs.
 
-### 4. Balance Before Training
+### 3. Balance Before Training
 Imbalanced datasets lead to models that only excel in over-represented areas. Coverage step helps identify and fill gaps.
 
-### 5. Validate Both Dataset AND Grader
+### 4. Validate Both Dataset AND Grader
 Dry run tells you two things:
 - **Dataset quality:** Can the base model do these tasks at all?
 - **Grader quality:** Does the evaluation function differentiate good from bad?
 
-### 6. RFT ≠ SFT
+### 5. RFT ≠ SFT
 - RFT needs prompts + grader (not gold answers)
 - Model generates responses during training
 - Grader provides learning signal

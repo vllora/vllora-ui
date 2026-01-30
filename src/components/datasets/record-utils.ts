@@ -2,12 +2,14 @@
  * Utility functions for dataset records
  */
 
-import { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
+import { analyzeCoverage } from "@/lib/distri-dataset-tools/analysis/analyze-coverage";
+import { CoverageStats, DatasetRecord, TopicHierarchyConfig, TopicHierarchyNode } from "@/types/dataset-types";
 
 /** Available topic for selection in TopicCell */
 export interface AvailableTopic {
-  name: string;
-  path: string[]; // Full path from root to this topic
+  id: string;     // Unique identifier (matches record.topic)
+  name: string;   // Display name
+  path: string[]; // Full path from root to this topic (names)
 }
 
 /**
@@ -31,9 +33,42 @@ export function getLeafTopicsFromHierarchy(
     } else {
       // Leaf node - add as available topic
       topics.push({
+        id: node.id || node.name,  // Use id for matching with record.topic
         name: node.name,
         path: currentPath,
       });
+    }
+  }
+
+  return topics;
+}
+
+/**
+ * Extract ALL topics from a topic hierarchy (not just leaves).
+ * Used for display/filtering purposes only - NOT for record assignment.
+ * Records should only be assigned to leaf topics.
+ */
+export function getAllTopicsFromHierarchy(
+  nodes: TopicHierarchyNode[] | undefined,
+  parentPath: string[] = []
+): AvailableTopic[] {
+  if (!nodes || nodes.length === 0) return [];
+
+  const topics: AvailableTopic[] = [];
+
+  for (const node of nodes) {
+    const currentPath = [...parentPath, node.name];
+
+    // Add this topic
+    topics.push({
+      id: node.id || node.name,  // Use id for matching with record.topic
+      name: node.name,
+      path: currentPath,
+    });
+
+    // Recurse into children if any
+    if (node.children && node.children.length > 0) {
+      topics.push(...getAllTopicsFromHierarchy(node.children, currentPath));
     }
   }
 
@@ -127,6 +162,48 @@ const hashString = (str: string): number => {
   return Math.abs(hash);
 };
 
+/**
+ * Find a topic node in the hierarchy by its id/name.
+ * Returns the node if found, undefined otherwise.
+ */
+export function findTopicInHierarchy(
+  nodes: TopicHierarchyNode[] | undefined,
+  topicId: string
+): TopicHierarchyNode | undefined {
+  if (!nodes || nodes.length === 0) return undefined;
+
+  for (const node of nodes) {
+    const nodeId = node.id || node.name;
+    if (nodeId === topicId || node.name === topicId) {
+      return node;
+    }
+    if (node.children && node.children.length > 0) {
+      const found = findTopicInHierarchy(node.children, topicId);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Get all descendant leaf topic IDs for a given topic node.
+ * If the node itself is a leaf, returns just its ID.
+ * Used for aggregating records when viewing a parent topic.
+ */
+export function getDescendantLeafTopicIds(node: TopicHierarchyNode): string[] {
+  if (!node.children || node.children.length === 0) {
+    // Leaf node - return its ID
+    return [node.id || node.name];
+  }
+
+  // Parent node - recurse into children
+  const ids: string[] = [];
+  for (const child of node.children) {
+    ids.push(...getDescendantLeafTopicIds(child));
+  }
+  return ids;
+}
+
 // Get topic badge color based on topic name (hash-based for consistency)
 export const getTopicColor = (topic: string | undefined): string => {
   if (!topic) return "";
@@ -141,3 +218,93 @@ export const getTopicColor = (topic: string | undefined): string => {
   const hash = hashString(t);
   return TOPIC_COLORS[hash % TOPIC_COLORS.length];
 };
+
+// ============================================================================
+// Dataset Insights Computation
+// ============================================================================
+
+export interface DatasetInsights {
+  /** Total number of records */
+  totalRecords: number;
+  /** Number of generated (synthetic) records */
+  generatedRecords: number;
+  /** Number of original (non-generated) records */
+  originalRecords: number;
+  /** Percentage of generated records (0-100) */
+  generatedPercent: number;
+  /** Percentage of original records (0-100) */
+  originalPercent: number;
+  /** Number of unique topics */
+  topicCount: number;
+  /** Number of records without a topic */
+  uncategorizedCount: number;
+  /** Number of records with a topic */
+  categorizedCount: number;
+  /** Percentage of categorized records (0-100) */
+  categorizedPercent: number;
+  /** Topic distribution: topic -> count */
+  topicDistribution: Record<string, number>;
+}
+
+
+export function computeCoverageStats(props: {records: DatasetRecord[], topic_hierarchy?: TopicHierarchyConfig}): CoverageStats {
+  const { records, topic_hierarchy } = props;
+  // Calculate coverage
+    const coverageReport = analyzeCoverage({records, hierarchy: topic_hierarchy});
+  
+    // Convert to CoverageStats format for storage
+    const coverageStats: CoverageStats = {
+      balanceScore: coverageReport.balanceScore,
+      balanceRating: coverageReport.balanceRating,
+      topicDistribution: Object.fromEntries(
+        Object.entries(coverageReport.distribution).map(([topic, dist]) => [topic, dist.count])
+      ),
+      uncategorizedCount: coverageReport.uncategorizedCount,
+      totalRecords: coverageReport.totalRecords,
+      lastCalculatedAt: Date.now(),
+    };
+    return coverageStats;
+}
+
+/**
+ * Compute dataset insights from records.
+ * Pure function that derives all stats from the records array.
+ */
+export function computeDatasetInsights(records: DatasetRecord[]): DatasetInsights {
+  const totalRecords = records.length;
+
+  // Generated vs original records
+  const generatedRecords = records.filter(r => r.is_generated).length;
+  const originalRecords = totalRecords - generatedRecords;
+  const generatedPercent = totalRecords > 0 ? Math.round((generatedRecords / totalRecords) * 100) : 0;
+  const originalPercent = totalRecords > 0 ? Math.round((originalRecords / totalRecords) * 100) : 0;
+
+  // Topic stats
+  const topicDistribution: Record<string, number> = {};
+  let uncategorizedCount = 0;
+
+  for (const r of records) {
+    if (r.topic) {
+      topicDistribution[r.topic] = (topicDistribution[r.topic] || 0) + 1;
+    } else {
+      uncategorizedCount++;
+    }
+  }
+
+  const topicCount = Object.keys(topicDistribution).length;
+  const categorizedCount = totalRecords - uncategorizedCount;
+  const categorizedPercent = totalRecords > 0 ? Math.round((categorizedCount / totalRecords) * 100) : 0;
+
+  return {
+    totalRecords,
+    generatedRecords,
+    originalRecords,
+    generatedPercent,
+    originalPercent,
+    topicCount,
+    uncategorizedCount,
+    categorizedCount,
+    categorizedPercent,
+    topicDistribution,
+  };
+}

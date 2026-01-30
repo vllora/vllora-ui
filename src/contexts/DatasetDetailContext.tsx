@@ -3,20 +3,21 @@
  *
  * Manages state for the dataset detail view using Provider/Consumer pattern.
  * Reduces prop drilling by providing state and handlers to child components.
+ * Uses ReturnType pattern for automatic type inference.
  */
 
 import {
   createContext,
   useContext,
-  ReactNode,
   useState,
   useEffect,
   useCallback,
   useMemo,
+  type ReactNode,
 } from "react";
 import { DatasetsConsumer } from "@/contexts/DatasetsContext";
 import { DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
-import { Dataset, DatasetRecord, TopicHierarchyConfig, TopicHierarchyNode } from "@/types/dataset-types";
+import type { Dataset, DatasetRecord, TopicHierarchyConfig, TopicHierarchyNode } from "@/types/dataset-types";
 import { emitter } from "@/utils/eventEmitter";
 import { toast } from "sonner";
 import { uploadDatasetForFinetune, createFinetuneJobFromUpload } from "@/services/finetune-api";
@@ -30,7 +31,7 @@ import { generateTopics } from "@/lib/distri-dataset-tools/analysis/generate-top
 import { generateTraces } from "@/lib/distri-dataset-tools/analysis/generate-traces";
 import { generateHierarchy } from "@/lib/distri-dataset-tools/analysis/generate-hierarchy";
 import { classifyRecords } from "@/lib/distri-dataset-tools/analysis/classify-records";
-import type { DatasetDetailContextType, GeneratedFilter } from "./DatasetDetailContext.types";
+import type { GeneratedFilter } from "./DatasetDetailContext.types";
 import type { SortConfig } from "@/components/datasets/RecordsToolbar";
 import type { ColumnVisibility } from "@/components/datasets/table-columns";
 import type { DeleteConfirmation } from "@/components/datasets/DeleteConfirmationDialog";
@@ -38,28 +39,20 @@ import type { GenerationConfig } from "@/components/datasets/GenerateSyntheticDa
 import type { ImportMode } from "@/components/datasets/IngestDataDialog";
 
 // ============================================================================
-// Context
+// Types
 // ============================================================================
 
-const DatasetDetailContext = createContext<DatasetDetailContextType | undefined>(undefined);
-
-// ============================================================================
-// Provider
-// ============================================================================
-
-interface DatasetDetailProviderProps {
-  children: ReactNode;
+interface DatasetDetailHookProps {
   datasetId: string;
   onBack: () => void;
   onSelectDataset?: (datasetId: string) => void;
 }
 
-export function DatasetDetailProvider({
-  children,
-  datasetId,
-  onBack,
-  onSelectDataset,
-}: DatasetDetailProviderProps) {
+// ============================================================================
+// Hook - Core logic
+// ============================================================================
+
+function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailHookProps) {
   // Get datasets context
   const {
     datasets,
@@ -127,6 +120,7 @@ export function DatasetDetailProvider({
   const [generateDataDialog, setGenerateDataDialog] = useState(false);
   const [sanitizeDataDialog, setSanitizeDataDialog] = useState(false);
   const [dryRunDialog, setDryRunDialog] = useState(false);
+  const [evaluationConfigDialog, setEvaluationConfigDialog] = useState(false);
 
   // Loading states
   const [isGeneratingTopics, setIsGeneratingTopics] = useState(false);
@@ -727,6 +721,52 @@ export function DatasetDetailProvider({
     }
   }, [dataset, records, selectedRecordIds, refreshDataset]);
 
+  /**
+   * Migrate records from a parent topic to appropriate children after hierarchy change.
+   * Called when a child is added to a topic that has records assigned to it.
+   */
+  const handleMigrateRecordsToChildren = useCallback(async (
+    parentTopicId: string,
+    newHierarchy: TopicHierarchyNode[]
+  ) => {
+    if (!dataset) return;
+
+    // Find records currently assigned to the parent topic
+    const recordsToMigrate = records.filter(r => r.topic === parentTopicId);
+    if (recordsToMigrate.length === 0) return;
+
+    setIsAutoTagging(true);
+    setAutoTagProgress({ completed: 0, total: recordsToMigrate.length });
+
+    try {
+      const result = await classifyRecords({
+        hierarchy: newHierarchy,
+        records: recordsToMigrate,
+        onProgress: (progress) => {
+          setAutoTagProgress(progress);
+        },
+      });
+
+      if (!result.success || !result.classifications) {
+        toast.error(result.error || "Failed to migrate records");
+        return;
+      }
+
+      // Batch update all records' topics
+      const updatedCount = await updateRecordTopicsBatch(dataset.id, result.classifications);
+
+      // Refresh records
+      await refreshDataset();
+      toast.success(`Auto-migrated ${updatedCount} record${updatedCount !== 1 ? 's' : ''} to child topics`);
+    } catch (err) {
+      console.error("Failed to migrate records:", err);
+      toast.error("Failed to migrate records to child topics");
+    } finally {
+      setIsAutoTagging(false);
+      setAutoTagProgress(null);
+    }
+  }, [dataset, records, refreshDataset]);
+
   const handleClearRecordTopics = useCallback(async () => {
     if (!dataset) return;
     try {
@@ -811,17 +851,105 @@ export function DatasetDetailProvider({
     }
   }, [dataset]);
 
+  // Delete a topic: removes from hierarchy AND clears from records (doesn't delete records)
+  const handleDeleteTopic = useCallback(async (topicName: string) => {
+    if (!dataset) return;
+
+    // Helper to recursively remove a topic node by name
+    // Returns [filtered nodes, all removed topic IDs (including children)]
+    // Note: Topic IDs use path syntax (e.g., "Openings/Italian Game") matching how records store topics
+    const removeTopicNode = (
+      nodes: TopicHierarchyNode[],
+      nameToRemove: string
+    ): [TopicHierarchyNode[], string[]] => {
+      const removedIds: string[] = [];
+
+      // Helper to collect all topic IDs in a subtree
+      // Uses node.id (which is the full path) to match how records store topics
+      const collectTopicIds = (node: TopicHierarchyNode): string[] => {
+        // Use node.id (full path like "Openings/Italian Game") or fallback to name
+        const ids = [node.id || node.name];
+        if (node.children) {
+          for (const child of node.children) {
+            ids.push(...collectTopicIds(child));
+          }
+        }
+        return ids;
+      };
+
+      const filtered = nodes.filter((node) => {
+        if (node.name === nameToRemove) {
+          // Collect this node and all its children's IDs (full paths)
+          removedIds.push(...collectTopicIds(node));
+          return false;
+        }
+        return true;
+      });
+
+      // Recursively process remaining nodes' children
+      const result = filtered.map((node) => {
+        if (node.children && node.children.length > 0) {
+          const [filteredChildren, childRemovedIds] = removeTopicNode(node.children, nameToRemove);
+          removedIds.push(...childRemovedIds);
+          return {
+            ...node,
+            children: filteredChildren.length > 0 ? filteredChildren : undefined,
+          };
+        }
+        return node;
+      });
+
+      return [result, removedIds];
+    };
+
+    // Clone current hierarchy
+    const currentHierarchy = dataset.topicHierarchy?.hierarchy
+      ? JSON.parse(JSON.stringify(dataset.topicHierarchy.hierarchy)) as TopicHierarchyNode[]
+      : [];
+
+    // Remove the topic and get all affected topic IDs (including children)
+    // Topic IDs are full paths like "Openings/Italian Game"
+    const [newHierarchy, removedTopicIds] = removeTopicNode(currentHierarchy, topicName);
+
+    // Update the hierarchy (preserve existing config, just update the hierarchy array)
+    const updatedConfig = {
+      ...dataset.topicHierarchy,
+      depth: dataset.topicHierarchy?.depth ?? 1,
+      hierarchy: newHierarchy,
+    };
+
+    try {
+      // Save updated hierarchy
+      await updateDatasetTopicHierarchy(dataset.id, updatedConfig);
+      setDataset((prev) => (prev ? { ...prev, topicHierarchy: updatedConfig } : null));
+
+      // Clear topics from records for all removed topic IDs (the deleted topic and its children)
+      if (removedTopicIds.length > 0) {
+        let totalCleared = 0;
+        for (const topicId of removedTopicIds) {
+          const clearedCount = await clearTopicFromRecords(dataset.id, topicId);
+          totalCleared += clearedCount;
+        }
+        if (totalCleared > 0) {
+          const topicSet = new Set(removedTopicIds);
+          setRecords((prev) =>
+            prev.map((r) => (r.topic && topicSet.has(r.topic) ? { ...r, topic: undefined, updatedAt: Date.now() } : r))
+          );
+        }
+      }
+    } catch (err) {
+      console.error("Failed to delete topic:", err);
+      toast.error("Failed to delete topic");
+    }
+  }, [dataset]);
+
   // Derived: count of records that have topics assigned
   const recordsWithTopicsCount = useMemo(
     () => records.filter((r) => r.topic).length,
     [records]
   );
 
-  // ============================================================================
-  // Context value
-  // ============================================================================
-
-  const value: DatasetDetailContextType = {
+  return {
     // Core data
     dataset,
     records,
@@ -874,6 +1002,8 @@ export function DatasetDetailProvider({
     setSanitizeDataDialog,
     dryRunDialog,
     setDryRunDialog,
+    evaluationConfigDialog,
+    setEvaluationConfigDialog,
 
     // Loading states
     isGeneratingTopics,
@@ -907,13 +1037,46 @@ export function DatasetDetailProvider({
     handleGenerateHierarchy,
     handleApplyTopicHierarchy,
     handleAutoTagRecords,
+    handleMigrateRecordsToChildren,
     handleClearRecordTopics,
     handleClearSelectedRecordTopics,
     handleRenameTopicInRecords,
     handleDeleteTopicFromRecords,
+    handleDeleteTopic,
   };
+}
 
-  return <DatasetDetailContext.Provider value={value}>{children}</DatasetDetailContext.Provider>;
+// ============================================================================
+// Context - Type inferred from hook
+// ============================================================================
+
+export type DatasetDetailContextType = ReturnType<typeof useDatasetDetail>;
+
+const DatasetDetailContext = createContext<DatasetDetailContextType | undefined>(undefined);
+
+// ============================================================================
+// Provider
+// ============================================================================
+
+interface DatasetDetailProviderProps {
+  children: ReactNode;
+  datasetId: string;
+  onBack: () => void;
+  onSelectDataset?: (datasetId: string) => void;
+}
+
+export function DatasetDetailProvider({
+  children,
+  datasetId,
+  onBack,
+  onSelectDataset,
+}: DatasetDetailProviderProps) {
+  const value = useDatasetDetail({ datasetId, onBack, onSelectDataset });
+  return (
+    <DatasetDetailContext.Provider value={value}>
+      {children}
+    </DatasetDetailContext.Provider>
+  );
 }
 
 // ============================================================================
@@ -929,4 +1092,4 @@ export function DatasetDetailConsumer() {
 }
 
 // Re-export types for consumers
-export type { DatasetDetailContextType, GeneratedFilter } from "./DatasetDetailContext.types";
+export type { GeneratedFilter } from "./DatasetDetailContext.types";

@@ -28,6 +28,8 @@ export interface LucyWelcomeProps {
   onQuickAction?: (action: QuickAction) => void;
   /** Optional className */
   className?: string;
+  /** Proactive prompt to show instead of default greeting */
+  proactivePrompt?: string | null;
 }
 
 // ============================================================================
@@ -38,6 +40,7 @@ export function LucyWelcome({
   quickActions = [],
   onQuickAction,
   className,
+  proactivePrompt,
 }: LucyWelcomeProps) {
   return (
     <div className={cn('flex flex-col items-start gap-1', className)}>
@@ -52,13 +55,19 @@ export function LucyWelcome({
       {/* Welcome message bubble */}
       <div className="max-w-[85%] bg-muted/50 border border-border rounded-2xl rounded-tl-sm px-4 py-3 ml-10">
         <div className="space-y-3">
-          {/* Greeting text */}
-          <p className="text-sm">
-            Hello! I'm Lucy, your VLlora AI assistant. I can help you analyze
-            traces, filter complex logs, or optimize your LLM prompts based on
-            recent performance data.
-          </p>
-          <p className="text-sm">How can I help you today?</p>
+          {/* Greeting text - use proactivePrompt if provided */}
+          {proactivePrompt ? (
+            <p className="text-sm">{proactivePrompt}</p>
+          ) : (
+            <>
+              <p className="text-sm">
+                Hello! I'm Lucy, your VLlora AI assistant. I can help you analyze
+                traces, filter complex logs, or optimize your LLM prompts based on
+                recent performance data.
+              </p>
+              <p className="text-sm">How can I help you today?</p>
+            </>
+          )}
 
           {/* Quick action buttons */}
           {quickActions.length > 0 && (

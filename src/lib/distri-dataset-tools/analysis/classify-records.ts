@@ -31,7 +31,7 @@ interface RecordForClassification {
 
 interface ClassificationResult {
   record_id: string;
-  topic: string; // Leaf topic name
+  topic: string; // Leaf topic ID using path syntax (e.g., "Openings/Italian Game")
 }
 
 interface ClassificationResponse {
@@ -53,7 +53,7 @@ export interface ClassifyRecordsParams {
 export interface ClassifyRecordsResult {
   success: boolean;
   error?: string;
-  classifications?: Map<string, string>; // record_id -> leaf topic name
+  classifications?: Map<string, string>; // record_id -> leaf topic ID
   classifiedCount?: number;
 }
 
@@ -62,17 +62,17 @@ export interface ClassifyRecordsResult {
 // =========================================================================
 
 /**
- * Get all leaf topic names from hierarchy
+ * Get all leaf topic IDs from hierarchy
  */
-function getLeafTopicNames(nodes: TopicHierarchyNode[]): string[] {
+function getLeafTopicIds(nodes: TopicHierarchyNode[]): string[] {
   const leaves: string[] = [];
 
   for (const node of nodes) {
     if (node.children && node.children.length > 0) {
-      leaves.push(...getLeafTopicNames(node.children));
+      leaves.push(...getLeafTopicIds(node.children));
     } else {
-      // Leaf node
-      leaves.push(node.name);
+      // Leaf node - use id (fallback to name if no id)
+      leaves.push(node.id || node.name);
     }
   }
 
@@ -80,12 +80,13 @@ function getLeafTopicNames(nodes: TopicHierarchyNode[]): string[] {
 }
 
 /**
- * Strip ids from hierarchy for cleaner prompt (only keep name and children)
+ * Format hierarchy for prompt - include both id and name for clarity
  */
-function stripHierarchyIds(nodes: TopicHierarchyNode[]): Array<{ name: string; children?: Array<{ name: string; children?: unknown[] }> }> {
+function formatHierarchyForPrompt(nodes: TopicHierarchyNode[]): Array<{ id: string; name: string; children?: unknown[] }> {
   return nodes.map(node => ({
+    id: node.id || node.name,
     name: node.name,
-    ...(node.children && node.children.length > 0 ? { children: stripHierarchyIds(node.children) } : {}),
+    ...(node.children && node.children.length > 0 ? { children: formatHierarchyForPrompt(node.children) } : {}),
   }));
 }
 
@@ -98,21 +99,24 @@ const CLASSIFICATION_SYSTEM_PROMPT = `You are a record classifier for datasets.
 Goal: Classify each record into the most appropriate leaf topic from the provided hierarchy.
 
 Rules:
-- Each record must be assigned to exactly one leaf topic (from the provided list)
+- Each record must be assigned to exactly one LEAF topic (nodes without children)
+- Return the topic ID exactly as shown in the hierarchy (e.g., "Technical Support/Hardware Issues/Device Malfunction")
+- Topic IDs use path syntax with "/" separators
 - Choose the most specific and relevant topic for each record
 - If a record doesn't fit any topic well, choose the closest match
 - Output MUST be valid JSON that matches the schema (no markdown, no code fences)
-- Only use topic names that exist in the provided leaf topics list
+- Only use topic IDs that exist in the provided hierarchy as leaf nodes
 `;
 
 function buildClassificationPrompt(
   hierarchy: TopicHierarchyNode[],
   records: RecordForClassification[]
 ): string {
-  const cleanHierarchy = stripHierarchyIds(hierarchy);
+  const formattedHierarchy = formatHierarchyForPrompt(hierarchy);
 
   return `## Topic Hierarchy
-${JSON.stringify(cleanHierarchy, null, 2)}
+Each node has an "id" (unique identifier) and "name" (display name). Return the "id" of the leaf topic.
+${JSON.stringify(formattedHierarchy, null, 2)}
 
 ## Records to Classify
 ${JSON.stringify(records, null, 2)}
@@ -136,7 +140,7 @@ function buildClassificationResponseSchema() {
                 record_id: { type: 'string' },
                 topic: {
                   type: 'string',
-                  description: 'The leaf topic name',
+                  description: 'The leaf topic ID (e.g., "Openings/Italian Game")',
                 },
               },
               required: ['record_id', 'topic'],
@@ -231,7 +235,7 @@ const CLASSIFICATION_BATCH_SIZE = 10;
 async function processBatch(
   batch: DatasetRecord[],
   hierarchy: TopicHierarchyNode[],
-  validLeafTopics: Set<string>
+  validLeafTopicIds: Set<string>
 ): Promise<Map<string, string>> {
   const classifications = new Map<string, string>();
   const recordsForClassification = batch.map(extractRecordData);
@@ -242,8 +246,14 @@ async function processBatch(
   if (result.classifications) {
     for (const classification of result.classifications) {
       const recordExists = batch.some(r => r.id === classification.record_id);
-      if (recordExists && classification.topic && validLeafTopics.has(classification.topic)) {
+      const isValidTopic = classification.topic && validLeafTopicIds.has(classification.topic);
+
+      // LLM returns topic IDs directly - validate against valid leaf IDs
+      if (recordExists && isValidTopic) {
         classifications.set(classification.record_id, classification.topic);
+      } else if (!isValidTopic && classification.topic) {
+        // Log when LLM returns invalid topic (helps debug topic ID vs name issues)
+        console.warn(`[classifyRecords] Invalid topic "${classification.topic}" for record ${classification.record_id}. Valid leaf topics:`, Array.from(validLeafTopicIds));
       }
     }
   }
@@ -272,8 +282,10 @@ export async function classifyRecords(params: ClassifyRecordsParams): Promise<Cl
       };
     }
 
-    const validLeafTopics = new Set(getLeafTopicNames(hierarchy));
-    if (validLeafTopics.size === 0) {
+    // Get valid leaf topic IDs for validation
+    const validLeafTopicIds = new Set(getLeafTopicIds(hierarchy));
+
+    if (validLeafTopicIds.size === 0) {
       return {
         success: false,
         error: 'Topic hierarchy has no leaf topics',
@@ -298,7 +310,7 @@ export async function classifyRecords(params: ClassifyRecordsParams): Promise<Cl
       const batchGroup = batches.slice(i, i + MAX_CONCURRENT_BATCHES);
 
       const results = await Promise.all(
-        batchGroup.map((batch) => processBatch(batch, hierarchy, validLeafTopics))
+        batchGroup.map((batch) => processBatch(batch, hierarchy, validLeafTopicIds))
       );
 
       // Merge results and update progress

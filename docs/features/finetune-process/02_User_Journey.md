@@ -6,12 +6,12 @@
 
 ## Overview
 
-The RFT product uses a **visual canvas** showing an 7-step pipeline as connected nodes. Users can:
-- Click any step to see details and take actions
+The RFT product follows a 7-step pipeline. Users can:
+- Trigger any step to see details and take actions
 - Re-trigger any step at any time
 - Import/export data at any point
 
-**Key Feature:** Data validation (sanitization) is **automatic**, not a step. The Health Indicator shows validation status at all times.
+**Key Feature:** Data validation (sanitization) is **automatic**, not a step.
 
 ---
 
@@ -34,36 +34,6 @@ Two modes:
 
 ---
 
-## Dataset Canvas (`/finetune/:id`)
-
-The main view for working with a dataset.
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ chess-tutor                          [📊 Records] [📥 Import] [⚙️]     │
-├─────────────────────────────────────────────────────────────────────────┤
-│ HEALTH: ✓ 1,008 valid    ⚠ 34 invalid (3%)            [View Issues]   │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐                │
-│  │1.Extract│──▶│2.Topics │──▶│3.Cover. │──▶│4.Grader │                │
-│  │   ✅    │   │  & Cat. │   │   ⚠️    │   │   ✅    │                │
-│  └─────────┘   │   ✅    │   └────┬────┘   └────┬────┘                │
-│                └─────────┘        │              │                      │
-│                                   ▼              ▼                      │
-│                ┌─────────┐   ┌─────────┐   ┌─────────┐                 │
-│                │7.Deploy │◀──│6.Train  │◀──│5.DryRun │                 │
-│                │   ⬜    │   │   ⬜    │   │   ✅    │                 │
-│                └─────────┘   └─────────┘   └─────────┘                 │
-│                                                                         │
-├─────────────────────────────────────────────────────────────────────────┤
-│ DETAIL PANEL (selected step)                                           │
-│ 3. Review Coverage                                      ⚠️ Attention   │
-│ Balance: 0.35 • 2 topics under-represented                             │
-│ [📊 Dashboard] [✨ Generate] [📋 View Records] [Skip →]                │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
 ---
 
 ## Pipeline Steps (7 Total)
@@ -82,13 +52,7 @@ The main view for working with a dataset.
 
 ## Health Indicator (Automatic Validation)
 
-The Health Indicator bar shows validation status at all times. **This is NOT a pipeline step.**
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ ✓ 1,008 valid records    ⚠ 34 invalid (3%)            [View Issues]   │
-└─────────────────────────────────────────────────────────────────────────┘
-```
+The Health Indicator shows validation status at all times. **This is NOT a pipeline step.**
 
 **When validation runs:**
 - Initial dataset creation
@@ -190,20 +154,7 @@ The Health Indicator bar shows validation status at all times. **This is NOT a p
 
 **Purpose:** Create initial dataset from traces or uploaded file.
 
-**Node Card:**
-```
-┌─────────────────────────────────┐
-│  ①  Extract Data                │
-│     INGESTION                   │
-│                                 │
-│  Source: Gateway Traces         │
-│                       Active ●  │
-└─────────────────────────────────┘
-```
-
-**Click to open:** Records Viewer modal
-
-**Modal Actions:**
+**Actions:**
 | Action | Description |
 |--------|-------------|
 | Pull New Traces | Extract new traces since last pull |
@@ -218,31 +169,7 @@ The Health Indicator bar shows validation status at all times. **This is NOT a p
 
 **Purpose:** Define topic hierarchy AND assign each record to a topic.
 
-**Node Card (Complete):**
-```
-┌─────────────────────────────────┐
-│  ②  Topics & Category           │
-│     CLASSIFICATION              │
-│                                 │
-│  7 topics • 1,008 records       │
-│                    Complete ●   │
-└─────────────────────────────────┘
-```
-
-**Node Card (Processing):**
-```
-┌─────────────────────────────────┐
-│  ②  Topics & Category           │
-│     CLASSIFICATION              │
-│                                 │
-│  Categorizing... 52%            │
-│                  Processing ●   │
-└─────────────────────────────────┘
-```
-
-**Click to open:** Topics Editor modal
-
-**Modal Actions:**
+**Actions:**
 | Action | Description |
 |--------|-------------|
 | Edit Topics | Modify topic hierarchy |
@@ -272,33 +199,9 @@ The Health Indicator bar shows validation status at all times. **This is NOT a p
 
 **Purpose:** Analyze topic distribution and identify gaps.
 
-**Node Card (Complete):**
-```
-┌─────────────────────────────────┐
-│  ③  Coverage Analysis           │
-│     DISTRIBUTION                │
-│                                 │
-│  Balance: 0.72                  │
-│                    Complete ●   │
-└─────────────────────────────────┘
-```
-
-**Node Card (Attention):**
-```
-┌─────────────────────────────────┐
-│  ③  Coverage Analysis           │
-│     DISTRIBUTION                │
-│                                 │
-│  Balance: 0.35 (Poor)           │
-│                   Attention ●   │
-└─────────────────────────────────┘
-```
-
 **Auto-runs:** After categorization completes.
 
-**Click to open:** Coverage Dashboard modal
-
-**Modal Actions:**
+**Actions:**
 | Action | Description |
 |--------|-------------|
 | View Dashboard | Detailed distribution charts |
@@ -317,31 +220,7 @@ The Health Indicator bar shows validation status at all times. **This is NOT a p
 
 **Purpose:** Configure how model outputs will be scored during training.
 
-**Node Card (LLM Judge):**
-```
-┌─────────────────────────────────┐
-│  ④  Grader Config               │
-│     EVALUATION RULES            │
-│                                 │
-│  Judge: GPT-4o                  │
-│                  Configured ●   │
-└─────────────────────────────────┘
-```
-
-**Node Card (Script):**
-```
-┌─────────────────────────────────┐
-│  ④  Grader Config               │
-│     EVALUATION RULES            │
-│                                 │
-│  Type: JavaScript Script        │
-│                  Configured ●   │
-└─────────────────────────────────┘
-```
-
 **Does NOT auto-run:** Requires user configuration.
-
-**Click to open:** Configure Grader modal
 
 **Grader Types:**
 | Type | Best For |
@@ -349,7 +228,7 @@ The Health Indicator bar shows validation status at all times. **This is NOT a p
 | LLM as a Judge | Subjective quality assessment |
 | Script | Format validation, deterministic checks |
 
-**Modal Actions:**
+**Actions:**
 | Action | Description |
 |--------|-------------|
 | Edit Grader | Configure grader type and settings |
@@ -361,30 +240,6 @@ The Health Indicator bar shows validation status at all times. **This is NOT a p
 
 **Purpose:** Test dataset + grader quality before training.
 
-**Node Card (Passed):**
-```
-┌─────────────────────────────────┐
-│  ⑤  Dry Run                     │
-│     VALIDATION                  │
-│                                 │
-│  Mean: 0.45 • GO               │
-│                      Passed ●   │
-└─────────────────────────────────┘
-```
-
-**Node Card (Failed):**
-```
-┌─────────────────────────────────┐
-│  ⑤  Dry Run                     │
-│     VALIDATION                  │
-│                                 │
-│  Mean: 0.08 • NO-GO            │
-│                      Failed ●   │
-└─────────────────────────────────┘
-```
-
-**Click to open:** Dry Run Results modal
-
 **GO/NO-GO Criteria:**
 | Metric | GO | CAUTION | NO-GO |
 |--------|-----|---------|-------|
@@ -392,7 +247,7 @@ The Health Indicator bar shows validation status at all times. **This is NOT a p
 | % Scoring > 0 | > 70% | 50–70% | < 50% |
 | Std Dev | > 0.10 | 0.05–0.10 | < 0.05 |
 
-**Modal Actions:**
+**Actions:**
 | Action | Description |
 |--------|-------------|
 | Full Results | View detailed score distribution |
@@ -405,47 +260,12 @@ The Health Indicator bar shows validation status at all times. **This is NOT a p
 
 **Purpose:** Execute RFT training.
 
-**Node Card (Ready):**
-```
-┌─────────────────────────────────┐
-│  ⑥  Train Model                 │
-│     RFT TRAINING                │
-│                                 │
-│  Ready to start                 │
-│                       Ready ○   │
-└─────────────────────────────────┘
-```
-
-**Node Card (Training):**
-```
-┌─────────────────────────────────┐
-│  ⑥  Train Model                 │
-│     RFT TRAINING                │
-│                                 │
-│  Training... 45%                │
-│                   Training ●   │
-└─────────────────────────────────┘
-```
-
-**Node Card (Complete):**
-```
-┌─────────────────────────────────┐
-│  ⑥  Train Model                 │
-│     RFT TRAINING                │
-│                                 │
-│  +49% improvement               │
-│                    Complete ●   │
-└─────────────────────────────────┘
-```
-
-**Click to open:** Start Training modal
-
-**Training Configuration (in modal):**
+**Training Configuration:**
 - Base model selection
 - Train/validation split (default 90/10)
 - Stratify by topic option
 
-**Modal Actions:**
+**Actions:**
 | Action | Description |
 |--------|-------------|
 | Start Training | Begin RFT training |
@@ -458,36 +278,12 @@ The Health Indicator bar shows validation status at all times. **This is NOT a p
 
 **Purpose:** Ship trained model to production.
 
-**Node Card (Waiting):**
-```
-┌─────────────────────────────────┐
-│  ⑦  Deploy                      │
-│     DEPLOYMENT                  │
-│                                 │
-│  Waiting for training           │
-│                     Waiting ○   │
-└─────────────────────────────────┘
-```
-
-**Node Card (Ready):**
-```
-┌─────────────────────────────────┐
-│  ⑦  Deploy                      │
-│     DEPLOYMENT                  │
-│                                 │
-│  Model ready to deploy          │
-│                       Ready ●   │
-└─────────────────────────────────┘
-```
-
-**Click to open:** Deploy modal
-
 **Deployment Options:**
 - **Replace in gateway** — All traffic routes to fine-tuned model
 - **New endpoint only** — Access via explicit model ID
 - **A/B test** — Split traffic between base and fine-tuned
 
-**Modal Actions:**
+**Actions:**
 | Action | Description |
 |--------|-------------|
 | Run Benchmarks | Test model against test set |

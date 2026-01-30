@@ -11,7 +11,7 @@ export interface DatasetRecord {
   data: unknown;               // Trace payload (DataInfo) or imported object
   metadata?: Record<string, unknown>; // Record-level metadata (provenance, flags)
   spanId?: string;             // For duplicate detection and keeping track of span (optional - undefined for generated data)
-  topic?: string;              // Leaf topic name (look up full path in dataset's topicHierarchy)
+  topic?: string;              // Leaf topic ID using path syntax (e.g., "Category/Subcategory/Topic")
   is_generated?: boolean;      // True for synthetic/generated traces
   evaluation?: DatasetEvaluation;
   createdAt: number;
@@ -119,18 +119,202 @@ export interface BackendJsEvaluator {
 // Union type for backend evaluator
 export type BackendEvaluator = BackendLlmAsJudgeEvaluator | BackendJsEvaluator;
 
+// Sanitization hygiene report (subset of HygieneReport for storage)
+export interface SanitizationStats {
+  validRecords: number;
+  invalidRecords: number;
+  duplicateRecords: number;
+  validationRate: number; // 0-1
+  errorsByType: Record<string, number>;
+  recommendations: string[];
+}
+
+// Dataset statistics computed by get_dataset_stats tool
+// Stored on dataset for UI display and agent reference
+export interface DatasetStats {
+  // Record counts
+  totalRecords: number;
+  generatedRecords: number;
+  originalRecords: number;
+  // Message stats
+  totalMessages: number;
+  averageMessagesPerRecord: number;
+  // Topic info
+  topicDistribution: Record<string, number>;
+  topicCount: number;
+  uncategorizedCount: number;
+  // Configuration flags
+  hasTopicHierarchy: boolean;
+  hasEvaluationConfig: boolean;
+  // Sanitization/validation stats
+  sanitization?: SanitizationStats;
+  // When stats were last calculated
+  lastCalculatedAt: number;
+}
+
+// Coverage statistics stored on dataset for UI display
+export interface CoverageStats {
+  // Balance score (0-1, where 1 is perfectly balanced)
+  balanceScore: number;
+  // Balance rating for display
+  balanceRating: 'excellent' | 'good' | 'fair' | 'poor' | 'critical';
+  // Count of records per topic
+  topicDistribution: Record<string, number>;
+  // Number of records without topics
+  uncategorizedCount: number;
+  // Total number of records when calculated
+  totalRecords: number;
+  // When this was last calculated
+  lastCalculatedAt: number;
+}
+
+// Dry run verdict
+export type DryRunVerdict = 'GO' | 'NO-GO' | 'WARNING';
+
+// Quality assessment for dataset or grader
+export type QualityRating = 'good' | 'warning' | 'problem' | 'unknown';
+
+// Per-topic dry run statistics
+export interface TopicDryRunStats {
+  mean: number;
+  std: number;
+  count: number;
+  status: QualityRating;
+}
+
+// Score distribution buckets (0.0-0.2, 0.2-0.4, etc.)
+export interface ScoreDistribution {
+  '0.0-0.2': number;
+  '0.2-0.4': number;
+  '0.4-0.6': number;
+  '0.6-0.8': number;
+  '0.8-1.0': number;
+}
+
+// Percentile statistics
+export interface Percentiles {
+  p10: number;
+  p25: number;
+  p50: number; // median
+  p75: number;
+  p90: number;
+}
+
+// Diagnosis result from dry run analysis
+export interface DryRunDiagnosis {
+  // Overall quality assessments
+  datasetQuality: QualityRating;
+  graderQuality: QualityRating;
+  // Final verdict
+  verdict: DryRunVerdict;
+  // Issues detected
+  warnings: string[];
+  // Actionable recommendations
+  recommendations: string[];
+  // Detailed issue descriptions for UI
+  issues: {
+    type: 'mean_low' | 'mean_high' | 'std_low' | 'std_high' | 'low_success' | 'too_easy' | 'topic_problem';
+    severity: 'warning' | 'error';
+    message: string;
+    suggestion: string;
+  }[];
+}
+
+// Dry run statistics stored on dataset for UI display
+export interface DryRunStats {
+  // When this was run
+  evaluationRunId: string;
+  lastRunAt: number;
+
+  // Sample info
+  samplesEvaluated: number;
+  samplePercentage: number;
+
+  // Core statistics
+  statistics: {
+    mean: number;
+    std: number;
+    median: number;
+    min: number;
+    max: number;
+    percentiles: Percentiles;
+    // Score fractions
+    percentAboveZero: number;  // %>0
+    percentPerfect: number;    // %=1.0
+  };
+
+  // Distribution for histogram visualization
+  distribution: ScoreDistribution;
+
+  // Per-topic breakdown
+  byTopic: Record<string, TopicDryRunStats>;
+
+  // Diagnosis and recommendations
+  diagnosis: DryRunDiagnosis;
+
+  // Sample results for manual review (top/bottom scores)
+  sampleResults: {
+    highest: Array<{ recordId: string; score: number; reason?: string }>;
+    lowest: Array<{ recordId: string; score: number; reason?: string }>;
+    aroundMean: Array<{ recordId: string; score: number; reason?: string }>;
+  };
+}
+
+// Dataset state for tracking finetune progress
+export type DatasetState = 'draft' | 'in_finetune' | 'completed';
+
+// Consolidated state configuration for UI display
+export interface DatasetStateConfig {
+  value: DatasetState;
+  label: string;
+  className: string;
+}
+
+export const DATASET_STATE_CONFIG: DatasetStateConfig[] = [
+  {
+    value: 'draft',
+    label: 'Draft',
+    className: 'bg-muted text-muted-foreground',
+  },
+  {
+    value: 'in_finetune',
+    label: 'Processing',
+    className: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+  },
+  {
+    value: 'completed',
+    label: 'Completed',
+    className: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+  },
+];
+
+// Helper to get config by state value
+export function getDatasetStateConfig(state: DatasetState): DatasetStateConfig {
+  return DATASET_STATE_CONFIG.find((c) => c.value === state) ?? DATASET_STATE_CONFIG[0];
+}
+
 // Stored in 'datasets' object store (metadata only, no records array)
 export interface Dataset {
   id: string;
   name: string;
   createdAt: number;
   updatedAt: number;
+  // Dataset state: draft (default), in_finetune, or completed
+  state?: DatasetState;
+  // Training objective describing specific behaviors to reinforce or suppress
+  datasetObjective?: string;
   // Backend dataset ID from the cloud provider (set after first finetune upload)
   backendDatasetId?: string;
   // Topic hierarchy configuration
   topicHierarchy?: TopicHierarchyConfig;
   // LLM-as-a-Judge evaluation configuration
   evaluationConfig?: EvaluationConfig;
+  // Coverage statistics for UI display (updated by analyze_coverage)
+  coverageStats?: CoverageStats;
+  // Dry run statistics for UI display (updated by run_dry_run)
+  dryRunStats?: DryRunStats;
+  // Dataset statistics for UI display (updated by get_dataset_stats)
+  stats?: DatasetStats;
 }
 
 // Combined view for UI (dataset + its records)
