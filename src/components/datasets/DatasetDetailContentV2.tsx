@@ -8,7 +8,8 @@
 
 import { useMemo, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Loader2, LayoutGrid, Table2 } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
+import { ViewModeToggle, type ViewMode } from "./dataset-detail-header/ViewModeToggle";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { emitter } from "@/utils/eventEmitter";
 import { DeleteConfirmationDialog } from "./DeleteConfirmationDialog";
@@ -21,10 +22,8 @@ import { SanitizeDataDialog } from "./SanitizeDataDialog";
 import { DryRunDialog } from "./DryRunDialog";
 import { getLeafTopicsFromHierarchy } from "./record-utils";
 import { getTopicCounts } from "./topic-hierarchy-utils";
-import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
-import { RecordsTable } from "./records-table/RecordsTable";
-import { RecordDetailSidebar } from "./records-table/RecordDetailSidebar";
 import { DatasetDetailHeader } from "./dataset-detail-header";
+import { DatasetMainContent } from "./DatasetMainContent";
 import { LucyDatasetAssistant } from "./LucyDatasetAssistant";
 import { EvaluationConfigDialog } from "./evaluation-dialog/EvaluationConfigDialog";
 import { updateDatasetEvaluationConfig } from "@/services/datasets-db";
@@ -101,7 +100,7 @@ export function DatasetDetailContentV2() {
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
 
   // View mode: "canvas" for visual hierarchy, "table" for full data table with hierarchy grouping
-  const [viewMode, setViewMode] = useState<"canvas" | "table">("canvas");
+  const [viewMode, setViewMode] = useState<ViewMode>("canvas");
 
   // Selected record for sidebar detail view (table mode only)
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
@@ -353,87 +352,33 @@ export function DatasetDetailContentV2() {
         </div>
 
         {/* View mode toolbar */}
-        <div className="px-4 py-2 border-b border-border flex items-center justify-end">
-          <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-lg">
-            <Button
-              variant={viewMode === "canvas" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-7 px-2.5 gap-1.5"
-              onClick={() => setViewMode("canvas")}
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span className="text-xs">Canvas</span>
-            </Button>
-            <Button
-              variant={viewMode === "table" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-7 px-2.5 gap-1.5"
-              onClick={() => setViewMode("table")}
-            >
-              <Table2 className="w-3.5 h-3.5" />
-              <span className="text-xs">Table</span>
-            </Button>
-          </div>
-        </div>
+        <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
 
         {/* Main content area - Canvas or Table based on view mode */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {viewMode === "canvas" ? (
-            <TopicHierarchyCanvas
-              hierarchy={dataset.topicHierarchy?.hierarchy}
-              records={sortedRecords}
-              datasetId={datasetId}
-              coverageStats={canvasCoverageStats}
-              onSelectTopic={setSelectedTopic}
-              selectedTopic={selectedTopic}
-              onAddTopic={handleAddTopic}
-              onRenameTopic={handleRenameTopic}
-              onDeleteTopic={handleDeleteTopic}
-              onUpdateRecordTopic={handleUpdateRecordTopic}
-              onDeleteRecord={(recordId) =>
-                setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
-              }
-              onSaveRecord={handleSaveRecordData}
-              onCreateChildTopic={handleCreateChildTopic}
-              onGenerateForTopic={handleGenerateForTopic}
-              onGenerateSubtopics={handleGenerateSubtopics}
-            />
-          ) : (
-            <>
-              {/* Records Table */}
-              <RecordsTable
-                records={sortedRecords}
-                datasetId={datasetId}
-                showHeader={true}
-                showFooter={true}
-                height="auto"
-                groupByTopic={true}
-                topicHierarchy={dataset.topicHierarchy?.hierarchy}
-                availableTopics={availableTopics}
-                onUpdateTopic={handleUpdateRecordTopic}
-                onDelete={(recordId) =>
-                  setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
-                }
-                onSave={handleSaveRecordData}
-                onExpand={(record) => setSelectedRecordId(record.id)}
-                viewingRecordId={selectedRecordId}
-              />
-
-              {/* Record Detail Sidebar (Sheet - renders via portal) */}
-              <RecordDetailSidebar
-                record={selectedRecord}
-                onClose={() => setSelectedRecordId(null)}
-                availableTopics={availableTopics}
-                onUpdateTopic={handleUpdateRecordTopic}
-                onDelete={(recordId) => {
-                  setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id });
-                  setSelectedRecordId(null);
-                }}
-                onSave={handleSaveRecordData}
-              />
-            </>
-          )}
-        </div>
+        <DatasetMainContent
+          viewMode={viewMode}
+          datasetId={datasetId}
+          records={sortedRecords}
+          topicHierarchy={dataset.topicHierarchy?.hierarchy}
+          coverageStats={canvasCoverageStats}
+          availableTopics={availableTopics}
+          selectedTopic={selectedTopic}
+          onSelectTopic={setSelectedTopic}
+          selectedRecord={selectedRecord}
+          selectedRecordId={selectedRecordId}
+          onSelectRecordId={setSelectedRecordId}
+          onAddTopic={handleAddTopic}
+          onRenameTopic={handleRenameTopic}
+          onDeleteTopic={handleDeleteTopic}
+          onUpdateRecordTopic={handleUpdateRecordTopic}
+          onDeleteRecord={(recordId) =>
+            setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
+          }
+          onSaveRecord={handleSaveRecordData}
+          onCreateChildTopic={handleCreateChildTopic}
+          onGenerateForTopic={handleGenerateForTopic}
+          onGenerateSubtopics={handleGenerateSubtopics}
+        />
       </div>
 
       {/* Dialogs */}

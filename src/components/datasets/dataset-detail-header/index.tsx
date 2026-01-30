@@ -11,10 +11,17 @@ import { Input } from "@/components/ui/input";
 import { Pencil, Check, X } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { DatasetStatsCards } from "./DatasetStatsCards";
+import { DatasetBreadcrumb } from "./DatasetBreadcrumb";
 
 export function DatasetDetailHeader() {
   const {
     dataset,
+    datasetId,
+    datasets,
+    datasetRecordCounts,
+    onBack,
+    onSelectDataset,
+    setCreateDatasetDialog,
     handleRenameDataset,
   } = DatasetDetailConsumer();
 
@@ -42,6 +49,16 @@ export function DatasetDetailHeader() {
 
   return (
     <div className="w-full flex flex-col">
+      {/* Breadcrumb */}
+      <DatasetBreadcrumb
+        name={name}
+        datasetId={datasetId}
+        datasets={datasets}
+        datasetRecordCounts={datasetRecordCounts}
+        onBack={onBack}
+        onSelectDataset={onSelectDataset}
+        onCreateNew={() => setCreateDatasetDialog(true)}
+      />
 
       {/* Title and Objective */}
       <div className="mb-4">
