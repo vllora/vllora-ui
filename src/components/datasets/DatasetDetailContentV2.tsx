@@ -74,6 +74,10 @@ export function DatasetDetailContentV2() {
     dryRunDialog,
     setDryRunDialog,
 
+    // Evaluation config dialog
+    evaluationConfigDialog,
+    setEvaluationConfigDialog,
+
     // Handlers
     handleUpdateRecordTopic,
     handleDeleteConfirm,
@@ -95,7 +99,6 @@ export function DatasetDetailContentV2() {
 
   // State for canvas view
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
-  const [evaluationConfigDialog, setEvaluationConfigDialog] = useState(false);
 
   // View mode: "canvas" for visual hierarchy, "table" for full data table with hierarchy grouping
   const [viewMode, setViewMode] = useState<"canvas" | "table">("canvas");

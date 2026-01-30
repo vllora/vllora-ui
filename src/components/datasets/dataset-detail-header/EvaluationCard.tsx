@@ -13,6 +13,8 @@ export interface EvaluationCardProps {
   evaluationConfig?: EvaluationConfig;
   /** Dry run stats (if evaluation has been run) */
   dryRunStats?: DryRunStats;
+  /** Callback when clicking to configure evaluation */
+  onConfigureClick?: () => void;
 }
 
 const VERDICT_COLORS = {
@@ -27,18 +29,21 @@ const VERDICT_BG = {
   "NO-GO": "bg-red-500",
 };
 
-export function EvaluationCard({ evaluationConfig, dryRunStats }: EvaluationCardProps) {
-  // No evaluation config - show setup prompt
+export function EvaluationCard({ evaluationConfig, dryRunStats, onConfigureClick }: EvaluationCardProps) {
+  // No evaluation config - show setup prompt (clickable)
   if (!evaluationConfig) {
     return (
-      <div className="px-4 py-3 rounded-lg bg-muted/50 flex items-center justify-center min-h-[88px]">
+      <button
+        onClick={onConfigureClick}
+        className="w-full px-4 py-3 rounded-lg bg-muted/50 flex items-center justify-center min-h-[88px] hover:bg-muted/70 transition-colors cursor-pointer"
+      >
         <div className="flex flex-col items-center gap-1 text-center">
           <FlaskConical className="w-5 h-5 text-muted-foreground/50" />
           <span className="text-xs text-muted-foreground">
-            Evaluation not configured
+            Configure evaluation
           </span>
         </div>
-      </div>
+      </button>
     );
   }
 

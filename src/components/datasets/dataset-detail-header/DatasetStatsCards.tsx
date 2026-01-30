@@ -13,7 +13,7 @@ import { TopicsBarCard } from "./TopicsBarCard";
 import { EvaluationCard } from "./EvaluationCard";
 
 export function DatasetStatsCards() {
-  const { dataset, records } = DatasetDetailConsumer();
+  const { dataset, records, setEvaluationConfigDialog } = DatasetDetailConsumer();
 
   // Use shared utility for computing insights (memoized on records change)
   const insights = useMemo(() => computeDatasetInsights(records), [records]);
@@ -43,6 +43,7 @@ export function DatasetStatsCards() {
       <EvaluationCard
         evaluationConfig={dataset?.evaluationConfig}
         dryRunStats={dataset?.dryRunStats}
+        onConfigureClick={() => setEvaluationConfigDialog(true)}
       />
     </div>
   );
