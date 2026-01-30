@@ -5,13 +5,13 @@
  * Provides actions: Generate (dropdown), Delete.
  */
 
-import { Trash2, Sparkles, ChevronDown, Database, Table2Icon } from "lucide-react";
+import { Trash2, FilePlus, GitBranch, Grid2X2Plus } from "lucide-react";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface TopicNodeToolbarProps {
   /** Topic name (used for delete) */
@@ -47,65 +47,71 @@ export function TopicNodeToolbar({
 }: TopicNodeToolbarProps) {
   // Use fullPath for generate prompts, fallback to name
   const topicPath = fullPath || name;
-  const hasGenerateOptions = (!isRoot && onGenerateForTopic) || onGenerateSubtopics;
 
   return (
-    <div
-      className="absolute left-1/2 -translate-x-1/2 -top-11 z-10 nodrag nopan"
-      onClick={(e) => e.stopPropagation()}
-    >
-      <div className="flex items-center gap-1 px-1.5 py-1 rounded-lg bg-popover border border-border shadow-lg">
-        {/* Generate dropdown */}
-        {hasGenerateOptions && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+    <TooltipProvider delayDuration={300}>
+      <div
+        className="absolute left-1/2 -translate-x-1/2 -top-11 z-10 nodrag nopan"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-1 px-1.5 py-1 rounded-lg bg-popover border border-border shadow-lg">
+        {/* Generate Records button (not for root) */}
+        {!isRoot && onGenerateForTopic && (
+          <Tooltip>
+            <TooltipTrigger asChild>
               <button
                 type="button"
-                className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                onClick={() => onGenerateForTopic(topicPath)}
+                className="flex items-center justify-center w-7 h-7 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
               >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Generate</span>
-                <ChevronDown className="w-3 h-3 opacity-50" />
+                <Grid2X2Plus className="w-3.5 h-3.5" />
               </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="min-w-[120px] p-1">
-              {!isRoot && onGenerateForTopic && (
-                <DropdownMenuItem
-                  onClick={() => onGenerateForTopic(topicPath)}
-                  className="text-xs py-1.5 px-2"
-                >
-                  <Database className="w-3.5 h-3.5 mr-1.5" />
-                  Records
-                </DropdownMenuItem>
-              )}
-              {onGenerateSubtopics && (
-                <DropdownMenuItem
-                  onClick={() => onGenerateSubtopics(isRoot ? null : topicPath)}
-                  className="text-xs py-1.5 px-2"
-                >
-                  <Table2Icon className="w-3.5 h-3.5 mr-1.5" />
-                  Sub-topics
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" sideOffset={4}>
+              Generate records
+            </TooltipContent>
+          </Tooltip>
+        )}
+
+        {/* Generate Sub-topics button */}
+        {onGenerateSubtopics && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => onGenerateSubtopics(isRoot ? null : topicPath)}
+                className="flex items-center justify-center w-7 h-7 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+              >
+                <GitBranch className="w-3.5 h-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" sideOffset={4}>
+              Generate sub-topics
+            </TooltipContent>
+          </Tooltip>
         )}
 
         {/* Separator */}
-        {hasGenerateOptions && !isRoot && onDeleteTopic && (
+        {((!isRoot && onGenerateForTopic) || onGenerateSubtopics) && !isRoot && onDeleteTopic && (
           <div className="w-px h-5 bg-border" />
         )}
 
         {/* Delete button (not for root) */}
         {!isRoot && onDeleteTopic && (
-          <button
-            type="button"
-            onClick={() => onDeleteTopic(name)}
-            className="flex items-center justify-center w-7 h-7 rounded-md hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive"
-            title="Delete topic"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => onDeleteTopic(name)}
+                className="flex items-center justify-center w-7 h-7 rounded-md hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" sideOffset={4}>
+              Delete topic
+            </TooltipContent>
+          </Tooltip>
         )}
 
         {/* Future: More options dropdown */}
@@ -129,7 +135,8 @@ export function TopicNodeToolbar({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu> */}
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }
