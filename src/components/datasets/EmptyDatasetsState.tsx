@@ -47,27 +47,28 @@ Remember: You are a tutor, not just an engine wrapper. Add pedagogical value thr
 
 
 
+const REQUEST_BODY = JSON.stringify({
+  model: "gpt-4o-mini",
+  messages: [
+    { role: "system", content: SYSTEM_PROMPT },
+    { role: "user", content: "FEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1\n\nWhat are the best responses for black?" }
+  ]
+}, null, 2);
+
 const CURL_COMMAND = `curl http://localhost:9090/v1/chat/completions \\
   -H "Content-Type: application/json" \\
-  -d '{
-    "model": "gpt-4o-mini",
-    "messages": [
-      {"role": "system", "content": ${SYSTEM_PROMPT}},
-      {"role": "user", "content": "FEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1\\n\\nWhat are the best responses for black?"}
-    ]
-  }'`;
+  -d '${REQUEST_BODY.replace(/'/g, "'\\''")}'`;
 
 export function EmptyDatasetsState() {
   const navigate = useNavigate();
   const { hasBackendSpans } = DatasetsUIConsumer();
 
-  console.log("==== hasBackendSpans", hasBackendSpans);
   // Auto-navigate to create dataset when backend spans are detected
   useEffect(() => {
     if (hasBackendSpans) {
       setTimeout(() => {
         navigate("/datasets/new", { replace: true });
-      }, 1000);
+      }, 5000);
     }
   }, [hasBackendSpans, navigate]);
   return (
