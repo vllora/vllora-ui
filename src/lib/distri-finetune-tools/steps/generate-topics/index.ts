@@ -20,7 +20,7 @@ const USE_BACKEND_TOPIC_GENERATION = true;
 
 export const generateTopicsHandler: ToolHandler = async (params) => {
   try {
-    const { workflow_id, method = 'auto', max_depth = 3, degree = 2 } = params;
+    const { workflow_id, method = 'auto', max_depth = 2, degree = 2 } = params;
 
     if (!workflow_id || typeof workflow_id !== 'string') {
       return { success: false, error: 'workflow_id is required' };
@@ -41,8 +41,8 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
       };
     }
 
-    const depthValue = typeof max_depth === 'number' ? max_depth : 3;
-    const degreeValue = typeof degree === 'number' ? degree : 3;
+    const depthValue = typeof max_depth === 'number' ? max_depth : 2;
+    const degreeValue = typeof degree === 'number' ? degree : 2;
 
     let hierarchy: TopicHierarchyNode[];
 
