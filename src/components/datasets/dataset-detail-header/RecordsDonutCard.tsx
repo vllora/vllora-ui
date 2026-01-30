@@ -3,15 +3,18 @@
  *
  * Displays a donut chart showing the distribution of original vs generated records.
  * Uses CSS conic-gradient for the chart visualization.
+ * Clickable to show detailed analytics dialog.
  */
 
 export interface RecordsDonutCardProps {
   total: number;
   original: number;
   generated: number;
+  /** Callback when card is clicked to show details */
+  onClick?: () => void;
 }
 
-export function RecordsDonutCard({ total, original, generated }: RecordsDonutCardProps) {
+export function RecordsDonutCard({ total, original, generated, onClick }: RecordsDonutCardProps) {
   const generatedPercent = total > 0 ? (generated / total) * 100 : 0;
   const originalPercent = total > 0 ? (original / total) * 100 : 0;
 
@@ -27,7 +30,10 @@ export function RecordsDonutCard({ total, original, generated }: RecordsDonutCar
     : { background: "rgb(156 163 175)" };
 
   return (
-    <div className="flex items-center gap-4 px-4 py-3 rounded-lg bg-muted/50">
+    <button
+      onClick={onClick}
+      className="flex items-center gap-4 px-4 py-3 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors cursor-pointer w-full text-left"
+    >
       {/* Donut Chart */}
       <div className="relative shrink-0">
         <div
@@ -58,6 +64,6 @@ export function RecordsDonutCard({ total, original, generated }: RecordsDonutCar
           </div>
         </div>
       </div>
-    </div>
+    </button>
   );
 }
