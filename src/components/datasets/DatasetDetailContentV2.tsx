@@ -9,7 +9,7 @@
 import { useMemo, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Loader2 } from "lucide-react";
-import { ViewModeToggle, type ViewMode } from "./dataset-detail-header/ViewModeToggle";
+import { DatasetUtilityBar, type ViewMode } from "./dataset-detail-header/DatasetUtilityBar";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { emitter } from "@/utils/eventEmitter";
 import { DeleteConfirmationDialog } from "./DeleteConfirmationDialog";
@@ -93,6 +93,7 @@ export function DatasetDetailContentV2() {
     handleDeleteTopicFromRecords,
     handleDeleteTopic,
     handleImportRecords,
+    handleExport,
     recordsWithTopicsCount,
   } = DatasetDetailConsumer();
 
@@ -352,7 +353,12 @@ export function DatasetDetailContentV2() {
         </div>
 
         {/* View mode toolbar */}
-        <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
+        <DatasetUtilityBar
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          onExport={handleExport}
+          onConfigureEvaluation={() => setEvaluationConfigDialog(true)}
+        />
 
         {/* Main content area - Canvas or Table based on view mode */}
         <DatasetMainContent

@@ -5,7 +5,7 @@
  * Displays topic hierarchy canvas or records table based on view mode.
  */
 
-import type { ViewMode } from "./dataset-detail-header/ViewModeToggle";
+import type { ViewMode } from "./dataset-detail-header/DatasetUtilityBar";
 import type { CoverageStats, DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import type { AvailableTopic } from "./record-utils";
 import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
