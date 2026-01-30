@@ -28,8 +28,10 @@ export const startTrainingHandler: ToolHandler = async (params) => {
       return { success: false, error: `Cannot start training in step ${workflow.currentStep}. Must be in training step.` };
     }
 
-    if (!workflow.dryRun || workflow.dryRun.verdict === 'NO-GO') {
-      return { success: false, error: 'Dry run must pass before starting training' };
+    // Dry run is optional - only block if dry run was attempted and got NO-GO
+    // If no dry run was done (skipped), allow training to proceed
+    if (workflow.dryRun?.verdict === 'NO-GO') {
+      return { success: false, error: 'Dry run failed with NO-GO verdict. Please fix the issues before training, or rollback and skip dry run if you want to proceed anyway.' };
     }
 
     // Get dataset to check backend ID

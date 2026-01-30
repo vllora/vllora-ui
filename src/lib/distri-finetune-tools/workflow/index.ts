@@ -37,12 +37,39 @@ function getStepIndex(step: FinetuneStep): number {
   return STEP_ORDER.indexOf(step);
 }
 
+/**
+ * Valid step transitions. The workflow allows flexibility:
+ * - Normal flow: topics_config → categorize → coverage_generation → grader_config → dry_run → training → deployment
+ * - Skip coverage: topics_config → grader_config (skip categorization and coverage)
+ * - Skip coverage: categorize → grader_config (skip coverage analysis)
+ * - Skip dry_run: grader_config → training (skip dry run validation)
+ *
+ * The key requirement for training is having the evaluation function configured (grader_config).
+ * Coverage analysis and dry_run are optional - users can proceed if they have evaluation configured.
+ */
 function isValidStepTransition(from: FinetuneStep, to: FinetuneStep): boolean {
   const fromIndex = getStepIndex(from);
   const toIndex = getStepIndex(to);
 
-  // Can only advance one step at a time
-  return toIndex === fromIndex + 1;
+  // Normal flow: advance one step at a time
+  if (toIndex === fromIndex + 1) {
+    return true;
+  }
+
+  // Allow skipping to grader_config from topics_config or categorize
+  // This enables users to proceed with finetune even without perfect coverage,
+  // as long as they configure the evaluation function
+  if (to === 'grader_config' && (from === 'topics_config' || from === 'categorize')) {
+    return true;
+  }
+
+  // Allow skipping dry_run and going directly to training
+  // Users can skip validation if they're confident in their data and grader
+  if (to === 'training' && from === 'grader_config') {
+    return true;
+  }
+
+  return false;
 }
 
 function canRollbackTo(currentStep: FinetuneStep, targetStep: FinetuneStep): boolean {
@@ -232,9 +259,18 @@ export const advanceToStepHandler: ToolHandler = async (params): Promise<Advance
     if (!isValidStepTransition(workflow.currentStep, targetStep)) {
       const currentIndex = getStepIndex(workflow.currentStep);
       const nextStep = STEP_ORDER[currentIndex + 1];
+      // Provide helpful guidance on valid transitions
+      let validOptions: string;
+      if (workflow.currentStep === 'topics_config' || workflow.currentStep === 'categorize') {
+        validOptions = `Next step should be ${nextStep}, or you can skip to grader_config if you want to proceed without coverage analysis.`;
+      } else if (workflow.currentStep === 'grader_config') {
+        validOptions = `Next step should be ${nextStep}, or you can skip directly to training if you want to bypass dry run validation.`;
+      } else {
+        validOptions = `Next step should be ${nextStep}.`;
+      }
       return {
         success: false,
-        error: `Cannot advance from ${workflow.currentStep} to ${step}. Next step should be ${nextStep}.`,
+        error: `Cannot advance from ${workflow.currentStep} to ${step}. ${validOptions}`,
       };
     }
 
@@ -256,7 +292,7 @@ export const advanceToStepHandler: ToolHandler = async (params): Promise<Advance
 
 export const advanceToStepTool: DistriFnTool = {
   name: 'advance_to_step',
-  description: 'Move the workflow to the next step. Can only advance one step at a time.',
+  description: 'Move the workflow to the next step. Supports skipping optional steps: topics_config/categorize can skip to grader_config, grader_config can skip to training.',
   type: 'function',
   parameters: {
     type: 'object',

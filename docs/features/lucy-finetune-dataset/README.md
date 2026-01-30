@@ -95,41 +95,44 @@ This document outlines the architecture and implementation plan for refactoring 
                     │                  │                  │
                     └────────┬─────────┘                  │
                              │ generate_topics()         │
-                             ▼                           │
-                    ┌──────────────────┐                  │
-                    │                  │                  │
-                    │ 2. CATEGORIZE    │                  │
-                    │                  │                  │
-                    └────────┬─────────┘                  │
-                             │ categorize_records()      │
-                             ▼                           │
-                    ┌──────────────────┐                  │
-                    │                  │                  │
-                    │ 3. COVERAGE &    │←──────┐         │ User can
-                    │    GENERATE_DATA │       │         │ go back
-                    │                  │       │         │ to any
-                    └────────┬─────────┘       │         │ previous
-                             │                 │ repeat  │ step
-                             │ analyze →       │ generate│
-                             │ generate if     │         │
-                             │ gaps found      │         │
-                             ▼                 │         │
-                    ┌──────────────────┐       │         │
-                    │                  │───────┘         │
-                    │ 4. GRADER_CONFIG │                  │
-                    │                  │                  │
+                             ├─────────────────────┐     │
+                             ▼                     │     │
+                    ┌──────────────────┐           │     │
+                    │                  │           │     │
+                    │ 2. CATEGORIZE    │           │     │
+                    │                  │           │     │
+                    └────────┬─────────┘           │     │
+                             │ categorize_records()│     │
+                             ├─────────────────────┤     │
+                             ▼                     │     │
+                    ┌──────────────────┐           │     │
+                    │                  │           │     │
+                    │ 3. COVERAGE &    │←──────┐   │     │ User can
+                    │    GENERATE_DATA │       │   │     │ go back
+                    │   (OPTIONAL)     │       │   │     │ to any
+                    └────────┬─────────┘       │   │     │ previous
+                             │                 │   │     │ step
+                             │ analyze →       │   │     │
+                             │ generate if     │   │     │
+                             │ gaps found      │   │     │
+                             ▼                 │   │     │
+                    ┌──────────────────┐       │   │     │
+                    │                  │───────┘   │     │
+                    │ 4. GRADER_CONFIG │◄──────────┘     │
+                    │   (REQUIRED)     │                  │
                     └────────┬─────────┘                  │
                              │ configure_grader()        │
-                             ▼                           │
-                    ┌──────────────────┐                  │
-                    │                  │  ◄───────────────┤
-                    │ 5. DRY_RUN       │  NO-GO: fix     │
-                    │                  │  and retry      │
-                    └────────┬─────────┘                  │
-                             │ GO decision               │
-                             ▼                           │
-                    ┌──────────────────┐                  │
-                    │                  │                  │
+                             ├─────────────────────┐     │
+                             ▼                     │     │
+                    ┌──────────────────┐           │     │
+                    │                  │  ◄────────┼─────┤
+                    │ 5. DRY_RUN       │  NO-GO:  │     │
+                    │   (OPTIONAL)     │  fix/retry│     │
+                    └────────┬─────────┘           │     │
+                             │ GO decision         │     │
+                             ▼                     │     │
+                    ┌──────────────────┐           │     │
+                    │                  │◄──────────┘     │
                     │ 6. TRAINING      │──────────────────┘
                     │                  │
                     └────────┬─────────┘
@@ -153,6 +156,11 @@ This document outlines the architecture and implementation plan for refactoring 
 - Records are INPUT to the workflow, not a step
 - GENERATE_DATA is combined with COVERAGE as one step (analyze → generate if needed → repeat)
 - The goal of GENERATE_DATA is to improve topic coverage balance
+- **The ONLY hard requirement for training is having the evaluation function configured (grader_config)**
+
+**Optional Step Skipping:**
+- **Coverage & Generation (Step 3) is OPTIONAL**: Users can skip directly from topics_config or categorize to grader_config if they're satisfied with their data or want to proceed without coverage analysis
+- **Dry Run (Step 5) is OPTIONAL but RECOMMENDED**: Users can skip from grader_config directly to training. However, if dry run was performed and returned NO-GO, training is blocked until issues are resolved
 
 ---
 
@@ -761,17 +769,23 @@ The finetune process has 7 main steps (input is records + training goals):
 
 1. **Topics Configuration** - Define topic hierarchy (auto-generate, template, or manual)
 2. **Categorization** - Assign records to topics with confidence scoring
-3. **Coverage & Generation** - Analyze balance, generate synthetic data to fill gaps
-4. **Grader Configuration** - Set up evaluation function (LLM-as-Judge or Script)
-5. **Dry Run** - Validate dataset + grader quality (GO/NO-GO decision)
+3. **Coverage & Generation** - Analyze balance, generate synthetic data to fill gaps **(OPTIONAL)**
+4. **Grader Configuration** - Set up evaluation function (LLM-as-Judge or Script) **(REQUIRED)**
+5. **Dry Run** - Validate dataset + grader quality (GO/NO-GO decision) **(OPTIONAL but RECOMMENDED)**
 6. **Training** - Execute RFT training
 7. **Deployment** - Deploy the fine-tuned model
 
-**Key Insight**: The GENERATE_DATA step is about improving COVERAGE. We analyze topic distribution and generate synthetic data to:
-- Balance under-represented topics
-- Augment small datasets
-- Add missing edge cases
-- Fill tool usage patterns
+**Key Insight**: The ONLY hard requirement for training is having the evaluation function configured (grader_config). Coverage analysis and dry run are optional - users can proceed if they have evaluation configured.
+
+**Optional Step Skipping:**
+- From topics_config or categorize → can skip directly to grader_config
+- From grader_config → can skip directly to training (bypass dry run)
+
+**GENERATE_DATA Purpose**: When used, it improves COVERAGE by:
+- Balancing under-represented topics
+- Augmenting small datasets
+- Adding missing edge cases
+- Filling tool usage patterns
 
 # INTERACTION STYLE
 
@@ -798,10 +812,11 @@ The finetune process has 7 main steps (input is records + training goals):
 - Report results: how many assigned, confidence levels
 - Flag low-confidence records for review
 
-## Step 3: Coverage & Generation
+## Step 3: Coverage & Generation (OPTIONAL)
+- **This step is optional** - users can skip directly to grader_config if satisfied with their data
 - Analyze topic distribution automatically
 - Calculate balance score (0.0-1.0)
-- If balance < 0.5, recommend generating synthetic data
+- If balance < 0.5, recommend generating synthetic data (but don't require it)
 - **Generation Goal**: Improve coverage by filling gaps in under-represented topics
 - Support multiple generation strategies:
   - **Message Variation** (recommended for multi-turn): Vary last user message
@@ -811,6 +826,7 @@ The finetune process has 7 main steps (input is records + training goals):
   - **Tool Chain**: Generate tool usage patterns
 - Can repeat generation multiple times until coverage is satisfactory
 - Target: Balance score > 0.5, all topics have min 100 samples
+- **Skip option**: If user wants to proceed without coverage analysis, advance directly to grader_config
 
 ## Step 4: Grader Configuration
 - This step REQUIRES user input - don't auto-generate
@@ -819,13 +835,15 @@ The finetune process has 7 main steps (input is records + training goals):
 - Help construct the grader configuration
 - Test on sample before proceeding
 
-## Step 5: Dry Run
+## Step 5: Dry Run (OPTIONAL but RECOMMENDED)
+- **This step is optional** but strongly recommended - users can skip directly to training
 - Before dry run, upload dataset to backend: call `upload_dataset`
 - If grader is updated after upload, use `sync_evaluator` instead of re-uploading
-- ALWAYS run dry run before training
 - Explain metrics: mean, std, percentiles, distribution, per-topic breakdown
 - Make GO/NO-GO/WARNING recommendation with diagnosis
 - If NO-GO, diagnose dataset vs grader issues and suggest fixes
+- **Important**: If dry run was performed and returned NO-GO, training is blocked until issues are resolved
+- **Skip option**: If user is confident and wants to skip dry run, advance directly to training
 
 ## Step 6: Training
 - Confirm training parameters with user
@@ -839,11 +857,13 @@ The finetune process has 7 main steps (input is records + training goals):
 
 # RULES
 
-1. **Never skip dry run** - Always validate before training
-2. **Confirm destructive actions** - Training costs money, confirm first
-3. **Track state** - Use workflow status to know where we are
-4. **Be helpful** - If user is stuck, suggest next actions
-5. **Explain metrics** - Users may not understand dry run metrics, explain them
+1. **Grader config is required** - The evaluation function must be configured before training
+2. **Recommend dry run** - Dry run is optional but strongly recommended. If skipped and training fails, suggest going back
+3. **Respect NO-GO verdicts** - If dry run was performed and returned NO-GO, training is blocked until issues are fixed
+4. **Confirm destructive actions** - Training costs money, confirm first
+5. **Track state** - Use workflow status to know where we are
+6. **Be helpful** - If user is stuck, suggest next actions
+7. **Explain metrics** - Users may not understand dry run metrics, explain them
 ```
 
 ---
@@ -900,7 +920,7 @@ The finetune process has 7 main steps (input is records + training goals):
 ```typescript
 {
   name: "advance_to_step",
-  description: "Move workflow to a specific step (must meet prerequisites)",
+  description: "Move the workflow to the next step. Supports skipping optional steps: topics_config/categorize can skip to grader_config, grader_config can skip to training.",
   parameters: {
     type: "object",
     properties: {
@@ -913,6 +933,10 @@ The finetune process has 7 main steps (input is records + training goals):
     required: ["workflow_id", "step"]
   }
 }
+// Valid transitions:
+// - Normal flow: advance one step at a time
+// - Skip to grader_config: from topics_config or categorize (skip coverage analysis)
+// - Skip to training: from grader_config (skip dry run validation)
 ```
 
 ### Step 1: Topics Configuration Tools

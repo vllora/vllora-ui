@@ -47,11 +47,9 @@ export const generateSyntheticDataHandler: ToolHandler = async (params): Promise
     });
 
     if (!workflow_id || typeof workflow_id !== 'string') {
-      console.log('[generateSyntheticData] Invalid workflow_id:', workflow_id);
       return { success: false, error: 'workflow_id is required' };
     }
 
-    console.log('[generateSyntheticData] Fetching workflow:', workflow_id);
     const workflow = await workflowDB.getWorkflow(workflow_id);
     if (!workflow) {
       console.log('[generateSyntheticData] Workflow not found:', workflow_id);
