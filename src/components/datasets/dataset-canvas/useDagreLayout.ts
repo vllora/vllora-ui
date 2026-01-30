@@ -12,12 +12,12 @@ import type { TopicNode } from "./topic-node/TopicNodeComponent";
 import type { TopicInputNode } from "./TopicInputNode";
 import type { RootNode } from "./RootNodeComponent";
 import type { TopicHierarchyNode } from "@/types/dataset-types";
+import { COLLAPSED_WIDTH } from "./topic-node/CollapsedTopicNode";
 
 // Union type for all canvas node types
 export type CanvasNode = TopicNode | TopicInputNode | RootNode;
 
 // Layout constants - must match TopicNodeComponent sizes
-const NODE_WIDTH_COLLAPSED = 280;
 const NODE_WIDTH_EXPANDED = 700;
 const NODE_HEIGHT_COLLAPSED = 80;
 const NODE_HEIGHT_EXPANDED = 500;
@@ -136,7 +136,7 @@ function getLayoutedElements(
         height = NODE_HEIGHT_EXPANDED;
       } else {
         // Collapsed dimensions
-        width = NODE_WIDTH_COLLAPSED;
+        width = COLLAPSED_WIDTH;
         height = NODE_HEIGHT_COLLAPSED;
       }
     }
@@ -204,7 +204,7 @@ function getLayoutedElements(
         nodeWidth = NODE_WIDTH_EXPANDED;
         nodeHeight = NODE_HEIGHT_EXPANDED;
       } else {
-        nodeWidth = NODE_WIDTH_COLLAPSED;
+        nodeWidth = COLLAPSED_WIDTH;
         nodeHeight = NODE_HEIGHT_COLLAPSED;
       }
     }

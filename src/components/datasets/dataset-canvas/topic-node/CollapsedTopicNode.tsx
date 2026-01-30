@@ -22,7 +22,7 @@ interface CollapsedTopicNodeProps {
 }
 
 // Fixed width for collapsed state
-export const COLLAPSED_WIDTH = 280;
+export const COLLAPSED_WIDTH = 300;
 
 export function CollapsedTopicNode({
   name,
