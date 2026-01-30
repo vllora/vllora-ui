@@ -7,15 +7,20 @@
 import type { DistriFnTool } from '@distri/core';
 import * as workflowDB from '@/services/finetune-workflow-db';
 import * as datasetsDB from '@/services/datasets-db';
-import type { ToolHandler } from '../types';
-import { buildHierarchyFromAnalysis, countLeafTopics } from './helpers';
+import type { ToolHandler } from '../../types';
+import type { TopicHierarchyNode } from '@/types/dataset-types';
+import { countLeafTopics } from '../helpers';
 
-// Import existing analysis tools
-import { generateTopics as existingGenerateTopics } from '@/lib/distri-dataset-tools/analysis/generate-topics';
+import { generateTopicsViaBackend } from './backend';
+import { generateTopicsViaFrontend } from './frontend';
+
+// Feature flag: Set to true to use the backend topic hierarchy generation endpoint
+// Set to false to use the existing frontend LLM-based generation
+const USE_BACKEND_TOPIC_GENERATION = true;
 
 export const generateTopicsHandler: ToolHandler = async (params) => {
   try {
-    const { workflow_id, method = 'auto', max_depth = 3, degree = 3 } = params;
+    const { workflow_id, method = 'auto', max_depth = 3, degree = 2 } = params;
 
     if (!workflow_id || typeof workflow_id !== 'string') {
       return { success: false, error: 'workflow_id is required' };
@@ -30,29 +35,56 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
     // (users may want to refine topics while configuring the grader)
     const allowedSteps = ['topics_config', 'grader_config'];
     if (!allowedSteps.includes(workflow.currentStep)) {
-      return { success: false, error: `Cannot generate topics in step ${workflow.currentStep}. Must be in topics_config or grader_config step.` };
+      return {
+        success: false,
+        error: `Cannot generate topics in step ${workflow.currentStep}. Must be in topics_config or grader_config step.`,
+      };
     }
 
-    // Use existing topic generation
-    const result = await existingGenerateTopics({
-      datasetId: workflow.datasetId,
-      maxDepth: typeof max_depth === 'number' ? max_depth : 3,
-      degree: typeof degree === 'number' ? degree : 3,
-    });
+    const depthValue = typeof max_depth === 'number' ? max_depth : 3;
+    const degreeValue = typeof degree === 'number' ? degree : 3;
 
-    if (!result.success || !result.analysis) {
-      return { success: false, error: result.error || 'Failed to generate topics' };
+    let hierarchy: TopicHierarchyNode[];
+
+    if (USE_BACKEND_TOPIC_GENERATION) {
+      // Use backend topic hierarchy generation endpoint
+      const records = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);
+      if (records.length === 0) {
+        return { success: false, error: 'No records found in dataset' };
+      }
+
+      // Format records for the backend API (limit to 20 as per backend implementation)
+      const formattedRecords = records.slice(0, 20).map((r) => ({ data: r.data }));
+
+      const result = await generateTopicsViaBackend(
+        workflow.trainingGoals || 'Generate diverse training data',
+        depthValue,
+        degreeValue,
+        formattedRecords,
+      );
+
+      if (!result.success || !result.hierarchy) {
+        return { success: false, error: result.error || 'Failed to generate topics via backend' };
+      }
+
+      hierarchy = result.hierarchy;
+    } else {
+      // Use existing frontend LLM-based topic generation
+      const result = await generateTopicsViaFrontend(workflow.datasetId, depthValue, degreeValue);
+
+      if (!result.success || !result.hierarchy) {
+        return { success: false, error: result.error || 'Failed to generate topics' };
+      }
+
+      hierarchy = result.hierarchy;
     }
 
-    // Convert analysis to hierarchy structure
-    const hierarchy = buildHierarchyFromAnalysis(result.analysis);
     const topicCount = countLeafTopics(hierarchy);
-    const depth = typeof max_depth === 'number' ? max_depth : 3;
 
     // Save hierarchy to dataset (single source of truth)
     await datasetsDB.updateDatasetTopicHierarchy(workflow.datasetId, {
       goals: workflow.trainingGoals,
-      depth,
+      depth: depthValue,
       hierarchy,
       generatedAt: Date.now(),
     });
@@ -60,7 +92,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
     // Update workflow with metadata only (not the full hierarchy)
     await workflowDB.updateStepData(workflow_id, 'topicsConfig', {
       topicCount,
-      depth,
+      depth: depthValue,
       generatedAt: Date.now(),
       method: method as 'auto' | 'template' | 'manual',
     });
@@ -70,7 +102,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
       hierarchy,
       method,
       topic_count: topicCount,
-      depth,
+      depth: depthValue,
     };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to generate topics' };
