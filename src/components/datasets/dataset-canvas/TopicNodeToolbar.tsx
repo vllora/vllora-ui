@@ -5,7 +5,7 @@
  * Provides actions: Generate (dropdown), Delete.
  */
 
-import { Trash2, Sparkles, ChevronDown, Database, GitBranch, Table2Icon } from "lucide-react";
+import { Trash2, Sparkles, ChevronDown, Database, Table2Icon } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,

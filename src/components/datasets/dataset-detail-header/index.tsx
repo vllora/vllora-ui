@@ -48,7 +48,7 @@ export function DatasetDetailHeader() {
   };
 
   return (
-    <div className="mb-4">
+    <div className="w-full flex flex-col">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm mb-4">
         <button

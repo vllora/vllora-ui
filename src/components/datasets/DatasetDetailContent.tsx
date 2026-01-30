@@ -12,7 +12,6 @@ import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { DeleteConfirmationDialog } from "./DeleteConfirmationDialog";
 import { AssignTopicDialog } from "./AssignTopicDialog";
 import { IngestDataDialog } from "./IngestDataDialog";
-import { DatasetDetailHeader } from "./DatasetDetailHeader";
 import { RecordsToolbar } from "./RecordsToolbar";
 import { RecordsTable } from "./records-table";
 import { CreateDatasetDialog } from "./CreateDatasetDialog";
@@ -23,6 +22,7 @@ import { SanitizeDataDialog } from "./SanitizeDataDialog";
 import { DryRunDialog } from "./DryRunDialog";
 import { getLeafTopicsFromHierarchy } from "./record-utils";
 import { getTopicCounts } from "./topic-hierarchy-utils";
+import { DatasetDetailHeader } from "./dataset-detail-header";
 
 export function DatasetDetailContent() {
   const {

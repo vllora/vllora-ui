@@ -24,7 +24,7 @@ import { getTopicCounts } from "./topic-hierarchy-utils";
 import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
 import { RecordsTable } from "./records-table/RecordsTable";
 import { RecordDetailSidebar } from "./records-table/RecordDetailSidebar";
-import { DatasetDetailHeader } from "./DatasetDetailHeader";
+import { DatasetDetailHeader } from "./dataset-detail-header";
 import { LucyDatasetAssistant } from "./LucyDatasetAssistant";
 import { EvaluationConfigDialog } from "./evaluation-dialog/EvaluationConfigDialog";
 import { updateDatasetEvaluationConfig } from "@/services/datasets-db";
@@ -346,10 +346,8 @@ export function DatasetDetailContentV2() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header with dataset objective and insights */}
         <div className="px-4 py-2 border-b border-border">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1">
+          <div className="flex flex-1 flex-col items-start justify-between gap-4">
               <DatasetDetailHeader />
-            </div>
             {/* View mode toggle */}
             <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-lg shrink-0">
               <Button

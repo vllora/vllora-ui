@@ -39,7 +39,7 @@ export const analyzeCoverageHandler: ToolHandler = async (params): Promise<Analy
     // Get full coverage report for response (includes distribution details)
     const records = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);
     const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
-    const coverageReport = existingAnalyzeCoverage(records, dataset?.topicHierarchy || null);
+    const coverageReport = existingAnalyzeCoverage({records, hierarchy: dataset?.topicHierarchy || undefined});
 
     // Convert distribution to expected format for response
     const distribution: Record<string, {

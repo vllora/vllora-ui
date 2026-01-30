@@ -107,7 +107,7 @@ export const generateSyntheticDataHandler: ToolHandler = async (params): Promise
       }
     } else {
       // Topics-First workflow: analyze coverage and determine underrepresented topics
-      const beforeReport = existingAnalyzeCoverage(records, dataset?.topicHierarchy || null);
+      const beforeReport = existingAnalyzeCoverage({records, hierarchy: dataset?.topicHierarchy || undefined});
       balanceScoreBefore = beforeReport.balanceScore;
 
       // Determine topics to target
