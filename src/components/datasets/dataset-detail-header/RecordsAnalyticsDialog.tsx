@@ -89,8 +89,20 @@ function transformRecordToApiFormat(record: DatasetRecord): { messages: unknown[
     : { messages };
 }
 
-// Helper to render a histogram as horizontal bars
-function HistogramBars({ data, label }: { data: Record<string, number>; label: string }) {
+// Color palette for charts
+const CHART_COLORS = [
+  "bg-blue-500",
+  "bg-emerald-500",
+  "bg-violet-500",
+  "bg-amber-500",
+  "bg-rose-500",
+  "bg-cyan-500",
+  "bg-orange-500",
+  "bg-teal-500",
+];
+
+// Helper to render a histogram as horizontal bars (compact mode for ranges like "100-199")
+function HistogramBars({ data, label, color = "bg-blue-500" }: { data: Record<string, number>; label: string; color?: string }) {
   const entries = Object.entries(data);
   if (entries.length === 0) return null;
 
@@ -98,19 +110,21 @@ function HistogramBars({ data, label }: { data: Record<string, number>; label: s
   const total = entries.reduce((sum, [, v]) => sum + v, 0);
 
   return (
-    <div className="space-y-1.5">
-      <div className="text-xs text-muted-foreground">{label}</div>
+    <div className="space-y-1">
+      <div className="text-xs text-muted-foreground mb-1.5">{label}</div>
       {entries.map(([range, count]) => (
         <div key={range} className="flex items-center gap-2">
-          <span className="text-xs w-16 text-muted-foreground shrink-0">{range}</span>
-          <div className="flex-1 h-4 bg-muted/30 rounded overflow-hidden">
+          <span className="text-xs min-w-[60px] text-muted-foreground shrink-0 truncate" title={range}>
+            {range}
+          </span>
+          <div className="flex-1 h-3 bg-muted/50 rounded-sm overflow-hidden">
             <div
-              className="h-full bg-primary/60 rounded"
+              className={`h-full ${color} rounded-sm`}
               style={{ width: `${(count / maxValue) * 100}%` }}
             />
           </div>
-          <span className="text-xs w-12 text-right tabular-nums">
-            {count} <span className="text-muted-foreground">({Math.round((count / total) * 100)}%)</span>
+          <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+            {count} ({Math.round((count / total) * 100)}%)
           </span>
         </div>
       ))}
@@ -118,13 +132,74 @@ function HistogramBars({ data, label }: { data: Record<string, number>; label: s
   );
 }
 
-// Stat card component
-function StatCard({ label, value, subtitle }: { label: string; value: string | number; subtitle?: string }) {
+// Helper to render topic/tool distribution (label above bar for long names)
+function DistributionList({ data, emptyMessage, colorful = true }: { data: Record<string, number>; emptyMessage?: string; colorful?: boolean }) {
+  const entries = Object.entries(data);
+  if (entries.length === 0) {
+    return emptyMessage ? (
+      <div className="text-xs text-muted-foreground py-2">{emptyMessage}</div>
+    ) : null;
+  }
+
+  const maxValue = Math.max(...entries.map(([, v]) => v));
+  const total = entries.reduce((sum, [, v]) => sum + v, 0);
+
   return (
-    <div className="px-3 py-2 rounded-lg bg-muted/50">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="text-sm font-medium">{value}</div>
-      {subtitle && <div className="text-xs text-muted-foreground">{subtitle}</div>}
+    <div className="space-y-2">
+      {entries.map(([name, count], index) => {
+        const barColor = colorful ? CHART_COLORS[index % CHART_COLORS.length] : "bg-blue-500";
+        return (
+          <div key={name} className="space-y-0.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-foreground truncate mr-2" title={name}>{name}</span>
+              <span className="text-muted-foreground tabular-nums shrink-0">
+                {count} ({Math.round((count / total) * 100)}%)
+              </span>
+            </div>
+            <div className="h-2 bg-muted/50 rounded-sm overflow-hidden">
+              <div
+                className={`h-full ${barColor} rounded-sm`}
+                style={{ width: `${(count / maxValue) * 100}%` }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Section header
+function SectionHeader({ children }: { children: React.ReactNode }) {
+  return <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">{children}</h3>;
+}
+
+// Message length visualization with horizontal bars
+function MessageLengthBars({ system, user, assistant }: { system: number; user: number; assistant: number }) {
+  const maxValue = Math.max(system, user, assistant, 1); // Prevent division by zero
+
+  const bars = [
+    { label: "System", value: system, color: "bg-violet-500" },
+    { label: "User", value: user, color: "bg-blue-500" },
+    { label: "Assistant", value: assistant, color: "bg-emerald-500" },
+  ];
+
+  return (
+    <div className="space-y-2 p-3 rounded-lg bg-muted/30">
+      {bars.map(({ label, value, color }) => (
+        <div key={label} className="space-y-1">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">{label}</span>
+            <span className="font-medium tabular-nums">{value.toLocaleString()} chars</span>
+          </div>
+          <div className="h-2 bg-muted/50 rounded-full overflow-hidden">
+            <div
+              className={`h-full ${color} rounded-full transition-all`}
+              style={{ width: `${(value / maxValue) * 100}%` }}
+            />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -142,95 +217,105 @@ function AnalyticsContent({ analytics }: { analytics: DryRunAnalyticsResponse })
   }
 
   return (
-    <div className="space-y-6">
-      {/* Overview Stats */}
+    <div className="space-y-5">
+      {/* Overview Row */}
       {hasQuality && (
-        <div>
-          <h3 className="text-sm font-medium mb-3">Overview</h3>
-          <div className="grid grid-cols-3 gap-2">
-            <StatCard label="Total Rows" value={quality.total_rows} />
-            <StatCard
-              label="With Ground Truth"
-              value={quality.rows_with_ground_truth}
-              subtitle={quality.total_rows > 0 ? `${Math.round((quality.rows_with_ground_truth / quality.total_rows) * 100)}%` : undefined}
-            />
-            <StatCard
-              label="Duplicates"
-              value={quality.duplicate_input_rows}
-              subtitle={quality.conflicting_outputs > 0 ? `${quality.conflicting_outputs} conflicts` : undefined}
-            />
+        <div className="grid grid-cols-4 gap-3 p-3 rounded-lg bg-muted/30">
+          <div>
+            <div className="text-lg font-semibold">{quality.total_rows.toLocaleString()}</div>
+            <div className="text-xs text-muted-foreground">Total Rows</div>
+          </div>
+          <div>
+            <div className="text-lg font-semibold">{quality.rows_with_ground_truth.toLocaleString()}</div>
+            <div className="text-xs text-muted-foreground">With Ground Truth</div>
+          </div>
+          <div>
+            <div className="text-lg font-semibold">{quality.duplicate_input_rows.toLocaleString()}</div>
+            <div className="text-xs text-muted-foreground">Duplicates</div>
+          </div>
+          <div>
+            <div className="text-lg font-semibold">{quality.conflicting_outputs.toLocaleString()}</div>
+            <div className="text-xs text-muted-foreground">Conflicts</div>
           </div>
         </div>
       )}
 
-      {/* Message Length Stats */}
+      {/* Message Length Stats - with visual bars */}
       {hasQuality && (
         <div>
-          <h3 className="text-sm font-medium mb-3">Average Message Length</h3>
-          <div className="grid grid-cols-3 gap-2">
-            <StatCard label="System" value={`${Math.round(quality.avg_system_chars)} chars`} />
-            <StatCard label="User" value={`${Math.round(quality.avg_user_chars)} chars`} />
-            <StatCard label="Assistant" value={`${Math.round(quality.avg_assistant_chars)} chars`} />
-          </div>
+          <SectionHeader>Average Message Length</SectionHeader>
+          <MessageLengthBars
+            system={Math.round(quality.avg_system_chars)}
+            user={Math.round(quality.avg_user_chars)}
+            assistant={Math.round(quality.avg_assistant_chars)}
+          />
         </div>
       )}
 
       {/* Length Histograms */}
       {hasQuality && Object.keys(quality.user_length_histogram || {}).length > 0 && (
         <div>
-          <h3 className="text-sm font-medium mb-3">Message Length Distribution</h3>
-          <div className="space-y-4">
-            <HistogramBars data={quality.user_length_histogram} label="User messages" />
+          <SectionHeader>Message Length Distribution</SectionHeader>
+          <div className="space-y-3 p-3 rounded-lg bg-muted/30">
+            <HistogramBars data={quality.user_length_histogram} label="User messages" color="bg-blue-500" />
             {Object.keys(quality.assistant_length_histogram || {}).length > 0 && (
-              <HistogramBars data={quality.assistant_length_histogram} label="Assistant messages" />
+              <HistogramBars data={quality.assistant_length_histogram} label="Assistant messages" color="bg-emerald-500" />
             )}
           </div>
         </div>
       )}
 
-      {/* Tool Usage */}
-      {hasAnalytics && (
+      {/* Tool Usage - only show if there are rows with tools */}
+      {hasAnalytics && analyticsData.rows_with_tools > 0 && (
         <div>
-          <h3 className="text-sm font-medium mb-3">Tool Usage</h3>
-          <div className="grid grid-cols-2 gap-2">
-            <StatCard
-              label="Rows with Tools"
-              value={analyticsData.rows_with_tools}
-              subtitle={analyticsData.total_rows > 0 ? `${Math.round((analyticsData.rows_with_tools / analyticsData.total_rows) * 100)}%` : undefined}
-            />
-            <StatCard
-              label="Unique Tools"
-              value={Object.keys(analyticsData.tool_counts || {}).length}
-            />
-          </div>
-          {Object.keys(analyticsData.tool_counts || {}).length > 0 && (
-            <div className="mt-3">
-              <HistogramBars data={analyticsData.tool_counts} label="Tool frequency" />
+          <SectionHeader>Tool Usage</SectionHeader>
+          <div className="p-3 rounded-lg bg-muted/30">
+            <div className="flex gap-6 mb-3">
+              <div>
+                <span className="text-sm font-medium">{analyticsData.rows_with_tools.toLocaleString()}</span>
+                <span className="text-xs text-muted-foreground ml-1">rows with tools</span>
+                {analyticsData.total_rows > 0 && (
+                  <span className="text-xs text-muted-foreground ml-1">
+                    ({Math.round((analyticsData.rows_with_tools / analyticsData.total_rows) * 100)}%)
+                  </span>
+                )}
+              </div>
+              <div>
+                <span className="text-sm font-medium">{Object.keys(analyticsData.tool_counts || {}).length}</span>
+                <span className="text-xs text-muted-foreground ml-1">unique tools</span>
+              </div>
             </div>
-          )}
+            {Object.keys(analyticsData.tool_counts || {}).length > 0 && (
+              <DistributionList data={analyticsData.tool_counts} />
+            )}
+          </div>
         </div>
       )}
 
       {/* Topic Distribution */}
       {hasAnalytics && (
         <div>
-          <h3 className="text-sm font-medium mb-3">Topic Coverage</h3>
-          <div className="grid grid-cols-2 gap-2">
-            <StatCard
-              label="With Topic"
-              value={analyticsData.rows_with_topic}
-              subtitle={analyticsData.total_rows > 0 ? `${Math.round((analyticsData.rows_with_topic / analyticsData.total_rows) * 100)}%` : undefined}
-            />
-            <StatCard
-              label="Without Topic"
-              value={analyticsData.rows_without_topic}
-            />
-          </div>
-          {Object.keys(analyticsData.topic_row_counts || {}).length > 0 && (
-            <div className="mt-3">
-              <HistogramBars data={analyticsData.topic_row_counts} label="Topics" />
+          <SectionHeader>Topic Coverage</SectionHeader>
+          <div className="p-3 rounded-lg bg-muted/30">
+            <div className="flex gap-6 mb-3">
+              <div>
+                <span className="text-sm font-medium">{analyticsData.rows_with_topic.toLocaleString()}</span>
+                <span className="text-xs text-muted-foreground ml-1">with topic</span>
+                {analyticsData.total_rows > 0 && (
+                  <span className="text-xs text-muted-foreground ml-1">
+                    ({Math.round((analyticsData.rows_with_topic / analyticsData.total_rows) * 100)}%)
+                  </span>
+                )}
+              </div>
+              <div>
+                <span className="text-sm font-medium">{analyticsData.rows_without_topic.toLocaleString()}</span>
+                <span className="text-xs text-muted-foreground ml-1">without topic</span>
+              </div>
             </div>
-          )}
+            {Object.keys(analyticsData.topic_row_counts || {}).length > 0 && (
+              <DistributionList data={analyticsData.topic_row_counts} emptyMessage="No topics assigned" />
+            )}
+          </div>
         </div>
       )}
     </div>
