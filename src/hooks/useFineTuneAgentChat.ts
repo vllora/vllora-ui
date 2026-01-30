@@ -15,6 +15,7 @@ import { useAgent, useChatMessages } from '@distri/react';
 import { uuidv4, DistriFnTool, DistriMessage, DistriClient } from '@distri/core';
 import { finetuneTools, workflowToContext } from '@/lib/distri-finetune-tools';
 import { finetuneWorkflowService, FinetuneWorkflowState } from '@/services/finetune-workflow-db';
+import { getDatasetById } from '@/services/datasets-db';
 
 // Type for chat messages returned by useChatMessages
 // This is a union type that includes DistriMessage and other event types
@@ -49,9 +50,10 @@ function createNewThreadId(): string {
 
 function buildContextMessage(
   datasetId: string,
-  workflow: FinetuneWorkflowState | null
+  workflow: FinetuneWorkflowState | null,
+  datasetHasEvaluator?: boolean
 ): string {
-  const context = workflowToContext(datasetId, workflow);
+  const context = workflowToContext(datasetId, workflow, datasetHasEvaluator);
   return `Context:\n\`\`\`json\n${JSON.stringify(context, null, 2)}\n\`\`\``;
 }
 
@@ -121,6 +123,8 @@ export function useFineTuneAgentChat(
   // Workflow state
   const [workflow, setWorkflow] = useState<FinetuneWorkflowState | null>(null);
   const [workflowLoading, setWorkflowLoading] = useState(true);
+  // Track if dataset has evaluator configured (via UI, separate from workflow)
+  const [datasetHasEvaluator, setDatasetHasEvaluator] = useState(false);
 
   // Tools
   const tools = useMemo<DistriFnTool[]>(() => finetuneTools, []);
@@ -138,11 +142,16 @@ export function useFineTuneAgentChat(
   const refreshWorkflow = useCallback(async () => {
     setWorkflowLoading(true);
     try {
-      const workflowState = await finetuneWorkflowService.getWorkflowByDataset(datasetId);
+      const [workflowState, dataset] = await Promise.all([
+        finetuneWorkflowService.getWorkflowByDataset(datasetId),
+        getDatasetById(datasetId),
+      ]);
       setWorkflow(workflowState);
+      setDatasetHasEvaluator(!!dataset?.evaluationConfig);
     } catch (error) {
       console.error('[useFineTuneAgentChat] Error loading workflow:', error);
       setWorkflow(null);
+      setDatasetHasEvaluator(false);
     } finally {
       setWorkflowLoading(false);
     }
@@ -176,7 +185,7 @@ export function useFineTuneAgentChat(
   const prepareMessage = useCallback(
     (userMessage: string): DistriMessage => {
       // Build context from current workflow state
-      const contextText = buildContextMessage(datasetId, workflow);
+      const contextText = buildContextMessage(datasetId, workflow, datasetHasEvaluator);
 
       // Create message with context prepended
       const fullMessage = `${contextText}\n\nUser message: ${userMessage}`;
@@ -185,7 +194,7 @@ export function useFineTuneAgentChat(
         { part_type: 'text', data: fullMessage },
       ]);
     },
-    [datasetId, workflow]
+    [datasetId, workflow, datasetHasEvaluator]
   );
 
   return {

@@ -191,16 +191,37 @@ export const getWorkflowStatusHandler: ToolHandler = async (params): Promise<Wor
     const { workflow_id, dataset_id } = params;
 
     let workflow: workflowDB.FinetuneWorkflowState | null = null;
+    let datasetIdToCheck: string | null = null;
 
     if (workflow_id && typeof workflow_id === 'string') {
       workflow = await workflowDB.getWorkflow(workflow_id);
+      datasetIdToCheck = workflow?.datasetId ?? null;
     } else if (dataset_id && typeof dataset_id === 'string') {
       workflow = await workflowDB.getWorkflowByDataset(dataset_id);
+      datasetIdToCheck = dataset_id;
     } else {
       return { success: false, error: 'Either workflow_id or dataset_id is required' };
     }
 
-    return workflowToStatusResult(workflow);
+    // Check if dataset has evaluationConfig (configured via UI)
+    let datasetHasEvaluator = false;
+    if (datasetIdToCheck) {
+      const dataset = await datasetsDB.getDatasetById(datasetIdToCheck);
+      datasetHasEvaluator = !!dataset?.evaluationConfig;
+
+      // Sync: If dataset has evaluationConfig but workflow doesn't have graderConfig,
+      // update workflow to reflect this
+      if (workflow && datasetHasEvaluator && !workflow.graderConfig) {
+        await workflowDB.updateStepData(workflow.id, 'graderConfig', {
+          type: dataset!.evaluationConfig!.type,
+          configuredAt: dataset!.evaluationConfig!.updatedAt ?? Date.now(),
+        });
+        // Refresh workflow state
+        workflow = await workflowDB.getWorkflow(workflow.id);
+      }
+    }
+
+    return workflowToStatusResult(workflow, datasetHasEvaluator);
   } catch (error) {
     return {
       success: false,
