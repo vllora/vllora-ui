@@ -134,18 +134,18 @@ function FinetuneProcessInner({ children }: { children: ReactNode }) {
     // Get valid record IDs from validation
     const validIds = validationReport
       ? new Set(
-          records
-            .filter((r) => !invalidRecordIds.has(r.id))
-            .map((r) => r.id)
-        )
+        records
+          .filter((r) => !invalidRecordIds.has(r.id))
+          .map((r) => r.id)
+      )
       : undefined;
 
-    const report = analyzeCoverage(
+    const report = analyzeCoverage({
       records,
-      dataset.topicHierarchy,
-      targetDistribution || undefined,
-      validIds
-    );
+      hierarchy: dataset.topicHierarchy,
+      targets: targetDistribution || undefined,
+      validRecordIds: validIds
+    });
 
     setCoverageReport(report);
 
@@ -227,10 +227,10 @@ function FinetuneProcessInner({ children }: { children: ReactNode }) {
       status: datasetContext.isGeneratingHierarchy || datasetContext.isAutoTagging
         ? 'processing'
         : hasHierarchy
-        ? 'complete'
-        : hasRecords
-        ? 'ready'
-        : 'waiting',
+          ? 'complete'
+          : hasRecords
+            ? 'ready'
+            : 'waiting',
       statusText: hasHierarchy
         ? `${topicsCount} topics \u2022 ${taggedCount} tagged`
         : 'Not configured',
@@ -251,10 +251,10 @@ function FinetuneProcessInner({ children }: { children: ReactNode }) {
       status: datasetContext.isGeneratingTraces
         ? 'processing'
         : hasHierarchy && validCount > 0
-        ? 'complete'
-        : hasHierarchy
-        ? 'ready'
-        : 'waiting',
+          ? 'complete'
+          : hasHierarchy
+            ? 'ready'
+            : 'waiting',
       statusText: validCount > 0 ? `${validCount} valid records` : 'Analyze distribution',
       progress: datasetContext.generationProgress
         ? (datasetContext.generationProgress / 100) * 100
@@ -301,16 +301,16 @@ function FinetuneProcessInner({ children }: { children: ReactNode }) {
       status: datasetContext.isStartingFinetune
         ? 'processing'
         : hasGrader && validCount > 0
-        ? 'ready'
-        : 'waiting',
+          ? 'ready'
+          : 'waiting',
       statusText: 'Start RFT training',
       canRerun: true,
       isBlocked: !hasGrader || validCount === 0,
       blockedReason: !hasGrader
         ? 'Configure grader first'
         : validCount === 0
-        ? 'Need valid records'
-        : undefined,
+          ? 'Need valid records'
+          : undefined,
     });
 
     // Step 7: Deploy

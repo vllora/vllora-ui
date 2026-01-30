@@ -15,6 +15,7 @@ import {
   getBalanceRating,
 } from '@/types/coverage-types';
 import { getDatasetById, getRecordsByDatasetId, updateDatasetCoverageStats } from '@/services/datasets-db';
+import { computeCoverageStats } from '@/components/datasets/record-utils';
 
 /**
  * Extract all leaf topic IDs from a hierarchy.
@@ -112,12 +113,13 @@ export function calculateSimpleBalanceScore(
 /**
  * Analyze coverage and generate report
  */
-export function analyzeCoverage(
+export function analyzeCoverage(props: {
   records: DatasetRecord[],
-  hierarchy: TopicHierarchyConfig | null,
+  hierarchy?: TopicHierarchyConfig,
   targets?: TargetDistribution,
   validRecordIds?: Set<string>
-): CoverageReport {
+}): CoverageReport {
+  const { records, hierarchy, targets, validRecordIds } = props;
   // Filter to valid records if provided
   const validRecords = validRecordIds
     ? records.filter((r) => validRecordIds.has(r.id))
@@ -330,21 +332,8 @@ export async function calculateAndSaveCoverageStats(
   const dataset = await getDatasetById(datasetId);
   const records = await getRecordsByDatasetId(datasetId);
 
-  // Calculate coverage
-  const coverageReport = analyzeCoverage(records, dataset?.topicHierarchy || null);
 
-  // Convert to CoverageStats format for storage
-  const coverageStats: CoverageStats = {
-    balanceScore: coverageReport.balanceScore,
-    balanceRating: coverageReport.balanceRating,
-    topicDistribution: Object.fromEntries(
-      Object.entries(coverageReport.distribution).map(([topic, dist]) => [topic, dist.count])
-    ),
-    uncategorizedCount: coverageReport.uncategorizedCount,
-    totalRecords: coverageReport.totalRecords,
-    lastCalculatedAt: Date.now(),
-  };
-
+  const coverageStats = computeCoverageStats({records, topic_hierarchy: dataset?.topicHierarchy});
   // Save to dataset
   await updateDatasetCoverageStats(datasetId, coverageStats);
 

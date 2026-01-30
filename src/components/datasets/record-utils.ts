@@ -2,7 +2,8 @@
  * Utility functions for dataset records
  */
 
-import { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
+import { analyzeCoverage } from "@/lib/distri-dataset-tools/analysis/analyze-coverage";
+import { CoverageStats, DatasetRecord, TopicHierarchyConfig, TopicHierarchyNode } from "@/types/dataset-types";
 
 /** Available topic for selection in TopicCell */
 export interface AvailableTopic {
@@ -217,3 +218,93 @@ export const getTopicColor = (topic: string | undefined): string => {
   const hash = hashString(t);
   return TOPIC_COLORS[hash % TOPIC_COLORS.length];
 };
+
+// ============================================================================
+// Dataset Insights Computation
+// ============================================================================
+
+export interface DatasetInsights {
+  /** Total number of records */
+  totalRecords: number;
+  /** Number of generated (synthetic) records */
+  generatedRecords: number;
+  /** Number of original (non-generated) records */
+  originalRecords: number;
+  /** Percentage of generated records (0-100) */
+  generatedPercent: number;
+  /** Percentage of original records (0-100) */
+  originalPercent: number;
+  /** Number of unique topics */
+  topicCount: number;
+  /** Number of records without a topic */
+  uncategorizedCount: number;
+  /** Number of records with a topic */
+  categorizedCount: number;
+  /** Percentage of categorized records (0-100) */
+  categorizedPercent: number;
+  /** Topic distribution: topic -> count */
+  topicDistribution: Record<string, number>;
+}
+
+
+export function computeCoverageStats(props: {records: DatasetRecord[], topic_hierarchy?: TopicHierarchyConfig}): CoverageStats {
+  const { records, topic_hierarchy } = props;
+  // Calculate coverage
+    const coverageReport = analyzeCoverage({records, hierarchy: topic_hierarchy});
+  
+    // Convert to CoverageStats format for storage
+    const coverageStats: CoverageStats = {
+      balanceScore: coverageReport.balanceScore,
+      balanceRating: coverageReport.balanceRating,
+      topicDistribution: Object.fromEntries(
+        Object.entries(coverageReport.distribution).map(([topic, dist]) => [topic, dist.count])
+      ),
+      uncategorizedCount: coverageReport.uncategorizedCount,
+      totalRecords: coverageReport.totalRecords,
+      lastCalculatedAt: Date.now(),
+    };
+    return coverageStats;
+}
+
+/**
+ * Compute dataset insights from records.
+ * Pure function that derives all stats from the records array.
+ */
+export function computeDatasetInsights(records: DatasetRecord[]): DatasetInsights {
+  const totalRecords = records.length;
+
+  // Generated vs original records
+  const generatedRecords = records.filter(r => r.is_generated).length;
+  const originalRecords = totalRecords - generatedRecords;
+  const generatedPercent = totalRecords > 0 ? Math.round((generatedRecords / totalRecords) * 100) : 0;
+  const originalPercent = totalRecords > 0 ? Math.round((originalRecords / totalRecords) * 100) : 0;
+
+  // Topic stats
+  const topicDistribution: Record<string, number> = {};
+  let uncategorizedCount = 0;
+
+  for (const r of records) {
+    if (r.topic) {
+      topicDistribution[r.topic] = (topicDistribution[r.topic] || 0) + 1;
+    } else {
+      uncategorizedCount++;
+    }
+  }
+
+  const topicCount = Object.keys(topicDistribution).length;
+  const categorizedCount = totalRecords - uncategorizedCount;
+  const categorizedPercent = totalRecords > 0 ? Math.round((categorizedCount / totalRecords) * 100) : 0;
+
+  return {
+    totalRecords,
+    generatedRecords,
+    originalRecords,
+    generatedPercent,
+    originalPercent,
+    topicCount,
+    uncategorizedCount,
+    categorizedCount,
+    categorizedPercent,
+    topicDistribution,
+  };
+}
