@@ -25,7 +25,6 @@ import { getTopicCounts } from "./topic-hierarchy-utils";
 import { DatasetDetailHeader } from "./dataset-detail-header";
 import { DatasetMainContent } from "./DatasetMainContent";
 import { LucyDatasetAssistant } from "./LucyDatasetAssistant";
-import { EvaluationConfigDialog } from "./evaluation-dialog/EvaluationConfigDialog";
 import { updateDatasetEvaluationConfig } from "@/services/datasets-db";
 import type { CoverageStats, EvaluationConfig, TopicHierarchyNode } from "@/types/dataset-types";
 
@@ -72,10 +71,6 @@ export function DatasetDetailContentV2() {
     // Dry run dialog
     dryRunDialog,
     setDryRunDialog,
-
-    // Evaluation config dialog
-    evaluationConfigDialog,
-    setEvaluationConfigDialog,
 
     // Handlers
     handleUpdateRecordTopic,
@@ -357,7 +352,6 @@ export function DatasetDetailContentV2() {
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           onExport={handleExport}
-          onConfigureEvaluation={() => setEvaluationConfigDialog(true)}
         />
 
         {/* Main content area - Canvas or Table based on view mode */}
@@ -384,6 +378,8 @@ export function DatasetDetailContentV2() {
           onCreateChildTopic={handleCreateChildTopic}
           onGenerateForTopic={handleGenerateForTopic}
           onGenerateSubtopics={handleGenerateSubtopics}
+          evaluationConfig={dataset.evaluationConfig}
+          onSaveEvaluationConfig={handleSaveEvaluationConfig}
         />
       </div>
 
@@ -495,13 +491,6 @@ export function DatasetDetailContentV2() {
         }}
       />
 
-      {/* Evaluation config dialog */}
-      <EvaluationConfigDialog
-        open={evaluationConfigDialog}
-        onOpenChange={setEvaluationConfigDialog}
-        config={dataset?.evaluationConfig}
-        onSave={handleSaveEvaluationConfig}
-      />
     </div>
   );
 }

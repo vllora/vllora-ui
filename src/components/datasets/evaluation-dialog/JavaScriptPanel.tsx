@@ -18,7 +18,11 @@ interface JavaScriptPanelProps {
 }
 
 const DEFAULT_SCRIPT = `/**
- * Evaluate the quality of an AI response.
+ * Evaluate the quality of an AI response using LLM-as-a-Judge.
+ *
+ * Available globals:
+ * - __langdb_call_llm_as_judge_obj(prompt): Calls the configured LLM model
+ *   and returns a parsed object with { score, reasoning }
  *
  * @param {Object} input - The input object containing messages
  * @param {Array} input.messages - The conversation messages
@@ -27,30 +31,40 @@ const DEFAULT_SCRIPT = `/**
  * @returns {Object} - Evaluation result with score and reasoning
  */
 function evaluate(input, output) {
+  // Extract the user query from input messages
+  const userMessages = input.messages?.filter(m => m.role === 'user') || [];
+  const query = userMessages[userMessages.length - 1]?.content || '';
+
   // Extract the assistant's response
   const response = Array.isArray(output.messages)
     ? output.messages.map(m => m.content).join('\\n')
     : output.messages?.content || '';
 
-  // Example evaluation logic
-  let score = 3;
-  let reasoning = 'Default score';
+  // Build the evaluation prompt for the LLM judge
+  const prompt = \`You are an expert evaluator assessing the quality of an AI assistant's response.
 
-  // Check response length
-  if (response.length > 500) {
-    score += 1;
-    reasoning = 'Detailed response';
-  }
+User Query:
+\${query}
 
-  // Check for code blocks
-  if (response.includes('\`\`\`')) {
-    score += 1;
-    reasoning = 'Includes code examples';
-  }
+Assistant Response:
+\${response}
+
+Evaluate the response on the following criteria:
+1. Relevance: Does it directly address the user's question?
+2. Accuracy: Is the information correct and reliable?
+3. Completeness: Does it fully answer the question?
+4. Clarity: Is it well-structured and easy to understand?
+
+Provide your evaluation as JSON with:
+- score: A number from 1-5 (1=poor, 5=excellent)
+- reasoning: A brief explanation of your score\`;
+
+  // Call the LLM judge and get structured result
+  const result = __langdb_call_llm_as_judge_obj(prompt);
 
   return {
-    score: Math.min(score, 5),
-    reasoning: reasoning,
+    score: result.score,
+    reasoning: result.reasoning,
   };
 }
 `;
@@ -126,7 +140,7 @@ export function JavaScriptPanel({
       {/* Footer */}
       <div className="flex items-center justify-between h-10 px-5 border-t border-border bg-muted/30">
         <p className="text-xs text-muted-foreground">
-          Function signature: <code className="text-[rgb(var(--theme-400))]">evaluate(input, output)</code> → <code className="text-[rgb(var(--theme-400))]">{`{ score, reasoning }`}</code>
+          Use <code className="text-[rgb(var(--theme-400))]">__langdb_call_llm_as_judge_obj(prompt)</code> to call the LLM judge
         </p>
       </div>
     </div>

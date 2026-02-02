@@ -6,11 +6,12 @@
  */
 
 import type { ViewMode } from "./dataset-detail-header/DatasetUtilityBar";
-import type { CoverageStats, DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
+import type { CoverageStats, DatasetRecord, TopicHierarchyNode, EvaluationConfig } from "@/types/dataset-types";
 import type { AvailableTopic } from "./record-utils";
 import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
 import { RecordsTable } from "./records-table/RecordsTable";
 import { RecordDetailSidebar } from "./records-table/RecordDetailSidebar";
+import { EvaluationConfigPanel } from "./evaluation-dialog/EvaluationConfigPanel";
 
 export interface DatasetMainContentProps {
   viewMode: ViewMode;
@@ -39,6 +40,10 @@ export interface DatasetMainContentProps {
   onCreateChildTopic: (parentTopicName: string | null, childTopicName: string) => Promise<void>;
   onGenerateForTopic: (topicName: string) => void;
   onGenerateSubtopics: (topicId: string | null) => void;
+
+  // Evaluator config
+  evaluationConfig?: EvaluationConfig;
+  onSaveEvaluationConfig: (config: EvaluationConfig) => Promise<void>;
 }
 
 export function DatasetMainContent({
@@ -62,7 +67,21 @@ export function DatasetMainContent({
   onCreateChildTopic,
   onGenerateForTopic,
   onGenerateSubtopics,
+  evaluationConfig,
+  onSaveEvaluationConfig,
 }: DatasetMainContentProps) {
+  // Evaluator view
+  if (viewMode === "evaluator") {
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <EvaluationConfigPanel
+          config={evaluationConfig}
+          onSave={onSaveEvaluationConfig}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {viewMode === "canvas" ? (
