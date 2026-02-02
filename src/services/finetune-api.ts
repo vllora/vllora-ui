@@ -1,6 +1,6 @@
 import { apiClient, handleApiResponse, getAuthToken } from "@/lib/api-client";
 import { getBackendUrl } from "@/config/api";
-import { DatasetWithRecords, DatasetRecord, DataInfo, EvaluationConfig, BackendEvaluator } from "@/types/dataset-types";
+import { DatasetWithRecords, DatasetRecord, DataInfo, EvaluationConfig, BackendEvaluator, BackendChatMessage } from "@/types/dataset-types";
 
 // ============================================================================
 // Types
@@ -213,14 +213,46 @@ export function datasetToJsonl(records: DatasetRecord[]): string {
 
 /**
  * Convert FE EvaluationConfig to backend Evaluator format
+ *
+ * Note: Backend expects prompt_template as an array of ChatCompletionMessage objects,
+ * and output_schema as a JSON object (not a string).
  */
 export function evaluationConfigToBackendEvaluator(config: EvaluationConfig): BackendEvaluator {
   if (config.type === 'llm_as_judge') {
+    // Convert prompt template string to array of messages
+    // Backend expects: Vec<ChatCompletionMessage> where ChatCompletionMessage has role and content
+    const promptMessages: BackendChatMessage[] = [
+      {
+        role: 'system' as const,
+        content: config.promptTemplate,
+      },
+    ];
+
+    // Parse output_schema from string to JSON object if it's a string
+    let outputSchema: unknown;
+    if (typeof config.outputSchema === 'string') {
+      try {
+        outputSchema = JSON.parse(config.outputSchema);
+      } catch {
+        // If parsing fails, use a default schema
+        outputSchema = {
+          type: 'object',
+          properties: {
+            score: { type: 'number' },
+            reasoning: { type: 'string' },
+          },
+          required: ['score', 'reasoning'],
+        };
+      }
+    } else {
+      outputSchema = config.outputSchema;
+    }
+
     return {
       type: 'llm_as_judge',
       config: {
-        prompt_template: config.promptTemplate,
-        output_schema: config.outputSchema,
+        prompt_template: promptMessages,
+        output_schema: outputSchema,
         completion_params: {
           model_name: config.completionParams.model,
           temperature: config.completionParams.temperature,

@@ -841,8 +841,9 @@ The finetune process has 7 main steps (input is records + training goals):
 - If grader is updated after upload, use `sync_evaluator` instead of re-uploading
 - Explain metrics: mean, std, percentiles, distribution, per-topic breakdown
 - Make GO/NO-GO/WARNING recommendation with diagnosis
-- If NO-GO, diagnose dataset vs grader issues and suggest fixes
-- **Important**: If dry run was performed and returned NO-GO, training is blocked until issues are resolved
+- If NO-GO, diagnose issues AND always offer two options:
+  - **Option A (Recommended)**: Fix the issues (add data, adjust grader, etc.)
+  - **Option B (Bypass)**: Rollback to grader_config and skip directly to training
 - **Skip option**: If user is confident and wants to skip dry run, advance directly to training
 
 ## Step 6: Training
@@ -859,7 +860,7 @@ The finetune process has 7 main steps (input is records + training goals):
 
 1. **Grader config is required** - The evaluation function must be configured before training
 2. **Recommend dry run** - Dry run is optional but strongly recommended. If skipped and training fails, suggest going back
-3. **Respect NO-GO verdicts** - If dry run was performed and returned NO-GO, training is blocked until issues are fixed
+3. **NO-GO is not a dead end** - If dry run returns NO-GO, always offer two options: fix the issues OR bypass by rolling back and skipping dry run
 4. **Confirm destructive actions** - Training costs money, confirm first
 5. **Track state** - Use workflow status to know where we are
 6. **Be helpful** - If user is stuck, suggest next actions

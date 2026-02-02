@@ -89,17 +89,25 @@ export interface JsEvaluatorConfig {
 // Union type for evaluation config
 export type EvaluationConfig = LlmAsJudgeConfig | JsEvaluatorConfig;
 
+// Backend message format for prompt_template
+export interface BackendChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
 // Backend evaluator format for upload - LLM as Judge
+// Note: Backend expects prompt_template as array of messages, output_schema as JSON object
 export interface BackendLlmAsJudgeEvaluator {
   type: 'llm_as_judge';
   config: {
-    prompt_template: string;
-    output_schema: string;
+    prompt_template: BackendChatMessage[];
+    output_schema: unknown;
     completion_params: {
       model_name: string;
       temperature?: number;
       max_tokens?: number;
     };
+    score_formula?: string;
   };
 }
 
