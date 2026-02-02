@@ -828,7 +828,7 @@ not_started → topics_config → categorize → coverage_generation → grader_
 - When user provides records + training goals, call `start_finetune_workflow`
 - Records are validated automatically
 - If invalid records found, explain issues and ask if user wants to proceed with valid ones
-- **Quick Path Option**: If user wants to train quickly, can skip to grader_config immediately
+- **Quick Path Option**: If user wants to train quickly, use `start_step: "grader_config"` to skip directly to grader configuration
 
 ## Step 1: Topics Configuration (OPTIONAL)
 - **This step is optional** - users can skip directly to grader_config
@@ -927,12 +927,18 @@ not_started → topics_config → categorize → coverage_generation → grader_
       dataset_name: {
         type: "string",
         description: "Optional name for the dataset"
+      },
+      start_step: {
+        type: "string",
+        enum: ["topics_config", "grader_config"],
+        default: "topics_config",
+        description: "Which step to start at. Use 'grader_config' for quick path (skip topics/categorize/coverage steps)"
       }
     },
     required: ["records", "training_goals"]
   }
 }
-// Returns: { workflow_id, validation: { valid_count, invalid_count, errors } }
+// Returns: { workflow_id, current_step, validation: { valid_count, invalid_count, errors } }
 ```
 
 #### `get_workflow_status`
@@ -955,7 +961,7 @@ not_started → topics_config → categorize → coverage_generation → grader_
 ```typescript
 {
   name: "advance_to_step",
-  description: "Move the workflow to the next step. Supports skipping optional steps: topics_config/categorize can skip to grader_config, grader_config can skip to training.",
+  description: "Move the workflow to the next step. Supports skipping optional steps for quick path workflow.",
   parameters: {
     type: "object",
     properties: {
@@ -970,6 +976,7 @@ not_started → topics_config → categorize → coverage_generation → grader_
 }
 // Valid transitions:
 // - Normal flow: advance one step at a time
+// - Quick path: not_started → grader_config (skip topics, categorize, coverage steps)
 // - Skip to grader_config: from topics_config or categorize (skip coverage analysis)
 // - Skip to training: from grader_config (skip dry run validation)
 ```

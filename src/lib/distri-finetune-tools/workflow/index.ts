@@ -18,6 +18,33 @@ import { workflowToStatusResult } from '../types';
 import { FinetuneStep } from '@/services/finetune-workflow-db';
 
 // =============================================================================
+// Event Emitter for UI Updates
+// =============================================================================
+
+/**
+ * Emit an event when the workflow state changes.
+ * This allows UI components (like WorkflowStepIndicator) to update in real-time.
+ */
+export function emitWorkflowUpdate(datasetId: string, step?: FinetuneStep): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('finetune-workflow-updated', {
+        detail: { datasetId, step },
+      })
+    );
+
+    // Emit view mode change for specific steps
+    if (step === 'grader_config') {
+      window.dispatchEvent(
+        new CustomEvent('finetune-set-view-mode', {
+          detail: { viewMode: 'evaluator' },
+        })
+      );
+    }
+  }
+}
+
+// =============================================================================
 // Step Order and Validation
 // =============================================================================
 
@@ -157,6 +184,9 @@ export const startFinetuneWorkflowHandler: ToolHandler = async (params): Promise
 
     // Advance to target start step (quick path: grader_config, normal: topics_config)
     await workflowDB.advanceToStep(workflow.id, targetStartStep);
+
+    // Emit event for UI update
+    emitWorkflowUpdate(dataset_id, targetStartStep);
 
     return {
       success: true,
@@ -321,6 +351,9 @@ export const advanceToStepHandler: ToolHandler = async (params): Promise<Advance
     const previousStep = workflow.currentStep;
     await workflowDB.advanceToStep(workflow_id, targetStep);
 
+    // Emit event for UI update
+    emitWorkflowUpdate(workflow.datasetId, targetStep);
+
     return {
       success: true,
       previous_step: previousStep,
@@ -390,6 +423,8 @@ export const rollbackToStepHandler: ToolHandler = async (params): Promise<Rollba
           })),
         };
       }
+      // Emit event for UI update
+      emitWorkflowUpdate(workflow.datasetId);
       return {
         success: true,
         rolled_back_to: restored.currentStep,
@@ -428,6 +463,9 @@ export const rollbackToStepHandler: ToolHandler = async (params): Promise<Rollba
       if (!restored) {
         return { success: false, error: 'Failed to restore snapshot' };
       }
+
+      // Emit event for UI update
+      emitWorkflowUpdate(workflow.datasetId);
 
       return {
         success: true,

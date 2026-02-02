@@ -6,7 +6,7 @@
  * - Canvas view showing topic hierarchy visualization
  */
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { DatasetUtilityBar, type ViewMode } from "./dataset-detail-header/DatasetUtilityBar";
@@ -97,6 +97,18 @@ export function DatasetDetailContentV2() {
 
   // View mode: "canvas" for visual hierarchy, "table" for full data table with hierarchy grouping
   const [viewMode, setViewMode] = useState<ViewMode>("canvas");
+
+  // Listen for workflow-triggered view mode changes (e.g., grader_config -> evaluator)
+  useEffect(() => {
+    const handleViewModeChange = (event: CustomEvent<{ viewMode: ViewMode }>) => {
+      setViewMode(event.detail.viewMode);
+    };
+
+    window.addEventListener("finetune-set-view-mode" as any, handleViewModeChange);
+    return () => {
+      window.removeEventListener("finetune-set-view-mode" as any, handleViewModeChange);
+    };
+  }, []);
 
   // Selected record for sidebar detail view (table mode only)
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
