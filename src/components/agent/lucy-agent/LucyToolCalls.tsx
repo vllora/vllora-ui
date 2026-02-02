@@ -6,6 +6,7 @@
  */
 
 import { useChatStateStore } from '@distri/react';
+import type { DistriAnyTool } from '@distri/react';
 import { DistriFnTool } from '@distri/core';
 import { LucyToolActions } from './LucyToolActions';
 
@@ -14,7 +15,12 @@ import { LucyToolActions } from './LucyToolActions';
 // ============================================================================
 
 interface LucyToolCallsProps {
-  tools?: DistriFnTool[];
+  tools?: DistriAnyTool[];
+}
+
+// Type guard to check if tool is a function tool
+function isFnTool(tool: DistriAnyTool): tool is DistriFnTool {
+  return tool.type === 'function';
 }
 
 // ============================================================================
@@ -38,38 +44,45 @@ export function LucyToolCalls({ tools }: LucyToolCallsProps) {
       {externalToolCalls.map((toolCallState) => {
         // Find the matching tool definition
         const tool = tools.find((t) => t.name === toolCallState.tool_name);
-        if (!tool) {
-          // Fallback to default component if tool not found
-          return toolCallState.component ? (
+
+        // For UI tools (like ask_follow_up), render their component directly
+        // The component is set by the chat store when executeTool is called
+        if (toolCallState.component) {
+          return (
             <div key={`external-tool-${toolCallState.tool_call_id}`}>
               {toolCallState.component}
             </div>
-          ) : null;
+          );
         }
 
-        return (
-          <div key={`external-tool-${toolCallState.tool_call_id}`}>
-            <LucyToolActions
-              toolCall={{
-                tool_call_id: toolCallState.tool_call_id,
-                tool_name: toolCallState.tool_name,
-                input: toolCallState.input,
-              }}
-              toolCallState={toolCallState}
-              completeTool={(result) => {
-                completeTool(
-                  {
-                    tool_call_id: toolCallState.tool_call_id,
-                    tool_name: toolCallState.tool_name,
-                    input: toolCallState.input,
-                  },
-                  result
-                );
-              }}
-              tool={tool}
-            />
-          </div>
-        );
+        // For function tools, render LucyToolActions
+        if (tool && isFnTool(tool)) {
+          return (
+            <div key={`external-tool-${toolCallState.tool_call_id}`}>
+              <LucyToolActions
+                toolCall={{
+                  tool_call_id: toolCallState.tool_call_id,
+                  tool_name: toolCallState.tool_name,
+                  input: toolCallState.input,
+                }}
+                toolCallState={toolCallState}
+                completeTool={(result) => {
+                  completeTool(
+                    {
+                      tool_call_id: toolCallState.tool_call_id,
+                      tool_name: toolCallState.tool_name,
+                      input: toolCallState.input,
+                    },
+                    result
+                  );
+                }}
+                tool={tool}
+              />
+            </div>
+          );
+        }
+
+        return null;
       })}
     </>
   );

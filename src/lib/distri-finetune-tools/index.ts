@@ -83,27 +83,28 @@ export const finetuneToolHandlers: Record<
 > = {
   ...workflowToolHandlers,
   ...stepToolHandlers,
-  ...todosToolHandlers,
+  // Note: todosToolHandlers not included - write_todos is a builtin tool handled by server
 };
 
 // =============================================================================
 // Tool Name Constants
 // =============================================================================
 
+// Note: TODOS_TOOL_NAMES not included - write_todos is a builtin tool handled by server
 export const FINETUNE_TOOL_NAMES = [
   ...WORKFLOW_TOOL_NAMES,
   ...STEP_TOOL_NAMES,
-  ...TODOS_TOOL_NAMES,
 ] as const;
 
-export type FinetuneToolName = WorkflowToolName | StepToolName | TodosToolName;
+export type FinetuneToolName = WorkflowToolName | StepToolName;
 
 // =============================================================================
 // Tool Type Checkers
 // =============================================================================
 
 export function isFinetuneTool(toolName: string): toolName is FinetuneToolName {
-  return isWorkflowTool(toolName) || isStepTool(toolName) || isTodosTool(toolName);
+  // Note: isTodosTool not checked - write_todos is a builtin tool handled by server
+  return isWorkflowTool(toolName) || isStepTool(toolName);
 }
 
 // Re-export individual type checkers
@@ -138,10 +139,11 @@ export async function executeFinetuneTool(
 export { workflowTools, stepTools, todosTools };
 
 // Combined array of all finetune tools
+// Note: write_todos is NOT included here because it's a builtin tool
+// handled by the distri server (not an external tool)
 export const finetuneTools: DistriFnTool[] = [
   ...workflowTools,
   ...stepTools,
-  ...todosTools,
 ];
 
 // =============================================================================

@@ -186,6 +186,86 @@ The vendored `@distri/react` has peer dependencies. Ensure your `package.json` i
 - `react` (>=18.0.0)
 - `react-dom` (>=18.0.0)
 
+## Available Exports
+
+### From @distri/core
+
+Key types and utilities:
+
+```typescript
+import {
+  // Types
+  Agent,
+  DistriMessage,
+  DistriChatMessage,
+  DistriFnTool,
+  TodoItem,
+  TodoStatus,
+  ToolCall,
+  ToolResult,
+  // Utilities
+  DistriClient,
+  createSuccessfulToolResult,
+  createFailedToolResult,
+} from '@distri/core';
+```
+
+### From @distri/react
+
+Hooks, components, and types:
+
+```typescript
+import {
+  // Hooks
+  useChat,
+  useChatMessages,
+  useChatStateStore,
+  useAgent,
+  // Components
+  TodosDisplay,           // Renders todo list with progress bar
+  Chat,                   // Full chat component
+  // Tools
+  createAskFollowUpTool,  // Creates ask_follow_up UI tool
+  // Types
+  DistriAnyTool,          // Union of DistriFnTool | DistriUiTool
+  DistriUiTool,           // UI-based tool with component
+  ToolRendererMap,
+  ToolCallState,
+} from '@distri/react';
+```
+
+### Usage Examples
+
+**TodosDisplay component:**
+```tsx
+import { TodosDisplay } from '@distri/react';
+import { TodoItem } from '@distri/core';
+
+function MyChat() {
+  const [todos, setTodos] = useState<TodoItem[]>([]);
+
+  // Listen for todo updates from agent
+  useEffect(() => {
+    const handler = (e: CustomEvent) => setTodos(e.detail.todos);
+    window.addEventListener('lucy-todos-updated', handler);
+    return () => window.removeEventListener('lucy-todos-updated', handler);
+  }, []);
+
+  return todos.length > 0 && <TodosDisplay todos={todos} />;
+}
+```
+
+**ask_follow_up tool:**
+```tsx
+import { createAskFollowUpTool } from '@distri/react';
+import type { DistriAnyTool } from '@distri/react';
+
+const tools: DistriAnyTool[] = [
+  ...finetuneTools,
+  createAskFollowUpTool(),  // UI tool for structured questions
+];
+```
+
 ## Related Files
 
 | File | Purpose |

@@ -19,12 +19,11 @@
 
 import { useCallback, useRef, useEffect, useState } from 'react';
 import { useChat, useChatStateStore, TodosDisplay } from '@distri/react';
-import type { ToolRendererMap } from '@distri/react';
+import type { ToolRendererMap, DistriAnyTool } from '@distri/react';
 import {
   Agent,
   DistriChatMessage,
   DistriMessage,
-  DistriFnTool,
   DistriPart,
   ToolExecutionOptions,
   TodoItem,
@@ -47,7 +46,7 @@ export interface LucyChatProps {
   /** The agent instance */
   agent: Agent;
   /** External tools for the chat */
-  externalTools?: DistriFnTool[];
+  externalTools?: DistriAnyTool[];
   /** Initial messages */
   initialMessages?: DistriChatMessage[];
   /** Callback before sending a message */
@@ -127,13 +126,20 @@ export function LucyChat({
   // Voice input state
   const [isStreamingVoice, setIsStreamingVoice] = useState(false);
 
-  // Todos state - populated by write_todos tool via window events
-  const [todos, setTodos] = useState<TodoItem[]>([]);
+  // Todos state - populated by write_todos tool via window events (external tool path)
+  const [localTodos, setLocalTodos] = useState<TodoItem[]>([]);
 
-  // Listen for todos updates from write_todos tool
+  // Also subscribe to store todos (builtin tool path - when server handles write_todos)
+  const storeTodos = useChatStateStore((state) => state.todos);
+
+  // Use whichever source has todos - prefer store if it has data (more recent updates)
+  const todos = storeTodos.length > 0 ? storeTodos : localTodos;
+
+  // Listen for todos updates from external write_todos tool
   useEffect(() => {
     const handleTodosUpdate = (event: CustomEvent<{ todos: TodoItem[] }>) => {
-      setTodos(event.detail.todos);
+      console.log('[LucyChat] Received lucy-todos-updated event:', event.detail.todos);
+      setLocalTodos(event.detail.todos);
     };
 
     window.addEventListener('lucy-todos-updated' as any, handleTodosUpdate);
@@ -141,6 +147,16 @@ export function LucyChat({
       window.removeEventListener('lucy-todos-updated' as any, handleTodosUpdate);
     };
   }, []);
+
+  // Debug: log todos state changes
+  useEffect(() => {
+    console.log('[LucyChat] Todos state:', { localTodos, storeTodos, merged: todos });
+  }, [localTodos, storeTodos, todos]);
+
+  // Debug: log external tools on mount
+  useEffect(() => {
+    console.log('[LucyChat] External tools registered:', externalTools?.map(t => t.name));
+  }, [externalTools]);
 
   const {
     messages,

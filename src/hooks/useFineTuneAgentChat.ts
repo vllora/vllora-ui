@@ -11,8 +11,9 @@
  */
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useAgent, useChatMessages } from '@distri/react';
-import { uuidv4, DistriFnTool, DistriMessage, DistriClient } from '@distri/core';
+import { useAgent, useChatMessages, createAskFollowUpTool } from '@distri/react';
+import type { DistriAnyTool } from '@distri/react';
+import { uuidv4, DistriMessage, DistriClient } from '@distri/core';
 import { finetuneTools, workflowToContext } from '@/lib/distri-finetune-tools';
 import { finetuneWorkflowService, FinetuneWorkflowState } from '@/services/finetune-workflow-db';
 import { getDatasetById } from '@/services/datasets-db';
@@ -82,7 +83,7 @@ interface UseFineTuneAgentChatReturn {
   /** Current thread ID */
   threadId: string;
   /** Tools available to the agent */
-  tools: DistriFnTool[];
+  tools: DistriAnyTool[];
   /** Chat messages */
   messages: ChatMessage[];
   /** Current workflow state (null if none) */
@@ -126,8 +127,11 @@ export function useFineTuneAgentChat(
   // Track if dataset has evaluator configured (via UI, separate from workflow)
   const [datasetHasEvaluator, setDatasetHasEvaluator] = useState(false);
 
-  // Tools
-  const tools = useMemo<DistriFnTool[]>(() => finetuneTools, []);
+  // Tools - includes finetune tools + ask_follow_up UI tool
+  const tools = useMemo<DistriAnyTool[]>(
+    () => [...finetuneTools, createAskFollowUpTool()],
+    []
+  );
 
   // Chat messages
   const { messages } = useChatMessages({

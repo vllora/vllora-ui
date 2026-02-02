@@ -127,6 +127,59 @@ distri/
 
 ---
 
+### 3.5. Builtin Tools (from Distri)
+
+The agent has access to three **builtin tools** provided by the Distri framework:
+
+| Tool | Purpose | UI Component |
+|------|---------|--------------|
+| `final` | Mark agent response as final | N/A |
+| `write_todos` | Track sub-tasks with real-time progress updates | `TodosDisplay` from `@distri/react` |
+| `ask_follow_up` | Ask structured follow-up questions in stepper format | `AskFollowUpComponent` from `@distri/react` |
+
+#### write_todos
+
+Allows the agent to track granular sub-tasks. The UI displays a progress bar with task status.
+
+```typescript
+// Agent calls:
+write_todos({
+  "todos": [
+    { "content": "Analyze current coverage", "status": "done" },
+    { "content": "Generate data for topic A", "status": "in_progress" },
+    { "content": "Re-analyze coverage", "status": "open" }
+  ]
+})
+```
+
+**Frontend Integration:**
+- Server executes `write_todos` and emits `TodosUpdated` events via A2A protocol
+- `chatStateStore` receives events and updates `todos` state
+- `LucyChat` subscribes to `useChatStateStore((state) => state.todos)`
+- `TodosDisplay` component (from `@distri/react`) renders the todo list
+
+#### ask_follow_up
+
+Allows the agent to ask structured questions with various input types.
+
+```typescript
+// Agent calls:
+ask_follow_up({
+  "title": "Training Configuration",
+  "questions": [
+    { "id": "epochs", "question": "How many epochs?", "type": "select", "options": ["1", "2", "3"] },
+    { "id": "notes", "question": "Special requirements?", "type": "text", "required": false }
+  ]
+})
+```
+
+**Frontend Integration:**
+- `createAskFollowUpTool()` from `@distri/react` creates the UI tool
+- Added to tools array in `useFineTuneAgentChat.ts`
+- `LucyToolCalls` renders the component when the agent calls the tool
+
+---
+
 ### 4. Frontend Components
 
 #### a) LucyDatasetAssistant
@@ -165,7 +218,7 @@ interface UseFineTuneAgentChatReturn {
   agent: any;                    // Distri agent instance
   agentLoading: boolean;
   threadId: string;              // Persisted per dataset
-  tools: DistriFnTool[];         // All 21 finetune tools
+  tools: DistriAnyTool[];        // Finetune tools + ask_follow_up UI tool
   messages: ChatMessage[];
   workflow: FinetuneWorkflowState | null;
   workflowLoading: boolean;
@@ -174,6 +227,18 @@ interface UseFineTuneAgentChatReturn {
   prepareMessage: (userMessage: string) => DistriMessage;
 }
 ```
+
+**Tools Array Composition:**
+```typescript
+// In useFineTuneAgentChat.ts
+const tools = useMemo<DistriAnyTool[]>(
+  () => [...finetuneTools, createAskFollowUpTool()],
+  []
+);
+```
+
+- `finetuneTools`: All 21 function tools (workflow + step tools + todos)
+- `createAskFollowUpTool()`: UI tool for structured follow-up questions
 
 **Context Injection Pattern:**
 ```typescript

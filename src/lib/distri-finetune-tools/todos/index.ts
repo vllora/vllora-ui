@@ -38,6 +38,7 @@ export interface WriteTodosResult {
  */
 export function emitTodosUpdate(todos: TodoItem[]): void {
   if (typeof window !== 'undefined') {
+    console.log('[write_todos] Emitting lucy-todos-updated event:', todos);
     window.dispatchEvent(
       new CustomEvent('lucy-todos-updated', {
         detail: { todos },
@@ -58,6 +59,7 @@ function generateId(): string {
 export async function writeTodosHandler(
   params: WriteTodosParams
 ): Promise<WriteTodosResult> {
+  console.log('[write_todos] Handler called with params:', params);
   const { todos = [] } = params;
 
   // Validate and transform todos to include IDs
@@ -94,6 +96,7 @@ export async function writeTodosHandler(
 export const writeTodosTool: DistriFnTool = {
   name: 'write_todos',
   type: 'function',
+  autoExecute: true, // Auto-execute without user confirmation
   description:
     'Manage TODOs with efficient bulk operations. Use write_todos for all modifications. Always keep and recite current TODOs in context.',
   parameters: {
