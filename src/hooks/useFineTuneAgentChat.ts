@@ -14,7 +14,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useAgent, useChatMessages, createAskFollowUpTool } from '@distri/react';
 import type { DistriAnyTool } from '@distri/react';
 import { uuidv4, DistriMessage, DistriClient } from '@distri/core';
-import { finetuneTools, workflowToContext } from '@/lib/distri-finetune-tools';
+import { finetuneTools, workflowToContext, createDisplayTopicHierarchyTool } from '@/lib/distri-finetune-tools';
 import { finetuneWorkflowService, FinetuneWorkflowState } from '@/services/finetune-workflow-db';
 import { getDatasetById } from '@/services/datasets-db';
 
@@ -127,9 +127,9 @@ export function useFineTuneAgentChat(
   // Track if dataset has evaluator configured (via UI, separate from workflow)
   const [datasetHasEvaluator, setDatasetHasEvaluator] = useState(false);
 
-  // Tools - includes finetune tools + ask_follow_up UI tool
+  // Tools - includes finetune tools + UI tools (ask_follow_up, display_topic_hierarchy)
   const tools = useMemo<DistriAnyTool[]>(
-    () => [...finetuneTools, createAskFollowUpTool()],
+    () => [...finetuneTools, createAskFollowUpTool(), createDisplayTopicHierarchyTool()],
     []
   );
 
