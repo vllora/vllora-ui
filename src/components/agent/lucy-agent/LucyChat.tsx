@@ -18,7 +18,7 @@
  */
 
 import { useCallback, useRef, useEffect, useState } from 'react';
-import { useChat, useChatStateStore } from '@distri/react';
+import { useChat, useChatStateStore, TodosDisplay } from '@distri/react';
 import type { ToolRendererMap } from '@distri/react';
 import {
   Agent,
@@ -27,6 +27,7 @@ import {
   DistriFnTool,
   DistriPart,
   ToolExecutionOptions,
+  TodoItem,
 } from '@distri/core';
 import { LucyChatInput, AttachedImage } from './LucyChatInput';
 import { LucyWelcome, QuickAction } from './LucyWelcome';
@@ -125,6 +126,21 @@ export function LucyChat({
 
   // Voice input state
   const [isStreamingVoice, setIsStreamingVoice] = useState(false);
+
+  // Todos state - populated by write_todos tool via window events
+  const [todos, setTodos] = useState<TodoItem[]>([]);
+
+  // Listen for todos updates from write_todos tool
+  useEffect(() => {
+    const handleTodosUpdate = (event: CustomEvent<{ todos: TodoItem[] }>) => {
+      setTodos(event.detail.todos);
+    };
+
+    window.addEventListener('lucy-todos-updated' as any, handleTodosUpdate);
+    return () => {
+      window.removeEventListener('lucy-todos-updated' as any, handleTodosUpdate);
+    };
+  }, []);
 
   const {
     messages,
@@ -428,6 +444,15 @@ export function LucyChat({
           <div ref={messagesEndRef} />
         </div>
       </div>
+
+      {/* Todos Display - shows above input when there are active todos */}
+      {todos.length > 0 && (
+        <div className="border-t bg-background/50">
+          <div className="max-w-3xl mx-auto px-4 py-2">
+            <TodosDisplay todos={todos} />
+          </div>
+        </div>
+      )}
 
       {/* Input Area */}
       <div className="bg-background/80 backdrop-blur">

@@ -26,6 +26,16 @@ import {
   type StepToolName,
 } from './steps';
 
+import {
+  todosTools,
+  todosToolHandlers,
+  TODOS_TOOL_NAMES,
+  isTodosTool,
+  type TodosToolName,
+  type TodoItem,
+  type TodoStatus,
+} from './todos';
+
 // Re-export types
 export type {
   ToolHandler,
@@ -73,6 +83,7 @@ export const finetuneToolHandlers: Record<
 > = {
   ...workflowToolHandlers,
   ...stepToolHandlers,
+  ...todosToolHandlers,
 };
 
 // =============================================================================
@@ -82,20 +93,24 @@ export const finetuneToolHandlers: Record<
 export const FINETUNE_TOOL_NAMES = [
   ...WORKFLOW_TOOL_NAMES,
   ...STEP_TOOL_NAMES,
+  ...TODOS_TOOL_NAMES,
 ] as const;
 
-export type FinetuneToolName = WorkflowToolName | StepToolName;
+export type FinetuneToolName = WorkflowToolName | StepToolName | TodosToolName;
 
 // =============================================================================
 // Tool Type Checkers
 // =============================================================================
 
 export function isFinetuneTool(toolName: string): toolName is FinetuneToolName {
-  return isWorkflowTool(toolName) || isStepTool(toolName);
+  return isWorkflowTool(toolName) || isStepTool(toolName) || isTodosTool(toolName);
 }
 
 // Re-export individual type checkers
-export { isWorkflowTool, isStepTool };
+export { isWorkflowTool, isStepTool, isTodosTool };
+
+// Re-export todos types
+export type { TodoItem, TodoStatus };
 
 // =============================================================================
 // Execute Tool
@@ -120,12 +135,13 @@ export async function executeFinetuneTool(
 // =============================================================================
 
 // Individual tool arrays for selective use
-export { workflowTools, stepTools };
+export { workflowTools, stepTools, todosTools };
 
 // Combined array of all finetune tools
 export const finetuneTools: DistriFnTool[] = [
   ...workflowTools,
   ...stepTools,
+  ...todosTools,
 ];
 
 // =============================================================================

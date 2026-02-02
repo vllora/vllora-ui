@@ -1,0 +1,53 @@
+{
+  "name": "@distri/react",
+  "version": "0.3.3",
+  "description": "React hooks and components for Distri Framework (vendored)",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./globals.css": "./dist/globals.css",
+    "./styles.css": "./dist/index.css"
+  },
+  "peerDependencies": {
+    "@distri/core": "*",
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
+  },
+  "dependencies": {
+    "@radix-ui/react-avatar": "^1.1.10",
+    "@radix-ui/react-checkbox": "^1.3.2",
+    "@radix-ui/react-dialog": "^1.1.14",
+    "@radix-ui/react-dropdown-menu": "^2.1.15",
+    "@radix-ui/react-select": "^2.2.5",
+    "@radix-ui/react-separator": "^1.1.7",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@radix-ui/react-toast": "^1.2.14",
+    "@radix-ui/react-tooltip": "^1.2.7",
+    "@tiptap/extension-placeholder": "^2.11.5",
+    "@tiptap/pm": "^2.11.5",
+    "@tiptap/react": "^2.11.5",
+    "@tiptap/starter-kit": "^2.11.5",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.0.0",
+    "lucide-react": "^0.460.0",
+    "next-themes": "^0.4.6",
+    "react-frame-component": "^5.2.7",
+    "react-markdown": "^10.1.0",
+    "react-speech-recognition": "^4.0.1",
+    "react-syntax-highlighter": "^15.6.1",
+    "rehype-raw": "^7.0.0",
+    "rehype-sanitize": "^6.0.0",
+    "remark-gfm": "^4.0.1",
+    "sonner": "^2.0.6",
+    "tailwind-merge": "^2.0.0",
+    "tailwindcss-animate": "^1.0.7",
+    "zustand": "^5.0.7"
+  }
+}
