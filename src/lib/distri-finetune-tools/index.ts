@@ -28,10 +28,7 @@ import {
 
 import {
   todosTools,
-  todosToolHandlers,
-  TODOS_TOOL_NAMES,
   isTodosTool,
-  type TodosToolName,
   type TodoItem,
   type TodoStatus,
 } from './todos';
