@@ -527,7 +527,11 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
         const outputMessage = output?.messages
           ? (Array.isArray(output.messages) ? output.messages[0] : output.messages)
           : output;
-        const messages = outputMessage
+        // Only add outputMessage if it's a valid message (has role property)
+        const isValidMessage = outputMessage &&
+          typeof outputMessage === 'object' &&
+          'role' in (outputMessage as object);
+        const messages = isValidMessage
           ? [...inputMessages, outputMessage]
           : inputMessages;
 
