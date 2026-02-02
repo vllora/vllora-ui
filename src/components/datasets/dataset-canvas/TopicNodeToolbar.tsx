@@ -5,7 +5,7 @@
  * Provides actions: Generate (dropdown), Delete.
  */
 
-import { Trash2, FilePlus, GitBranch, Grid2X2Plus } from "lucide-react";
+import { Trash2, GitBranch, Grid2X2Plus } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
