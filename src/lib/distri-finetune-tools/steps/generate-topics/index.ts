@@ -20,7 +20,7 @@ const USE_BACKEND_TOPIC_GENERATION = true;
 
 export const generateTopicsHandler: ToolHandler = async (params) => {
   try {
-    const { workflow_id, method = 'auto', max_depth = 2, degree = 2 } = params;
+    const { workflow_id, method = 'auto', max_depth = 2, degree = 2, max_topics = 3, focus } = params;
 
     if (!workflow_id || typeof workflow_id !== 'string') {
       return { success: false, error: 'workflow_id is required' };
@@ -41,8 +41,26 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
       };
     }
 
-    const depthValue = typeof max_depth === 'number' ? max_depth : 2;
-    const degreeValue = typeof degree === 'number' ? degree : 2;
+    // Parse parameters with robust type coercion (LLM may send strings instead of numbers)
+    const depthValue = typeof max_depth === 'number'
+      ? max_depth
+      : typeof max_depth === 'string'
+        ? parseInt(max_depth, 10) || 2
+        : 2;
+    const degreeValue = typeof degree === 'number'
+      ? degree
+      : typeof degree === 'string'
+        ? parseInt(degree, 10) || 2
+        : 2;
+    const maxTopicsValue = typeof max_topics === 'number'
+      ? max_topics
+      : typeof max_topics === 'string'
+        ? parseInt(max_topics, 10) || 3
+        : 3;
+    const focusValue = typeof focus === 'string' && focus.trim() ? focus.trim() : undefined;
+
+    console.log('[generate_topics] Parameters received:', { max_depth, degree, max_topics, focus });
+    console.log('[generate_topics] Parsed values:', { depthValue, degreeValue, maxTopicsValue, focusValue });
 
     let hierarchy: TopicHierarchyNode[];
 
@@ -61,6 +79,8 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
         depthValue,
         degreeValue,
         formattedRecords,
+        maxTopicsValue,
+        focusValue,
       );
 
       if (!result.success || !result.hierarchy) {
@@ -123,8 +143,14 @@ export const generateTopicsTool: DistriFnTool = {
         default: 'auto',
         description: 'Method for generating topics',
       },
-      max_depth: { type: 'number', default: 3, description: 'Maximum hierarchy depth' },
-      degree: { type: 'number', default: 3, description: 'Branching factor' },
+      max_depth: { type: 'number', default: 2, description: 'Maximum hierarchy depth (1-5 levels)' },
+      degree: { type: 'number', default: 2, description: 'Branching factor (children per topic)' },
+      max_topics: { type: 'number', default: 3, description: 'Maximum number of root topics' },
+      focus: {
+        type: 'string',
+        description:
+          'Optional user guidance for topic generation. Examples: "focus on error handling scenarios", "organize by difficulty level", "emphasize edge cases", "structure around user journey stages"',
+      },
     },
     required: ['workflow_id'],
   },

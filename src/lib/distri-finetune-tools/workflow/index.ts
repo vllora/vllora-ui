@@ -128,10 +128,6 @@ export const startFinetuneWorkflowHandler: ToolHandler = async (params): Promise
       return { success: false, error: 'dataset_id is required' };
     }
 
-    if (!training_goals || typeof training_goals !== 'string') {
-      return { success: false, error: 'training_goals is required' };
-    }
-
     // Validate start_step if provided
     const validStartSteps: FinetuneStep[] = ['topics_config', 'grader_config'];
     const targetStartStep: FinetuneStep = (start_step && typeof start_step === 'string' && validStartSteps.includes(start_step as FinetuneStep))
@@ -142,6 +138,15 @@ export const startFinetuneWorkflowHandler: ToolHandler = async (params): Promise
     const dataset = await datasetsDB.getDatasetById(dataset_id);
     if (!dataset) {
       return { success: false, error: `Dataset ${dataset_id} not found` };
+    }
+
+    // Use provided training_goals or fall back to dataset's objective
+    const effectiveGoals = (typeof training_goals === 'string' && training_goals.trim())
+      ? training_goals.trim()
+      : dataset.datasetObjective;
+
+    if (!effectiveGoals) {
+      return { success: false, error: 'training_goals is required (dataset has no datasetObjective set)' };
     }
 
     // Check if workflow already exists
@@ -172,7 +177,7 @@ export const startFinetuneWorkflowHandler: ToolHandler = async (params): Promise
     const invalidCount = validationErrors.length;
 
     // Create workflow
-    const workflow = await workflowDB.createWorkflow(dataset_id, training_goals);
+    const workflow = await workflowDB.createWorkflow(dataset_id, effectiveGoals);
 
     // Update workflow with validation results
     await workflowDB.updateStepData(workflow.id, 'inputValidation', {
@@ -209,7 +214,7 @@ export const startFinetuneWorkflowHandler: ToolHandler = async (params): Promise
 
 export const startFinetuneWorkflowTool: DistriFnTool = {
   name: 'start_finetune_workflow',
-  description: 'Initialize a new finetune workflow for a dataset. Validates records and sets up the workflow state. Supports quick path: set start_step to "grader_config" to skip all preparation steps and go directly to evaluation configuration.',
+  description: 'Initialize a new finetune workflow for a dataset. Validates records and sets up the workflow state. Uses dataset\'s datasetObjective as training goals if not provided. Supports quick path: set start_step to "grader_config" to skip all preparation steps.',
   type: 'function',
   parameters: {
     type: 'object',
@@ -220,15 +225,15 @@ export const startFinetuneWorkflowTool: DistriFnTool = {
       },
       training_goals: {
         type: 'string',
-        description: "User's description of desired model behaviors",
+        description: 'Optional: Override training goals. If not provided, uses dataset\'s datasetObjective.',
       },
       start_step: {
         type: 'string',
         enum: ['topics_config', 'grader_config'],
-        description: 'Optional: The step to start at. Default is "topics_config". Use "grader_config" for quick path to skip all preparation steps (topics, categorization, coverage) and go directly to evaluation configuration.',
+        description: 'Optional: The step to start at. Default is "topics_config". Use "grader_config" for quick path to skip all preparation steps.',
       },
     },
-    required: ['dataset_id', 'training_goals'],
+    required: ['dataset_id'],
   },
   handler: async (input) => JSON.stringify(await startFinetuneWorkflowHandler(input as Record<string, unknown>)),
 } as DistriFnTool;
