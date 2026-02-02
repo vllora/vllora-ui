@@ -7,63 +7,58 @@ This document describes the workflow state machine for the Lucy Finetune Agent s
 ## State Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         Finetune Workflow State Machine                          │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│   ┌──────────────┐                                                               │
-│   │ not_started  │ ─── start_finetune_workflow ───►                              │
-│   └──────────────┘                                                               │
-│          │                                                                       │
-│          ▼                                                                       │
-│   ┌──────────────┐                                                               │
-│   │ topics_config│ ─── generate_topics + apply_topic_hierarchy ───►              │
-│   │   (Step 1)   │     [OPTIONAL: can skip]                                      │
-│   └──────────────┘                                                               │
-│          │                                                                       │
-│          ▼                                                                       │
-│   ┌──────────────┐                                                               │
-│   │  categorize  │ ─── categorize_records ───►                                   │
-│   │   (Step 2)   │     [OPTIONAL: can skip]                                      │
-│   └──────────────┘                                                               │
-│          │                                                                       │
-│          ▼                                                                       │
-│   ┌──────────────┐                                                               │
-│   │  coverage_   │ ─── analyze_coverage + generate_synthetic_data ───►           │
-│   │  generation  │     [OPTIONAL: can skip]                                      │
-│   │   (Step 3)   │                                                               │
-│   └──────────────┘                                                               │
-│          │                                                                       │
-│          ▼                                                                       │
-│   ┌──────────────┐                                                               │
-│   │ grader_config│ ─── configure_grader + test_grader_sample ───►                │
-│   │   (Step 4)   │     [REQUIRED for training]                                   │
-│   └──────────────┘                                                               │
-│          │                                                                       │
-│          ▼                                                                       │
-│   ┌──────────────┐                                                               │
-│   │   dry_run    │ ─── upload_dataset + run_dry_run ───►                         │
-│   │   (Step 5)   │     [RECOMMENDED but can skip]                                │
-│   └──────────────┘                                                               │
-│          │                                                                       │
-│          ▼                                                                       │
-│   ┌──────────────┐                                                               │
-│   │   training   │ ─── start_training + check_training_status ───►               │
-│   │   (Step 6)   │     [REQUIRED]                                                │
-│   └──────────────┘                                                               │
-│          │                                                                       │
-│          ▼                                                                       │
-│   ┌──────────────┐                                                               │
-│   │  deployment  │ ─── deploy_model ───►                                         │
-│   │   (Step 7)   │     [OPTIONAL]                                                │
-│   └──────────────┘                                                               │
-│          │                                                                       │
-│          ▼                                                                       │
-│   ┌──────────────┐                                                               │
-│   │  completed   │                                                               │
-│   └──────────────┘                                                               │
-│                                                                                  │
-└─────────────────────────────────────────────────────────────────────────────────┘
+                    ┌──────────────────────────────────────────┐
+                    │                                          │
+    ┌───────────────▼───────────────┐                         │
+    │        not_started            │                         │
+    └───────────────┬───────────────┘                         │
+                    │ start_finetune_workflow                 │
+                    ▼                                          │
+    ┌───────────────────────────────┐                         │
+    │       topics_config           │────────────┐            │
+    │         (Step 1)              │            │            │
+    └───────────────┬───────────────┘            │            │
+                    │                            │ skip       │
+                    ▼                            │            │
+    ┌───────────────────────────────┐            │            │
+    │         categorize            │────────────┤            │
+    │         (Step 2)              │            │            │
+    └───────────────┬───────────────┘            │            │
+                    │                            │            │
+                    ▼                            │            │
+    ┌───────────────────────────────┐            │            │
+    │     coverage_generation       │            │            │
+    │         (Step 3)              │            │            │
+    └───────────────┬───────────────┘            │            │
+                    │                            ▼            │
+                    ▼              ┌─────────────────────────┐│
+    ┌───────────────────────────────────────────────────────┐││
+    │              grader_config (REQUIRED)                 │◄┘
+    │                    (Step 4)                           │
+    └───────────────┬──────────────┬────────────────────────┘
+                    │              │ skip
+                    ▼              │
+    ┌───────────────────────────────┐              │
+    │           dry_run             │              │
+    │           (Step 5)            │              │
+    └───────────────┬───────────────┘              │
+                    │                              │
+                    ▼              ◄───────────────┘
+    ┌───────────────────────────────┐
+    │           training            │
+    │        (Step 6 - REQUIRED)    │
+    └───────────────┬───────────────┘
+                    │
+                    ▼
+    ┌───────────────────────────────┐
+    │          deployment           │
+    │           (Step 7)            │
+    └───────────────┬───────────────┘
+                    │
+                    ▼
+    ┌───────────────────────────────┐
+    │          completed            │
+    └───────────────────────────────┘
 ```
 
 ---
@@ -89,6 +84,71 @@ type FinetuneStep =
 
 ```typescript
 type StepStatus = 'pending' | 'in_progress' | 'completed' | 'skipped';
+```
+
+---
+
+## Valid State Transitions
+
+The workflow supports flexible transitions defined in `workflow/index.ts`:
+
+### Step Order
+
+```typescript
+const STEP_ORDER: FinetuneStep[] = [
+  'not_started',      // 0
+  'topics_config',    // 1
+  'categorize',       // 2
+  'coverage_generation', // 3
+  'grader_config',    // 4
+  'dry_run',          // 5
+  'training',         // 6
+  'deployment',       // 7
+  'completed',        // 8
+];
+```
+
+### Transition Rules
+
+| From | To | Valid? | Notes |
+|------|----|--------|-------|
+| Any step | Next step (+1) | ✅ | Normal sequential flow |
+| `not_started` | `grader_config` | ✅ | **Quick path** - skip ALL preparation steps |
+| `topics_config` | `grader_config` | ✅ | Skip categorization & coverage |
+| `categorize` | `grader_config` | ✅ | Skip coverage |
+| `grader_config` | `training` | ✅ | Skip dry run |
+| Any other skip | - | ❌ | Not allowed |
+
+### Implementation
+
+```typescript
+function isValidStepTransition(from: FinetuneStep, to: FinetuneStep): boolean {
+  const fromIndex = getStepIndex(from);
+  const toIndex = getStepIndex(to);
+
+  // Normal flow: advance one step at a time
+  if (toIndex === fromIndex + 1) {
+    return true;
+  }
+
+  // Quick path: Allow skipping directly from not_started to grader_config
+  // This enables users to see the end-to-end flow quickly with just records + evaluation function
+  if (to === 'grader_config' && from === 'not_started') {
+    return true;
+  }
+
+  // Skip to grader_config from topics_config or categorize
+  if (to === 'grader_config' && (from === 'topics_config' || from === 'categorize')) {
+    return true;
+  }
+
+  // Skip dry_run and go directly to training
+  if (to === 'training' && from === 'grader_config') {
+    return true;
+  }
+
+  return false;
+}
 ```
 
 ---
@@ -159,19 +219,30 @@ interface CategorizationResult {
 
 | Property | Value |
 |----------|-------|
-| Required | No (optional, requires Steps 1-2) |
+| Required | **No** (optional - improves data balance) |
+| Depends On | Steps 1-2 (if skipped, this is also skipped) |
+| Can Skip To | `grader_config` directly |
 | Tools | `analyze_coverage`, `generate_synthetic_data` |
 | Output | `coverageGeneration` object stored in workflow |
 
-**State Transitions:**
-- `pending` → `in_progress`: When coverage analysis begins
-- `in_progress` → `completed`: When generation is done or user approves coverage
-- `pending` → `skipped`: When user skips
+**Two Supported Workflows:**
+
+1. **Data-First Workflow** (Seed-Based):
+   - Start with few seed records
+   - Generate variations without topics
+   - Create topics after generation
+   - Categorize all records
+
+2. **Topics-First Workflow** (Coverage-Based):
+   - Define topic hierarchy first
+   - Categorize existing records
+   - Analyze coverage gaps
+   - Generate data for under-represented topics
 
 **Data Stored:**
 ```typescript
 interface CoverageGenerationResult {
-  coverageScore: number;           // 0.0 - 1.0
+  balanceScore: number;           // 0.0 - 1.0
   gaps: TopicGap[];
   generatedRecords: number;
   strategy: GenerationStrategy;
@@ -187,14 +258,16 @@ interface CoverageGenerationResult {
 
 | Property | Value |
 |----------|-------|
-| Required | **Yes** (must have evaluator before training) |
+| Required | **YES** (must have evaluator before training) |
+| Can Skip From | `not_started`, `topics_config`, `categorize` |
 | Tools | `configure_grader`, `test_grader_sample` |
 | Output | `graderConfig` object stored in workflow |
 
-**State Transitions:**
-- `pending` → `in_progress`: When grader configuration begins
-- `in_progress` → `completed`: When grader is tested and confirmed
-- Cannot be skipped (required for training)
+**This is one of only TWO required steps** (along with training). Users can jump directly here from `not_started` if they just want to configure the evaluator and start training quickly.
+
+**Grader Types:**
+- `llm_as_judge` - LLM evaluates responses
+- `javascript` - Custom JS evaluation script
 
 **Data Stored:**
 ```typescript
@@ -215,23 +288,39 @@ interface GraderConfig {
 
 | Property | Value |
 |----------|-------|
-| Required | No (recommended but can skip) |
+| Required | **No** (recommended but can skip) |
+| Can Skip To | `training` directly |
 | Tools | `upload_dataset`, `sync_evaluator`, `run_dry_run` |
 | Output | `dryRun` object stored in workflow |
 
-**State Transitions:**
-- `pending` → `in_progress`: When dry run begins
-- `in_progress` → `completed`: When dry run passes
-- `in_progress` → `pending`: When dry run fails (can retry)
-- `pending` → `skipped`: When user chooses to skip
+**Prerequisites:**
+- Must call `upload_dataset` before `run_dry_run`
+- Use `sync_evaluator` to update grader after upload
+
+**Dry Run Metrics:**
+| Metric | Healthy Range | Description |
+|--------|---------------|-------------|
+| Mean | 0.25-0.65 | Average score across samples |
+| Std | 0.10-0.25 | Score spread/variance |
+| %>0 | >10-20% | Tasks base model can't do perfectly |
+| %=1.0 | <30-50% | Tasks already perfect (no learning signal) |
+
+**Verdicts:**
+- `GO` - Metrics look good, proceed to training
+- `WARNING` - Some concerns, user decides
+- `NO-GO` - Problems detected, recommend fixing
 
 **Data Stored:**
 ```typescript
 interface DryRunResult {
-  verdict: DryRunVerdict;          // 'pass' | 'fail' | 'warning'
-  sampleSize: number;
-  averageScore: number;
-  issues: DryRunIssue[];
+  verdict: DryRunVerdict;          // 'GO' | 'WARNING' | 'NO_GO'
+  mean: number;
+  std: number;
+  percentAboveZero: number;
+  percentPerfect: number;
+  sampleCount: number;
+  diagnosis?: string;
+  recommendations: string[];
   completedAt: number;
 }
 ```
@@ -244,24 +333,29 @@ interface DryRunResult {
 
 | Property | Value |
 |----------|-------|
-| Required | **Yes** |
+| Required | **YES** (core purpose of the workflow) |
+| Prerequisites | `grader_config` must be completed |
 | Tools | `start_training`, `check_training_status` |
 | Output | `training` object stored in workflow |
 
-**State Transitions:**
-- `pending` → `in_progress`: When training job starts
-- `in_progress` → `completed`: When training completes successfully
-- `in_progress` → `pending`: When training fails (can retry)
+**This is one of only TWO required steps** (along with grader_config). Once grader is configured, users can proceed directly to training.
 
 **Data Stored:**
 ```typescript
 interface TrainingResult {
   jobId: string;
-  status: 'queued' | 'running' | 'completed' | 'failed';
+  status: 'pending' | 'running' | 'completed' | 'failed';
   modelId?: string;                // Set when completed
+  progress?: number;
+  currentEpoch?: number;
+  totalEpochs?: number;
+  metrics?: {
+    trainReward: number;
+    validReward: number;
+    loss: number;
+  };
   startedAt: number;
   completedAt?: number;
-  metrics?: TrainingMetrics;
 }
 ```
 
@@ -276,11 +370,6 @@ interface TrainingResult {
 | Required | No (optional) |
 | Tools | `deploy_model` |
 | Output | `deployment` object stored in workflow |
-
-**State Transitions:**
-- `pending` → `in_progress`: When deployment begins
-- `in_progress` → `completed`: When model is deployed
-- `pending` → `skipped`: When user skips
 
 **Data Stored:**
 ```typescript
@@ -313,7 +402,6 @@ interface FinetuneWorkflowState {
   training: TrainingResult | null;
   deployment: DeploymentResult | null;
 
-  // Metadata
   createdAt: number;
   updatedAt: number;
 }
@@ -321,29 +409,26 @@ interface FinetuneWorkflowState {
 
 ---
 
-## State Transitions
-
-### Workflow Control Tools
+## Workflow Control Tools
 
 | Tool | From States | To States | Description |
 |------|-------------|-----------|-------------|
 | `start_finetune_workflow` | (none) | `topics_config` | Initialize new workflow |
 | `get_workflow_status` | (any) | (same) | Read-only status check |
-| `advance_to_step` | (any) | (next step) | Move forward in workflow |
-| `rollback_to_step` | (any) | (previous step) | Restore from snapshot |
-
-### Advance Rules
-
-1. **Forward Only (normally):** `advance_to_step` moves to the next logical step
-2. **Skip Support:** Optional steps can be skipped
-3. **Prerequisite Check:** Required steps must be completed before dependent steps
-4. **Snapshot Creation:** State is snapshotted before advancing
+| `advance_to_step` | (any) | (next/skip) | Move forward in workflow |
+| `rollback_to_step` | (any) | (previous) | Restore from snapshot |
 
 ### Rollback Rules
 
-1. **Snapshot Restore:** Rollback restores workflow to a previous snapshot
-2. **Data Preservation:** Step results are preserved in snapshots
-3. **Any-to-Any:** Can rollback to any previously completed step
+```typescript
+function canRollbackTo(currentStep: FinetuneStep, targetStep: FinetuneStep): boolean {
+  const currentIndex = getStepIndex(currentStep);
+  const targetIndex = getStepIndex(targetStep);
+
+  // Can rollback to any previous step (but not not_started)
+  return targetIndex < currentIndex && targetIndex > 0;
+}
+```
 
 ---
 
@@ -368,7 +453,7 @@ interface WorkflowSnapshot {
 
 ---
 
-## Minimum Viable Workflow (Quick Path)
+## Quick Path (Minimum Viable Workflow)
 
 The shortest path to training requires only **two things**:
 
@@ -377,14 +462,34 @@ The shortest path to training requires only **two things**:
 │ not_started  │────►│ grader_config│────►│   training   │────►│  completed   │
 │              │     │  (REQUIRED)  │     │  (REQUIRED)  │     │              │
 └──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
-                            │
-                     Skip all of:
-                     - topics_config
-                     - categorize
-                     - coverage_generation
-                     - dry_run
-                     - deployment
 ```
+
+**How to use Quick Path:**
+
+Option 1: Use `start_step` parameter when starting workflow:
+```typescript
+start_finetune_workflow({
+  dataset_id: "...",
+  training_goals: "...",
+  start_step: "grader_config"  // Skip directly to grader config
+})
+```
+
+Option 2: Use `advance_to_step` after starting:
+```typescript
+// Start workflow (lands at not_started or topics_config)
+start_finetune_workflow({ dataset_id: "...", training_goals: "..." })
+
+// Skip to grader_config
+advance_to_step({ workflow_id: "...", step: "grader_config" })
+```
+
+**Skipped Steps:**
+- `topics_config` (Step 1)
+- `categorize` (Step 2)
+- `coverage_generation` (Step 3)
+- `dry_run` (Step 5)
+- `deployment` (Step 7)
 
 **Minimum Requirements:**
 1. **Dataset with records** - At least some input/output pairs exist
@@ -395,29 +500,58 @@ The shortest path to training requires only **two things**:
 - Results may not be optimal, but provides a fast feedback loop
 - Users can iterate and add optional steps later to improve quality
 
-**Note:** The training result quality depends heavily on data quality and coverage. Skipping preparation steps will likely produce suboptimal results, but allows rapid experimentation.
-
 ---
 
-## Step Dependencies
+## Step Dependencies Visualization
 
 ```
-topics_config ──► categorize ──► coverage_generation
-                                        │
-                                        ▼
-grader_config ◄─────────────────────────┘
-     │
-     ▼
-  dry_run ──► training ──► deployment ──► completed
+                    ┌─────────────────────────────────────────┐
+                    │         OPTIONAL IMPROVEMENT PATH        │
+                    │                                         │
+                    │  topics_config ──► categorize ──►       │
+                    │                    coverage_generation  │
+                    │                          │              │
+                    └──────────────────────────┼──────────────┘
+                                               │
+                                               ▼
+┌─────────────┐                        ┌─────────────┐
+│ not_started │──── QUICK PATH ───────►│grader_config│ (REQUIRED)
+└─────────────┘                        └─────────────┘
+                                               │
+                           ┌───────────────────┼───────────────────┐
+                           │                   │                   │
+                           ▼                   │                   ▼
+                    ┌─────────────┐            │            ┌─────────────┐
+                    │   dry_run   │ (optional) │            │  training   │
+                    └─────────────┘            │            │ (REQUIRED)  │
+                           │                   │            └─────────────┘
+                           └───────────────────┘                   │
+                                                                   ▼
+                                                            ┌─────────────┐
+                                                            │ deployment  │
+                                                            │ (optional)  │
+                                                            └─────────────┘
+                                                                   │
+                                                                   ▼
+                                                            ┌─────────────┐
+                                                            │  completed  │
+                                                            └─────────────┘
 ```
 
 **Dependency Rules:**
+
+**Required Path (minimum):**
+- `grader_config` is **REQUIRED** (must configure evaluation function)
+- `training` is **REQUIRED** and requires `grader_config` to be completed
+
+**Optional Enhancement Path:**
 - `categorize` requires `topics_config` (or both skipped)
 - `coverage_generation` requires `categorize` (or both skipped)
-- `grader_config` is independent (required)
-- `dry_run` requires `grader_config`
-- `training` requires `grader_config` (and optionally `dry_run`)
-- `deployment` requires `training`
+- Steps 1-3 can be entirely skipped to go directly to `grader_config`
+
+**Optional Validation:**
+- `dry_run` requires `grader_config` but can be skipped
+- `deployment` requires `training` but can be skipped
 
 ---
 
@@ -432,18 +566,21 @@ Every user message includes workflow context:
   "finetune_workflow": {
     "workflow_id": "workflow-456",
     "current_step": "coverage_generation",
-    "step_statuses": {
+    "step_status": {
+      "not_started": "completed",
       "topics_config": "completed",
       "categorize": "completed",
       "coverage_generation": "in_progress",
       "grader_config": "pending",
       "dry_run": "pending",
       "training": "pending",
-      "deployment": "pending"
+      "deployment": "pending",
+      "completed": "pending"
     },
     "coverage": 0.72,
     "has_grader": false,
-    "training_goals": "Improve response quality for customer support"
+    "dry_run_verdict": null,
+    "training_status": null
   }
 }
 ```

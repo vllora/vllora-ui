@@ -156,11 +156,23 @@ This document outlines the architecture and implementation plan for refactoring 
 - Records are INPUT to the workflow, not a step
 - GENERATE_DATA is combined with COVERAGE as one step (analyze → generate if needed → repeat)
 - The goal of GENERATE_DATA is to improve topic coverage balance
-- **The ONLY hard requirement for training is having the evaluation function configured (grader_config)**
+- **The ONLY hard requirements for training are: (1) having records, and (2) having the evaluation function configured (grader_config)**
 
-**Optional Step Skipping:**
-- **Coverage & Generation (Step 3) is OPTIONAL**: Users can skip directly from topics_config or categorize to grader_config if they're satisfied with their data or want to proceed without coverage analysis
-- **Dry Run (Step 5) is OPTIONAL but RECOMMENDED**: Users can skip from grader_config directly to training. However, if dry run was performed and returned NO-GO, training is blocked until issues are resolved
+**Quick Path to Training:**
+Users who just want to see the end-to-end flow quickly can skip directly from `not_started` to `grader_config`, then proceed to `training`. This produces results (though not optimal), allowing rapid experimentation.
+
+**Optional Steps (All Improve Quality):**
+- **Topics Configuration (Step 1)**: OPTIONAL - helps organize data by categories
+- **Categorization (Step 2)**: OPTIONAL - assigns records to topics for coverage analysis
+- **Coverage & Generation (Step 3)**: OPTIONAL - balances dataset by generating synthetic data for gaps
+- **Dry Run (Step 5)**: OPTIONAL but RECOMMENDED - validates dataset + grader quality before training
+
+**Minimum Viable Path:**
+```
+not_started → grader_config → training → completed
+```
+
+This allows users to quickly experiment even if results aren't perfect.
 
 ---
 
@@ -767,19 +779,34 @@ You are a Finetune Assistant that guides users through the complete RFT (Reinfor
 
 The finetune process has 7 main steps (input is records + training goals):
 
-1. **Topics Configuration** - Define topic hierarchy (auto-generate, template, or manual)
-2. **Categorization** - Assign records to topics with confidence scoring
+1. **Topics Configuration** - Define topic hierarchy (auto-generate, template, or manual) **(OPTIONAL)**
+2. **Categorization** - Assign records to topics with confidence scoring **(OPTIONAL)**
 3. **Coverage & Generation** - Analyze balance, generate synthetic data to fill gaps **(OPTIONAL)**
 4. **Grader Configuration** - Set up evaluation function (LLM-as-Judge or Script) **(REQUIRED)**
 5. **Dry Run** - Validate dataset + grader quality (GO/NO-GO decision) **(OPTIONAL but RECOMMENDED)**
-6. **Training** - Execute RFT training
-7. **Deployment** - Deploy the fine-tuned model
+6. **Training** - Execute RFT training **(REQUIRED)**
+7. **Deployment** - Deploy the fine-tuned model **(OPTIONAL)**
 
-**Key Insight**: The ONLY hard requirement for training is having the evaluation function configured (grader_config). Coverage analysis and dry run are optional - users can proceed if they have evaluation configured.
+**Key Insight**: The ONLY hard requirements for training are:
+1. Having **records** (existing data in the dataset)
+2. Having the **evaluation function configured** (grader_config)
 
-**Optional Step Skipping:**
-- From topics_config or categorize → can skip directly to grader_config
-- From grader_config → can skip directly to training (bypass dry run)
+All other steps (topics, categorization, coverage, dry run) are optional quality improvements. Users can skip directly to grader_config and training for a quick end-to-end experience.
+
+**Quick Path (Minimum Viable):**
+```
+not_started → grader_config → training → completed
+```
+
+**Full Path (Best Quality):**
+```
+not_started → topics_config → categorize → coverage_generation → grader_config → dry_run → training → deployment → completed
+```
+
+**Flexible Skipping:**
+- From `not_started` → can skip directly to `grader_config` (skip Steps 1-3)
+- From `grader_config` → can skip directly to `training` (bypass dry run)
+- The result quality depends on preparation - skipping steps trades quality for speed
 
 **GENERATE_DATA Purpose**: When used, it improves COVERAGE by:
 - Balancing under-represented topics
@@ -801,16 +828,21 @@ The finetune process has 7 main steps (input is records + training goals):
 - When user provides records + training goals, call `start_finetune_workflow`
 - Records are validated automatically
 - If invalid records found, explain issues and ask if user wants to proceed with valid ones
+- **Quick Path Option**: If user wants to train quickly, can skip to grader_config immediately
 
-## Step 1: Topics Configuration
+## Step 1: Topics Configuration (OPTIONAL)
+- **This step is optional** - users can skip directly to grader_config
 - Offer three options: auto-generate, use template, or manual
 - Default to auto-generate if user doesn't specify
 - Show generated hierarchy for user approval
+- **Skip option**: Inform user they can proceed without topics if they want a quick training run
 
-## Step 2: Categorization
+## Step 2: Categorization (OPTIONAL)
+- **This step is optional** - requires Step 1, both can be skipped
 - Run categorization automatically after topics are approved
 - Report results: how many assigned, confidence levels
 - Flag low-confidence records for review
+- **Skip option**: If Step 1 was skipped, this step is also skipped
 
 ## Step 3: Coverage & Generation (OPTIONAL)
 - **This step is optional** - users can skip directly to grader_config if satisfied with their data
@@ -858,13 +890,15 @@ The finetune process has 7 main steps (input is records + training goals):
 
 # RULES
 
-1. **Grader config is required** - The evaluation function must be configured before training
-2. **Recommend dry run** - Dry run is optional but strongly recommended. If skipped and training fails, suggest going back
-3. **NO-GO is not a dead end** - If dry run returns NO-GO, always offer two options: fix the issues OR bypass by rolling back and skipping dry run
-4. **Confirm destructive actions** - Training costs money, confirm first
-5. **Track state** - Use workflow status to know where we are
-6. **Be helpful** - If user is stuck, suggest next actions
-7. **Explain metrics** - Users may not understand dry run metrics, explain them
+1. **Only grader config + training are required** - Steps 1-3 (topics, categorize, coverage) are all optional. Users can skip directly to grader_config if they want a quick training run.
+2. **Support quick path** - If user wants to see end-to-end flow quickly, guide them directly to grader_config → training. Warn that results may not be optimal without preparation steps.
+3. **Recommend dry run** - Dry run is optional but strongly recommended. If skipped and training fails, suggest going back
+4. **NO-GO is not a dead end** - If dry run returns NO-GO, always offer two options: fix the issues OR bypass by rolling back and skipping dry run
+5. **Confirm destructive actions** - Training costs money, confirm first
+6. **Track state** - Use workflow status to know where we are
+7. **Be helpful** - If user is stuck, suggest next actions
+8. **Explain metrics** - Users may not understand dry run metrics, explain them
+9. **Quality vs Speed tradeoff** - Make it clear that skipping optional steps saves time but may reduce training quality
 ```
 
 ---

@@ -6,34 +6,48 @@ This document describes the technical architecture of the Lucy Finetune Agent sy
 
 ## System Overview
 
+The Lucy Dataset Agent follows a **3-tier architecture** with tools executing locally in the browser:
+
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           Lucy Dataset Agent Architecture                        │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│  ┌─────────────────────┐     WebSocket      ┌─────────────────────────────────┐ │
-│  │     FRONTEND        │◄──────────────────►│           BACKEND               │ │
-│  │                     │                    │                                 │ │
-│  │  LucyDatasetAssistant                    │  gateway/src/distri.rs          │ │
-│  │  ├── useFineTuneAgentChat               │  ├── download_distri()          │ │
-│  │  ├── DistriProvider                     │  ├── start_distri_server()      │ │
-│  │  └── Context Injection                  │  └── is_distri_running()        │ │
-│  │                     │                    │            │                    │ │
-│  │  distri-finetune-tools/                 │            ▼                    │ │
-│  │  ├── workflow/ (4 tools)               │  ┌─────────────────┐            │ │
-│  │  ├── steps/ (17 tools)                 │  │  Distri Binary  │            │ │
-│  │  └── types.ts                          │  │  (distri serve) │            │ │
-│  │            │                            │  └─────────────────┘            │ │
-│  │            ▼                            │            │                    │ │
-│  │  ┌─────────────────┐                    │            ▼                    │ │
-│  │  │ IndexedDB Store │                    │  ┌─────────────────────────────┐│ │
-│  │  │ - Datasets      │                    │  │ vllora-finetune-agent.md    ││ │
-│  │  │ - Workflows     │                    │  │ - Model: gpt-4.1            ││ │
-│  │  │ - Snapshots     │                    │  │ - 21 external tools         ││ │
-│  │  └─────────────────┘                    │  │ - max_iterations: 20        ││ │
-│  └─────────────────────┘                    │  └─────────────────────────────┘│ │
-│                                             └─────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           FRONTEND (React/TypeScript)                    │
+│  ┌────────────────────────┐   ┌─────────────────────────────────────┐  │
+│  │ LucyDatasetAssistant   │   │    distri-finetune-tools/           │  │
+│  │ - Sidebar UI           │   │    - Workflow tools (4)             │  │
+│  │ - Auto-analysis        │   │    - Step tools (17)                │  │
+│  │ - Quick actions        │   │    - Execute locally in browser     │  │
+│  └────────────────────────┘   └─────────────────────────────────────┘  │
+│           │                              │                              │
+│           ▼                              ▼                              │
+│  ┌────────────────────────────────────────────────────────────────────┐│
+│  │              useFineTuneAgentChat Hook                             ││
+│  │  - Injects workflow context into messages                         ││
+│  │  - Manages thread/session state (localStorage)                    ││
+│  │  - Workflow state in IndexedDB                                    ││
+│  └────────────────────────────────────────────────────────────────────┘│
+└───────────────────────────────┬─────────────────────────────────────────┘
+                                │ WebSocket/HTTP
+                                ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                       BACKEND - vllora gateway (Rust)                   │
+│  ┌────────────────────────────────────────────────────────────────────┐│
+│  │                    distri.rs                                       ││
+│  │  - Downloads distri binary from GitHub releases                   ││
+│  │  - Starts distri server as subprocess                             ││
+│  │  - Health check at /v1/agents                                     ││
+│  └────────────────────────────────────────────────────────────────────┘│
+└───────────────────────────────┬─────────────────────────────────────────┘
+                                │ Spawns
+                                ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                  DISTRI SERVER (A2A Protocol Agent Server)              │
+│  ┌───────────────────────┐   ┌────────────────────────────────────────┐│
+│  │   AgentOrchestrator   │   │     vllora-finetune-agent.md           ││
+│  │   - Loads agent defs  │◄──│     - Model: gpt-4.1                   ││
+│  │   - Tool execution    │   │     - 21 external tools defined        ││
+│  │   - Message routing   │   │     - max_iterations: 20               ││
+│  └───────────────────────┘   └────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -86,7 +100,34 @@ is_distri_running()         // Health check via /v1/agents endpoint
 
 ---
 
-### 3. Frontend Components
+### 3. Distri Server (A2A Protocol)
+
+The distri server is an **A2A-compatible agent framework** built in Rust:
+
+**Source:** [github.com/distrihub/distri](https://github.com/distrihub/distri)
+
+```
+distri/
+├── server/
+│   ├── distri-server/        # HTTP server with Actix-web
+│   │   └── src/
+│   │       ├── agent_server.rs   # Main server entry point
+│   │       ├── routes.rs         # API routing (/v1/*)
+│   │       └── context.rs        # Request context
+│   ├── distri-core/          # Agent orchestration logic
+│   ├── distri-stores/        # Storage backends
+│   └── distri-plugin-executor/  # Deno-based plugin runtime
+└── distrijs/                 # TypeScript client (@distri/core, @distri/react)
+```
+
+**Key Components:**
+- **AgentOrchestrator**: Loads agent definitions, routes messages, executes tools
+- **DistriAgentServer**: HTTP server exposing `/v1/*` endpoints
+- **A2A Protocol**: Standard agent-to-agent communication protocol
+
+---
+
+### 4. Frontend Components
 
 #### a) LucyDatasetAssistant
 
@@ -144,19 +185,22 @@ function buildContextMessage(datasetId, workflow, datasetHasEvaluator) {
 
 ---
 
-### 4. Tools Organization
+### 5. Tools Organization
 
 **Directory:** `ui/src/lib/distri-finetune-tools/`
 
 ```
 distri-finetune-tools/
-├── index.ts              # Main exports
-├── types.ts              # Shared types
+├── index.ts              # Main exports, executeFinetuneTool()
+├── types.ts              # Shared types (FinetuneContext, result types)
 ├── workflow/
 │   └── index.ts          # 4 workflow control tools
 ├── steps/
 │   ├── index.ts          # Aggregates all step tools
 │   ├── generate-topics/  # Topic generation (frontend + backend)
+│   │   ├── frontend.ts   # LLM-based generation
+│   │   ├── backend.ts    # Template-based generation
+│   │   └── index.ts
 │   ├── apply-hierarchy.ts
 │   ├── categorize-records.ts
 │   ├── analyze-coverage.ts
@@ -203,7 +247,7 @@ distri-finetune-tools/
 
 ---
 
-### 5. State Persistence
+### 6. State Persistence
 
 **File:** `ui/src/services/finetune-workflow-db.ts`
 
@@ -238,7 +282,7 @@ interface FinetuneWorkflowState {
 
 ---
 
-### 6. Data Flow
+### 7. Data Flow
 
 ```
 ┌──────────┐    ┌─────────────────────┐    ┌──────────────┐    ┌──────────────┐
@@ -294,17 +338,60 @@ Every user message is prepended with a JSON context block:
 
 This gives the agent full awareness without needing separate "get status" calls.
 
-### 3. Flexible Workflow
-Optional steps allow users to skip preparation:
-- Topics/categorization/coverage are optional
-- Only **records + evaluation function** required for training
-- Dry run recommended but can be bypassed
+### 3. Flexible Workflow (Quick Path)
+Users can start training with just records and an evaluation function:
+
+**Minimum Requirements:**
+- Records exist in the dataset
+- Evaluation function configured (grader_config)
+
+**Optional Improvements (can skip all):**
+- Topics configuration (Step 1)
+- Categorization (Step 2)
+- Coverage & generation (Step 3)
+- Dry run validation (Step 5)
+- Deployment (Step 7)
+
+**Quick Path:** `not_started → grader_config → training → completed`
+
+This allows users to quickly see the end-to-end flow. Results may not be optimal, but enables rapid experimentation.
 
 ### 4. Snapshot-Based Rollback
 Workflow snapshots stored in IndexedDB enable:
 - Rolling back to any previous step
 - Preserving state for experimentation
 - Recovery from failed operations
+
+### 5. Hybrid Tool Execution
+- **Frontend tools**: Data operations execute locally in browser for low latency
+- **Backend operations**: Training and deployment may call external APIs
+
+---
+
+## Architecture Observations
+
+### Strengths
+
+1. **Low Latency Data Operations** - Tools run locally in browser, reducing round-trips
+2. **Workflow State Persistence** - IndexedDB preserves workflow across sessions
+3. **Flexible Step Skipping** - Users can skip optional steps (topics → grader, grader → training)
+4. **Context Injection** - Every message includes workflow state for agent awareness
+5. **Proactive UX** - Auto-analysis when opening datasets
+
+### Potential Considerations
+
+1. **Tool Definition Sync** - Tools defined in both:
+   - Agent `.md` file (`[tools].external` array)
+   - Frontend TypeScript (`DistriFnTool` definitions)
+
+   These must stay in sync manually.
+
+2. **Browser-Only Execution** - All 21 tools execute in browser. For operations like `start_training` or `deploy_model`, consider:
+   - Access to GPU resources
+   - Long-running jobs
+   - Secure API key handling
+
+3. **Single Model Dependency** - Agent uses `model = "gpt-4.1"` exclusively.
 
 ---
 

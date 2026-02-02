@@ -18,6 +18,7 @@ export interface StartWorkflowResult {
   success: boolean;
   error?: string;
   workflow_id?: string;
+  current_step?: FinetuneStep;
   validation?: {
     record_count: number;
     valid_count: number;

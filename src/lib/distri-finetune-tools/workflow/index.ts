@@ -40,12 +40,14 @@ function getStepIndex(step: FinetuneStep): number {
 /**
  * Valid step transitions. The workflow allows flexibility:
  * - Normal flow: topics_config → categorize → coverage_generation → grader_config → dry_run → training → deployment
+ * - Quick path: not_started → grader_config (skip ALL preparation steps for rapid experimentation)
  * - Skip coverage: topics_config → grader_config (skip categorization and coverage)
  * - Skip coverage: categorize → grader_config (skip coverage analysis)
  * - Skip dry_run: grader_config → training (skip dry run validation)
  *
  * The key requirement for training is having the evaluation function configured (grader_config).
- * Coverage analysis and dry_run are optional - users can proceed if they have evaluation configured.
+ * All other steps (topics, categorization, coverage, dry_run) are optional - users can proceed
+ * as long as they have records and an evaluation function configured.
  */
 function isValidStepTransition(from: FinetuneStep, to: FinetuneStep): boolean {
   const fromIndex = getStepIndex(from);
@@ -53,6 +55,13 @@ function isValidStepTransition(from: FinetuneStep, to: FinetuneStep): boolean {
 
   // Normal flow: advance one step at a time
   if (toIndex === fromIndex + 1) {
+    return true;
+  }
+
+  // Quick path: Allow skipping directly from not_started to grader_config
+  // This enables users to see the end-to-end flow quickly with just records + evaluation function
+  // Results may not be optimal, but allows rapid experimentation
+  if (to === 'grader_config' && from === 'not_started') {
     return true;
   }
 
@@ -86,7 +95,7 @@ function canRollbackTo(currentStep: FinetuneStep, targetStep: FinetuneStep): boo
 
 export const startFinetuneWorkflowHandler: ToolHandler = async (params): Promise<StartWorkflowResult> => {
   try {
-    const { dataset_id, training_goals } = params;
+    const { dataset_id, training_goals, start_step } = params;
 
     if (!dataset_id || typeof dataset_id !== 'string') {
       return { success: false, error: 'dataset_id is required' };
@@ -95,6 +104,12 @@ export const startFinetuneWorkflowHandler: ToolHandler = async (params): Promise
     if (!training_goals || typeof training_goals !== 'string') {
       return { success: false, error: 'training_goals is required' };
     }
+
+    // Validate start_step if provided
+    const validStartSteps: FinetuneStep[] = ['topics_config', 'grader_config'];
+    const targetStartStep: FinetuneStep = (start_step && typeof start_step === 'string' && validStartSteps.includes(start_step as FinetuneStep))
+      ? (start_step as FinetuneStep)
+      : 'topics_config';
 
     // Verify dataset exists
     const dataset = await datasetsDB.getDatasetById(dataset_id);
@@ -140,12 +155,13 @@ export const startFinetuneWorkflowHandler: ToolHandler = async (params): Promise
       validationErrors,
     });
 
-    // Advance to first step
-    await workflowDB.advanceToStep(workflow.id, 'topics_config');
+    // Advance to target start step (quick path: grader_config, normal: topics_config)
+    await workflowDB.advanceToStep(workflow.id, targetStartStep);
 
     return {
       success: true,
       workflow_id: workflow.id,
+      current_step: targetStartStep,
       validation: {
         record_count: records.length,
         valid_count: validCount,
@@ -163,7 +179,7 @@ export const startFinetuneWorkflowHandler: ToolHandler = async (params): Promise
 
 export const startFinetuneWorkflowTool: DistriFnTool = {
   name: 'start_finetune_workflow',
-  description: 'Initialize a new finetune workflow for a dataset. Validates records and sets up the workflow state.',
+  description: 'Initialize a new finetune workflow for a dataset. Validates records and sets up the workflow state. Supports quick path: set start_step to "grader_config" to skip all preparation steps and go directly to evaluation configuration.',
   type: 'function',
   parameters: {
     type: 'object',
@@ -175,6 +191,11 @@ export const startFinetuneWorkflowTool: DistriFnTool = {
       training_goals: {
         type: 'string',
         description: "User's description of desired model behaviors",
+      },
+      start_step: {
+        type: 'string',
+        enum: ['topics_config', 'grader_config'],
+        description: 'Optional: The step to start at. Default is "topics_config". Use "grader_config" for quick path to skip all preparation steps (topics, categorization, coverage) and go directly to evaluation configuration.',
       },
     },
     required: ['dataset_id', 'training_goals'],
@@ -282,7 +303,9 @@ export const advanceToStepHandler: ToolHandler = async (params): Promise<Advance
       const nextStep = STEP_ORDER[currentIndex + 1];
       // Provide helpful guidance on valid transitions
       let validOptions: string;
-      if (workflow.currentStep === 'topics_config' || workflow.currentStep === 'categorize') {
+      if (workflow.currentStep === 'not_started') {
+        validOptions = `Next step should be ${nextStep}, or you can skip directly to grader_config for quick path (skips all preparation steps).`;
+      } else if (workflow.currentStep === 'topics_config' || workflow.currentStep === 'categorize') {
         validOptions = `Next step should be ${nextStep}, or you can skip to grader_config if you want to proceed without coverage analysis.`;
       } else if (workflow.currentStep === 'grader_config') {
         validOptions = `Next step should be ${nextStep}, or you can skip directly to training if you want to bypass dry run validation.`;
@@ -313,7 +336,7 @@ export const advanceToStepHandler: ToolHandler = async (params): Promise<Advance
 
 export const advanceToStepTool: DistriFnTool = {
   name: 'advance_to_step',
-  description: 'Move the workflow to the next step. Supports skipping optional steps: topics_config/categorize can skip to grader_config, grader_config can skip to training.',
+  description: 'Move the workflow to the next step. Supports skipping optional steps: not_started can skip to grader_config (quick path), topics_config/categorize can skip to grader_config, grader_config can skip to training.',
   type: 'function',
   parameters: {
     type: 'object',
