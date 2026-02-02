@@ -3993,13 +3993,13 @@ var TodosDisplay = ({
         style: { width: `${completedCount / totalCount * 100}%` }
       }
     ) }),
-    /* @__PURE__ */ jsx21("ul", { className: "space-y-1.5", children: todos.map((todo) => /* @__PURE__ */ jsxs13(
+    /* @__PURE__ */ jsx21("ul", { className: "space-y-1.5 overflow-hidden", children: todos.map((todo) => /* @__PURE__ */ jsxs13(
       "li",
       {
-        className: "flex items-start gap-2 text-sm",
+        className: "flex items-start gap-2 text-sm min-w-0",
         children: [
           getStatusIcon(todo.status),
-          /* @__PURE__ */ jsx21("span", { className: getStatusStyles(todo.status), children: todo.content })
+          /* @__PURE__ */ jsx21("span", { className: `${getStatusStyles(todo.status)} break-words min-w-0`, children: todo.content })
         ]
       },
       todo.id

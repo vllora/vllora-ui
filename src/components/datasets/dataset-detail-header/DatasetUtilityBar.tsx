@@ -1,10 +1,10 @@
 /**
  * DatasetUtilityBar
  *
- * Utility bar with export button and view mode toggle for the dataset detail view.
+ * Utility bar with export button, view mode toggle, and finetune button for the dataset detail view.
  */
 
-import { LayoutGrid, Table2, Download, Code2 } from "lucide-react";
+import { LayoutGrid, Table2, Download, Code2, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -19,12 +19,30 @@ export interface DatasetUtilityBarProps {
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
   onExport?: () => void;
+  /** Whether the dataset has records */
+  hasRecords?: boolean;
+  /** Whether the dataset has an evaluation function configured */
+  hasEvaluator?: boolean;
+  /** Callback when finetune button is clicked */
+  onFinetune?: () => void;
+  /** Whether finetune is in progress */
+  isFinetuning?: boolean;
 }
 
-export function DatasetUtilityBar({ viewMode, onViewModeChange, onExport }: DatasetUtilityBarProps) {
+export function DatasetUtilityBar({
+  viewMode,
+  onViewModeChange,
+  onExport,
+  hasRecords,
+  hasEvaluator,
+  onFinetune,
+  isFinetuning,
+}: DatasetUtilityBarProps) {
+  const canFinetune = hasRecords && hasEvaluator;
+
   return (
     <div className="px-4 py-2 border-b border-border flex items-center justify-between">
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-2">
         {/* Export button */}
         <TooltipProvider delayDuration={300}>
           <Tooltip>
@@ -41,6 +59,31 @@ export function DatasetUtilityBar({ viewMode, onViewModeChange, onExport }: Data
             <TooltipContent>Export dataset</TooltipContent>
           </Tooltip>
         </TooltipProvider>
+
+        {/* Finetune button - shown when records and evaluator exist */}
+        {canFinetune && (
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="h-7 px-3 gap-1.5"
+                  onClick={onFinetune}
+                  disabled={isFinetuning}
+                >
+                  {isFinetuning ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5" />
+                  )}
+                  <span className="text-xs">{isFinetuning ? "Starting..." : "Finetune"}</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Start finetune workflow</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
       </div>
 
       {/* View mode toggle */}

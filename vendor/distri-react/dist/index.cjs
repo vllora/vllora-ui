@@ -4148,13 +4148,13 @@ var TodosDisplay = ({
         style: { width: `${completedCount / totalCount * 100}%` }
       }
     ) }),
-    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("ul", { className: "space-y-1.5", children: todos.map((todo) => /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)(
+    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("ul", { className: "space-y-1.5 overflow-hidden", children: todos.map((todo) => /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)(
       "li",
       {
-        className: "flex items-start gap-2 text-sm",
+        className: "flex items-start gap-2 text-sm min-w-0",
         children: [
           getStatusIcon(todo.status),
-          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: getStatusStyles(todo.status), children: todo.content })
+          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: `${getStatusStyles(todo.status)} break-words min-w-0`, children: todo.content })
         ]
       },
       todo.id
