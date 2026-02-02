@@ -33,23 +33,6 @@ import {
   type TodoStatus,
 } from './todos';
 
-// Import UI tools
-import {
-  createDisplayTopicHierarchyTool,
-  DISPLAY_TOPIC_HIERARCHY_TOOL_NAME,
-} from './ui';
-
-// Re-export UI tools
-export {
-  createDisplayTopicHierarchyTool,
-  DISPLAY_TOPIC_HIERARCHY_TOOL_NAME,
-};
-export type {
-  TopicNode,
-  DisplayTopicHierarchyInput,
-  DisplayTopicHierarchyOutput,
-} from './ui';
-
 // Re-export types
 export type {
   ToolHandler,
