@@ -50,17 +50,7 @@ export function DatasetDetailHeader() {
 
   return (
     <div className="w-full flex flex-col">
-      {/* Breadcrumb */}
-      {/* <DatasetBreadcrumb
-        name={name}
-        datasetId={datasetId}
-        datasets={datasets}
-        datasetRecordCounts={datasetRecordCounts}
-        onBack={onBack}
-        onSelectDataset={onSelectDataset}
-        onCreateNew={() => setCreateDatasetDialog(true)}
-      /> */}
-
+      
       {/* Title Row with Workflow Indicator */}
       <div className="mb-4">
         <div className="flex items-start justify-between gap-4">
@@ -100,9 +90,7 @@ export function DatasetDetailHeader() {
                 </div>
               )}
               {/* Right: Workflow State Indicator */}
-              {datasetId && (
-                <WorkflowStepIndicator datasetId={datasetId} className="shrink-0 pt-1" />
-              )}
+              <WorkflowStepIndicator datasetId={datasetId} className="shrink-0 pt-1" />
             </div>
 
             {/* Training Objective */}

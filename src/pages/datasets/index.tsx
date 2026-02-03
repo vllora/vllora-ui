@@ -1,11 +1,7 @@
-import { useEffect } from "react";
-import { useLocalStorageState } from "ahooks";
 import { DatasetsUIProvider, DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
 import { DatasetsGrid } from "@/components/datasets/table";
 import { EmptyDatasetsState } from "@/components/datasets/EmptyDatasetsState";
 import { Loader2 } from "lucide-react";
-
-const DATASETS_VISITED_KEY = "vllora:datasets:hasVisited";
 
 // Inner component that uses the UI context
 function DatasetsPageContent() {

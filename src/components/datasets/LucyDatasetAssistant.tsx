@@ -112,12 +112,7 @@ export function LucyDatasetAssistant() {
 
   // Proactive behavior: when no workflow exists and no messages, auto-trigger analysis
   useEffect(() => {
-    // Only set once per dataset session, when everything is loaded
-    console.log('===== workflowLoading', workflowLoading)
-    console.log('===== agentLoading', agentLoading)
-    console.log('===== agent', agent)
-    console.log('===== isConnected', isConnected)
-    console.log('===== selectedDatasetId', selectedDatasetId)
+    
     if (
       hasSetAutoTriggerRef.current ||
       workflowLoading ||
