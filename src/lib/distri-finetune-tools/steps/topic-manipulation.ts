@@ -1,0 +1,124 @@
+/**
+ * Topic Manipulation Tools
+ *
+ * Tools for reading topic hierarchies.
+ * For modifications, use adjust_topic_hierarchy which uses the BE/LLM.
+ */
+
+import type { DistriFnTool } from '@distri/core';
+import * as workflowDB from '@/services/finetune-workflow-db';
+import * as datasetsDB from '@/services/datasets-db';
+import type { TopicHierarchyNode } from '@/types/dataset-types';
+import type { ToolHandler } from '../types';
+import { countLeafTopics, calculateMaxDepth } from './helpers';
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+/**
+ * Convert hierarchy to a readable tree string
+ */
+function hierarchyToTreeString(
+  nodes: TopicHierarchyNode[],
+  prefix: string = '',
+  isLast: boolean = true
+): string {
+  let result = '';
+  nodes.forEach((node, index) => {
+    const isLastNode = index === nodes.length - 1;
+    const connector = isLastNode ? '└── ' : '├── ';
+    const childPrefix = isLastNode ? '    ' : '│   ';
+
+    result += `${prefix}${connector}${node.name}\n`;
+
+    if (node.children && node.children.length > 0) {
+      result += hierarchyToTreeString(node.children, prefix + childPrefix, isLastNode);
+    }
+  });
+  return result;
+}
+
+// =============================================================================
+// get_topic_hierarchy
+// =============================================================================
+
+interface GetTopicHierarchyResult {
+  success: boolean;
+  error?: string;
+  hierarchy?: TopicHierarchyNode[];
+  topic_count?: number;
+  depth?: number;
+  tree_view?: string;
+}
+
+export const getTopicHierarchyHandler: ToolHandler = async (params): Promise<GetTopicHierarchyResult> => {
+  try {
+    const { workflow_id, dataset_id } = params;
+
+    let datasetIdToUse: string | null = null;
+
+    if (workflow_id && typeof workflow_id === 'string') {
+      const workflow = await workflowDB.getWorkflow(workflow_id);
+      if (!workflow) {
+        return { success: false, error: 'Workflow not found' };
+      }
+      datasetIdToUse = workflow.datasetId;
+    } else if (dataset_id && typeof dataset_id === 'string') {
+      datasetIdToUse = dataset_id;
+    } else {
+      return { success: false, error: 'Either workflow_id or dataset_id is required' };
+    }
+
+    const dataset = await datasetsDB.getDatasetById(datasetIdToUse);
+    if (!dataset) {
+      return { success: false, error: 'Dataset not found' };
+    }
+
+    const hierarchy = dataset.topicHierarchy?.hierarchy;
+    if (!hierarchy || hierarchy.length === 0) {
+      return {
+        success: true,
+        hierarchy: [],
+        topic_count: 0,
+        depth: 0,
+        tree_view: '(No topics defined)',
+      };
+    }
+
+    const topicCount = countLeafTopics(hierarchy);
+    const depth = calculateMaxDepth(hierarchy);
+    const treeView = hierarchyToTreeString(hierarchy);
+
+    return {
+      success: true,
+      hierarchy,
+      topic_count: topicCount,
+      depth,
+      tree_view: treeView,
+    };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to get topic hierarchy' };
+  }
+};
+
+export const getTopicHierarchyTool: DistriFnTool = {
+  name: 'get_topic_hierarchy',
+  description: 'Get the current topic hierarchy for a dataset. Returns the hierarchy structure, topic count, depth, and a human-readable tree view.',
+  type: 'function',
+  parameters: {
+    type: 'object',
+    properties: {
+      workflow_id: {
+        type: 'string',
+        description: 'The workflow ID (optional if dataset_id provided)',
+      },
+      dataset_id: {
+        type: 'string',
+        description: 'The dataset ID (optional if workflow_id provided)',
+      },
+    },
+    required: [],
+  },
+  handler: async (input) => JSON.stringify(await getTopicHierarchyHandler(input as Record<string, unknown>)),
+} as DistriFnTool;

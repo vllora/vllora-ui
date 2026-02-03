@@ -74,6 +74,7 @@ export type FinetuneJobStatus = 'pending' | 'running' | 'succeeded' | 'failed' |
 export interface FinetuneJob {
   id: string;
   provider_job_id: string;
+  dataset_id: string;
   status: FinetuneJobStatus;
   base_model: string;
   fine_tuned_model?: string;
@@ -372,6 +373,34 @@ export async function getReinforcementJobStatus(jobId: string): Promise<Reinforc
 }
 
 /**
+ * Cancel a reinforcement fine-tuning job
+ * @param jobId - The provider job ID to cancel
+ */
+export async function cancelReinforcementJob(jobId: string): Promise<void> {
+  const response = await apiClient(`/finetune/reinforcement-jobs/${jobId}/cancel`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to cancel job' }));
+    throw new Error(error.message || 'Failed to cancel job');
+  }
+}
+
+/**
+ * Resume a cancelled reinforcement fine-tuning job
+ * @param jobId - The provider job ID to resume
+ */
+export async function resumeReinforcementJob(jobId: string): Promise<void> {
+  const response = await apiClient(`/finetune/reinforcement-jobs/${jobId}/resume`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to resume job' }));
+    throw new Error(error.message || 'Failed to resume job');
+  }
+}
+
+/**
  * Upload a dataset to the backend for finetuning
  * This is step 1 of the finetune process - should be called first so the
  * backendDatasetId can be saved before attempting to create the job
@@ -405,6 +434,29 @@ export async function uploadDatasetForFinetune(
   };
 }
 
+/** Default training configuration */
+export const DEFAULT_TRAINING_CONFIG: ReinforcementTrainingConfig = {
+  learning_rate: 0.0001,
+  lora_rank: 16,
+  epochs: 2.0,
+  batch_size: 65536,
+};
+
+/** Default inference parameters */
+export const DEFAULT_INFERENCE_PARAMETERS: ReinforcementInferenceParameters = {
+  max_output_tokens: 2048,
+  temperature: 0.7,
+  top_p: 0.9,
+};
+
+export interface CreateFinetuneJobOptions {
+  baseModel?: string;
+  outputModel?: string;
+  displayName?: string;
+  trainingConfig?: Partial<ReinforcementTrainingConfig>;
+  inferenceParameters?: Partial<ReinforcementInferenceParameters>;
+}
+
 /**
  * Create a finetune job using an already-uploaded dataset
  * This is step 2 of the finetune process - call after uploadDatasetForFinetune
@@ -412,34 +464,32 @@ export async function uploadDatasetForFinetune(
 export async function createFinetuneJobFromUpload(
   backendDatasetId: string,
   datasetName: string,
-  options?: {
-    baseModel?: string;
-    outputModel?: string;
-    displayName?: string;
-  }
+  options?: CreateFinetuneJobOptions
 ): Promise<ReinforcementJob> {
   // Generate output model name from dataset name
   const timestamp = Date.now();
   const safeName = datasetName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30);
   const defaultOutputModel = `${safeName}-${timestamp}`;
 
-  // Create reinforcement job with default config
+  // Merge user config with defaults
+  const trainingConfig: ReinforcementTrainingConfig = {
+    ...DEFAULT_TRAINING_CONFIG,
+    ...options?.trainingConfig,
+  };
+
+  const inferenceParameters: ReinforcementInferenceParameters = {
+    ...DEFAULT_INFERENCE_PARAMETERS,
+    ...options?.inferenceParameters,
+  };
+
+  // Create reinforcement job
   const job = await createReinforcementJob({
     dataset: backendDatasetId,
     base_model: options?.baseModel || 'llama-v3-8b-instruct',
     output_model: options?.outputModel || defaultOutputModel,
     display_name: options?.displayName || `${datasetName} Fine-tune`,
-    training_config: {
-      learning_rate: 0.0001,
-      lora_rank: 16,
-      epochs: 2.0,
-      batch_size: 65536,
-    },
-    inference_parameters: {
-      max_output_tokens: 2048,
-      temperature: 0.7,
-      top_p: 0.9,
-    },
+    training_config: trainingConfig,
+    inference_parameters: inferenceParameters,
   });
 
   return job;

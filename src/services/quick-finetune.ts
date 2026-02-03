@@ -14,7 +14,13 @@
 
 import * as workflowDB from './finetune-workflow-db';
 import * as datasetsDB from './datasets-db';
-import { uploadDatasetForFinetune, createFinetuneJobFromUpload, listReinforcementJobs } from './finetune-api';
+import {
+  uploadDatasetForFinetune,
+  createFinetuneJobFromUpload,
+  listReinforcementJobs,
+  ReinforcementTrainingConfig,
+  ReinforcementInferenceParameters,
+} from './finetune-api';
 
 export interface QuickFinetuneResult {
   success: boolean;
@@ -24,7 +30,15 @@ export interface QuickFinetuneResult {
   status?: string;
 }
 
-export interface QuickFinetuneOptions {
+/** Training configuration options for finetune jobs */
+export interface TrainingConfigOptions {
+  /** Training hyperparameters */
+  trainingConfig?: Partial<ReinforcementTrainingConfig>;
+  /** Inference parameters during training */
+  inferenceParameters?: Partial<ReinforcementInferenceParameters>;
+}
+
+export interface QuickFinetuneOptions extends TrainingConfigOptions {
   datasetId: string;
   baseModel?: string;
 }
@@ -33,7 +47,7 @@ export interface QuickFinetuneOptions {
 // Common Types for startFinetuneTraining
 // ============================================================================
 
-export interface StartFinetuneTrainingOptions {
+export interface StartFinetuneTrainingOptions extends TrainingConfigOptions {
   /** Backend dataset ID (must already be uploaded) */
   backendDatasetId: string;
   /** Dataset name for display */
@@ -74,6 +88,8 @@ export async function startFinetuneTraining(
     datasetName,
     workflowId,
     baseModel = 'llama-v3-8b-instruct',
+    trainingConfig,
+    inferenceParameters,
   } = options;
 
   try {
@@ -98,6 +114,8 @@ export async function startFinetuneTraining(
       {
         baseModel,
         displayName: `${datasetName} Fine-tune`,
+        trainingConfig,
+        inferenceParameters,
       }
     );
 
@@ -136,7 +154,12 @@ export async function startFinetuneTraining(
  * and then calls the common startFinetuneTraining function.
  */
 export async function quickFinetune(options: QuickFinetuneOptions): Promise<QuickFinetuneResult> {
-  const { datasetId, baseModel = 'llama-v3-8b-instruct' } = options;
+  const {
+    datasetId,
+    baseModel = 'llama-v3-8b-instruct',
+    trainingConfig,
+    inferenceParameters,
+  } = options;
 
   try {
     // 1. Get dataset and validate
@@ -194,6 +217,8 @@ export async function quickFinetune(options: QuickFinetuneOptions): Promise<Quic
       datasetName: dataset.name,
       workflowId: workflow.id,
       baseModel,
+      trainingConfig,
+      inferenceParameters,
     });
 
     if (!result.success) {

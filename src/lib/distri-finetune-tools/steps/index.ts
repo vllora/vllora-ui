@@ -15,6 +15,8 @@ import type { ToolHandler } from '../types';
 // Topic Configuration (Step 1)
 export { generateTopicsHandler, generateTopicsTool } from './generate-topics';
 export { applyTopicHierarchyHandler, applyTopicHierarchyTool } from './apply-hierarchy';
+export { adjustTopicHierarchyHandler, adjustTopicHierarchyTool } from './adjust-hierarchy';
+export { getTopicHierarchyHandler, getTopicHierarchyTool } from './topic-manipulation';
 
 // Categorization (Step 2)
 export { categorizeRecordsHandler, categorizeRecordsTool } from './categorize-records';
@@ -61,6 +63,8 @@ export * from './helpers';
 
 import { generateTopicsHandler, generateTopicsTool } from './generate-topics';
 import { applyTopicHierarchyHandler, applyTopicHierarchyTool } from './apply-hierarchy';
+import { adjustTopicHierarchyHandler, adjustTopicHierarchyTool } from './adjust-hierarchy';
+import { getTopicHierarchyHandler, getTopicHierarchyTool } from './topic-manipulation';
 import { categorizeRecordsHandler, categorizeRecordsTool } from './categorize-records';
 import { analyzeCoverageHandler, analyzeCoverageTool } from './analyze-coverage';
 import { generateSyntheticDataHandler, generateSyntheticDataTool } from './generate-synthetic';
@@ -85,6 +89,8 @@ import { updateRecordHandler, updateRecordTool } from './update-record';
 export const STEP_TOOL_NAMES = [
   'generate_topics',
   'apply_topic_hierarchy',
+  'adjust_topic_hierarchy',
+  'get_topic_hierarchy',
   'categorize_records',
   'analyze_coverage',
   'generate_synthetic_data',
@@ -112,6 +118,8 @@ export function isStepTool(name: string): name is StepToolName {
 export const stepTools: DistriFnTool[] = [
   generateTopicsTool,
   applyTopicHierarchyTool,
+  adjustTopicHierarchyTool,
+  getTopicHierarchyTool,
   categorizeRecordsTool,
   analyzeCoverageTool,
   generateSyntheticDataTool,
@@ -133,6 +141,8 @@ export const stepTools: DistriFnTool[] = [
 export const stepToolHandlers: Record<string, ToolHandler> = {
   generate_topics: generateTopicsHandler,
   apply_topic_hierarchy: applyTopicHierarchyHandler,
+  adjust_topic_hierarchy: adjustTopicHierarchyHandler,
+  get_topic_hierarchy: getTopicHierarchyHandler,
   categorize_records: categorizeRecordsHandler,
   analyze_coverage: analyzeCoverageHandler,
   generate_synthetic_data: generateSyntheticDataHandler,

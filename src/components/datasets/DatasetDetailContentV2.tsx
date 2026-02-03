@@ -324,7 +324,10 @@ export function DatasetDetailContentV2() {
           </div>
         )}
         {activeSection === "jobs" && (
-          <FinetuneJobsContent />
+          <FinetuneJobsContent
+            datasetId={datasetId}
+            canCreateJob={hasRecords && hasEvaluator}
+          />
         )}
       </div>
 
