@@ -224,8 +224,8 @@ import {
   // Components
   TodosDisplay,           // Renders todo list with progress bar
   Chat,                   // Full chat component
-  // Tools
-  createAskFollowUpTool,  // Creates ask_follow_up UI tool
+  // Tools (available but not currently used)
+  createAskFollowUpTool,  // Creates ask_follow_up UI tool (disabled)
   // Types
   DistriAnyTool,          // Union of DistriFnTool | DistriUiTool
   DistriUiTool,           // UI-based tool with component
@@ -255,8 +255,12 @@ function MyChat() {
 }
 ```
 
-**ask_follow_up tool:**
+**ask_follow_up tool (currently disabled):**
+
+> **Note:** The `ask_follow_up` tool is available in @distri/react but is currently disabled in the Lucy finetune agent to simplify the workflow.
+
 ```tsx
+// Example (not currently used):
 import { createAskFollowUpTool } from '@distri/react';
 import type { DistriAnyTool } from '@distri/react';
 

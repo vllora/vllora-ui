@@ -129,13 +129,12 @@ distri/
 
 ### 3.5. Builtin Tools (from Distri)
 
-The agent has access to three **builtin tools** provided by the Distri framework:
+The agent has access to two **builtin tools** provided by the Distri framework:
 
 | Tool | Purpose | UI Component |
 |------|---------|--------------|
 | `final` | Mark agent response as final | N/A |
 | `write_todos` | Track sub-tasks with real-time progress updates | `TodosDisplay` from `@distri/react` |
-| `ask_follow_up` | Ask structured follow-up questions in stepper format | `AskFollowUpComponent` from `@distri/react` |
 
 #### write_todos
 
@@ -157,26 +156,6 @@ write_todos({
 - `chatStateStore` receives events and updates `todos` state
 - `LucyChat` subscribes to `useChatStateStore((state) => state.todos)`
 - `TodosDisplay` component (from `@distri/react`) renders the todo list
-
-#### ask_follow_up
-
-Allows the agent to ask structured questions with various input types.
-
-```typescript
-// Agent calls:
-ask_follow_up({
-  "title": "Training Configuration",
-  "questions": [
-    { "id": "epochs", "question": "How many epochs?", "type": "select", "options": ["1", "2", "3"] },
-    { "id": "notes", "question": "Special requirements?", "type": "text", "required": false }
-  ]
-})
-```
-
-**Frontend Integration:**
-- `createAskFollowUpTool()` from `@distri/react` creates the UI tool
-- Added to tools array in `useFineTuneAgentChat.ts`
-- `LucyToolCalls` renders the component when the agent calls the tool
 
 ---
 
@@ -218,7 +197,7 @@ interface UseFineTuneAgentChatReturn {
   agent: any;                    // Distri agent instance
   agentLoading: boolean;
   threadId: string;              // Persisted per dataset
-  tools: DistriAnyTool[];        // Finetune tools + ask_follow_up UI tool
+  tools: DistriAnyTool[];        // Finetune tools
   messages: ChatMessage[];
   workflow: FinetuneWorkflowState | null;
   workflowLoading: boolean;
@@ -231,14 +210,10 @@ interface UseFineTuneAgentChatReturn {
 **Tools Array Composition:**
 ```typescript
 // In useFineTuneAgentChat.ts
-const tools = useMemo<DistriAnyTool[]>(
-  () => [...finetuneTools, createAskFollowUpTool()],
-  []
-);
+const tools = useMemo<DistriAnyTool[]>(() => [...finetuneTools], []);
 ```
 
-- `finetuneTools`: All 21 function tools (workflow + step tools + todos)
-- `createAskFollowUpTool()`: UI tool for structured follow-up questions
+- `finetuneTools`: All 21 function tools (workflow + step tools)
 
 **Context Injection Pattern:**
 ```typescript
@@ -465,3 +440,4 @@ Workflow snapshots stored in IndexedDB enable:
 - [State Machine](./state-machine.md) - Workflow state transitions
 - [Overview](./01-overview.md) - High-level feature overview
 - [README](./README.md) - Complete design document
+- [Re-enabling ask_follow_up](./re-enabling-ask-follow-up.md) - Guide to restore the ask_follow_up UI tool
