@@ -213,6 +213,8 @@ export function LucyChat({
 
   // Track the last auto-triggered prompt to prevent duplicate sends
   const lastAutoTriggeredPromptRef = useRef<string | null>(null);
+  // Track if we're currently processing an auto-trigger to prevent races
+  const autoTriggerPendingRef = useRef(false);
 
   // Auto-trigger prompt - send message automatically
   // Works for both initial proactive prompts and external triggers (like "Generate for topic")
@@ -220,26 +222,44 @@ export function LucyChat({
     // When prompt is cleared, reset tracking to allow re-trigger of same prompt
     if (!autoTriggerPrompt) {
       lastAutoTriggeredPromptRef.current = null;
+      autoTriggerPendingRef.current = false;
       return;
     }
 
+    // Skip if this exact prompt was already triggered or is pending
     if (
-      autoTriggerPrompt !== lastAutoTriggeredPromptRef.current &&
-      !isStreaming &&
-      !isLoading
+      autoTriggerPrompt === lastAutoTriggeredPromptRef.current ||
+      autoTriggerPendingRef.current
     ) {
-      lastAutoTriggeredPromptRef.current = autoTriggerPrompt;
-      // Small delay to ensure component is fully mounted
-      const timer = setTimeout(() => {
-        sendMessage([{ part_type: 'text', data: autoTriggerPrompt }]);
-      }, 100);
-      return () => clearTimeout(timer);
+      return;
     }
+
+    // Skip if chat is busy
+    if (isStreaming || isLoading) {
+      return;
+    }
+
+    // Mark as pending to prevent duplicate triggers from rapid effect re-runs
+    autoTriggerPendingRef.current = true;
+    lastAutoTriggeredPromptRef.current = autoTriggerPrompt;
+
+    // Small delay to ensure component is fully mounted
+    const timer = setTimeout(() => {
+      sendMessage([{ part_type: 'text', data: autoTriggerPrompt }]);
+      // Reset pending after send completes
+      autoTriggerPendingRef.current = false;
+    }, 100);
+
+    return () => {
+      clearTimeout(timer);
+      autoTriggerPendingRef.current = false;
+    };
   }, [autoTriggerPrompt, isStreaming, isLoading, sendMessage]);
 
   // Reset auto-trigger tracking when threadId changes (new chat)
   useEffect(() => {
     lastAutoTriggeredPromptRef.current = null;
+    autoTriggerPendingRef.current = false;
   }, [threadId]);
 
   // Auto-send pending message when streaming ends

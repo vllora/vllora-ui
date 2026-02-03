@@ -106,6 +106,10 @@ export function LucyDatasetAssistant() {
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
+  // Store workflow ref to use in timeout without adding to dependencies
+  const workflowRef = useRef(workflow);
+  workflowRef.current = workflow;
+
   // Proactive behavior: auto-analyze dataset when viewing it for the first time
   useEffect(() => {
     // Skip if not ready
@@ -135,7 +139,6 @@ export function LucyDatasetAssistant() {
 
     // Capture values for the timeout (in case they change during the delay)
     const promptDataset = currentDataset;
-    const promptWorkflow = workflow;
     const targetDatasetId = selectedDatasetId;
 
     // Use a delay to ensure LucyChat is fully mounted and ready
@@ -144,12 +147,13 @@ export function LucyDatasetAssistant() {
       // Double-check we haven't already triggered and messages are still empty
       if (lastAnalyzedDatasetRef.current !== targetDatasetId && messagesRef.current.length === 0) {
         lastAnalyzedDatasetRef.current = targetDatasetId;
-        setAutoTriggerPrompt(buildDatasetAnalysisPrompt({ dataset: promptDataset, workflow: promptWorkflow }));
+        // Use ref to get latest workflow value at trigger time
+        setAutoTriggerPrompt(buildDatasetAnalysisPrompt({ dataset: promptDataset, workflow: workflowRef.current }));
       }
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [datasetLoading, workflow, workflowLoading, agentLoading, agent, isConnected, selectedDatasetId, currentDataset]);
+  }, [datasetLoading, workflowLoading, agentLoading, agent, isConnected, selectedDatasetId, currentDataset]);
 
   // Reset auto-trigger prompt when dataset changes (allow new analysis)
   useEffect(() => {

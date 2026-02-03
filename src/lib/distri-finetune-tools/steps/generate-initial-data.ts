@@ -29,13 +29,14 @@ interface GenerateInitialDataParams {
   dataset_id: string;
   count?: number;
   generation_mode?: 'rft' | 'sft';
+  /** Optional user guidance for how to generate the data (e.g., "focus on beginner concepts", "include edge cases") */
+  user_guidance?: string;
 }
 
 interface GeneratedExample {
   system_prompt: string;
   user_message: string;
   assistant_response?: string;
-  topic?: string;
 }
 
 interface GenerateInitialDataResult {
@@ -67,13 +68,12 @@ const INITIAL_DATA_GENERATION_USER_RFT = `Generate {{count}} diverse training ex
 
 Training Objective:
 {{objective}}
-
+{{user_guidance}}
 Generate a JSON array of examples. Each example should be a realistic user query/prompt that would be sent to an AI assistant being trained for this objective.
 
 For each example, provide:
 - system_prompt: A concise system prompt that defines the assistant's role for this specific scenario
 - user_message: A realistic user message/query
-- topic: A short topic label (1-3 words) categorizing this example
 
 Make the examples diverse in:
 - Complexity (simple to complex queries)
@@ -86,8 +86,7 @@ Output Format:
   "examples": [
     {
       "system_prompt": "You are a helpful assistant that...",
-      "user_message": "User's question or request...",
-      "topic": "topic_label"
+      "user_message": "User's question or request..."
     },
     ...
   ]
@@ -99,14 +98,13 @@ const INITIAL_DATA_GENERATION_USER_SFT = `Generate {{count}} diverse training ex
 
 Training Objective:
 {{objective}}
-
+{{user_guidance}}
 Generate a JSON array of complete conversation examples. Each example should demonstrate the ideal assistant behavior for this objective.
 
 For each example, provide:
 - system_prompt: A concise system prompt that defines the assistant's role for this specific scenario
 - user_message: A realistic user message/query
 - assistant_response: An ideal, helpful response from the assistant
-- topic: A short topic label (1-3 words) categorizing this example
 
 Make the examples diverse in:
 - Complexity (simple to complex queries)
@@ -120,8 +118,7 @@ Output Format:
     {
       "system_prompt": "You are a helpful assistant that...",
       "user_message": "User's question or request...",
-      "assistant_response": "Helpful and accurate response...",
-      "topic": "topic_label"
+      "assistant_response": "Helpful and accurate response..."
     },
     ...
   ]
@@ -144,9 +141,8 @@ const INITIAL_DATA_RESPONSE_SCHEMA_RFT = {
             properties: {
               system_prompt: { type: 'string' },
               user_message: { type: 'string' },
-              topic: { type: 'string' },
             },
-            required: ['system_prompt', 'user_message', 'topic'],
+            required: ['system_prompt', 'user_message'],
             additionalProperties: false,
           },
         },
@@ -173,9 +169,8 @@ const INITIAL_DATA_RESPONSE_SCHEMA_SFT = {
               system_prompt: { type: 'string' },
               user_message: { type: 'string' },
               assistant_response: { type: 'string' },
-              topic: { type: 'string' },
             },
-            required: ['system_prompt', 'user_message', 'assistant_response', 'topic'],
+            required: ['system_prompt', 'user_message', 'assistant_response'],
             additionalProperties: false,
           },
         },
@@ -193,7 +188,8 @@ const INITIAL_DATA_RESPONSE_SCHEMA_SFT = {
 async function callLLMForInitialData(
   objective: string,
   count: number,
-  mode: 'rft' | 'sft'
+  mode: 'rft' | 'sft',
+  userGuidance?: string
 ): Promise<GeneratedExample[]> {
   const lucyConfig = await fetchLucyConfigCached();
   const rawUrl = lucyConfig.distri_url || getDistriUrl();
@@ -206,9 +202,15 @@ async function callLLMForInitialData(
     ? INITIAL_DATA_GENERATION_USER_RFT
     : INITIAL_DATA_GENERATION_USER_SFT;
 
+  // Build user guidance section if provided
+  const guidanceSection = userGuidance
+    ? `\nUser's specific guidance:\n${userGuidance}\n`
+    : '';
+
   const userPrompt = userPromptTemplate
     .replace(/\{\{count\}\}/g, String(count))
-    .replace('{{objective}}', objective);
+    .replace('{{objective}}', objective)
+    .replace('{{user_guidance}}', guidanceSection);
 
   const responseSchema = mode === 'rft'
     ? INITIAL_DATA_RESPONSE_SCHEMA_RFT
@@ -297,6 +299,7 @@ export const generateInitialDataHandler: ToolHandler = async (params): Promise<G
       dataset_id,
       count = 10,
       generation_mode = 'rft',
+      user_guidance,
     } = params as unknown as GenerateInitialDataParams;
 
     if (!dataset_id) {
@@ -320,15 +323,17 @@ export const generateInitialDataHandler: ToolHandler = async (params): Promise<G
 
     console.log('[generateInitialData] Generating data for objective:', objective.substring(0, 100) + '...');
     console.log('[generateInitialData] Count:', count, 'Mode:', generation_mode);
+    if (user_guidance) {
+      console.log('[generateInitialData] User guidance:', user_guidance.substring(0, 100) + '...');
+    }
 
     // Generate examples using LLM
-    const examples = await callLLMForInitialData(objective, count, generation_mode);
+    const examples = await callLLMForInitialData(objective, count, generation_mode, user_guidance);
     console.log('[generateInitialData] Generated', examples.length, 'examples');
 
-    // Convert to dataset records and save
+    // Convert to dataset records and save (without topics - user can define topics later)
     const recordsToAdd = examples.map(example => ({
       data: exampleToDataInfo(example, generation_mode),
-      topic: example.topic?.toLowerCase().replace(/\s+/g, '_') || 'general',
       is_generated: true,
       metadata: {
         generation_source: 'initial_data',
@@ -357,20 +362,24 @@ export const generateInitialDataHandler: ToolHandler = async (params): Promise<G
 
 export const generateInitialDataTool: DistriFnTool = {
   name: 'generate_initial_data',
-  description: `Generate initial seed records for an empty dataset using only the training objective.
+  description: `Generate initial seed records for an empty dataset based on the training objective.
 
 Use this tool when:
 - A dataset has no records yet
 - You need to bootstrap the dataset with initial training examples
 - The dataset has a training objective defined but no seed data
 
-This tool generates diverse training examples based on the dataset's training objective,
-without requiring any existing records. Generated records can then be used as seeds for
-further data generation or topic analysis.
+This tool generates diverse training examples based on the dataset's training objective.
+You can optionally provide user guidance to focus the generation on specific aspects.
+Generated records can then be used as seeds for further data generation or topic analysis.
 
 **Generation Modes:**
 - RFT (default): Generates prompts only (empty output for reinforcement learning rollouts)
-- SFT: Generates complete conversations with assistant responses`,
+- SFT: Generates complete conversations with assistant responses
+
+**User Guidance:**
+Pass the user's specific instructions if they mentioned what kind of data they want.
+Examples: "focus on beginner concepts", "include edge cases", "emphasize error handling scenarios"`,
   type: 'function',
   parameters: {
     type: 'object',
@@ -389,6 +398,10 @@ further data generation or topic analysis.
         enum: ['rft', 'sft'],
         default: 'rft',
         description: 'Generation mode: "rft" for prompts only, "sft" for complete conversations',
+      },
+      user_guidance: {
+        type: 'string',
+        description: 'Optional user guidance for data generation (e.g., "focus on beginner concepts", "include edge cases")',
       },
     },
     required: ['dataset_id'],
