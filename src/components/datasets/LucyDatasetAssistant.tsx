@@ -78,11 +78,10 @@ export function LucyDatasetAssistant() {
 
   const { datasets } = DatasetsConsumer();
 
-  // Derive current dataset from datasets list and URL param
+  // Derive current dataset from datasets list and URL param (full dataset object for context)
   const currentDataset = useMemo(() => {
     if (!selectedDatasetId) return null;
-    const dataset = datasets.find(d => d.id === selectedDatasetId);
-    return dataset ? { id: dataset.id, name: dataset.name, datasetObjective: dataset.datasetObjective } : null;
+    return datasets.find(d => d.id === selectedDatasetId) || null;
   }, [datasets, selectedDatasetId]);
 
   // Lucy agent state
@@ -109,41 +108,86 @@ export function LucyDatasetAssistant() {
   // Auto-trigger prompt for proactive analysis
   const [autoTriggerPrompt, setAutoTriggerPrompt] = useState<string | null>(null);
   const hasSetAutoTriggerRef = useRef(false);
+  const lastAnalyzedDatasetRef = useRef<string | null>(null);
 
-  // Proactive behavior: when no workflow exists and no messages, auto-trigger analysis
+  // Proactive behavior: auto-analyze dataset when viewing it for the first time
   useEffect(() => {
-    
+    // Skip if not ready
     if (
-      hasSetAutoTriggerRef.current ||
       workflowLoading ||
       agentLoading ||
       !agent ||
       !isConnected ||
-      !selectedDatasetId
+      !selectedDatasetId ||
+      !currentDataset
     ) {
       return;
     }
 
-    // If no workflow and no existing messages, auto-trigger analysis
-    if (!workflow && messages.length === 0) {
-      hasSetAutoTriggerRef.current = true;
-      // NOTE: Only ask for analysis - do NOT ask to start workflow or apply changes
-      setAutoTriggerPrompt(
-        `Analyze this dataset and recommend what I should do next.`
-      );
-    } else if (workflow && messages.length === 0) {
-      // Workflow exists but no messages - auto-trigger status check
-      hasSetAutoTriggerRef.current = true;
-      setAutoTriggerPrompt(
-        `Show me the current status of my finetune workflow for "${currentDataset?.name || 'this dataset'}".`
-      );
+    // Skip if we already analyzed this dataset in this session
+    if (lastAnalyzedDatasetRef.current === selectedDatasetId) {
+      return;
     }
-  }, [workflow, workflowLoading, agentLoading, agent, isConnected, messages.length, selectedDatasetId, currentDataset?.name]);
 
-  // Reset auto-trigger when dataset changes
+    // Skip if there are already messages (user has interacted)
+    if (messages.length > 0) {
+      lastAnalyzedDatasetRef.current = selectedDatasetId;
+      return;
+    }
+
+    // Mark as analyzed
+    lastAnalyzedDatasetRef.current = selectedDatasetId;
+    hasSetAutoTriggerRef.current = true;
+
+    // Build contextual prompt based on dataset state
+    const buildPrompt = () => {
+      const name = currentDataset.name;
+      const objective = currentDataset.datasetObjective;
+      const hasTopics = !!(currentDataset.topicHierarchy?.hierarchy?.length);
+      const hasEvaluator = !!(
+        currentDataset.evaluationConfig &&
+        ((currentDataset.evaluationConfig.type === 'js' && currentDataset.evaluationConfig.script) ||
+         (currentDataset.evaluationConfig.type === 'llm_as_judge' && currentDataset.evaluationConfig.promptTemplate))
+      );
+      const workflowStep = workflow?.currentStep || 'not_started';
+
+      let prompt = `I'm viewing the dataset "${name}". `;
+
+      if (objective) {
+        prompt += `Training objective: "${objective}". `;
+      }
+
+      if (hasTopics) {
+        prompt += `Has topic hierarchy configured. `;
+      }
+
+      if (hasEvaluator) {
+        prompt += `Has evaluator configured. `;
+      }
+
+      if (workflow && workflowStep !== 'not_started' && workflowStep !== 'completed') {
+        prompt += `Workflow is at step: ${workflowStep}. `;
+      }
+
+      prompt += `Please analyze the current state and recommend what I should do next.`;
+
+      return prompt;
+    };
+
+    // Use a delay to ensure LucyChat is fully mounted and ready
+    const timer = setTimeout(() => {
+      setAutoTriggerPrompt(buildPrompt());
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [workflow, workflowLoading, agentLoading, agent, isConnected, messages.length, selectedDatasetId, currentDataset]);
+
+  // Reset auto-trigger prompt when dataset changes (allow new analysis)
   useEffect(() => {
-    hasSetAutoTriggerRef.current = false;
+    // Clear the prompt but don't reset lastAnalyzedDatasetRef
+    // (that's handled in the main effect to allow re-analysis on revisit)
     setAutoTriggerPrompt(null);
+    hasSetAutoTriggerRef.current = false;
   }, [selectedDatasetId]);
 
   // Listen for external prompt triggers (e.g., "Generate for topic" button)

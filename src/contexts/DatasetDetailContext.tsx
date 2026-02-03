@@ -17,11 +17,11 @@ import {
 } from "react";
 import { DatasetsConsumer } from "@/contexts/DatasetsContext";
 import { DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
-import type { Dataset, DatasetRecord, TopicHierarchyConfig, TopicHierarchyNode } from "@/types/dataset-types";
+import type { Dataset, DatasetRecord, TopicHierarchyConfig, TopicHierarchyNode, EvaluationConfig } from "@/types/dataset-types";
 import { emitter } from "@/utils/eventEmitter";
 import { toast } from "sonner";
 import { quickFinetune } from "@/services/quick-finetune";
-import { updateDatasetTopicHierarchy, clearAllRecordTopics, updateRecordTopicsBatch, renameTopicInRecords, clearTopicFromRecords } from "@/services/datasets-db";
+import { updateDatasetTopicHierarchy, clearAllRecordTopics, updateRecordTopicsBatch, renameTopicInRecords, clearTopicFromRecords, updateDatasetEvaluationConfig } from "@/services/datasets-db";
 import { filterAndSortRecords } from "@/components/datasets/record-filters";
 import {
   DEFAULT_COLUMN_VISIBILITY,
@@ -41,6 +41,12 @@ import type { ImportMode } from "@/components/datasets/IngestDataDialog";
 // ============================================================================
 // Types
 // ============================================================================
+
+/** View mode within records section */
+export type ViewMode = "canvas" | "table";
+
+/** Active section tab */
+export type DatasetSection = "records" | "evaluator" | "jobs";
 
 interface DatasetDetailHookProps {
   datasetId: string;
@@ -108,6 +114,12 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
       // Ignore storage errors
     }
   }, []);
+
+  // UI View state
+  const [activeSection, setActiveSection] = useState<DatasetSection>("records");
+  const [viewMode, setViewMode] = useState<ViewMode>("canvas");
+  const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
+  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
 
   // Dialog states
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmation | null>(null);
@@ -226,6 +238,29 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
       loadCounts();
     }
   }, [datasets, datasetId, records.length, getRecordCount]);
+
+  // Listen for workflow-triggered section/view mode changes (e.g., grader_config -> evaluator)
+  useEffect(() => {
+    const handleSectionChange = (event: CustomEvent<{ section?: DatasetSection; viewMode?: ViewMode }>) => {
+      if (event.detail.section) {
+        setActiveSection(event.detail.section);
+      }
+      if (event.detail.viewMode) {
+        setViewMode(event.detail.viewMode);
+      }
+    };
+
+    window.addEventListener("finetune-set-view-mode" as any, handleSectionChange);
+    return () => {
+      window.removeEventListener("finetune-set-view-mode" as any, handleSectionChange);
+    };
+  }, []);
+
+  // Derived: selected record for sidebar detail view (table mode)
+  const selectedRecord = useMemo(
+    () => sortedRecords.find((r) => r.id === selectedRecordId) ?? null,
+    [sortedRecords, selectedRecordId]
+  );
 
   // ============================================================================
   // Helpers
@@ -943,6 +978,150 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     }
   }, [dataset]);
 
+  // Handle rename topic from canvas (inline rename) - updates both hierarchy and records
+  const handleRenameTopic = useCallback(async (oldName: string, newName: string) => {
+    if (!dataset || !oldName || !newName || oldName === newName) return;
+
+    // Helper to rename a node in the hierarchy
+    const renameNodeInHierarchy = (
+      nodes: TopicHierarchyNode[],
+      targetName: string,
+      newNodeName: string
+    ): TopicHierarchyNode[] => {
+      return nodes.map((node) => {
+        if (node.name === targetName) {
+          return { ...node, name: newNodeName };
+        }
+        if (node.children && node.children.length > 0) {
+          return {
+            ...node,
+            children: renameNodeInHierarchy(node.children, targetName, newNodeName),
+          };
+        }
+        return node;
+      });
+    };
+
+    // Update records with new topic name
+    await handleRenameTopicInRecords(oldName, newName);
+
+    // Update hierarchy if it exists
+    if (dataset.topicHierarchy?.hierarchy) {
+      const updatedHierarchy = renameNodeInHierarchy(
+        JSON.parse(JSON.stringify(dataset.topicHierarchy.hierarchy)) as TopicHierarchyNode[],
+        oldName,
+        newName
+      );
+
+      await handleApplyTopicHierarchy({
+        ...dataset.topicHierarchy,
+        hierarchy: updatedHierarchy,
+      });
+    }
+  }, [dataset, handleRenameTopicInRecords, handleApplyTopicHierarchy]);
+
+  // Handle create child topic from canvas inline input
+  const handleCreateChildTopic = useCallback(async (parentTopicName: string | null, childTopicName: string) => {
+    if (!dataset) return;
+
+    // Helper to find a node by name and return its ID and whether it was a leaf
+    const findNodeInfo = (
+      nodes: TopicHierarchyNode[],
+      targetName: string
+    ): { id: string; wasLeaf: boolean } | null => {
+      for (const node of nodes) {
+        if (node.name === targetName) {
+          return {
+            id: node.id || node.name,
+            wasLeaf: !node.children || node.children.length === 0,
+          };
+        }
+        if (node.children && node.children.length > 0) {
+          const found = findNodeInfo(node.children, targetName);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    // Helper to find and add child to a node by name
+    const addChildToNode = (
+      nodes: TopicHierarchyNode[],
+      parentName: string,
+      newChild: TopicHierarchyNode
+    ): TopicHierarchyNode[] => {
+      return nodes.map((node) => {
+        if (node.name === parentName) {
+          return {
+            ...node,
+            children: [...(node.children || []), newChild],
+          };
+        }
+        if (node.children && node.children.length > 0) {
+          return {
+            ...node,
+            children: addChildToNode(node.children, parentName, newChild),
+          };
+        }
+        return node;
+      });
+    };
+
+    // Check if parent was a leaf with records (needs migration)
+    let parentInfo: { id: string; wasLeaf: boolean } | null = null;
+    let recordsNeedMigration = false;
+    if (parentTopicName !== null && dataset.topicHierarchy?.hierarchy) {
+      parentInfo = findNodeInfo(dataset.topicHierarchy.hierarchy, parentTopicName);
+      if (parentInfo?.wasLeaf) {
+        // Check if any records are assigned to this topic
+        recordsNeedMigration = sortedRecords.some(r => r.topic === parentInfo!.id);
+      }
+    }
+
+    // Create new node with unique ID
+    const newNode: TopicHierarchyNode = {
+      id: `topic-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      name: childTopicName,
+    };
+
+    // Clone current hierarchy or create empty array
+    const currentHierarchy = dataset.topicHierarchy?.hierarchy
+      ? JSON.parse(JSON.stringify(dataset.topicHierarchy.hierarchy)) as TopicHierarchyNode[]
+      : [];
+
+    // Add to root level or find parent and add as child
+    const updatedHierarchy = parentTopicName === null
+      ? [...currentHierarchy, newNode]
+      : addChildToNode(currentHierarchy, parentTopicName, newNode);
+
+    // Apply the updated hierarchy
+    await handleApplyTopicHierarchy({
+      ...dataset.topicHierarchy,
+      depth: dataset.topicHierarchy?.depth ?? 3,
+      hierarchy: updatedHierarchy,
+    });
+
+    // Auto-migrate records if parent was a leaf with records
+    if (recordsNeedMigration && parentInfo) {
+      // Small delay to ensure hierarchy is saved before migration
+      setTimeout(() => {
+        handleMigrateRecordsToChildren(parentInfo!.id, updatedHierarchy);
+      }, 100);
+    }
+  }, [dataset, sortedRecords, handleApplyTopicHierarchy, handleMigrateRecordsToChildren]);
+
+  // Handle save evaluation config
+  const handleSaveEvaluationConfig = useCallback(async (config: EvaluationConfig) => {
+    if (!dataset) return;
+    try {
+      await updateDatasetEvaluationConfig(dataset.id, config);
+      setDataset((prev) => (prev ? { ...prev, evaluationConfig: config } : null));
+    } catch (err) {
+      console.error("Failed to save evaluation config:", err);
+      toast.error("Failed to save evaluation config");
+    }
+  }, [dataset]);
+
   // Derived: count of records that have topics assigned
   const recordsWithTopicsCount = useMemo(
     () => records.filter((r) => r.topic).length,
@@ -980,6 +1159,17 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     // Selection
     selectedRecordIds,
     setSelectedRecordIds,
+
+    // UI View state
+    activeSection,
+    setActiveSection,
+    viewMode,
+    setViewMode,
+    selectedTopic,
+    setSelectedTopic,
+    selectedRecordId,
+    setSelectedRecordId,
+    selectedRecord,
 
     // Dialog states
     deleteConfirm,
@@ -1041,6 +1231,9 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     handleRenameTopicInRecords,
     handleDeleteTopicFromRecords,
     handleDeleteTopic,
+    handleRenameTopic,
+    handleCreateChildTopic,
+    handleSaveEvaluationConfig,
   };
 }
 
