@@ -2,13 +2,16 @@
  * Start Training Tool
  *
  * Starts the fine-tuning training job using the backend API.
- * Requires dataset to be uploaded to backend first.
+ * Uses quickFinetune which handles all prerequisites automatically:
+ * - Creates/gets workflow
+ * - Uploads dataset if needed
+ * - Checks for duplicate running jobs
+ * - Creates the training job
  */
 
 import type { DistriFnTool } from '@distri/core';
 import * as workflowDB from '@/services/finetune-workflow-db';
-import * as datasetsDB from '@/services/datasets-db';
-import { createFinetuneJobFromUpload } from '@/services/finetune-api';
+import { quickFinetune } from '@/services/quick-finetune';
 import type { ToolHandler } from '../types';
 
 export const startTrainingHandler: ToolHandler = async (params) => {
@@ -19,63 +22,35 @@ export const startTrainingHandler: ToolHandler = async (params) => {
       return { success: false, error: 'workflow_id is required' };
     }
 
+    // Get workflow to find the dataset ID
     const workflow = await workflowDB.getWorkflow(workflow_id);
     if (!workflow) {
       return { success: false, error: 'Workflow not found' };
     }
 
-    if (workflow.currentStep !== 'training') {
-      return { success: false, error: `Cannot start training in step ${workflow.currentStep}. Must be in training step.` };
-    }
-
-    // Dry run is optional - only block if dry run was attempted and got NO-GO
-    // If no dry run was done (skipped), allow training to proceed
-    if (workflow.dryRun?.verdict === 'NO-GO') {
-      return { success: false, error: 'Dry run failed with NO-GO verdict. Please fix the issues before training, or rollback and skip dry run if you want to proceed anyway.' };
-    }
-
-    // Get dataset to check backend ID
-    const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
-    if (!dataset) {
-      return { success: false, error: 'Dataset not found' };
-    }
-
-    if (!dataset.backendDatasetId) {
-      return { success: false, error: 'Dataset must be uploaded to backend first. Use upload_dataset tool.' };
-    }
-
     const model = typeof base_model === 'string' ? base_model : 'llama-v3-8b-instruct';
 
-    // Create the finetune job via backend API
-    const job = await createFinetuneJobFromUpload(
-      dataset.backendDatasetId,
-      dataset.name,
-      {
-        baseModel: model,
-        displayName: `${dataset.name} Fine-tune`,
-      }
-    );
-
-    // Update workflow with training job info
-    await workflowDB.updateStepData(workflow_id, 'training', {
-      jobId: job.provider_job_id,
+    // Use quickFinetune which handles everything:
+    // - Workflow creation/management
+    // - Dataset upload if needed
+    // - Duplicate job prevention
+    // - Training job creation
+    const result = await quickFinetune({
+      datasetId: workflow.datasetId,
       baseModel: model,
-      status: job.status as 'pending' | 'queued' | 'running' | 'completed' | 'failed',
-      startedAt: Date.now(),
-      progress: 0,
-      metrics: null,
-      modelId: job.fine_tuned_model || null,
     });
+
+    if (!result.success) {
+      return { success: false, error: result.error };
+    }
 
     return {
       success: true,
       training: {
-        job_id: job.provider_job_id,
-        internal_id: job.id,
-        status: job.status,
+        job_id: result.jobId,
+        status: result.status,
         base_model: model,
-        fine_tuned_model: job.fine_tuned_model,
-        training_config: job.training_config,
+        workflow_id: result.workflowId,
         training_params: training_params || {},
       },
     };

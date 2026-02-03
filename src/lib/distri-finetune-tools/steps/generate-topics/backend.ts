@@ -15,6 +15,7 @@ interface BackendTopicHierarchyRequest {
   degree?: number;
   model?: string;
   temperature?: number;
+  focus?: string;
 }
 
 interface BackendTopicHierarchyResponse {
@@ -31,12 +32,21 @@ export interface GenerateTopicsResult {
 
 /**
  * Generate topic hierarchy using the backend endpoint
+ *
+ * @param goals - Training goals from the workflow
+ * @param depth - Hierarchy depth (1-5 levels)
+ * @param degree - Number of subtopics per topic
+ * @param records - Sample records from the dataset
+ * @param maxTopics - Maximum number of root topics (default: 3)
+ * @param focus - Optional focus areas for topic generation (e.g., "error handling", "edge cases")
  */
 export async function generateTopicsViaBackend(
   goals: string,
   depth: number,
   degree: number,
   records: Array<{ data: unknown }>,
+  maxTopics: number = 3,
+  focus?: string,
 ): Promise<GenerateTopicsResult> {
   const url = `${getBackendUrl()}/finetune/topic-hierarchy/generate`;
 
@@ -45,8 +55,19 @@ export async function generateTopicsViaBackend(
     depth,
     degree,
     records,
-    max_topics: 5,
+    max_topics: maxTopics,
+    ...(focus && { focus }),
   };
+
+  console.log('[generateTopicsViaBackend] Request URL:', url);
+  console.log('[generateTopicsViaBackend] Request body:', {
+    goals: goals.substring(0, 50) + '...',
+    depth,
+    degree,
+    records_count: records.length,
+    max_topics: maxTopics,
+    focus,
+  });
 
   const response = await fetch(url, {
     method: 'POST',

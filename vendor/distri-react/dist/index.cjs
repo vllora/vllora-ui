@@ -4148,13 +4148,13 @@ var TodosDisplay = ({
         style: { width: `${completedCount / totalCount * 100}%` }
       }
     ) }),
-    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("ul", { className: "space-y-1.5", children: todos.map((todo) => /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)(
+    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("ul", { className: "space-y-1.5 overflow-hidden", children: todos.map((todo) => /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)(
       "li",
       {
-        className: "flex items-start gap-2 text-sm",
+        className: "flex items-start gap-2 text-sm min-w-0",
         children: [
           getStatusIcon(todo.status),
-          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: getStatusStyles(todo.status), children: todo.content })
+          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: `${getStatusStyles(todo.status)} break-words min-w-0`, children: todo.content })
         ]
       },
       todo.id
@@ -7850,6 +7850,8 @@ function AskFollowUpComponent({
     });
     return defaults;
   });
+  const [otherSelected, setOtherSelected] = (0, import_react31.useState)({});
+  const [otherText, setOtherText] = (0, import_react31.useState)({});
   const currentQuestion = hasQuestions ? questions[currentStep] : null;
   const isLastStep = currentStep === questions.length - 1;
   const isCompleted = toolCallState?.status === "completed";
@@ -7906,6 +7908,20 @@ function AskFollowUpComponent({
       handleNext();
     }
   }, [handleNext]);
+  const handleSkip = (0, import_react31.useCallback)(() => {
+    const output = {
+      answers,
+      completed: true
+    };
+    completeTool({
+      tool_call_id: toolCall.tool_call_id,
+      tool_name: toolCall.tool_name,
+      parts: [{
+        part_type: "data",
+        data: output
+      }]
+    });
+  }, [answers, completeTool, toolCall]);
   if (!hasQuestions) {
     return null;
   }
@@ -7964,43 +7980,121 @@ function AskFollowUpComponent({
           autoFocus: true
         }
       ),
-      currentQuestion.type === "select" && currentQuestion.options && /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("div", { className: "space-y-2", children: currentQuestion.options.map((option) => /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(
-        "button",
-        {
-          onClick: () => handleAnswer(option),
-          className: cn(
-            "w-full px-3 py-2 text-sm text-left border rounded-md transition-colors",
-            answers[currentQuestion.id] === option ? "border-primary bg-primary/10" : "hover:bg-muted"
-          ),
-          children: option
-        },
-        option
-      )) }),
-      currentQuestion.type === "multiselect" && currentQuestion.options && /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("div", { className: "space-y-2", children: currentQuestion.options.map((option) => {
-        const selected = (answers[currentQuestion.id] || []).includes(option);
-        return /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)(
+      currentQuestion.type === "select" && currentQuestion.options && /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { className: "space-y-2", children: [
+        currentQuestion.options.map((option) => /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(
           "button",
           {
             onClick: () => {
-              const current = answers[currentQuestion.id] || [];
-              const newValue = selected ? current.filter((v) => v !== option) : [...current, option];
-              handleAnswer(newValue);
+              setOtherSelected((prev) => ({ ...prev, [currentQuestion.id]: false }));
+              handleAnswer(option);
+            },
+            className: cn(
+              "w-full px-3 py-2 text-sm text-left border rounded-md transition-colors",
+              answers[currentQuestion.id] === option && !otherSelected[currentQuestion.id] ? "border-primary bg-primary/10" : "hover:bg-muted"
+            ),
+            children: option
+          },
+          option
+        )),
+        /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(
+          "button",
+          {
+            onClick: () => {
+              setOtherSelected((prev) => ({ ...prev, [currentQuestion.id]: true }));
+              handleAnswer(otherText[currentQuestion.id] || "");
+            },
+            className: cn(
+              "w-full px-3 py-2 text-sm text-left border rounded-md transition-colors",
+              otherSelected[currentQuestion.id] ? "border-primary bg-primary/10" : "hover:bg-muted"
+            ),
+            children: "Other (type your own)"
+          }
+        ),
+        otherSelected[currentQuestion.id] && /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(
+          "input",
+          {
+            type: "text",
+            value: otherText[currentQuestion.id] || "",
+            onChange: (e) => {
+              setOtherText((prev) => ({ ...prev, [currentQuestion.id]: e.target.value }));
+              handleAnswer(e.target.value);
+            },
+            onKeyDown: handleKeyDown,
+            placeholder: currentQuestion.placeholder || "Type your custom answer...",
+            className: "w-full px-3 py-2 text-sm border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50",
+            autoFocus: true
+          }
+        )
+      ] }),
+      currentQuestion.type === "multiselect" && currentQuestion.options && /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { className: "space-y-2", children: [
+        currentQuestion.options.map((option) => {
+          const selected = (answers[currentQuestion.id] || []).includes(option);
+          return /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)(
+            "button",
+            {
+              onClick: () => {
+                const current = answers[currentQuestion.id] || [];
+                const newValue = selected ? current.filter((v) => v !== option) : [...current, option];
+                handleAnswer(newValue);
+              },
+              className: cn(
+                "w-full px-3 py-2 text-sm text-left border rounded-md transition-colors flex items-center gap-2",
+                selected ? "border-primary bg-primary/10" : "hover:bg-muted"
+              ),
+              children: [
+                /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("div", { className: cn(
+                  "w-4 h-4 border rounded flex items-center justify-center",
+                  selected ? "bg-primary border-primary" : "border-muted-foreground"
+                ), children: selected && /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(CheckIcon, { className: "w-3 h-3 text-primary-foreground" }) }),
+                option
+              ]
+            },
+            option
+          );
+        }),
+        /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)(
+          "button",
+          {
+            onClick: () => {
+              setOtherSelected((prev) => ({ ...prev, [currentQuestion.id]: !prev[currentQuestion.id] }));
             },
             className: cn(
               "w-full px-3 py-2 text-sm text-left border rounded-md transition-colors flex items-center gap-2",
-              selected ? "border-primary bg-primary/10" : "hover:bg-muted"
+              otherSelected[currentQuestion.id] ? "border-primary bg-primary/10" : "hover:bg-muted"
             ),
             children: [
               /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("div", { className: cn(
                 "w-4 h-4 border rounded flex items-center justify-center",
-                selected ? "bg-primary border-primary" : "border-muted-foreground"
-              ), children: selected && /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(CheckIcon, { className: "w-3 h-3 text-primary-foreground" }) }),
-              option
+                otherSelected[currentQuestion.id] ? "bg-primary border-primary" : "border-muted-foreground"
+              ), children: otherSelected[currentQuestion.id] && /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(CheckIcon, { className: "w-3 h-3 text-primary-foreground" }) }),
+              "Other (type your own)"
             ]
-          },
-          option
-        );
-      }) }),
+          }
+        ),
+        otherSelected[currentQuestion.id] && /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(
+          "input",
+          {
+            type: "text",
+            value: otherText[currentQuestion.id] || "",
+            onChange: (e) => {
+              const customValue = e.target.value;
+              setOtherText((prev) => ({ ...prev, [currentQuestion.id]: customValue }));
+              const current = answers[currentQuestion.id] || [];
+              const prevCustom = otherText[currentQuestion.id];
+              const filtered = current.filter((v) => v !== prevCustom);
+              if (customValue) {
+                handleAnswer([...filtered, customValue]);
+              } else {
+                handleAnswer(filtered);
+              }
+            },
+            onKeyDown: handleKeyDown,
+            placeholder: currentQuestion.placeholder || "Type your custom answer...",
+            className: "w-full px-3 py-2 text-sm border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50",
+            autoFocus: true
+          }
+        )
+      ] }),
       currentQuestion.type === "boolean" && /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { className: "flex gap-3", children: [
         /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(
           "button",
@@ -8039,18 +8133,28 @@ function AskFollowUpComponent({
           children: "Back"
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(
-        "button",
-        {
-          onClick: handleNext,
-          disabled: currentQuestion.required && !answers[currentQuestion.id],
-          className: cn(
-            "px-4 py-1.5 text-sm rounded-md transition-colors",
-            currentQuestion.required && !answers[currentQuestion.id] ? "bg-muted text-muted-foreground cursor-not-allowed" : "bg-primary text-primary-foreground hover:bg-primary/90"
-          ),
-          children: isLastStep ? "Submit" : "Next"
-        }
-      )
+      /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { className: "flex items-center gap-2", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(
+          "button",
+          {
+            onClick: handleSkip,
+            className: "px-3 py-1.5 text-sm rounded-md transition-colors text-muted-foreground hover:bg-muted",
+            children: "Skip"
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(
+          "button",
+          {
+            onClick: handleNext,
+            disabled: currentQuestion.required && !answers[currentQuestion.id],
+            className: cn(
+              "px-4 py-1.5 text-sm rounded-md transition-colors",
+              currentQuestion.required && !answers[currentQuestion.id] ? "bg-muted text-muted-foreground cursor-not-allowed" : "bg-primary text-primary-foreground hover:bg-primary/90"
+            ),
+            children: isLastStep ? "Submit" : "Next"
+          }
+        )
+      ] })
     ] })
   ] });
 }

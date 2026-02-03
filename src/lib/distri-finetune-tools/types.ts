@@ -143,7 +143,10 @@ export interface GenerateDataResult {
 export interface ConfigureGraderResult {
   success: boolean;
   error?: string;
-  grader_type?: 'llm_as_judge' | 'js';
+  grader_type?: 'js';
+  model?: string;
+  temperature?: number;
+  max_tokens?: number;
   configured_at?: number;
 }
 

@@ -453,6 +453,126 @@ interface WorkflowSnapshot {
 
 ---
 
+## IndexedDB Storage
+
+The finetune workflow system uses **two separate IndexedDB databases** to persist data:
+
+### Database 1: `vllora-finetune` (Workflow State)
+
+**Purpose:** Stores workflow progress, step metadata, and snapshots. Does NOT store actual configuration data.
+
+| Object Store | Key | Indexes | Description |
+|--------------|-----|---------|-------------|
+| `workflows` | `id` | `datasetId`, `currentStep`, `createdAt`, `updatedAt` | Workflow state per dataset |
+| `snapshots` | `id` | `workflowId`, `step`, `createdAt` | State snapshots for rollback |
+| `generationHistory` | `id` | `workflowId`, `createdAt` | Synthetic data generation runs |
+
+#### Workflow Store Schema
+
+```typescript
+interface FinetuneWorkflowState {
+  // Identity
+  id: string;                    // Unique workflow ID (UUID)
+  datasetId: string;             // Reference to dataset in vllora-datasets DB
+  trainingGoals: string;         // User's stated training objectives
+
+  // Progress tracking
+  currentStep: FinetuneStep;     // Current active step
+  stepStatus: Record<FinetuneStep, StepStatus>;  // Status of each step
+
+  // Step metadata (NOT the actual config data)
+  inputValidation: { recordCount, validCount, invalidCount, validationErrors } | null;
+  topicsConfig: { topicCount, depth, generatedAt, method } | null;  // Hierarchy in Dataset.topicHierarchy
+  categorization: { assignedCount, lowConfidenceCount, confidenceThreshold } | null;
+  coverageGeneration: { balanceScore, topicDistribution, recommendations, generationRounds, syntheticCount, syntheticPercentage } | null;
+  graderConfig: { type, configuredAt } | null;  // Actual config in Dataset.evaluationConfig
+  dryRun: { mean, std, percentAboveZero, percentPerfect, verdict, sampleResults, recommendations } | null;
+  training: { jobId, baseModel, status, startedAt, progress, metrics, modelId } | null;
+  deployment: { deployedAt, modelId, deploymentName, endpoint } | null;
+
+  // Timestamps
+  createdAt: number;
+  updatedAt: number;
+}
+```
+
+#### Snapshots Store Schema
+
+```typescript
+interface WorkflowSnapshotStore {
+  id: string;              // Format: "{workflowId}-{step}-{timestamp}"
+  workflowId: string;      // Reference to parent workflow
+  step: FinetuneStep;      // Step at which snapshot was taken
+  state: FinetuneWorkflowState;  // Complete workflow state copy
+  createdAt: number;
+}
+```
+
+#### Generation History Store Schema
+
+```typescript
+interface GenerationHistoryStore {
+  id: string;              // Format: "{workflowId}-gen-{timestamp}"
+  workflowId: string;
+  strategy: GenerationStrategy;   // 'message_variation' | 'few_shot' | 'topic_description' | etc.
+  topicsTargeted: string[];
+  recordsGenerated: number;
+  recordsValid: number;
+  balanceScoreBefore: number;
+  balanceScoreAfter: number;
+  createdAt: number;
+}
+```
+
+---
+
+### Database 2: `vllora-datasets` (Dataset & Records)
+
+**Purpose:** Stores actual dataset data including records, topic hierarchy, and evaluation configuration.
+
+| Object Store | Key | Indexes | Description |
+|--------------|-----|---------|-------------|
+| `datasets` | `id` | `name`, `createdAt` | Dataset metadata and configurations |
+| `records` | `id` | `datasetId`, `createdAt` | Training records (input/output pairs) |
+
+#### What's Stored in Dataset (NOT in Workflow)
+
+```typescript
+interface Dataset {
+  id: string;
+  name: string;
+  description?: string;
+  datasetObjective?: string;
+
+  // Actual configuration data (workflow only stores metadata)
+  topicHierarchy?: TopicNode[];      // Full topic tree (Step 1 output)
+  evaluationConfig?: EvaluationConfig;  // Grader config (Step 4 output)
+
+  // Backend sync
+  backendDatasetId?: string;  // ID from backend after upload
+
+  createdAt: number;
+  updatedAt: number;
+}
+```
+
+---
+
+### Storage Separation Rationale
+
+| Data Type | Stored In | Why |
+|-----------|-----------|-----|
+| Workflow progress | `vllora-finetune` | Allows multiple workflows per dataset, snapshots, rollback |
+| Topic hierarchy | `vllora-datasets` (Dataset) | Shared across workflows, used by records |
+| Evaluation config | `vllora-datasets` (Dataset) | Shared across workflows, synced to backend |
+| Records | `vllora-datasets` (Records) | Core data, independent of workflow |
+| Training job info | `vllora-finetune` (Workflow) | Workflow-specific, includes job ID and status |
+| Snapshots | `vllora-finetune` | Enables rollback without affecting dataset |
+
+**Key Design Decision:** The workflow stores **metadata/pointers** to configurations, not the configurations themselves. This prevents data duplication and ensures the dataset remains the source of truth for `topicHierarchy` and `evaluationConfig`.
+
+---
+
 ## Quick Path (Minimum Viable Workflow)
 
 The shortest path to training requires only **two things**:

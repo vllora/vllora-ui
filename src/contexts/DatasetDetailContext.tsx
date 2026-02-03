@@ -20,8 +20,8 @@ import { DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
 import type { Dataset, DatasetRecord, TopicHierarchyConfig, TopicHierarchyNode } from "@/types/dataset-types";
 import { emitter } from "@/utils/eventEmitter";
 import { toast } from "sonner";
-import { uploadDatasetForFinetune, createFinetuneJobFromUpload } from "@/services/finetune-api";
-import { updateDatasetBackendId, updateDatasetTopicHierarchy, clearAllRecordTopics, updateRecordTopicsBatch, renameTopicInRecords, clearTopicFromRecords } from "@/services/datasets-db";
+import { quickFinetune } from "@/services/quick-finetune";
+import { updateDatasetTopicHierarchy, clearAllRecordTopics, updateRecordTopicsBatch, renameTopicInRecords, clearTopicFromRecords } from "@/services/datasets-db";
 import { filterAndSortRecords } from "@/components/datasets/record-filters";
 import {
   DEFAULT_COLUMN_VISIBILITY,
@@ -556,27 +556,24 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
 
     setIsStartingFinetune(true);
     try {
-      let backendDatasetId = dataset.backendDatasetId;
+      // Use common quickFinetune function which handles:
+      // - Workflow creation/management
+      // - Dataset upload if needed
+      // - Duplicate job prevention
+      // - Training job creation
+      const result = await quickFinetune({ datasetId: dataset.id });
 
-      // Step 1: Upload dataset to backend (skip if already uploaded)
-      if (!backendDatasetId) {
-        const uploadResult = await uploadDatasetForFinetune({ ...dataset, records });
-        backendDatasetId = uploadResult.backendDatasetId;
-
-        // Save the backend dataset ID immediately after upload succeeds
-        // This ensures we track the uploaded dataset even if job creation fails
-        await updateDatasetBackendId(dataset.id, backendDatasetId);
-        setDataset((prev) => prev ? { ...prev, backendDatasetId } : null);
+      if (result.success && result.jobId) {
+        toast.success("Fine-tuning job started", {
+          description: `Job ID: ${result.jobId}`,
+        });
+        // Emit event to notify FinetuneJobsContext to refresh and open jobs panel
+        emitter.emit("vllora_finetune_job_created", { jobId: result.jobId });
+      } else if (!result.success) {
+        toast.error("Failed to start fine-tuning job", {
+          description: result.error || "An error occurred",
+        });
       }
-
-      // Step 2: Create the finetune job
-      const job = await createFinetuneJobFromUpload(backendDatasetId, dataset.name);
-
-      toast.success("Fine-tuning job started", {
-        description: `Job ID: ${job.id}`,
-      });
-      // Emit event to notify FinetuneJobsContext to refresh
-      emitter.emit("vllora_finetune_job_created", { jobId: job.id });
     } catch (err) {
       console.error("Failed to start fine-tuning job:", err);
       toast.error("Failed to start fine-tuning job", {

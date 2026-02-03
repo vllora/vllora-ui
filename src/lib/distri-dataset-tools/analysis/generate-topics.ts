@@ -1,10 +1,8 @@
 import { DistriClient, type DistriMessage } from '@distri/core';
-import type { DistriFnTool } from '@distri/core';
 import { getDistriUrl } from '@/config/api';
 import { fetchLucyConfig, type LucyConfig } from '@/lib/agent-sync';
 import type { DatasetRecord } from '@/types/dataset-types';
 import * as datasetsDB from '@/services/datasets-db';
-import type { ToolHandler } from '../types';
 import { getInputSummary, getOutputSummary } from './helpers';
 
 // Cache for Lucy config
@@ -407,58 +405,3 @@ export async function generateTopics(params: Record<string, unknown>): Promise<A
   });
 }
 
-// =========================================================================
-// Tool handler for provider/agent
-// =========================================================================
-
-export const generateTopicsHandler: ToolHandler = async ({ dataset_id, dataset_name, record_ids, max_topics, max_depth, degree, branching }) => {
-  if (!dataset_id) {
-    return { success: false, error: 'dataset_id is required' };
-  }
-
-  return generateTopics({
-    dataset_id,
-    dataset_name,
-    record_ids: Array.isArray(record_ids) ? record_ids : undefined,
-    max_topics: typeof max_topics === 'number' ? max_topics : undefined,
-    max_depth: typeof max_depth === 'number' ? max_depth : undefined,
-    degree: typeof degree === 'number' ? degree : typeof branching === 'number' ? branching : undefined,
-  });
-};
-
-export const generateTopicsTool: DistriFnTool = {
-  name: 'generate_topics',
-  description: 'Generate and auto-apply topic tags for dataset records using the LLM.',
-  type: 'function',
-  parameters: {
-    type: 'object',
-    properties: {
-      dataset_id: { type: 'string', description: 'The dataset ID' },
-      dataset_name: { type: 'string', description: 'Optional dataset name for logging' },
-      record_ids: {
-        type: 'array',
-        items: { type: 'string' },
-        description: 'Optional: specific record IDs to analyze (default: all)',
-      },
-      max_topics: {
-        type: 'number',
-        description: 'Optional: maximum number of topics to suggest (default: 3)',
-      },
-      max_depth: {
-        type: 'number',
-        description: 'Optional: maximum depth of topic_path (default: 3)',
-      },
-      degree: {
-        type: 'number',
-        description: 'Optional: desired branching factor (siblings per level, default: 3)',
-      },
-      branching: {
-        type: 'number',
-        description: 'Alias for degree (branching factor)',
-      },
-    },
-    required: ['dataset_id'],
-  },
-  autoExecute: true,
-  handler: async (input: object) => JSON.stringify(await generateTopicsHandler(input as Record<string, unknown>)),
-} as DistriFnTool;

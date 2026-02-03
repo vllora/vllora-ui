@@ -12,18 +12,14 @@ import type { ToolHandler } from '../types';
 
 export const configureGraderHandler: ToolHandler = async (params) => {
   try {
-    const { workflow_id, grader_type, config } = params;
+    const { workflow_id, script, model, temperature, max_tokens } = params;
 
     if (!workflow_id || typeof workflow_id !== 'string') {
       return { success: false, error: 'workflow_id is required' };
     }
 
-    if (!grader_type || (grader_type !== 'llm_as_judge' && grader_type !== 'js')) {
-      return { success: false, error: 'grader_type must be "llm_as_judge" or "js"' };
-    }
-
-    if (!config || typeof config !== 'object') {
-      return { success: false, error: 'config object is required' };
+    if (!script || typeof script !== 'string') {
+      return { success: false, error: 'script is required' };
     }
 
     const workflow = await workflowDB.getWorkflow(workflow_id);
@@ -35,56 +31,46 @@ export const configureGraderHandler: ToolHandler = async (params) => {
       return { success: false, error: `Cannot configure grader in step ${workflow.currentStep}. Must be in grader_config step.` };
     }
 
-    // Build evaluation config
-    let evaluationConfig: EvaluationConfig;
+    // Parse completion params with type coercion (LLM may pass strings)
+    const modelValue = typeof model === 'string' ? model : 'gpt-4o';
+    const temperatureValue = typeof temperature === 'number'
+      ? temperature
+      : typeof temperature === 'string'
+        ? parseFloat(temperature) || 0.0
+        : 0.0;
+    const maxTokensValue = typeof max_tokens === 'number'
+      ? max_tokens
+      : typeof max_tokens === 'string'
+        ? parseInt(max_tokens, 10) || 2048
+        : 2048;
 
-    if (grader_type === 'llm_as_judge') {
-      const { prompt_template, output_schema, model, temperature, max_tokens } = config as Record<string, unknown>;
-
-      if (!prompt_template || typeof prompt_template !== 'string') {
-        return { success: false, error: 'prompt_template is required for llm_as_judge' };
-      }
-
-      evaluationConfig = {
-        type: 'llm_as_judge',
-        promptTemplate: prompt_template,
-        outputSchema: typeof output_schema === 'string' ? output_schema : '{"type":"object","properties":{"score":{"type":"number"},"reasoning":{"type":"string"}},"required":["score","reasoning"]}',
-        completionParams: {
-          model: typeof model === 'string' ? model : 'gpt-4.1',
-          temperature: typeof temperature === 'number' ? temperature : 0.0,
-          maxTokens: typeof max_tokens === 'number' ? max_tokens : 1000,
-        },
-        updatedAt: Date.now(),
-      };
-    } else {
-      const { script } = config as Record<string, unknown>;
-
-      if (!script || typeof script !== 'string') {
-        return { success: false, error: 'script is required for js evaluator' };
-      }
-
-      evaluationConfig = {
-        type: 'js',
-        script,
-        completionParams: {
-          model: 'gpt-4.1',
-        },
-        updatedAt: Date.now(),
-      };
-    }
+    // Build evaluation config (JavaScript evaluator only)
+    const evaluationConfig: EvaluationConfig = {
+      type: 'js',
+      script,
+      completionParams: {
+        model: modelValue,
+        temperature: temperatureValue,
+        maxTokens: maxTokensValue,
+      },
+      updatedAt: Date.now(),
+    };
 
     // Save full config to dataset (single source of truth)
     await datasetsDB.updateDatasetEvaluationConfig(workflow.datasetId, evaluationConfig);
 
     // Update workflow with metadata only (not the full config)
     await workflowDB.updateStepData(workflow_id, 'graderConfig', {
-      type: grader_type as 'llm_as_judge' | 'js',
+      type: 'js',
       configuredAt: Date.now(),
     });
 
     return {
       success: true,
-      grader_type: grader_type,
+      grader_type: 'js',
+      model: modelValue,
+      temperature: temperatureValue,
+      max_tokens: maxTokensValue,
       configured_at: Date.now(),
     };
   } catch (error) {
@@ -94,23 +80,33 @@ export const configureGraderHandler: ToolHandler = async (params) => {
 
 export const configureGraderTool: DistriFnTool = {
   name: 'configure_grader',
-  description: 'Configure the evaluation/grader function for RFT. Must be in grader_config step.',
+  description: 'Configure the JavaScript evaluation script for RFT. The script should define an evaluate(input, output) function that returns { score, reasoning }. Must be in grader_config step.',
   type: 'function',
   parameters: {
     type: 'object',
     properties: {
       workflow_id: { type: 'string', description: 'The workflow ID' },
-      grader_type: {
+      script: {
         type: 'string',
-        enum: ['llm_as_judge', 'js'],
-        description: 'Type of grader',
+        description: 'JavaScript code defining an evaluate(input, output) function. Use __langdb_call_llm_as_judge_obj(prompt) to call the LLM judge.',
       },
-      config: {
-        type: 'object',
-        description: 'Grader configuration. For llm_as_judge: { prompt_template, output_schema, model, temperature }. For js: { script }',
+      model: {
+        type: 'string',
+        default: 'gpt-4o',
+        description: 'LLM model for the judge (gpt-4o, gpt-4o-mini, claude-3-5-sonnet, claude-3-haiku)',
+      },
+      temperature: {
+        type: 'number',
+        default: 0.0,
+        description: 'Temperature for LLM judge (0.0-2.0)',
+      },
+      max_tokens: {
+        type: 'number',
+        default: 2048,
+        description: 'Max tokens for LLM judge response',
       },
     },
-    required: ['workflow_id', 'grader_type', 'config'],
+    required: ['workflow_id', 'script'],
   },
   handler: async (input) => JSON.stringify(await configureGraderHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

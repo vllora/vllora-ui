@@ -1,0 +1,218 @@
+/**
+ * Quick Finetune Service
+ *
+ * Provides a direct path to start finetuning when:
+ * - Dataset has records
+ * - Evaluation function is already configured
+ *
+ * This bypasses Lucy and directly:
+ * 1. Creates/gets workflow
+ * 2. Advances to training step
+ * 3. Uploads dataset to backend
+ * 4. Starts the training job
+ */
+
+import * as workflowDB from './finetune-workflow-db';
+import * as datasetsDB from './datasets-db';
+import { uploadDatasetForFinetune, createFinetuneJobFromUpload, listReinforcementJobs } from './finetune-api';
+
+export interface QuickFinetuneResult {
+  success: boolean;
+  error?: string;
+  workflowId?: string;
+  jobId?: string;
+  status?: string;
+}
+
+export interface QuickFinetuneOptions {
+  datasetId: string;
+  baseModel?: string;
+}
+
+// ============================================================================
+// Common Types for startFinetuneTraining
+// ============================================================================
+
+export interface StartFinetuneTrainingOptions {
+  /** Backend dataset ID (must already be uploaded) */
+  backendDatasetId: string;
+  /** Dataset name for display */
+  datasetName: string;
+  /** Workflow ID to update */
+  workflowId: string;
+  /** Base model to fine-tune */
+  baseModel?: string;
+}
+
+export interface StartFinetuneTrainingResult {
+  success: boolean;
+  error?: string;
+  jobId?: string;
+  status?: string;
+  fineTunedModel?: string;
+}
+
+// ============================================================================
+// Core Function - Used by both quickFinetune and startTrainingHandler
+// ============================================================================
+
+/**
+ * Start a finetune training job
+ *
+ * This is the core function that creates the job and updates the workflow.
+ * Prerequisites:
+ * - Dataset must already be uploaded (backendDatasetId required)
+ * - Workflow must exist
+ *
+ * Both quickFinetune and startTrainingHandler use this function.
+ */
+export async function startFinetuneTraining(
+  options: StartFinetuneTrainingOptions
+): Promise<StartFinetuneTrainingResult> {
+  const {
+    backendDatasetId,
+    datasetName,
+    workflowId,
+    baseModel = 'llama-v3-8b-instruct',
+  } = options;
+
+  try {
+    // Check for existing running/pending jobs for this dataset
+    const existingJobs = await listReinforcementJobs(undefined, undefined, backendDatasetId);
+    const activeJob = existingJobs.find(
+      (job) => job.status === 'pending' || job.status === 'running'
+    );
+
+    if (activeJob) {
+      const activeJobId = activeJob.provider_job_id || activeJob.id;
+      return {
+        success: false,
+        error: `A finetune job is already in progress (${activeJobId}). Wait for it to complete before starting a new one.`,
+      };
+    }
+
+    // Create the finetune job via backend API
+    const job = await createFinetuneJobFromUpload(
+      backendDatasetId,
+      datasetName,
+      {
+        baseModel,
+        displayName: `${datasetName} Fine-tune`,
+      }
+    );
+
+    // Use provider_job_id (from list endpoint) or id (from create endpoint) as fallback
+    const jobId = job.provider_job_id || job.id;
+
+    // Update workflow with training info
+    await workflowDB.updateStepData(workflowId, 'training', {
+      jobId,
+      baseModel,
+      status: job.status as 'pending' | 'queued' | 'running' | 'completed' | 'failed',
+      startedAt: Date.now(),
+      progress: 0,
+      metrics: null,
+      modelId: job.fine_tuned_model || null,
+    });
+
+    return {
+      success: true,
+      jobId,
+      status: job.status,
+      fineTunedModel: job.fine_tuned_model,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to start training job',
+    };
+  }
+}
+
+/**
+ * Execute quick finetune - goes directly from dataset to training
+ *
+ * This function handles all the setup (workflow creation, dataset upload)
+ * and then calls the common startFinetuneTraining function.
+ */
+export async function quickFinetune(options: QuickFinetuneOptions): Promise<QuickFinetuneResult> {
+  const { datasetId, baseModel = 'llama-v3-8b-instruct' } = options;
+
+  try {
+    // 1. Get dataset and validate
+    const dataset = await datasetsDB.getDatasetById(datasetId);
+    if (!dataset) {
+      return { success: false, error: 'Dataset not found' };
+    }
+
+    // Check records exist
+    const records = await datasetsDB.getRecordsByDatasetId(datasetId);
+    if (records.length === 0) {
+      return { success: false, error: 'Dataset has no records' };
+    }
+
+    // Check evaluator exists
+    if (!dataset.evaluationConfig) {
+      return { success: false, error: 'Dataset has no evaluation function configured' };
+    }
+
+    // 2. Get or create workflow
+    let workflow = await workflowDB.getWorkflowByDataset(datasetId);
+
+    if (!workflow) {
+      // Create new workflow starting at grader_config (since we have evaluator)
+      const trainingGoals = dataset.datasetObjective || 'Fine-tune model for this dataset';
+      workflow = await workflowDB.createWorkflow(datasetId, trainingGoals);
+    }
+
+    // 3. Sync grader config from dataset to workflow
+    if (!workflow.graderConfig) {
+      await workflowDB.updateStepData(workflow.id, 'graderConfig', {
+        type: dataset.evaluationConfig.type,
+        configuredAt: dataset.evaluationConfig.updatedAt ?? Date.now(),
+      });
+    }
+
+    // 4. Advance workflow to training step (skipping dry run)
+    await workflowDB.advanceToStep(workflow.id, 'training');
+
+    // 5. Upload dataset to backend if not already uploaded
+    let backendDatasetId = dataset.backendDatasetId;
+
+    if (!backendDatasetId) {
+      const datasetWithRecords = { ...dataset, records };
+      const uploadResult = await uploadDatasetForFinetune(datasetWithRecords);
+      backendDatasetId = uploadResult.backendDatasetId;
+
+      // Save backend ID
+      await datasetsDB.updateDatasetBackendId(datasetId, backendDatasetId);
+    }
+
+    // 6. Start training job using common function
+    const result = await startFinetuneTraining({
+      backendDatasetId,
+      datasetName: dataset.name,
+      workflowId: workflow.id,
+      baseModel,
+    });
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error,
+      };
+    }
+
+    return {
+      success: true,
+      workflowId: workflow.id,
+      jobId: result.jobId,
+      status: result.status,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to start quick finetune',
+    };
+  }
+}

@@ -1,9 +1,11 @@
 /**
  * DatasetDetailContentV2
  *
- * Refactored version of DatasetDetailContent with new layout:
- * - Topbar with stepper showing dataset preparation checklist
+ * Main content component for dataset detail view:
+ * - Header with dataset objective and insights
+ * - View mode toggle (canvas/table/evaluator)
  * - Canvas view showing topic hierarchy visualization
+ * - Finetune jobs sidebar panel
  */
 
 import { useMemo, useState, useCallback, useEffect } from "react";
@@ -26,6 +28,10 @@ import { DatasetDetailHeader } from "./dataset-detail-header";
 import { DatasetMainContent } from "./DatasetMainContent";
 import { LucyDatasetAssistant } from "./LucyDatasetAssistant";
 import { updateDatasetEvaluationConfig } from "@/services/datasets-db";
+import { quickFinetune } from "@/services/quick-finetune";
+import { toast } from "sonner";
+import { FinetuneJobsPanel } from "@/components/finetune/FinetuneJobsPanel";
+import { useFinetuneJobs } from "@/contexts/FinetuneJobsContext";
 import type { CoverageStats, EvaluationConfig, TopicHierarchyNode } from "@/types/dataset-types";
 
 export function DatasetDetailContentV2() {
@@ -91,6 +97,21 @@ export function DatasetDetailContentV2() {
     handleExport,
     recordsWithTopicsCount,
   } = DatasetDetailConsumer();
+
+  // Finetune jobs sidebar
+  const { setCurrentBackendDatasetId } = useFinetuneJobs();
+
+  // Set the backend dataset ID for filtering jobs when dataset changes
+  useEffect(() => {
+    if (dataset?.backendDatasetId) {
+      setCurrentBackendDatasetId(dataset.backendDatasetId);
+    } else {
+      setCurrentBackendDatasetId(null);
+    }
+    return () => {
+      setCurrentBackendDatasetId(null);
+    };
+  }, [dataset?.backendDatasetId, setCurrentBackendDatasetId]);
 
   // State for canvas view
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
@@ -185,6 +206,50 @@ export function DatasetDetailContentV2() {
       : `Generate top-level topics for this dataset. Analyze the existing data and suggest meaningful categories to organize the content.`;
     emitter.emit("vllora_lucy_prompt", { prompt });
   }, []);
+
+  // Handle finetune button click - directly start finetune workflow
+  const [isFinetuning, setIsFinetuning] = useState(false);
+
+  const handleFinetune = useCallback(async () => {
+    if (!datasetId || isFinetuning) return;
+
+    setIsFinetuning(true);
+    toast.info("Starting finetune...", { duration: 2000 });
+
+    try {
+      const result = await quickFinetune({ datasetId });
+
+      if (result.success) {
+        toast.success(`Finetune job started! Job ID: ${result.jobId}`, {
+          duration: 5000,
+        });
+        // Emit event to notify Lucy about the started job
+        emitter.emit("vllora_lucy_prompt", {
+          prompt: `Finetune job ${result.jobId} has been started for this dataset. Please monitor its progress.`,
+        });
+      } else {
+        toast.error(`Failed to start finetune: ${result.error}`, {
+          duration: 5000,
+        });
+      }
+    } catch (error) {
+      toast.error(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`, {
+        duration: 5000,
+      });
+    } finally {
+      setIsFinetuning(false);
+    }
+  }, [datasetId, isFinetuning]);
+
+  // Check if finetune conditions are met
+  const hasRecords = sortedRecords.length > 0;
+  const hasEvaluator = !!(
+    dataset?.evaluationConfig &&
+    (
+      (dataset.evaluationConfig.type === 'js' && dataset.evaluationConfig.script) ||
+      (dataset.evaluationConfig.type === 'llm_as_judge' && dataset.evaluationConfig.promptTemplate)
+    )
+  );
 
   // Handle rename topic from canvas (inline rename)
   const handleRenameTopic = (oldName: string, newName: string) => {
@@ -364,6 +429,10 @@ export function DatasetDetailContentV2() {
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           onExport={handleExport}
+          hasRecords={hasRecords}
+          hasEvaluator={hasEvaluator}
+          onFinetune={handleFinetune}
+          isFinetuning={isFinetuning}
         />
 
         {/* Main content area - Canvas or Table based on view mode */}
@@ -503,6 +572,8 @@ export function DatasetDetailContentV2() {
         }}
       />
 
+      {/* Finetune jobs sidebar */}
+      <FinetuneJobsPanel />
     </div>
   );
 }
