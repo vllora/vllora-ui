@@ -1,7 +1,7 @@
 import { DatasetsUIProvider, DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
 import { DatasetsGrid } from "@/components/datasets/table";
-import { EmptyDatasetsState } from "@/components/datasets/EmptyDatasetsState";
 import { Loader2 } from "lucide-react";
+import { EmptyDatasetsState } from "@/components/datasets/empty-dataset-state";
 
 // Inner component that uses the UI context
 function DatasetsPageContent() {

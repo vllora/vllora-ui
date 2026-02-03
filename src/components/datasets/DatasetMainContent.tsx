@@ -12,6 +12,7 @@ import type { AvailableTopic } from "./record-utils";
 import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
 import { RecordsTable } from "./records-table/RecordsTable";
 import { RecordDetailSidebar } from "./records-table/RecordDetailSidebar";
+import { EmptyRecordsState } from "./EmptyRecordsState";
 
 export interface DatasetMainContentProps {
   viewMode: ViewMode;
@@ -40,6 +41,9 @@ export interface DatasetMainContentProps {
   onCreateChildTopic: (parentTopicName: string | null, childTopicName: string) => Promise<void>;
   onGenerateForTopic: (topicName: string) => void;
   onGenerateSubtopics: (topicId: string | null) => void;
+
+  // Empty state
+  datasetObjective?: string;
 }
 
 export function DatasetMainContent({
@@ -63,7 +67,17 @@ export function DatasetMainContent({
   onCreateChildTopic,
   onGenerateForTopic,
   onGenerateSubtopics,
+  datasetObjective,
 }: DatasetMainContentProps) {
+  // Show empty state when no records
+  if (records.length === 0) {
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <EmptyRecordsState datasetObjective={datasetObjective} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {viewMode === "canvas" ? (

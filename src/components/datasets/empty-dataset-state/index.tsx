@@ -1,0 +1,241 @@
+/**
+ * EmptyDatasetsState
+ *
+ * Empty state component displayed when no datasets exist.
+ * Two modes: Enter Objective (manual) or Initialize via API (automated).
+ * Listens for backend spans and shows live trace feed when detected.
+ */
+
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { cn } from "@/lib/utils";
+import { DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
+import { DatasetsConsumer } from "@/contexts/DatasetsContext";
+import { ProjectEventsConsumer } from "@/contexts/project-events";
+import { listSpans, type Span } from "@/services/spans-api";
+import { toast } from "sonner";
+import { ObjectiveInputTab } from "./ObjectiveInputTab";
+import { ApiInitializeTab } from "./ApiInitializeTab";
+import type { Trace } from "./LiveTraceFeed";
+import { ALL_PROVIDERS } from "../spans-select-table";
+import { tryParseJson } from "@/utils/modelUtils";
+
+type TabType = "objective" | "api";
+
+const isValidTab = (tab: string | null): tab is TabType => {
+  return tab === "objective" || tab === "api";
+};
+
+// Transform a Span to a Trace for display
+function spanToTrace(span: Span): Trace {
+  const date = new Date(span.start_time_us / 1000);
+  const time = date.toLocaleTimeString("en-US", {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    fractionalSecondDigits: 3,
+  } as Intl.DateTimeFormatOptions);
+
+  // Extract messages from attribute
+  const attr = span.attribute as { input?: string };
+  const parsed = attr?.input ? tryParseJson(attr.input) : [];
+  const msgArray = Array.isArray(parsed) ? parsed : [];
+
+  // Transform messages with truncated content
+  const messages = msgArray.map((msg) => ({
+    role: msg.role || "unknown",
+    content: truncateContent(msg.content),
+  }));
+
+  return {
+    time,
+    status: "CAPTURED",
+    messages,
+  };
+}
+
+// Truncate content for display
+function truncateContent(content: unknown): string {
+  if (typeof content === "string") {
+    return content.length > 50 ? content.slice(0, 50) + "..." : content;
+  }
+  if (Array.isArray(content)) {
+    // Handle multi-part content (e.g., text + image)
+    const textPart = content.find((p) => p.type === "text");
+    if (textPart?.text) {
+      return textPart.text.length > 50 ? textPart.text.slice(0, 50) + "..." : textPart.text;
+    }
+    return "[Multi-part content]";
+  }
+  return "[Complex content]";
+}
+
+export function EmptyDatasetsState() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { hasBackendSpans } = DatasetsUIConsumer();
+  const { createDataset } = DatasetsConsumer();
+  const { projectId, subscribe } = ProjectEventsConsumer();
+
+  // Get initial tab from URL or default to "objective"
+  const tabParam = searchParams.get("tab");
+  const activeTab: TabType = isValidTab(tabParam) ? tabParam : "objective";
+
+  const [objective, setObjective] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+
+  // Update URL when tab changes
+  const handleTabChange = useCallback((tab: TabType) => {
+    setSearchParams({ tab }, { replace: true });
+  }, [setSearchParams]);
+
+  // Real trace feed data from API
+  const [traces, setTraces] = useState<Trace[]>([]);
+  const tracesRef = useRef<Trace[]>([]);
+
+  // Fetch recent model_call spans
+  const fetchTraces = useCallback(async () => {
+    if (!projectId) return;
+
+    try {
+      const response = await listSpans({
+        projectId,
+        params: {
+          operationNames: ALL_PROVIDERS.join(","),
+          limit: 10,
+        },
+      });
+
+      const newTraces = response.data.map(spanToTrace);
+      setTraces(newTraces);
+      tracesRef.current = newTraces;
+    } catch (error) {
+      console.error("Failed to fetch traces:", error);
+    }
+  }, [projectId]);
+
+  // Fetch traces on mount and when projectId changes
+  useEffect(() => {
+    fetchTraces();
+  }, [fetchTraces]);
+
+  // Subscribe to span events for real-time updates
+  useEffect(() => {
+    if (!projectId) return;
+
+    const unsubscribe = subscribe(
+      "empty-state-trace-listener",
+      () => {
+        // Refetch traces when new span events arrive
+        setTimeout(() => {
+          fetchTraces();
+        }, 3000);
+      },
+      (event) => {
+        // Filter for model_call span_end events
+        if (event.type === "Custom") {
+          const customEvent = event as { event?: { type?: string; operation_name?: string } };
+          return (
+            customEvent.event?.type === "span_end" &&
+            customEvent.event?.operation_name === "model_call"
+          );
+        }
+        return false;
+      }
+    );
+
+    return unsubscribe;
+  }, [projectId, subscribe, fetchTraces]);
+
+  const handleStartFinetune = async () => {
+    if (!objective.trim()) {
+      toast.error("Please enter an objective first");
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      // Generate a dataset name from the objective (first few words)
+      const words = objective.trim().split(/\s+/).slice(0, 4).join(" ");
+      const datasetName = words.length > 30 ? words.slice(0, 30) + "..." : words;
+
+      const dataset = await createDataset(datasetName, objective.trim());
+      navigate(`/datasets/${dataset.id}`);
+    } catch (error) {
+      console.error("Failed to create dataset:", error);
+      toast.error("Failed to create dataset");
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  return (
+    <div className="flex-1 flex flex-col items-center justify-start pt-16 p-8 relative overflow-auto">
+      {/* Subtle background glow */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-[rgba(var(--theme-500),0.03)] rounded-full blur-3xl" />
+      </div>
+
+      {/* Header - always centered */}
+      <div className="flex flex-col items-center text-center relative z-10 mb-8">
+        {/* Title */}
+        <h1 className="text-4xl md:text-5xl font-bold mb-4 text-foreground">
+          What is the objective of{" "}
+          <span className="text-[rgb(var(--theme-500))]">your dataset?</span>
+        </h1>
+        <p className="text-muted-foreground text-lg">
+          Define your goal to let our AI agent optimize your data enhancement strategy.
+        </p>
+      </div>
+
+      {/* Tab Switcher - always centered */}
+      <div className="inline-flex items-center p-1 rounded-full bg-muted/50 border border-border mb-8 relative z-10">
+        <button
+          onClick={() => handleTabChange("objective")}
+          className={cn(
+            "px-6 py-2 rounded-full text-sm font-medium transition-all",
+            activeTab === "objective"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          Enter Objective
+        </button>
+        <button
+          onClick={() => handleTabChange("api")}
+          className={cn(
+            "px-6 py-2 rounded-full text-sm font-medium transition-all",
+            activeTab === "api"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          Initialize via API
+        </button>
+      </div>
+
+      {/* Tab Content - width varies by tab */}
+      <div
+        className={cn(
+          "w-full relative z-10",
+          activeTab === "objective" ? "max-w-2xl" : "max-w-5xl"
+        )}
+      >
+        {activeTab === "objective" ? (
+          <ObjectiveInputTab
+            objective={objective}
+            onObjectiveChange={setObjective}
+            onStartFinetune={handleStartFinetune}
+            isLoading={isCreating}
+          />
+        ) : (
+          <ApiInitializeTab
+            hasBackendSpans={hasBackendSpans}
+            traces={traces}
+          />
+        )}
+      </div>
+    </div>
+  );
+}

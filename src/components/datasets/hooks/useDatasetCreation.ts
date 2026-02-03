@@ -19,6 +19,7 @@ import {
   clearUploadSession,
 } from "@/services/upload-session-db";
 import type { UploadedRecord } from "../upload-records-section";
+import { CHESS_TUTOR_OBJECTIVE } from "../constants/objective-suggestions";
 
 export type TabValue = "traces" | "upload";
 
@@ -70,12 +71,7 @@ export function useDatasetCreation() {
 
       if (isChessTutorSample) {
         setDatasetName("Chess Tutor Dataset");
-        setFinetuneObjective(
-          "Train a chess tutor assistant that can analyze board positions from FEN notation, " +
-          "suggest optimal moves with clear explanations of the strategic reasoning behind each recommendation, " +
-          "teach opening theory, middlegame tactics, and endgame techniques, " +
-          "and adapt explanations to the player's skill level from beginner to advanced."
-        );
+        setFinetuneObjective(CHESS_TUTOR_OBJECTIVE.description);
       }
     }
   }, [spans, hasAutoSelected]);

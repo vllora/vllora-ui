@@ -477,6 +477,7 @@ export function DatasetDetailContentV2() {
             onCreateChildTopic={handleCreateChildTopic}
             onGenerateForTopic={handleGenerateForTopic}
             onGenerateSubtopics={handleGenerateSubtopics}
+            datasetObjective={dataset.datasetObjective}
           />
         )}
         {activeSection === "evaluator" && (

@@ -152,7 +152,7 @@ export async function getTopicCoverageStats(datasetId: string): Promise<{ total:
   });
 }
 
-// Create a new dataset
+// Create a new dataset and auto-start workflow if objective is provided
 export async function createDataset(name: string, datasetObjective?: string): Promise<Dataset> {
   const db = await getDB();
   const now = Date.now();
@@ -169,7 +169,21 @@ export async function createDataset(name: string, datasetObjective?: string): Pr
     const store = tx.objectStore('datasets');
     const request = store.add(dataset);
 
-    request.onsuccess = () => resolve(dataset);
+    request.onsuccess = async () => {
+      // Auto-start workflow if dataset has an objective
+      if (datasetObjective?.trim()) {
+        try {
+          const { createWorkflow, advanceToStep } = await import('./finetune-workflow-db');
+          const workflow = await createWorkflow(dataset.id, datasetObjective.trim());
+          // Advance to first step (topics_config)
+          await advanceToStep(workflow.id, 'topics_config');
+        } catch (err) {
+          console.warn('[createDataset] Failed to auto-start workflow:', err);
+          // Don't fail dataset creation if workflow creation fails
+        }
+      }
+      resolve(dataset);
+    };
     request.onerror = () => reject(request.error);
   });
 }

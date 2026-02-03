@@ -22,6 +22,7 @@ export { categorizeRecordsHandler, categorizeRecordsTool } from './categorize-re
 // Coverage & Generation (Step 3)
 export { analyzeCoverageHandler, analyzeCoverageTool } from './analyze-coverage';
 export { generateSyntheticDataHandler, generateSyntheticDataTool } from './generate-synthetic';
+export { generateInitialDataHandler, generateInitialDataTool } from './generate-initial-data';
 
 // Grader Configuration (Step 4)
 export { configureGraderHandler, configureGraderTool } from './configure-grader';
@@ -63,6 +64,7 @@ import { applyTopicHierarchyHandler, applyTopicHierarchyTool } from './apply-hie
 import { categorizeRecordsHandler, categorizeRecordsTool } from './categorize-records';
 import { analyzeCoverageHandler, analyzeCoverageTool } from './analyze-coverage';
 import { generateSyntheticDataHandler, generateSyntheticDataTool } from './generate-synthetic';
+import { generateInitialDataHandler, generateInitialDataTool } from './generate-initial-data';
 import { configureGraderHandler, configureGraderTool } from './configure-grader';
 import { testGraderSampleHandler, testGraderSampleTool } from './test-grader';
 import { validateRecordsHandler, validateRecordsTool } from './validate-records';
@@ -86,6 +88,7 @@ export const STEP_TOOL_NAMES = [
   'categorize_records',
   'analyze_coverage',
   'generate_synthetic_data',
+  'generate_initial_data',
   'configure_grader',
   'validate_records',
   'test_grader_sample',
@@ -112,6 +115,7 @@ export const stepTools: DistriFnTool[] = [
   categorizeRecordsTool,
   analyzeCoverageTool,
   generateSyntheticDataTool,
+  generateInitialDataTool,
   configureGraderTool,
   validateRecordsTool,
   testGraderSampleTool,
@@ -132,6 +136,7 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   categorize_records: categorizeRecordsHandler,
   analyze_coverage: analyzeCoverageHandler,
   generate_synthetic_data: generateSyntheticDataHandler,
+  generate_initial_data: generateInitialDataHandler,
   configure_grader: configureGraderHandler,
   validate_records: validateRecordsHandler,
   test_grader_sample: testGraderSampleHandler,
