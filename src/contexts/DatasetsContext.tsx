@@ -9,6 +9,7 @@ import { createContext, useContext, useCallback, useState, useEffect, type React
 import { Dataset, DatasetEvaluation, DatasetWithRecords } from '@/types/dataset-types';
 import { Span } from '@/types/common-type';
 import * as datasetsDB from '@/services/datasets-db';
+import * as workflowDB from '@/services/finetune-workflow-db';
 import { emitter } from '@/utils/eventEmitter';
 import { toast } from 'sonner';
 
@@ -126,8 +127,15 @@ function useDatasets() {
     return deletedCount;
   }, [loadDatasets]);
 
-  // Delete a dataset
+  // Delete a dataset and all related data (including finetune workflow)
   const deleteDataset = useCallback(async (datasetId: string): Promise<void> => {
+    // Delete associated finetune workflow (includes snapshots and generation history)
+    const workflow = await workflowDB.getWorkflowByDataset(datasetId);
+    if (workflow) {
+      await workflowDB.deleteWorkflow(workflow.id);
+    }
+
+    // Delete the dataset and its records
     await datasetsDB.deleteDataset(datasetId);
     setDatasets(prev => prev.filter(ds => ds.id !== datasetId));
   }, []);

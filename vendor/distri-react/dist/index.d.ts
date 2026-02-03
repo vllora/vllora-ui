@@ -1122,6 +1122,10 @@ interface TodosDisplayProps {
     todos: TodoItem[];
     className?: string;
     title?: string;
+    /** Auto-collapse when all tasks are done (default: true) */
+    autoCollapseOnDone?: boolean;
+    /** Initial collapsed state (default: false) */
+    defaultCollapsed?: boolean;
 }
 declare const TodosDisplay: React__default.FC<TodosDisplayProps>;
 

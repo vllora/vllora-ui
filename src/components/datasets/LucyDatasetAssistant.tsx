@@ -113,6 +113,11 @@ export function LucyDatasetAssistant() {
   // Proactive behavior: when no workflow exists and no messages, auto-trigger analysis
   useEffect(() => {
     // Only set once per dataset session, when everything is loaded
+    console.log('===== workflowLoading', workflowLoading)
+    console.log('===== agentLoading', agentLoading)
+    console.log('===== agent', agent)
+    console.log('===== isConnected', isConnected)
+    console.log('===== selectedDatasetId', selectedDatasetId)
     if (
       hasSetAutoTriggerRef.current ||
       workflowLoading ||
@@ -127,16 +132,15 @@ export function LucyDatasetAssistant() {
     // If no workflow and no existing messages, auto-trigger analysis
     if (!workflow && messages.length === 0) {
       hasSetAutoTriggerRef.current = true;
-      // This will automatically send a message to the agent
       // NOTE: Only ask for analysis - do NOT ask to start workflow or apply changes
       setAutoTriggerPrompt(
-        `I just opened the "${currentDataset?.name || 'dataset'}" dataset. Please analyze it and give me an overview of what I have. Do NOT start a workflow or make any changes yet - just show me the analysis and wait for my feedback.`
+        `Analyze this dataset and recommend what I should do next.`
       );
     } else if (workflow && messages.length === 0) {
       // Workflow exists but no messages - auto-trigger status check
       hasSetAutoTriggerRef.current = true;
       setAutoTriggerPrompt(
-        `I'm returning to my fine-tuning workflow for "${currentDataset?.name || 'dataset'}". The workflow is at the "${workflow.currentStep}" step. Please show me the current status and help me continue.`
+        `Show me the current status of my finetune workflow for "${currentDataset?.name || 'this dataset'}".`
       );
     }
   }, [workflow, workflowLoading, agentLoading, agent, isConnected, messages.length, selectedDatasetId, currentDataset?.name]);
