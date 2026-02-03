@@ -4,7 +4,7 @@
  * Utility bar with export button, view mode toggle, and finetune button for the dataset detail view.
  */
 
-import { LayoutGrid, Table2, Download, Code2, Sparkles, Loader2 } from "lucide-react";
+import { LayoutGrid, Table2, Download, Code2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -12,6 +12,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { FinetuneButton } from "@/components/datasets/FinetuneButton";
 
 export type ViewMode = "canvas" | "table" | "evaluator";
 
@@ -62,27 +63,11 @@ export function DatasetUtilityBar({
 
         {/* Finetune button - shown when records and evaluator exist */}
         {canFinetune && (
-          <TooltipProvider delayDuration={300}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="h-7 px-3 gap-1.5"
-                  onClick={onFinetune}
-                  disabled={isFinetuning}
-                >
-                  {isFinetuning ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Sparkles className="w-3.5 h-3.5" />
-                  )}
-                  <span className="text-xs">{isFinetuning ? "Starting..." : "Finetune"}</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Start finetune workflow</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <FinetuneButton
+            onFinetune={onFinetune}
+            isFinetuning={isFinetuning}
+            tooltipText="Start finetune workflow"
+          />
         )}
       </div>
 

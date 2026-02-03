@@ -95,9 +95,12 @@ export async function quickFinetune(options: QuickFinetuneOptions): Promise<Quic
       }
     );
 
+    // Use provider_job_id (from list endpoint) or id (from create endpoint) as fallback
+    const jobId = job.provider_job_id || job.id;
+
     // 7. Update workflow with training info
     await workflowDB.updateStepData(workflow.id, 'training', {
-      jobId: job.provider_job_id,
+      jobId,
       baseModel,
       status: job.status as 'pending' | 'queued' | 'running' | 'completed' | 'failed',
       startedAt: Date.now(),
@@ -109,7 +112,7 @@ export async function quickFinetune(options: QuickFinetuneOptions): Promise<Quic
     return {
       success: true,
       workflowId: workflow.id,
-      jobId: job.provider_job_id,
+      jobId,
       status: job.status,
     };
   } catch (error) {

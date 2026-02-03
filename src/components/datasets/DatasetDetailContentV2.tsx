@@ -1,9 +1,11 @@
 /**
  * DatasetDetailContentV2
  *
- * Refactored version of DatasetDetailContent with new layout:
- * - Topbar with stepper showing dataset preparation checklist
+ * Main content component for dataset detail view:
+ * - Header with dataset objective and insights
+ * - View mode toggle (canvas/table/evaluator)
  * - Canvas view showing topic hierarchy visualization
+ * - Finetune jobs sidebar panel
  */
 
 import { useMemo, useState, useCallback, useEffect } from "react";
@@ -28,6 +30,8 @@ import { LucyDatasetAssistant } from "./LucyDatasetAssistant";
 import { updateDatasetEvaluationConfig } from "@/services/datasets-db";
 import { quickFinetune } from "@/services/quick-finetune";
 import { toast } from "sonner";
+import { FinetuneJobsPanel } from "@/components/finetune/FinetuneJobsPanel";
+import { useFinetuneJobs } from "@/contexts/FinetuneJobsContext";
 import type { CoverageStats, EvaluationConfig, TopicHierarchyNode } from "@/types/dataset-types";
 
 export function DatasetDetailContentV2() {
@@ -93,6 +97,21 @@ export function DatasetDetailContentV2() {
     handleExport,
     recordsWithTopicsCount,
   } = DatasetDetailConsumer();
+
+  // Finetune jobs sidebar
+  const { setCurrentBackendDatasetId } = useFinetuneJobs();
+
+  // Set the backend dataset ID for filtering jobs when dataset changes
+  useEffect(() => {
+    if (dataset?.backendDatasetId) {
+      setCurrentBackendDatasetId(dataset.backendDatasetId);
+    } else {
+      setCurrentBackendDatasetId(null);
+    }
+    return () => {
+      setCurrentBackendDatasetId(null);
+    };
+  }, [dataset?.backendDatasetId, setCurrentBackendDatasetId]);
 
   // State for canvas view
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
@@ -553,6 +572,8 @@ export function DatasetDetailContentV2() {
         }}
       />
 
+      {/* Finetune jobs sidebar */}
+      <FinetuneJobsPanel />
     </div>
   );
 }

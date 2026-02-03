@@ -20,7 +20,7 @@ import { DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
 import type { Dataset, DatasetRecord, TopicHierarchyConfig, TopicHierarchyNode } from "@/types/dataset-types";
 import { emitter } from "@/utils/eventEmitter";
 import { toast } from "sonner";
-import { uploadDatasetForFinetune, createFinetuneJobFromUpload } from "@/services/finetune-api";
+import { uploadDatasetForFinetune, createFinetuneJobFromUpload, listReinforcementJobs } from "@/services/finetune-api";
 import { updateDatasetBackendId, updateDatasetTopicHierarchy, clearAllRecordTopics, updateRecordTopicsBatch, renameTopicInRecords, clearTopicFromRecords } from "@/services/datasets-db";
 import { filterAndSortRecords } from "@/components/datasets/record-filters";
 import {
@@ -569,14 +569,31 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
         setDataset((prev) => prev ? { ...prev, backendDatasetId } : null);
       }
 
-      // Step 2: Create the finetune job
+      // Step 2: Check for existing running/pending jobs for this dataset
+      const existingJobs = await listReinforcementJobs(undefined, undefined, backendDatasetId);
+      const activeJob = existingJobs.find(
+        (job) => job.status === "pending" || job.status === "running"
+      );
+
+      if (activeJob) {
+        toast.warning("A fine-tuning job is already in progress", {
+          description: `Job "${activeJob.provider_job_id}" is ${activeJob.status}. Wait for it to complete before starting a new one.`,
+        });
+        // Emit event to open the jobs panel so user can see the existing job
+        emitter.emit("vllora_finetune_job_created", { jobId: activeJob.id });
+        return;
+      }
+
+      // Step 3: Create the finetune job
       const job = await createFinetuneJobFromUpload(backendDatasetId, dataset.name);
 
+      // Use provider_job_id (from list endpoint) or id (from create endpoint) as fallback
+      const jobId = job.provider_job_id || job.id;
       toast.success("Fine-tuning job started", {
-        description: `Job ID: ${job.id}`,
+        description: `Job ID: ${jobId}`,
       });
-      // Emit event to notify FinetuneJobsContext to refresh
-      emitter.emit("vllora_finetune_job_created", { jobId: job.id });
+      // Emit event to notify FinetuneJobsContext to refresh and open jobs panel
+      emitter.emit("vllora_finetune_job_created", { jobId });
     } catch (err) {
       console.error("Failed to start fine-tuning job:", err);
       toast.error("Failed to start fine-tuning job", {
