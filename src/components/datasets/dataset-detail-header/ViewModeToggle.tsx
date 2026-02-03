@@ -1,10 +1,11 @@
 /**
  * ViewModeToggle
  *
- * Toggle buttons for switching between dataset view modes (canvas, table, evaluator).
+ * Toggle buttons for switching between record view modes (canvas, table).
+ * Note: Evaluator is now a separate section accessed via DatasetSectionTabs.
  */
 
-import { LayoutGrid, Table2, Code2 } from "lucide-react";
+import { LayoutGrid, Table2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -13,7 +14,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-export type ViewMode = "canvas" | "table" | "evaluator";
+export type ViewMode = "canvas" | "table";
 
 interface ViewModeOption {
   mode: ViewMode;
@@ -31,11 +32,6 @@ const VIEW_MODE_OPTIONS: ViewModeOption[] = [
     mode: "table",
     icon: <Table2 className="w-3.5 h-3.5" />,
     tooltip: "Records table",
-  },
-  {
-    mode: "evaluator",
-    icon: <Code2 className="w-3.5 h-3.5" />,
-    tooltip: "Evaluator script",
   },
 ];
 

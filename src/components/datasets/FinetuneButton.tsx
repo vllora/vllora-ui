@@ -105,7 +105,6 @@ export function FinetuneButton({
       ) : (
         <>
           <Sparkles className="w-4 h-4" />
-          <span>Finetune</span>
         </>
       )}
     </Button>

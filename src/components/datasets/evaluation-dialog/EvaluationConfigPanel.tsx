@@ -5,7 +5,7 @@
  * Displayed as a tab in the dataset main content area.
  */
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -26,6 +26,12 @@ import {
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import type { EvaluationConfig } from "@/types/dataset-types";
+
+/** Methods exposed via ref for external control */
+export interface EvaluationConfigPanelRef {
+  reset: () => void;
+  copy: () => void;
+}
 
 // Default script for the JavaScript evaluator (same as JavaScriptPanel)
 const DEFAULT_SCRIPT = `/**
@@ -83,6 +89,8 @@ Provide your evaluation as JSON with:
 interface EvaluationConfigPanelProps {
   config?: EvaluationConfig;
   onSave: (config: EvaluationConfig) => Promise<void>;
+  /** Hide header action buttons (Reset/Copy) when they're shown externally */
+  hideHeaderActions?: boolean;
 }
 
 const AVAILABLE_MODELS = [
@@ -92,10 +100,8 @@ const AVAILABLE_MODELS = [
   { value: "claude-3-haiku", label: "Claude 3 Haiku", cost: "$0.01" },
 ];
 
-export function EvaluationConfigPanel({
-  config,
-  onSave,
-}: EvaluationConfigPanelProps) {
+export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, EvaluationConfigPanelProps>(
+  function EvaluationConfigPanel({ config, onSave, hideHeaderActions = false }, ref) {
   // JavaScript evaluator state
   const [script, setScript] = useState(DEFAULT_SCRIPT);
 
@@ -160,6 +166,12 @@ export function EvaluationConfigPanel({
     setScript(DEFAULT_SCRIPT);
   };
 
+  // Expose reset and copy methods to parent via ref
+  useImperativeHandle(ref, () => ({
+    reset: handleReset,
+    copy: handleCopy,
+  }), [script]);
+
   const selectedModelInfo = AVAILABLE_MODELS.find((m) => m.value === selectedModel);
 
   return (
@@ -173,26 +185,28 @@ export function EvaluationConfigPanel({
             Define how training samples are scored using JavaScript
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs gap-1.5"
-            onClick={handleReset}
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Reset
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs gap-1.5"
-            onClick={handleCopy}
-          >
-            <Copy className="w-3.5 h-3.5" />
-            Copy
-          </Button>
-        </div>
+        {!hideHeaderActions && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs gap-1.5"
+              onClick={handleReset}
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Reset
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs gap-1.5"
+              onClick={handleCopy}
+            >
+              <Copy className="w-3.5 h-3.5" />
+              Copy
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Editor */}
@@ -309,4 +323,4 @@ export function EvaluationConfigPanel({
       </div>
     </div>
   );
-}
+});

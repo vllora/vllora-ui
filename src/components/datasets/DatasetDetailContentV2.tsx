@@ -3,15 +3,16 @@
  *
  * Main content component for dataset detail view:
  * - Header with dataset objective and insights
- * - View mode toggle (canvas/table/evaluator)
- * - Canvas view showing topic hierarchy visualization
- * - Finetune jobs sidebar panel
+ * - Section tabs (Records / Evaluator / Jobs)
+ * - Records section: Canvas or Table view with view mode toggle
+ * - Evaluator section: Evaluation function configuration
+ * - Jobs section: Finetune jobs list
  */
 
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Loader2 } from "lucide-react";
-import { DatasetUtilityBar, type ViewMode } from "./dataset-detail-header/DatasetUtilityBar";
+import { DatasetUtilityBar, type ViewMode, type DatasetSection } from "./dataset-detail-header/DatasetUtilityBar";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { emitter } from "@/utils/eventEmitter";
 import { DeleteConfirmationDialog } from "./DeleteConfirmationDialog";
@@ -28,9 +29,10 @@ import { DatasetDetailHeader } from "./dataset-detail-header";
 import { DatasetMainContent } from "./DatasetMainContent";
 import { LucyDatasetAssistant } from "./LucyDatasetAssistant";
 import { updateDatasetEvaluationConfig } from "@/services/datasets-db";
+import { EvaluationConfigPanel, type EvaluationConfigPanelRef } from "./evaluation-dialog/EvaluationConfigPanel";
 import { quickFinetune } from "@/services/quick-finetune";
 import { toast } from "sonner";
-import { FinetuneJobsPanel } from "@/components/finetune/FinetuneJobsPanel";
+import { FinetuneJobsContent } from "@/components/finetune/FinetuneJobsContent";
 import { useFinetuneJobs } from "@/contexts/FinetuneJobsContext";
 import type { CoverageStats, EvaluationConfig, TopicHierarchyNode } from "@/types/dataset-types";
 
@@ -116,18 +118,29 @@ export function DatasetDetailContentV2() {
   // State for canvas view
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
 
-  // View mode: "canvas" for visual hierarchy, "table" for full data table with hierarchy grouping
+  // Active section: "records" for data views, "evaluator" for evaluation config
+  const [activeSection, setActiveSection] = useState<DatasetSection>("records");
+
+  // View mode within records section: "canvas" for visual hierarchy, "table" for full data table
   const [viewMode, setViewMode] = useState<ViewMode>("canvas");
 
-  // Listen for workflow-triggered view mode changes (e.g., grader_config -> evaluator)
+  // Ref for EvaluationConfigPanel to expose reset/copy methods
+  const evaluatorPanelRef = useRef<EvaluationConfigPanelRef>(null);
+
+  // Listen for workflow-triggered section/view mode changes (e.g., grader_config -> evaluator)
   useEffect(() => {
-    const handleViewModeChange = (event: CustomEvent<{ viewMode: ViewMode }>) => {
-      setViewMode(event.detail.viewMode);
+    const handleSectionChange = (event: CustomEvent<{ section?: DatasetSection; viewMode?: ViewMode }>) => {
+      if (event.detail.section) {
+        setActiveSection(event.detail.section);
+      }
+      if (event.detail.viewMode) {
+        setViewMode(event.detail.viewMode);
+      }
     };
 
-    window.addEventListener("finetune-set-view-mode" as any, handleViewModeChange);
+    window.addEventListener("finetune-set-view-mode" as any, handleSectionChange);
     return () => {
-      window.removeEventListener("finetune-set-view-mode" as any, handleViewModeChange);
+      window.removeEventListener("finetune-set-view-mode" as any, handleSectionChange);
     };
   }, []);
 
@@ -424,8 +437,10 @@ export function DatasetDetailContentV2() {
           <DatasetDetailHeader />
         </div>
 
-        {/* View mode toolbar */}
+        {/* Combined section tabs + utility bar */}
         <DatasetUtilityBar
+          activeSection={activeSection}
+          onSectionChange={setActiveSection}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           onExport={handleExport}
@@ -433,35 +448,50 @@ export function DatasetDetailContentV2() {
           hasEvaluator={hasEvaluator}
           onFinetune={handleFinetune}
           isFinetuning={isFinetuning}
+          onEvaluatorReset={() => evaluatorPanelRef.current?.reset()}
+          onEvaluatorCopy={() => evaluatorPanelRef.current?.copy()}
         />
 
-        {/* Main content area - Canvas or Table based on view mode */}
-        <DatasetMainContent
-          viewMode={viewMode}
-          datasetId={datasetId}
-          records={sortedRecords}
-          topicHierarchy={dataset.topicHierarchy?.hierarchy}
-          coverageStats={canvasCoverageStats}
-          availableTopics={availableTopics}
-          selectedTopic={selectedTopic}
-          onSelectTopic={setSelectedTopic}
-          selectedRecord={selectedRecord}
-          selectedRecordId={selectedRecordId}
-          onSelectRecordId={setSelectedRecordId}
-          onAddTopic={handleAddTopic}
-          onRenameTopic={handleRenameTopic}
-          onDeleteTopic={handleDeleteTopic}
-          onUpdateRecordTopic={handleUpdateRecordTopic}
-          onDeleteRecord={(recordId) =>
-            setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
-          }
-          onSaveRecord={handleSaveRecordData}
-          onCreateChildTopic={handleCreateChildTopic}
-          onGenerateForTopic={handleGenerateForTopic}
-          onGenerateSubtopics={handleGenerateSubtopics}
-          evaluationConfig={dataset.evaluationConfig}
-          onSaveEvaluationConfig={handleSaveEvaluationConfig}
-        />
+        {/* Main content area - Records, Evaluator, or Jobs based on active section */}
+        {activeSection === "records" && (
+          <DatasetMainContent
+            viewMode={viewMode}
+            datasetId={datasetId}
+            records={sortedRecords}
+            topicHierarchy={dataset.topicHierarchy?.hierarchy}
+            coverageStats={canvasCoverageStats}
+            availableTopics={availableTopics}
+            selectedTopic={selectedTopic}
+            onSelectTopic={setSelectedTopic}
+            selectedRecord={selectedRecord}
+            selectedRecordId={selectedRecordId}
+            onSelectRecordId={setSelectedRecordId}
+            onAddTopic={handleAddTopic}
+            onRenameTopic={handleRenameTopic}
+            onDeleteTopic={handleDeleteTopic}
+            onUpdateRecordTopic={handleUpdateRecordTopic}
+            onDeleteRecord={(recordId) =>
+              setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
+            }
+            onSaveRecord={handleSaveRecordData}
+            onCreateChildTopic={handleCreateChildTopic}
+            onGenerateForTopic={handleGenerateForTopic}
+            onGenerateSubtopics={handleGenerateSubtopics}
+          />
+        )}
+        {activeSection === "evaluator" && (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <EvaluationConfigPanel
+              ref={evaluatorPanelRef}
+              config={dataset.evaluationConfig}
+              onSave={handleSaveEvaluationConfig}
+              hideHeaderActions
+            />
+          </div>
+        )}
+        {activeSection === "jobs" && (
+          <FinetuneJobsContent />
+        )}
       </div>
 
       {/* Dialogs */}
@@ -571,9 +601,6 @@ export function DatasetDetailContentV2() {
           };
         }}
       />
-
-      {/* Finetune jobs sidebar */}
-      <FinetuneJobsPanel />
     </div>
   );
 }
