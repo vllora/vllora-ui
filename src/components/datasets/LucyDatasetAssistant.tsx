@@ -12,7 +12,6 @@
  */
 
 import { useMemo, useCallback, useState, useEffect, useRef } from "react";
-import { useParams } from "react-router";
 import { Plus, Loader2, PanelLeftClose, PanelLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { emitter } from "@/utils/eventEmitter";
@@ -25,7 +24,7 @@ import {
 import { DistriMessage } from "@distri/core";
 import { useDistriConnection } from "@/providers/DistriProvider";
 import { ProviderKeysConsumer } from "@/contexts/ProviderKeysContext";
-import { DatasetsConsumer } from "@/contexts/DatasetsContext";
+import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { useFineTuneAgentChat } from "@/hooks/useFineTuneAgentChat";
 import {
   LucyChat,
@@ -35,6 +34,7 @@ import {
 } from "@/components/agent/lucy-agent";
 import type { QuickAction } from "@/components/agent/lucy-agent/LucyWelcome";
 import { cn } from "@/lib/utils";
+import { buildDatasetAnalysisPrompt } from "./lucy-prompt-utils";
 
 // Finetune-focused quick actions for Lucy
 const FINETUNE_QUICK_ACTIONS: QuickAction[] = [
@@ -73,16 +73,8 @@ const FINETUNE_QUICK_ACTIONS: QuickAction[] = [
 export function LucyDatasetAssistant() {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  // Get dataset ID from URL params (for detail page)
-  const { datasetId: selectedDatasetId } = useParams<{ datasetId: string }>();
-
-  const { datasets } = DatasetsConsumer();
-
-  // Derive current dataset from datasets list and URL param (full dataset object for context)
-  const currentDataset = useMemo(() => {
-    if (!selectedDatasetId) return null;
-    return datasets.find(d => d.id === selectedDatasetId) || null;
-  }, [datasets, selectedDatasetId]);
+  // Get dataset from context (rendered inside DatasetDetailProvider)
+  const { dataset: currentDataset, datasetId: selectedDatasetId, isLoading: datasetLoading } = DatasetDetailConsumer();
 
   // Lucy agent state
   const { isConnected, reconnect } = useDistriConnection();
@@ -110,10 +102,15 @@ export function LucyDatasetAssistant() {
   const hasSetAutoTriggerRef = useRef(false);
   const lastAnalyzedDatasetRef = useRef<string | null>(null);
 
+  // Store messages ref to check without triggering effect re-runs
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+
   // Proactive behavior: auto-analyze dataset when viewing it for the first time
   useEffect(() => {
     // Skip if not ready
     if (
+      datasetLoading ||
       workflowLoading ||
       agentLoading ||
       !agent ||
@@ -124,63 +121,35 @@ export function LucyDatasetAssistant() {
       return;
     }
 
-    // Skip if we already analyzed this dataset in this session
+    // Skip if we already successfully triggered for this dataset
     if (lastAnalyzedDatasetRef.current === selectedDatasetId) {
       return;
     }
 
     // Skip if there are already messages (user has interacted)
-    if (messages.length > 0) {
+    // Using ref to avoid re-running effect when messages change
+    if (messagesRef.current.length > 0) {
       lastAnalyzedDatasetRef.current = selectedDatasetId;
       return;
     }
 
-    // Mark as analyzed
-    lastAnalyzedDatasetRef.current = selectedDatasetId;
-    hasSetAutoTriggerRef.current = true;
-
-    // Build contextual prompt based on dataset state
-    const buildPrompt = () => {
-      const name = currentDataset.name;
-      const objective = currentDataset.datasetObjective;
-      const hasTopics = !!(currentDataset.topicHierarchy?.hierarchy?.length);
-      const hasEvaluator = !!(
-        currentDataset.evaluationConfig &&
-        ((currentDataset.evaluationConfig.type === 'js' && currentDataset.evaluationConfig.script) ||
-         (currentDataset.evaluationConfig.type === 'llm_as_judge' && currentDataset.evaluationConfig.promptTemplate))
-      );
-      const workflowStep = workflow?.currentStep || 'not_started';
-
-      let prompt = `I'm viewing the dataset "${name}". `;
-
-      if (objective) {
-        prompt += `Training objective: "${objective}". `;
-      }
-
-      if (hasTopics) {
-        prompt += `Has topic hierarchy configured. `;
-      }
-
-      if (hasEvaluator) {
-        prompt += `Has evaluator configured. `;
-      }
-
-      if (workflow && workflowStep !== 'not_started' && workflowStep !== 'completed') {
-        prompt += `Workflow is at step: ${workflowStep}. `;
-      }
-
-      prompt += `Please analyze the current state and recommend what I should do next.`;
-
-      return prompt;
-    };
+    // Capture values for the timeout (in case they change during the delay)
+    const promptDataset = currentDataset;
+    const promptWorkflow = workflow;
+    const targetDatasetId = selectedDatasetId;
 
     // Use a delay to ensure LucyChat is fully mounted and ready
+    // Only mark as analyzed AFTER the trigger fires (prevents race condition with cleanup)
     const timer = setTimeout(() => {
-      setAutoTriggerPrompt(buildPrompt());
+      // Double-check we haven't already triggered and messages are still empty
+      if (lastAnalyzedDatasetRef.current !== targetDatasetId && messagesRef.current.length === 0) {
+        lastAnalyzedDatasetRef.current = targetDatasetId;
+        setAutoTriggerPrompt(buildDatasetAnalysisPrompt({ dataset: promptDataset, workflow: promptWorkflow }));
+      }
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [workflow, workflowLoading, agentLoading, agent, isConnected, messages.length, selectedDatasetId, currentDataset]);
+  }, [datasetLoading, workflow, workflowLoading, agentLoading, agent, isConnected, selectedDatasetId, currentDataset]);
 
   // Reset auto-trigger prompt when dataset changes (allow new analysis)
   useEffect(() => {

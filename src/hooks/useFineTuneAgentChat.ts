@@ -141,6 +141,14 @@ export function useFineTuneAgentChat(
 
   // Load workflow state on mount and when datasetId changes
   const refreshWorkflow = useCallback(async () => {
+    // Skip loading if no datasetId
+    if (!datasetId) {
+      setWorkflowLoading(false);
+      setWorkflow(null);
+      setDatasetHasEvaluator(false);
+      return;
+    }
+
     setWorkflowLoading(true);
     try {
       const [workflowState, dataset] = await Promise.all([
