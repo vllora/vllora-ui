@@ -164,28 +164,29 @@ export async function createDataset(name: string, datasetObjective?: string): Pr
     ...(datasetObjective?.trim() && { datasetObjective: datasetObjective.trim() }),
   };
 
-  return new Promise((resolve, reject) => {
+  // First, save the dataset to IndexedDB
+  await new Promise<void>((resolve, reject) => {
     const tx = db.transaction('datasets', 'readwrite');
     const store = tx.objectStore('datasets');
     const request = store.add(dataset);
 
-    request.onsuccess = async () => {
-      // Auto-start workflow if dataset has an objective
-      if (datasetObjective?.trim()) {
-        try {
-          const { createWorkflow, advanceToStep } = await import('./finetune-workflow-db');
-          const workflow = await createWorkflow(dataset.id, datasetObjective.trim());
-          // Advance to first step (topics_config)
-          await advanceToStep(workflow.id, 'topics_config');
-        } catch (err) {
-          console.warn('[createDataset] Failed to auto-start workflow:', err);
-          // Don't fail dataset creation if workflow creation fails
-        }
-      }
-      resolve(dataset);
-    };
+    request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
   });
+
+  // Then, create workflow if dataset has an objective (separate transaction)
+  // Note: Workflow starts at 'not_started' - Lucy will advance it when user begins finetune process
+  if (datasetObjective?.trim()) {
+    try {
+      const { createWorkflow } = await import('./finetune-workflow-db');
+      await createWorkflow(dataset.id, datasetObjective.trim());
+    } catch (err) {
+      console.warn('[createDataset] Failed to create workflow:', err);
+      // Don't fail dataset creation if workflow creation fails
+    }
+  }
+
+  return dataset;
 }
 
 

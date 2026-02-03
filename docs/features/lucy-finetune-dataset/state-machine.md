@@ -83,7 +83,7 @@ type FinetuneStep =
 ### Step Status Enum
 
 ```typescript
-type StepStatus = 'pending' | 'in_progress' | 'completed' | 'skipped';
+type StepStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped';
 ```
 
 ---
@@ -172,6 +172,7 @@ function isValidStepTransition(from: FinetuneStep, to: FinetuneStep): boolean {
 **State Transitions:**
 - `pending` → `in_progress`: When user requests topic generation
 - `in_progress` → `completed`: When hierarchy is applied
+- `in_progress` → `failed`: When an error occurs during the step
 - `pending` → `skipped`: When user chooses to skip
 
 **Data Stored:**
@@ -200,6 +201,7 @@ interface TopicsConfig {
 **State Transitions:**
 - `pending` → `in_progress`: When categorization begins
 - `in_progress` → `completed`: When all records are categorized
+- `in_progress` → `failed`: When an error occurs during categorization
 - `pending` → `skipped`: When user skips (also skips if Step 1 skipped)
 
 **Data Stored:**

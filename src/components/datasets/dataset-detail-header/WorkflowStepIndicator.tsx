@@ -16,10 +16,10 @@ import {
 import {
   type FinetuneStep,
   type FinetuneWorkflowState,
-  type StepStatus,
   getWorkflowByDataset,
 } from "@/services/finetune-workflow-db";
-import { Check, Loader2, X } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
+import { StepIcon } from "./StepIcon";
 
 // Steps in order (excluding not_started and completed which are pseudo-steps)
 const WORKFLOW_STEPS: { step: FinetuneStep; label: string; short: string }[] = [
@@ -37,22 +37,6 @@ interface WorkflowStepIndicatorProps {
   className?: string;
 }
 
-function StepIcon({ status, isCurrent }: { status: StepStatus; isCurrent: boolean }) {
-  if (status === "completed") {
-    return <Check className="w-3 h-3 text-emerald-500" />;
-  }
-  if (status === "failed") {
-    return <X className="w-3 h-3 text-destructive" />;
-  }
-  if (status === "skipped") {
-    return <span className="text-[10px] text-muted-foreground">—</span>;
-  }
-  if (isCurrent) {
-    return <Loader2 className="w-3 h-3 animate-spin text-primary" />;
-  }
-  return <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30" />;
-}
-
 export function WorkflowStepIndicator({ datasetId, className }: WorkflowStepIndicatorProps) {
   const [workflow, setWorkflow] = useState<FinetuneWorkflowState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,6 +47,7 @@ export function WorkflowStepIndicator({ datasetId, className }: WorkflowStepIndi
     async function loadWorkflow() {
       try {
         const wf = await getWorkflowByDataset(datasetId);
+        console.log("=== Workflow:", wf);
         if (mounted) {
           setWorkflow(wf);
           setLoading(false);
@@ -96,11 +81,12 @@ export function WorkflowStepIndicator({ datasetId, className }: WorkflowStepIndi
     );
   }
 
-  if (!workflow || workflow.currentStep === "not_started") {
+  if (!workflow) {
     return null;
   }
 
   const isCompleted = workflow.currentStep === "completed";
+  const isNotStarted = workflow.currentStep === "not_started";
 
   return (
     <TooltipProvider delayDuration={100}>
@@ -109,7 +95,8 @@ export function WorkflowStepIndicator({ datasetId, className }: WorkflowStepIndi
 
         {WORKFLOW_STEPS.map((stepInfo, index) => {
           const status = workflow.stepStatus[stepInfo.step];
-          const isCurrent = workflow.currentStep === stepInfo.step;
+          // When not started, no step is current
+          const isCurrent = !isNotStarted && workflow.currentStep === stepInfo.step;
           const isLast = index === WORKFLOW_STEPS.length - 1;
 
           return (
