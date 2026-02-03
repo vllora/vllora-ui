@@ -6,7 +6,7 @@
  * - Evaluator section: No additional actions (panel has its own controls)
  */
 
-import { Download, ListChecks, Database, Code2, RotateCcw, Copy } from "lucide-react";
+import { Download, ListChecks, Database, RotateCcw, Copy, Check, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -57,7 +57,7 @@ const SECTION_TABS = [
   {
     id: "evaluator" as const,
     label: "Evaluator",
-    icon: Code2,
+    icon: FlaskConical,
   },
   {
     id: "jobs" as const,
@@ -113,7 +113,14 @@ export function DatasetUtilityBar({
               <span>{tab.label}</span>
               {/* Configured indicator for evaluator */}
               {tab.id === "evaluator" && hasEvaluator && (
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                <TooltipProvider delayDuration={300}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Check className="w-3.5 h-3.5 text-green-500" />
+                    </TooltipTrigger>
+                    <TooltipContent>Evaluator is configured</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
               {/* Active jobs count badge for jobs tab */}
               {tab.id === "jobs" && activeJobsCount > 0 && (

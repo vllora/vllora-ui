@@ -15,22 +15,10 @@ function DatasetsPageContent() {
     isLoading,
   } = DatasetsUIConsumer();
 
-  // Track if this is the user's first time (for auto-navigation)
-  const [hasVisited, setHasVisited] = useLocalStorageState<boolean>(DATASETS_VISITED_KEY, {
-    defaultValue: false,
-  });
-  const isFirstVisit = !hasVisited;
 
   const noDatasets = datasets.length === 0;
-  const showEmptyState = isFirstVisit && noDatasets;
 
-  // Mark as visited once user has datasets
-  useEffect(() => {
-    if (datasets.length > 0 && isFirstVisit) {
-      setHasVisited(true);
-    }
-  }, [datasets.length, isFirstVisit, setHasVisited]);
-
+  // Mark as visited once user has dataset
   return (
     <section className="flex-1 flex overflow-hidden bg-background text-foreground relative">
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -38,7 +26,7 @@ function DatasetsPageContent() {
           <div className="flex-1 flex items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
-        ) : showEmptyState ? (
+        ) : noDatasets ? (
           <EmptyDatasetsState />
         ) : (
           <DatasetsGrid onSelectDataset={navigateToDataset} />

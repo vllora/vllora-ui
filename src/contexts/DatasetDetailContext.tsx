@@ -120,7 +120,6 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
   const [generateDataDialog, setGenerateDataDialog] = useState(false);
   const [sanitizeDataDialog, setSanitizeDataDialog] = useState(false);
   const [dryRunDialog, setDryRunDialog] = useState(false);
-  const [evaluationConfigDialog, setEvaluationConfigDialog] = useState(false);
 
   // Loading states
   const [isGeneratingTopics, setIsGeneratingTopics] = useState(false);
@@ -1003,8 +1002,6 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     setSanitizeDataDialog,
     dryRunDialog,
     setDryRunDialog,
-    evaluationConfigDialog,
-    setEvaluationConfigDialog,
 
     // Loading states
     isGeneratingTopics,
