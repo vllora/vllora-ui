@@ -73,17 +73,26 @@ export function FinetuneJobsProvider({ children }: FinetuneJobsProviderProps) {
   const { subscribe } = ProjectEventsConsumer();
   const subscriptionIdRef = useRef<string>(`finetune-jobs-${Date.now()}`);
 
-  // Load jobs from backend (optionally filtered by dataset)
+  // Load jobs from backend (filtered by dataset)
+  // If datasetId is null, clear jobs (dataset hasn't been uploaded yet)
   const loadJobs = useCallback(async (datasetId?: string | null) => {
+    // Use provided datasetId or fall back to current state
+    const filterDatasetId = datasetId !== undefined ? datasetId : currentBackendDatasetId;
+
+    // If no backend dataset ID, clear jobs (dataset not uploaded yet)
+    if (!filterDatasetId) {
+      setJobs([]);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     try {
-      // Use provided datasetId or fall back to current state
-      const filterDatasetId = datasetId !== undefined ? datasetId : currentBackendDatasetId;
       const fetchedJobs = await listReinforcementJobs(
         undefined, // limit
         undefined, // after
-        filterDatasetId || undefined // datasetId (server-side filter)
+        filterDatasetId // datasetId (server-side filter)
       );
       setJobs(fetchedJobs);
     } catch (err) {
