@@ -135,6 +135,7 @@ __export(index_exports, {
   TypingIndicator: () => TypingIndicator,
   UserMessageRenderer: () => UserMessageRenderer,
   VoiceInput: () => VoiceInput,
+  configureAskFollowUpStyles: () => configureAskFollowUpStyles,
   createAskFollowUpTool: () => createAskFollowUpTool,
   extractContent: () => extractContent,
   useAgent: () => useAgent,
@@ -7784,6 +7785,10 @@ var import_jsx_runtime47 = require("react/jsx-runtime");
 // src/components/AskFollowUp.tsx
 var import_react32 = require("react");
 var import_jsx_runtime48 = require("react/jsx-runtime");
+var globalClassNames = {};
+function configureAskFollowUpStyles(classNames) {
+  globalClassNames = classNames;
+}
 var ASK_FOLLOW_UP_TOOL_NAME = "ask_follow_up";
 function createAskFollowUpTool() {
   return {
@@ -7855,6 +7860,7 @@ function AskFollowUpComponent({
   const input = toolCall.input;
   const questions = (0, import_react32.useMemo)(() => input?.questions || [], [input?.questions]);
   const hasQuestions = questions.length > 0;
+  const styles = globalClassNames;
   const [currentStep, setCurrentStep] = (0, import_react32.useState)(0);
   const [answers, setAnswers] = (0, import_react32.useState)(() => {
     const defaults = {};
@@ -7947,47 +7953,48 @@ function AskFollowUpComponent({
     return null;
   }
   if (isCompleted) {
-    return /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { className: "border rounded-lg p-4 bg-muted/30", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { className: "flex items-center gap-2 text-sm text-muted-foreground", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(CheckIcon, { className: "w-4 h-4 text-green-500" }),
+    return /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { className: cn("border rounded-lg p-4 bg-muted/30", styles.completedContainer), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { className: cn("flex items-center gap-2 text-sm text-muted-foreground", styles.completedText), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(CheckIcon, { className: cn("w-4 h-4 text-green-500", styles.completedIcon) }),
         /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("span", { children: "Follow-up questions answered" })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("div", { className: "mt-2 space-y-1", children: questions.map((q) => /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { className: "text-xs", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("span", { className: "text-muted-foreground", children: q.question }),
-        /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("span", { className: "ml-2 font-medium", children: Array.isArray(answers[q.id]) ? answers[q.id].join(", ") : String(answers[q.id]) })
+      /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("div", { className: "mt-2 space-y-1", children: questions.map((q) => /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { className: cn("text-xs", styles.answerItem), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("span", { className: cn("text-muted-foreground", styles.answerQuestion), children: q.question }),
+        /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("span", { className: cn("ml-2 font-medium", styles.answerValue), children: Array.isArray(answers[q.id]) ? answers[q.id].join(", ") : String(answers[q.id]) })
       ] }, q.id)) })
     ] });
   }
   if (!currentQuestion) {
     return null;
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { className: "border rounded-lg overflow-hidden bg-background shadow-sm", children: [
-    (input.title || input.description) && /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { className: "px-4 py-3 border-b bg-muted/30", children: [
-      input.title && /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("h3", { className: "font-medium text-sm", children: input.title }),
-      input.description && /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("p", { className: "text-xs text-muted-foreground mt-1", children: input.description })
+  return /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { className: cn("border rounded-lg overflow-hidden bg-background shadow-sm", styles.root), children: [
+    (input.title || input.description) && /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { className: cn("px-4 py-3 border-b bg-muted/30", styles.header), children: [
+      input.title && /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("h3", { className: cn("font-medium text-sm", styles.title), children: input.title }),
+      input.description && /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("p", { className: cn("text-xs text-muted-foreground mt-1", styles.description), children: input.description })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { className: "px-4 pt-3", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { className: cn("px-4 pt-3", styles.progressContainer), children: [
       /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("div", { className: "flex items-center gap-1", children: questions.map((_, idx) => /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(
         "div",
         {
           className: cn(
             "h-1 flex-1 rounded-full transition-colors",
-            idx < currentStep ? "bg-primary" : idx === currentStep ? "bg-primary/50" : "bg-muted"
+            styles.progressSegment,
+            idx < currentStep ? cn("bg-primary", styles.progressSegmentCompleted) : idx === currentStep ? cn("bg-primary/50", styles.progressSegmentActive) : cn("bg-muted", styles.progressSegmentPending)
           )
         },
         idx
       )) }),
-      /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("p", { className: "text-xs text-muted-foreground mt-2", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("p", { className: cn("text-xs text-muted-foreground mt-2", styles.progressText), children: [
         "Question ",
         currentStep + 1,
         " of ",
         questions.length
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { className: "p-4", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("label", { className: "block text-sm font-medium mb-3", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { className: cn("p-4", styles.questionContainer), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("label", { className: cn("block text-sm font-medium mb-3", styles.questionLabel), children: [
         currentQuestion.question,
-        currentQuestion.required && /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("span", { className: "text-destructive ml-1", children: "*" })
+        currentQuestion.required && /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("span", { className: cn("text-destructive ml-1", styles.requiredIndicator), children: "*" })
       ] }),
       currentQuestion.type === "text" && /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(
         "input",
@@ -7997,7 +8004,10 @@ function AskFollowUpComponent({
           onChange: (e) => handleAnswer(e.target.value),
           onKeyDown: handleKeyDown,
           placeholder: currentQuestion.placeholder || "Type your answer...",
-          className: "w-full px-3 py-2 text-sm border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50",
+          className: cn(
+            "w-full px-3 py-2 text-sm border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50",
+            styles.textInput
+          ),
           autoFocus: true
         }
       ),
@@ -8011,7 +8021,8 @@ function AskFollowUpComponent({
             },
             className: cn(
               "w-full px-3 py-2 text-sm text-left border rounded-md transition-colors",
-              answers[currentQuestion.id] === option && !otherSelected[currentQuestion.id] ? "border-primary bg-primary/10" : "hover:bg-muted"
+              styles.optionButton,
+              answers[currentQuestion.id] === option && !otherSelected[currentQuestion.id] ? cn("border-primary bg-primary/10", styles.optionButtonSelected) : "hover:bg-muted"
             ),
             children: option
           },
@@ -8026,7 +8037,8 @@ function AskFollowUpComponent({
             },
             className: cn(
               "w-full px-3 py-2 text-sm text-left border rounded-md transition-colors",
-              otherSelected[currentQuestion.id] ? "border-primary bg-primary/10" : "hover:bg-muted"
+              styles.optionButton,
+              otherSelected[currentQuestion.id] ? cn("border-primary bg-primary/10", styles.optionButtonSelected) : "hover:bg-muted"
             ),
             children: "Other (type your own)"
           }
@@ -8042,7 +8054,10 @@ function AskFollowUpComponent({
             },
             onKeyDown: handleKeyDown,
             placeholder: currentQuestion.placeholder || "Type your custom answer...",
-            className: "w-full px-3 py-2 text-sm border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50",
+            className: cn(
+              "w-full px-3 py-2 text-sm border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50",
+              styles.textInput
+            ),
             autoFocus: true
           }
         )
@@ -8060,12 +8075,14 @@ function AskFollowUpComponent({
               },
               className: cn(
                 "w-full px-3 py-2 text-sm text-left border rounded-md transition-colors flex items-center gap-2",
-                selected ? "border-primary bg-primary/10" : "hover:bg-muted"
+                styles.optionButton,
+                selected ? cn("border-primary bg-primary/10", styles.optionButtonSelected) : "hover:bg-muted"
               ),
               children: [
                 /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("div", { className: cn(
                   "w-4 h-4 border rounded flex items-center justify-center",
-                  selected ? "bg-primary border-primary" : "border-muted-foreground"
+                  styles.checkbox,
+                  selected ? cn("bg-primary border-primary", styles.checkboxChecked) : "border-muted-foreground"
                 ), children: selected && /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(CheckIcon, { className: "w-3 h-3 text-primary-foreground" }) }),
                 option
               ]
@@ -8081,12 +8098,14 @@ function AskFollowUpComponent({
             },
             className: cn(
               "w-full px-3 py-2 text-sm text-left border rounded-md transition-colors flex items-center gap-2",
-              otherSelected[currentQuestion.id] ? "border-primary bg-primary/10" : "hover:bg-muted"
+              styles.optionButton,
+              otherSelected[currentQuestion.id] ? cn("border-primary bg-primary/10", styles.optionButtonSelected) : "hover:bg-muted"
             ),
             children: [
               /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("div", { className: cn(
                 "w-4 h-4 border rounded flex items-center justify-center",
-                otherSelected[currentQuestion.id] ? "bg-primary border-primary" : "border-muted-foreground"
+                styles.checkbox,
+                otherSelected[currentQuestion.id] ? cn("bg-primary border-primary", styles.checkboxChecked) : "border-muted-foreground"
               ), children: otherSelected[currentQuestion.id] && /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(CheckIcon, { className: "w-3 h-3 text-primary-foreground" }) }),
               "Other (type your own)"
             ]
@@ -8111,19 +8130,23 @@ function AskFollowUpComponent({
             },
             onKeyDown: handleKeyDown,
             placeholder: currentQuestion.placeholder || "Type your custom answer...",
-            className: "w-full px-3 py-2 text-sm border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50",
+            className: cn(
+              "w-full px-3 py-2 text-sm border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50",
+              styles.textInput
+            ),
             autoFocus: true
           }
         )
       ] }),
-      currentQuestion.type === "boolean" && /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { className: "flex gap-3", children: [
+      currentQuestion.type === "boolean" && /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { className: cn("flex gap-3", styles.booleanContainer), children: [
         /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(
           "button",
           {
             onClick: () => handleAnswer(true),
             className: cn(
               "flex-1 px-4 py-2 text-sm border rounded-md transition-colors",
-              answers[currentQuestion.id] === true ? "border-primary bg-primary/10" : "hover:bg-muted"
+              styles.booleanButton,
+              answers[currentQuestion.id] === true ? cn("border-primary bg-primary/10", styles.booleanButtonSelected) : "hover:bg-muted"
             ),
             children: "Yes"
           }
@@ -8134,14 +8157,15 @@ function AskFollowUpComponent({
             onClick: () => handleAnswer(false),
             className: cn(
               "flex-1 px-4 py-2 text-sm border rounded-md transition-colors",
-              answers[currentQuestion.id] === false ? "border-primary bg-primary/10" : "hover:bg-muted"
+              styles.booleanButton,
+              answers[currentQuestion.id] === false ? cn("border-primary bg-primary/10", styles.booleanButtonSelected) : "hover:bg-muted"
             ),
             children: "No"
           }
         )
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { className: "px-4 pb-4 flex items-center justify-between", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { className: cn("px-4 pb-4 flex items-center justify-between", styles.actionsContainer), children: [
       /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(
         "button",
         {
@@ -8149,7 +8173,8 @@ function AskFollowUpComponent({
           disabled: currentStep === 0,
           className: cn(
             "px-3 py-1.5 text-sm rounded-md transition-colors",
-            currentStep === 0 ? "text-muted-foreground cursor-not-allowed" : "hover:bg-muted"
+            styles.backButton,
+            currentStep === 0 ? cn("text-muted-foreground cursor-not-allowed", styles.backButtonDisabled) : "hover:bg-muted"
           ),
           children: "Back"
         }
@@ -8159,7 +8184,10 @@ function AskFollowUpComponent({
           "button",
           {
             onClick: handleSkip,
-            className: "px-3 py-1.5 text-sm rounded-md transition-colors text-muted-foreground hover:bg-muted",
+            className: cn(
+              "px-3 py-1.5 text-sm rounded-md transition-colors text-muted-foreground hover:bg-muted",
+              styles.skipButton
+            ),
             children: "Skip"
           }
         ),
@@ -8170,7 +8198,8 @@ function AskFollowUpComponent({
             disabled: currentQuestion.required && !answers[currentQuestion.id],
             className: cn(
               "px-4 py-1.5 text-sm rounded-md transition-colors",
-              currentQuestion.required && !answers[currentQuestion.id] ? "bg-muted text-muted-foreground cursor-not-allowed" : "bg-primary text-primary-foreground hover:bg-primary/90"
+              styles.nextButton,
+              currentQuestion.required && !answers[currentQuestion.id] ? cn("bg-muted text-muted-foreground cursor-not-allowed", styles.nextButtonDisabled) : "bg-primary text-primary-foreground hover:bg-primary/90"
             ),
             children: isLastStep ? "Submit" : "Next"
           }
@@ -8331,6 +8360,7 @@ function wrapTools(tools, options = {}) {
   TypingIndicator,
   UserMessageRenderer,
   VoiceInput,
+  configureAskFollowUpStyles,
   createAskFollowUpTool,
   extractContent,
   useAgent,

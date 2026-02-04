@@ -559,6 +559,78 @@ interface AskFollowUpOutput {
     answers: Record<string, string | string[] | boolean>;
     completed: boolean;
 }
+interface AskFollowUpClassNames {
+    /** Root container */
+    root?: string;
+    /** Header section with title/description */
+    header?: string;
+    /** Title text */
+    title?: string;
+    /** Description text */
+    description?: string;
+    /** Progress bar container */
+    progressContainer?: string;
+    /** Individual progress segment */
+    progressSegment?: string;
+    /** Progress segment when completed */
+    progressSegmentCompleted?: string;
+    /** Progress segment when active */
+    progressSegmentActive?: string;
+    /** Progress segment when pending */
+    progressSegmentPending?: string;
+    /** Progress text (e.g., "Question 1 of 3") */
+    progressText?: string;
+    /** Question container */
+    questionContainer?: string;
+    /** Question label */
+    questionLabel?: string;
+    /** Required indicator */
+    requiredIndicator?: string;
+    /** Text input field */
+    textInput?: string;
+    /** Option button (for select/multiselect) */
+    optionButton?: string;
+    /** Option button when selected */
+    optionButtonSelected?: string;
+    /** Checkbox in multiselect */
+    checkbox?: string;
+    /** Checkbox when checked */
+    checkboxChecked?: string;
+    /** Boolean button container */
+    booleanContainer?: string;
+    /** Boolean button */
+    booleanButton?: string;
+    /** Boolean button when selected */
+    booleanButtonSelected?: string;
+    /** Actions container (Back/Skip/Next buttons) */
+    actionsContainer?: string;
+    /** Back button */
+    backButton?: string;
+    /** Back button when disabled */
+    backButtonDisabled?: string;
+    /** Skip button */
+    skipButton?: string;
+    /** Next/Submit button */
+    nextButton?: string;
+    /** Next button when disabled */
+    nextButtonDisabled?: string;
+    /** Completed state container */
+    completedContainer?: string;
+    /** Completed icon */
+    completedIcon?: string;
+    /** Completed text */
+    completedText?: string;
+    /** Answer summary item */
+    answerItem?: string;
+    /** Answer question text */
+    answerQuestion?: string;
+    /** Answer value text */
+    answerValue?: string;
+}
+/**
+ * Configure global classNames for all AskFollowUp instances
+ */
+declare function configureAskFollowUpStyles(classNames: AskFollowUpClassNames): void;
 declare const ASK_FOLLOW_UP_TOOL_NAME = "ask_follow_up";
 declare function createAskFollowUpTool(): DistriUiTool;
 
@@ -1138,4 +1210,4 @@ interface UserMessageRendererProps {
 }
 declare const UserMessageRenderer: React__default.FC<UserMessageRendererProps>;
 
-export { ASK_FOLLOW_UP_TOOL_NAME, AgentSelect, AppSidebar, type AskFollowUpInput, type AskFollowUpOutput, AssistantMessageRenderer, type AssistantMessageRendererProps, type AttachedImage, AuthLoading, type AuthStatus, Badge, BrowserPreviewPanel, BrowserViewport, type BrowserViewportProps, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Chat, type ChatContainerProps, type ChatCustomRenderers, type ChatEmptyStateCategory, type ChatEmptyStateController, type ChatEmptyStateOptions, type ChatEmptyStateStarter, ChatInner, ChatInput, type ChatInputProps, type ChatInstance, type ChatProps, type ChatState, type ChatStateStore, ConfigurationPanel, DialogRoot as Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, type DistriAnyTool, DistriAuthProvider, DistriContext, DistriProvider, type DistriUiTool, DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuPortal, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, type ExtractedContent, type FollowUpQuestion, ImageRenderer, type ImageRendererProps, Input, LoadingAnimation, type LoadingAnimationConfig, type LoadingAnimationPreset, type LoadingAnimationProps, LoadingShimmer, MessageFeedback, type MessageFeedbackProps, MessageReadProvider, type MessageReadProviderProps, MessageReadTracker, type MessageReadTrackerProps, MessageRenderer, type MessageRendererProps, type ModelOption, type PlanState, Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectScrollDownButton, SelectScrollUpButton, SelectSeparator, SelectTrigger, SelectValue, Separator, Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupAction, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuAction, SidebarMenuBadge, SidebarMenuButton, SidebarMenuItem, SidebarMenuSkeleton, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem, SidebarProvider, SidebarRail, SidebarSeparator, SidebarTrigger, Skeleton, StepBasedRenderer, type StepBasedRendererProps, type StepState, type StreamingIndicator, StreamingTextRenderer, type StreamingTtsOptions, type TaskState, Textarea, ThemeProvider, ThemeToggle, ThinkingRenderer, type ThinkingRendererProps, TodosDisplay, type TodosDisplayProps, type ToolCallState, type ToolCallStatus, type ToolRendererMap, type ToolRendererProps, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, type TtsConfig, type TtsRequest, TypingIndicator, type UiToolProps, type UseAgentOptions, type UseAgentResult, type UseAgentsByUsageOptions, type UseAgentsByUsageResult, type UseAgentsResult, type UseChatMessagesOptions, type UseChatMessagesReturn, type UseChatOptions, type UseChatReturn, type UseConfigurationResult, type UseMessageReadStatusOptions, type UseMessageReadStatusResult, type UseMessageVoteOptions, type UseMessageVoteResult, type UseMessageVotesOptions, type UseMessageVotesResult, type UseThreadMessagesOptions, type UseThreadReadStatusOptions, type UseThreadReadStatusResult, type UseThreadsOptions, type UseThreadsResult, UserMessageRenderer, type UserMessageRendererProps, VoiceInput, type VoiceInputProps, createAskFollowUpTool, extractContent, useAgent, useAgentDefinitions, useAgentsByUsage, useChat, useChatMessages, useChatStateStore, useConfiguration, useDistri, useDistriAuth, useDistriToken, useMessageReadContext, useMessageReadStatus, useMessageVote, useMessageVotes, useSidebar, useSpeechToText, useTheme, useThreadReadStatus, useThreads, useTts, useWorkspace, wrapFnToolAsUiTool, wrapTools };
+export { ASK_FOLLOW_UP_TOOL_NAME, AgentSelect, AppSidebar, type AskFollowUpClassNames, type AskFollowUpInput, type AskFollowUpOutput, AssistantMessageRenderer, type AssistantMessageRendererProps, type AttachedImage, AuthLoading, type AuthStatus, Badge, BrowserPreviewPanel, BrowserViewport, type BrowserViewportProps, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Chat, type ChatContainerProps, type ChatCustomRenderers, type ChatEmptyStateCategory, type ChatEmptyStateController, type ChatEmptyStateOptions, type ChatEmptyStateStarter, ChatInner, ChatInput, type ChatInputProps, type ChatInstance, type ChatProps, type ChatState, type ChatStateStore, ConfigurationPanel, DialogRoot as Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, type DistriAnyTool, DistriAuthProvider, DistriContext, DistriProvider, type DistriUiTool, DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuPortal, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, type ExtractedContent, type FollowUpQuestion, ImageRenderer, type ImageRendererProps, Input, LoadingAnimation, type LoadingAnimationConfig, type LoadingAnimationPreset, type LoadingAnimationProps, LoadingShimmer, MessageFeedback, type MessageFeedbackProps, MessageReadProvider, type MessageReadProviderProps, MessageReadTracker, type MessageReadTrackerProps, MessageRenderer, type MessageRendererProps, type ModelOption, type PlanState, Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectScrollDownButton, SelectScrollUpButton, SelectSeparator, SelectTrigger, SelectValue, Separator, Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupAction, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuAction, SidebarMenuBadge, SidebarMenuButton, SidebarMenuItem, SidebarMenuSkeleton, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem, SidebarProvider, SidebarRail, SidebarSeparator, SidebarTrigger, Skeleton, StepBasedRenderer, type StepBasedRendererProps, type StepState, type StreamingIndicator, StreamingTextRenderer, type StreamingTtsOptions, type TaskState, Textarea, ThemeProvider, ThemeToggle, ThinkingRenderer, type ThinkingRendererProps, TodosDisplay, type TodosDisplayProps, type ToolCallState, type ToolCallStatus, type ToolRendererMap, type ToolRendererProps, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, type TtsConfig, type TtsRequest, TypingIndicator, type UiToolProps, type UseAgentOptions, type UseAgentResult, type UseAgentsByUsageOptions, type UseAgentsByUsageResult, type UseAgentsResult, type UseChatMessagesOptions, type UseChatMessagesReturn, type UseChatOptions, type UseChatReturn, type UseConfigurationResult, type UseMessageReadStatusOptions, type UseMessageReadStatusResult, type UseMessageVoteOptions, type UseMessageVoteResult, type UseMessageVotesOptions, type UseMessageVotesResult, type UseThreadMessagesOptions, type UseThreadReadStatusOptions, type UseThreadReadStatusResult, type UseThreadsOptions, type UseThreadsResult, UserMessageRenderer, type UserMessageRendererProps, VoiceInput, type VoiceInputProps, configureAskFollowUpStyles, createAskFollowUpTool, extractContent, useAgent, useAgentDefinitions, useAgentsByUsage, useChat, useChatMessages, useChatStateStore, useConfiguration, useDistri, useDistriAuth, useDistriToken, useMessageReadContext, useMessageReadStatus, useMessageVote, useMessageVotes, useSidebar, useSpeechToText, useTheme, useThreadReadStatus, useThreads, useTts, useWorkspace, wrapFnToolAsUiTool, wrapTools };

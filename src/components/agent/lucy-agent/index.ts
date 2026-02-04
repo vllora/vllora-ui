@@ -4,6 +4,10 @@
  * Custom chat interface components for the Lucy AI assistant.
  */
 
+// Initialize Lucy-themed styles for distri components
+import { initializeLucyAskFollowUpStyles } from './lucy-ask-follow-up-styles';
+initializeLucyAskFollowUpStyles();
+
 // Core chat components
 export * from './LucyAvatar';
 export * from './LucyChat';

@@ -72,19 +72,18 @@ export function LucyToolCallCard({ toolCall, state }: LucyToolCallCardProps) {
   // Completed state
   if (state?.status === 'completed') {
     return (
-      <div className="my-2 rounded-lg border border-border/50 bg-muted/30 overflow-hidden">
+      <div className="my-1 rounded-lg border border-border/50 bg-muted/30 overflow-hidden">
         {/* Header */}
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="w-full p-3 flex items-center gap-3 hover:bg-muted/50 transition-colors"
+          className="w-full p-2 flex items-center gap-3 hover:bg-muted/50 transition-colors"
         >
           <div className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500/10">
             <CheckCircle className="w-3 h-3 text-emerald-500" />
           </div>
           <div className="flex-1 min-w-0 text-left">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-zinc-700/50 text-zinc-300">
-                <Wrench className="w-3 h-3 inline-block mr-1" />
+              <span className="text-xs font-mono px-2 py-0.5 rounded-full text-[12px] text-gray-400">
                 {toolCall.tool_name}
               </span>
               {!!executionTime && executionTime >= 500 && (
