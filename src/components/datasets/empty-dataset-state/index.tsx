@@ -172,10 +172,6 @@ export function EmptyDatasetsState() {
 
   return (
     <div className="flex-1 flex flex-col items-center justify-start pt-16 p-8 relative overflow-auto">
-      {/* Subtle background glow */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-[rgba(var(--theme-500),0.03)] rounded-full blur-3xl" />
-      </div>
 
       {/* Header - always centered */}
       <div className="flex flex-col items-center text-center relative z-10 mb-8">
@@ -219,7 +215,7 @@ export function EmptyDatasetsState() {
       <div
         className={cn(
           "w-full relative z-10 h-full",
-          activeTab === "objective" ? "max-w-2xl" : "max-w-6xl"
+          activeTab === "objective" ? "max-w-3xl" : "max-w-6xl"
         )}
       >
         {activeTab === "objective" ? (
