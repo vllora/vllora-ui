@@ -91,7 +91,7 @@ export const adjustTopicHierarchyHandler: ToolHandler = async (params) => {
     }
 
     // Get current hierarchy from dataset
-    const dataset = await datasetsDB.getDataset(workflow.datasetId);
+    const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
     if (!dataset) {
       return { success: false, error: 'Dataset not found' };
     }
@@ -108,7 +108,7 @@ export const adjustTopicHierarchyHandler: ToolHandler = async (params) => {
     const result = await adjustTopicsViaBackend(
       currentHierarchy,
       instruction,
-      dataset.datasetObjective || workflow.goals || 'General training',
+      dataset.datasetObjective || workflow.trainingGoals || 'General training',
     );
 
     if (!result.success || !result.hierarchy) {
@@ -130,7 +130,7 @@ export const adjustTopicHierarchyHandler: ToolHandler = async (params) => {
       topicCount,
       depth,
       generatedAt: Date.now(),
-      method: 'adjusted',
+      method: 'manual',
     });
 
     return {

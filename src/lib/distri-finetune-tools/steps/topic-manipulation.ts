@@ -22,7 +22,7 @@ import { countLeafTopics, calculateMaxDepth } from './helpers';
 function hierarchyToTreeString(
   nodes: TopicHierarchyNode[],
   prefix: string = '',
-  isLast: boolean = true
+  _isLast: boolean = true
 ): string {
   let result = '';
   nodes.forEach((node, index) => {
