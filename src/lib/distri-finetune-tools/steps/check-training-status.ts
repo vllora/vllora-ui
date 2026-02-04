@@ -1,11 +1,12 @@
 /**
  * Check Training Status Tool
  *
- * Checks the status of the ongoing training job.
+ * Checks the status of the ongoing training job via backend API.
  */
 
 import type { DistriFnTool } from '@distri/core';
 import * as workflowDB from '@/services/finetune-workflow-db';
+import { getReinforcementJobStatus } from '@/services/finetune-api';
 import type { ToolHandler } from '../types';
 
 export const checkTrainingStatusHandler: ToolHandler = async (params) => {
@@ -21,31 +22,56 @@ export const checkTrainingStatusHandler: ToolHandler = async (params) => {
       return { success: false, error: 'Workflow not found' };
     }
 
+    // Switch to Jobs tab so user can see the training status
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('finetune-set-view-mode', {
+          detail: { section: 'jobs' },
+        })
+      );
+    }
+
     if (!workflow.training?.jobId) {
       return { success: false, error: 'No training job found' };
     }
 
-    // TODO: Actually check training status via API
-    // Mock status progression
-    const elapsed = Date.now() - (workflow.training.startedAt || Date.now());
-    let status: 'queued' | 'running' | 'completed' | 'failed' = 'running';
-    let progress = Math.min(100, Math.floor(elapsed / 1000 / 60 * 3)); // ~3% per minute
+    // Get actual job status from backend API (source of truth)
+    const job = await getReinforcementJobStatus(workflow.training.jobId);
 
-    if (progress >= 100) {
-      status = 'completed';
-      progress = 100;
+    // Map backend status to workflow status
+    const statusMap: Record<string, 'pending' | 'queued' | 'running' | 'completed' | 'failed'> = {
+      pending: 'pending',
+      running: 'running',
+      succeeded: 'completed',
+      failed: 'failed',
+      cancelled: 'failed',
+    };
+    const workflowStatus = statusMap[job.status] || 'running';
+
+    // Update workflow with latest job info (modelId when completed, status changes)
+    const needsUpdate =
+      workflow.training.status !== workflowStatus ||
+      (job.fine_tuned_model && workflow.training.modelId !== job.fine_tuned_model);
+
+    if (needsUpdate) {
+      await workflowDB.updateStepData(workflow_id, 'training', {
+        ...workflow.training,
+        status: workflowStatus,
+        modelId: job.fine_tuned_model || workflow.training.modelId,
+      });
     }
 
     return {
       success: true,
       training_status: {
-        job_id: workflow.training.jobId,
-        status,
-        progress,
-        base_model: workflow.training.baseModel,
-        started_at: workflow.training.startedAt,
-        estimated_completion: status === 'completed' ? null : Date.now() + (100 - progress) * 20000,
-        fine_tuned_model: status === 'completed' ? `ft:${workflow.training.baseModel}:${workflow.training.jobId}` : null,
+        job_id: job.provider_job_id || job.id,
+        status: job.status,
+        base_model: job.base_model,
+        fine_tuned_model: job.fine_tuned_model || null,
+        created_at: job.created_at,
+        updated_at: job.updated_at,
+        completed_at: job.completed_at || null,
+        error_message: job.error_message || null,
       },
     };
   } catch (error) {

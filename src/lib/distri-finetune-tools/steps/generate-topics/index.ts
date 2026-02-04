@@ -155,12 +155,18 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
       method: method as "auto" | "template" | "manual",
     });
 
+    // Get record counts for categorization info
+    const allRecords = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);
+    const uncategorizedCount = allRecords.filter((r) => !r.topic).length;
+
     return {
       success: true,
       hierarchy,
       method,
       topic_count: topicCount,
       depth: depthValue,
+      total_records: allRecords.length,
+      uncategorized_count: uncategorizedCount,
     };
   } catch (error) {
     return {
