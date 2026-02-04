@@ -85,6 +85,11 @@ export const applyTopicHierarchyHandler: ToolHandler = async (params) => {
       return { success: false, error: `Cannot apply hierarchy in step ${workflow.currentStep}. Must be in not_started, topics_config, or grader_config step.` };
     }
 
+    // Auto-advance from not_started to topics_config when topic operations begin
+    if (workflow.currentStep === 'not_started') {
+      await workflowDB.advanceToStep(workflow_id, 'topics_config');
+    }
+
     // Normalize and validate hierarchy structure (ensures IDs exist)
     const validHierarchy = normalizeHierarchy(hierarchy);
     const topicCount = countLeafTopics(validHierarchy);
