@@ -45,7 +45,7 @@ function spanToTrace(span: Span): Trace {
   // Transform messages with truncated content
   const messages = msgArray.map((msg) => ({
     role: msg.role || "unknown",
-    content: truncateContent(msg.content),
+    content: msg.content,
   }));
 
   return {
@@ -130,7 +130,7 @@ export function EmptyDatasetsState() {
         // Refetch traces when new span events arrive
         setTimeout(() => {
           fetchTraces();
-        }, 3000);
+        }, 2000);
       },
       (event) => {
         // Filter for model_call span_end events
@@ -218,8 +218,8 @@ export function EmptyDatasetsState() {
       {/* Tab Content - width varies by tab */}
       <div
         className={cn(
-          "w-full relative z-10",
-          activeTab === "objective" ? "max-w-2xl" : "max-w-5xl"
+          "w-full relative z-10 h-full",
+          activeTab === "objective" ? "max-w-2xl" : "max-w-6xl"
         )}
       >
         {activeTab === "objective" ? (

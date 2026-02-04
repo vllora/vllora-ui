@@ -76,6 +76,10 @@ export function getChatCompletionsUrl(): string {
   return `${getBackendUrl()}/v1/chat/completions`;
 }
 
+export function getInferObjectiveUrl(): string {
+  return `${getBackendUrl()}/lucy/v1/chat/completions`;
+}
+
 export const getThreadsUrl = () => {
   return `${getBackendUrl()}/threads`;
 }

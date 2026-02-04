@@ -5,15 +5,19 @@
  * Features curl command on left, live trace feed on right.
  */
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Copy, ArrowRight } from "lucide-react";
+import { ArrowRight, Sparkles, Wand2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { CodeBlock } from "@/components/chat/traces/components/CodeBlock";
 import { LiveTraceFeed, type Trace } from "./LiveTraceFeed";
+import { CollapsibleCurlCommand } from "./CollapsibleCurlCommand";
+import { inferObjectiveFromTraces } from "./infer-objective";
+import * as datasetsDB from "@/services/datasets-db";
 
-const SYSTEM_PROMPT = `You are an expert chess tutor helping a student improve their chess skills. Your role is to:
+export const CHESS_TUTOR_INIT_PART_1= "You are an expert chess tutor helping a student improve their chess skills. Your role is to:"
+export const CHESS_TUTOR_INIT_PART_2 = `You are an expert chess tutor helping a student improve their chess skills. Your role is to:
 
 1. ANALYZE positions using the analyze_position tool
 2. EVALUATE the student's moves when they make moves
@@ -46,12 +50,13 @@ const SYSTEM_PROMPT = `You are an expert chess tutor helping a student improve t
 
 Remember: You are a tutor, not just an engine wrapper. Add pedagogical value through your explanations.`
 
+export const CHESS_TUTOR_SYSTEM_PROMPT = `${CHESS_TUTOR_INIT_PART_1}\n\n${CHESS_TUTOR_INIT_PART_2}`;
 
 
 const REQUEST_BODY = JSON.stringify({
   model: "gpt-4o-mini",
   messages: [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: CHESS_TUTOR_SYSTEM_PROMPT },
     { role: "user", content: "FEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1\n\nWhat are the best responses for black?" }
   ]
 }, null, 2);
@@ -67,58 +72,136 @@ interface ApiInitializeTabProps {
 
 export function ApiInitializeTab({ hasBackendSpans, traces }: ApiInitializeTabProps) {
   const navigate = useNavigate();
-  const [copied, setCopied] = useState(false);
+  const [datasetObjective, setDatasetObjective] = useState("");
+  const [isInferring, setIsInferring] = useState(false);
+  const hasAutoInferred = useRef(false);
 
-  const handleCopyCommand = () => {
-    navigator.clipboard.writeText(CURL_COMMAND);
-    setCopied(true);
-    toast.success("Copied to clipboard");
-    setTimeout(() => setCopied(false), 2000);
+  const handleInferObjective = async () => {
+    if (traces.length === 0) return;
+
+    setIsInferring(true);
+    try {
+      const inferredObjective = await inferObjectiveFromTraces(traces);
+      setDatasetObjective(inferredObjective);
+    } catch (error) {
+      console.error("Failed to infer objective:", error);
+    } finally {
+      setIsInferring(false);
+    }
   };
 
-  const handleStartFinetune = () => {
-    navigate("/datasets/new", { state: { fromTraces: true } });
+  // Auto-trigger suggestion when first trace arrives
+  useEffect(() => {
+    if (traces.length > 0 && !hasAutoInferred.current && !datasetObjective) {
+      hasAutoInferred.current = true;
+      handleInferObjective();
+    }
+  }, [traces.length]);
+
+  const [isCreating, setIsCreating] = useState(false);
+
+  const handleStartFinetune = async () => {
+    if (traces.length === 0) return;
+
+    setIsCreating(true);
+    try {
+      // Generate dataset name from objective or use default
+      const datasetName = datasetObjective.trim()
+        ? datasetObjective.trim().slice(0, 50) + (datasetObjective.length > 50 ? "..." : "")
+        : `Dataset ${new Date().toLocaleDateString()}`;
+
+      // Create the dataset
+      const dataset = await datasetsDB.createDataset(datasetName, datasetObjective.trim() || undefined);
+
+      // Convert traces to records format (DataInfo)
+      const records = traces.map((trace) => {
+        // Separate input messages (system, user) from output (assistant)
+        const inputMessages = trace.messages.filter((m) => m.role !== "assistant");
+        const outputMessages = trace.messages.filter((m) => m.role === "assistant");
+
+        return {
+          data: {
+            input: {
+              messages: inputMessages.map((m) => ({ role: m.role, content: m.content })),
+            },
+            output: {
+              messages: outputMessages.map((m) => ({ role: m.role, content: m.content })),
+            },
+          },
+        };
+      });
+
+      // Add records to the dataset
+      await datasetsDB.addRecordsToDataset(dataset.id, records);
+
+      toast.success(`Created dataset with ${records.length} records`);
+      navigate(`/datasets/${dataset.id}`);
+    } catch (error) {
+      console.error("Failed to create dataset:", error);
+      toast.error("Failed to create dataset");
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   return (
-    <div className="w-full flex flex-col gap-4">
-      {/* Row: Code Block + Live Trace Feed */}
-      <div className="flex gap-4">
-        {/* Left: Code Block */}
-        <div className="flex-1 rounded-xl border border-border bg-card/50 backdrop-blur-sm overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
-            <div className="flex items-center gap-2">
-              <div className="flex gap-1.5">
-                <div className="w-3 h-3 rounded-full bg-red-500/80" />
-                <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
-                <div className="w-3 h-3 rounded-full bg-green-500/80" />
-              </div>
-              <span className="text-xs text-muted-foreground ml-2">
-                POST /v1/chat/completions
-              </span>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCopyCommand}
-              className="h-7 gap-1.5 text-xs"
-            >
-              <Copy className="w-3.5 h-3.5" />
-              {copied ? "Copied!" : "COPY CURL"}
-            </Button>
+    <div className="w-full h-full flex-1 flex flex-col gap-4">
+      {/* Top Row: Dataset Objective + Live Trace Feed - grows to fill space */}
+      <div className="flex-1 flex gap-4 min-h-0 h-[calc(100%-100px)]">
+        {/* Left: Dataset Objective */}
+        <div className="flex-1 rounded-xl border border-border bg-card/50 backdrop-blur-sm p-4 flex flex-col gap-2">
+          <div className="flex items-center justify-between shrink-0">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <Sparkles className="w-4 h-4 text-amber-500" />
+              Dataset Objective
+            </label>
+            {traces.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleInferObjective}
+                disabled={isInferring}
+                className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              >
+                {isInferring ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Wand2 className="w-3.5 h-3.5" />
+                )}
+                {isInferring ? "Suggesting..." : "Suggest"}
+              </Button>
+            )}
           </div>
+          <Textarea
+            value={datasetObjective}
+            onChange={(e) => setDatasetObjective(e.target.value)}
+            placeholder="Describe what you want the fine-tuned model to do. E.g., 'A chess tutor that explains positions clearly and adapts to the student's level'"
+            className="flex-1 min-h-[100px] resize-none bg-background/50"
+          />
+          <p className="text-xs text-muted-foreground shrink-0">
+            This helps guide data generation and evaluation criteria for your fine-tuning workflow.
+          </p>
 
-          {/* Code Content */}
-          <div className="p-4 overflow-auto max-h-[40vh] bg-black/20">
-            <CodeBlock
-              title=""
-              code={CURL_COMMAND}
-              language="bash"
-              hideTitle
-              showLineNumber={false}
-            />
-          </div>
+          {/* Start Button - shown when traces exist */}
+          {traces.length > 0 && (
+            <Button
+              onClick={handleStartFinetune}
+              disabled={isCreating}
+              className="w-full shrink-0 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white gap-2 animate-in fade-in duration-300"
+            >
+              {isCreating ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  Start Finetune
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </Button>
+          )}
         </div>
 
         {/* Right: Live Trace Feed */}
@@ -129,18 +212,8 @@ export function ApiInitializeTab({ hasBackendSpans, traces }: ApiInitializeTabPr
         />
       </div>
 
-      {/* Start Finetune Button - shown when traces exist */}
-      {traces.length > 0 && (
-        <div className="flex justify-end">
-          <Button
-            onClick={handleStartFinetune}
-            className="bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white gap-2"
-          >
-            Start Finetune
-            <ArrowRight className="w-4 h-4" />
-          </Button>
-        </div>
-      )}
+      {/* Bottom: Collapsible Curl Command */}
+      <CollapsibleCurlCommand command={CURL_COMMAND} />
     </div>
   );
 }
