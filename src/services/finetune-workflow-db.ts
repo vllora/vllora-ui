@@ -5,6 +5,8 @@
  * Allows Lucy to persist and resume workflows across sessions.
  */
 
+import { emitWorkflowUpdate } from "@/lib/distri-finetune-tools/workflow";
+
 // Note: topicHierarchy and evaluationConfig are stored in the Dataset, not duplicated here.
 // The workflow only tracks step progress and metadata, not the actual config data.
 
@@ -570,6 +572,7 @@ export async function advanceToStep(
   };
 
   await updateWorkflow(updatedWorkflow);
+  emitWorkflowUpdate(workflow.datasetId, step);
   return updatedWorkflow;
 }
 

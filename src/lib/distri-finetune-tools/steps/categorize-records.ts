@@ -28,9 +28,7 @@ export const categorizeRecordsHandler: ToolHandler = async (params): Promise<Cat
       return { success: false, error: 'Workflow not found' };
     }
 
-    if (workflow.currentStep !== 'categorize') {
-      return { success: false, error: `Cannot categorize in step ${workflow.currentStep}. Must be in categorize step.` };
-    }
+    await workflowDB.advanceToStep(workflow_id, 'categorize');
 
     // Check dataset for topic hierarchy (single source of truth)
     const dataset = await datasetsDB.getDatasetById(workflow.datasetId);

@@ -5,13 +5,14 @@
  * This enables data generation when no existing records exist to build upon.
  */
 
-import type { DistriFnTool } from '@distri/core';
-import { DistriClient, type DistriMessage } from '@distri/core';
-import * as datasetsDB from '@/services/datasets-db';
-import { getDistriUrl } from '@/config/api';
-import { fetchLucyConfig, type LucyConfig } from '@/lib/agent-sync';
-import type { ToolHandler } from '../types';
-import type { DataInfo } from '@/types/dataset-types';
+import type { DistriFnTool } from "@distri/core";
+import { DistriClient, type DistriMessage } from "@distri/core";
+import * as datasetsDB from "@/services/datasets-db";
+import { getDistriUrl } from "@/config/api";
+import { fetchLucyConfig, type LucyConfig } from "@/lib/agent-sync";
+import type { ToolHandler } from "../types";
+import type { DataInfo } from "@/types/dataset-types";
+import * as workflowDB from "@/services/finetune-workflow-db";
 
 // Cache for Lucy config
 let cachedLucyConfig: LucyConfig | null = null;
@@ -28,7 +29,7 @@ const fetchLucyConfigCached = async (): Promise<LucyConfig> => {
 interface GenerateInitialDataParams {
   dataset_id: string;
   count?: number;
-  generation_mode?: 'rft' | 'sft';
+  generation_mode?: "rft" | "sft";
   /** Optional user guidance for how to generate the data (e.g., "focus on beginner concepts", "include edge cases") */
   user_guidance?: string;
 }
@@ -127,55 +128,55 @@ Output Format:
 Generate exactly {{count}} examples.`;
 
 const INITIAL_DATA_RESPONSE_SCHEMA_RFT = {
-  type: 'json_schema',
+  type: "json_schema",
   json_schema: {
-    name: 'initial_training_data_rft',
+    name: "initial_training_data_rft",
     strict: true,
     schema: {
-      type: 'object',
+      type: "object",
       properties: {
         examples: {
-          type: 'array',
+          type: "array",
           items: {
-            type: 'object',
+            type: "object",
             properties: {
-              system_prompt: { type: 'string' },
-              user_message: { type: 'string' },
+              system_prompt: { type: "string" },
+              user_message: { type: "string" },
             },
-            required: ['system_prompt', 'user_message'],
+            required: ["system_prompt", "user_message"],
             additionalProperties: false,
           },
         },
       },
-      required: ['examples'],
+      required: ["examples"],
       additionalProperties: false,
     },
   },
 };
 
 const INITIAL_DATA_RESPONSE_SCHEMA_SFT = {
-  type: 'json_schema',
+  type: "json_schema",
   json_schema: {
-    name: 'initial_training_data_sft',
+    name: "initial_training_data_sft",
     strict: true,
     schema: {
-      type: 'object',
+      type: "object",
       properties: {
         examples: {
-          type: 'array',
+          type: "array",
           items: {
-            type: 'object',
+            type: "object",
             properties: {
-              system_prompt: { type: 'string' },
-              user_message: { type: 'string' },
-              assistant_response: { type: 'string' },
+              system_prompt: { type: "string" },
+              user_message: { type: "string" },
+              assistant_response: { type: "string" },
             },
-            required: ['system_prompt', 'user_message', 'assistant_response'],
+            required: ["system_prompt", "user_message", "assistant_response"],
             additionalProperties: false,
           },
         },
       },
-      required: ['examples'],
+      required: ["examples"],
       additionalProperties: false,
     },
   },
@@ -188,37 +189,43 @@ const INITIAL_DATA_RESPONSE_SCHEMA_SFT = {
 async function callLLMForInitialData(
   objective: string,
   count: number,
-  mode: 'rft' | 'sft',
-  userGuidance?: string
+  mode: "rft" | "sft",
+  userGuidance?: string,
 ): Promise<GeneratedExample[]> {
   const lucyConfig = await fetchLucyConfigCached();
   const rawUrl = lucyConfig.distri_url || getDistriUrl();
-  const baseUrl = `${rawUrl.replace(/\/$/, '')}/v1`;
+  const baseUrl = `${rawUrl.replace(/\/$/, "")}/v1`;
   const distriClient = DistriClient.create({ baseUrl });
 
   const modelSettingsFromConfig = lucyConfig.model_settings || {};
 
-  const userPromptTemplate = mode === 'rft'
-    ? INITIAL_DATA_GENERATION_USER_RFT
-    : INITIAL_DATA_GENERATION_USER_SFT;
+  const userPromptTemplate =
+    mode === "rft"
+      ? INITIAL_DATA_GENERATION_USER_RFT
+      : INITIAL_DATA_GENERATION_USER_SFT;
 
   // Build user guidance section if provided
   const guidanceSection = userGuidance
     ? `\nUser's specific guidance:\n${userGuidance}\n`
-    : '';
+    : "";
 
   const userPrompt = userPromptTemplate
     .replace(/\{\{count\}\}/g, String(count))
-    .replace('{{objective}}', objective)
-    .replace('{{user_guidance}}', guidanceSection);
+    .replace("{{objective}}", objective)
+    .replace("{{user_guidance}}", guidanceSection);
 
-  const responseSchema = mode === 'rft'
-    ? INITIAL_DATA_RESPONSE_SCHEMA_RFT
-    : INITIAL_DATA_RESPONSE_SCHEMA_SFT;
+  const responseSchema =
+    mode === "rft"
+      ? INITIAL_DATA_RESPONSE_SCHEMA_RFT
+      : INITIAL_DATA_RESPONSE_SCHEMA_SFT;
 
   const messages: DistriMessage[] = [
-    DistriClient.initDistriMessage('system', [{ part_type: 'text', data: INITIAL_DATA_GENERATION_SYSTEM }]),
-    DistriClient.initDistriMessage('user', [{ part_type: 'text', data: userPrompt }]),
+    DistriClient.initDistriMessage("system", [
+      { part_type: "text", data: INITIAL_DATA_GENERATION_SYSTEM },
+    ]),
+    DistriClient.initDistriMessage("user", [
+      { part_type: "text", data: userPrompt },
+    ]),
   ];
 
   let lastError: unknown;
@@ -227,14 +234,14 @@ async function callLLMForInitialData(
       const response = await distriClient.llm(messages, [], {
         model_settings: {
           ...modelSettingsFromConfig,
-          model: modelSettingsFromConfig.model || 'openai/gpt-4.1',
+          model: modelSettingsFromConfig.model || "openai/gpt-4.1",
           temperature: modelSettingsFromConfig.temperature ?? 0.7,
           response_format: responseSchema,
         },
       });
 
       if (!response.content) {
-        throw new Error('LLM returned empty response');
+        throw new Error("LLM returned empty response");
       }
 
       const parsed = JSON.parse(response.content.trim());
@@ -243,33 +250,38 @@ async function callLLMForInitialData(
       lastError = err;
       if (attempt < 2) {
         const backoffMs = 800 * Math.pow(2, attempt);
-        await new Promise(resolve => setTimeout(resolve, backoffMs));
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
       }
     }
   }
 
-  throw lastError instanceof Error ? lastError : new Error('LLM call failed');
+  throw lastError instanceof Error ? lastError : new Error("LLM call failed");
 }
 
 // =============================================================================
 // Convert to DatasetRecord format
 // =============================================================================
 
-function exampleToDataInfo(example: GeneratedExample, mode: 'rft' | 'sft'): DataInfo {
+function exampleToDataInfo(
+  example: GeneratedExample,
+  mode: "rft" | "sft",
+): DataInfo {
   const inputMessages = [
-    { role: 'system' as const, content: example.system_prompt },
-    { role: 'user' as const, content: example.user_message },
+    { role: "system" as const, content: example.system_prompt },
+    { role: "user" as const, content: example.user_message },
   ];
 
-  if (mode === 'sft' && example.assistant_response) {
+  if (mode === "sft" && example.assistant_response) {
     return {
       input: {
         messages: inputMessages,
         tools: [],
       },
       output: {
-        messages: [{ role: 'assistant' as const, content: example.assistant_response }],
-        finish_reason: 'stop',
+        messages: [
+          { role: "assistant" as const, content: example.assistant_response },
+        ],
+        finish_reason: "stop",
       },
     };
   }
@@ -291,19 +303,24 @@ function exampleToDataInfo(example: GeneratedExample, mode: 'rft' | 'sft'): Data
 // Main Handler
 // =============================================================================
 
-export const generateInitialDataHandler: ToolHandler = async (params): Promise<GenerateInitialDataResult> => {
+export const generateInitialDataHandler: ToolHandler = async (
+  params,
+): Promise<GenerateInitialDataResult> => {
   try {
-    console.log('[generateInitialData] Starting with params:', JSON.stringify(params, null, 2));
+    console.log(
+      "[generateInitialData] Starting with params:",
+      JSON.stringify(params, null, 2),
+    );
 
     const {
       dataset_id,
       count = 10,
-      generation_mode = 'rft',
+      generation_mode = "rft",
       user_guidance,
     } = params as unknown as GenerateInitialDataParams;
 
     if (!dataset_id) {
-      return { success: false, error: 'dataset_id is required' };
+      return { success: false, error: "dataset_id is required" };
     }
 
     // Get dataset
@@ -311,39 +328,72 @@ export const generateInitialDataHandler: ToolHandler = async (params): Promise<G
     if (!dataset) {
       return { success: false, error: `Dataset ${dataset_id} not found` };
     }
+    // get workflow
+    const workflow = await workflowDB.getWorkflow(dataset_id);
+    console.log("======== [generateInitialData] Workflow:", workflow);
+    if (workflow) {
+      // check if workflow is in topics_config or grader_config
+      if (!workflow.currentStep || workflow.currentStep === "not_started") {
+        await workflowDB.advanceToStep(workflow.id, "topics_config");
+      }
+    }
 
     // Get training objective
     const objective = dataset.datasetObjective;
     if (!objective || !objective.trim()) {
       return {
         success: false,
-        error: 'Dataset has no training objective defined. Please set a training objective first.',
+        error:
+          "Dataset has no training objective defined. Please set a training objective first.",
       };
     }
 
-    console.log('[generateInitialData] Generating data for objective:', objective.substring(0, 100) + '...');
-    console.log('[generateInitialData] Count:', count, 'Mode:', generation_mode);
+    console.log(
+      "[generateInitialData] Generating data for objective:",
+      objective.substring(0, 100) + "...",
+    );
+    console.log(
+      "[generateInitialData] Count:",
+      count,
+      "Mode:",
+      generation_mode,
+    );
     if (user_guidance) {
-      console.log('[generateInitialData] User guidance:', user_guidance.substring(0, 100) + '...');
+      console.log(
+        "[generateInitialData] User guidance:",
+        user_guidance.substring(0, 100) + "...",
+      );
     }
 
     // Generate examples using LLM
-    const examples = await callLLMForInitialData(objective, count, generation_mode, user_guidance);
-    console.log('[generateInitialData] Generated', examples.length, 'examples');
+    const examples = await callLLMForInitialData(
+      objective,
+      count,
+      generation_mode,
+      user_guidance,
+    );
+    console.log("[generateInitialData] Generated", examples.length, "examples");
 
     // Convert to dataset records and save (without topics - user can define topics later)
-    const recordsToAdd = examples.map(example => ({
+    const recordsToAdd = examples.map((example) => ({
       data: exampleToDataInfo(example, generation_mode),
       is_generated: true,
       metadata: {
-        generation_source: 'initial_data',
+        generation_source: "initial_data",
         generation_mode,
         generated_at_ms: Date.now(),
       },
     }));
 
-    const addedRecords = await datasetsDB.addRecordsToDataset(dataset_id, recordsToAdd);
-    console.log('[generateInitialData] Added', addedRecords.length, 'records to dataset');
+    const addedRecords = await datasetsDB.addRecordsToDataset(
+      dataset_id,
+      recordsToAdd,
+    );
+    console.log(
+      "[generateInitialData] Added",
+      addedRecords.length,
+      "records to dataset",
+    );
 
     return {
       success: true,
@@ -352,16 +402,19 @@ export const generateInitialDataHandler: ToolHandler = async (params): Promise<G
       training_objective: objective,
     };
   } catch (error) {
-    console.error('[generateInitialData] Failed:', error);
+    console.error("[generateInitialData] Failed:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to generate initial data',
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to generate initial data",
     };
   }
 };
 
 export const generateInitialDataTool: DistriFnTool = {
-  name: 'generate_initial_data',
+  name: "generate_initial_data",
   description: `Generate initial seed records for an empty dataset based on the training objective.
 
 Use this tool when:
@@ -380,32 +433,37 @@ Generated records can then be used as seeds for further data generation or topic
 **User Guidance:**
 Pass the user's specific instructions if they mentioned what kind of data they want.
 Examples: "focus on beginner concepts", "include edge cases", "emphasize error handling scenarios"`,
-  type: 'function',
+  type: "function",
   parameters: {
-    type: 'object',
+    type: "object",
     properties: {
       dataset_id: {
-        type: 'string',
-        description: 'The dataset ID to generate initial data for',
+        type: "string",
+        description: "The dataset ID to generate initial data for",
       },
       count: {
-        type: 'number',
+        type: "number",
         default: 10,
-        description: 'Number of initial records to generate (default: 10)',
+        description: "Number of initial records to generate (default: 10)",
       },
       generation_mode: {
-        type: 'string',
-        enum: ['rft', 'sft'],
-        default: 'rft',
-        description: 'Generation mode: "rft" for prompts only, "sft" for complete conversations',
+        type: "string",
+        enum: ["rft", "sft"],
+        default: "rft",
+        description:
+          'Generation mode: "rft" for prompts only, "sft" for complete conversations',
       },
       user_guidance: {
-        type: 'string',
-        description: 'Optional user guidance for data generation (e.g., "focus on beginner concepts", "include edge cases")',
+        type: "string",
+        description:
+          'Optional user guidance for data generation (e.g., "focus on beginner concepts", "include edge cases")',
       },
     },
-    required: ['dataset_id'],
+    required: ["dataset_id"],
   },
   autoExecute: true,
-  handler: async (input) => JSON.stringify(await generateInitialDataHandler(input as Record<string, unknown>)),
+  handler: async (input) =>
+    JSON.stringify(
+      await generateInitialDataHandler(input as Record<string, unknown>),
+    ),
 } as DistriFnTool;

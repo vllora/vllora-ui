@@ -35,16 +35,7 @@ export const generateSyntheticDataHandler: ToolHandler = async (params): Promise
     // Determine if this is Data-First workflow (seed-based generation)
     const isDataFirstWorkflow = Array.isArray(record_ids) && record_ids.length > 0;
 
-    console.log('[generateSyntheticData] Parsed params:', {
-      workflow_id,
-      strategy,
-      target_topics,
-      count_per_topic,
-      max_turns,
-      generation_mode,
-      record_ids,
-      isDataFirstWorkflow,
-    });
+
 
     if (!workflow_id || typeof workflow_id !== 'string') {
       return { success: false, error: 'workflow_id is required' };
@@ -56,27 +47,8 @@ export const generateSyntheticDataHandler: ToolHandler = async (params): Promise
       return { success: false, error: 'Workflow not found' };
     }
 
-    
+       
 
-    // Step validation: different rules for Data-First vs Topics-First workflow
-    if (isDataFirstWorkflow) {
-      // Data-First workflow: allow generation from topics_config or coverage_generation step
-      const allowedSteps = ['topics_config', 'coverage_generation'];
-      if (!allowedSteps.includes(workflow.currentStep)) {
-        return {
-          success: false,
-          error: `Cannot generate data in step ${workflow.currentStep}. For Data-First workflow with record_ids, must be in topics_config or coverage_generation step.`,
-        };
-      }
-    } else {
-      // Topics-First workflow: must be in coverage_generation step
-      if (workflow.currentStep !== 'coverage_generation') {
-        return {
-          success: false,
-          error: `Cannot generate data in step ${workflow.currentStep}. For Topics-First workflow, must be in coverage_generation step. Use record_ids parameter for Data-First workflow (seed-based generation from topics_config step).`,
-        };
-      }
-    }
 
     // Get current coverage
     const records = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);

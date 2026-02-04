@@ -28,10 +28,13 @@ export const analyzeCoverageHandler: ToolHandler = async (params): Promise<Analy
     if (!workflow) {
       return { success: false, error: 'Workflow not found' };
     }
+    await workflowDB.advanceToStep(workflow_id, 'coverage_generation');
 
-    if (workflow.currentStep !== 'coverage_generation') {
-      return { success: false, error: `Cannot analyze coverage in step ${workflow.currentStep}. Must be in coverage_generation step.` };
-    }
+    
+
+    // if (workflow.currentStep !== 'coverage_generation') {
+    //   return { success: false, error: `Cannot analyze coverage in step ${workflow.currentStep}. Must be in coverage_generation step.` };
+    // }
 
     // Use shared function to calculate and save coverage stats to dataset
     const coverageStats = await calculateAndSaveCoverageStats(workflow.datasetId);

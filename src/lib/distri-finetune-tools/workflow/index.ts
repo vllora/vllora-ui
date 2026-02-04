@@ -355,10 +355,6 @@ export const advanceToStepHandler: ToolHandler = async (params): Promise<Advance
 
     const previousStep = workflow.currentStep;
     await workflowDB.advanceToStep(workflow_id, targetStep);
-
-    // Emit event for UI update
-    emitWorkflowUpdate(workflow.datasetId, targetStep);
-
     return {
       success: true,
       previous_step: previousStep,
