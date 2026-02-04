@@ -166,7 +166,7 @@ export interface GenerationHistoryStore {
 // =============================================================================
 
 const DB_NAME = 'vllora-finetune';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -208,6 +208,14 @@ async function getDB(): Promise<IDBDatabase> {
         const historyStore = db.createObjectStore('generationHistory', { keyPath: 'id' });
         historyStore.createIndex('workflowId', 'workflowId', { unique: false });
         historyStore.createIndex('createdAt', 'createdAt', { unique: false });
+      }
+
+      // Create dry run jobs store for background job tracking (added in v2)
+      if (!db.objectStoreNames.contains('dryRunJobs')) {
+        const dryRunJobsStore = db.createObjectStore('dryRunJobs', { keyPath: 'id' });
+        dryRunJobsStore.createIndex('datasetId', 'datasetId', { unique: false });
+        dryRunJobsStore.createIndex('status', 'status', { unique: false });
+        dryRunJobsStore.createIndex('createdAt', 'createdAt', { unique: false });
       }
     };
   });

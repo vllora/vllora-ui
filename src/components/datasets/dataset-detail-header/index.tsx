@@ -24,6 +24,7 @@ export function DatasetDetailHeader() {
     // onSelectDataset,
     // setCreateDatasetDialog,
     handleRenameDataset,
+    setDryRunDialog,
   } = DatasetDetailConsumer();
 
   const [isEditing, setIsEditing] = useState(false);
@@ -90,7 +91,12 @@ export function DatasetDetailHeader() {
                 </div>
               )}
               {/* Right: Workflow State Indicator */}
-              <WorkflowStepIndicator datasetId={datasetId} className="shrink-0 pt-1" />
+              <WorkflowStepIndicator
+                datasetId={datasetId}
+                className="shrink-0 pt-1"
+                hasGraderConfig={!!dataset?.evaluationConfig}
+                onDryRunClick={() => setDryRunDialog(true)}
+              />
             </div>
 
             {/* Training Objective */}

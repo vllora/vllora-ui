@@ -7,6 +7,7 @@
 
 import { useMemo, useState, useCallback } from "react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
+import { useDryRunJobs } from "@/contexts/DryRunJobsContext";
 import { computeCoverageStats, computeDatasetInsights } from "../record-utils";
 import { RecordsDonutCard } from "./RecordsDonutCard";
 import { TopicsBarCard } from "./TopicsBarCard";
@@ -14,7 +15,8 @@ import { EvaluationCard } from "./EvaluationCard";
 import { RecordsAnalyticsDialog } from "./detail-records-analytics-dialog";
 
 export function DatasetStatsCards() {
-  const { dataset, records } = DatasetDetailConsumer();
+  const { dataset, records, setDryRunDialog } = DatasetDetailConsumer();
+  const { runningJob } = useDryRunJobs();
 
   // Dialog state for records analytics
   const [analyticsDialogOpen, setAnalyticsDialogOpen] = useState(false);
@@ -27,6 +29,11 @@ export function DatasetStatsCards() {
       })
     );
   }, []);
+
+  // Open dry run dialog
+  const handleOpenDryRunDialog = useCallback(() => {
+    setDryRunDialog(true);
+  }, [setDryRunDialog]);
 
   // Use shared utility for computing insights (memoized on records change)
   const insights = useMemo(() => computeDatasetInsights(records), [records]);
@@ -58,7 +65,9 @@ export function DatasetStatsCards() {
         <EvaluationCard
           evaluationConfig={dataset?.evaluationConfig}
           dryRunStats={dataset?.dryRunStats}
+          runningJob={runningJob}
           onConfigureClick={handleNavigateToEvaluator}
+          onDryRunClick={handleOpenDryRunDialog}
         />
       </div>
 

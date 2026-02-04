@@ -3,18 +3,32 @@
  *
  * Summary card showing evaluation score distribution.
  * Shows blank state if evaluation is not configured.
+ * Shows running state if a dry run is in progress.
  */
 
-import { FlaskConical } from "lucide-react";
+import { FlaskConical, Loader2, RefreshCw } from "lucide-react";
 import type { DryRunStats, EvaluationConfig } from "@/types/dataset-types";
+import type { DryRunJob } from "@/types/dry-run-job";
+import {
+  getJobTotalRows,
+  getJobCompletedRows,
+  getJobFailedRows,
+  getJobAverageScore,
+  getJobPassedCount,
+  getJobFailedGradingCount,
+} from "@/types/dry-run-job";
 
 export interface EvaluationCardProps {
   /** Evaluation configuration (if set) */
   evaluationConfig?: EvaluationConfig;
   /** Dry run stats (if evaluation has been run) */
   dryRunStats?: DryRunStats;
+  /** Currently running dry run job (if any) */
+  runningJob?: DryRunJob | null;
   /** Callback when clicking to configure evaluation */
   onConfigureClick?: () => void;
+  /** Callback when clicking to open dry run dialog */
+  onDryRunClick?: () => void;
 }
 
 const VERDICT_COLORS = {
@@ -29,7 +43,7 @@ const VERDICT_BG = {
   "NO-GO": "bg-red-500",
 };
 
-export function EvaluationCard({ evaluationConfig, dryRunStats, onConfigureClick }: EvaluationCardProps) {
+export function EvaluationCard({ evaluationConfig, dryRunStats, runningJob, onConfigureClick, onDryRunClick }: EvaluationCardProps) {
   // No evaluation config - show setup prompt (clickable)
   if (!evaluationConfig) {
     return (
@@ -47,17 +61,88 @@ export function EvaluationCard({ evaluationConfig, dryRunStats, onConfigureClick
     );
   }
 
+  // Dry run is currently running - show progress with summary stats
+  if (runningJob && (runningJob.status === 'running' || runningJob.status === 'pending')) {
+    const totalRows = getJobTotalRows(runningJob);
+    const completedRows = getJobCompletedRows(runningJob);
+    const failedRows = getJobFailedRows(runningJob);
+    const averageScore = getJobAverageScore(runningJob);
+    const passedCount = getJobPassedCount(runningJob);
+    const failedGradingCount = getJobFailedGradingCount(runningJob);
+
+    const progress = totalRows > 0
+      ? Math.round((completedRows / totalRows) * 100)
+      : 0;
+    const hasAvgScore = averageScore !== undefined;
+    const hasPassedCount = passedCount > 0;
+    const hasFailures = failedRows > 0 || failedGradingCount > 0;
+
+    return (
+      <button
+        onClick={onDryRunClick}
+        className="w-full px-4 py-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-800/50 flex flex-col min-h-[88px] hover:bg-blue-100/50 dark:hover:bg-blue-900/30 transition-colors cursor-pointer"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between w-full mb-2">
+          <div className="flex items-center gap-2">
+            <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+            <span className="text-xs font-medium text-blue-700 dark:text-blue-400">
+              Dry run in progress...
+            </span>
+          </div>
+          {hasAvgScore && (
+            <span className="text-xs font-medium text-blue-700 dark:text-blue-400">
+              {(averageScore * 100).toFixed(0)}% avg
+            </span>
+          )}
+        </div>
+
+        {/* Progress bar */}
+        <div className="w-full h-1.5 bg-blue-200/50 dark:bg-blue-800/30 rounded-full overflow-hidden mb-1">
+          <div
+            className="h-full bg-blue-500 transition-all duration-300"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+
+        {/* Stats row */}
+        <div className="flex items-center justify-between w-full text-xs">
+          <span className="text-blue-600/80 dark:text-blue-400/80">
+            {completedRows} / {totalRows} ({progress}%)
+          </span>
+          {(hasPassedCount || hasFailures) && (
+            <div className="flex items-center gap-2">
+              {hasPassedCount && (
+                <span className="text-emerald-600 dark:text-emerald-400">
+                  ✓ {passedCount}
+                </span>
+              )}
+              {hasFailures && (
+                <span className="text-red-600 dark:text-red-400">
+                  ✗ {failedRows + failedGradingCount}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </button>
+    );
+  }
+
   // Config exists but no dry run yet
   if (!dryRunStats) {
     return (
-      <div className="px-4 py-3 rounded-lg bg-muted/50 flex items-center justify-center min-h-[88px]">
+      <button
+        onClick={onDryRunClick}
+        className="w-full px-4 py-3 rounded-lg bg-muted/50 flex items-center justify-center min-h-[88px] hover:bg-muted/70 transition-colors cursor-pointer"
+      >
         <div className="flex flex-col items-center gap-1 text-center">
           <FlaskConical className="w-5 h-5 text-muted-foreground/50" />
           <span className="text-xs text-muted-foreground">
             Run dry run to see scores
           </span>
         </div>
-      </div>
+      </button>
     );
   }
 
@@ -91,6 +176,13 @@ export function EvaluationCard({ evaluationConfig, dryRunStats, onConfigureClick
         <div className="flex items-center gap-2 text-xs">
           <span className="text-muted-foreground">Verdict:</span>
           <span className={`font-medium ${verdictColor}`}>{verdict}</span>
+          <button
+            onClick={onDryRunClick}
+            className="p-1 rounded hover:bg-muted transition-colors"
+            title="Re-run dry run"
+          >
+            <RefreshCw className="w-3 h-3 text-muted-foreground hover:text-foreground" />
+          </button>
         </div>
       </div>
 

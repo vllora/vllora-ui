@@ -59,7 +59,7 @@ export const runDryRunHandler: ToolHandler = async (params) => {
     // Create evaluation run with sampling
     const evaluationResponse = await createEvaluation({
       dataset_id: dataset.backendDatasetId,
-      model_params: {
+      rollout_model_params: {
         model: dataset.evaluationConfig.completionParams.model,
         temperature: dataset.evaluationConfig.completionParams.temperature,
       },

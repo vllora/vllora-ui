@@ -119,7 +119,7 @@ export interface EvaluationCompletionParams {
 
 export interface CreateEvaluationRequest {
   dataset_id: string;
-  model_params: EvaluationCompletionParams;
+  rollout_model_params: EvaluationCompletionParams;
   offset?: number;
   limit?: number;
 }
