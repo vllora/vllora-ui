@@ -53,7 +53,7 @@ export function ObjectiveInputTab({
               value={objective}
               onChange={(e) => onObjectiveChange(e.target.value)}
               placeholder="Describe what you want your model to do..."
-              className="w-full min-h-[32vh] bg-transparent border-0 pl-14 pr-6 pt-5 pb-6 text-foreground placeholder:text-muted-foreground/60 resize-none focus:outline-none text-[15px] leading-relaxed focus:ring-0"
+              className="w-full min-h-[32vh] bg-transparent border-0 border-none outline-none pl-14 pr-6 pt-5 pb-6 text-foreground placeholder:text-muted-foreground/60 resize-none focus:outline-none focus:ring-0 focus:border-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none text-[15px] leading-relaxed"
             />
 
             {/* Subtle gradient overlay at bottom for depth */}

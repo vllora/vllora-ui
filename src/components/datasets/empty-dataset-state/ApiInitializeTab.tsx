@@ -144,64 +144,90 @@ export function ApiInitializeTab({ hasBackendSpans, traces }: ApiInitializeTabPr
     }
   };
 
+  const hasContent = datasetObjective.trim().length > 0;
+
   return (
     <div className="w-full h-full flex-1 flex flex-col gap-4">
       {/* Top Row: Dataset Objective + Live Trace Feed - grows to fill space */}
       <div className="flex-1 flex gap-4 min-h-0 h-[calc(100%-100px)]">
-        {/* Left: Dataset Objective */}
-        <div className="flex-1 rounded-xl border border-border bg-card/50 backdrop-blur-sm p-4 flex flex-col gap-2">
-          <div className="flex items-center justify-between shrink-0">
-            <label className="flex items-center gap-2 text-sm font-medium">
-              <Sparkles className="w-4 h-4 text-amber-500" />
-              Dataset Objective
-            </label>
-            {traces.length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleInferObjective}
-                disabled={isInferring}
-                className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-              >
-                {isInferring ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Wand2 className="w-3.5 h-3.5" />
-                )}
-                {isInferring ? "Suggesting..." : "Suggest"}
-              </Button>
-            )}
-          </div>
-          <Textarea
-            value={datasetObjective}
-            onChange={(e) => setDatasetObjective(e.target.value)}
-            placeholder="Describe what you want the fine-tuned model to do. E.g., 'A chess tutor that explains positions clearly and adapts to the student's level'"
-            className="flex-1 min-h-[100px] resize-none bg-background/50"
-          />
-          <p className="text-xs text-muted-foreground shrink-0">
-            This helps guide data generation and evaluation criteria for your fine-tuning workflow.
-          </p>
-
-          {/* Start Button - shown when traces exist */}
-          {traces.length > 0 && (
-            <Button
-              onClick={handleStartFinetune}
-              disabled={isCreating}
-              className="w-full shrink-0 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white gap-2 animate-in fade-in duration-300"
-            >
-              {isCreating ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                <>
-                  Start Finetune
-                  <ArrowRight className="w-4 h-4" />
-                </>
+        {/* Left: Dataset Objective - with gradient border effect */}
+        <div className="group flex-1 relative rounded-2xl p-[1px] bg-gradient-to-b from-border/80 via-border/40 to-border/80 hover:from-[rgba(var(--theme-500),0.3)] hover:via-border/40 hover:to-[rgba(var(--theme-500),0.3)] transition-all duration-500">
+          <div className="h-full rounded-2xl bg-card/95 backdrop-blur-md overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 pt-4 pb-2 shrink-0">
+              <label className="flex items-center gap-2.5 text-sm font-medium">
+                <div className="relative">
+                  <Sparkles className="w-4 h-4 text-[rgba(var(--theme-500),0.9)] transition-transform duration-300 group-hover:scale-110" />
+                  <div className="absolute inset-0 text-[rgba(var(--theme-500),0.4)] animate-pulse">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                </div>
+                Dataset Objective
+              </label>
+              {traces.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleInferObjective}
+                  disabled={isInferring}
+                  className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-[rgba(var(--theme-500),0.1)]"
+                >
+                  {isInferring ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Wand2 className="w-3.5 h-3.5" />
+                  )}
+                  {isInferring ? "Suggesting..." : "Suggest"}
+                </Button>
               )}
-            </Button>
-          )}
+            </div>
+
+            {/* Textarea */}
+            <div className="relative flex-1 px-5">
+              <Textarea
+                value={datasetObjective}
+                onChange={(e) => setDatasetObjective(e.target.value)}
+                placeholder="Describe what you want the fine-tuned model to do..."
+                className="h-full min-h-[100px] resize-none bg-transparent border-0 border-none outline-none focus:outline-none focus:ring-0 focus:border-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none text-[15px] leading-relaxed placeholder:text-muted-foreground/60"
+              />
+              {/* Subtle gradient overlay at bottom for depth */}
+              <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-card/80 to-transparent pointer-events-none" />
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between px-5 py-4 border-t border-border/30 bg-muted/20 shrink-0">
+              <span className="text-xs text-muted-foreground/60">
+                {hasContent ? (
+                  <span className="text-muted-foreground/80">
+                    {datasetObjective.length} characters
+                  </span>
+                ) : (
+                  "Guides data generation and evaluation"
+                )}
+              </span>
+
+              {/* Start Button - shown when traces exist */}
+              {traces.length > 0 && (
+                <Button
+                  onClick={handleStartFinetune}
+                  disabled={isCreating}
+                  className="group/btn bg-[rgba(var(--theme-500),1)] hover:bg-[rgba(var(--theme-400),1)] text-white gap-2 px-5 h-10 rounded-lg font-medium shadow-lg shadow-[rgba(var(--theme-500),0.25)] hover:shadow-[rgba(var(--theme-500),0.35)] hover:shadow-xl transition-all duration-200 disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed animate-in fade-in"
+                >
+                  {isCreating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      Start Finetune
+                      <ArrowRight className="w-4 h-4 transition-transform duration-200 group-hover/btn:translate-x-0.5" />
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Right: Live Trace Feed */}
