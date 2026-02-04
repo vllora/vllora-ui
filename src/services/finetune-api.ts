@@ -455,6 +455,10 @@ export interface CreateFinetuneJobOptions {
   displayName?: string;
   trainingConfig?: Partial<ReinforcementTrainingConfig>;
   inferenceParameters?: Partial<ReinforcementInferenceParameters>;
+  /** Chunk size for training data processing */
+  chunkSize?: number;
+  /** Number of nodes for distributed training */
+  nodeCount?: number;
 }
 
 /**
@@ -482,15 +486,25 @@ export async function createFinetuneJobFromUpload(
     ...options?.inferenceParameters,
   };
 
-  // Create reinforcement job
-  const job = await createReinforcementJob({
+  // Create reinforcement job request
+  const request: CreateReinforcementJobRequest = {
     dataset: backendDatasetId,
     base_model: options?.baseModel || 'llama-v3-8b-instruct',
     output_model: options?.outputModel || defaultOutputModel,
     display_name: options?.displayName || `${datasetName} Fine-tune`,
     training_config: trainingConfig,
     inference_parameters: inferenceParameters,
-  });
+  };
+
+  // Add optional distributed training parameters
+  if (options?.chunkSize !== undefined) {
+    request.chunk_size = options.chunkSize;
+  }
+  if (options?.nodeCount !== undefined) {
+    request.node_count = options.nodeCount;
+  }
+
+  const job = await createReinforcementJob(request);
 
   return job;
 }

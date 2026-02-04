@@ -13,8 +13,10 @@ import type { DistriFnTool } from '@distri/core';
 import * as workflowDB from '@/services/finetune-workflow-db';
 import { quickFinetune } from '@/services/quick-finetune';
 import type { ToolHandler } from '../types';
+import { toast } from 'sonner';
 
 interface TrainingParams {
+  // Training config
   learning_rate?: number;
   epochs?: number;
   batch_size?: number;
@@ -22,20 +24,33 @@ interface TrainingParams {
   max_context_length?: number;
   gradient_accumulation_steps?: number;
   learning_rate_warmup_steps?: number;
+  batch_size_samples?: number;
   // Inference parameters
   max_output_tokens?: number;
   temperature?: number;
   top_p?: number;
   top_k?: number;
+  response_candidates_count?: number;
 }
 
 export const startTrainingHandler: ToolHandler = async (params) => {
   try {
-    const { workflow_id, base_model = 'llama-v3-8b-instruct', training_params } = params;
+    const {
+      workflow_id,
+      base_model = 'llama-v3-8b-instruct',
+      chunk_size,
+      node_count,
+      training_params,
+    } = params;
 
     if (!workflow_id || typeof workflow_id !== 'string') {
       return { success: false, error: 'workflow_id is required' };
     }
+
+    // Parse top-level params with type coercion
+    const model = typeof base_model === 'string' ? base_model : 'llama-v3-8b-instruct';
+    const chunkSize = typeof chunk_size === 'number' ? chunk_size : undefined;
+    const nodeCount = typeof node_count === 'number' ? node_count : undefined;
 
     // Get workflow to find the dataset ID
     const workflow = await workflowDB.getWorkflow(workflow_id);
@@ -43,7 +58,14 @@ export const startTrainingHandler: ToolHandler = async (params) => {
       return { success: false, error: 'Workflow not found' };
     }
 
-    const model = typeof base_model === 'string' ? base_model : 'llama-v3-8b-instruct';
+    // Switch to Jobs tab immediately so user can see the training progress
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('finetune-set-view-mode', {
+          detail: { section: 'jobs' },
+        })
+      );
+    }
 
     // Parse training params if provided
     const tp = (training_params || {}) as TrainingParams;
@@ -55,12 +77,14 @@ export const startTrainingHandler: ToolHandler = async (params) => {
       ...(tp.max_context_length !== undefined && { max_context_length: tp.max_context_length }),
       ...(tp.gradient_accumulation_steps !== undefined && { gradient_accumulation_steps: tp.gradient_accumulation_steps }),
       ...(tp.learning_rate_warmup_steps !== undefined && { learning_rate_warmup_steps: tp.learning_rate_warmup_steps }),
+      ...(tp.batch_size_samples !== undefined && { batch_size_samples: tp.batch_size_samples }),
     };
     const inferenceParameters = {
       ...(tp.max_output_tokens !== undefined && { max_output_tokens: tp.max_output_tokens }),
       ...(tp.temperature !== undefined && { temperature: tp.temperature }),
       ...(tp.top_p !== undefined && { top_p: tp.top_p }),
       ...(tp.top_k !== undefined && { top_k: tp.top_k }),
+      ...(tp.response_candidates_count !== undefined && { response_candidates_count: tp.response_candidates_count }),
     };
 
     // Use quickFinetune which handles everything:
@@ -73,12 +97,17 @@ export const startTrainingHandler: ToolHandler = async (params) => {
       baseModel: model,
       trainingConfig: Object.keys(trainingConfig).length > 0 ? trainingConfig : undefined,
       inferenceParameters: Object.keys(inferenceParameters).length > 0 ? inferenceParameters : undefined,
+      chunkSize,
+      nodeCount,
     });
 
+
     if (!result.success) {
+      toast.error(result.error || "Failed to start finetune job");
       return { success: false, error: result.error };
     }
 
+    toast.success(`Finetune job started! Job ID: ${result.jobId}`);
     return {
       success: true,
       training: {
@@ -103,17 +132,27 @@ export const startTrainingTool: DistriFnTool = {
     properties: {
       workflow_id: { type: 'string', description: 'The workflow ID' },
       base_model: { type: 'string', default: 'llama-v3-8b-instruct', description: 'Base model to fine-tune' },
+      chunk_size: { type: 'number', description: 'Chunk size for training data processing' },
+      node_count: { type: 'number', description: 'Number of nodes for distributed training' },
       training_params: {
         type: 'object',
-        description: 'Optional training parameters',
+        description: 'Advanced training and inference parameters (optional)',
         properties: {
+          // Training config
           learning_rate: { type: 'number', description: 'Learning rate (default: 0.0001)' },
           epochs: { type: 'number', description: 'Number of epochs (default: 2.0)' },
-          batch_size: { type: 'number', description: 'Batch size (default: 65536)' },
+          batch_size: { type: 'number', description: 'Batch size in tokens (default: 65536)' },
+          batch_size_samples: { type: 'number', description: 'Batch size in samples' },
           lora_rank: { type: 'number', description: 'LoRA rank (default: 16)' },
-          max_context_length: { type: 'number', description: 'Max context length' },
-          max_output_tokens: { type: 'number', description: 'Max output tokens (default: 2048)' },
-          temperature: { type: 'number', description: 'Temperature (default: 0.7)' },
+          max_context_length: { type: 'number', description: 'Max context length for training' },
+          gradient_accumulation_steps: { type: 'number', description: 'Gradient accumulation steps' },
+          learning_rate_warmup_steps: { type: 'number', description: 'Learning rate warmup steps' },
+          // Inference parameters
+          max_output_tokens: { type: 'number', description: 'Max output tokens during training rollouts (default: 2048)' },
+          temperature: { type: 'number', description: 'Temperature for rollouts (default: 0.7)' },
+          top_p: { type: 'number', description: 'Top-p sampling (default: 0.9)' },
+          top_k: { type: 'number', description: 'Top-k sampling' },
+          response_candidates_count: { type: 'number', description: 'Number of response candidates to generate per prompt' },
         },
       },
     },

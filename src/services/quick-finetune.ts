@@ -21,6 +21,7 @@ import {
   ReinforcementTrainingConfig,
   ReinforcementInferenceParameters,
 } from './finetune-api';
+import { emitter } from '@/utils/eventEmitter';
 
 export interface QuickFinetuneResult {
   success: boolean;
@@ -36,6 +37,10 @@ export interface TrainingConfigOptions {
   trainingConfig?: Partial<ReinforcementTrainingConfig>;
   /** Inference parameters during training */
   inferenceParameters?: Partial<ReinforcementInferenceParameters>;
+  /** Chunk size for training data processing */
+  chunkSize?: number;
+  /** Number of nodes for distributed training */
+  nodeCount?: number;
 }
 
 export interface QuickFinetuneOptions extends TrainingConfigOptions {
@@ -90,6 +95,8 @@ export async function startFinetuneTraining(
     baseModel = 'llama-v3-8b-instruct',
     trainingConfig,
     inferenceParameters,
+    chunkSize,
+    nodeCount,
   } = options;
 
   try {
@@ -116,6 +123,8 @@ export async function startFinetuneTraining(
         displayName: `${datasetName} Fine-tune`,
         trainingConfig,
         inferenceParameters,
+        chunkSize,
+        nodeCount,
       }
     );
 
@@ -159,6 +168,8 @@ export async function quickFinetune(options: QuickFinetuneOptions): Promise<Quic
     baseModel = 'llama-v3-8b-instruct',
     trainingConfig,
     inferenceParameters,
+    chunkSize,
+    nodeCount,
   } = options;
 
   try {
@@ -219,6 +230,8 @@ export async function quickFinetune(options: QuickFinetuneOptions): Promise<Quic
       baseModel,
       trainingConfig,
       inferenceParameters,
+      chunkSize,
+      nodeCount,
     });
 
     if (!result.success) {
@@ -227,6 +240,9 @@ export async function quickFinetune(options: QuickFinetuneOptions): Promise<Quic
         error: result.error,
       };
     }
+
+    // Emit event so FinetuneJobsContext can refresh with the correct backendDatasetId
+    emitter.emit('vllora_finetune_job_created', { backendDatasetId });
 
     return {
       success: true,

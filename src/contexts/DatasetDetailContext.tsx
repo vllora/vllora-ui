@@ -15,6 +15,7 @@ import {
   useMemo,
   type ReactNode,
 } from "react";
+import { useSearchParams } from "react-router";
 import { DatasetsConsumer } from "@/contexts/DatasetsContext";
 import { DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
 import type { Dataset, DatasetRecord, TopicHierarchyConfig, TopicHierarchyNode, EvaluationConfig } from "@/types/dataset-types";
@@ -115,9 +116,62 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     }
   }, []);
 
-  // UI View state
-  const [activeSection, setActiveSection] = useState<DatasetSection>("records");
-  const [viewMode, setViewMode] = useState<ViewMode>("canvas");
+  // URL query params for tab persistence
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // UI View state - initialize from URL query params
+  const [activeSection, setActiveSectionState] = useState<DatasetSection>(() => {
+    const tabParam = searchParams.get("tab");
+    if (tabParam === "evaluator" || tabParam === "jobs" || tabParam === "records") {
+      return tabParam;
+    }
+    return "records";
+  });
+  const [viewModeState, setViewModeState] = useState<ViewMode>(() => {
+    const viewParam = searchParams.get("view");
+    if (viewParam === "canvas" || viewParam === "table") {
+      return viewParam;
+    }
+    return "canvas";
+  });
+
+  // Helper to update URL params
+  const updateUrlParams = useCallback((updates: { tab?: DatasetSection | null; view?: ViewMode | null }) => {
+    const newParams = new URLSearchParams(searchParams);
+
+    if (updates.tab !== undefined) {
+      if (updates.tab === "records" || updates.tab === null) {
+        newParams.delete("tab");
+      } else {
+        newParams.set("tab", updates.tab);
+      }
+    }
+
+    if (updates.view !== undefined) {
+      if (updates.view === "canvas" || updates.view === null) {
+        newParams.delete("view");
+      } else {
+        newParams.set("view", updates.view);
+      }
+    }
+
+    setSearchParams(newParams, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  // Wrapper to update both state and URL when section changes
+  const setActiveSection = useCallback((section: DatasetSection) => {
+    setActiveSectionState(section);
+    updateUrlParams({ tab: section });
+  }, [updateUrlParams]);
+
+  // Wrapper to update both state and URL when view mode changes
+  const setViewMode = useCallback((mode: ViewMode) => {
+    setViewModeState(mode);
+    updateUrlParams({ view: mode });
+  }, [updateUrlParams]);
+
+  // Expose viewMode for reading
+  const viewMode = viewModeState;
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
 
@@ -254,7 +308,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     return () => {
       window.removeEventListener("finetune-set-view-mode" as any, handleSectionChange);
     };
-  }, []);
+  }, [setActiveSection, setViewMode]);
 
   // Derived: selected record for sidebar detail view (table mode)
   const selectedRecord = useMemo(
@@ -601,8 +655,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
         toast.success("Fine-tuning job started", {
           description: `Job ID: ${result.jobId}`,
         });
-        // Emit event to notify FinetuneJobsContext to refresh and open jobs panel
-        emitter.emit("vllora_finetune_job_created", { jobId: result.jobId });
+        // Note: quickFinetune already emits vllora_finetune_job_created event
       } else if (!result.success) {
         toast.error("Failed to start fine-tuning job", {
           description: result.error || "An error occurred",

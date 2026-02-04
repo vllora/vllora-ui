@@ -33,11 +33,11 @@ export function emitWorkflowUpdate(datasetId: string, step?: FinetuneStep): void
       })
     );
 
-    // Emit view mode change for specific steps
+    // Emit section change for specific steps
     if (step === 'grader_config') {
       window.dispatchEvent(
         new CustomEvent('finetune-set-view-mode', {
-          detail: { viewMode: 'evaluator' },
+          detail: { section: 'evaluator' },
         })
       );
     }

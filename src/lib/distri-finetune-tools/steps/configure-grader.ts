@@ -12,7 +12,7 @@ import type { ToolHandler } from '../types';
 
 export const configureGraderHandler: ToolHandler = async (params) => {
   try {
-    const { workflow_id, script, model, temperature, max_tokens } = params;
+    const { workflow_id, script } = params;
 
     if (!workflow_id || typeof workflow_id !== 'string') {
       return { success: false, error: 'workflow_id is required' };
@@ -26,32 +26,20 @@ export const configureGraderHandler: ToolHandler = async (params) => {
     if (!workflow) {
       return { success: false, error: 'Workflow not found' };
     }
-
+    // Auto-advance to grader_config if in earlier step
     if (workflow.currentStep !== 'grader_config') {
-      return { success: false, error: `Cannot configure grader in step ${workflow.currentStep}. Must be in grader_config step.` };
+      await workflowDB.advanceToStep(workflow_id, 'grader_config');
     }
 
-    // Parse completion params with type coercion (LLM may pass strings)
-    const modelValue = typeof model === 'string' ? model : 'gpt-4o';
-    const temperatureValue = typeof temperature === 'number'
-      ? temperature
-      : typeof temperature === 'string'
-        ? parseFloat(temperature) || 0.0
-        : 0.0;
-    const maxTokensValue = typeof max_tokens === 'number'
-      ? max_tokens
-      : typeof max_tokens === 'string'
-        ? parseInt(max_tokens, 10) || 2048
-        : 2048;
-
     // Build evaluation config (JavaScript evaluator only)
+    // Use default completion params (required by type but not needed for pure JS evaluation)
     const evaluationConfig: EvaluationConfig = {
       type: 'js',
       script,
       completionParams: {
-        model: modelValue,
-        temperature: temperatureValue,
-        maxTokens: maxTokensValue,
+        model: 'gpt-4o',
+        temperature: 0.0,
+        maxTokens: 2048,
       },
       updatedAt: Date.now(),
     };
@@ -65,12 +53,18 @@ export const configureGraderHandler: ToolHandler = async (params) => {
       configuredAt: Date.now(),
     });
 
+    // Switch to Evaluator tab so user can see the configured grader
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('finetune-set-view-mode', {
+          detail: { section: 'evaluator' },
+        })
+      );
+    }
+
     return {
       success: true,
       grader_type: 'js',
-      model: modelValue,
-      temperature: temperatureValue,
-      max_tokens: maxTokensValue,
       configured_at: Date.now(),
     };
   } catch (error) {
@@ -80,7 +74,7 @@ export const configureGraderHandler: ToolHandler = async (params) => {
 
 export const configureGraderTool: DistriFnTool = {
   name: 'configure_grader',
-  description: 'Configure the JavaScript evaluation script for RFT. The script should define an evaluate(input, output) function that returns { score, reasoning }. Must be in grader_config step.',
+  description: 'Configure the JavaScript evaluation script for RFT. The script should define an evaluate(input, output) function that returns { score, reasoning }.',
   type: 'function',
   parameters: {
     type: 'object',
@@ -88,22 +82,7 @@ export const configureGraderTool: DistriFnTool = {
       workflow_id: { type: 'string', description: 'The workflow ID' },
       script: {
         type: 'string',
-        description: 'JavaScript code defining an evaluate(input, output) function. Use __langdb_call_llm_as_judge_obj(prompt) to call the LLM judge.',
-      },
-      model: {
-        type: 'string',
-        default: 'gpt-4o',
-        description: 'LLM model for the judge (gpt-4o, gpt-4o-mini, claude-3-5-sonnet, claude-3-haiku)',
-      },
-      temperature: {
-        type: 'number',
-        default: 0.0,
-        description: 'Temperature for LLM judge (0.0-2.0)',
-      },
-      max_tokens: {
-        type: 'number',
-        default: 2048,
-        description: 'Max tokens for LLM judge response',
+        description: 'JavaScript code defining an evaluate(input, output) function that returns { score: number, reasoning: string }.',
       },
     },
     required: ['workflow_id', 'script'],

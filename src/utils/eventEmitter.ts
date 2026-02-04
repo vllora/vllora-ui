@@ -78,7 +78,7 @@ type VlloraEvents = {
   vllora_input_speechRecognitionStart: Record<string, never>;
   vllora_input_speechRecognitionEnd: Record<string, never>;
   // Finetune job events
-  vllora_finetune_job_created: { jobId: string };
+  vllora_finetune_job_created: { jobId?: string; backendDatasetId: string };
   // Lucy assistant prompt trigger (from UI actions like "Generate for topic")
   vllora_lucy_prompt: { prompt: string };
 };

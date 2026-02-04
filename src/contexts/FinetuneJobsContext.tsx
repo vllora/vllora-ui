@@ -175,11 +175,16 @@ export function FinetuneJobsProvider({ children }: FinetuneJobsProviderProps) {
     loadJobs(currentBackendDatasetId);
   }, [currentBackendDatasetId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Listen for job created events from DatasetDetailContext
+  // Listen for job created events from quickFinetune
   useEffect(() => {
-    const handleJobCreated = () => {
-      // Refresh jobs list and open sidebar
-      loadJobs();
+    const handleJobCreated = (event: { backendDatasetId: string }) => {
+      // Update the current backend dataset ID and refresh jobs list
+      if (event.backendDatasetId) {
+        setCurrentBackendDatasetId(event.backendDatasetId);
+        // loadJobs will be triggered by the useEffect watching currentBackendDatasetId
+      } else {
+        loadJobs();
+      }
       setIsSidebarOpen(true);
     };
 
