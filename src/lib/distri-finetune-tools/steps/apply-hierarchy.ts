@@ -77,11 +77,12 @@ export const applyTopicHierarchyHandler: ToolHandler = async (params) => {
       return { success: false, error: 'Workflow not found' };
     }
 
-    // Allow hierarchy changes in topics_config or grader_config steps
-    // (users may want to refine topics while configuring the grader)
-    const allowedSteps = ['topics_config', 'grader_config'];
+    // Allow hierarchy changes in not_started, topics_config or grader_config steps
+    // not_started: workflow just started, first action is typically topic config
+    // grader_config: users may want to refine topics while configuring the grader
+    const allowedSteps = ['not_started', 'topics_config', 'grader_config'];
     if (!allowedSteps.includes(workflow.currentStep)) {
-      return { success: false, error: `Cannot apply hierarchy in step ${workflow.currentStep}. Must be in topics_config or grader_config step.` };
+      return { success: false, error: `Cannot apply hierarchy in step ${workflow.currentStep}. Must be in not_started, topics_config, or grader_config step.` };
     }
 
     // Normalize and validate hierarchy structure (ensures IDs exist)

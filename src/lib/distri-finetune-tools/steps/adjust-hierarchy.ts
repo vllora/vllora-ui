@@ -81,13 +81,19 @@ export const adjustTopicHierarchyHandler: ToolHandler = async (params) => {
       return { success: false, error: 'Workflow not found' };
     }
 
-    // Allow hierarchy changes in topics_config or grader_config steps
-    const allowedSteps = ['topics_config', 'grader_config'];
+    // Allow hierarchy changes in not_started, topics_config or grader_config steps
+    // not_started: workflow just started, first action is typically topic config
+    const allowedSteps = ['not_started', 'topics_config', 'grader_config'];
     if (!allowedSteps.includes(workflow.currentStep)) {
       return {
         success: false,
-        error: `Cannot adjust hierarchy in step ${workflow.currentStep}. Must be in topics_config or grader_config step.`,
+        error: `Cannot adjust hierarchy in step ${workflow.currentStep}. Must be in not_started, topics_config, or grader_config step.`,
       };
+    }
+
+    // Auto-advance from not_started to topics_config when topic operations begin
+    if (workflow.currentStep === 'not_started') {
+      await workflowDB.advanceToStep(workflow_id, 'topics_config');
     }
 
     // Get current hierarchy from dataset
