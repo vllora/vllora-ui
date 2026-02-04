@@ -294,7 +294,6 @@ class DryRunPollingManager {
 
       // Get record topics if stored
       const recordTopics = this.getRecordTopics(jobId);
-
       // Analyze results
       const samplePercentage = Math.round((job.sampleSize / result.total_rows) * 100);
       const dryRunStats = analyzeDryRunResults(

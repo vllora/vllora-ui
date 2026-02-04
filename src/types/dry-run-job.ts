@@ -19,11 +19,6 @@ export type DryRunJobStatus =
   | 'cancelled';  // User cancelled
 
 /**
- * Polling snapshot - Full EvaluationResultResponse including results for investigation
- */
-export type PollingSnapshot = EvaluationResultResponse;
-
-/**
  * A dry run job record stored in IndexedDB
  */
 export interface DryRunJob {
@@ -55,7 +50,7 @@ export interface DryRunJob {
   completedAt?: number;
 
   /** Latest polling snapshot from backend (real-time progress) */
-  pollingSnapshot?: PollingSnapshot;
+  pollingSnapshot?: EvaluationResultResponse;
 
   /** Full dry run results (populated on completion) */
   result?: DryRunStats;

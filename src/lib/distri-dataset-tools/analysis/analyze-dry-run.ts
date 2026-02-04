@@ -300,7 +300,10 @@ export function analyzeDryRunResults(
   recordTopics?: Record<string, string> // recordId -> topic mapping
 ): DryRunStats {
   const results = evaluationResult.results;
-  const scores = results.map((r) => r.score ?? 0);
+
+  // Only include results that have actual scores (filter out failed/pending)
+  const scoredResults = results.filter((r) => r.score != null);
+  const scores = scoredResults.map((r) => r.score!);
 
   // Calculate basic statistics
   const mean = calculateMean(scores);
@@ -326,10 +329,11 @@ export function analyzeDryRunResults(
   if (recordTopics) {
     const topicScores: Record<string, number[]> = {};
 
-    for (const result of results) {
+    // Only use results with actual scores for per-topic analysis
+    for (const result of scoredResults) {
       const topic = recordTopics[result.dataset_row_id] || '__unknown__';
       if (!topicScores[topic]) topicScores[topic] = [];
-      topicScores[topic].push(result.score ?? 0);
+      topicScores[topic].push(result.score!);
     }
 
     for (const [topic, topicScoreList] of Object.entries(topicScores)) {
@@ -347,26 +351,26 @@ export function analyzeDryRunResults(
   // Run diagnosis
   const diagnosis = diagnoseResults(mean, std, percentAboveZero, percentPerfect, byTopic);
 
-  // Extract sample results for manual review
-  const sortedResults = [...results].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-  const highest = sortedResults.slice(0, 5).map((r) => ({
+  // Extract sample results for manual review (only scored results)
+  const sortedScoredResults = [...scoredResults].sort((a, b) => b.score! - a.score!);
+  const highest = sortedScoredResults.slice(0, 5).map((r) => ({
     recordId: r.dataset_row_id,
-    score: r.score ?? 0,
+    score: r.score!,
     reason: r.reason,
   }));
-  const lowest = sortedResults.slice(-5).reverse().map((r) => ({
+  const lowest = sortedScoredResults.slice(-5).reverse().map((r) => ({
     recordId: r.dataset_row_id,
-    score: r.score ?? 0,
+    score: r.score!,
     reason: r.reason,
   }));
 
   // Find samples around mean
-  const aroundMean = sortedResults
-    .filter((r) => Math.abs((r.score ?? 0) - mean) < 0.1)
+  const aroundMean = sortedScoredResults
+    .filter((r) => Math.abs(r.score! - mean) < 0.1)
     .slice(0, 5)
     .map((r) => ({
       recordId: r.dataset_row_id,
-      score: r.score ?? 0,
+      score: r.score!,
       reason: r.reason,
     }));
 

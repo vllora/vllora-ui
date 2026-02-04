@@ -11,18 +11,24 @@ import { RotateCcw, CheckCircle2, XCircle, History } from "lucide-react";
 import { ScoreHistogram } from "../ScoreHistogram";
 import { StatCard } from "./StatCard";
 import { SampleCard } from "./SampleCard";
+import { ResultsTable } from "./ResultsTable";
 import { cn } from "@/lib/utils";
 import type { DryRunStats } from "@/types/dataset-types";
+import type { EvaluationResultResponse } from "@/services/finetune-api";
+
+export type ResultsViewTab = "overview" | "samples" | "topics" | "details";
 
 interface ResultsViewProps {
   result: DryRunStats;
   scores: number[];
-  activeTab: "overview" | "samples" | "topics";
-  onTabChange: (tab: "overview" | "samples" | "topics") => void;
+  activeTab: ResultsViewTab;
+  onTabChange: (tab: ResultsViewTab) => void;
   onReset: () => void;
   onViewHistory: () => void;
   onClose: () => void;
   hasHistory: boolean;
+  /** Full evaluation results for details tab */
+  evaluationResults?: EvaluationResultResponse["results"];
 }
 
 export function ResultsView({
@@ -34,6 +40,7 @@ export function ResultsView({
   onViewHistory,
   onClose,
   hasHistory,
+  evaluationResults,
 }: ResultsViewProps) {
   const byTopic = result.byTopic || {};
   const recommendations = result.diagnosis.recommendations || [];
@@ -42,11 +49,12 @@ export function ResultsView({
   return (
     <div className="space-y-4">
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={(v) => onTabChange(v as typeof activeTab)}>
-        <TabsList className="grid w-full grid-cols-3">
+      <Tabs value={activeTab} onValueChange={(v) => onTabChange(v as ResultsViewTab)}>
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="topics">By Topic</TabsTrigger>
           <TabsTrigger value="samples">Samples</TabsTrigger>
+          <TabsTrigger value="details">Details</TabsTrigger>
         </TabsList>
 
         {/* Overview tab */}
@@ -153,6 +161,17 @@ export function ResultsView({
               </div>
             </div>
           </div>
+        </TabsContent>
+
+        {/* Details tab - full results table */}
+        <TabsContent value="details" className="mt-4">
+          {evaluationResults && evaluationResults.length > 0 ? (
+            <ResultsTable results={evaluationResults} maxHeight={300} />
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              No detailed results available
+            </p>
+          )}
         </TabsContent>
       </Tabs>
 

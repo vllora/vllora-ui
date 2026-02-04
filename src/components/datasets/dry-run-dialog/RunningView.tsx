@@ -16,6 +16,7 @@ import {
   getJobAverageScore,
   getJobPassedCount,
 } from "@/types/dry-run-job";
+import { ResultsTable } from "./ResultsTable";
 
 interface RunningViewProps {
   job: DryRunJob;
@@ -112,68 +113,7 @@ export function RunningView({ job, progress, onCancel }: RunningViewProps) {
       </div>
 
       {/* Results table */}
-      {results.length > 0 && (
-        <div className="rounded-md border overflow-hidden">
-          <div className="max-h-[200px] overflow-y-auto">
-            <table className="w-full text-xs">
-              <thead className="bg-muted/50 sticky top-0">
-                <tr>
-                  <th className="text-left p-2 font-medium">#</th>
-                  <th className="text-left p-2 font-medium">Status</th>
-                  <th className="text-left p-2 font-medium">Score</th>
-                  <th className="text-left p-2 font-medium">Reason / Error</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {results.map((result) => (
-                  <tr key={result.dataset_row_id} className="hover:bg-muted/30">
-                    <td className="p-2 font-mono text-muted-foreground">
-                      {result.row_index + 1}
-                    </td>
-                    <td className="p-2">
-                      <span className={cn(
-                        "px-1.5 py-0.5 rounded text-xs font-medium",
-                        result.status === "completed"
-                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                          : result.status === "failed"
-                          ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                          : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400"
-                      )}>
-                        {result.status}
-                      </span>
-                    </td>
-                    <td className="p-2">
-                      {result.score != null && result.status === "completed" ? (
-                        <span className={cn(
-                          "font-mono",
-                          result.score >= 0.7
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : result.score >= 0.4
-                            ? "text-amber-600 dark:text-amber-400"
-                            : "text-red-600 dark:text-red-400"
-                        )}>
-                          {(result.score * 100).toFixed(0)}%
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </td>
-                    <td className="p-2 max-w-[200px] truncate text-muted-foreground" title={result.reason || result.error_message}>
-                      {result.error_message ? (
-                        <span className="text-red-500">{result.error_message}</span>
-                      ) : result.reason ? (
-                        result.reason
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+      <ResultsTable results={results} />
 
       {/* Info message */}
       <p className="text-xs text-muted-foreground text-center">
