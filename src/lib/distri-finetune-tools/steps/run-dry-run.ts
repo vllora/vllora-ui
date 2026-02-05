@@ -33,10 +33,10 @@ export const runDryRunHandler: ToolHandler = async (params) => {
       return { success: false, error: `Cannot run dry run in step ${workflow.currentStep}. Must be in dry_run step.` };
     }
 
-    // Get dataset to check evaluation config and backend dataset ID
+    // Get dataset to check eval script and backend dataset ID
     const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
-    if (!dataset?.evaluationConfig) {
-      return { success: false, error: 'Grader must be configured first. Configure evaluationConfig on the dataset.' };
+    if (!dataset?.evalScript) {
+      return { success: false, error: 'Grader must be configured first. Configure evalScript on the dataset.' };
     }
 
     if (!dataset.backendDatasetId) {
@@ -59,10 +59,7 @@ export const runDryRunHandler: ToolHandler = async (params) => {
     // Create evaluation run with sampling
     const evaluationResponse = await createEvaluation({
       dataset_id: dataset.backendDatasetId,
-      rollout_model_params: {
-        model: dataset.evaluationConfig.completionParams.model,
-        temperature: dataset.evaluationConfig.completionParams.temperature,
-      },
+      rollout_model_params: {},
       offset: 0,
       limit: sampleSize,
     });

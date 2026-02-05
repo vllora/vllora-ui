@@ -7,7 +7,7 @@
  */
 
 import { FlaskConical, Loader2, RefreshCw } from "lucide-react";
-import type { DryRunStats, EvaluationConfig } from "@/types/dataset-types";
+import type { DryRunStats } from "@/types/dataset-types";
 import type { DryRunJob } from "@/types/dry-run-job";
 import {
   getJobTotalRows,
@@ -19,8 +19,8 @@ import {
 } from "@/types/dry-run-job";
 
 export interface EvaluationCardProps {
-  /** Evaluation configuration (if set) */
-  evaluationConfig?: EvaluationConfig;
+  /** Evaluation script (if set) */
+  evalScript?: string;
   /** Dry run stats (if evaluation has been run) */
   dryRunStats?: DryRunStats;
   /** Currently running dry run job (if any) */
@@ -43,9 +43,9 @@ const VERDICT_BG = {
   "NO-GO": "bg-red-500",
 };
 
-export function EvaluationCard({ evaluationConfig, dryRunStats, runningJob, onConfigureClick, onDryRunClick }: EvaluationCardProps) {
-  // No evaluation config - show setup prompt (clickable)
-  if (!evaluationConfig) {
+export function EvaluationCard({ evalScript, dryRunStats, runningJob, onConfigureClick, onDryRunClick }: EvaluationCardProps) {
+  // No eval script - show setup prompt (clickable)
+  if (!evalScript) {
     return (
       <button
         onClick={onConfigureClick}

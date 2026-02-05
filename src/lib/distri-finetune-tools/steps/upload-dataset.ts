@@ -61,7 +61,7 @@ export const uploadDatasetHandler: ToolHandler = async (params) => {
 
     // Count what was included
     const hasTopicHierarchy = !!dataset.topicHierarchy?.hierarchy?.length;
-    const hasEvaluator = !!dataset.evaluationConfig;
+    const hasEvalScript = !!dataset.evalScript;
 
     return {
       success: true,
@@ -70,11 +70,11 @@ export const uploadDatasetHandler: ToolHandler = async (params) => {
       jsonl_size_bytes: jsonlContent.length,
       included: {
         topic_hierarchy: hasTopicHierarchy,
-        evaluator: hasEvaluator,
+        eval_script: hasEvalScript,
       },
-      message: hasEvaluator
-        ? 'Dataset uploaded with evaluator config. Ready for dry run.'
-        : 'Dataset uploaded without evaluator. Configure grader before dry run.',
+      message: hasEvalScript
+        ? 'Dataset uploaded with eval script. Ready for dry run.'
+        : 'Dataset uploaded without eval script. Configure grader before dry run.',
     };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to upload dataset' };

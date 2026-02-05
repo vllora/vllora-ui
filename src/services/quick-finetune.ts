@@ -185,9 +185,9 @@ export async function quickFinetune(options: QuickFinetuneOptions): Promise<Quic
       return { success: false, error: 'Dataset has no records' };
     }
 
-    // Check evaluator exists
-    if (!dataset.evaluationConfig) {
-      return { success: false, error: 'Dataset has no evaluation function configured' };
+    // Check eval script exists
+    if (!dataset.evalScript) {
+      return { success: false, error: 'Dataset has no evaluation script configured' };
     }
 
     // 2. Get or create workflow
@@ -202,8 +202,8 @@ export async function quickFinetune(options: QuickFinetuneOptions): Promise<Quic
     // 3. Sync grader config from dataset to workflow
     if (!workflow.graderConfig) {
       await workflowDB.updateStepData(workflow.id, 'graderConfig', {
-        type: dataset.evaluationConfig.type,
-        configuredAt: dataset.evaluationConfig.updatedAt ?? Date.now(),
+        type: 'js',
+        configuredAt: Date.now(),
       });
     }
 

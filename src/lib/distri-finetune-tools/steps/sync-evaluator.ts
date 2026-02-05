@@ -1,17 +1,15 @@
 /**
  * Sync Evaluator Tool
  *
- * Syncs the local evaluator config to the backend dataset.
- * This allows updating the grader without re-uploading the entire dataset.
+ * Validates that the evaluator is configured and dataset is ready.
+ * Note: The backend API doesn't support updating evaluators separately.
+ * The eval script is included during dataset upload - to change it, use
+ * upload_dataset with force_reupload=true.
  */
 
 import type { DistriFnTool } from '@distri/core';
 import * as workflowDB from '@/services/finetune-workflow-db';
 import * as datasetsDB from '@/services/datasets-db';
-import {
-  updateDatasetEvaluator,
-  evaluationConfigToBackendEvaluator,
-} from '@/services/finetune-api';
 import type { ToolHandler } from '../types';
 
 export const syncEvaluatorHandler: ToolHandler = async (params) => {
@@ -33,41 +31,41 @@ export const syncEvaluatorHandler: ToolHandler = async (params) => {
       return { success: false, error: 'Dataset not found' };
     }
 
+    // Check if eval script exists locally
+    if (!dataset.evalScript) {
+      return {
+        success: false,
+        error: 'No eval script found on dataset. Configure grader first.',
+      };
+    }
+
     // Check if dataset has been uploaded to backend
     if (!dataset.backendDatasetId) {
       return {
-        success: false,
-        error: 'Dataset must be uploaded to backend first. Use upload_dataset tool.',
+        success: true,
+        needs_upload: true,
+        evaluator_type: 'js',
+        message: 'Eval script configured. Dataset needs to be uploaded to backend. Use upload_dataset tool.',
       };
     }
 
-    // Check if evaluator config exists locally
-    if (!dataset.evaluationConfig) {
-      return {
-        success: false,
-        error: 'No evaluator config found on dataset. Configure grader first.',
-      };
-    }
-
-    // Convert to backend format and sync
-    const backendEvaluator = evaluationConfigToBackendEvaluator(dataset.evaluationConfig);
-
-    await updateDatasetEvaluator(dataset.backendDatasetId, backendEvaluator);
-
+    // Dataset is uploaded and has eval script - ready for dry run
+    // Note: We can't update the eval script separately. If it changed since upload,
+    // user needs to re-upload with force_reupload=true
     return {
       success: true,
       backend_dataset_id: dataset.backendDatasetId,
-      evaluator_type: dataset.evaluationConfig.type,
-      message: 'Evaluator config synced to backend. Ready for dry run.',
+      evaluator_type: 'js',
+      message: 'Eval script configured and dataset uploaded. Ready for dry run. Note: If eval script changed, use upload_dataset with force_reupload=true.',
     };
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to sync evaluator' };
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to check evaluator status' };
   }
 };
 
 export const syncEvaluatorTool: DistriFnTool = {
   name: 'sync_evaluator',
-  description: 'Sync the local evaluator config to the backend dataset. Use this after configuring or updating the grader to sync it without re-uploading the entire dataset.',
+  description: 'Check evaluator configuration status. Note: To update the eval script on backend, use upload_dataset with force_reupload=true.',
   type: 'function',
   parameters: {
     type: 'object',

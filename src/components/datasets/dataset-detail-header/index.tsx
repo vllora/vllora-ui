@@ -94,7 +94,7 @@ export function DatasetDetailHeader() {
               <WorkflowStepIndicator
                 datasetId={datasetId}
                 className="shrink-0 pt-1"
-                hasGraderConfig={!!dataset?.evaluationConfig}
+                hasGraderConfig={!!dataset?.evalScript}
                 onDryRunClick={() => setDryRunDialog(true)}
               />
             </div>

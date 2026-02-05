@@ -91,7 +91,7 @@ export function DryRunJobsProvider({
   );
 
   const datasetId = dataset.id;
-  const evaluationConfig = dataset.evaluationConfig;
+  const evalScript = dataset.evalScript;
 
   // Update backend dataset ID when dataset changes
   useEffect(() => {
@@ -146,15 +146,18 @@ export function DryRunJobsProvider({
   // Start a new dry run
   const startDryRun = useCallback(
     async (sampleSize: number): Promise<string> => {
-      if (!evaluationConfig) {
+      if (!evalScript) {
         throw new Error('Grader must be configured first');
       }
 
       // Auto-upload dataset if not already uploaded
       let backendDatasetId = currentBackendDatasetId;
-      if (!backendDatasetId) {
+      const needsUpload = !backendDatasetId;
+
+      if (needsUpload) {
         toast.info('Uploading dataset to backend...');
         try {
+          // Upload includes eval script, so no need to sync separately
           const uploadResult = await uploadDatasetForFinetune({
             ...dataset,
             records,
@@ -169,6 +172,9 @@ export function DryRunJobsProvider({
           throw uploadError;
         }
       }
+      // Note: If dataset was already uploaded, we proceed with the eval script
+      // that was included during upload. The cloud API doesn't support PATCH for
+      // updating evaluators. To use a new eval script, user needs to re-upload.
 
       // Build record topics mapping
       const recordTopics: Record<string, string> = {};
@@ -178,20 +184,16 @@ export function DryRunJobsProvider({
         }
       }
 
+      // backendDatasetId is guaranteed to be defined at this point
+      // (either from upload or from existing value)
       return dryRunPollingManager.startDryRun({
         datasetId,
-        backendDatasetId,
+        backendDatasetId: backendDatasetId!,
         sampleSize,
-        evaluationConfig: {
-          completionParams: {
-            model: evaluationConfig.completionParams.model,
-            temperature: evaluationConfig.completionParams.temperature ?? 0.7,
-          },
-        },
         recordTopics: Object.keys(recordTopics).length > 0 ? recordTopics : undefined,
       });
     },
-    [datasetId, dataset, currentBackendDatasetId, evaluationConfig, records]
+    [datasetId, dataset, currentBackendDatasetId, evalScript, records]
   );
 
   // Cancel a dry run

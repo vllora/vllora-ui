@@ -236,13 +236,7 @@ export function DatasetDetailContentV2() {
 
   // Check if finetune conditions are met
   const hasRecords = sortedRecords.length > 0;
-  const hasEvaluator = !!(
-    dataset?.evaluationConfig &&
-    (
-      (dataset.evaluationConfig.type === 'js' && dataset.evaluationConfig.script) ||
-      (dataset.evaluationConfig.type === 'llm_as_judge' && dataset.evaluationConfig.promptTemplate)
-    )
-  );
+  const hasEvaluator = !!dataset?.evalScript;
 
   if (isLoading) {
     return (
@@ -322,7 +316,7 @@ export function DatasetDetailContentV2() {
           <div className="flex-1 flex flex-col overflow-hidden">
             <EvaluationConfigPanel
               ref={evaluatorPanelRef}
-              config={dataset.evaluationConfig}
+              evalScript={dataset.evalScript}
               onSave={handleSaveEvaluationConfig}
               hideHeaderActions
             />
@@ -409,7 +403,7 @@ export function DatasetDetailContentV2() {
         open={dryRunDialog}
         onOpenChange={setDryRunDialog}
         recordCount={sortedRecords.length}
-        hasGraderConfig={!!dataset?.evaluationConfig}
+        hasGraderConfig={!!dataset?.evalScript}
       />
     </div>
     </DryRunJobsProvider>

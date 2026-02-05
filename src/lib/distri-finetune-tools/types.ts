@@ -280,7 +280,7 @@ export interface FinetuneContext {
 export function workflowToContext(
   datasetId: string,
   workflow: FinetuneWorkflowState | null,
-  datasetHasEvaluator?: boolean
+  datasetHasEvalScript?: boolean
 ): FinetuneContext {
   return {
     page: 'datasets',
@@ -291,8 +291,8 @@ export function workflowToContext(
           current_step: workflow.currentStep,
           step_status: workflow.stepStatus as Record<FinetuneStep, string>,
           coverage: workflow.coverageGeneration?.balanceScore,
-          // Check both workflow.graderConfig and dataset.evaluationConfig
-          has_grader: !!workflow.graderConfig || !!datasetHasEvaluator,
+          // Check both workflow.graderConfig and dataset.evalScript
+          has_grader: !!workflow.graderConfig || !!datasetHasEvalScript,
           dry_run_verdict: workflow.dryRun?.verdict,
           training_status: workflow.training?.status,
         }
@@ -306,7 +306,7 @@ export function workflowToContext(
 
 export function workflowToStatusResult(
   workflow: FinetuneWorkflowState | null,
-  datasetHasEvaluator?: boolean
+  datasetHasEvalScript?: boolean
 ): WorkflowStatusResult {
   if (!workflow) {
     return { success: false, error: 'Workflow not found' };
@@ -321,8 +321,8 @@ export function workflowToStatusResult(
       current_step: workflow.currentStep,
       step_status: workflow.stepStatus as Record<FinetuneStep, string>,
       coverage_score: workflow.coverageGeneration?.balanceScore,
-      // Check both workflow.graderConfig and dataset.evaluationConfig
-      has_grader: !!workflow.graderConfig || !!datasetHasEvaluator,
+      // Check both workflow.graderConfig and dataset.evalScript
+      has_grader: !!workflow.graderConfig || !!datasetHasEvalScript,
       dry_run_verdict: workflow.dryRun?.verdict,
       training_status: workflow.training?.status,
       created_at: workflow.createdAt,

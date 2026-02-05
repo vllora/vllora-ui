@@ -63,7 +63,7 @@ export function DatasetStatsCards() {
 
         {/* Evaluation Score Distribution */}
         <EvaluationCard
-          evaluationConfig={dataset?.evaluationConfig}
+          evalScript={dataset?.evalScript}
           dryRunStats={dataset?.dryRunStats}
           runningJob={runningJob}
           onConfigureClick={handleNavigateToEvaluator}

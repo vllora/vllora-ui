@@ -265,17 +265,13 @@ function FinetuneProcessInner({ children }: { children: ReactNode }) {
     });
 
     // Step 4: Grader Config
-    const hasGrader = !!dataset?.evaluationConfig;
+    const hasGrader = !!dataset?.evalScript;
     steps.push({
       id: 'grader',
       name: 'Grader Config',
       category: 'EVALUATION RULES',
       status: hasGrader ? 'complete' : validCount > 0 ? 'ready' : 'waiting',
-      statusText: hasGrader
-        ? dataset?.evaluationConfig?.type === 'llm_as_judge'
-          ? 'LLM Judge'
-          : 'Script'
-        : 'Not configured',
+      statusText: hasGrader ? 'Script' : 'Not configured',
       canRerun: true,
       isBlocked: validCount === 0,
       blockedReason: validCount === 0 ? 'Need valid records' : undefined,

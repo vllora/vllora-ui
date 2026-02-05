@@ -7,7 +7,7 @@
 
 import { emitWorkflowUpdate } from "@/lib/distri-finetune-tools/workflow";
 
-// Note: topicHierarchy and evaluationConfig are stored in the Dataset, not duplicated here.
+// Note: topicHierarchy and evalScript are stored in the Dataset, not duplicated here.
 // The workflow only tracks step progress and metadata, not the actual config data.
 
 // =============================================================================
@@ -104,9 +104,9 @@ export interface FinetuneWorkflowState {
     syntheticPercentage: number;
   } | null;
 
-  // Note: actual evaluationConfig is stored in Dataset.evaluationConfig, not duplicated here
+  // Note: actual eval script is stored in Dataset.evalScript, not duplicated here
   graderConfig: {
-    type: 'llm_as_judge' | 'js';
+    type: 'js';
     configuredAt: number;
   } | null;
 

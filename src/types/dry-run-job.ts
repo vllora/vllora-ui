@@ -70,7 +70,7 @@ export function getJobTotalRows(job: DryRunJob): number {
 
 /** Get completed rows from job */
 export function getJobCompletedRows(job: DryRunJob): number {
-  return job.pollingSnapshot?.completed_rows ?? 0;
+  return (job.pollingSnapshot?.completed_rows ?? 0) + (job.pollingSnapshot?.failed_rows ?? 0);
 }
 
 /** Get failed rows from job */
@@ -100,12 +100,6 @@ export interface StartDryRunParams {
   datasetId: string;
   backendDatasetId: string;
   sampleSize: number;
-  evaluationConfig: {
-    completionParams: {
-      model: string;
-      temperature: number;
-    };
-  };
   /** Optional: record ID to topic mapping for per-topic analysis */
   recordTopics?: Record<string, string>;
 }

@@ -15,7 +15,6 @@ import {
   RotateCcw,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
-import type { EvaluationConfig } from "@/types/dataset-types";
 
 /** Methods exposed via ref for external control */
 export interface EvaluationConfigPanelRef {
@@ -92,44 +91,37 @@ function evaluate(input) {
 `;
 
 interface EvaluationConfigPanelProps {
-  config?: EvaluationConfig;
-  onSave: (config: EvaluationConfig) => Promise<void>;
+  evalScript?: string;
+  onSave: (script: string) => Promise<void>;
   /** Hide header action buttons (Reset/Copy) when they're shown externally */
   hideHeaderActions?: boolean;
 }
 
 export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, EvaluationConfigPanelProps>(
-  function EvaluationConfigPanel({ config, onSave, hideHeaderActions = false }, ref) {
+  function EvaluationConfigPanel({ evalScript, onSave, hideHeaderActions = false }, ref) {
   // JavaScript evaluator state
   const [script, setScript] = useState(DEFAULT_SCRIPT);
 
   // UI state
   const [isSaving, setIsSaving] = useState(false);
 
-  // Initialize from config
+  // Initialize from evalScript
   useEffect(() => {
-    if (config?.type === "js" && config.script) {
-      setScript(config.script);
+    if (evalScript) {
+      setScript(evalScript);
     }
-  }, [config]);
+  }, [evalScript]);
 
   // Track if there are unsaved changes
   const hasChanges = useMemo(() => {
-    if (!config) return script !== DEFAULT_SCRIPT;
-    const configScript = config.type === "js" ? config.script : DEFAULT_SCRIPT;
-    return script !== configScript;
-  }, [config, script]);
+    if (!evalScript) return script !== DEFAULT_SCRIPT;
+    return script !== evalScript;
+  }, [evalScript, script]);
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await onSave({
-        type: "js",
-        script,
-        completionParams: {
-          model: "gpt-4o", // Default model for LLM-as-judge calls within script
-        },
-      });
+      await onSave(script);
     } catch {
       // Error handled by parent
     } finally {

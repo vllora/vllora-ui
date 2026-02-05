@@ -91,7 +91,6 @@ class DryRunPollingManager {
       datasetId,
       backendDatasetId,
       sampleSize,
-      evaluationConfig,
       recordTopics,
     } = params;
 
@@ -109,10 +108,7 @@ class DryRunPollingManager {
       // Call backend to create evaluation
       const evaluationResponse = await createEvaluation({
         dataset_id: backendDatasetId,
-        rollout_model_params: {
-          model: evaluationConfig.completionParams.model,
-          temperature: evaluationConfig.completionParams.temperature,
-        },
+        rollout_model_params: {},
         offset: 0,
         limit: sampleSize,
       });
