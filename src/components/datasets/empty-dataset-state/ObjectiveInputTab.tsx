@@ -4,9 +4,10 @@
  * Tab content for entering a dataset objective manually.
  * Features a text input with sparkle icon, badges, and start button.
  * Includes suggestion pills that show short summaries and fill full descriptions.
+ * Also includes a "Try Sample" button to load pre-built sample datasets.
  */
 
-import { Sparkles, ArrowRight, Loader2 } from "lucide-react";
+import { Sparkles, ArrowRight, Loader2, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   OBJECTIVE_SUGGESTIONS,
@@ -17,14 +18,18 @@ interface ObjectiveInputTabProps {
   objective: string;
   onObjectiveChange: (value: string) => void;
   onStartFinetune: () => void;
+  onLoadSample?: () => void;
   isLoading?: boolean;
+  isLoadingSample?: boolean;
 }
 
 export function ObjectiveInputTab({
   objective,
   onObjectiveChange,
   onStartFinetune,
+  onLoadSample,
   isLoading = false,
+  isLoadingSample = false,
 }: ObjectiveInputTabProps) {
   const handleSuggestionClick = (suggestion: ObjectiveSuggestion) => {
     onObjectiveChange(suggestion.description);
@@ -110,6 +115,25 @@ export function ObjectiveInputTab({
             </span>
           </button>
         ))}
+
+        {/* Separator */}
+        <span className="text-muted-foreground/30 mx-1">|</span>
+
+        {/* Sample Dataset Button */}
+        {onLoadSample && (
+          <button
+            onClick={onLoadSample}
+            disabled={isLoadingSample}
+            className="group/sample flex items-center gap-1.5 px-4 py-2 text-sm rounded-full border border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 hover:border-amber-500/50 hover:shadow-[0_0_20px_rgba(251,191,36,0.15)] transition-all duration-300 text-amber-600 dark:text-amber-400 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isLoadingSample ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <FlaskConical className="w-3.5 h-3.5" />
+            )}
+            <span>{isLoadingSample ? "Loading..." : "Sample Dataset"}</span>
+          </button>
+        )}
       </div>
     </div>
   );

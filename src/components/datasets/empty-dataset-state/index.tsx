@@ -13,6 +13,7 @@ import { DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
 import { DatasetsConsumer } from "@/contexts/DatasetsContext";
 import { ProjectEventsConsumer } from "@/contexts/project-events";
 import { listSpans, type Span } from "@/services/spans-api";
+import { createSampleDataset, getDefaultSampleDataset } from "@/services/sample-datasets";
 import { toast } from "sonner";
 import { ObjectiveInputTab } from "./ObjectiveInputTab";
 import { ApiInitializeTab } from "./ApiInitializeTab";
@@ -68,6 +69,7 @@ export function EmptyDatasetsState() {
 
   const [objective, setObjective] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [isLoadingSample, setIsLoadingSample] = useState(false);
 
   // Update URL when tab changes
   const handleTabChange = useCallback((tab: TabType) => {
@@ -154,6 +156,21 @@ export function EmptyDatasetsState() {
     }
   };
 
+  const handleLoadSample = async () => {
+    setIsLoadingSample(true);
+    try {
+      const sampleConfig = getDefaultSampleDataset();
+      const result = await createSampleDataset(sampleConfig);
+      toast.success(`Created sample dataset with ${result.recordCount} records`);
+      navigate(`/datasets/${result.datasetId}`);
+    } catch (error) {
+      console.error("Failed to load sample dataset:", error);
+      toast.error("Failed to load sample dataset");
+    } finally {
+      setIsLoadingSample(false);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col items-center justify-start pt-16 p-8 relative overflow-auto">
 
@@ -207,7 +224,9 @@ export function EmptyDatasetsState() {
             objective={objective}
             onObjectiveChange={setObjective}
             onStartFinetune={handleStartFinetune}
+            onLoadSample={handleLoadSample}
             isLoading={isCreating}
+            isLoadingSample={isLoadingSample}
           />
         ) : (
           <ApiInitializeTab
