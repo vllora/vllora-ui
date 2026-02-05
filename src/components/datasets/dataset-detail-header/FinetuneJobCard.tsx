@@ -10,7 +10,7 @@ import { Cpu, Play, CheckCircle, XCircle, Loader2, ArrowRight, Sparkles } from "
 import { cn } from "@/lib/utils";
 import { useFinetuneJobs } from "@/contexts/FinetuneJobsContext";
 import type { FinetuneJob, FinetuneJobStatus } from "@/services/finetune-api";
-import { formatDistanceToNow } from "date-fns";
+import { formatFinetuneJobDate } from "@/components/finetune/content/utils";
 
 export interface FinetuneJobCardProps {
   /** Click handler for empty state (start finetune) */
@@ -67,14 +67,6 @@ const STATUS_CONFIG: Record<FinetuneJobStatus, {
     iconColor: "text-zinc-400",
   },
 };
-
-function formatJobTime(dateString: string): string {
-  try {
-    return formatDistanceToNow(new Date(dateString), { addSuffix: true });
-  } catch {
-    return dateString;
-  }
-}
 
 export function FinetuneJobCard({
   onStartClick,
@@ -262,7 +254,7 @@ function JobStatusCard({ job, onClick }: { job: FinetuneJob; onClick?: () => voi
               ? `Model: ${job.fine_tuned_model}`
               : job.status === "failed" && job.error_message
               ? job.error_message
-              : `Started ${formatJobTime(job.created_at)}`
+              : `Started ${formatFinetuneJobDate(job.created_at)}`
             }
           </p>
         </div>

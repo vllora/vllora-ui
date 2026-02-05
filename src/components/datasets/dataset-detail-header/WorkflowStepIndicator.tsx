@@ -51,7 +51,6 @@ export function WorkflowStepIndicator({ datasetId, className, onDryRunClick, has
     async function loadWorkflow() {
       try {
         const wf = await getWorkflowByDataset(datasetId);
-        console.log("=== Workflow:", wf);
         if (mounted) {
           setWorkflow(wf);
           setLoading(false);
