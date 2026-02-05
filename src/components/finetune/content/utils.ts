@@ -58,3 +58,44 @@ export function getModelDisplayName(modelId: string): string {
   const model = BASE_MODELS.find(m => m.value === modelId);
   return model?.label || modelId;
 }
+
+/**
+ * Message in a conversation
+ */
+export interface Message {
+  role: string;
+  content: string;
+}
+
+/**
+ * Extract input messages and output message from a training row.
+ * The last assistant message is treated as the model output.
+ */
+export function extractConversation(row: Record<string, unknown>): {
+  inputMessages: Message[];
+  outputMessage: Message | null;
+} {
+  const input = row.input as Record<string, unknown> | undefined;
+  const messages = (input?.messages || row.messages) as Message[] | undefined;
+
+  if (!messages || !Array.isArray(messages) || messages.length === 0) {
+    return { inputMessages: [], outputMessage: null };
+  }
+
+  // Last message is typically the assistant's response (model output)
+  const lastMessage = messages[messages.length - 1];
+  const isLastAssistant = lastMessage?.role === "assistant";
+
+  if (isLastAssistant) {
+    return {
+      inputMessages: messages.slice(0, -1),
+      outputMessage: lastMessage,
+    };
+  }
+
+  // If no assistant message at the end, all messages are input
+  return {
+    inputMessages: messages,
+    outputMessage: null,
+  };
+}

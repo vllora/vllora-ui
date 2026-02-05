@@ -23,7 +23,7 @@ import {
   Sparkles,
   Plus,
 } from "lucide-react";
-import { JobTableRow } from "./JobTableRow";
+import { FinetuneJobTableRow } from "./FinetuneJobTableRow";
 import { NewJobDialog } from "./NewJobDialog";
 
 interface FinetuneJobsContentProps {
@@ -120,7 +120,7 @@ export function FinetuneJobsContent({ datasetId, canCreateJob = true }: Finetune
             </TableHeader>
             <TableBody>
               {filteredJobs.map((job) => (
-                <JobTableRow key={job.id} job={job} onJobAction={loadJobs} />
+                <FinetuneJobTableRow key={job.id} job={job} onJobAction={loadJobs} />
               ))}
             </TableBody>
           </Table>

@@ -1,5 +1,5 @@
 /**
- * JobTableRow
+ * FinetuneJobTableRow
  *
  * Expandable table row component for displaying a finetune job.
  */
@@ -27,12 +27,12 @@ import { FinetuneJobStatusBadge } from "../FinetuneJobStatusBadge";
 import { JobExpandedContent } from "./JobExpandedContent";
 import { formatFinetuneJobDate, formatDuration, getModelDisplayName } from "./utils";
 
-interface JobTableRowProps {
+interface FinetuneJobTableRowProps {
   job: FinetuneJob;
   onJobAction?: () => void;
 }
 
-export function JobTableRow({ job, onJobAction }: JobTableRowProps) {
+export function FinetuneJobTableRow({ job, onJobAction }: FinetuneJobTableRowProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [evalResults, setEvalResults] = useState<FinetuneEvalResultsResponse | null>(null);
