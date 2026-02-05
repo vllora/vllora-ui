@@ -65,16 +65,29 @@ function transformRecordToApiFormat(record: DatasetRecord): { messages: unknown[
     : { messages };
 }
 
+export interface RecordStats {
+  total: number;
+  original: number;
+  generated: number;
+  topicDistribution: Record<string, number>;
+  uncategorizedCount: number;
+  balanceRating?: "excellent" | "good" | "fair" | "poor" | "critical";
+  balanceScore?: number;
+}
+
 export interface RecordsAnalyticsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   records: DatasetRecord[];
+  /** Pre-computed record stats for the overview chart */
+  recordStats?: RecordStats;
 }
 
 export function RecordsAnalyticsDialog({
   open,
   onOpenChange,
   records,
+  recordStats,
 }: RecordsAnalyticsDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -122,7 +135,7 @@ export function RecordsAnalyticsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-[90vw] h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Dataset Analytics</DialogTitle>
         </DialogHeader>
@@ -132,7 +145,7 @@ export function RecordsAnalyticsDialog({
         ) : error ? (
           <ErrorState message={error} />
         ) : analytics ? (
-          <AnalyticsContent analytics={analytics} />
+          <AnalyticsContent analytics={analytics} recordStats={recordStats} />
         ) : (
           <EmptyState
             message={records.length === 0 ? "No records to analyze" : "Loading analytics..."}

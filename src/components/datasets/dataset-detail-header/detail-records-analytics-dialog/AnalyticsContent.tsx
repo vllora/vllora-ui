@@ -2,14 +2,16 @@
  * AnalyticsContent
  *
  * Main content component for displaying dataset analytics.
- * Shows overview stats, message lengths, histograms, tool usage, and topic coverage.
+ * Shows overview chart, quality stats, message lengths, histograms, tool usage, and topic coverage.
  */
 
 import type { DryRunAnalyticsResponse } from "@/services/finetune-api";
 import { EmptyState } from "../DialogStates";
+import { OverviewChart } from "../overview-card";
 import { DistributionList } from "./DistributionList";
 import { HistogramBars } from "./HistogramBars";
 import { MessageLengthBars } from "./MessageLengthBars";
+import { QualityStatsRow } from "./QualityStatsRow";
 import { SectionHeader } from "./SectionHeader";
 
 // Typed interfaces for analytics response
@@ -37,11 +39,22 @@ interface QualityData {
   conflicting_outputs: number;
 }
 
-export interface AnalyticsContentProps {
-  analytics: DryRunAnalyticsResponse;
+export interface RecordStats {
+  total: number;
+  original: number;
+  generated: number;
+  topicDistribution: Record<string, number>;
+  uncategorizedCount: number;
+  balanceRating?: "excellent" | "good" | "fair" | "poor" | "critical";
+  balanceScore?: number;
 }
 
-export function AnalyticsContent({ analytics }: AnalyticsContentProps) {
+export interface AnalyticsContentProps {
+  analytics: DryRunAnalyticsResponse;
+  recordStats?: RecordStats;
+}
+
+export function AnalyticsContent({ analytics, recordStats }: AnalyticsContentProps) {
   const quality = analytics.quality as unknown as QualityData | undefined;
   const analyticsData = analytics.analytics as unknown as AnalyticsData | undefined;
 
@@ -53,105 +66,84 @@ export function AnalyticsContent({ analytics }: AnalyticsContentProps) {
   }
 
   return (
-    <div className="space-y-5">
-      {/* Overview Row */}
-      {hasQuality && (
-        <div className="grid grid-cols-4 gap-3 p-3 rounded-lg bg-muted/30">
-          <div>
-            <div className="text-lg font-semibold">{quality.total_rows.toLocaleString()}</div>
-            <div className="text-xs text-muted-foreground">Total Rows</div>
-          </div>
-          <div>
-            <div className="text-lg font-semibold">{quality.rows_with_ground_truth.toLocaleString()}</div>
-            <div className="text-xs text-muted-foreground">With Ground Truth</div>
-          </div>
-          <div>
-            <div className="text-lg font-semibold">{quality.duplicate_input_rows.toLocaleString()}</div>
-            <div className="text-xs text-muted-foreground">Duplicates</div>
-          </div>
-          <div>
-            <div className="text-lg font-semibold">{quality.conflicting_outputs.toLocaleString()}</div>
-            <div className="text-xs text-muted-foreground">Conflicts</div>
-          </div>
-        </div>
-      )}
-
-      {/* Message Length Stats - with visual bars */}
-      {hasQuality && (
-        <div>
-          <SectionHeader>Average Message Length</SectionHeader>
-          <MessageLengthBars
-            system={Math.round(quality.avg_system_chars)}
-            user={Math.round(quality.avg_user_chars)}
-            assistant={Math.round(quality.avg_assistant_chars)}
+    <div className="space-y-4">
+      {/* Overview Chart - Records & Topics */}
+      {recordStats && recordStats.total > 0 && (
+        <div className="p-4 rounded-lg bg-muted/30">
+          <OverviewChart
+            total={recordStats.total}
+            original={recordStats.original}
+            generated={recordStats.generated}
+            topicDistribution={recordStats.topicDistribution}
+            uncategorizedCount={recordStats.uncategorizedCount}
+            balanceRating={recordStats.balanceRating}
+            balanceScore={recordStats.balanceScore}
+            size="md"
+            maxLegendItems={5}
           />
         </div>
       )}
 
-      {/* Length Histograms */}
-      {hasQuality && Object.keys(quality.user_length_histogram || {}).length > 0 && (
-        <div>
-          <SectionHeader>Message Length Distribution</SectionHeader>
-          <div className="space-y-3 p-3 rounded-lg bg-muted/30">
-            <HistogramBars data={quality.user_length_histogram} label="User messages" color="bg-blue-500" />
-            {Object.keys(quality.assistant_length_histogram || {}).length > 0 && (
-              <HistogramBars data={quality.assistant_length_histogram} label="Assistant messages" color="bg-emerald-500" />
-            )}
+      {/* Quality Stats Row */}
+      {hasQuality && (
+        <QualityStatsRow
+          totalRows={quality.total_rows}
+          rowsWithGroundTruth={quality.rows_with_ground_truth}
+          duplicateRows={quality.duplicate_input_rows}
+          conflictingOutputs={quality.conflicting_outputs}
+        />
+      )}
+
+      {/* Message Length + Histograms in a 2-column grid */}
+      {hasQuality && (
+        <div className="grid grid-cols-2 gap-3">
+          {/* Left: Average Message Length */}
+          <div className="p-3 rounded-lg bg-muted/30">
+            <SectionHeader>Average Message Length (chars)</SectionHeader>
+            <MessageLengthBars
+              system={Math.round(quality.avg_system_chars)}
+              user={Math.round(quality.avg_user_chars)}
+              assistant={Math.round(quality.avg_assistant_chars)}
+            />
           </div>
+
+          {/* Right: Length Distribution */}
+          {Object.keys(quality.user_length_histogram || {}).length > 0 && (
+            <div className="p-3 rounded-lg bg-muted/30 space-y-3">
+              <SectionHeader>Length Distribution</SectionHeader>
+              <HistogramBars data={quality.user_length_histogram} label="User messages" />
+              {Object.keys(quality.assistant_length_histogram || {}).length > 0 && (
+                <HistogramBars data={quality.assistant_length_histogram} label="Assistant messages" />
+              )}
+            </div>
+          )}
         </div>
       )}
 
       {/* Tool Usage - only show if there are rows with tools */}
       {hasAnalytics && analyticsData.rows_with_tools > 0 && (
-        <div>
-          <SectionHeader>Tool Usage</SectionHeader>
-          <div className="p-3 rounded-lg bg-muted/30">
-            <div className="flex gap-6 mb-3">
-              <div>
-                <span className="text-sm font-medium">{analyticsData.rows_with_tools.toLocaleString()}</span>
-                <span className="text-xs text-muted-foreground ml-1">rows with tools</span>
+        <div className="p-3 rounded-lg bg-muted/30">
+          <div className="flex items-center justify-between mb-2">
+            <SectionHeader>Tool Usage</SectionHeader>
+            <div className="flex items-center gap-3 text-xs">
+              <span>
+                <span className="font-medium">{analyticsData.rows_with_tools.toLocaleString()}</span>
+                <span className="text-muted-foreground ml-1">rows</span>
                 {analyticsData.total_rows > 0 && (
-                  <span className="text-xs text-muted-foreground ml-1">
+                  <span className="text-muted-foreground ml-1">
                     ({Math.round((analyticsData.rows_with_tools / analyticsData.total_rows) * 100)}%)
                   </span>
                 )}
-              </div>
-              <div>
-                <span className="text-sm font-medium">{Object.keys(analyticsData.tool_counts || {}).length}</span>
-                <span className="text-xs text-muted-foreground ml-1">unique tools</span>
-              </div>
+              </span>
+              <span>
+                <span className="font-medium">{Object.keys(analyticsData.tool_counts || {}).length}</span>
+                <span className="text-muted-foreground ml-1">unique tools</span>
+              </span>
             </div>
-            {Object.keys(analyticsData.tool_counts || {}).length > 0 && (
-              <DistributionList data={analyticsData.tool_counts} />
-            )}
           </div>
-        </div>
-      )}
-
-      {/* Topic Distribution */}
-      {hasAnalytics && (
-        <div>
-          <SectionHeader>Topic Coverage</SectionHeader>
-          <div className="p-3 rounded-lg bg-muted/30">
-            <div className="flex gap-6 mb-3">
-              <div>
-                <span className="text-sm font-medium">{analyticsData.rows_with_topic.toLocaleString()}</span>
-                <span className="text-xs text-muted-foreground ml-1">with topic</span>
-                {analyticsData.total_rows > 0 && (
-                  <span className="text-xs text-muted-foreground ml-1">
-                    ({Math.round((analyticsData.rows_with_topic / analyticsData.total_rows) * 100)}%)
-                  </span>
-                )}
-              </div>
-              <div>
-                <span className="text-sm font-medium">{analyticsData.rows_without_topic.toLocaleString()}</span>
-                <span className="text-xs text-muted-foreground ml-1">without topic</span>
-              </div>
-            </div>
-            {Object.keys(analyticsData.topic_row_counts || {}).length > 0 && (
-              <DistributionList data={analyticsData.topic_row_counts} emptyMessage="No topics assigned" />
-            )}
-          </div>
+          {Object.keys(analyticsData.tool_counts || {}).length > 0 && (
+            <DistributionList data={analyticsData.tool_counts} />
+          )}
         </div>
       )}
     </div>

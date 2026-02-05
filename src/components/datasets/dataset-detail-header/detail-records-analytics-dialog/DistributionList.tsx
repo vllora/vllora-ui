@@ -1,19 +1,32 @@
 /**
  * DistributionList
  *
- * Renders a distribution of items (topics, tools, etc.) as horizontal bars.
- * Labels are displayed above bars to accommodate long names like topic paths.
+ * Renders a distribution of items (topics, tools, etc.) as a stacked bar
+ * with legend, matching the Overview Chart visual style.
  */
 
-// Color palette for charts
-export const CHART_COLORS = [
-  "bg-blue-500",
+import { useMemo } from "react";
+
+// Colors matching the Overview Chart palette
+const SEGMENT_COLORS = [
+  "rgba(16, 185, 129, 0.7)",   // emerald
+  "rgba(59, 130, 246, 0.7)",   // blue
+  "rgba(245, 158, 11, 0.7)",   // amber
+  "rgba(139, 92, 246, 0.7)",   // violet
+  "rgba(6, 182, 212, 0.7)",    // cyan
+  "rgba(249, 115, 22, 0.7)",   // orange
+  "rgba(236, 72, 153, 0.7)",   // pink
+  "rgba(20, 184, 166, 0.7)",   // teal
+];
+
+const DOT_CLASSES = [
   "bg-emerald-500",
-  "bg-violet-500",
+  "bg-blue-500",
   "bg-amber-500",
-  "bg-rose-500",
+  "bg-violet-500",
   "bg-cyan-500",
   "bg-orange-500",
+  "bg-pink-500",
   "bg-teal-500",
 ];
 
@@ -26,7 +39,20 @@ export interface DistributionListProps {
   colorful?: boolean;
 }
 
-export function DistributionList({ data, emptyMessage, colorful = true }: DistributionListProps) {
+interface Segment {
+  name: string;
+  count: number;
+  percent: number;
+  color: string;
+  dotClass: string;
+}
+
+function getDisplayName(path: string): string {
+  const parts = path.split("/");
+  return parts[parts.length - 1];
+}
+
+export function DistributionList({ data, emptyMessage }: DistributionListProps) {
   const entries = Object.entries(data);
   if (entries.length === 0) {
     return emptyMessage ? (
@@ -34,30 +60,75 @@ export function DistributionList({ data, emptyMessage, colorful = true }: Distri
     ) : null;
   }
 
-  const maxValue = Math.max(...entries.map(([, v]) => v));
   const total = entries.reduce((sum, [, v]) => sum + v, 0);
+
+  const segments: Segment[] = useMemo(() => {
+    return entries
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count], idx) => ({
+        name,
+        count,
+        percent: total > 0 ? (count / total) * 100 : 0,
+        color: SEGMENT_COLORS[idx % SEGMENT_COLORS.length],
+        dotClass: DOT_CLASSES[idx % DOT_CLASSES.length],
+      }));
+  }, [entries, total]);
+
+  // For legend, show max 5 items and group rest
+  const maxLegendItems = 5;
+  const legendItems = useMemo(() => {
+    if (segments.length <= maxLegendItems) {
+      return segments;
+    }
+    const topItems = segments.slice(0, maxLegendItems - 1);
+    const otherItems = segments.slice(maxLegendItems - 1);
+    const otherCount = otherItems.reduce((sum, s) => sum + s.count, 0);
+    const otherPercent = otherItems.reduce((sum, s) => sum + s.percent, 0);
+
+    return [
+      ...topItems,
+      {
+        name: `+${otherItems.length} more`,
+        count: otherCount,
+        percent: otherPercent,
+        color: "rgba(156, 163, 175, 0.7)",
+        dotClass: "bg-gray-400",
+      },
+    ];
+  }, [segments]);
 
   return (
     <div className="space-y-2">
-      {entries.map(([name, count], index) => {
-        const barColor = colorful ? CHART_COLORS[index % CHART_COLORS.length] : "bg-blue-500";
-        return (
-          <div key={name} className="space-y-0.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-foreground truncate mr-2" title={name}>{name}</span>
-              <span className="text-muted-foreground tabular-nums shrink-0">
-                {count} ({Math.round((count / total) * 100)}%)
-              </span>
-            </div>
-            <div className="h-2 bg-muted/50 rounded-sm overflow-hidden">
-              <div
-                className={`h-full ${barColor} rounded-sm`}
-                style={{ width: `${(count / maxValue) * 100}%` }}
-              />
-            </div>
+      {/* Stacked Bar */}
+      <div className="h-5 rounded-sm overflow-hidden flex">
+        {segments.map((seg, idx) => (
+          <div
+            key={idx}
+            className="h-full transition-all"
+            style={{
+              width: `${seg.percent}%`,
+              backgroundColor: seg.color,
+              minWidth: seg.percent > 0 ? "2px" : "0",
+            }}
+            title={`${seg.name}: ${seg.count} (${Math.round(seg.percent)}%)`}
+          />
+        ))}
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-x-3 gap-y-1">
+        {legendItems.map((item, idx) => (
+          <div key={idx} className="flex items-center gap-1.5 text-xs">
+            <div className={`w-2 h-2 rounded-sm shrink-0 ${item.dotClass}`} />
+            <span className="text-muted-foreground truncate max-w-[100px]" title={item.name}>
+              {getDisplayName(item.name)}
+            </span>
+            <span className="text-muted-foreground tabular-nums">
+              {Math.round(item.percent)}%
+            </span>
           </div>
-        );
-      })}
+        ))}
+      </div>
     </div>
   );
 }

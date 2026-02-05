@@ -88,6 +88,15 @@ export function DatasetStatsCards() {
         open={analyticsDialogOpen}
         onOpenChange={setAnalyticsDialogOpen}
         records={records}
+        recordStats={{
+          total: insights.totalRecords,
+          original: insights.originalRecords,
+          generated: insights.generatedRecords,
+          topicDistribution: insights.topicDistribution,
+          uncategorizedCount: insights.uncategorizedCount,
+          balanceRating: coverageStats?.balanceRating,
+          balanceScore: coverageStats?.balanceScore,
+        }}
       />
     </>
   );
