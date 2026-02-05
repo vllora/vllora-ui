@@ -250,6 +250,7 @@ export async function uploadDataset(
       config: {
         script: '', // Will be replaced by eval_script content on backend
         completion_params: {
+          model: 'gpt-4o-mini',
           model_name: 'gpt-4o-mini',
           temperature: 0.0,
           max_tokens: 300,
@@ -636,7 +637,7 @@ export async function updateDatasetEvalScript(
     config: {
       script,
       completion_params: {
-        model_name: 'gpt-4o-mini',
+        model: 'gpt-4o-mini',
       },
     },
   };

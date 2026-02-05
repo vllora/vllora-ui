@@ -43,9 +43,10 @@ interface DryRunJobsContextType {
   /**
    * Start a new dry run
    * @param sampleSize Number of samples to evaluate
+   * @param rolloutModel Model to use for generating responses
    * @returns Job ID
    */
-  startDryRun: (sampleSize: number) => Promise<string>;
+  startDryRun: (sampleSize: number, rolloutModel?: string) => Promise<string>;
 
   /**
    * Cancel a running dry run
@@ -145,7 +146,7 @@ export function DryRunJobsProvider({
 
   // Start a new dry run
   const startDryRun = useCallback(
-    async (sampleSize: number): Promise<string> => {
+    async (sampleSize: number, rolloutModel?: string): Promise<string> => {
       if (!evalScript) {
         throw new Error('Grader must be configured first');
       }
@@ -191,6 +192,7 @@ export function DryRunJobsProvider({
         backendDatasetId: backendDatasetId!,
         sampleSize,
         recordTopics: Object.keys(recordTopics).length > 0 ? recordTopics : undefined,
+        rolloutModel,
       });
     },
     [datasetId, dataset, currentBackendDatasetId, evalScript, records]

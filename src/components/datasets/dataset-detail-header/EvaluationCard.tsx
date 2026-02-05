@@ -25,6 +25,8 @@ export interface EvaluationCardProps {
   dryRunStats?: DryRunStats;
   /** Currently running dry run job (if any) */
   runningJob?: DryRunJob | null;
+  /** Last completed dry run job (for checking errors) */
+  lastCompletedJob?: DryRunJob | null;
   /** Callback when clicking to configure evaluation */
   onConfigureClick?: () => void;
   /** Callback when clicking to open dry run dialog */
@@ -43,7 +45,7 @@ const VERDICT_BG = {
   "NO-GO": "bg-red-500",
 };
 
-export function EvaluationCard({ evalScript, dryRunStats, runningJob, onConfigureClick, onDryRunClick }: EvaluationCardProps) {
+export function EvaluationCard({ evalScript, dryRunStats, runningJob, lastCompletedJob, onConfigureClick, onDryRunClick }: EvaluationCardProps) {
   // No eval script - show setup prompt (clickable)
   if (!evalScript) {
     return (
@@ -150,6 +152,38 @@ export function EvaluationCard({ evalScript, dryRunStats, runningJob, onConfigur
   const { statistics, distribution, diagnosis } = dryRunStats;
   const verdict = diagnosis.verdict;
   const verdictColor = VERDICT_COLORS[verdict];
+
+  // Check if this is an error state by looking at the last completed job
+  const totalRows = lastCompletedJob ? getJobTotalRows(lastCompletedJob) : 0;
+  const failedRows = lastCompletedJob ? getJobFailedRows(lastCompletedJob) : 0;
+  const failedGrading = lastCompletedJob ? getJobFailedGradingCount(lastCompletedJob) : 0;
+  const totalErrors = failedRows + failedGrading;
+
+  // Error state: most evaluations failed (>50% errors)
+  const isErrorState = totalRows > 0 && totalErrors > 0 && (totalErrors / totalRows) > 0.5;
+
+  // Error state - show simplified error view
+  if (isErrorState) {
+    return (
+      <button
+        onClick={onDryRunClick}
+        className="w-full px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 flex flex-col min-h-[88px] hover:bg-red-500/15 transition-colors cursor-pointer"
+      >
+        <div className="flex items-center justify-between w-full mb-2">
+          <span className="text-xs text-muted-foreground">Evaluation</span>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-muted-foreground">Verdict:</span>
+            <span className="font-medium text-red-500">NO-GO</span>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <span className="text-sm text-red-400">
+            All evaluations failed — click to view details
+          </span>
+        </div>
+      </button>
+    );
+  }
 
   // Calculate bar widths for distribution
   const maxCount = Math.max(

@@ -1,12 +1,13 @@
 /**
  * RunningView
  *
- * Shows real-time progress and results during dry run execution.
- * Displays stats cards and a scrollable table of evaluation results.
+ * Shows real-time progress during dry run execution.
+ * Clean, minimal design focused on progress indication.
  */
 
-import { Loader2, StopCircle } from "lucide-react";
+import { StopCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import type { DryRunJob } from "@/types/dry-run-job";
 import {
@@ -32,100 +33,91 @@ export function RunningView({ job, progress, onCancel }: RunningViewProps) {
   const passedCount = getJobPassedCount(job);
 
   const hasAvgScore = averageScore !== undefined;
+  const hasResults = completedRows > 0 || failedRows > 0;
 
   // Get results from polling snapshot
   const results = job.pollingSnapshot?.results ?? [];
 
   return (
-    <div className="space-y-4 py-4">
-      {/* Header */}
-      <div className="flex items-center justify-center gap-3">
-        <Loader2 className="h-5 w-5 animate-spin text-primary" />
-        <span className="text-sm font-medium">Running dry run validation...</span>
-      </div>
-
-      {/* Progress bar */}
-      <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-        <div
-          className="h-full bg-primary transition-all duration-300"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-
-      {/* Progress text */}
-      <div className="text-center">
-        <p className="text-sm text-muted-foreground">
-          {completedRows} / {totalRows} samples evaluated ({progress}%)
-        </p>
-      </div>
-
-      {/* Real-time stats */}
-      <div className="grid grid-cols-4 gap-2">
-        {/* Completed */}
-        <div className="rounded-md border bg-card p-2 text-center">
-          <p className="text-xs text-muted-foreground">Completed</p>
-          <p className={cn(
-            "text-sm font-mono font-medium",
-            completedRows > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"
-          )}>
-            {completedRows}
-          </p>
-        </div>
-
-        {/* Failed (execution) */}
-        <div className="rounded-md border bg-card p-2 text-center">
-          <p className="text-xs text-muted-foreground">Failed</p>
-          <p className={cn(
-            "text-sm font-mono font-medium",
-            failedRows > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"
-          )}>
-            {failedRows}
-          </p>
-        </div>
-
-        {/* Passed grading */}
-        <div className="rounded-md border bg-card p-2 text-center">
-          <p className="text-xs text-muted-foreground">Passed</p>
-          <p className={cn(
-            "text-sm font-mono font-medium",
-            passedCount > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"
-          )}>
-            {passedCount}
-          </p>
-        </div>
-
-        {/* Average score */}
-        <div className="rounded-md border bg-card p-2 text-center">
-          <p className="text-xs text-muted-foreground">Avg Score</p>
-          <p className={cn(
-            "text-sm font-mono font-medium",
-            hasAvgScore
-              ? averageScore >= 0.7
-                ? "text-emerald-600 dark:text-emerald-400"
+    <div className="flex flex-col h-full">
+      {/* Progress section */}
+      <div className="shrink-0 space-y-3">
+        {/* Progress header with live stats */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-3 w-3 rounded-full bg-blue-500 animate-pulse" />
+            <span className="text-sm font-medium text-zinc-200">
+              Evaluating samples...
+            </span>
+          </div>
+          {hasAvgScore && (
+            <span className={cn(
+              "text-sm font-mono font-medium",
+              averageScore >= 0.7
+                ? "text-emerald-400"
                 : averageScore >= 0.4
-                ? "text-amber-600 dark:text-amber-400"
-                : "text-red-600 dark:text-red-400"
-              : "text-muted-foreground"
-          )}>
-            {hasAvgScore ? `${(averageScore * 100).toFixed(0)}%` : "-"}
-          </p>
+                ? "text-amber-400"
+                : "text-red-400"
+            )}>
+              {(averageScore * 100).toFixed(0)}% avg
+            </span>
+          )}
+        </div>
+
+        {/* Progress bar */}
+        <div className="relative">
+          <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-blue-500 transition-all duration-300"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Stats row - only show meaningful stats */}
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-zinc-400">
+            {completedRows} / {totalRows} ({progress}%)
+          </span>
+          {hasResults && (
+            <div className="flex items-center gap-3">
+              {passedCount > 0 && (
+                <span className="text-emerald-400">
+                  {passedCount} passed
+                </span>
+              )}
+              {failedRows > 0 && (
+                <span className="text-red-400">
+                  {failedRows} failed
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Results table */}
-      <ResultsTable results={results} />
+      {/* Results table - flexible height */}
+      <div className="flex-1 min-h-0 mt-4">
+        <ResultsTable results={results} fillHeight />
+      </div>
 
-      {/* Info message */}
-      <p className="text-xs text-muted-foreground text-center">
-        You can close this dialog - the dry run will continue in the background.
-      </p>
-
-      {/* Cancel button */}
-      <div className="flex justify-center">
-        <Button variant="outline" size="sm" onClick={onCancel}>
-          <StopCircle className="h-4 w-4 mr-2" />
-          Cancel
-        </Button>
+      {/* Footer */}
+      <div className="shrink-0 pt-4 space-y-4">
+        <Separator className="bg-zinc-800" />
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-zinc-500">
+            You can close this dialog — the dry run will continue in the background.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onCancel}
+            className="h-8 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+          >
+            <StopCircle className="h-4 w-4 mr-1.5" />
+            Cancel
+          </Button>
+        </div>
       </div>
     </div>
   );

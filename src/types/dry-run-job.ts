@@ -102,4 +102,6 @@ export interface StartDryRunParams {
   sampleSize: number;
   /** Optional: record ID to topic mapping for per-topic analysis */
   recordTopics?: Record<string, string>;
+  /** Model to use for generating responses (rollout model) */
+  rolloutModel?: string;
 }

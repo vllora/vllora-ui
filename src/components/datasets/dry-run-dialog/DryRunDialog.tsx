@@ -24,6 +24,7 @@ import { ResultsView, type ResultsViewTab } from "./ResultsView";
 import { RunningView } from "./RunningView";
 import { VerdictBadge } from "./VerdictBadge";
 import { useDryRunJobs } from "@/contexts/DryRunJobsContext";
+import { cn } from "@/lib/utils";
 import type { DryRunJob } from "@/types/dry-run-job";
 import { getJobTotalRows, getJobCompletedRows } from "@/types/dry-run-job";
 
@@ -54,6 +55,7 @@ export function DryRunDialog({
 
   const [view, setView] = useState<DialogView>("config");
   const [sampleSize, setSampleSize] = useState(300);
+  const [rolloutModel, setRolloutModel] = useState("gpt-4o-mini");
   const [activeTab, setActiveTab] = useState<ResultsViewTab>("overview");
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
@@ -92,12 +94,12 @@ export function DryRunDialog({
     if (!hasGraderConfig) return;
 
     try {
-      await startDryRun(sampleSize);
+      await startDryRun(sampleSize, rolloutModel);
       setView("running");
     } catch (error) {
       console.error("Failed to start dry run:", error);
     }
-  }, [hasGraderConfig, sampleSize, startDryRun]);
+  }, [hasGraderConfig, sampleSize, rolloutModel, startDryRun]);
 
   const handleCancel = useCallback(async () => {
     if (runningJob) {
@@ -149,15 +151,16 @@ export function DryRunDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[70vw] max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-[70vw] h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FlaskConical className="h-5 w-5" />
             Dry Run Validation
-            {result && (
+            {/* Only show verdict when viewing results, not during running */}
+            {view === "results" && result && (
               <VerdictBadge verdict={result.diagnosis.verdict} />
             )}
-            {runningJob && (
+            {view === "running" && (
               <span className="ml-2 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
                 Running...
               </span>
@@ -168,7 +171,10 @@ export function DryRunDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-4 py-2">
+        <div className={cn(
+          "flex-1 min-h-0 py-2",
+          (view === "results" || view === "config" || view === "running") ? "flex flex-col" : "overflow-y-auto space-y-4"
+        )}>
           {/* Config view */}
           {view === "config" && (
             <ConfigView
@@ -176,6 +182,8 @@ export function DryRunDialog({
               hasGraderConfig={hasGraderConfig}
               sampleSize={sampleSize}
               onSampleSizeChange={setSampleSize}
+              rolloutModel={rolloutModel}
+              onRolloutModelChange={setRolloutModel}
               onRunDryRun={handleRunDryRun}
               onViewHistory={handleViewHistory}
               hasHistory={jobs.length > 0}

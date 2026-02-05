@@ -18,7 +18,7 @@ import type { ToolHandler } from '../types';
 
 export const runDryRunHandler: ToolHandler = async (params) => {
   try {
-    const { workflow_id, sample_percentage = 10 } = params;
+    const { workflow_id, sample_percentage = 10, rollout_model = 'gpt-4o-mini' } = params;
 
     if (!workflow_id || typeof workflow_id !== 'string') {
       return { success: false, error: 'workflow_id is required' };
@@ -57,9 +57,12 @@ export const runDryRunHandler: ToolHandler = async (params) => {
     }
 
     // Create evaluation run with sampling
+    const model = typeof rollout_model === 'string' ? rollout_model : 'gpt-4o-mini';
     const evaluationResponse = await createEvaluation({
       dataset_id: dataset.backendDatasetId,
-      rollout_model_params: {},
+      rollout_model_params: {
+        model,
+      },
       offset: 0,
       limit: sampleSize,
     });
@@ -144,6 +147,7 @@ export const runDryRunTool: DistriFnTool = {
     properties: {
       workflow_id: { type: 'string', description: 'The workflow ID' },
       sample_percentage: { type: 'number', default: 10, description: 'Percentage of records to test (1-100)' },
+      rollout_model: { type: 'string', default: 'gpt-4o-mini', description: 'Model to use for generating responses to be evaluated. Options: gpt-4o-mini, gpt-4o, gpt-4.1, gpt-4.1-mini' },
     },
     required: ['workflow_id'],
   },

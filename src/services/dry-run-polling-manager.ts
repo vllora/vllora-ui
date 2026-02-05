@@ -92,6 +92,7 @@ class DryRunPollingManager {
       backendDatasetId,
       sampleSize,
       recordTopics,
+      rolloutModel = 'gpt-4o-mini', // Default model if not specified
     } = params;
 
     // Create job record in pending state
@@ -106,9 +107,12 @@ class DryRunPollingManager {
 
     try {
       // Call backend to create evaluation
+      // rollout_model_params specifies the model that generates responses to be evaluated
       const evaluationResponse = await createEvaluation({
         dataset_id: backendDatasetId,
-        rollout_model_params: {},
+        rollout_model_params: {
+          model: rolloutModel,
+        },
         offset: 0,
         limit: sampleSize,
       });

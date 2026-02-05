@@ -16,7 +16,7 @@ import { RecordsAnalyticsDialog } from "./detail-records-analytics-dialog";
 
 export function DatasetStatsCards() {
   const { dataset, records, setDryRunDialog } = DatasetDetailConsumer();
-  const { runningJob } = useDryRunJobs();
+  const { runningJob, lastCompletedJob } = useDryRunJobs();
 
   // Dialog state for records analytics
   const [analyticsDialogOpen, setAnalyticsDialogOpen] = useState(false);
@@ -66,6 +66,7 @@ export function DatasetStatsCards() {
           evalScript={dataset?.evalScript}
           dryRunStats={dataset?.dryRunStats}
           runningJob={runningJob}
+          lastCompletedJob={lastCompletedJob}
           onConfigureClick={handleNavigateToEvaluator}
           onDryRunClick={handleOpenDryRunDialog}
         />

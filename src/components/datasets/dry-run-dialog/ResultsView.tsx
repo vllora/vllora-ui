@@ -4,12 +4,12 @@
  * Displays dry run results with tabs for overview, topics, and samples.
  */
 
+import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RotateCcw, CheckCircle2, XCircle, History } from "lucide-react";
+import { CheckCircle2, XCircle, History, RefreshCw, AlertTriangle, ArrowRight } from "lucide-react";
 import { ScoreHistogram } from "../ScoreHistogram";
-import { StatCard } from "./StatCard";
 import { SampleCard } from "./SampleCard";
 import { ResultsTable } from "./ResultsTable";
 import { cn } from "@/lib/utils";
@@ -46,11 +46,25 @@ export function ResultsView({
   const recommendations = result.diagnosis.recommendations || [];
   const sampleResults = result.sampleResults || { highest: [], lowest: [], aroundMean: [] };
 
+  // Count errors and successes from evaluation results
+  const { errorCount, successCount, totalCount } = useMemo(() => {
+    if (!evaluationResults) return { errorCount: 0, successCount: 0, totalCount: 0 };
+    const errors = evaluationResults.filter(
+      (r) => r.status === "failed" || !!r.error_message
+    ).length;
+    const total = evaluationResults.length;
+    return { errorCount: errors, successCount: total - errors, totalCount: total };
+  }, [evaluationResults]);
+
+  // Check if we should show error-focused view (>50% errors or all errors)
+  const showErrorView = totalCount > 0 && (errorCount / totalCount) > 0.5;
+
   return (
-    <div className="space-y-4">
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={(v) => onTabChange(v as ResultsViewTab)}>
-        <TabsList className="grid w-full grid-cols-4">
+    <div className="flex flex-col h-full">
+      {/* Tabs - scrollable content area */}
+      <div className="flex-1 min-h-0 flex flex-col">
+        <Tabs value={activeTab} onValueChange={(v) => onTabChange(v as ResultsViewTab)} className="flex-1 flex flex-col min-h-0">
+        <TabsList className="grid w-full grid-cols-4 shrink-0">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="topics">By Topic</TabsTrigger>
           <TabsTrigger value="samples">Samples</TabsTrigger>
@@ -58,37 +72,97 @@ export function ResultsView({
         </TabsList>
 
         {/* Overview tab */}
-        <TabsContent value="overview" className="space-y-4 mt-4">
-          {scores.length > 0 && (
-            <ScoreHistogram scores={scores} showMean showStats />
-          )}
+        <TabsContent value="overview" className="space-y-4 mt-4 overflow-y-auto">
+          {showErrorView ? (
+            /* Error-focused view when most evaluations failed */
+            <div className="space-y-4">
+              {/* Error summary card */}
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-red-400 mt-0.5 shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <h3 className="text-sm font-medium text-red-400">
+                      {errorCount === totalCount ? "All" : "Most"} evaluations failed
+                    </h3>
+                    <p className="text-xs text-zinc-400">
+                      {errorCount} of {totalCount} evaluations encountered errors.
+                      This usually indicates an issue with the grader configuration.
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onTabChange("details")}
+                      className="mt-2 h-7 text-xs border-red-500/30 text-red-400 hover:bg-red-500/20 hover:text-red-300"
+                    >
+                      View error details
+                      <ArrowRight className="h-3 w-3 ml-1" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
 
-          {/* Stats summary */}
-          <div className="grid grid-cols-4 gap-2">
-            <StatCard label="Mean" value={result.statistics.mean.toFixed(2)} />
-            <StatCard label="Std Dev" value={result.statistics.std.toFixed(2)} />
-            <StatCard label="Min" value={result.statistics.min.toFixed(2)} />
-            <StatCard label="Max" value={result.statistics.max.toFixed(2)} />
-          </div>
+              {/* Quick stats - show what we have */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-md border border-zinc-800 bg-zinc-900/50 p-2.5 text-center">
+                  <p className="text-[10px] uppercase tracking-wider text-zinc-500">Total</p>
+                  <p className="text-base font-mono font-semibold text-zinc-200 mt-0.5">{totalCount}</p>
+                </div>
+                <div className="rounded-md border border-red-500/30 bg-red-500/10 p-2.5 text-center">
+                  <p className="text-[10px] uppercase tracking-wider text-red-400">Failed</p>
+                  <p className="text-base font-mono font-semibold text-red-400 mt-0.5">{errorCount}</p>
+                </div>
+                <div className="rounded-md border border-zinc-800 bg-zinc-900/50 p-2.5 text-center">
+                  <p className="text-[10px] uppercase tracking-wider text-zinc-500">Success</p>
+                  <p className="text-base font-mono font-semibold text-emerald-400 mt-0.5">{successCount}</p>
+                </div>
+              </div>
 
-          {/* Recommendations */}
-          {recommendations.length > 0 && (
-            <div className="rounded-md bg-muted/50 border p-3 space-y-2">
-              <p className="text-sm font-medium">Recommendations:</p>
-              <ul className="text-xs text-muted-foreground space-y-1">
-                {recommendations.map((rec, i) => (
-                  <li key={i} className="flex items-start gap-2">
-                    <span>*</span>
-                    <span>{rec}</span>
+              {/* Error-specific guidance */}
+              <div className="rounded-md bg-zinc-900/50 border border-zinc-800 p-3 space-y-2">
+                <p className="text-sm font-medium text-zinc-300">How to fix:</p>
+                <ul className="text-xs text-zinc-500 space-y-1">
+                  <li className="flex items-start gap-2">
+                    <span className="text-zinc-600">1.</span>
+                    <span>Check the <strong className="text-zinc-400">Details</strong> tab for specific error messages</span>
                   </li>
-                ))}
-              </ul>
+                  <li className="flex items-start gap-2">
+                    <span className="text-zinc-600">2.</span>
+                    <span>Verify your grader script has no syntax errors</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-zinc-600">3.</span>
+                    <span>Ensure all required variables (e.g., <code className="text-zinc-400">model</code>) are configured</span>
+                  </li>
+                </ul>
+              </div>
             </div>
+          ) : (
+            /* Normal stats view when evaluations succeeded */
+            <>
+              {scores.length > 0 && (
+                <ScoreHistogram scores={scores} showMean showStats />
+              )}
+
+              {/* Recommendations */}
+              {recommendations.length > 0 && (
+                <div className="rounded-md bg-zinc-900/50 border border-zinc-800 p-3 space-y-2">
+                  <p className="text-sm font-medium text-zinc-300">Recommendations:</p>
+                  <ul className="text-xs text-zinc-500 space-y-1">
+                    {recommendations.map((rec, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className="text-zinc-600">•</span>
+                        <span>{rec}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
           )}
         </TabsContent>
 
         {/* By Topic tab */}
-        <TabsContent value="topics" className="space-y-3 mt-4">
+        <TabsContent value="topics" className="space-y-3 mt-4 overflow-y-auto">
           {Object.entries(byTopic).length > 0 ? (
             <div className="space-y-2">
               {Object.entries(byTopic)
@@ -96,29 +170,29 @@ export function ResultsView({
                 .map(([topic, data]) => (
                   <div
                     key={topic}
-                    className="flex items-center justify-between p-2 rounded-md border bg-card"
+                    className="flex items-center justify-between p-2.5 rounded-md border border-zinc-800 bg-zinc-900/50"
                   >
                     <div>
-                      <p className="text-sm font-medium">{topic}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-sm font-medium text-zinc-200">{topic}</p>
+                      <p className="text-xs text-zinc-500">
                         {data.count} samples
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-24 bg-muted rounded-full overflow-hidden">
+                    <div className="flex items-center gap-3">
+                      <div className="h-1.5 w-24 bg-zinc-800 rounded-full overflow-hidden">
                         <div
                           className={cn(
-                            "h-full rounded-full",
+                            "h-full rounded-full transition-all",
                             data.mean < 0.3
                               ? "bg-red-500"
                               : data.mean < 0.5
                               ? "bg-amber-500"
-                              : "bg-green-500"
+                              : "bg-emerald-500"
                           )}
                           style={{ width: `${data.mean * 100}%` }}
                         />
                       </div>
-                      <span className="text-sm font-mono w-12 text-right">
+                      <span className="text-sm font-mono font-medium text-zinc-300 w-12 text-right tabular-nums">
                         {data.mean.toFixed(2)}
                       </span>
                     </div>
@@ -126,81 +200,127 @@ export function ResultsView({
                 ))}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              No topic data available
-            </p>
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <p className="text-sm text-zinc-400">No topic data available</p>
+              <p className="text-xs text-zinc-500 mt-1 max-w-[280px]">
+                Records need to be categorized into topics to see per-topic breakdown.
+                Define a topic hierarchy and categorize your records first.
+              </p>
+            </div>
           )}
         </TabsContent>
 
         {/* Samples tab */}
-        <TabsContent value="samples" className="space-y-3 mt-4">
-          <div className="grid grid-cols-2 gap-4">
-            {/* High scores */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm font-medium text-green-600">
-                <CheckCircle2 className="h-4 w-4" />
-                Highest Scores
-              </div>
-              <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                {sampleResults.highest.slice(0, 5).map((sample, i) => (
-                  <SampleCard key={i} sample={sample} />
-                ))}
-              </div>
+        <TabsContent value="samples" className="space-y-3 mt-4 overflow-y-auto">
+          {sampleResults.highest.length === 0 && sampleResults.lowest.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-sm text-zinc-400">No sample scores available</p>
+              <p className="text-xs text-zinc-500 mt-1">
+                {showErrorView
+                  ? "All evaluations failed — fix grader issues first"
+                  : "Run a dry run to see sample scores"}
+              </p>
             </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+              {/* High scores */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium text-emerald-400">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Highest Scores
+                </div>
+                <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                  {sampleResults.highest.slice(0, 5).map((sample, i) => (
+                    <SampleCard key={i} sample={sample} />
+                  ))}
+                </div>
+              </div>
 
-            {/* Low scores */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm font-medium text-red-600">
-                <XCircle className="h-4 w-4" />
-                Lowest Scores
-              </div>
-              <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                {sampleResults.lowest.slice(0, 5).map((sample, i) => (
-                  <SampleCard key={i} sample={sample} />
-                ))}
+              {/* Low scores */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium text-red-400">
+                  <XCircle className="h-4 w-4" />
+                  Lowest Scores
+                </div>
+                <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                  {sampleResults.lowest.slice(0, 5).map((sample, i) => (
+                    <SampleCard key={i} sample={sample} />
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </TabsContent>
 
         {/* Details tab - full results table */}
-        <TabsContent value="details" className="mt-4">
+        <TabsContent value="details" className="mt-4 flex-1 flex flex-col min-h-0">
           {evaluationResults && evaluationResults.length > 0 ? (
-            <ResultsTable results={evaluationResults} maxHeight={300} />
+            <ResultsTable results={evaluationResults} fillHeight />
           ) : (
-            <p className="text-sm text-muted-foreground text-center py-4">
+            <p className="text-sm text-zinc-500 text-center py-4">
               No detailed results available
             </p>
           )}
         </TabsContent>
       </Tabs>
+      </div>
 
-      <Separator />
+      {/* Footer - sticky at bottom */}
+      <div className="shrink-0 pt-4 space-y-4">
+        <Separator className="bg-zinc-800" />
 
-      {/* Actions */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={onReset}>
-            <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-            Run Again
-          </Button>
+        {/* Footer - refined dark theme design */}
+      <div className="flex items-center justify-between rounded-md border border-zinc-800 bg-zinc-900/50 px-4 py-3">
+        {/* Left side - Status indicator */}
+        <div className="flex items-center gap-2.5">
+          {errorCount > 0 ? (
+            <>
+              <div className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-sm text-zinc-400">
+                {errorCount} error{errorCount !== 1 ? "s" : ""} detected
+              </span>
+            </>
+          ) : (
+            <>
+              <div className="h-2 w-2 rounded-full bg-emerald-500" />
+              <span className="text-sm text-zinc-400">
+                All evaluations passed
+              </span>
+            </>
+          )}
           {hasHistory && (
-            <Button variant="ghost" size="sm" onClick={onViewHistory}>
-              <History className="h-3.5 w-3.5 mr-1.5" />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onViewHistory}
+              className="ml-1 h-7 text-xs text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
+            >
+              <History className="h-3 w-3 mr-1" />
               History
             </Button>
           )}
         </div>
+
+        {/* Right side - Actions */}
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={onClose}>
+          <Button
+            onClick={onReset}
+            size="sm"
+            className="h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Run Again
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onClose}
+            className="h-8 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+          >
             Close
           </Button>
-          {result.diagnosis.verdict === "GO" && (
-            <Button size="sm">
-              Start Training
-            </Button>
-          )}
         </div>
+      </div>
       </div>
     </div>
   );

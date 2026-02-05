@@ -16,6 +16,13 @@ import {
   Cell,
   ReferenceLine,
 } from "recharts";
+import {
+  Tooltip as UITooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ScoreHistogramProps {
@@ -246,13 +253,36 @@ export function ScoreHistogram({
 
       {/* Statistics */}
       {showStats && (
-        <div className="grid grid-cols-5 gap-2 text-center">
-          <StatBox label="Mean" value={stats.mean.toFixed(2)} highlight />
-          <StatBox label="Std" value={stats.std.toFixed(2)} />
-          <StatBox label="Min" value={stats.min.toFixed(2)} />
-          <StatBox label="Max" value={stats.max.toFixed(2)} />
-          <StatBox label="Median" value={stats.median.toFixed(2)} />
-        </div>
+        <TooltipProvider delayDuration={200}>
+          <div className="grid grid-cols-5 gap-2 text-center">
+            <StatBox
+              label="Mean"
+              value={stats.mean.toFixed(2)}
+              highlight
+              description="Average score across all samples. Higher is better. Ideal range: 0.3-0.8"
+            />
+            <StatBox
+              label="Std Dev"
+              value={stats.std.toFixed(2)}
+              description="Standard deviation - how spread out the scores are. Low (<0.1) may indicate grader not differentiating well"
+            />
+            <StatBox
+              label="Min"
+              value={stats.min.toFixed(2)}
+              description="Lowest score in the sample. Very low values may indicate problematic examples"
+            />
+            <StatBox
+              label="Max"
+              value={stats.max.toFixed(2)}
+              description="Highest score in the sample. Very high values across all samples may indicate lenient grading"
+            />
+            <StatBox
+              label="Median"
+              value={stats.median.toFixed(2)}
+              description="Middle value when scores are sorted. Less affected by outliers than mean"
+            />
+          </div>
+        </TooltipProvider>
       )}
 
       {/* Diagnosis */}
@@ -298,23 +328,41 @@ function StatBox({
   label,
   value,
   highlight = false,
+  description,
 }: {
   label: string;
   value: string;
   highlight?: boolean;
+  description?: string;
 }) {
-  return (
+  const content = (
     <div
       className={cn(
-        "rounded-md border p-2",
+        "rounded-md border p-2 cursor-help",
         highlight && "bg-primary/5 border-primary/20"
       )}
     >
-      <p className="text-xs text-muted-foreground">{label}</p>
+      <div className="flex items-center justify-center gap-1">
+        <p className="text-xs text-muted-foreground">{label}</p>
+        {description && (
+          <HelpCircle className="h-3 w-3 text-muted-foreground/50" />
+        )}
+      </div>
       <p className={cn("text-lg font-semibold", highlight && "text-primary")}>
         {value}
       </p>
     </div>
+  );
+
+  if (!description) return content;
+
+  return (
+    <UITooltip>
+      <TooltipTrigger asChild>{content}</TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-[200px] text-xs">
+        <p>{description}</p>
+      </TooltipContent>
+    </UITooltip>
   );
 }
 
