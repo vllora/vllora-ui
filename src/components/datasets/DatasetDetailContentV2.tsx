@@ -31,7 +31,7 @@ import { LucyDatasetAssistant } from "./LucyDatasetAssistant";
 import { EvaluationConfigPanel, type EvaluationConfigPanelRef } from "./evaluation-dialog/EvaluationConfigPanel";
 import { quickFinetune } from "@/services/quick-finetune";
 import { toast } from "sonner";
-import { FinetuneJobsContent } from "@/components/finetune/FinetuneJobsContent";
+import { FinetuneJobsContent } from "@/components/finetune/content";
 import { useFinetuneJobs } from "@/contexts/FinetuneJobsContext";
 import { DryRunJobsProvider } from "@/contexts/DryRunJobsContext";
 import type { CoverageStats } from "@/types/dataset-types";
