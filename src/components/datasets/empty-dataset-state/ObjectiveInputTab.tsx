@@ -115,26 +115,35 @@ export function ObjectiveInputTab({
             </span>
           </button>
         ))}
+      </div>
 
-        {/* Separator */}
-        <span className="text-muted-foreground/30 mx-1">|</span>
-
-        {/* Sample Dataset Button */}
-        {onLoadSample && (
+      {/* Sample Dataset CTA */}
+      {onLoadSample && (
+        <div className="flex items-center justify-center gap-2 mt-4">
+          <div className="h-px w-12 bg-gradient-to-r from-transparent to-border/50" />
           <button
             onClick={onLoadSample}
             disabled={isLoadingSample}
-            className="group/sample flex items-center gap-1.5 px-4 py-2 text-sm rounded-full border border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 hover:border-amber-500/50 hover:shadow-[0_0_20px_rgba(251,191,36,0.15)] transition-all duration-300 text-amber-600 dark:text-amber-400 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="group/sample flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isLoadingSample ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <>
+                <Loader2 className="w-4 h-4 animate-spin text-[rgb(var(--theme-500))]" />
+                <span>Loading sample...</span>
+              </>
             ) : (
-              <FlaskConical className="w-3.5 h-3.5" />
+              <>
+                <span>or jumpstart with</span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[rgba(var(--theme-500),0.3)] bg-[rgba(var(--theme-500),0.08)] text-[rgb(var(--theme-500))] font-medium group-hover/sample:bg-[rgba(var(--theme-500),0.15)] group-hover/sample:border-[rgba(var(--theme-500),0.5)] transition-all">
+                  <FlaskConical className="w-3.5 h-3.5" />
+                  Chess Tutor Sample
+                </span>
+              </>
             )}
-            <span>{isLoadingSample ? "Loading..." : "Sample Dataset"}</span>
           </button>
-        )}
-      </div>
+          <div className="h-px w-12 bg-gradient-to-l from-transparent to-border/50" />
+        </div>
+      )}
     </div>
   );
 }

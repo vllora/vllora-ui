@@ -7,6 +7,7 @@
 
 import { useFinetuneJobs } from "@/contexts/FinetuneJobsContext";
 import { FinetuneJobStatusBadge } from "./FinetuneJobStatusBadge";
+import { TrainingMetricsChart } from "./TrainingMetricsChart";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -171,7 +172,7 @@ function EpochSummary({ results }: EpochSummaryProps) {
                     : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
                   : "bg-muted text-muted-foreground"
               )}
-              title={`Epoch ${epoch}: ${avgScore !== null ? `${(avgScore * 100).toFixed(1)}%` : 'No score'}`}
+              title={`Epoch ${epoch}: ${avgScore !== null ? avgScore.toFixed(2) : 'No score'}`}
             >
               {epoch}
             </div>
@@ -198,7 +199,7 @@ function EpochSummary({ results }: EpochSummaryProps) {
                 ? "text-yellow-600"
                 : "text-red-600"
             )}>
-              {(epochData[epochData.length - 1].avgScore! * 100).toFixed(1)}%
+              {epochData[epochData.length - 1].avgScore!.toFixed(2)}
             </span>
           </>
         )}
@@ -512,9 +513,12 @@ function JobTableRow({ job, onJobAction }: JobTableRowProps) {
                       {evalsError.includes('404') ? 'No evaluation metrics available yet' : evalsError}
                     </div>
                   ) : evalResults && evalResults.results.length > 0 ? (
-                    <div className="space-y-3">
-                      {/* Summary Stats */}
+                    <div className="space-y-4">
+                      {/* Quick Summary */}
                       <EpochSummary results={evalResults.results} />
+
+                      {/* Detailed Charts & Breakdown */}
+                      <TrainingMetricsChart results={evalResults.results} />
                     </div>
                   ) : (
                     <div className="text-xs text-muted-foreground py-2">

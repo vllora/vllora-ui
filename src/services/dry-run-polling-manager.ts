@@ -26,8 +26,8 @@ import { toast } from 'sonner';
 // Constants
 // =============================================================================
 
-const POLL_INTERVAL_MS = 3000; // 3 seconds
-const MAX_POLL_ATTEMPTS = 120; // 6 minutes max (120 * 3 seconds)
+const POLL_INTERVAL_MS = 6000; // 3 seconds
+// const MAX_POLL_ATTEMPTS = 120; // 6 minutes max (120 * 3 seconds)
 
 // =============================================================================
 // Singleton Class
@@ -269,17 +269,17 @@ class DryRunPollingManager {
     const attempts = (this.pollAttempts.get(jobId) || 0) + 1;
     this.pollAttempts.set(jobId, attempts);
 
-    // Check for timeout
-    if (attempts > MAX_POLL_ATTEMPTS) {
-      this.stopPolling(jobId);
-      await updateDryRunJob(jobId, {
-        status: 'failed',
-        error: 'Dry run timed out',
-        completedAt: Date.now(),
-      });
-      toast.error('Dry run timed out');
-      return;
-    }
+    // // Check for timeout
+    // if (attempts > MAX_POLL_ATTEMPTS) {
+    //   this.stopPolling(jobId);
+    //   await updateDryRunJob(jobId, {
+    //     status: 'failed',
+    //     error: 'Dry run timed out',
+    //     completedAt: Date.now(),
+    //   });
+    //   toast.error('Dry run timed out');
+    //   return;
+    // }
 
     try {
       const result = await getEvaluationResult(job.evaluationRunId);
