@@ -5,9 +5,29 @@
 import { formatDistanceToNow, differenceInSeconds, differenceInMinutes, differenceInHours } from "date-fns";
 import { BASE_MODELS } from "./constants";
 
-export function formatDate(dateString: string): string {
+/**
+ * Parse a finetune job date string ensuring it's treated as UTC.
+ * Handles timestamps like "2026-02-05 12:53:55" (space-separated, no timezone).
+ */
+export function parseFinetuneJobDate(dateString: string): Date {
+  let isoString = dateString;
+  // Handle space-separated format: "2025-09-29 14:11:50.395000"
+  if (!dateString.includes('T')) {
+    isoString = dateString.replace(' ', 'T');
+  }
+  // Ensure UTC timezone if not specified
+  if (!isoString.endsWith('Z') && !isoString.includes('+') && !isoString.includes('-', 10)) {
+    isoString += 'Z';
+  }
+  return new Date(isoString);
+}
+
+/**
+ * Format a finetune job date as relative time (e.g., "5 minutes ago").
+ */
+export function formatFinetuneJobDate(dateString: string): string {
   try {
-    return formatDistanceToNow(new Date(dateString), { addSuffix: true });
+    return formatDistanceToNow(parseFinetuneJobDate(dateString), { addSuffix: true });
   } catch {
     return dateString;
   }
@@ -15,8 +35,8 @@ export function formatDate(dateString: string): string {
 
 export function formatDuration(startDate: string, endDate?: string | null): string {
   try {
-    const start = new Date(startDate);
-    const end = endDate ? new Date(endDate) : new Date();
+    const start = parseFinetuneJobDate(startDate);
+    const end = endDate ? parseFinetuneJobDate(endDate) : new Date();
 
     const hours = differenceInHours(end, start);
     const minutes = differenceInMinutes(end, start) % 60;

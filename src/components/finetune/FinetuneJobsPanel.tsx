@@ -1,5 +1,6 @@
 import { useFinetuneJobs } from "@/contexts/FinetuneJobsContext";
 import { FinetuneJobStatusBadge } from "./FinetuneJobStatusBadge";
+import { formatFinetuneJobDate } from "./content/utils";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -18,18 +19,9 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { FinetuneJob } from "@/services/finetune-api";
-import { formatDistanceToNow } from "date-fns";
 
 interface FinetuneJobsPanelProps {
   className?: string;
-}
-
-function formatDate(dateString: string): string {
-  try {
-    return formatDistanceToNow(new Date(dateString), { addSuffix: true });
-  } catch {
-    return dateString;
-  }
 }
 
 function JobItem({ job }: { job: FinetuneJob }) {
@@ -55,7 +47,7 @@ function JobItem({ job }: { job: FinetuneJob }) {
                 <FinetuneJobStatusBadge status={job.status} />
               </div>
               <div className="text-xs text-muted-foreground">
-                {formatDate(job.created_at)}
+                {formatFinetuneJobDate(job.created_at)}
               </div>
             </div>
           </button>
@@ -98,7 +90,7 @@ function JobItem({ job }: { job: FinetuneJob }) {
                 {job.completed_at && (
                   <>
                     <span className="text-muted-foreground">Completed:</span>
-                    <span>{formatDate(job.completed_at)}</span>
+                    <span>{formatFinetuneJobDate(job.completed_at)}</span>
                   </>
                 )}
               </div>

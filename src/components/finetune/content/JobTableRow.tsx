@@ -30,7 +30,7 @@ import { toast } from "sonner";
 import { FinetuneJobStatusBadge } from "../FinetuneJobStatusBadge";
 import { TrainingMetricsChart } from "../TrainingMetricsChart";
 import { EpochSummary } from "./EpochSummary";
-import { formatDate, formatDuration, getModelDisplayName } from "./utils";
+import { formatFinetuneJobDate, formatDuration, getModelDisplayName } from "./utils";
 
 interface JobTableRowProps {
   job: FinetuneJob;
@@ -165,7 +165,7 @@ export function JobTableRow({ job, onJobAction }: JobTableRowProps) {
                 {job.provider_job_id.slice(0, 12)}...
               </span>
               <span className="text-xs text-muted-foreground">
-                {formatDate(job.created_at)}
+                {formatFinetuneJobDate(job.created_at)}
               </span>
             </div>
           </div>
@@ -275,7 +275,7 @@ export function JobTableRow({ job, onJobAction }: JobTableRowProps) {
                     {job.completed_at && (
                       <>
                         <span className="text-muted-foreground">Completed:</span>
-                        <span>{formatDate(job.completed_at)}</span>
+                        <span>{formatFinetuneJobDate(job.completed_at)}</span>
                       </>
                     )}
                   </div>
