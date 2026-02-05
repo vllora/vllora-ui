@@ -48,6 +48,7 @@ export function PerRowDetailsSection({ results }: PerRowDetailsSectionProps) {
               epoch,
               score: result.score,
               breakdown,
+              logs: result.logs,
             });
           }
         }

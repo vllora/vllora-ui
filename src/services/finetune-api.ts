@@ -601,6 +601,7 @@ export interface EpochEvalResult {
   score?: number;
   reason?: string;
   status?: string;
+  logs?: string[];
   [key: string]: unknown;
 }
 
