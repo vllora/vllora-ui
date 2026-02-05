@@ -10,7 +10,7 @@ import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { computeCoverageStats, computeDatasetInsights } from "../record-utils";
 import { DatasetOverviewCard } from "./overview-card";
 import { DryRunEvaluationCard } from "./evaluation-card";
-import { FinetuneJobCard } from "./FinetuneJobCard";
+import { FinetuneJobCard } from "./finetune-job-card";
 import { RecordsAnalyticsDialog } from "./detail-records-analytics-dialog";
 
 export function DatasetStatsCards() {

@@ -60,6 +60,75 @@ export function getModelDisplayName(modelId: string): string {
 }
 
 /**
+ * Epoch data with average score
+ */
+export interface EpochData {
+  epoch: number;
+  avgScore: number | null;
+  count: number;
+}
+
+/**
+ * Training summary computed from evaluation results
+ */
+export interface TrainingSummary {
+  totalRows: number;
+  epochData: EpochData[];
+  latestEpoch: number | null;
+  latestAvgScore: number | null;
+}
+
+/**
+ * Compute training summary from evaluation results.
+ * Shared logic used by EpochSummary and FinetuneJobCard.
+ */
+export function computeTrainingSummary(
+  results: Array<{ row_index: number; epochs: Record<string, Array<{ score?: number | null }>> }>
+): TrainingSummary | null {
+  if (!results || results.length === 0) return null;
+
+  // Collect all epochs across all rows
+  const epochStats = new Map<number, { scores: number[]; count: number }>();
+
+  for (const row of results) {
+    for (const [epochStr, evalResults] of Object.entries(row.epochs)) {
+      const epoch = parseInt(epochStr, 10);
+      if (!epochStats.has(epoch)) {
+        epochStats.set(epoch, { scores: [], count: 0 });
+      }
+      const stats = epochStats.get(epoch)!;
+      for (const result of evalResults) {
+        stats.count++;
+        if (typeof result.score === 'number') {
+          stats.scores.push(result.score);
+        }
+      }
+    }
+  }
+
+  // Sort epochs
+  const sortedEpochs = Array.from(epochStats.entries()).sort(([a], [b]) => a - b);
+  if (sortedEpochs.length === 0) return null;
+
+  // Calculate average scores per epoch
+  const epochData = sortedEpochs.map(([epoch, stats]) => {
+    const avgScore = stats.scores.length > 0
+      ? stats.scores.reduce((a, b) => a + b, 0) / stats.scores.length
+      : null;
+    return { epoch, avgScore, count: stats.count };
+  });
+
+  const latestEpochData = epochData[epochData.length - 1];
+
+  return {
+    totalRows: results.length,
+    epochData,
+    latestEpoch: latestEpochData?.epoch ?? null,
+    latestAvgScore: latestEpochData?.avgScore ?? null,
+  };
+}
+
+/**
  * Message in a conversation
  */
 export interface Message {

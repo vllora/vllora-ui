@@ -19,13 +19,12 @@ import {
   FinetuneJob,
   cancelReinforcementJob,
   resumeReinforcementJob,
-  getFinetuneEvaluations,
-  FinetuneEvalResultsResponse,
 } from "@/services/finetune-api";
 import { toast } from "sonner";
 import { FinetuneJobStatusBadge } from "../FinetuneJobStatusBadge";
 import { JobExpandedContent } from "./JobExpandedContent";
 import { formatFinetuneJobDate, formatDuration, getModelDisplayName } from "./utils";
+import { useFinetuneJobs } from "@/contexts/FinetuneJobsContext";
 
 interface FinetuneJobTableRowProps {
   job: FinetuneJob;
@@ -35,14 +34,27 @@ interface FinetuneJobTableRowProps {
 export function FinetuneJobTableRow({ job, onJobAction }: FinetuneJobTableRowProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
-  const [evalResults, setEvalResults] = useState<FinetuneEvalResultsResponse | null>(null);
-  const [isLoadingEvals, setIsLoadingEvals] = useState(false);
   const [isRefreshingEvals, setIsRefreshingEvals] = useState(false);
-  const [evalsError, setEvalsError] = useState<string | null>(null);
 
   const canCancel = job.status === 'pending' || job.status === 'running';
   const canResume = job.status === 'cancelled';
   const isActive = job.status === 'pending' || job.status === 'running';
+
+  // Get evaluations from context (single polling instance)
+  const { getJobEvaluations, refreshJobEvaluations } = useFinetuneJobs();
+  const {
+    data: evalResults,
+    isLoading: isLoadingEvals,
+    error: evalsError,
+  } = isExpanded ? getJobEvaluations(job.id) : { data: null, isLoading: false, error: null };
+
+  // Manual refresh handler with local refreshing state
+  const handleRefreshMetrics = useCallback(() => {
+    setIsRefreshingEvals(true);
+    refreshJobEvaluations(job.id);
+    // Clear refreshing state after a short delay (context doesn't track refresh separately)
+    setTimeout(() => setIsRefreshingEvals(false), 1000);
+  }, [job.id, refreshJobEvaluations]);
 
   // Listen for expand event from FinetuneJobCard
   useEffect(() => {
@@ -57,64 +69,6 @@ export function FinetuneJobTableRow({ job, onJobAction }: FinetuneJobTableRowPro
       window.removeEventListener('finetune-expand-job', handleExpandJob as EventListener);
     };
   }, [job.id]);
-
-  // Fetch evaluations function (reusable for initial, poll, and manual refresh)
-  const fetchEvaluations = useCallback(async (options: { isInitial?: boolean; isManualRefresh?: boolean } = {}) => {
-    const { isInitial = false, isManualRefresh = false } = options;
-
-    if (!job.dataset_id) return;
-
-    if (isInitial) {
-      setIsLoadingEvals(true);
-      setEvalsError(null);
-    }
-    if (isManualRefresh) {
-      setIsRefreshingEvals(true);
-    }
-
-    try {
-      const results = await getFinetuneEvaluations(job.dataset_id, job.provider_job_id);
-      setEvalResults(results);
-      setEvalsError(null);
-    } catch (error) {
-      setEvalsError(error instanceof Error ? error.message : 'Failed to load evaluations');
-    } finally {
-      if (isInitial) setIsLoadingEvals(false);
-      if (isManualRefresh) setIsRefreshingEvals(false);
-    }
-  }, [job.dataset_id, job.provider_job_id]);
-
-  // Fetch evaluation results when expanded, poll while running
-  useEffect(() => {
-    if (!isExpanded || !job.dataset_id) return;
-
-    let isMounted = true;
-    let pollInterval: ReturnType<typeof setInterval> | null = null;
-
-    // Initial fetch
-    fetchEvaluations({ isInitial: true });
-
-    // Poll every 20 seconds while job is running
-    if (isActive) {
-      pollInterval = setInterval(() => {
-        if (isMounted) {
-          fetchEvaluations();
-        }
-      }, 20000);
-    }
-
-    return () => {
-      isMounted = false;
-      if (pollInterval) {
-        clearInterval(pollInterval);
-      }
-    };
-  }, [isExpanded, job.dataset_id, isActive, fetchEvaluations]);
-
-  // Manual refresh handler
-  const handleRefreshMetrics = useCallback(() => {
-    fetchEvaluations({ isManualRefresh: true });
-  }, [fetchEvaluations]);
 
   const handleCancel = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();

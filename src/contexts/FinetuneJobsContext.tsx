@@ -17,8 +17,10 @@ import {
 import {
   FinetuneJob,
   FinetuneJobStatus,
+  FinetuneEvalResultsResponse,
   listReinforcementJobs,
   getReinforcementJobStatus,
+  getFinetuneEvaluations,
 } from "@/services/finetune-api";
 import { ProjectEventsConsumer } from "@/contexts/project-events";
 import {
@@ -30,6 +32,12 @@ import { emitter } from "@/utils/eventEmitter";
 // ============================================================================
 // Types
 // ============================================================================
+
+interface JobEvaluationState {
+  data: FinetuneEvalResultsResponse | null;
+  isLoading: boolean;
+  error: string | null;
+}
 
 interface FinetuneJobsContextType {
   jobs: FinetuneJob[];
@@ -44,6 +52,9 @@ interface FinetuneJobsContextType {
   currentBackendDatasetId: string | null;
   setCurrentBackendDatasetId: (backendDatasetId: string | null) => void;
   filteredJobs: FinetuneJob[];
+  // Job evaluations - single polling instance per job
+  getJobEvaluations: (jobId: string) => JobEvaluationState;
+  refreshJobEvaluations: (jobId: string) => void;
 }
 
 // ============================================================================
@@ -62,12 +73,19 @@ interface FinetuneJobsProviderProps {
   children: ReactNode;
 }
 
+// Poll interval for evaluations (20 seconds)
+const EVAL_POLL_INTERVAL = 20000;
+
 export function FinetuneJobsProvider({ children }: FinetuneJobsProviderProps) {
   const [jobs, setJobs] = useState<FinetuneJob[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentBackendDatasetId, setCurrentBackendDatasetId] = useState<string | null>(null);
+
+  // Job evaluations state - keyed by job ID
+  const [jobEvaluations, setJobEvaluations] = useState<Record<string, JobEvaluationState>>({});
+  const evalPollIntervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
   // Get project events for SSE subscription
   const { subscribe } = ProjectEventsConsumer();
@@ -116,6 +134,107 @@ export function FinetuneJobsProvider({ children }: FinetuneJobsProviderProps) {
     } catch (err) {
       console.error(`Failed to refresh job ${providerJobId}:`, err);
     }
+  }, []);
+
+  // Fetch evaluations for a specific job
+  const fetchJobEvaluations = useCallback(async (job: FinetuneJob, isInitial = false) => {
+    if (!job.dataset_id) return;
+
+    const jobId = job.id;
+
+    if (isInitial) {
+      setJobEvaluations((prev) => ({
+        ...prev,
+        [jobId]: { data: prev[jobId]?.data ?? null, isLoading: true, error: null },
+      }));
+    }
+
+    try {
+      const results = await getFinetuneEvaluations(job.dataset_id, job.provider_job_id);
+      setJobEvaluations((prev) => ({
+        ...prev,
+        [jobId]: { data: results, isLoading: false, error: null },
+      }));
+    } catch (err) {
+      setJobEvaluations((prev) => ({
+        ...prev,
+        [jobId]: {
+          data: prev[jobId]?.data ?? null,
+          isLoading: false,
+          error: err instanceof Error ? err.message : 'Failed to load evaluations',
+        },
+      }));
+    }
+  }, []);
+
+  // Start polling evaluations for active jobs
+  const startEvalPolling = useCallback((job: FinetuneJob) => {
+    const jobId = job.id;
+
+    // Don't start if already polling
+    if (evalPollIntervalsRef.current[jobId]) return;
+
+    // Initial fetch
+    fetchJobEvaluations(job, true);
+
+    // Start polling
+    evalPollIntervalsRef.current[jobId] = setInterval(() => {
+      fetchJobEvaluations(job);
+    }, EVAL_POLL_INTERVAL);
+  }, [fetchJobEvaluations]);
+
+  // Stop polling evaluations for a job
+  const stopEvalPolling = useCallback((jobId: string) => {
+    if (evalPollIntervalsRef.current[jobId]) {
+      clearInterval(evalPollIntervalsRef.current[jobId]);
+      delete evalPollIntervalsRef.current[jobId];
+    }
+  }, []);
+
+  // Get evaluation state for a job (triggers polling if active and not already polling)
+  const getJobEvaluations = useCallback((jobId: string): JobEvaluationState => {
+    const job = jobs.find((j) => j.id === jobId);
+    const isActive = job && (job.status === 'pending' || job.status === 'running');
+
+    // Start polling for active jobs that aren't being polled yet
+    if (job && isActive && job.dataset_id && !evalPollIntervalsRef.current[jobId]) {
+      startEvalPolling(job);
+    }
+
+    return jobEvaluations[jobId] ?? { data: null, isLoading: false, error: null };
+  }, [jobs, jobEvaluations, startEvalPolling]);
+
+  // Manual refresh evaluations for a job
+  const refreshJobEvaluations = useCallback((jobId: string) => {
+    const job = jobs.find((j) => j.id === jobId);
+    if (job) {
+      fetchJobEvaluations(job, false);
+    }
+  }, [jobs, fetchJobEvaluations]);
+
+  // Start/stop polling based on job status changes
+  useEffect(() => {
+    for (const job of jobs) {
+      const isActive = job.status === 'pending' || job.status === 'running';
+      const isPolling = !!evalPollIntervalsRef.current[job.id];
+
+      if (isActive && job.dataset_id && !isPolling) {
+        // Job became active, start polling
+        startEvalPolling(job);
+      } else if (!isActive && isPolling) {
+        // Job is no longer active, stop polling (but keep data)
+        stopEvalPolling(job.id);
+      }
+    }
+  }, [jobs, startEvalPolling, stopEvalPolling]);
+
+  // Cleanup all polling on unmount
+  useEffect(() => {
+    return () => {
+      for (const jobId of Object.keys(evalPollIntervalsRef.current)) {
+        clearInterval(evalPollIntervalsRef.current[jobId]);
+      }
+    };
   }, []);
 
   // Handle SSE event for job updates
@@ -208,6 +327,8 @@ export function FinetuneJobsProvider({ children }: FinetuneJobsProviderProps) {
     currentBackendDatasetId,
     setCurrentBackendDatasetId,
     filteredJobs,
+    getJobEvaluations,
+    refreshJobEvaluations,
   };
 
   return (
