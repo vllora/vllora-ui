@@ -96,7 +96,7 @@ export interface FinetuneWorkflowState {
 
   // Coverage & Generation (combined step)
   coverageGeneration: {
-    balanceScore: number;
+    balanceScore?: number;  // undefined when no topics configured
     topicDistribution: Record<string, number>;
     recommendations: string[];
     generationRounds: GenerationRound[];

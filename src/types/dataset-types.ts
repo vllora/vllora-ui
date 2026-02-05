@@ -87,10 +87,10 @@ export interface DatasetStats {
 
 // Coverage statistics stored on dataset for UI display
 export interface CoverageStats {
-  // Balance score (0-1, where 1 is perfectly balanced)
-  balanceScore: number;
-  // Balance rating for display
-  balanceRating: 'excellent' | 'good' | 'fair' | 'poor' | 'critical';
+  // Balance score (0-1, where 1 is perfectly balanced) - undefined when no topics configured
+  balanceScore?: number;
+  // Balance rating for display - undefined when no topics configured
+  balanceRating?: 'excellent' | 'good' | 'fair' | 'poor' | 'critical';
   // Count of records per topic
   topicDistribution: Record<string, number>;
   // Number of records without topics

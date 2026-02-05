@@ -7,16 +7,14 @@
 
 import { useMemo, useState, useCallback } from "react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
-import { useDryRunJobs } from "@/contexts/DryRunJobsContext";
 import { computeCoverageStats, computeDatasetInsights } from "../record-utils";
 import { RecordsDonutCard } from "./RecordsDonutCard";
 import { TopicsBarCard } from "./TopicsBarCard";
-import { EvaluationCard } from "./EvaluationCard";
+import { DryRunEvaluationCard } from "./evaluation-card";
 import { RecordsAnalyticsDialog } from "./detail-records-analytics-dialog";
 
 export function DatasetStatsCards() {
   const { dataset, records, setDryRunDialog } = DatasetDetailConsumer();
-  const { runningJob, lastCompletedJob } = useDryRunJobs();
 
   // Dialog state for records analytics
   const [analyticsDialogOpen, setAnalyticsDialogOpen] = useState(false);
@@ -61,12 +59,9 @@ export function DatasetStatsCards() {
           balanceScore={coverageStats?.balanceScore}
         />
 
-        {/* Evaluation Score Distribution */}
-        <EvaluationCard
+        {/* Dry Run Evaluation Score Distribution */}
+        <DryRunEvaluationCard
           evalScript={dataset?.evalScript}
-          dryRunStats={dataset?.dryRunStats}
-          runningJob={runningJob}
-          lastCompletedJob={lastCompletedJob}
           onConfigureClick={handleNavigateToEvaluator}
           onDryRunClick={handleOpenDryRunDialog}
         />

@@ -109,8 +109,8 @@ export interface AnalyzeCoverageResult {
   success: boolean;
   error?: string;
   coverage?: {
-    balance_score: number;
-    balance_rating: string;
+    balance_score?: number;    // undefined when no topics configured
+    balance_rating?: string;   // undefined when no topics configured
     distribution: Record<string, {
       count: number;
       percentage: number;

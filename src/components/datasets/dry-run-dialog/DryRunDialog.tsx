@@ -23,7 +23,7 @@ import { HistoryView } from "./HistoryView";
 import { ResultsView, type ResultsViewTab } from "./ResultsView";
 import { RunningView } from "./RunningView";
 import { VerdictBadge } from "./VerdictBadge";
-import { useDryRunJobs } from "@/contexts/DryRunJobsContext";
+import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
 import { cn } from "@/lib/utils";
 import type { DryRunJob } from "@/types/dry-run-job";
 import { getJobTotalRows, getJobCompletedRows } from "@/types/dry-run-job";
@@ -61,7 +61,7 @@ export function DryRunDialog({
     lastCompletedJob,
     startDryRun,
     cancelDryRun,
-  } = useDryRunJobs();
+  } = DryRunJobsConsumer();
 
   const [view, setView] = useState<DialogView>("config");
   const [sampleSize, setSampleSize] = useState(() => getDefaultSampleSize(recordCount));

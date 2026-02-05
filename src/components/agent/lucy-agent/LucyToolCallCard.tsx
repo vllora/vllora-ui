@@ -5,7 +5,7 @@
  */
 
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, CheckCircle, XCircle, Wrench, Clock } from 'lucide-react';
+import { ChevronDown, ChevronRight, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { extractToolResultData } from '@distri/core';
 import type { ToolCallState } from '@distri/react';
 import { JsonViewer } from '@/components/chat/traces/TraceRow/span-info/JsonViewer';

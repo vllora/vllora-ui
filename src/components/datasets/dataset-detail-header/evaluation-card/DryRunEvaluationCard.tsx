@@ -1,32 +1,26 @@
 /**
- * EvaluationCard
+ * DryRunEvaluationCard
  *
- * Summary card showing evaluation score distribution.
+ * Summary card showing dry run evaluation score distribution.
  * Shows blank state if evaluation is not configured.
  * Shows running state if a dry run is in progress.
+ * Shows failed state if the last job failed.
  */
 
-import { FlaskConical, Loader2, RefreshCw } from "lucide-react";
-import type { DryRunStats } from "@/types/dataset-types";
-import type { DryRunJob } from "@/types/dry-run-job";
+import { RefreshCw } from "lucide-react";
 import {
   getJobTotalRows,
-  getJobCompletedRows,
   getJobFailedRows,
-  getJobAverageScore,
-  getJobPassedCount,
   getJobFailedGradingCount,
 } from "@/types/dry-run-job";
+import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
+import { EvaluationEmptyState, DryRunEmptyState } from "./EvaluationEmptyState";
+import { EvaluationFailedState } from "./EvaluationFailedState";
+import { EvaluationRunningState } from "./EvaluationRunningState";
 
-export interface EvaluationCardProps {
+export interface DryRunEvaluationCardProps {
   /** Evaluation script (if set) */
   evalScript?: string;
-  /** Dry run stats (if evaluation has been run) */
-  dryRunStats?: DryRunStats;
-  /** Currently running dry run job (if any) */
-  runningJob?: DryRunJob | null;
-  /** Last completed dry run job (for checking errors) */
-  lastCompletedJob?: DryRunJob | null;
   /** Callback when clicking to configure evaluation */
   onConfigureClick?: () => void;
   /** Callback when clicking to open dry run dialog */
@@ -45,115 +39,56 @@ const VERDICT_BG = {
   "NO-GO": "bg-red-500",
 };
 
-export function EvaluationCard({ evalScript, dryRunStats, runningJob, lastCompletedJob, onConfigureClick, onDryRunClick }: EvaluationCardProps) {
+export function DryRunEvaluationCard({ evalScript, onConfigureClick, onDryRunClick }: DryRunEvaluationCardProps) {
+  const { jobs, isLoading, runningJob, lastCompletedJob } = DryRunJobsConsumer();
+
   // No eval script - show setup prompt (clickable)
   if (!evalScript) {
-    return (
-      <button
-        onClick={onConfigureClick}
-        className="w-full px-4 py-3 rounded-lg bg-muted/50 flex items-center justify-center min-h-[88px] hover:bg-muted/70 transition-colors cursor-pointer"
-      >
-        <div className="flex flex-col items-center gap-1 text-center">
-          <FlaskConical className="w-5 h-5 text-muted-foreground/50" />
-          <span className="text-xs text-muted-foreground">
-            Configure evaluation
-          </span>
-        </div>
-      </button>
-    );
+    return <EvaluationEmptyState onConfigureClick={onConfigureClick} />;
   }
 
   // Dry run is currently running - show progress with summary stats
   if (runningJob && (runningJob.status === 'running' || runningJob.status === 'pending')) {
-    const totalRows = getJobTotalRows(runningJob);
-    const completedRows = getJobCompletedRows(runningJob);
-    const failedRows = getJobFailedRows(runningJob);
-    const averageScore = getJobAverageScore(runningJob);
-    const passedCount = getJobPassedCount(runningJob);
-    const failedGradingCount = getJobFailedGradingCount(runningJob);
+    return <EvaluationRunningState runningJob={runningJob} onDryRunClick={onDryRunClick} />;
+  }
 
-    const progress = totalRows > 0
-      ? Math.round((completedRows / totalRows) * 100)
-      : 0;
-    const hasAvgScore = averageScore !== undefined;
-    const hasPassedCount = passedCount > 0;
-    const hasFailures = failedRows > 0 || failedGradingCount > 0;
+  // Check for failed jobs (most recent first)
+  const lastFailedJob = jobs.find((j) => j.status === 'failed');
 
+  // Get dry run stats from last completed job
+  const dryRunStats = lastCompletedJob?.result;
+
+  // Still loading - show empty state as placeholder
+  if (isLoading) {
+    return <DryRunEmptyState onDryRunClick={onDryRunClick} />;
+  }
+
+  // No jobs at all - show empty state to run first dry run
+  if (jobs.length === 0) {
+    return <DryRunEmptyState onDryRunClick={onDryRunClick} />;
+  }
+
+  // Has failed job but no completed job with results - show failed state
+  if (lastFailedJob && !dryRunStats) {
     return (
-      <button
-        onClick={onDryRunClick}
-        className="w-full px-4 py-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-800/50 flex flex-col min-h-[88px] hover:bg-blue-100/50 dark:hover:bg-blue-900/30 transition-colors cursor-pointer"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between w-full mb-2">
-          <div className="flex items-center gap-2">
-            <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
-            <span className="text-xs font-medium text-blue-700 dark:text-blue-400">
-              Dry run in progress...
-            </span>
-          </div>
-          {hasAvgScore && (
-            <span className="text-xs font-medium text-blue-700 dark:text-blue-400">
-              {(averageScore * 100).toFixed(0)}% avg
-            </span>
-          )}
-        </div>
-
-        {/* Progress bar */}
-        <div className="w-full h-1.5 bg-blue-200/50 dark:bg-blue-800/30 rounded-full overflow-hidden mb-1">
-          <div
-            className="h-full bg-blue-500 transition-all duration-300"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-
-        {/* Stats row */}
-        <div className="flex items-center justify-between w-full text-xs">
-          <span className="text-blue-600/80 dark:text-blue-400/80">
-            {completedRows} / {totalRows} ({progress}%)
-          </span>
-          {(hasPassedCount || hasFailures) && (
-            <div className="flex items-center gap-2">
-              {hasPassedCount && (
-                <span className="text-emerald-600 dark:text-emerald-400">
-                  ✓ {passedCount}
-                </span>
-              )}
-              {hasFailures && (
-                <span className="text-red-600 dark:text-red-400">
-                  ✗ {failedRows + failedGradingCount}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-      </button>
+      <EvaluationFailedState
+        onRetryClick={onDryRunClick}
+        errorMessage={lastFailedJob.error}
+      />
     );
   }
 
-  // Config exists but no dry run yet
+  // No completed job with results - show empty state
   if (!dryRunStats) {
-    return (
-      <button
-        onClick={onDryRunClick}
-        className="w-full px-4 py-3 rounded-lg bg-muted/50 flex items-center justify-center min-h-[88px] hover:bg-muted/70 transition-colors cursor-pointer"
-      >
-        <div className="flex flex-col items-center gap-1 text-center">
-          <FlaskConical className="w-5 h-5 text-muted-foreground/50" />
-          <span className="text-xs text-muted-foreground">
-            Run dry run to see scores
-          </span>
-        </div>
-      </button>
-    );
+    return <DryRunEmptyState onDryRunClick={onDryRunClick} />;
   }
 
   // Show evaluation results
   const { statistics, distribution, diagnosis } = dryRunStats;
-  const verdict = diagnosis.verdict;
+  const verdict = diagnosis.verdict as keyof typeof VERDICT_COLORS;
   const verdictColor = VERDICT_COLORS[verdict];
 
-  // Check if this is an error state by looking at the last completed job
+  // Check if this is an error state by looking at the completed job
   const totalRows = lastCompletedJob ? getJobTotalRows(lastCompletedJob) : 0;
   const failedRows = lastCompletedJob ? getJobFailedRows(lastCompletedJob) : 0;
   const failedGrading = lastCompletedJob ? getJobFailedGradingCount(lastCompletedJob) : 0;

@@ -24,67 +24,23 @@ import * as datasetsDB from '@/services/datasets-db';
 import { toast } from 'sonner';
 
 // =============================================================================
-// Context Type
+// Types
 // =============================================================================
 
-interface DryRunJobsContextType {
-  /** All jobs for current dataset (sorted by creation date, newest first) */
-  jobs: DryRunJob[];
+export type DryRunJobsContextType = ReturnType<typeof useDryRunJobs>;
 
-  /** Whether jobs are loading */
-  isLoading: boolean;
-
-  /** Currently running job (if any) */
-  runningJob: DryRunJob | null;
-
-  /** Most recent completed job (if any) */
-  lastCompletedJob: DryRunJob | null;
-
-  /**
-   * Start a new dry run
-   * @param sampleSize Number of samples to evaluate
-   * @param rolloutModel Model to use for generating responses
-   * @returns Job ID
-   */
-  startDryRun: (sampleSize: number, rolloutModel?: string) => Promise<string>;
-
-  /**
-   * Cancel a running dry run
-   * @param jobId Job ID to cancel
-   */
-  cancelDryRun: (jobId: string) => Promise<void>;
-
-  /** Refresh jobs from IndexedDB */
-  refreshJobs: () => Promise<void>;
-}
+export const DryRunJobsContext = createContext<DryRunJobsContextType | null>(null);
 
 // =============================================================================
-// Context
+// Hook (contains all logic)
 // =============================================================================
 
-const DryRunJobsContext = createContext<DryRunJobsContextType | null>(null);
-
-// =============================================================================
-// Provider Props
-// =============================================================================
-
-interface DryRunJobsProviderProps {
-  /** The full dataset */
+function useDryRunJobs(props: {
   dataset: Dataset;
-  /** Dataset records for building topic mapping and upload */
   records: DatasetRecord[];
-  children: ReactNode;
-}
+}) {
+  const { dataset, records } = props;
 
-// =============================================================================
-// Provider
-// =============================================================================
-
-export function DryRunJobsProvider({
-  dataset,
-  records,
-  children,
-}: DryRunJobsProviderProps) {
   const [jobs, setJobs] = useState<DryRunJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentBackendDatasetId, setCurrentBackendDatasetId] = useState<string | undefined>(
@@ -211,42 +167,48 @@ export function DryRunJobsProvider({
     [jobs]
   );
 
+  // Find most recent completed job with results
   const lastCompletedJob = useMemo(
-    () => jobs.find((j) => j.status === 'completed') || null,
+    () => jobs.find((j) => j.status === 'completed' && j.result) || null,
     [jobs]
   );
 
-  // Context value
-  const value: DryRunJobsContextType = useMemo(
-    () => ({
-      jobs,
-      isLoading,
-      runningJob,
-      lastCompletedJob,
-      startDryRun,
-      cancelDryRun,
-      refreshJobs: loadJobs,
-    }),
-    [jobs, isLoading, runningJob, lastCompletedJob, startDryRun, cancelDryRun, loadJobs]
-  );
-
-  return (
-    <DryRunJobsContext.Provider value={value}>
-      {children}
-    </DryRunJobsContext.Provider>
-  );
+  return {
+    jobs,
+    isLoading,
+    runningJob,
+    lastCompletedJob,
+    startDryRun,
+    cancelDryRun,
+    refreshJobs: loadJobs,
+  };
 }
 
 // =============================================================================
-// Hook
+// Provider
 // =============================================================================
 
-export function useDryRunJobs(): DryRunJobsContextType {
-  const context = useContext(DryRunJobsContext);
+export function DryRunJobsProvider({
+  children,
+  dataset,
+  records,
+}: {
+  children: ReactNode;
+  dataset: Dataset;
+  records: DatasetRecord[];
+}) {
+  const value = useDryRunJobs({ dataset, records });
+  return <DryRunJobsContext.Provider value={value}>{children}</DryRunJobsContext.Provider>;
+}
 
-  if (!context) {
-    throw new Error('useDryRunJobs must be used within a DryRunJobsProvider');
+// =============================================================================
+// Consumer
+// =============================================================================
+
+export function DryRunJobsConsumer() {
+  const value = useContext(DryRunJobsContext);
+  if (value === null) {
+    throw new Error('DryRunJobsContext must be used within a DryRunJobsProvider');
   }
-
-  return context;
+  return value;
 }

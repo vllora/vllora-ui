@@ -168,12 +168,18 @@ export function analyzeCoverage(props: {
   }
 
   // Calculate balance score (using categorized records only)
-  const categorizedCounts: Record<string, number> = {};
-  for (const topic of expectedTopics) {
-    categorizedCounts[topic] = counts[topic] || 0;
+  // Only calculate balance if there are topics configured
+  let balanceScore: number | undefined;
+  let balanceRating: CoverageReport['balanceRating'] | undefined;
+
+  if (expectedTopics.length > 0) {
+    const categorizedCounts: Record<string, number> = {};
+    for (const topic of expectedTopics) {
+      categorizedCounts[topic] = counts[topic] || 0;
+    }
+    balanceScore = calculateBalanceScore(categorizedCounts, false);
+    balanceRating = getBalanceRating(balanceScore);
   }
-  const balanceScore = calculateBalanceScore(categorizedCounts, false);
-  const balanceRating = getBalanceRating(balanceScore);
 
   // Generate recommendations
   const recommendations = generateCoverageRecommendations(
@@ -298,7 +304,7 @@ export function calculateGenerationTargets(
 
   // Estimate balance after generation
   const totalToGenerate = recommendations.reduce((sum, r) => sum + r.gap, 0);
-  const estimatedBalanceAfter = Math.min(1, balanceScore + 0.2); // Rough estimate
+  const estimatedBalanceAfter = Math.min(1, (balanceScore ?? 0) + 0.2); // Rough estimate
 
   return {
     recommendations,

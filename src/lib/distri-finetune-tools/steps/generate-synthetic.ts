@@ -78,7 +78,7 @@ export const generateSyntheticDataHandler: ToolHandler = async (params): Promise
     } else {
       // Topics-First workflow: analyze coverage and determine underrepresented topics
       const beforeReport = existingAnalyzeCoverage({records, hierarchy: dataset?.topicHierarchy || undefined});
-      balanceScoreBefore = beforeReport.balanceScore;
+      balanceScoreBefore = beforeReport.balanceScore ?? 0;
 
       // Determine topics to target
       if (target_topics && Array.isArray(target_topics) && target_topics.length > 0) {
@@ -195,7 +195,7 @@ export const generateSyntheticDataHandler: ToolHandler = async (params): Promise
     if (dataset?.topicHierarchy) {
       console.log('[generateSyntheticData] Recalculating coverage stats for dataset:', workflow.datasetId);
       const afterCoverageStats = await calculateAndSaveCoverageStats(workflow.datasetId);
-      balanceScoreAfter = afterCoverageStats.balanceScore;
+      balanceScoreAfter = afterCoverageStats.balanceScore ?? 0;
       topicDistribution = afterCoverageStats.topicDistribution;
       console.log('[generateSyntheticData] Coverage after:', {
         balanceScoreAfter,
