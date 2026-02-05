@@ -264,7 +264,7 @@ export function ScoreHistogram({
             <StatBox
               label="Std Dev"
               value={stats.std.toFixed(2)}
-              description="Standard deviation - how spread out the scores are. Low (<0.1) may indicate grader not differentiating well"
+              description="Standard deviation measures score spread. Formula: sqrt(Σ(x - mean)² / n). Low (<0.1) may indicate grader not differentiating well"
             />
             <StatBox
               label="Min"

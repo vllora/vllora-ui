@@ -48,11 +48,13 @@ export const runDryRunHandler: ToolHandler = async (params) => {
     const pct = typeof sample_percentage === 'number' ? sample_percentage : 10;
     const sampleSize = Math.max(1, Math.floor(records.length * (pct / 100)));
 
-    // Build recordId -> topic mapping for per-topic analysis
-    const recordTopics: Record<string, string> = {};
-    for (const record of records) {
+    // Build row_index -> topic mapping for per-topic analysis
+    // row_index matches the position in the uploaded dataset
+    const recordTopics: Record<number, string> = {};
+    for (let i = 0; i < records.length; i++) {
+      const record = records[i];
       if (record.topic) {
-        recordTopics[record.id] = record.topic;
+        recordTopics[i] = record.topic;
       }
     }
 

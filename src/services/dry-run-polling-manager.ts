@@ -336,13 +336,13 @@ class DryRunPollingManager {
   // Record Topics Storage (in-memory for current session)
   // =============================================================================
 
-  private recordTopicsMap: Map<string, Record<string, string>> = new Map();
+  private recordTopicsMap: Map<string, Record<number, string>> = new Map();
 
-  private storeRecordTopics(jobId: string, topics: Record<string, string>): void {
+  private storeRecordTopics(jobId: string, topics: Record<number, string>): void {
     this.recordTopicsMap.set(jobId, topics);
   }
 
-  private getRecordTopics(jobId: string): Record<string, string> | undefined {
+  private getRecordTopics(jobId: string): Record<number, string> | undefined {
     return this.recordTopicsMap.get(jobId);
   }
 

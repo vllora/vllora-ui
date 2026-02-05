@@ -17,7 +17,45 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-const SAMPLE_SIZE_OPTIONS = [100, 200, 300, 500];
+/**
+ * Generate sample size options based on record count
+ * For small datasets: show smaller increments
+ * For large datasets: show larger increments
+ */
+function getSampleSizeOptions(recordCount: number): Array<{ value: number; label: string }> {
+  if (recordCount <= 10) {
+    // Very small dataset - show "All" option
+    return [{ value: recordCount, label: "All" }];
+  }
+
+  if (recordCount <= 50) {
+    // Small dataset - show 10, 25, and All
+    const options: Array<{ value: number; label: string }> = [];
+    if (recordCount >= 10) options.push({ value: 10, label: "10" });
+    if (recordCount >= 25) options.push({ value: 25, label: "25" });
+    options.push({ value: recordCount, label: "All" });
+    return options;
+  }
+
+  if (recordCount <= 200) {
+    // Medium dataset - show 25, 50, 100, and All
+    const options: Array<{ value: number; label: string }> = [];
+    options.push({ value: 25, label: "25" });
+    options.push({ value: 50, label: "50" });
+    if (recordCount >= 100) options.push({ value: 100, label: "100" });
+    options.push({ value: recordCount, label: "All" });
+    return options;
+  }
+
+  // Large dataset - show fixed increments
+  const options: Array<{ value: number; label: string }> = [];
+  options.push({ value: 100, label: "100" });
+  options.push({ value: 200, label: "200" });
+  if (recordCount >= 300) options.push({ value: 300, label: "300" });
+  if (recordCount >= 500) options.push({ value: 500, label: "500" });
+
+  return options;
+}
 
 const ROLLOUT_MODEL_OPTIONS = [
   { value: "gpt-4o-mini", label: "GPT-4o Mini" },
@@ -73,20 +111,18 @@ export function ConfigView({
           <div>
             <label className="text-sm text-zinc-400 mb-2 block">Sample Size</label>
             <div className="flex gap-2">
-              {SAMPLE_SIZE_OPTIONS.map((size) => (
+              {getSampleSizeOptions(recordCount).map((option) => (
                 <button
-                  key={size}
-                  onClick={() => onSampleSizeChange(size)}
-                  disabled={size > recordCount}
+                  key={option.value}
+                  onClick={() => onSampleSizeChange(option.value)}
                   className={cn(
                     "px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                    "disabled:opacity-40 disabled:cursor-not-allowed",
-                    sampleSize === size
+                    sampleSize === option.value
                       ? "bg-zinc-700 text-white"
                       : "bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300"
                   )}
                 >
-                  {size}
+                  {option.label}
                 </button>
               ))}
             </div>
@@ -98,7 +134,7 @@ export function ConfigView({
           <div>
             <label className="text-sm text-zinc-400 mb-2 block">Rollout Model</label>
             <Select value={rolloutModel} onValueChange={onRolloutModelChange}>
-              <SelectTrigger className="w-full bg-zinc-800/50 border-zinc-700 text-zinc-300">
+              <SelectTrigger className="w-full bg-zinc-800/50 border-zinc-700 text-zinc-300 focus:ring-zinc-600 focus:ring-offset-0">
                 <SelectValue placeholder="Select model" />
               </SelectTrigger>
               <SelectContent>

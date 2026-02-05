@@ -177,11 +177,13 @@ export function DryRunJobsProvider({
       // that was included during upload. The cloud API doesn't support PATCH for
       // updating evaluators. To use a new eval script, user needs to re-upload.
 
-      // Build record topics mapping
-      const recordTopics: Record<string, string> = {};
-      for (const record of records) {
+      // Build record topics mapping using row_index (position in array)
+      // The backend uses row_index to identify rows, which matches the upload order
+      const recordTopics: Record<number, string> = {};
+      for (let i = 0; i < records.length; i++) {
+        const record = records[i];
         if (record.topic) {
-          recordTopics[record.id] = record.topic;
+          recordTopics[i] = record.topic;
         }
       }
 

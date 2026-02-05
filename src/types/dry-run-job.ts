@@ -100,8 +100,8 @@ export interface StartDryRunParams {
   datasetId: string;
   backendDatasetId: string;
   sampleSize: number;
-  /** Optional: record ID to topic mapping for per-topic analysis */
-  recordTopics?: Record<string, string>;
+  /** Optional: row_index to topic mapping for per-topic analysis */
+  recordTopics?: Record<number, string>;
   /** Model to use for generating responses (rollout model) */
   rolloutModel?: string;
 }

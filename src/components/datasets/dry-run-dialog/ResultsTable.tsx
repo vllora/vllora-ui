@@ -24,7 +24,13 @@ import {
   ArrowUpDown,
   AlertCircle,
   CheckCircle2,
+  ScrollText,
 } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import type { EvaluationResultResponse } from "@/services/finetune-api";
 
 type EvaluationResult = EvaluationResultResponse["results"][number];
@@ -109,11 +115,13 @@ function HighlightedText({ text }: { text: string }) {
 
 /**
  * Result card component with refined dark theme styling
+ * Shows logs in a popover when available
  */
 function ResultCard({ result, index }: { result: EvaluationResult; index: number }) {
   const isSuccess = result.status === "completed" && !result.error_message;
   const isFailed = result.status === "failed" || !!result.error_message;
   const isPending = result.status === "pending" || result.status === "running";
+  const hasLogs = result.logs && result.logs.length > 0;
 
   // Show appropriate message based on status
   const message = isPending
@@ -123,7 +131,7 @@ function ResultCard({ result, index }: { result: EvaluationResult; index: number
   return (
     <div
       className={cn(
-        "flex items-stretch rounded-md overflow-hidden",
+        "flex items-stretch rounded-md overflow-hidden h-full",
         "bg-zinc-900/80 border border-zinc-800",
         "hover:bg-zinc-900 hover:border-zinc-700 transition-colors"
       )}
@@ -203,6 +211,44 @@ function ResultCard({ result, index }: { result: EvaluationResult; index: number
           )}
         </span>
       </div>
+
+      {/* Logs popover button */}
+      {hasLogs && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2 border-l border-zinc-800",
+                "text-xs font-medium transition-colors",
+                "text-zinc-500 hover:text-blue-400 hover:bg-blue-500/10"
+              )}
+            >
+              <ScrollText className="h-3.5 w-3.5" />
+              Logs
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            side="left"
+            align="start"
+            className="w-[400px] max-h-[300px] p-0 bg-zinc-900 border-zinc-700"
+          >
+            <div className="p-3 border-b border-zinc-800">
+              <span className="text-xs font-medium text-zinc-300">
+                Evaluation Logs - Row #{index + 1}
+              </span>
+            </div>
+            <div className="p-3 overflow-y-auto max-h-[250px]">
+              <div className="space-y-1">
+                {result.logs!.map((log, i) => (
+                  <p key={i} className="text-xs text-zinc-400 font-mono">
+                    {log}
+                  </p>
+                ))}
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
     </div>
   );
 }

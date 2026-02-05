@@ -297,7 +297,7 @@ function diagnoseResults(
 export function analyzeDryRunResults(
   evaluationResult: EvaluationResultResponse,
   samplePercentage: number,
-  recordTopics?: Record<string, string> // recordId -> topic mapping
+  recordTopics?: Record<number, string> // row_index -> topic mapping
 ): DryRunStats {
   const results = evaluationResult.results;
 
@@ -329,9 +329,9 @@ export function analyzeDryRunResults(
   if (recordTopics) {
     const topicScores: Record<string, number[]> = {};
 
-    // Only use results with actual scores for per-topic analysis
+    // Use row_index to look up topics (row_index matches record position in upload order)
     for (const result of scoredResults) {
-      const topic = recordTopics[result.dataset_row_id] || '__unknown__';
+      const topic = recordTopics[result.row_index] || '__unknown__';
       if (!topicScores[topic]) topicScores[topic] = [];
       topicScores[topic].push(result.score!);
     }
@@ -413,7 +413,7 @@ export async function calculateAndSaveDryRunStats(
   datasetId: string,
   evaluationResult: EvaluationResultResponse,
   samplePercentage: number,
-  recordTopics?: Record<string, string>
+  recordTopics?: Record<number, string>
 ): Promise<DryRunStats> {
   // Calculate stats
   const dryRunStats = analyzeDryRunResults(evaluationResult, samplePercentage, recordTopics);

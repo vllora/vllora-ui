@@ -37,6 +37,16 @@ interface DryRunDialogProps {
   hasGraderConfig: boolean;
 }
 
+/**
+ * Get a sensible default sample size based on record count
+ */
+function getDefaultSampleSize(recordCount: number): number {
+  if (recordCount <= 10) return recordCount;
+  if (recordCount <= 50) return Math.min(25, recordCount);
+  if (recordCount <= 200) return 50;
+  return 100;
+}
+
 type DialogView = "config" | "running" | "results" | "history";
 
 export function DryRunDialog({
@@ -54,10 +64,15 @@ export function DryRunDialog({
   } = useDryRunJobs();
 
   const [view, setView] = useState<DialogView>("config");
-  const [sampleSize, setSampleSize] = useState(300);
+  const [sampleSize, setSampleSize] = useState(() => getDefaultSampleSize(recordCount));
   const [rolloutModel, setRolloutModel] = useState("gpt-4o-mini");
   const [activeTab, setActiveTab] = useState<ResultsViewTab>("overview");
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+
+  // Update sampleSize when recordCount changes (e.g., when switching datasets)
+  useEffect(() => {
+    setSampleSize(getDefaultSampleSize(recordCount));
+  }, [recordCount]);
 
   // Determine which job to display results for
   const displayJob = useMemo(() => {

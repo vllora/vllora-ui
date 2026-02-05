@@ -134,6 +134,7 @@ export interface RowEvaluationResult {
   dataset_row_id: string;
   row_index: number;
   status: string;
+  logs?: string[];
   score?: number;
   reason?: string;
   error_message?: string;
