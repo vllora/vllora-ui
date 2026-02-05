@@ -533,6 +533,59 @@ export async function waitForEvaluationComplete(
 }
 
 // ============================================================================
+// Finetune Evaluation Results Types & API
+// ============================================================================
+
+/** Single evaluation result for a row at a specific epoch */
+export interface EpochEvalResult {
+  score?: number;
+  reason?: string;
+  status?: string;
+  [key: string]: unknown;
+}
+
+/** Results for a single dataset row across epochs */
+export interface RowEpochResults {
+  row_index: number;
+  row: Record<string, unknown>;
+  /** Map of epoch number to array of evaluation results */
+  epochs: Record<number, EpochEvalResult[]>;
+}
+
+/** Response from finetune evaluations endpoint */
+export interface FinetuneEvalResultsResponse {
+  results: RowEpochResults[];
+}
+
+/**
+ * Get finetune evaluation results for a dataset/job
+ * Shows how the model performs on each row across training epochs
+ * @param datasetId - The backend dataset ID
+ * @param finetuneJobId - Optional job ID to filter results
+ * @param rowIndex - Optional row index to filter
+ * @param epoch - Optional epoch to filter
+ */
+export async function getFinetuneEvaluations(
+  datasetId: string,
+  finetuneJobId?: string,
+  rowIndex?: number,
+  epoch?: number
+): Promise<FinetuneEvalResultsResponse> {
+  const params = new URLSearchParams();
+  if (finetuneJobId) params.set('finetune_job_id', finetuneJobId);
+  if (rowIndex !== undefined) params.set('row_index', String(rowIndex));
+  if (epoch !== undefined) params.set('epoch', String(epoch));
+
+  const queryString = params.toString();
+  const endpoint = queryString
+    ? `/finetune/datasets/${datasetId}/finetune-evaluations?${queryString}`
+    : `/finetune/datasets/${datasetId}/finetune-evaluations`;
+
+  const response = await apiClient(endpoint, { method: 'GET' });
+  return handleApiResponse<FinetuneEvalResultsResponse>(response);
+}
+
+// ============================================================================
 // Dataset Evaluator Update API Functions
 // ============================================================================
 

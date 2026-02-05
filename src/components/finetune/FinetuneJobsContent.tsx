@@ -51,7 +51,7 @@ import {
   Play,
   Clock,
 } from "lucide-react";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   FinetuneJob,
   DEFAULT_TRAINING_CONFIG,
@@ -60,6 +60,8 @@ import {
   ReinforcementInferenceParameters,
   cancelReinforcementJob,
   resumeReinforcementJob,
+  getFinetuneEvaluations,
+  FinetuneEvalResultsResponse,
 } from "@/services/finetune-api";
 import { quickFinetune } from "@/services/quick-finetune";
 import { formatDistanceToNow, differenceInSeconds, differenceInMinutes, differenceInHours } from "date-fns";
@@ -108,6 +110,104 @@ function getModelDisplayName(modelId: string): string {
 }
 
 // ============================================================================
+// Epoch Summary Component
+// ============================================================================
+
+interface EpochSummaryProps {
+  results: FinetuneEvalResultsResponse['results'];
+}
+
+function EpochSummary({ results }: EpochSummaryProps) {
+  // Collect all epochs across all rows
+  const epochStats = new Map<number, { scores: number[]; count: number }>();
+
+  for (const row of results) {
+    for (const [epochStr, evalResults] of Object.entries(row.epochs)) {
+      const epoch = parseInt(epochStr, 10);
+      if (!epochStats.has(epoch)) {
+        epochStats.set(epoch, { scores: [], count: 0 });
+      }
+      const stats = epochStats.get(epoch)!;
+      for (const result of evalResults) {
+        stats.count++;
+        if (typeof result.score === 'number') {
+          stats.scores.push(result.score);
+        }
+      }
+    }
+  }
+
+  // Sort epochs
+  const sortedEpochs = Array.from(epochStats.entries()).sort(([a], [b]) => a - b);
+
+  if (sortedEpochs.length === 0) {
+    return <div className="text-xs text-muted-foreground">No epoch data available</div>;
+  }
+
+  // Calculate average scores per epoch
+  const epochData = sortedEpochs.map(([epoch, stats]) => {
+    const avgScore = stats.scores.length > 0
+      ? stats.scores.reduce((a, b) => a + b, 0) / stats.scores.length
+      : null;
+    return { epoch, avgScore, count: stats.count };
+  });
+
+  return (
+    <div className="space-y-2">
+      {/* Epoch Progress Bar */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground w-16">Epochs:</span>
+        <div className="flex gap-1">
+          {epochData.map(({ epoch, avgScore }) => (
+            <div
+              key={epoch}
+              className={cn(
+                "w-8 h-6 rounded text-xs flex items-center justify-center font-mono",
+                avgScore !== null
+                  ? avgScore >= 0.7
+                    ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                    : avgScore >= 0.4
+                    ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                    : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                  : "bg-muted text-muted-foreground"
+              )}
+              title={`Epoch ${epoch}: ${avgScore !== null ? `${(avgScore * 100).toFixed(1)}%` : 'No score'}`}
+            >
+              {epoch}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Score Summary Table */}
+      <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
+        <span className="text-muted-foreground">Total Rows:</span>
+        <span className="font-mono">{results.length}</span>
+
+        <span className="text-muted-foreground">Latest Epoch:</span>
+        <span className="font-mono">{epochData[epochData.length - 1]?.epoch ?? '-'}</span>
+
+        {epochData.length > 0 && epochData[epochData.length - 1].avgScore !== null && (
+          <>
+            <span className="text-muted-foreground">Latest Avg Score:</span>
+            <span className={cn(
+              "font-mono",
+              epochData[epochData.length - 1].avgScore! >= 0.7
+                ? "text-green-600"
+                : epochData[epochData.length - 1].avgScore! >= 0.4
+                ? "text-yellow-600"
+                : "text-red-600"
+            )}>
+              {(epochData[epochData.length - 1].avgScore! * 100).toFixed(1)}%
+            </span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
 // Job Table Row Component
 // ============================================================================
 
@@ -119,10 +219,72 @@ interface JobTableRowProps {
 function JobTableRow({ job, onJobAction }: JobTableRowProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
+  const [evalResults, setEvalResults] = useState<FinetuneEvalResultsResponse | null>(null);
+  const [isLoadingEvals, setIsLoadingEvals] = useState(false);
+  const [isRefreshingEvals, setIsRefreshingEvals] = useState(false);
+  const [evalsError, setEvalsError] = useState<string | null>(null);
 
   const canCancel = job.status === 'pending' || job.status === 'running';
   const canResume = job.status === 'cancelled';
   const isActive = job.status === 'pending' || job.status === 'running';
+
+  // Fetch evaluations function (reusable for initial, poll, and manual refresh)
+  const fetchEvaluations = useCallback(async (options: { isInitial?: boolean; isManualRefresh?: boolean } = {}) => {
+    const { isInitial = false, isManualRefresh = false } = options;
+
+    if (!job.dataset_id) return;
+
+    if (isInitial) {
+      setIsLoadingEvals(true);
+      setEvalsError(null);
+    }
+    if (isManualRefresh) {
+      setIsRefreshingEvals(true);
+    }
+
+    try {
+      const results = await getFinetuneEvaluations(job.dataset_id, job.provider_job_id);
+      setEvalResults(results);
+      setEvalsError(null);
+    } catch (error) {
+      setEvalsError(error instanceof Error ? error.message : 'Failed to load evaluations');
+    } finally {
+      if (isInitial) setIsLoadingEvals(false);
+      if (isManualRefresh) setIsRefreshingEvals(false);
+    }
+  }, [job.dataset_id, job.provider_job_id]);
+
+  // Fetch evaluation results when expanded, poll while running
+  useEffect(() => {
+    if (!isExpanded || !job.dataset_id) return;
+
+    let isMounted = true;
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+    // Initial fetch
+    fetchEvaluations({ isInitial: true });
+
+    // Poll every 20 seconds while job is running
+    if (isActive) {
+      pollInterval = setInterval(() => {
+        if (isMounted) {
+          fetchEvaluations();
+        }
+      }, 20000);
+    }
+
+    return () => {
+      isMounted = false;
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [isExpanded, job.dataset_id, isActive, fetchEvaluations]);
+
+  // Manual refresh handler
+  const handleRefreshMetrics = useCallback(() => {
+    fetchEvaluations({ isManualRefresh: true });
+  }, [fetchEvaluations]);
 
   const handleCancel = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -320,6 +482,47 @@ function JobTableRow({ job, onJobAction }: JobTableRowProps) {
                   </div>
                 )}
               </div>
+
+              {/* Training Metrics Section */}
+              {job.dataset_id && (
+                <div className="space-y-2 pt-2 border-t">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Training Metrics
+                    </h4>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs gap-1"
+                      onClick={handleRefreshMetrics}
+                      disabled={isLoadingEvals || isRefreshingEvals}
+                    >
+                      <RefreshCw className={cn("h-3 w-3", isRefreshingEvals && "animate-spin")} />
+                      Refresh
+                    </Button>
+                  </div>
+                  {isLoadingEvals ? (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Loading evaluation metrics...
+                    </div>
+                  ) : evalsError ? (
+                    <div className="text-xs text-muted-foreground py-2">
+                      {evalsError.includes('404') ? 'No evaluation metrics available yet' : evalsError}
+                    </div>
+                  ) : evalResults && evalResults.results.length > 0 ? (
+                    <div className="space-y-3">
+                      {/* Summary Stats */}
+                      <EpochSummary results={evalResults.results} />
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground py-2">
+                      No evaluation metrics available yet
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </TableCell>
         </TableRow>
