@@ -31,7 +31,6 @@ export function JobExpandedContent({
   onRefreshMetrics,
 }: JobExpandedContentProps) {
 
-  console.log('==== evalResults', JSON.stringify(evalResults))
   return (
     <TableRow className="bg-muted/30 hover:bg-muted/30">
       <TableCell colSpan={5} className="p-0">

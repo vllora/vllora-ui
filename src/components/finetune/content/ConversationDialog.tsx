@@ -1,15 +1,15 @@
 /**
  * ConversationDialog
  *
- * Dialog showing the full conversation (input messages and model output) for a training row.
+ * Sheet (sidebar) showing the full conversation (input messages and model output) for a training row.
  */
 
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { MarkdownViewer } from "@/components/chat/traces/TraceRow/span-info/DetailView/markdown-viewer";
 import { type Message } from "./utils";
 import { cn } from "@/lib/utils";
@@ -31,14 +31,14 @@ export function ConversationDialog({
   outputMessage,
 }: ConversationDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="text-sm">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-[600px] sm:max-w-[600px] flex flex-col p-0">
+        <SheetHeader className="p-4 border-b border-border shrink-0">
+          <SheetTitle className="text-sm">
             Row #{rowIndex} - Conversation
-          </DialogTitle>
-        </DialogHeader>
-        <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+          </SheetTitle>
+        </SheetHeader>
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
           {/* Input Messages */}
           <div className="space-y-2">
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -80,7 +80,7 @@ export function ConversationDialog({
             </div>
           )}
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

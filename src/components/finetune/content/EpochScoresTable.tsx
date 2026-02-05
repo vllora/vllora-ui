@@ -48,7 +48,6 @@ export function EpochScoresTable({
         <table className="w-full">
           <thead>
             <tr className="text-muted-foreground">
-              {hasLogs && <th className="w-6" />}
               <th className="text-left py-1 pr-2 w-16">Epoch</th>
               <th className="text-left py-1 pr-2 w-16">Score</th>
               {criteriaNames.map((c) => (
@@ -56,7 +55,8 @@ export function EpochScoresTable({
                   {c}
                 </th>
               ))}
-              <th className="text-left py-1">Reasoning</th>
+              <th className="text-left py-1 pr-2">Reasoning</th>
+              {hasLogs && <th className="text-center py-1 w-12">Logs</th>}
             </tr>
           </thead>
           <tbody>
@@ -68,22 +68,7 @@ export function EpochScoresTable({
                   key={`${e.epoch}-${idx}`}
                   className="border-t border-border/50"
                 >
-                  {hasLogs && (
-                    <td className="py-1 pr-1">
-                      {hasRowLogs && (
-                        <button
-                          onClick={() =>
-                            setSelectedLogs({ epoch: e.epoch, logs: e.logs! })
-                          }
-                          className="p-0.5 hover:bg-muted rounded"
-                          title="View logs"
-                        >
-                          <FileText className="h-3 w-3 text-muted-foreground" />
-                        </button>
-                      )}
-                    </td>
-                  )}
-                  <td className="py-1 pr-2 font-mono">{e.epoch}</td>
+                  <td className="py-1 pr-2 font-mono">{`${e.epoch}-${idx}`}</td>
                   <td
                     className={cn(
                       "py-1 pr-2 font-mono",
@@ -107,7 +92,7 @@ export function EpochScoresTable({
                         : "-"}
                     </td>
                   ))}
-                  <td className="py-1 text-muted-foreground max-w-[200px]">
+                  <td className="py-1 pr-2 text-muted-foreground max-w-[200px]">
                     {e.breakdown.reasoning ? (
                       <TooltipProvider>
                         <Tooltip>
@@ -128,6 +113,21 @@ export function EpochScoresTable({
                       "-"
                     )}
                   </td>
+                  {hasLogs && (
+                    <td className="py-1 text-center">
+                      {hasRowLogs && (
+                        <button
+                          onClick={() =>
+                            setSelectedLogs({ epoch: e.epoch, logs: e.logs! })
+                          }
+                          className="p-0.5 hover:bg-muted rounded"
+                          title="View logs"
+                        >
+                          <FileText className="h-3 w-3 text-muted-foreground" />
+                        </button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               );
             })}
