@@ -18,11 +18,11 @@ import {
 import { useSearchParams } from "react-router";
 import { DatasetsConsumer } from "@/contexts/DatasetsContext";
 import { DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
-import type { Dataset, DatasetRecord, TopicHierarchyConfig, TopicHierarchyNode, EvaluationConfig } from "@/types/dataset-types";
+import type { Dataset, DatasetRecord, TopicHierarchyConfig, TopicHierarchyNode } from "@/types/dataset-types";
 import { emitter } from "@/utils/eventEmitter";
 import { toast } from "sonner";
 import { quickFinetune } from "@/services/quick-finetune";
-import { updateDatasetTopicHierarchy, clearAllRecordTopics, updateRecordTopicsBatch, renameTopicInRecords, clearTopicFromRecords, updateDatasetEvaluationConfig } from "@/services/datasets-db";
+import { updateDatasetTopicHierarchy, clearAllRecordTopics, updateRecordTopicsBatch, renameTopicInRecords, clearTopicFromRecords, updateDatasetEvalScript } from "@/services/datasets-db";
 import { filterAndSortRecords } from "@/components/datasets/record-filters";
 import {
   DEFAULT_COLUMN_VISIBILITY,
@@ -1163,15 +1163,15 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     }
   }, [dataset, sortedRecords, handleApplyTopicHierarchy, handleMigrateRecordsToChildren]);
 
-  // Handle save evaluation config
-  const handleSaveEvaluationConfig = useCallback(async (config: EvaluationConfig) => {
+  // Handle save evaluation script
+  const handleSaveEvaluationConfig = useCallback(async (script: string) => {
     if (!dataset) return;
     try {
-      await updateDatasetEvaluationConfig(dataset.id, config);
-      setDataset((prev) => (prev ? { ...prev, evaluationConfig: config } : null));
+      await updateDatasetEvalScript(dataset.id, script);
+      setDataset((prev) => (prev ? { ...prev, evalScript: script } : null));
     } catch (err) {
-      console.error("Failed to save evaluation config:", err);
-      toast.error("Failed to save evaluation config");
+      console.error("Failed to save evaluation script:", err);
+      toast.error("Failed to save evaluation script");
     }
   }, [dataset]);
 

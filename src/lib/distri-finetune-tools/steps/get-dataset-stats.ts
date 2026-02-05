@@ -44,7 +44,7 @@ async function computeSanitizationStats(records: DatasetRecord[]): Promise<Sanit
  */
 export async function computeDatasetStats(
   records: DatasetRecord[],
-  dataset: { topicHierarchy?: unknown; evaluationConfig?: unknown } | null
+  dataset: { topicHierarchy?: unknown; evalScript?: string } | null
 ): Promise<DatasetStats> {
   const byTopic: Record<string, number> = {};
   let generatedCount = 0;
@@ -76,7 +76,7 @@ export async function computeDatasetStats(
     topicCount: Object.keys(byTopic).length,
     uncategorizedCount,
     hasTopicHierarchy: !!dataset?.topicHierarchy,
-    hasEvaluationConfig: !!dataset?.evaluationConfig,
+    hasEvalScript: !!dataset?.evalScript,
     sanitization,
     lastCalculatedAt: Date.now(),
   };
@@ -96,7 +96,7 @@ function toSnakeCaseStats(stats: DatasetStats) {
     topic_count: stats.topicCount,
     uncategorized_count: stats.uncategorizedCount,
     has_topic_hierarchy: stats.hasTopicHierarchy,
-    has_evaluation_config: stats.hasEvaluationConfig,
+    has_eval_script: stats.hasEvalScript,
     sanitization: stats.sanitization ? {
       valid_records: stats.sanitization.validRecords,
       invalid_records: stats.sanitization.invalidRecords,

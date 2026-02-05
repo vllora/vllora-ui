@@ -7,7 +7,6 @@
 import type { DistriFnTool } from '@distri/core';
 import * as workflowDB from '@/services/finetune-workflow-db';
 import * as datasetsDB from '@/services/datasets-db';
-import type { EvaluationConfig } from '@/types/dataset-types';
 import type { ToolHandler } from '../types';
 
 export const configureGraderHandler: ToolHandler = async (params) => {
@@ -31,21 +30,8 @@ export const configureGraderHandler: ToolHandler = async (params) => {
       await workflowDB.advanceToStep(workflow_id, 'grader_config');
     }
 
-    // Build evaluation config (JavaScript evaluator only)
-    // Use default completion params (required by type but not needed for pure JS evaluation)
-    const evaluationConfig: EvaluationConfig = {
-      type: 'js',
-      script,
-      completionParams: {
-        model: 'gpt-4o',
-        temperature: 0.0,
-        maxTokens: 2048,
-      },
-      updatedAt: Date.now(),
-    };
-
-    // Save full config to dataset (single source of truth)
-    await datasetsDB.updateDatasetEvaluationConfig(workflow.datasetId, evaluationConfig);
+    // Save eval script to dataset
+    await datasetsDB.updateDatasetEvalScript(workflow.datasetId, script);
 
     // Update workflow with metadata only (not the full config)
     await workflowDB.updateStepData(workflow_id, 'graderConfig', {

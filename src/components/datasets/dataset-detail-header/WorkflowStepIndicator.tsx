@@ -35,9 +35,13 @@ const WORKFLOW_STEPS: { step: FinetuneStep; label: string; short: string }[] = [
 interface WorkflowStepIndicatorProps {
   datasetId: string;
   className?: string;
+  /** Callback when dry run step is clicked */
+  onDryRunClick?: () => void;
+  /** Whether the grader is configured (needed to enable dry run) */
+  hasGraderConfig?: boolean;
 }
 
-export function WorkflowStepIndicator({ datasetId, className }: WorkflowStepIndicatorProps) {
+export function WorkflowStepIndicator({ datasetId, className, onDryRunClick, hasGraderConfig }: WorkflowStepIndicatorProps) {
   const [workflow, setWorkflow] = useState<FinetuneWorkflowState | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -99,13 +103,21 @@ export function WorkflowStepIndicator({ datasetId, className }: WorkflowStepIndi
           const isCurrent = !isNotStarted && workflow.currentStep === stepInfo.step;
           const isLast = index === WORKFLOW_STEPS.length - 1;
 
+          // Dry run step is clickable when grader is configured
+          const isDryRunStep = stepInfo.step === "dry_run";
+          const isDryRunClickable = isDryRunStep && hasGraderConfig && onDryRunClick;
+
+          const handleClick = isDryRunClickable ? onDryRunClick : undefined;
+
           return (
             <div key={stepInfo.step} className="flex items-center">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <div
+                    onClick={handleClick}
                     className={cn(
-                      "flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] transition-colors cursor-default",
+                      "flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] transition-colors",
+                      isDryRunClickable ? "cursor-pointer hover:bg-primary/20" : "cursor-default",
                       isCurrent && "bg-primary/10 text-primary font-medium",
                       status === "completed" && "text-emerald-600",
                       status === "failed" && "bg-destructive/10 text-destructive",
@@ -124,6 +136,9 @@ export function WorkflowStepIndicator({ datasetId, className }: WorkflowStepIndi
                   <div className="text-muted-foreground capitalize">
                     {isCurrent ? "In progress" : status}
                   </div>
+                  {isDryRunClickable && (
+                    <div className="text-primary mt-1">Click to run validation</div>
+                  )}
                 </TooltipContent>
               </Tooltip>
 

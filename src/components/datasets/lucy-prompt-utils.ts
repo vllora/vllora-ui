@@ -23,11 +23,7 @@ export function buildDatasetAnalysisPrompt({ dataset, workflow }: BuildAnalysisP
   const name = dataset.name;
   const objective = dataset.datasetObjective;
   const hasTopics = !!(dataset.topicHierarchy?.hierarchy?.length);
-  const hasEvaluator = !!(
-    dataset.evaluationConfig &&
-    ((dataset.evaluationConfig.type === 'js' && dataset.evaluationConfig.script) ||
-     (dataset.evaluationConfig.type === 'llm_as_judge' && dataset.evaluationConfig.promptTemplate))
-  );
+  const hasEvaluator = !!dataset.evalScript;
   const workflowStep = workflow?.currentStep || 'not_started';
 
   let prompt = `I'm viewing the dataset "${name}". `;

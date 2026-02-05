@@ -1,5 +1,6 @@
 import { McpServerConfig } from '@/services/mcp-api';
 import mitt, { Emitter } from 'mitt';
+import type { DryRunJob } from '@/types/dry-run-job';
 
 // ============================================================================
 // Distri Agent Event Types
@@ -79,6 +80,8 @@ type VlloraEvents = {
   vllora_input_speechRecognitionEnd: Record<string, never>;
   // Finetune job events
   vllora_finetune_job_created: { jobId?: string; backendDatasetId: string };
+  // Dry run job events
+  vllora_dry_run_job_update: { jobId: string; job: DryRunJob };
   // Lucy assistant prompt trigger (from UI actions like "Generate for topic")
   vllora_lucy_prompt: { prompt: string };
 };

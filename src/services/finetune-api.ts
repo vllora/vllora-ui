@@ -1,6 +1,6 @@
 import { apiClient, handleApiResponse, getAuthToken } from "@/lib/api-client";
 import { getBackendUrl } from "@/config/api";
-import { DatasetWithRecords, DatasetRecord, DataInfo, EvaluationConfig, BackendEvaluator, BackendChatMessage } from "@/types/dataset-types";
+import { DatasetWithRecords, DatasetRecord, DataInfo } from "@/types/dataset-types";
 
 // ============================================================================
 // Types
@@ -119,7 +119,7 @@ export interface EvaluationCompletionParams {
 
 export interface CreateEvaluationRequest {
   dataset_id: string;
-  model_params: EvaluationCompletionParams;
+  rollout_model_params: EvaluationCompletionParams;
   offset?: number;
   limit?: number;
 }
@@ -134,6 +134,7 @@ export interface RowEvaluationResult {
   dataset_row_id: string;
   row_index: number;
   status: string;
+  logs?: string[];
   score?: number;
   reason?: string;
   error_message?: string;
@@ -212,70 +213,6 @@ export function datasetToJsonl(records: DatasetRecord[]): string {
   return lines.join('\n');
 }
 
-/**
- * Convert FE EvaluationConfig to backend Evaluator format
- *
- * Note: Backend expects prompt_template as an array of ChatCompletionMessage objects,
- * and output_schema as a JSON object (not a string).
- */
-export function evaluationConfigToBackendEvaluator(config: EvaluationConfig): BackendEvaluator {
-  if (config.type === 'llm_as_judge') {
-    // Convert prompt template string to array of messages
-    // Backend expects: Vec<ChatCompletionMessage> where ChatCompletionMessage has role and content
-    const promptMessages: BackendChatMessage[] = [
-      {
-        role: 'system' as const,
-        content: config.promptTemplate,
-      },
-    ];
-
-    // Parse output_schema from string to JSON object if it's a string
-    let outputSchema: unknown;
-    if (typeof config.outputSchema === 'string') {
-      try {
-        outputSchema = JSON.parse(config.outputSchema);
-      } catch {
-        // If parsing fails, use a default schema
-        outputSchema = {
-          type: 'object',
-          properties: {
-            score: { type: 'number' },
-            reasoning: { type: 'string' },
-          },
-          required: ['score', 'reasoning'],
-        };
-      }
-    } else {
-      outputSchema = config.outputSchema;
-    }
-
-    return {
-      type: 'llm_as_judge',
-      config: {
-        prompt_template: promptMessages,
-        output_schema: outputSchema,
-        completion_params: {
-          model_name: config.completionParams.model,
-          temperature: config.completionParams.temperature,
-          max_tokens: config.completionParams.maxTokens,
-        },
-      },
-    };
-  } else {
-    return {
-      type: 'js',
-      config: {
-        script: config.script,
-        completion_params: {
-          model_name: config.completionParams.model,
-          temperature: config.completionParams.temperature,
-          max_tokens: config.completionParams.maxTokens,
-        },
-      },
-    };
-  }
-}
-
 // ============================================================================
 // API Functions
 // ============================================================================
@@ -284,12 +221,12 @@ export function evaluationConfigToBackendEvaluator(config: EvaluationConfig): Ba
  * Upload a dataset file (JSONL format) to the provider
  * @param jsonlContent - JSONL content for training
  * @param topicHierarchy - Optional topic hierarchy JSON string
- * @param evaluator - Optional evaluator config JSON string
+ * @param evalScript - Optional JavaScript evaluator script
  */
 export async function uploadDataset(
   jsonlContent: string,
   topicHierarchy?: string,
-  evaluator?: string
+  evalScript?: string
 ): Promise<DatasetUploadResponse> {
   const apiUrl = getBackendUrl();
   const formData = new FormData();
@@ -303,9 +240,25 @@ export async function uploadDataset(
     formData.append('topic_hierarchy', topicHierarchy);
   }
 
-  // Add evaluator if provided
-  if (evaluator) {
-    formData.append('evaluator', evaluator);
+  // Add eval_script and evaluator config if provided
+  // Backend requires BOTH: evaluator config (with type: "js") AND eval_script
+  // The backend merges eval_script content into evaluator.config.script
+  if (evalScript) {
+    formData.append('eval_script', evalScript);
+    // Must also send evaluator config for backend to merge the script into
+    const evaluatorConfig = {
+      type: 'js',
+      config: {
+        script: '', // Will be replaced by eval_script content on backend
+        completion_params: {
+          model: 'gpt-4o-mini',
+          model_name: 'gpt-4o-mini',
+          temperature: 0.0,
+          max_tokens: 300,
+        },
+      },
+    };
+    formData.append('evaluator', JSON.stringify(evaluatorConfig));
   }
 
   // Build headers
@@ -420,13 +373,8 @@ export async function uploadDatasetForFinetune(
     ? JSON.stringify(dataset.topicHierarchy.hierarchy)
     : undefined;
 
-  // Extract evaluator config if available
-  const evaluator = dataset.evaluationConfig
-    ? JSON.stringify(evaluationConfigToBackendEvaluator(dataset.evaluationConfig))
-    : undefined;
-
-  // Upload dataset with topic hierarchy and evaluator
-  const uploadResult = await uploadDataset(jsonlContent, topicHierarchy, evaluator);
+  // Upload dataset with topic hierarchy and eval script
+  const uploadResult = await uploadDataset(jsonlContent, topicHierarchy, dataset.evalScript);
 
   return {
     backendDatasetId: uploadResult.dataset_id,
@@ -602,6 +550,59 @@ export async function waitForEvaluationComplete(
 }
 
 // ============================================================================
+// Finetune Evaluation Results Types & API
+// ============================================================================
+
+/** Single evaluation result for a row at a specific epoch */
+export interface EpochEvalResult {
+  score?: number;
+  reason?: string;
+  status?: string;
+  [key: string]: unknown;
+}
+
+/** Results for a single dataset row across epochs */
+export interface RowEpochResults {
+  row_index: number;
+  row: Record<string, unknown>;
+  /** Map of epoch number to array of evaluation results */
+  epochs: Record<number, EpochEvalResult[]>;
+}
+
+/** Response from finetune evaluations endpoint */
+export interface FinetuneEvalResultsResponse {
+  results: RowEpochResults[];
+}
+
+/**
+ * Get finetune evaluation results for a dataset/job
+ * Shows how the model performs on each row across training epochs
+ * @param datasetId - The backend dataset ID
+ * @param finetuneJobId - Optional job ID to filter results
+ * @param rowIndex - Optional row index to filter
+ * @param epoch - Optional epoch to filter
+ */
+export async function getFinetuneEvaluations(
+  datasetId: string,
+  finetuneJobId?: string,
+  rowIndex?: number,
+  epoch?: number
+): Promise<FinetuneEvalResultsResponse> {
+  const params = new URLSearchParams();
+  if (finetuneJobId) params.set('finetune_job_id', finetuneJobId);
+  if (rowIndex !== undefined) params.set('row_index', String(rowIndex));
+  if (epoch !== undefined) params.set('epoch', String(epoch));
+
+  const queryString = params.toString();
+  const endpoint = queryString
+    ? `/finetune/datasets/${datasetId}/finetune-evaluations?${queryString}`
+    : `/finetune/datasets/${datasetId}/finetune-evaluations`;
+
+  const response = await apiClient(endpoint, { method: 'GET' });
+  return handleApiResponse<FinetuneEvalResultsResponse>(response);
+}
+
+// ============================================================================
 // Dataset Evaluator Update API Functions
 // ============================================================================
 
@@ -624,15 +625,23 @@ export interface DryRunAnalyticsResponse {
 }
 
 /**
- * Update the evaluator config for an existing backend dataset
- * This allows changing the grader without re-uploading the entire dataset
+ * Update the eval script for an existing backend dataset
  * @param datasetId - The backend dataset ID
- * @param evaluator - The evaluator config (BackendEvaluator format)
+ * @param script - The JavaScript evaluator script
  */
-export async function updateDatasetEvaluator(
+export async function updateDatasetEvalScript(
   datasetId: string,
-  evaluator: BackendEvaluator
+  script: string
 ): Promise<UpdateEvaluatorResponse> {
+  const evaluator = {
+    type: 'js',
+    config: {
+      script,
+      completion_params: {
+        model: 'gpt-4o-mini',
+      },
+    },
+  };
   const response = await apiClient(`/finetune/datasets/${datasetId}/evaluator`, {
     method: 'PATCH',
     body: JSON.stringify({ evaluator }),

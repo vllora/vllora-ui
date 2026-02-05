@@ -7,7 +7,7 @@
 
 import { emitWorkflowUpdate } from "@/lib/distri-finetune-tools/workflow";
 
-// Note: topicHierarchy and evaluationConfig are stored in the Dataset, not duplicated here.
+// Note: topicHierarchy and evalScript are stored in the Dataset, not duplicated here.
 // The workflow only tracks step progress and metadata, not the actual config data.
 
 // =============================================================================
@@ -96,7 +96,7 @@ export interface FinetuneWorkflowState {
 
   // Coverage & Generation (combined step)
   coverageGeneration: {
-    balanceScore: number;
+    balanceScore?: number;  // undefined when no topics configured
     topicDistribution: Record<string, number>;
     recommendations: string[];
     generationRounds: GenerationRound[];
@@ -104,9 +104,9 @@ export interface FinetuneWorkflowState {
     syntheticPercentage: number;
   } | null;
 
-  // Note: actual evaluationConfig is stored in Dataset.evaluationConfig, not duplicated here
+  // Note: actual eval script is stored in Dataset.evalScript, not duplicated here
   graderConfig: {
-    type: 'llm_as_judge' | 'js';
+    type: 'js';
     configuredAt: number;
   } | null;
 
@@ -166,7 +166,7 @@ export interface GenerationHistoryStore {
 // =============================================================================
 
 const DB_NAME = 'vllora-finetune';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -208,6 +208,14 @@ async function getDB(): Promise<IDBDatabase> {
         const historyStore = db.createObjectStore('generationHistory', { keyPath: 'id' });
         historyStore.createIndex('workflowId', 'workflowId', { unique: false });
         historyStore.createIndex('createdAt', 'createdAt', { unique: false });
+      }
+
+      // Create dry run jobs store for background job tracking (added in v2)
+      if (!db.objectStoreNames.contains('dryRunJobs')) {
+        const dryRunJobsStore = db.createObjectStore('dryRunJobs', { keyPath: 'id' });
+        dryRunJobsStore.createIndex('datasetId', 'datasetId', { unique: false });
+        dryRunJobsStore.createIndex('status', 'status', { unique: false });
+        dryRunJobsStore.createIndex('createdAt', 'createdAt', { unique: false });
       }
     };
   });

@@ -26,10 +26,10 @@ export const testGraderSampleHandler: ToolHandler = async (params) => {
       return { success: false, error: `Cannot test grader in step ${workflow.currentStep}` };
     }
 
-    // Get dataset to check evaluation config
+    // Get dataset to check eval script
     const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
-    if (!dataset?.evaluationConfig) {
-      return { success: false, error: 'Grader must be configured first. Configure evaluationConfig on the dataset.' };
+    if (!dataset?.evalScript) {
+      return { success: false, error: 'Grader must be configured first. Configure evalScript on the dataset.' };
     }
 
     // Get sample records
@@ -54,7 +54,7 @@ export const testGraderSampleHandler: ToolHandler = async (params) => {
         sample_size: sampleCount,
         results,
         average_score: avgScore,
-        grader_type: dataset.evaluationConfig.type,
+        grader_type: 'js',
       },
     };
   } catch (error) {

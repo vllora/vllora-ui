@@ -55,22 +55,6 @@ function spanToTrace(span: Span): Trace {
   };
 }
 
-// Truncate content for display
-function truncateContent(content: unknown): string {
-  if (typeof content === "string") {
-    return content.length > 50 ? content.slice(0, 50) + "..." : content;
-  }
-  if (Array.isArray(content)) {
-    // Handle multi-part content (e.g., text + image)
-    const textPart = content.find((p) => p.type === "text");
-    if (textPart?.text) {
-      return textPart.text.length > 50 ? textPart.text.slice(0, 50) + "..." : textPart.text;
-    }
-    return "[Multi-part content]";
-  }
-  return "[Complex content]";
-}
-
 export function EmptyDatasetsState() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();

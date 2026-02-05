@@ -52,81 +52,6 @@ export interface TopicHierarchyConfig {
   generatedAt?: number;
 }
 
-// Evaluator type discriminator
-export type EvaluatorType = 'llm_as_judge' | 'js';
-
-// Base completion params shared by both evaluator types
-export interface CompletionParams {
-  model: string;
-  temperature?: number;
-  maxTokens?: number;
-}
-
-// LLM-as-a-Judge specific config
-export interface LlmAsJudgeConfig {
-  type: 'llm_as_judge';
-  // Combined prompt template with evaluation instructions and variable placeholders
-  promptTemplate: string;
-  // JSON Schema for structured output
-  outputSchema: string;
-  // Completion parameters
-  completionParams: CompletionParams;
-  // Timestamp when config was last updated
-  updatedAt?: number;
-}
-
-// JavaScript evaluator specific config
-export interface JsEvaluatorConfig {
-  type: 'js';
-  // JavaScript code for evaluation
-  script: string;
-  // Completion parameters (for any LLM calls within the script)
-  completionParams: CompletionParams;
-  // Timestamp when config was last updated
-  updatedAt?: number;
-}
-
-// Union type for evaluation config
-export type EvaluationConfig = LlmAsJudgeConfig | JsEvaluatorConfig;
-
-// Backend message format for prompt_template
-export interface BackendChatMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-}
-
-// Backend evaluator format for upload - LLM as Judge
-// Note: Backend expects prompt_template as array of messages, output_schema as JSON object
-export interface BackendLlmAsJudgeEvaluator {
-  type: 'llm_as_judge';
-  config: {
-    prompt_template: BackendChatMessage[];
-    output_schema: unknown;
-    completion_params: {
-      model_name: string;
-      temperature?: number;
-      max_tokens?: number;
-    };
-    score_formula?: string;
-  };
-}
-
-// Backend evaluator format for upload - JavaScript
-export interface BackendJsEvaluator {
-  type: 'js';
-  config: {
-    script: string;
-    completion_params: {
-      model_name: string;
-      temperature?: number;
-      max_tokens?: number;
-    };
-  };
-}
-
-// Union type for backend evaluator
-export type BackendEvaluator = BackendLlmAsJudgeEvaluator | BackendJsEvaluator;
-
 // Sanitization hygiene report (subset of HygieneReport for storage)
 export interface SanitizationStats {
   validRecords: number;
@@ -153,7 +78,7 @@ export interface DatasetStats {
   uncategorizedCount: number;
   // Configuration flags
   hasTopicHierarchy: boolean;
-  hasEvaluationConfig: boolean;
+  hasEvalScript: boolean;
   // Sanitization/validation stats
   sanitization?: SanitizationStats;
   // When stats were last calculated
@@ -162,10 +87,10 @@ export interface DatasetStats {
 
 // Coverage statistics stored on dataset for UI display
 export interface CoverageStats {
-  // Balance score (0-1, where 1 is perfectly balanced)
-  balanceScore: number;
-  // Balance rating for display
-  balanceRating: 'excellent' | 'good' | 'fair' | 'poor' | 'critical';
+  // Balance score (0-1, where 1 is perfectly balanced) - undefined when no topics configured
+  balanceScore?: number;
+  // Balance rating for display - undefined when no topics configured
+  balanceRating?: 'excellent' | 'good' | 'fair' | 'poor' | 'critical';
   // Count of records per topic
   topicDistribution: Record<string, number>;
   // Number of records without topics
@@ -315,8 +240,8 @@ export interface Dataset {
   backendDatasetId?: string;
   // Topic hierarchy configuration
   topicHierarchy?: TopicHierarchyConfig;
-  // LLM-as-a-Judge evaluation configuration
-  evaluationConfig?: EvaluationConfig;
+  // JavaScript evaluation script for grading
+  evalScript?: string;
   // Coverage statistics for UI display (updated by analyze_coverage)
   coverageStats?: CoverageStats;
   // Dry run statistics for UI display (updated by run_dry_run)

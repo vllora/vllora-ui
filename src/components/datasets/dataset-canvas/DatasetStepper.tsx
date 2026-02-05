@@ -213,7 +213,7 @@ export function DatasetStepper({
 export function computeCompletedSteps(params: {
   recordCount: number;
   hasTopicHierarchy: boolean;
-  hasEvaluationConfig: boolean;
+  hasEvalScript: boolean;
   hasFinetuneJob: boolean;
   isDeployed: boolean;
 }): Set<DatasetStep> {
@@ -225,7 +225,7 @@ export function computeCompletedSteps(params: {
   if (params.hasTopicHierarchy) {
     completed.add("topics_categorize");
   }
-  if (params.hasEvaluationConfig) {
+  if (params.hasEvalScript) {
     completed.add("evaluation_config");
   }
   if (params.hasFinetuneJob) {

@@ -15,7 +15,6 @@ import {
   RotateCcw,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
-import type { EvaluationConfig } from "@/types/dataset-types";
 
 /** Methods exposed via ref for external control */
 export interface EvaluationConfigPanelRef {
@@ -24,97 +23,105 @@ export interface EvaluationConfigPanelRef {
 }
 
 // Default script for the JavaScript evaluator (same as JavaScriptPanel)
-const DEFAULT_SCRIPT = `/**
- * Evaluate the quality of an AI response using LLM-as-a-Judge.
- *
- * Available globals:
- * - __langdb_call_llm_as_judge_obj(prompt): Calls the configured LLM model
- *   and returns a parsed object with { score, reasoning }
- *
- * @param {Object} input - The input object containing messages
- * @param {Array} input.messages - The conversation messages
- * @param {Object} output - The output object containing the response
- * @param {Object|Array} output.messages - The assistant's response
- * @returns {Object} - Evaluation result with score and reasoning
- */
-function evaluate(input, output) {
-  // Extract the user query from input messages
-  const userMessages = input.messages?.filter(m => m.role === 'user') || [];
-  const query = userMessages[userMessages.length - 1]?.content || '';
+const DEFAULT_SCRIPT = `// Simple example: Call LLM-as-judge evaluator from JavaScript
+// This is a minimal working example
 
-  // Extract the assistant's response
-  const response = Array.isArray(output.messages)
-    ? output.messages.map(m => m.content).join('\\n')
-    : output.messages?.content || '';
-
-  // Build the evaluation prompt for the LLM judge
-  const prompt = \`You are an expert evaluator assessing the quality of an AI assistant's response.
-
-User Query:
-\${query}
-
-Assistant Response:
-\${response}
-
-Evaluate the response on the following criteria:
-1. Relevance: Does it directly address the user's question?
-2. Accuracy: Is the information correct and reliable?
-3. Completeness: Does it fully answer the question?
-4. Clarity: Is it well-structured and easy to understand?
-
-Provide your evaluation as JSON with:
-- score: A number from 1-5 (1=poor, 5=excellent)
-- reasoning: A brief explanation of your score\`;
-
-  // Call the LLM judge and get structured result
-  const result = __langdb_call_llm_as_judge_obj(prompt);
-
-  return {
-    score: result.score,
-    reasoning: result.reasoning,
+function evaluate(input) {
+  // Define the LLM-as-judge configuration
+  const config = {
+    prompt_template: [
+      {
+        role: "system",
+        content: "You are an expert evaluator. Evaluate the quality of the response."
+      },
+      {
+        role: "user",
+        content: "Response to evaluate: {{response}}\\n\\nProvide a score from 0 to 1 and reasoning."
+      }
+    ],
+    output_schema: {
+      type: "object",
+      properties: {
+        score: {
+          type: "number",
+          minimum: 0,
+          maximum: 1,
+          description: "Quality score from 0 to 1"
+        },
+        reasoning: {
+          type: "string",
+          description: "Explanation of the score"
+        }
+      },
+      required: ["score", "reasoning"],
+      additionalProperties: false
+    },
+    completion_params: {
+      model_name: "gpt-4o-mini",
+      temperature: 0.0,
+      max_tokens: 300
+    }
   };
+
+  // Call LLM-as-judge with the config and input row
+  try {
+    console.log("Calling LLM-as-judge with config: ", config);
+    const result = __langdb_call_llm_as_judge_obj(config, input);
+
+    // Check for errors
+    if (result.error) {
+      return {
+        score: 0,
+        reason: \`LLM-as-judge error: \${result.error}\`
+      };
+    }
+
+    // Return the evaluation result
+    return {
+      score: result.score || 0,
+      reason: result.reason || result.reasoning || "Evaluation completed"
+    };
+  } catch (error) {
+    return {
+      score: 0,
+      reason: \`Error: \${error.message}\`
+    };
+  }
 }
 `;
 
 interface EvaluationConfigPanelProps {
-  config?: EvaluationConfig;
-  onSave: (config: EvaluationConfig) => Promise<void>;
+  evalScript?: string;
+  onSave: (script: string) => Promise<void>;
   /** Hide header action buttons (Reset/Copy) when they're shown externally */
   hideHeaderActions?: boolean;
 }
 
 export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, EvaluationConfigPanelProps>(
-  function EvaluationConfigPanel({ config, onSave, hideHeaderActions = false }, ref) {
+  function EvaluationConfigPanel({ evalScript, onSave, hideHeaderActions = false }, ref) {
   // JavaScript evaluator state
   const [script, setScript] = useState(DEFAULT_SCRIPT);
 
   // UI state
   const [isSaving, setIsSaving] = useState(false);
 
-  // Initialize from config
+  // Initialize from evalScript
   useEffect(() => {
-    if (config?.type === "js" && config.script) {
-      setScript(config.script);
+    if (evalScript) {
+      setScript(evalScript);
     }
-  }, [config]);
+  }, [evalScript]);
 
   // Track if there are unsaved changes
   const hasChanges = useMemo(() => {
-    if (!config) return script !== DEFAULT_SCRIPT;
-    const configScript = config.type === "js" ? config.script : DEFAULT_SCRIPT;
-    return script !== configScript;
-  }, [config, script]);
+    if (!evalScript) return script !== DEFAULT_SCRIPT;
+    return script !== evalScript;
+  }, [evalScript, script]);
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await onSave({
-        type: "js",
-        script,
-        completionParams: {
-          model: "gpt-4o", // Default model for LLM-as-judge calls within script
-        },
-      });
+      await onSave(script);
     } catch {
       // Error handled by parent
     } finally {

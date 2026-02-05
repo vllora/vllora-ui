@@ -131,8 +131,9 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
     try {
       await deleteDataset(datasetId);
       toast.success("Dataset deleted");
-    } catch {
-      toast.error("Failed to delete dataset");
+    } catch (err) {
+      console.error("Failed to delete dataset:", err);
+      toast.error("Failed to delete dataset", { description: err as string });
     }
     setDeleteConfirm(null);
   };

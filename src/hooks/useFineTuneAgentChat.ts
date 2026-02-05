@@ -124,8 +124,8 @@ export function useFineTuneAgentChat(
   // Workflow state
   const [workflow, setWorkflow] = useState<FinetuneWorkflowState | null>(null);
   const [workflowLoading, setWorkflowLoading] = useState(true);
-  // Track if dataset has evaluator configured (via UI, separate from workflow)
-  const [datasetHasEvaluator, setDatasetHasEvaluator] = useState(false);
+  // Track if dataset has eval script configured (via UI, separate from workflow)
+  const [datasetHasEvalScript, setDatasetHasEvalScript] = useState(false);
 
   // Tools - includes finetune tools + UI tools (ask_follow_up)
   const tools = useMemo<DistriAnyTool[]>(
@@ -148,7 +148,7 @@ export function useFineTuneAgentChat(
     if (!datasetId) {
       setWorkflowLoading(false);
       setWorkflow(null);
-      setDatasetHasEvaluator(false);
+      setDatasetHasEvalScript(false);
       return;
     }
 
@@ -159,11 +159,11 @@ export function useFineTuneAgentChat(
         getDatasetById(datasetId),
       ]);
       setWorkflow(workflowState);
-      setDatasetHasEvaluator(!!dataset?.evaluationConfig);
+      setDatasetHasEvalScript(!!dataset?.evalScript);
     } catch (error) {
       console.error('[useFineTuneAgentChat] Error loading workflow:', error);
       setWorkflow(null);
-      setDatasetHasEvaluator(false);
+      setDatasetHasEvalScript(false);
     } finally {
       setWorkflowLoading(false);
     }
@@ -197,7 +197,7 @@ export function useFineTuneAgentChat(
   const prepareMessage = useCallback(
     (userMessage: string): DistriMessage => {
       // Build context from current workflow state
-      const contextText = buildContextMessage(datasetId, workflow, datasetHasEvaluator);
+      const contextText = buildContextMessage(datasetId, workflow, datasetHasEvalScript);
 
       // Create message with context prepended
       const fullMessage = `${contextText}\n\nUser message: ${userMessage}`;
@@ -206,7 +206,7 @@ export function useFineTuneAgentChat(
         { part_type: 'text', data: fullMessage },
       ]);
     },
-    [datasetId, workflow, datasetHasEvaluator]
+    [datasetId, workflow, datasetHasEvalScript]
   );
 
   return {

@@ -872,10 +872,10 @@ export async function updateDatasetTopicHierarchy(
   });
 }
 
-// Update a dataset's evaluation configuration (grader)
-export async function updateDatasetEvaluationConfig(
+// Update a dataset's eval script (grader)
+export async function updateDatasetEvalScript(
   datasetId: string,
-  evaluationConfig: import('@/types/dataset-types').EvaluationConfig
+  evalScript: string
 ): Promise<void> {
   const db = await getDB();
   const now = Date.now();
@@ -888,7 +888,7 @@ export async function updateDatasetEvaluationConfig(
     getRequest.onsuccess = () => {
       const dataset = getRequest.result;
       if (dataset) {
-        dataset.evaluationConfig = evaluationConfig;
+        dataset.evalScript = evalScript;
         dataset.updatedAt = now;
         store.put(dataset);
       }

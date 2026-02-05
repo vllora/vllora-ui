@@ -259,25 +259,25 @@ export const getWorkflowStatusHandler: ToolHandler = async (params): Promise<Wor
       return { success: false, error: 'Either workflow_id or dataset_id is required' };
     }
 
-    // Check if dataset has evaluationConfig (configured via UI)
-    let datasetHasEvaluator = false;
+    // Check if dataset has evalScript (configured via UI)
+    let datasetHasEvalScript = false;
     if (datasetIdToCheck) {
       const dataset = await datasetsDB.getDatasetById(datasetIdToCheck);
-      datasetHasEvaluator = !!dataset?.evaluationConfig;
+      datasetHasEvalScript = !!dataset?.evalScript;
 
-      // Sync: If dataset has evaluationConfig but workflow doesn't have graderConfig,
+      // Sync: If dataset has evalScript but workflow doesn't have graderConfig,
       // update workflow to reflect this
-      if (workflow && datasetHasEvaluator && !workflow.graderConfig) {
+      if (workflow && datasetHasEvalScript && !workflow.graderConfig) {
         await workflowDB.updateStepData(workflow.id, 'graderConfig', {
-          type: dataset!.evaluationConfig!.type,
-          configuredAt: dataset!.evaluationConfig!.updatedAt ?? Date.now(),
+          type: 'js',
+          configuredAt: Date.now(),
         });
         // Refresh workflow state
         workflow = await workflowDB.getWorkflow(workflow.id);
       }
     }
 
-    return workflowToStatusResult(workflow, datasetHasEvaluator);
+    return workflowToStatusResult(workflow, datasetHasEvalScript);
   } catch (error) {
     return {
       success: false,

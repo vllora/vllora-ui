@@ -27,8 +27,8 @@ export interface CoverageReport {
   totalRecords: number;
   validRecords: number;
   distribution: Record<string, TopicDistribution>;
-  balanceScore: number;         // 0-1 where 1 is perfectly balanced
-  balanceRating: BalanceRating;
+  balanceScore?: number;         // 0-1 where 1 is perfectly balanced (undefined when no topics configured)
+  balanceRating?: BalanceRating; // undefined when no topics configured
   recommendations: string[];
   uncategorizedCount: number;
   uncategorizedPercentage: number;

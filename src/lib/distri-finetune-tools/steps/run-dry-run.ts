@@ -18,7 +18,7 @@ import type { ToolHandler } from '../types';
 
 export const runDryRunHandler: ToolHandler = async (params) => {
   try {
-    const { workflow_id, sample_percentage = 10 } = params;
+    const { workflow_id, sample_percentage = 10, rollout_model = 'gpt-4o-mini' } = params;
 
     if (!workflow_id || typeof workflow_id !== 'string') {
       return { success: false, error: 'workflow_id is required' };
@@ -33,10 +33,10 @@ export const runDryRunHandler: ToolHandler = async (params) => {
       return { success: false, error: `Cannot run dry run in step ${workflow.currentStep}. Must be in dry_run step.` };
     }
 
-    // Get dataset to check evaluation config and backend dataset ID
+    // Get dataset to check eval script and backend dataset ID
     const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
-    if (!dataset?.evaluationConfig) {
-      return { success: false, error: 'Grader must be configured first. Configure evaluationConfig on the dataset.' };
+    if (!dataset?.evalScript) {
+      return { success: false, error: 'Grader must be configured first. Configure evalScript on the dataset.' };
     }
 
     if (!dataset.backendDatasetId) {
@@ -48,20 +48,22 @@ export const runDryRunHandler: ToolHandler = async (params) => {
     const pct = typeof sample_percentage === 'number' ? sample_percentage : 10;
     const sampleSize = Math.max(1, Math.floor(records.length * (pct / 100)));
 
-    // Build recordId -> topic mapping for per-topic analysis
-    const recordTopics: Record<string, string> = {};
-    for (const record of records) {
+    // Build row_index -> topic mapping for per-topic analysis
+    // row_index matches the position in the uploaded dataset
+    const recordTopics: Record<number, string> = {};
+    for (let i = 0; i < records.length; i++) {
+      const record = records[i];
       if (record.topic) {
-        recordTopics[record.id] = record.topic;
+        recordTopics[i] = record.topic;
       }
     }
 
     // Create evaluation run with sampling
+    const model = typeof rollout_model === 'string' ? rollout_model : 'gpt-4o-mini';
     const evaluationResponse = await createEvaluation({
       dataset_id: dataset.backendDatasetId,
-      model_params: {
-        model: dataset.evaluationConfig.completionParams.model,
-        temperature: dataset.evaluationConfig.completionParams.temperature,
+      rollout_model_params: {
+        model,
       },
       offset: 0,
       limit: sampleSize,
@@ -147,6 +149,7 @@ export const runDryRunTool: DistriFnTool = {
     properties: {
       workflow_id: { type: 'string', description: 'The workflow ID' },
       sample_percentage: { type: 'number', default: 10, description: 'Percentage of records to test (1-100)' },
+      rollout_model: { type: 'string', default: 'gpt-4o-mini', description: 'Model to use for generating responses to be evaluated. Options: gpt-4o-mini, gpt-4o, gpt-4.1, gpt-4.1-mini' },
     },
     required: ['workflow_id'],
   },
