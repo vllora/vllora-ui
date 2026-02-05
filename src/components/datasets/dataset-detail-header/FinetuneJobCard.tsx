@@ -15,8 +15,8 @@ import { formatFinetuneJobDate } from "@/components/finetune/content/utils";
 export interface FinetuneJobCardProps {
   /** Click handler for empty state (start finetune) */
   onStartClick?: () => void;
-  /** Click handler for job card (view details) */
-  onJobClick?: () => void;
+  /** Click handler for job card (view details), receives job ID */
+  onJobClick?: (jobId?: string) => void;
   /** Whether the dataset has enough records */
   canStartJob?: boolean;
 }
@@ -98,7 +98,7 @@ export function FinetuneJobCard({
   }
 
   // Show job status
-  return <JobStatusCard job={latestJob} onClick={onJobClick} />;
+  return <JobStatusCard job={latestJob} onClick={() => onJobClick?.(latestJob.id)} />;
 }
 
 function EmptyState({ onStartClick, canStartJob }: { onStartClick?: () => void; canStartJob: boolean }) {

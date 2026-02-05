@@ -34,8 +34,19 @@ export function DatasetStatsCards() {
   }, [setDryRunDialog]);
 
   // Navigate to Jobs tab when clicking on FinetuneJobCard
-  const handleNavigateToJobs = useCallback(() => {
+  // Also dispatch event to auto-expand the specified job
+  const handleNavigateToJobs = useCallback((jobId?: string) => {
     setActiveSection("jobs");
+    // Dispatch event to expand the specific job after tab switches
+    if (jobId) {
+      setTimeout(() => {
+        window.dispatchEvent(
+          new CustomEvent("finetune-expand-job", {
+            detail: { jobId },
+          })
+        );
+      }, 100);
+    }
   }, [setActiveSection]);
 
   // Open import dialog when clicking on empty DatasetOverviewCard

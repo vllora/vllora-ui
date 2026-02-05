@@ -44,6 +44,20 @@ export function FinetuneJobTableRow({ job, onJobAction }: FinetuneJobTableRowPro
   const canResume = job.status === 'cancelled';
   const isActive = job.status === 'pending' || job.status === 'running';
 
+  // Listen for expand event from FinetuneJobCard
+  useEffect(() => {
+    const handleExpandJob = (event: CustomEvent<{ jobId: string }>) => {
+      if (event.detail.jobId === job.id) {
+        setIsExpanded(true);
+      }
+    };
+
+    window.addEventListener('finetune-expand-job', handleExpandJob as EventListener);
+    return () => {
+      window.removeEventListener('finetune-expand-job', handleExpandJob as EventListener);
+    };
+  }, [job.id]);
+
   // Fetch evaluations function (reusable for initial, poll, and manual refresh)
   const fetchEvaluations = useCallback(async (options: { isInitial?: boolean; isManualRefresh?: boolean } = {}) => {
     const { isInitial = false, isManualRefresh = false } = options;
