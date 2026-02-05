@@ -60,7 +60,7 @@ export function ResultsView({
   const showErrorView = totalCount > 0 && (errorCount / totalCount) > 0.5;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col flex-1 min-h-0">
       {/* Tabs - scrollable content area */}
       <div className="flex-1 min-h-0 flex flex-col">
         <Tabs value={activeTab} onValueChange={(v) => onTabChange(v as ResultsViewTab)} className="flex-1 flex flex-col min-h-0">
@@ -211,62 +211,66 @@ export function ResultsView({
         </TabsContent>
 
         {/* Samples tab - shows best/worst examples for manual review */}
-        <TabsContent value="samples" className="mt-4 flex-1 flex flex-col min-h-0 overflow-y-auto">
-          {sampleResults.highest.length === 0 && sampleResults.lowest.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center flex-1">
-              <p className="text-sm text-zinc-400">No sample scores available</p>
-              <p className="text-xs text-zinc-500 mt-1">
-                {showErrorView
-                  ? "All evaluations failed — fix grader issues first"
-                  : "Run a dry run to see sample scores"}
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-4 flex-1 min-h-0">
-              {/* High scores */}
-              <div className="flex flex-col min-h-0">
-                <div className="flex items-center gap-2 text-sm font-medium text-emerald-400 mb-2 shrink-0">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Highest Scores
-                  <span className="text-xs text-zinc-500 font-normal">
-                    (best performing samples)
-                  </span>
-                </div>
-                <div className="space-y-2 overflow-y-auto flex-1 pr-1">
-                  {sampleResults.highest.slice(0, 10).map((sample, i) => (
-                    <SampleCard key={i} sample={sample} />
-                  ))}
-                </div>
+        <TabsContent value="samples" className="mt-4 flex-1 relative">
+          <div className="absolute inset-0 flex flex-col">
+            {sampleResults.highest.length === 0 && sampleResults.lowest.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center flex-1">
+                <p className="text-sm text-zinc-400">No sample scores available</p>
+                <p className="text-xs text-zinc-500 mt-1">
+                  {showErrorView
+                    ? "All evaluations failed — fix grader issues first"
+                    : "Run a dry run to see sample scores"}
+                </p>
               </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4 flex-1 min-h-0">
+                {/* High scores */}
+                <div className="flex flex-col min-h-0">
+                  <div className="flex items-center gap-2 text-sm font-medium text-emerald-400 mb-2 shrink-0">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Highest Scores
+                    <span className="text-xs text-zinc-500 font-normal">
+                      (best performing samples)
+                    </span>
+                  </div>
+                  <div className="space-y-2 overflow-y-auto flex-1 pr-1">
+                    {sampleResults.highest.slice(0, 10).map((sample, i) => (
+                      <SampleCard key={i} sample={sample} />
+                    ))}
+                  </div>
+                </div>
 
-              {/* Low scores */}
-              <div className="flex flex-col min-h-0">
-                <div className="flex items-center gap-2 text-sm font-medium text-red-400 mb-2 shrink-0">
-                  <XCircle className="h-4 w-4" />
-                  Lowest Scores
-                  <span className="text-xs text-zinc-500 font-normal">
-                    (needs attention)
-                  </span>
-                </div>
-                <div className="space-y-2 overflow-y-auto flex-1 pr-1">
-                  {sampleResults.lowest.slice(0, 10).map((sample, i) => (
-                    <SampleCard key={i} sample={sample} />
-                  ))}
+                {/* Low scores */}
+                <div className="flex flex-col min-h-0">
+                  <div className="flex items-center gap-2 text-sm font-medium text-red-400 mb-2 shrink-0">
+                    <XCircle className="h-4 w-4" />
+                    Lowest Scores
+                    <span className="text-xs text-zinc-500 font-normal">
+                      (needs attention)
+                    </span>
+                  </div>
+                  <div className="space-y-2 overflow-y-auto flex-1 pr-1">
+                    {sampleResults.lowest.slice(0, 10).map((sample, i) => (
+                      <SampleCard key={i} sample={sample} />
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </TabsContent>
 
         {/* Details tab - full results table */}
-        <TabsContent value="details" className="mt-4 flex-1 flex flex-col min-h-0">
-          {evaluationResults && evaluationResults.length > 0 ? (
-            <ResultsTable results={evaluationResults} fillHeight />
-          ) : (
-            <p className="text-sm text-zinc-500 text-center py-4">
-              No detailed results available
-            </p>
-          )}
+        <TabsContent value="details" className="mt-4 flex-1 relative">
+          <div className="absolute inset-0 flex flex-col">
+            {evaluationResults && evaluationResults.length > 0 ? (
+              <ResultsTable results={evaluationResults} fillHeight />
+            ) : (
+              <p className="text-sm text-zinc-500 text-center py-4">
+                No detailed results available
+              </p>
+            )}
+          </div>
         </TabsContent>
       </Tabs>
       </div>
