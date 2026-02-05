@@ -254,10 +254,7 @@ export function DatasetDetailContentV2() {
   }
 
   return (
-    <DryRunJobsProvider
-      dataset={dataset}
-      records={sortedRecords}
-    >
+    <DryRunJobsProvider dataset={dataset}>
     <div className="flex-1 flex overflow-hidden">
       {/* Lucy Assistant on the left */}
       <LucyDatasetAssistant />

@@ -1,24 +1,20 @@
 /**
  * Run Dry Run Tool
  *
- * Runs a dry run validation on a sample of the dataset before training.
- * Uses the backend evaluation API to run the configured grader on dataset rows.
- * Produces comprehensive diagnostics and saves stats to the dataset.
+ * Starts a dry run validation on a sample of the dataset.
+ * The dry run runs in the background - use get_dry_run_status to check progress.
+ * Uses the shared dry run polling manager for consistent behavior with the UI.
  */
 
 import type { DistriFnTool } from '@distri/core';
 import * as workflowDB from '@/services/finetune-workflow-db';
 import * as datasetsDB from '@/services/datasets-db';
-import {
-  createEvaluation,
-  waitForEvaluationComplete,
-} from '@/services/finetune-api';
-import { calculateAndSaveDryRunStats } from '@/lib/distri-dataset-tools/analysis/analyze-dry-run';
+import { dryRunPollingManager } from '@/services/dry-run-polling-manager';
 import type { ToolHandler } from '../types';
 
 export const runDryRunHandler: ToolHandler = async (params) => {
   try {
-    const { workflow_id, sample_percentage = 10, rollout_model = 'gpt-4o-mini' } = params;
+    const { workflow_id, sample_percentage = 100, rollout_model = 'gpt-4o-mini' } = params;
 
     if (!workflow_id || typeof workflow_id !== 'string') {
       return { success: false, error: 'workflow_id is required' };
@@ -28,127 +24,41 @@ export const runDryRunHandler: ToolHandler = async (params) => {
     if (!workflow) {
       return { success: false, error: 'Workflow not found' };
     }
-
-    if (workflow.currentStep !== 'dry_run') {
-      return { success: false, error: `Cannot run dry run in step ${workflow.currentStep}. Must be in dry_run step.` };
-    }
-
-    // Get dataset to check eval script and backend dataset ID
-    const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
-    if (!dataset?.evalScript) {
-      return { success: false, error: 'Grader must be configured first. Configure evalScript on the dataset.' };
-    }
-
-    if (!dataset.backendDatasetId) {
-      return { success: false, error: 'Dataset must be uploaded to backend first. Upload the dataset before running dry run.' };
-    }
-
-    // Get records to calculate sample size and build topic mapping
+    // Get records to calculate sample size
     const records = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);
-    const pct = typeof sample_percentage === 'number' ? sample_percentage : 10;
+    const pct = typeof sample_percentage === 'number' ? sample_percentage : 100;
     const sampleSize = Math.max(1, Math.floor(records.length * (pct / 100)));
 
-    // Build row_index -> topic mapping for per-topic analysis
-    // row_index matches the position in the uploaded dataset
-    const recordTopics: Record<number, string> = {};
-    for (let i = 0; i < records.length; i++) {
-      const record = records[i];
-      if (record.topic) {
-        recordTopics[i] = record.topic;
-      }
-    }
-
-    // Create evaluation run with sampling
+    // Start dry run using high-level API (handles auto-upload and validation)
     const model = typeof rollout_model === 'string' ? rollout_model : 'gpt-4o-mini';
-    const evaluationResponse = await createEvaluation({
-      dataset_id: dataset.backendDatasetId,
-      rollout_model_params: {
-        model,
-      },
-      offset: 0,
-      limit: sampleSize,
-    });
-
-    // Wait for evaluation to complete (poll with timeout)
-    const evaluationResult = await waitForEvaluationComplete(
-      evaluationResponse.evaluation_run_id,
-      60, // max 60 attempts
-      2000 // 2 second intervals = 2 minute timeout
-    ).catch((pollError) => {
-      throw new Error(`Dry run timed out: ${pollError instanceof Error ? pollError.message : 'Unknown error'}`);
-    });
-
-    // Run comprehensive analysis and save to dataset
-    const dryRunStats = await calculateAndSaveDryRunStats(
-      workflow.datasetId,
-      evaluationResult,
-      pct,
-      Object.keys(recordTopics).length > 0 ? recordTopics : undefined
-    );
-
-    // Update workflow with summary results (for workflow state tracking)
-    await workflowDB.updateStepData(workflow_id, 'dryRun', {
-      mean: dryRunStats.statistics.mean,
-      std: dryRunStats.statistics.std,
-      percentAboveZero: dryRunStats.statistics.percentAboveZero * 100,
-      percentPerfect: dryRunStats.statistics.percentPerfect * 100,
-      verdict: dryRunStats.diagnosis.verdict,
-      sampleResults: dryRunStats.sampleResults.lowest.concat(dryRunStats.sampleResults.highest).slice(0, 10).map((r) => ({
-        recordId: r.recordId,
-        prompt: '',
-        response: '',
-        score: r.score,
-        reasoning: r.reason || '',
-      })),
-      recommendations: dryRunStats.diagnosis.recommendations,
+    const jobId = await dryRunPollingManager.startDryRunForDataset({
+      datasetId: workflow.datasetId,
+      sampleSize,
+      rolloutModel: model,
     });
 
     return {
       success: true,
-      dry_run: {
-        evaluation_run_id: dryRunStats.evaluationRunId,
-        sample_size: dryRunStats.samplesEvaluated,
-        sample_percentage: pct,
-        // Core statistics
-        mean: dryRunStats.statistics.mean,
-        std: dryRunStats.statistics.std,
-        median: dryRunStats.statistics.median,
-        min: dryRunStats.statistics.min,
-        max: dryRunStats.statistics.max,
-        // Percentiles
-        percentiles: dryRunStats.statistics.percentiles,
-        // Score fractions
-        percent_above_zero: dryRunStats.statistics.percentAboveZero,
-        percent_perfect: dryRunStats.statistics.percentPerfect,
-        // Score distribution
-        distribution: dryRunStats.distribution,
-        // Diagnosis
-        verdict: dryRunStats.diagnosis.verdict,
-        dataset_quality: dryRunStats.diagnosis.datasetQuality,
-        grader_quality: dryRunStats.diagnosis.graderQuality,
-        warnings: dryRunStats.diagnosis.warnings,
-        recommendations: dryRunStats.diagnosis.recommendations,
-        issues: dryRunStats.diagnosis.issues,
-        // Per-topic breakdown
-        by_topic: dryRunStats.byTopic,
-        // Ready flag
-        ready_for_training: dryRunStats.diagnosis.verdict === 'GO',
-      },
+      message: 'Dry run started in background',
+      dry_run_job_id: jobId,
+      sample_size: sampleSize,
+      sample_percentage: pct,
+      status: 'running',
     };
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to run dry run' };
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to start dry run' };
   }
 };
 
 export const runDryRunTool: DistriFnTool = {
   name: 'run_dry_run',
-  description: 'Run a dry run validation on a sample of the dataset before training. Requires dataset to be uploaded to backend first.',
+  description: 'Start a dry run validation on a sample of the dataset. The dry run runs in the background - use get_dry_run_status to check progress and results. Automatically uploads dataset to backend if not already uploaded.',
   type: 'function',
   parameters: {
     type: 'object',
     properties: {
       workflow_id: { type: 'string', description: 'The workflow ID' },
-      sample_percentage: { type: 'number', default: 10, description: 'Percentage of records to test (1-100)' },
+      sample_percentage: { type: 'number', default: 100, description: 'Percentage of records to test (1-100)' },
       rollout_model: { type: 'string', default: 'gpt-4o-mini', description: 'Model to use for generating responses to be evaluated. Options: gpt-4o-mini, gpt-4o, gpt-4.1, gpt-4.1-mini' },
     },
     required: ['workflow_id'],

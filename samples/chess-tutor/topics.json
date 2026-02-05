@@ -1,0 +1,196 @@
+{
+  "goals": "Expert chess tutor helping a student improve their chess skills",
+  "depth": 3,
+  "hierarchy": [
+    {
+      "id": "student_skill_level",
+      "name": "student_skill_level",
+      "children": [
+        {
+          "id": "student_skill_level/opening_knowledge_level",
+          "name": "opening_knowledge_level",
+          "children": [
+            {
+              "id": "student_skill_level/opening_knowledge_level/opening_theory_familiarity",
+              "name": "opening_theory_familiarity",
+              "children": null
+            },
+            {
+              "id": "student_skill_level/opening_knowledge_level/common_opening_traps_awareness",
+              "name": "common_opening_traps_awareness",
+              "children": null
+            }
+          ]
+        },
+        {
+          "id": "student_skill_level/tactical_vs_strategic_understanding",
+          "name": "tactical_vs_strategic_understanding",
+          "children": [
+            {
+              "id": "student_skill_level/tactical_vs_strategic_understanding/focus_on_tactical_themes",
+              "name": "focus_on_tactical_themes",
+              "children": null
+            },
+            {
+              "id": "student_skill_level/tactical_vs_strategic_understanding/focus_on_strategic_concepts",
+              "name": "focus_on_strategic_concepts",
+              "children": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "user_intent_type",
+      "name": "user_intent_type",
+      "children": [
+        {
+          "id": "user_intent_type/request_for_position_analysis",
+          "name": "request_for_position_analysis",
+          "children": [
+            {
+              "id": "user_intent_type/request_for_position_analysis/request_for_full_position_evaluation",
+              "name": "request_for_full_position_evaluation",
+              "children": null
+            },
+            {
+              "id": "user_intent_type/request_for_position_analysis/request_for_best_move_suggestion",
+              "name": "request_for_best_move_suggestion",
+              "children": null
+            }
+          ]
+        },
+        {
+          "id": "user_intent_type/request_for_move_evaluation",
+          "name": "request_for_move_evaluation",
+          "children": [
+            {
+              "id": "user_intent_type/request_for_move_evaluation/evaluation_of_user_move_in_given_position",
+              "name": "evaluation_of_user_move_in_given_position",
+              "children": null
+            },
+            {
+              "id": "user_intent_type/request_for_move_evaluation/evaluation_of_candidate_moves_before_user_moves",
+              "name": "evaluation_of_candidate_moves_before_user_moves",
+              "children": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "position_analysis_depth",
+      "name": "position_analysis_depth",
+      "children": [
+        {
+          "id": "position_analysis_depth/single_move_evaluation",
+          "name": "single_move_evaluation",
+          "children": [
+            {
+              "id": "position_analysis_depth/single_move_evaluation/move_quality_classification",
+              "name": "move_quality_classification",
+              "children": null
+            },
+            {
+              "id": "position_analysis_depth/single_move_evaluation/move_reasoning_explanation_type",
+              "name": "move_reasoning_explanation_type",
+              "children": null
+            }
+          ]
+        },
+        {
+          "id": "position_analysis_depth/multi_move_sequential_analysis",
+          "name": "multi_move_sequential_analysis",
+          "children": [
+            {
+              "id": "position_analysis_depth/multi_move_sequential_analysis/fixed_number_of_moves_analyzed",
+              "name": "fixed_number_of_moves_analyzed",
+              "children": null
+            },
+            {
+              "id": "position_analysis_depth/multi_move_sequential_analysis/variable_length_move_sequence_analysis",
+              "name": "variable_length_move_sequence_analysis",
+              "children": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "move_evaluation_type",
+      "name": "move_evaluation_type",
+      "children": [
+        {
+          "id": "move_evaluation_type/qualitative_evaluation_style",
+          "name": "qualitative_evaluation_style",
+          "children": [
+            {
+              "id": "move_evaluation_type/qualitative_evaluation_style/focus_on_strategic_themes",
+              "name": "focus_on_strategic_themes",
+              "children": null
+            },
+            {
+              "id": "move_evaluation_type/qualitative_evaluation_style/focus_on_tactical_motifs",
+              "name": "focus_on_tactical_motifs",
+              "children": null
+            }
+          ]
+        },
+        {
+          "id": "move_evaluation_type/quantitative_evaluation_metric",
+          "name": "quantitative_evaluation_metric",
+          "children": [
+            {
+              "id": "move_evaluation_type/quantitative_evaluation_metric/engine_evaluation_score",
+              "name": "engine_evaluation_score",
+              "children": null
+            },
+            {
+              "id": "move_evaluation_type/quantitative_evaluation_metric/centipawn_loss_relative_to_best_move",
+              "name": "centipawn_loss_relative_to_best_move",
+              "children": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "engagement_question_type",
+      "name": "engagement_question_type",
+      "children": [
+        {
+          "id": "engagement_question_type/tactical_engagement_questions",
+          "name": "tactical_engagement_questions",
+          "children": [
+            {
+              "id": "engagement_question_type/tactical_engagement_questions/find_the_tactic",
+              "name": "find_the_tactic",
+              "children": null
+            },
+            {
+              "id": "engagement_question_type/tactical_engagement_questions/explain_the_tactic",
+              "name": "explain_the_tactic",
+              "children": null
+            }
+          ]
+        },
+        {
+          "id": "engagement_question_type/strategic_engagement_questions",
+          "name": "strategic_engagement_questions",
+          "children": [
+            {
+              "id": "engagement_question_type/strategic_engagement_questions/general_strategic_principle_questions",
+              "name": "general_strategic_principle_questions",
+              "children": null
+            },
+            {
+              "id": "engagement_question_type/strategic_engagement_questions/position_specific_strategic_questions",
+              "name": "position_specific_strategic_questions",
+              "children": null
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -125,7 +125,7 @@ export const startTrainingHandler: ToolHandler = async (params) => {
 
 export const startTrainingTool: DistriFnTool = {
   name: 'start_training',
-  description: 'Start the fine-tuning training job. Requires dataset to be uploaded to backend first.',
+  description: 'Start the fine-tuning training job. Automatically uploads dataset to backend if not already uploaded.',
   type: 'function',
   parameters: {
     type: 'object',

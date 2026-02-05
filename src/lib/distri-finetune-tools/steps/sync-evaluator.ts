@@ -1,7 +1,7 @@
 /**
  * Sync Evaluator Tool
  *
- * Validates that the evaluator is configured and dataset is ready.
+ * Validates that the evaluator is configured and uploads dataset if needed.
  * Note: The backend API doesn't support updating evaluators separately.
  * The eval script is included during dataset upload - to change it, use
  * upload_dataset with force_reupload=true.
@@ -10,6 +10,7 @@
 import type { DistriFnTool } from '@distri/core';
 import * as workflowDB from '@/services/finetune-workflow-db';
 import * as datasetsDB from '@/services/datasets-db';
+import { ensureDatasetUploaded } from '@/services/finetune-api';
 import type { ToolHandler } from '../types';
 
 export const syncEvaluatorHandler: ToolHandler = async (params) => {
@@ -39,22 +40,13 @@ export const syncEvaluatorHandler: ToolHandler = async (params) => {
       };
     }
 
-    // Check if dataset has been uploaded to backend
-    if (!dataset.backendDatasetId) {
-      return {
-        success: true,
-        needs_upload: true,
-        evaluator_type: 'js',
-        message: 'Eval script configured. Dataset needs to be uploaded to backend. Use upload_dataset tool.',
-      };
-    }
+    // Ensure dataset is uploaded (auto-uploads if needed)
+    const backendDatasetId = await ensureDatasetUploaded(workflow.datasetId);
 
     // Dataset is uploaded and has eval script - ready for dry run
-    // Note: We can't update the eval script separately. If it changed since upload,
-    // user needs to re-upload with force_reupload=true
     return {
       success: true,
-      backend_dataset_id: dataset.backendDatasetId,
+      backend_dataset_id: backendDatasetId,
       evaluator_type: 'js',
       message: 'Eval script configured and dataset uploaded. Ready for dry run. Note: If eval script changed, use upload_dataset with force_reupload=true.',
     };
@@ -65,7 +57,7 @@ export const syncEvaluatorHandler: ToolHandler = async (params) => {
 
 export const syncEvaluatorTool: DistriFnTool = {
   name: 'sync_evaluator',
-  description: 'Check evaluator configuration status. Note: To update the eval script on backend, use upload_dataset with force_reupload=true.',
+  description: 'Check evaluator configuration and upload dataset if needed. Automatically uploads dataset to backend if not already uploaded. Note: To update the eval script on backend, use upload_dataset with force_reupload=true.',
   type: 'function',
   parameters: {
     type: 'object',

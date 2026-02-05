@@ -16,6 +16,7 @@ import {
 import {
   createEvaluation,
   getEvaluationResult,
+  ensureDatasetUploaded,
 } from './finetune-api';
 import { analyzeDryRunResults } from '@/lib/distri-dataset-tools/analysis/analyze-dry-run';
 import * as datasetsDB from './datasets-db';
@@ -84,22 +85,56 @@ class DryRunPollingManager {
   }
 
   /**
-   * Start a new dry run job
+   * Start a dry run for a dataset (high-level API)
+   * Handles fetching dataset, auto-upload, and starting the dry run.
+   * Used by both UI (DryRunJobsContext) and tool handlers.
+   */
+  async startDryRunForDataset(params: {
+    datasetId: string;
+    sampleSize: number;
+    rolloutModel?: string;
+  }): Promise<string> {
+    const { datasetId, sampleSize, rolloutModel = 'gpt-4o-mini' } = params;
+
+    // Validate dataset has eval script
+    const dataset = await datasetsDB.getDatasetById(datasetId);
+    if (!dataset) {
+      throw new Error('Dataset not found');
+    }
+
+    if (!dataset.evalScript) {
+      throw new Error('Grader must be configured first');
+    }
+
+    // Ensure dataset is uploaded (auto-uploads if needed)
+    const backendDatasetId = await ensureDatasetUploaded(datasetId);
+
+    // Start the dry run
+    return this.startDryRun({
+      datasetId,
+      backendDatasetId,
+      sampleSize,
+      rolloutModel,
+    });
+  }
+
+  /**
+   * Start a new dry run job (low-level API)
+   * Requires backendDatasetId to already exist.
    */
   async startDryRun(params: StartDryRunParams): Promise<string> {
     const {
       datasetId,
       backendDatasetId,
       sampleSize,
-      recordTopics,
-      rolloutModel = 'gpt-4o-mini', // Default model if not specified
+      rolloutModel = 'gpt-4o-mini',
     } = params;
 
     // Create job record in pending state
     const job = await createDryRunJob({
       datasetId,
       backendDatasetId,
-      evaluationRunId: '', // Will be filled after API call
+      evaluationRunId: '',
       status: 'pending',
       sampleSize,
       createdAt: Date.now(),
@@ -107,7 +142,6 @@ class DryRunPollingManager {
 
     try {
       // Call backend to create evaluation
-      // rollout_model_params specifies the model that generates responses to be evaluated
       const evaluationResponse = await createEvaluation({
         dataset_id: backendDatasetId,
         rollout_model_params: {
@@ -123,12 +157,6 @@ class DryRunPollingManager {
         status: 'running',
         startedAt: Date.now(),
       });
-
-      // Store record topics for later analysis
-      if (recordTopics) {
-        // Store in memory for this job
-        this.storeRecordTopics(job.id, recordTopics);
-      }
 
       // Start polling
       this.startPolling(job.id);
@@ -187,7 +215,6 @@ class DryRunPollingManager {
       this.pollingIntervals.delete(jobId);
     }
     this.pollAttempts.delete(jobId);
-    this.clearRecordTopics(jobId);
   }
 
   /**
@@ -292,14 +319,23 @@ class DryRunPollingManager {
         return;
       }
 
-      // Get record topics if stored
-      const recordTopics = this.getRecordTopics(jobId);
+      // Build record topics mapping from database
+      // This works even after page refresh since we fetch from DB
+      const records = await datasetsDB.getRecordsByDatasetId(job.datasetId);
+      const recordTopics: Record<number, string> = {};
+      for (let i = 0; i < records.length; i++) {
+        const record = records[i];
+        if (record.topic) {
+          recordTopics[i] = record.topic;
+        }
+      }
+
       // Analyze results
       const samplePercentage = Math.round((job.sampleSize / result.total_rows) * 100);
       const dryRunStats = analyzeDryRunResults(
         result,
         samplePercentage,
-        recordTopics
+        Object.keys(recordTopics).length > 0 ? recordTopics : undefined
       );
 
       // Save results to dataset
@@ -330,24 +366,6 @@ class DryRunPollingManager {
       });
       toast.error('Failed to process dry run results');
     }
-  }
-
-  // =============================================================================
-  // Record Topics Storage (in-memory for current session)
-  // =============================================================================
-
-  private recordTopicsMap: Map<string, Record<number, string>> = new Map();
-
-  private storeRecordTopics(jobId: string, topics: Record<number, string>): void {
-    this.recordTopicsMap.set(jobId, topics);
-  }
-
-  private getRecordTopics(jobId: string): Record<number, string> | undefined {
-    return this.recordTopicsMap.get(jobId);
-  }
-
-  private clearRecordTopics(jobId: string): void {
-    this.recordTopicsMap.delete(jobId);
   }
 }
 

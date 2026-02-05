@@ -7,7 +7,6 @@
  * Shows failed state if the last job failed.
  */
 
-import { RefreshCw } from "lucide-react";
 import {
   getJobTotalRows,
   getJobFailedRows,
@@ -17,6 +16,8 @@ import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
 import { EvaluationEmptyState, DryRunEmptyState } from "./EvaluationEmptyState";
 import { EvaluationFailedState } from "./EvaluationFailedState";
 import { EvaluationRunningState } from "./EvaluationRunningState";
+import { EvaluationResultsState } from "./EvaluationResultsState";
+import { EvaluationErrorState } from "./EvaluationErrorState";
 
 export interface DryRunEvaluationCardProps {
   /** Evaluation script (if set) */
@@ -26,18 +27,6 @@ export interface DryRunEvaluationCardProps {
   /** Callback when clicking to open dry run dialog */
   onDryRunClick?: () => void;
 }
-
-const VERDICT_COLORS = {
-  GO: "text-emerald-500",
-  WARNING: "text-amber-500",
-  "NO-GO": "text-red-500",
-};
-
-const VERDICT_BG = {
-  GO: "bg-emerald-500",
-  WARNING: "bg-amber-500",
-  "NO-GO": "bg-red-500",
-};
 
 export function DryRunEvaluationCard({ evalScript, onConfigureClick, onDryRunClick }: DryRunEvaluationCardProps) {
   const { jobs, isLoading, runningJob, lastCompletedJob } = DryRunJobsConsumer();
@@ -83,11 +72,6 @@ export function DryRunEvaluationCard({ evalScript, onConfigureClick, onDryRunCli
     return <DryRunEmptyState onDryRunClick={onDryRunClick} />;
   }
 
-  // Show evaluation results
-  const { statistics, distribution, diagnosis } = dryRunStats;
-  const verdict = diagnosis.verdict as keyof typeof VERDICT_COLORS;
-  const verdictColor = VERDICT_COLORS[verdict];
-
   // Check if this is an error state by looking at the completed job
   const totalRows = lastCompletedJob ? getJobTotalRows(lastCompletedJob) : 0;
   const failedRows = lastCompletedJob ? getJobFailedRows(lastCompletedJob) : 0;
@@ -99,93 +83,9 @@ export function DryRunEvaluationCard({ evalScript, onConfigureClick, onDryRunCli
 
   // Error state - show simplified error view
   if (isErrorState) {
-    return (
-      <button
-        onClick={onDryRunClick}
-        className="w-full px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 flex flex-col min-h-[88px] hover:bg-red-500/15 transition-colors cursor-pointer"
-      >
-        <div className="flex items-center justify-between w-full mb-2">
-          <span className="text-xs text-muted-foreground">Evaluation</span>
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-muted-foreground">Verdict:</span>
-            <span className="font-medium text-red-500">NO-GO</span>
-          </div>
-        </div>
-        <div className="flex-1 flex items-center justify-center">
-          <span className="text-sm text-red-400">
-            All evaluations failed — click to view details
-          </span>
-        </div>
-      </button>
-    );
+    return <EvaluationErrorState onDryRunClick={onDryRunClick} />;
   }
 
-  // Calculate bar widths for distribution
-  const maxCount = Math.max(
-    distribution["0.0-0.2"],
-    distribution["0.2-0.4"],
-    distribution["0.4-0.6"],
-    distribution["0.6-0.8"],
-    distribution["0.8-1.0"]
-  );
-
-  const bars = [
-    { label: "0-0.2", count: distribution["0.0-0.2"], color: "bg-red-500/70" },
-    { label: "0.2-0.4", count: distribution["0.2-0.4"], color: "bg-orange-500/70" },
-    { label: "0.4-0.6", count: distribution["0.4-0.6"], color: "bg-amber-500/70" },
-    { label: "0.6-0.8", count: distribution["0.6-0.8"], color: "bg-lime-500/70" },
-    { label: "0.8-1", count: distribution["0.8-1.0"], color: "bg-emerald-500/70" },
-  ];
-
-  return (
-    <div className="px-4 py-3 rounded-lg bg-muted/50">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-muted-foreground">Evaluation</span>
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-muted-foreground">Verdict:</span>
-          <span className={`font-medium ${verdictColor}`}>{verdict}</span>
-          <button
-            onClick={onDryRunClick}
-            className="p-1 rounded hover:bg-muted transition-colors"
-            title="Re-run dry run"
-          >
-            <RefreshCw className="w-3 h-3 text-muted-foreground hover:text-foreground" />
-          </button>
-        </div>
-      </div>
-
-      {/* Score Distribution Bars */}
-      <div className="flex items-end gap-1 h-6 mb-2">
-        {bars.map((bar) => (
-          <div
-            key={bar.label}
-            className="flex-1 flex flex-col items-center"
-            title={`${bar.label}: ${bar.count} samples`}
-          >
-            <div
-              className={`w-full rounded-sm ${bar.color} transition-all`}
-              style={{
-                height: maxCount > 0 ? `${(bar.count / maxCount) * 100}%` : "2px",
-                minHeight: bar.count > 0 ? "4px" : "2px",
-              }}
-            />
-          </div>
-        ))}
-      </div>
-
-      {/* Stats Legend */}
-      <div className="flex items-center justify-between text-xs">
-        <div className="flex items-center gap-3">
-          <span className="text-muted-foreground">
-            Mean: <span className="font-medium text-foreground">{(statistics.mean * 100).toFixed(0)}%</span>
-          </span>
-          <span className="text-muted-foreground">
-            Std: <span className="font-medium text-foreground">{(statistics.std * 100).toFixed(0)}%</span>
-          </span>
-        </div>
-        <div className={`w-2 h-2 rounded-full ${VERDICT_BG[verdict]}`} />
-      </div>
-    </div>
-  );
+  // Show evaluation results with distribution bars
+  return <EvaluationResultsState stats={dryRunStats} onDryRunClick={onDryRunClick} />;
 }

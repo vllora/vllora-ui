@@ -5,7 +5,7 @@
  * Displays progress bar, completion stats, and pass/fail counts.
  */
 
-import { Loader2 } from "lucide-react";
+import { Loader2, Check, X } from "lucide-react";
 import type { DryRunJob } from "@/types/dry-run-job";
 import {
   getJobTotalRows,
@@ -70,21 +70,39 @@ export function EvaluationRunningState({
       </div>
 
       {/* Stats row */}
-      <div className="flex items-center justify-between w-full text-xs">
-        <span className="text-muted-foreground">
-          {completedRows} / {totalRows} ({progress}%)
-        </span>
+      <div className="flex items-center justify-between w-full">
+        {/* Progress count */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-medium text-foreground tabular-nums">
+            {completedRows}
+          </span>
+          <span className="text-xs text-muted-foreground">/</span>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {totalRows}
+          </span>
+          <span className="text-[10px] text-muted-foreground/70 ml-0.5">
+            ({progress}%)
+          </span>
+        </div>
+
+        {/* Pass/Fail badges */}
         {(hasPassedCount || hasFailures) && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {hasPassedCount && (
-              <span className="text-emerald-500">
-                ✓ {passedCount}
-              </span>
+              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/10">
+                <Check className="w-3 h-3 text-emerald-500" />
+                <span className="text-xs font-medium text-emerald-500 tabular-nums">
+                  {passedCount}
+                </span>
+              </div>
             )}
             {hasFailures && (
-              <span className="text-red-500">
-                ✗ {failedRows + failedGradingCount}
-              </span>
+              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500/10">
+                <X className="w-3 h-3 text-red-500" />
+                <span className="text-xs font-medium text-red-500 tabular-nums">
+                  {failedRows + failedGradingCount}
+                </span>
+              </div>
             )}
           </div>
         )}

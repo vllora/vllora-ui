@@ -15,7 +15,7 @@
 import * as workflowDB from './finetune-workflow-db';
 import * as datasetsDB from './datasets-db';
 import {
-  uploadDatasetForFinetune,
+  ensureDatasetUploaded,
   createFinetuneJobFromUpload,
   listReinforcementJobs,
   ReinforcementTrainingConfig,
@@ -210,17 +210,8 @@ export async function quickFinetune(options: QuickFinetuneOptions): Promise<Quic
     // 4. Advance workflow to training step (skipping dry run)
     await workflowDB.advanceToStep(workflow.id, 'training');
 
-    // 5. Upload dataset to backend if not already uploaded
-    let backendDatasetId = dataset.backendDatasetId;
-
-    if (!backendDatasetId) {
-      const datasetWithRecords = { ...dataset, records };
-      const uploadResult = await uploadDatasetForFinetune(datasetWithRecords);
-      backendDatasetId = uploadResult.backendDatasetId;
-
-      // Save backend ID
-      await datasetsDB.updateDatasetBackendId(datasetId, backendDatasetId);
-    }
+    // 5. Ensure dataset is uploaded (auto-uploads if needed)
+    const backendDatasetId = await ensureDatasetUploaded(datasetId);
 
     // 6. Start training job using common function
     const result = await startFinetuneTraining({

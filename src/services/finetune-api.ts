@@ -1,6 +1,8 @@
 import { apiClient, handleApiResponse, getAuthToken } from "@/lib/api-client";
 import { getBackendUrl } from "@/config/api";
 import { DatasetWithRecords, DatasetRecord, DataInfo } from "@/types/dataset-types";
+import * as datasetsDB from './datasets-db';
+import { toast } from 'sonner';
 
 // ============================================================================
 // Types
@@ -380,6 +382,47 @@ export async function uploadDatasetForFinetune(
     backendDatasetId: uploadResult.dataset_id,
     jsonlContent,
   };
+}
+
+/**
+ * Ensure dataset is uploaded to backend.
+ * If already uploaded, returns existing backendDatasetId.
+ * If not, uploads the dataset and saves the backendDatasetId.
+ *
+ * @param datasetId - Local dataset ID
+ * @returns backendDatasetId
+ * @throws Error if dataset not found, has no records, or upload fails
+ */
+export async function ensureDatasetUploaded(datasetId: string): Promise<string> {
+  const dataset = await datasetsDB.getDatasetById(datasetId);
+  if (!dataset) {
+    throw new Error('Dataset not found');
+  }
+
+  // Already uploaded
+  if (dataset.backendDatasetId) {
+    return dataset.backendDatasetId;
+  }
+
+  // Need to upload
+  const records = await datasetsDB.getRecordsByDatasetId(datasetId);
+  if (records.length === 0) {
+    throw new Error('Dataset has no records');
+  }
+
+  toast.info('Uploading dataset to backend...');
+  try {
+    const uploadResult = await uploadDatasetForFinetune({
+      ...dataset,
+      records,
+    });
+    await datasetsDB.updateDatasetBackendId(datasetId, uploadResult.backendDatasetId);
+    toast.success('Dataset uploaded successfully');
+    return uploadResult.backendDatasetId;
+  } catch (uploadError) {
+    toast.error('Failed to upload dataset');
+    throw uploadError;
+  }
 }
 
 /** Default training configuration */

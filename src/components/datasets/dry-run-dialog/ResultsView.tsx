@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CheckCircle2, XCircle, History, RefreshCw, AlertTriangle, ArrowRight } from "lucide-react";
-import { ScoreHistogram } from "../ScoreHistogram";
+import { ScoreHistogram } from "./ScoreHistogram";
 import { SampleCard } from "./SampleCard";
 import { ResultsTable } from "./ResultsTable";
 import { cn } from "@/lib/utils";
