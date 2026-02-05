@@ -7,7 +7,7 @@
 
 import { useMemo } from "react";
 import { BarChart, Bar, XAxis, ResponsiveContainer, Cell, ReferenceLine } from "recharts";
-import { ChevronRight, HelpCircle } from "lucide-react";
+import { ChevronRight, HelpCircle, ExternalLink } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -28,19 +28,19 @@ const VERDICT_CONFIG = {
     label: "GO",
     pill: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30",
     title: "Ready to Train",
-    description: "Dataset and grader quality look good. Mean score is in ideal range (30-80%) with healthy variance.",
+    description: "Dataset and grader quality look good. Mean score is in ideal range (0.3-0.8) with healthy variance.",
   },
   WARNING: {
     label: "WARNING",
     pill: "bg-amber-500/15 text-amber-500 border-amber-500/30",
     title: "Review Recommended",
-    description: "Scores may be too high (>90%) or too low (<10%), or variance is very low. Review samples before training.",
+    description: "Scores may be too high (>0.9) or too low (<0.1), or variance is very low. Review samples before training.",
   },
   "NO-GO": {
     label: "NO-GO",
     pill: "bg-red-500/15 text-red-500 border-red-500/30",
     title: "Not Ready",
-    description: "Mean score is extreme (<10% or >90%). Dataset or grader needs adjustment before training.",
+    description: "Mean score is extreme (<0.1 or >0.9). Dataset or grader needs adjustment before training.",
   },
 };
 
@@ -94,9 +94,18 @@ export function EvaluationResultsState({
                 {config.label}
               </span>
             </TooltipTrigger>
-            <TooltipContent side="left" className="max-w-[220px] text-xs">
+            <TooltipContent side="left" className="max-w-[240px] text-xs">
               <p className="font-medium mb-1">{config.title}</p>
               <p className="text-muted-foreground">{config.description}</p>
+              <a
+                href="https://cookbook.openai.com/examples/reinforcement_fine_tuning"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-blue-400 hover:text-blue-300 mt-2"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Learn more <ExternalLink className="w-3 h-3" />
+              </a>
             </TooltipContent>
           </Tooltip>
         </div>
@@ -133,29 +142,59 @@ export function EvaluationResultsState({
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="flex items-center gap-1 cursor-help">
-                  Mean: <span className="text-foreground font-medium tabular-nums">{(statistics.mean * 100).toFixed(0)}%</span>
+                  Mean: <span className="text-foreground font-medium tabular-nums">{statistics.mean.toFixed(2)}</span>
                   <HelpCircle className="w-3 h-3 opacity-50" />
                 </span>
               </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-[220px] text-xs">
+              <TooltipContent side="top" className="max-w-[300px] text-xs">
                 <p className="font-medium mb-1">Mean (Average Score)</p>
                 <p className="text-muted-foreground">
-                  Sum of all scores divided by total samples. Higher is better. Ideal range: 30-80%.
+                  Shows how well the base model already performs. Ideal range: 0.3-0.8.
                 </p>
+                <p className="text-muted-foreground mt-1">
+                  • Too high (&gt;0.9): Model already good, little room to improve
+                </p>
+                <p className="text-muted-foreground">
+                  • Too low (&lt;0.1): Grader may be too strict or data needs review
+                </p>
+                <a
+                  href="https://cookbook.openai.com/examples/reinforcement_fine_tuning"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-blue-400 hover:text-blue-300 mt-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Learn more <ExternalLink className="w-3 h-3" />
+                </a>
               </TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="flex items-center gap-1 cursor-help">
-                  Std: <span className="text-foreground font-medium tabular-nums">{(statistics.std * 100).toFixed(0)}%</span>
+                  Std: <span className="text-foreground font-medium tabular-nums">{statistics.std.toFixed(2)}</span>
                   <HelpCircle className="w-3 h-3 opacity-50" />
                 </span>
               </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-[220px] text-xs">
+              <TooltipContent side="top" className="max-w-[300px] text-xs">
                 <p className="font-medium mb-1">Standard Deviation</p>
                 <p className="text-muted-foreground">
-                  Measures score spread. Low (&lt;10%) means scores are similar; high (&gt;25%) means varied quality.
+                  Shows score variation across samples. Helps identify learning opportunities.
                 </p>
+                <p className="text-muted-foreground mt-1">
+                  • High (&gt;0.2): Model struggles on some examples - good for targeted learning
+                </p>
+                <p className="text-muted-foreground">
+                  • Low (&lt;0.1): Uniform performance - check if grader differentiates well
+                </p>
+                <a
+                  href="https://platform.openai.com/docs/guides/reinforcement-fine-tuning"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-blue-400 hover:text-blue-300 mt-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  OpenAI RFT Docs <ExternalLink className="w-3 h-3" />
+                </a>
               </TooltipContent>
             </Tooltip>
           </div>
