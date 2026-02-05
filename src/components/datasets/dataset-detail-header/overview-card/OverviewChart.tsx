@@ -148,7 +148,7 @@ export function OverviewChart({
   const dotSize = isMd ? "w-2 h-2" : "w-1.5 h-1.5";
 
   return (
-    <div className="flex gap-4">
+    <div className="flex gap-2 flex-1 justify-center items-center">
       {/* Left side: Records with donut */}
       <div className="flex items-center gap-3 shrink-0">
         {/* Donut Chart */}

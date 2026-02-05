@@ -32,7 +32,7 @@ export function OverviewFilledState({
   return (
     <button
       onClick={onClick}
-      className="w-full px-4 py-3 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors cursor-pointer text-left"
+      className="w-full flex px-4 py-3 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors cursor-pointer text-left"
     >
       <OverviewChart
         total={total}

@@ -6,7 +6,7 @@
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { RefreshCw, Loader2, Sparkles } from "lucide-react";
+import { RefreshCw, Loader2 } from "lucide-react";
 import { FinetuneEvalResultsResponse } from "@/services/finetune-api";
 import { TrainingMetricsChart } from "../TrainingMetricsChart";
 import { EpochSummary } from "./EpochSummary";
@@ -28,11 +28,7 @@ export function TrainingMetricsSection({
 }: TrainingMetricsSectionProps) {
   return (
     <div className="space-y-2 pt-2 border-t">
-      <div className="flex items-center justify-between">
-        <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-          <Sparkles className="h-3.5 w-3.5" />
-          Training Metrics
-        </h4>
+      <div className="flex items-center justify-end">
         <Button
           variant="ghost"
           size="sm"
