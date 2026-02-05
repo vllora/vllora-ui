@@ -239,9 +239,24 @@ export async function uploadDataset(
     formData.append('topic_hierarchy', topicHierarchy);
   }
 
-  // Add eval_script if provided
+  // Add eval_script and evaluator config if provided
+  // Backend requires BOTH: evaluator config (with type: "js") AND eval_script
+  // The backend merges eval_script content into evaluator.config.script
   if (evalScript) {
     formData.append('eval_script', evalScript);
+    // Must also send evaluator config for backend to merge the script into
+    const evaluatorConfig = {
+      type: 'js',
+      config: {
+        script: '', // Will be replaced by eval_script content on backend
+        completion_params: {
+          model_name: 'gpt-4o-mini',
+          temperature: 0.0,
+          max_tokens: 300,
+        },
+      },
+    };
+    formData.append('evaluator', JSON.stringify(evaluatorConfig));
   }
 
   // Build headers
