@@ -82,7 +82,7 @@ export function TopicNodeHeader({
           <>
             <span className={cn(
               "text-xs tabular-nums px-1.5 py-0.5 rounded",
-              totalCount > 0 ? "bg-zinc-700/50 text-zinc-300" : "bg-zinc-800 text-zinc-600"
+              totalCount > 0 ? "bg-zinc-700/50 text-muted-foreground" : "bg-zinc-800 text-zinc-600"
             )}>
               {totalCount}
             </span>

@@ -120,7 +120,7 @@ export function CoverageIndicator({ coveragePercentage, recordCount }: CoverageI
             </div>
             {/* Percentage text */}
             <span className={cn(
-              "text-[10px] font-medium tabular-nums",
+              "text-[10px] w-[35px] overflow-hidden text-ellipsis whitespace-nowrap    font-medium tabular-nums",
               getCoverageColorClass(coverageColor, 'text')
             )}>
               {coveragePercentage.toFixed(1)}%
