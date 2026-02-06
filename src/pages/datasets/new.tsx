@@ -5,17 +5,19 @@
  * Accessible at /datasets/new route.
  */
 
-import { SelectSpansOrUploadFile } from "@/components/datasets/SelectSpansOrUploadFile";
+import { EmptyDatasetsState } from "@/components/datasets/empty-dataset-state";
+// import { SelectSpansOrUploadFile } from "@/components/datasets/SelectSpansOrUploadFile";
 import { DatasetsUIProvider } from "@/contexts/DatasetsUIContext";
 
 export function NewDatasetPage() {
   return (
     <DatasetsUIProvider>
-      <section className="flex-1 flex overflow-hidden bg-background text-foreground relative">
+      <EmptyDatasetsState />
+      {/* <section className="flex-1 flex overflow-hidden bg-background text-foreground relative">
         <div className="flex-1 flex flex-col overflow-hidden">
           <SelectSpansOrUploadFile />
         </div>
-      </section>
+      </section> */}
     </DatasetsUIProvider>
   );
 }

@@ -27,6 +27,7 @@ import { DistriProvider } from "./providers/DistriProvider"
 import { AgentPanelWrapper } from "./components/agent"
 import { AgentPanelProvider } from "./contexts/AgentPanelContext"
 import { DatasetsProvider } from "./contexts/DatasetsContext"
+import { NewDatasetAdvancedPage } from "./pages/datasets/new-advanced"
 
 // Lazy load the models page
 const ModelsPage = lazy(() => import("./pages/models").then(module => ({ default: module.ModelsPage })))
@@ -95,6 +96,7 @@ function App() {
                 {/* Global routes */}
                 <Route path="projects" element={<ProjectsPage />} />
                 <Route path="datasets/new" element={<NewDatasetPage />} />
+                <Route path="datasets/new-advanced" element={<NewDatasetAdvancedPage />} />
                 <Route path="datasets/:datasetId" element={<DatasetDetailPage />} />
                 <Route path="datasets" element={<DatasetsPage />} />
                 <Route path="settings" element={<SettingsPage />} />
