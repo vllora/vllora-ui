@@ -6,7 +6,13 @@
  */
 
 import { useMemo } from "react";
-import { Database, Layers, BarChart3 } from "lucide-react";
+import { Database, Layers, BarChart3, HelpCircle } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 type BalanceRating = "excellent" | "good" | "fair" | "poor" | "critical";
 
@@ -250,7 +256,7 @@ export function OverviewFilledState({
           )}
 
           {/* Legend */}
-          {legendItems.length > 0 ? (
+          {totalTopics > 0 ? (
             <div className="flex flex-wrap gap-x-4 gap-y-1">
               {legendItems.map((item, idx) => (
                 <div key={idx} className="flex items-center gap-1.5 text-xs">
@@ -266,7 +272,32 @@ export function OverviewFilledState({
               ))}
             </div>
           ) : (
-            <span className="text-xs text-zinc-500">No topics configured</span>
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1.5 cursor-help">
+                    <span className="text-xs text-zinc-500">No topics yet</span>
+                    <HelpCircle className="w-3.5 h-3.5 text-zinc-600" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" align="start" className="max-w-[280px]">
+                  <div className="text-xs space-y-2">
+                    <p className="font-semibold">What are topics?</p>
+                    <p className="text-muted-foreground">
+                      Topics organize your training data into categories (e.g., "greeting", "troubleshooting", "billing").
+                      This helps ensure balanced coverage across different use cases.
+                    </p>
+                    <p className="text-muted-foreground">
+                      <span className="text-foreground font-medium">Why it matters:</span> Models trained on balanced topic distribution
+                      perform more consistently across all scenarios.
+                    </p>
+                    <p className="text-amber-400 text-[10px]">
+                      Use the AI assistant to auto-generate topics from your data.
+                    </p>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </div>
       </div>

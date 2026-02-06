@@ -133,7 +133,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     if (viewParam === "canvas" || viewParam === "table") {
       return viewParam;
     }
-    return "canvas";
+    return "table";
   });
 
   // Helper to update URL params
