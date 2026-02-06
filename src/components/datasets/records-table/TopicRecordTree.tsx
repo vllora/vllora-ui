@@ -183,7 +183,7 @@ function UnassignedSection({
       />
 
       {isExpanded && (
-        <div className="p-2 space-y-1.5 bg-transparent">
+        <div className="p-2 space-y-1 bg-transparent">
           {records.map((record) => (
             <RecordRow
               key={record.id}

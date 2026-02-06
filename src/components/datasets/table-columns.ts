@@ -30,7 +30,7 @@ export const COLUMN_WIDTHS = {
   /** Stats column (new layout) - flex based */
   stats: "flex-[1] min-w-0",
   /** Actions dropdown column (new layout) - fixed for small icon */
-  deepDiveActions: "w-10 shrink-0",
+  deepDiveActions: "w-10 shrink-0 mr-2",
 } as const;
 
 /** Columns that can be toggled by the user */

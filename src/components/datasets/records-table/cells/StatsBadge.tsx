@@ -43,13 +43,13 @@ export function StatsBadge({ data, className }: StatsBadgeProps) {
 
   return (
     <div className={cn("flex flex-col gap-1", className)}>
-      <div className="flex items-center gap-1.5 text-xs">
-        <Coins className="w-3.5 h-3.5 text-emerald-500" />
+      <div className="flex items-center gap-1.5 text-[11px]">
+        <Coins className="w-3 h-3 text-emerald-500" />
         <span className="text-foreground font-medium">{formatNumber(tokens)}</span>
         <span className="text-muted-foreground">tokens</span>
       </div>
-      <div className="flex items-center gap-1.5 text-xs">
-        <MessageSquare className="w-3.5 h-3.5 text-muted-foreground" />
+      <div className="flex items-center gap-1.5 text-[11px]">
+        <MessageSquare className="w-3 h-3 text-muted-foreground" />
         <span className="text-muted-foreground">{turns} turns</span>
       </div>
     </div>

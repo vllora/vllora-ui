@@ -23,6 +23,7 @@ interface ConversationThreadCellProps {
 export function ConversationThreadCell({ data, className }: ConversationThreadCellProps) {
   const messages = extractMessages(data);
 
+  const displayMessagesCount = Math.min(messages.length, 2);
   if (messages.length === 0) {
     return (
       <div className={cn("flex-1 min-w-0", className)}>
@@ -31,8 +32,8 @@ export function ConversationThreadCell({ data, className }: ConversationThreadCe
     );
   }
 
-  // Show first 3 messages with "+X more..." at the bottom
-  const displayMessages = messages.slice(0, 3);
+  // Show first 2 messages with "+X more..." at the bottom
+  const displayMessages = messages.slice(0, displayMessagesCount);
 
   return (
     <div className={cn("flex-1 min-w-0 flex flex-col gap-1", className)}>
@@ -42,9 +43,9 @@ export function ConversationThreadCell({ data, className }: ConversationThreadCe
         const cleanedContent = cleanText(msg.content);
 
         return (
-          <div key={idx} className="flex items-center gap-2 text-xs min-w-0">
+          <div key={idx} className="flex items-center gap-2 text-[11px] min-w-0">
             <span className={cn(
-              "shrink-0 w-8 text-center py-0.5 rounded text-[9px] font-semibold uppercase",
+              "shrink-0 w-8 text-center rounded text-[9px] font-semibold uppercase",
               badgeClass
             )}>
               {roleLabel}
@@ -55,9 +56,9 @@ export function ConversationThreadCell({ data, className }: ConversationThreadCe
           </div>
         );
       })}
-      {messages.length > 3 && (
+      {messages.length > displayMessagesCount && (
         <span className="text-[10px] text-zinc-500 pl-10">
-          +{messages.length - 3} more...
+          +{messages.length - displayMessagesCount} more...
         </span>
       )}
     </div>

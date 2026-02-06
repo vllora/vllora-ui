@@ -7,7 +7,6 @@
 
 import { useState, forwardRef } from "react";
 import { DatasetRecord } from "@/types/dataset-types";
-import { ChevronRight, ChevronDown, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConversationThreadCell, ToolsBadge, StatsBadge, TopicCell, RecordExpandedDetail, RecordActions, SelectionCheckbox } from "./cells";
 import { RecordDataDialog } from "./RecordDataDialog";
@@ -54,7 +53,6 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
   selected = false,
   onSelect,
   onExpand,
-  isViewing = false,
   availableTopics = [],
   hideTopic = false,
   isExpanded: controlledExpanded,
@@ -74,6 +72,7 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
   return (
     <div
       ref={ref}
+      onClick={handleToggleExpand}
       className={cn(
         "flex flex-col rounded-md overflow-hidden transition-colors bg-zinc-800/30",
         isExpanded ? "ring-1 ring-zinc-700/50" : "hover:bg-zinc-800/50",
@@ -83,30 +82,11 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
       {/* Main row */}
       <div
         className={cn(
-          "px-3 py-3 flex items-center gap-3 transition-colors",
+          "px-2 py-1.5 flex items-center gap-3 transition-colors",
           isExpanded && "border-b border-zinc-700/50"
         )}
       >
-        {/* Expand/Collapse toggle or viewing indicator */}
-        <button
-          onClick={handleToggleExpand}
-          className={cn(
-            "w-6 h-6 flex items-center justify-center shrink-0 transition-colors",
-            isViewing
-              ? "text-[rgb(var(--theme-500))]"
-              : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          {isViewing ? (
-            <Eye className="w-4 h-4" />
-          ) : onExpand ? (
-            <Eye className="w-4 h-4" />
-          ) : isExpanded ? (
-            <ChevronDown className="w-4 h-4" />
-          ) : (
-            <ChevronRight className="w-4 h-4" />
-          )}
-        </button>
+      
 
         {/* Checkbox */}
         {selectable && (

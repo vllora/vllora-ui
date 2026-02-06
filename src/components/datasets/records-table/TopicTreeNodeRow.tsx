@@ -106,7 +106,7 @@ export function TopicTreeNodeRow({
 
           {/* Records at this node */}
           {hasRecords && (
-            <div className="p-2 space-y-1.5">
+            <div className="p-2 space-y-1">
               {directRecords.map((record) => (
                 <RecordRow
                   key={record.id}
