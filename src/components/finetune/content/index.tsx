@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback } from "react";
-import { useFinetuneJobs } from "@/contexts/FinetuneJobsContext";
+import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -35,7 +35,7 @@ interface FinetuneJobsContentProps {
 }
 
 export function FinetuneJobsContent({ datasetId, canCreateJob = true, trainingConfig }: FinetuneJobsContentProps) {
-  const { filteredJobs, isLoading, error, loadJobs } = useFinetuneJobs();
+  const { filteredJobs, isLoading, error, loadJobs } = FinetuneJobsConsumer();
   const [showNewJobDialog, setShowNewJobDialog] = useState(false);
 
   // Calculate active jobs count from filtered jobs

@@ -166,11 +166,11 @@ export interface GenerationHistoryStore {
 // =============================================================================
 
 const DB_NAME = 'vllora-finetune';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let dbInstance: IDBDatabase | null = null;
 
-async function getDB(): Promise<IDBDatabase> {
+export async function getDB(): Promise<IDBDatabase> {
   if (dbInstance) return dbInstance;
 
   return new Promise((resolve, reject) => {
@@ -216,6 +216,12 @@ async function getDB(): Promise<IDBDatabase> {
         dryRunJobsStore.createIndex('datasetId', 'datasetId', { unique: false });
         dryRunJobsStore.createIndex('status', 'status', { unique: false });
         dryRunJobsStore.createIndex('createdAt', 'createdAt', { unique: false });
+      }
+
+      // Create job evaluations cache store (added in v3)
+      if (!db.objectStoreNames.contains('jobEvaluations')) {
+        const jobEvalsStore = db.createObjectStore('jobEvaluations', { keyPath: 'jobId' });
+        jobEvalsStore.createIndex('updatedAt', 'updatedAt', { unique: false });
       }
     };
   });
@@ -628,6 +634,104 @@ export async function updateStepData<K extends keyof FinetuneWorkflowState>(
 }
 
 // =============================================================================
+// Job Evaluations Cache (Stale-While-Revalidate)
+// =============================================================================
+
+import type { FinetuneEvalResultsResponse } from "@/services/finetune-api";
+
+export interface CachedJobEvaluation {
+  jobId: string;
+  data: FinetuneEvalResultsResponse;
+  updatedAt: number;
+}
+
+/**
+ * Get cached job evaluations
+ */
+export async function getCachedJobEvaluations(jobId: string): Promise<CachedJobEvaluation | null> {
+  const db = await getDB();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('jobEvaluations', 'readonly');
+    const store = tx.objectStore('jobEvaluations');
+    const request = store.get(jobId);
+
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * Save job evaluations to cache
+ */
+export async function saveJobEvaluationsCache(
+  jobId: string,
+  data: FinetuneEvalResultsResponse
+): Promise<void> {
+  const db = await getDB();
+
+  const cached: CachedJobEvaluation = {
+    jobId,
+    data,
+    updatedAt: Date.now(),
+  };
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('jobEvaluations', 'readwrite');
+    const store = tx.objectStore('jobEvaluations');
+    const request = store.put(cached);
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * Delete cached job evaluations
+ */
+export async function deleteCachedJobEvaluations(jobId: string): Promise<void> {
+  const db = await getDB();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('jobEvaluations', 'readwrite');
+    const store = tx.objectStore('jobEvaluations');
+    const request = store.delete(jobId);
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * Clear old cached evaluations (older than maxAge in ms)
+ */
+export async function clearOldEvaluationsCache(maxAgeMs: number = 7 * 24 * 60 * 60 * 1000): Promise<number> {
+  const db = await getDB();
+  const cutoff = Date.now() - maxAgeMs;
+  let deletedCount = 0;
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('jobEvaluations', 'readwrite');
+    const store = tx.objectStore('jobEvaluations');
+    const index = store.index('updatedAt');
+    const range = IDBKeyRange.upperBound(cutoff);
+    const cursorRequest = index.openCursor(range);
+
+    cursorRequest.onsuccess = (event) => {
+      const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+      if (cursor) {
+        cursor.delete();
+        deletedCount++;
+        cursor.continue();
+      }
+    };
+
+    tx.oncomplete = () => resolve(deletedCount);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// =============================================================================
 // Export Service Object
 // =============================================================================
 
@@ -653,4 +757,10 @@ export const finetuneWorkflowService = {
   advanceToStep,
   markStepFailed,
   updateStepData,
+
+  // Job Evaluations Cache
+  getCachedJobEvaluations,
+  saveJobEvaluationsCache,
+  deleteCachedJobEvaluations,
+  clearOldEvaluationsCache,
 };

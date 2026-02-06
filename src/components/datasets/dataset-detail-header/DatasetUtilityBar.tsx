@@ -15,7 +15,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { FinetuneButton } from "@/components/datasets/FinetuneButton";
-import { useFinetuneJobs } from "@/contexts/FinetuneJobsContext";
+import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { cn } from "@/lib/utils";
 import { ViewModeToggle, type ViewMode } from "./ViewModeToggle";
 
@@ -80,7 +80,7 @@ export function DatasetUtilityBar({
   onEvaluatorCopy,
 }: DatasetUtilityBarProps) {
   const canFinetune = hasRecords && hasEvaluator;
-  const { filteredJobs } = useFinetuneJobs();
+  const { filteredJobs } = FinetuneJobsConsumer();
 
   // Count active jobs (pending or running)
   const activeJobsCount = filteredJobs.filter(

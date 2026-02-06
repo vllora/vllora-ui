@@ -9,7 +9,7 @@ import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FinetuneJob } from "@/services/finetune-api";
 import { formatFinetuneJobDate, computeTrainingSummary } from "@/components/finetune/content/utils";
-import { useFinetuneJobs } from "@/contexts/FinetuneJobsContext";
+import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { STATUS_CONFIG } from "./constants";
 
 interface JobStatusCardProps {
@@ -23,7 +23,7 @@ export function JobStatusCard({ job, onClick }: JobStatusCardProps) {
   const isActive = job.status === "pending" || job.status === "running";
 
   // Get evaluations from context (single polling instance)
-  const { getJobEvaluations } = useFinetuneJobs();
+  const { getJobEvaluations } = FinetuneJobsConsumer();
   const { data: evalResults } = isActive ? getJobEvaluations(job.id) : { data: null };
 
   // Compute training summary from evaluation results

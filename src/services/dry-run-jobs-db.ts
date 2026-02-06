@@ -7,42 +7,7 @@
 
 import type { DryRunJob } from '@/types/dry-run-job';
 import { emitter } from '@/utils/eventEmitter';
-
-// =============================================================================
-// Database Setup (reuse from finetune-workflow-db)
-// =============================================================================
-
-const DB_NAME = 'vllora-finetune';
-const DB_VERSION = 2;
-
-let dbInstance: IDBDatabase | null = null;
-
-async function getDB(): Promise<IDBDatabase> {
-  if (dbInstance) return dbInstance;
-
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-    request.onerror = () => reject(request.error);
-
-    request.onsuccess = () => {
-      dbInstance = request.result;
-      resolve(dbInstance);
-    };
-
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-
-      // Create dry run jobs store if it doesn't exist
-      if (!db.objectStoreNames.contains('dryRunJobs')) {
-        const dryRunJobsStore = db.createObjectStore('dryRunJobs', { keyPath: 'id' });
-        dryRunJobsStore.createIndex('datasetId', 'datasetId', { unique: false });
-        dryRunJobsStore.createIndex('status', 'status', { unique: false });
-        dryRunJobsStore.createIndex('createdAt', 'createdAt', { unique: false });
-      }
-    };
-  });
-}
+import { getDB } from './finetune-workflow-db';
 
 // =============================================================================
 // CRUD Operations

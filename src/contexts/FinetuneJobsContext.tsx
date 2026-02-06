@@ -13,7 +13,9 @@ import {
   useEffect,
   useCallback,
   useRef,
+  useMemo,
 } from "react";
+import { useRequest } from "ahooks";
 import {
   FinetuneJob,
   FinetuneJobStatus,
@@ -22,6 +24,10 @@ import {
   getReinforcementJobStatus,
   getFinetuneEvaluations,
 } from "@/services/finetune-api";
+import {
+  getCachedJobEvaluations,
+  saveJobEvaluationsCache,
+} from "@/services/finetune-workflow-db";
 import { ProjectEventsConsumer } from "@/contexts/project-events";
 import {
   CustomEvent,
@@ -39,48 +45,20 @@ interface JobEvaluationState {
   error: string | null;
 }
 
-interface FinetuneJobsContextType {
-  jobs: FinetuneJob[];
-  isLoading: boolean;
-  error: string | null;
-  loadJobs: (datasetId?: string | null) => Promise<void>;
-  refreshJob: (jobId: string) => Promise<void>;
-  // Sidebar visibility state
-  isSidebarOpen: boolean;
-  setIsSidebarOpen: (open: boolean) => void;
-  // Dataset filtering - server-side filter via backend dataset ID
-  currentBackendDatasetId: string | null;
-  setCurrentBackendDatasetId: (backendDatasetId: string | null) => void;
-  filteredJobs: FinetuneJob[];
-  // Job evaluations - single polling instance per job
-  getJobEvaluations: (jobId: string) => JobEvaluationState;
-  refreshJobEvaluations: (jobId: string) => void;
-}
-
-// ============================================================================
-// Context
-// ============================================================================
-
-const FinetuneJobsContext = createContext<FinetuneJobsContextType | undefined>(
-  undefined
-);
-
-// ============================================================================
-// Provider
-// ============================================================================
-
-interface FinetuneJobsProviderProps {
-  children: ReactNode;
-}
-
 // Poll interval for evaluations (20 seconds)
 const EVAL_POLL_INTERVAL = 20000;
 
-export function FinetuneJobsProvider({ children }: FinetuneJobsProviderProps) {
-  const [jobs, setJobs] = useState<FinetuneJob[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+// ============================================================================
+// Hook
+// ============================================================================
+
+export type FinetuneJobsContextType = ReturnType<typeof useFinetuneJobsLogic>;
+
+function useFinetuneJobsLogic() {
+  // Sidebar visibility state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Dataset filtering - server-side filter via backend dataset ID
   const [currentBackendDatasetId, setCurrentBackendDatasetId] = useState<string | null>(null);
 
   // Job evaluations state - keyed by job ID
@@ -91,70 +69,93 @@ export function FinetuneJobsProvider({ children }: FinetuneJobsProviderProps) {
   const { subscribe } = ProjectEventsConsumer();
   const subscriptionIdRef = useRef<string>(`finetune-jobs-${Date.now()}`);
 
-  // Load jobs from backend (filtered by dataset)
-  // If datasetId is null, clear jobs (dataset hasn't been uploaded yet)
-  const loadJobs = useCallback(async (datasetId?: string | null) => {
-    // Use provided datasetId or fall back to current state
-    const filterDatasetId = datasetId !== undefined ? datasetId : currentBackendDatasetId;
+  // Use useRequest for jobs fetching with automatic refresh on dependency change
+  const {
+    data: jobs = [],
+    loading: isLoading,
+    error,
+    run: loadJobs,
+    mutate: setJobs,
+  } = useRequest(
+    async (datasetId?: string | null) => {
+      // Use provided datasetId or fall back to current state
+      const filterDatasetId = datasetId !== undefined ? datasetId : currentBackendDatasetId;
 
-    // If no backend dataset ID, clear jobs (dataset not uploaded yet)
-    if (!filterDatasetId) {
-      setJobs([]);
-      setIsLoading(false);
-      return;
-    }
+      // If no backend dataset ID, return empty (dataset not uploaded yet)
+      if (!filterDatasetId) {
+        return [];
+      }
 
-    setIsLoading(true);
-    setError(null);
-    try {
-      const fetchedJobs = await listReinforcementJobs(
+      return listReinforcementJobs(
         undefined, // limit
         undefined, // after
         filterDatasetId // datasetId (server-side filter)
       );
-      setJobs(fetchedJobs);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to load jobs";
-      setError(message);
-      console.error("Failed to load finetune jobs:", err);
-    } finally {
-      setIsLoading(false);
+    },
+    {
+      manual: true, // We'll trigger manually based on currentBackendDatasetId
     }
-  }, [currentBackendDatasetId]);
+  );
 
   // Refresh a specific job by ID
   const refreshJob = useCallback(async (providerJobId: string) => {
     try {
       const updatedJob = await getReinforcementJobStatus(providerJobId);
       setJobs((prevJobs) =>
-        prevJobs.map((job) =>
+        (prevJobs || []).map((job) =>
           job.provider_job_id === providerJobId ? updatedJob : job
         )
       );
     } catch (err) {
       console.error(`Failed to refresh job ${providerJobId}:`, err);
     }
-  }, []);
+  }, [setJobs]);
 
-  // Fetch evaluations for a specific job
+  // Fetch evaluations for a specific job (stale-while-revalidate pattern)
   const fetchJobEvaluations = useCallback(async (job: FinetuneJob, isInitial = false) => {
     if (!job.dataset_id) return;
 
     const jobId = job.id;
 
+    // On initial fetch, try to load from cache first (stale-while-revalidate)
     if (isInitial) {
-      setJobEvaluations((prev) => ({
-        ...prev,
-        [jobId]: { data: prev[jobId]?.data ?? null, isLoading: true, error: null },
-      }));
+      try {
+        const cached = await getCachedJobEvaluations(jobId);
+        if (cached) {
+          // Show cached data immediately
+          setJobEvaluations((prev) => ({
+            ...prev,
+            [jobId]: { data: cached.data, isLoading: true, error: null },
+          }));
+        } else {
+          setJobEvaluations((prev) => ({
+            ...prev,
+            [jobId]: { data: prev[jobId]?.data ?? null, isLoading: true, error: null },
+          }));
+        }
+      } catch {
+        // Cache read failed, continue with loading state
+        setJobEvaluations((prev) => ({
+          ...prev,
+          [jobId]: { data: prev[jobId]?.data ?? null, isLoading: true, error: null },
+        }));
+      }
     }
 
+    // Fetch fresh data from API (revalidate)
     try {
       const results = await getFinetuneEvaluations(job.dataset_id, job.provider_job_id);
+
+      // Update state with fresh data
       setJobEvaluations((prev) => ({
         ...prev,
         [jobId]: { data: results, isLoading: false, error: null },
       }));
+
+      // Save to cache in background
+      saveJobEvaluationsCache(jobId, results).catch((err) => {
+        console.warn('Failed to cache job evaluations:', err);
+      });
     } catch (err) {
       setJobEvaluations((prev) => ({
         ...prev,
@@ -243,22 +244,23 @@ export function FinetuneJobsProvider({ children }: FinetuneJobsProviderProps) {
       const { job_id, status } = event;
 
       setJobs((prevJobs) => {
-        const existingJob = prevJobs.find((j) => j.id === job_id);
+        const jobsList = prevJobs || [];
+        const existingJob = jobsList.find((j) => j.id === job_id);
         if (existingJob) {
           // Update existing job status
-          return prevJobs.map((job) =>
+          return jobsList.map((job) =>
             job.id === job_id
               ? { ...job, status: status as FinetuneJobStatus }
               : job
           );
         } else {
           // Job not in list, trigger a full reload
-          loadJobs();
-          return prevJobs;
+          loadJobs(currentBackendDatasetId);
+          return jobsList;
         }
       });
     },
-    [loadJobs]
+    [loadJobs, setJobs, currentBackendDatasetId]
   );
 
   // Subscribe to SSE events
@@ -284,12 +286,7 @@ export function FinetuneJobsProvider({ children }: FinetuneJobsProviderProps) {
     };
   }, [subscribe, handleJobUpdateEvent]);
 
-  // Load jobs on mount
-  useEffect(() => {
-    loadJobs();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Reload jobs when currentBackendDatasetId changes (server-side filtering)
+  // Load jobs on mount and when currentBackendDatasetId changes
   useEffect(() => {
     loadJobs(currentBackendDatasetId);
   }, [currentBackendDatasetId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -302,7 +299,7 @@ export function FinetuneJobsProvider({ children }: FinetuneJobsProviderProps) {
         setCurrentBackendDatasetId(event.backendDatasetId);
         // loadJobs will be triggered by the useEffect watching currentBackendDatasetId
       } else {
-        loadJobs();
+        loadJobs(currentBackendDatasetId);
       }
       setIsSidebarOpen(true);
     };
@@ -311,15 +308,39 @@ export function FinetuneJobsProvider({ children }: FinetuneJobsProviderProps) {
     return () => {
       emitter.off("vllora_finetune_job_created", handleJobCreated);
     };
-  }, [loadJobs]);
+  }, [loadJobs, currentBackendDatasetId]);
 
   // Jobs are now filtered server-side, so filteredJobs just returns jobs
   const filteredJobs = jobs;
 
-  const value: FinetuneJobsContextType = {
+  // Get the most recent job (sorted by created_at descending)
+  const latestJob = useMemo(() => {
+    if (filteredJobs.length === 0) return null;
+    return [...filteredJobs].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )[0];
+  }, [filteredJobs]);
+
+  // Track if we've already fetched evaluations for completed jobs (by job ID)
+  const completedJobsFetchedRef = useRef<Set<string>>(new Set());
+
+  // Fetch evaluations once for completed latestJob on mount/change
+  useEffect(() => {
+    if (!latestJob) return;
+
+    const isCompleted = latestJob.status !== 'pending' && latestJob.status !== 'running';
+    const alreadyFetched = completedJobsFetchedRef.current.has(latestJob.id);
+
+    if (isCompleted && latestJob.dataset_id && !alreadyFetched) {
+      completedJobsFetchedRef.current.add(latestJob.id);
+      fetchJobEvaluations(latestJob, true);
+    }
+  }, [latestJob, fetchJobEvaluations]);
+
+  return {
     jobs,
     isLoading,
-    error,
+    error: error ? (error instanceof Error ? error.message : String(error)) : null,
     loadJobs,
     refreshJob,
     isSidebarOpen,
@@ -327,10 +348,26 @@ export function FinetuneJobsProvider({ children }: FinetuneJobsProviderProps) {
     currentBackendDatasetId,
     setCurrentBackendDatasetId,
     filteredJobs,
+    latestJob,
     getJobEvaluations,
     refreshJobEvaluations,
   };
+}
 
+// ============================================================================
+// Context
+// ============================================================================
+
+const FinetuneJobsContext = createContext<FinetuneJobsContextType | undefined>(
+  undefined
+);
+
+// ============================================================================
+// Provider
+// ============================================================================
+
+export function FinetuneJobsProvider({ children }: { children: ReactNode }) {
+  const value = useFinetuneJobsLogic();
   return (
     <FinetuneJobsContext.Provider value={value}>
       {children}
@@ -351,9 +388,3 @@ export function FinetuneJobsConsumer() {
   }
   return context;
 }
-
-// ============================================================================
-// Hook (alias for Consumer)
-// ============================================================================
-
-export const useFinetuneJobs = FinetuneJobsConsumer;

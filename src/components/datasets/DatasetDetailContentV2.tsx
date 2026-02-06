@@ -32,7 +32,7 @@ import { EvaluationConfigPanel, type EvaluationConfigPanelRef } from "./evaluati
 import { quickFinetune } from "@/services/quick-finetune";
 import { toast } from "sonner";
 import { FinetuneJobsContent } from "@/components/finetune/content";
-import { useFinetuneJobs } from "@/contexts/FinetuneJobsContext";
+import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { DryRunJobsProvider } from "@/contexts/DryRunJobsContext";
 import type { CoverageStats } from "@/types/dataset-types";
 
@@ -114,7 +114,7 @@ export function DatasetDetailContentV2() {
   } = DatasetDetailConsumer();
 
   // Finetune jobs sidebar
-  const { setCurrentBackendDatasetId } = useFinetuneJobs();
+  const { setCurrentBackendDatasetId } = FinetuneJobsConsumer();
 
   // Set the backend dataset ID for filtering jobs when dataset changes
   useEffect(() => {

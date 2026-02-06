@@ -24,7 +24,7 @@ import { toast } from "sonner";
 import { FinetuneJobStatusBadge } from "../FinetuneJobStatusBadge";
 import { JobExpandedContent } from "./JobExpandedContent";
 import { formatFinetuneJobDate, formatDuration, getModelDisplayName } from "./utils";
-import { useFinetuneJobs } from "@/contexts/FinetuneJobsContext";
+import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 
 interface FinetuneJobTableRowProps {
   job: FinetuneJob;
@@ -41,7 +41,7 @@ export function FinetuneJobTableRow({ job, onJobAction }: FinetuneJobTableRowPro
   const isActive = job.status === 'pending' || job.status === 'running';
 
   // Get evaluations from context (single polling instance)
-  const { getJobEvaluations, refreshJobEvaluations } = useFinetuneJobs();
+  const { getJobEvaluations, refreshJobEvaluations } = FinetuneJobsConsumer();
   const {
     data: evalResults,
     isLoading: isLoadingEvals,

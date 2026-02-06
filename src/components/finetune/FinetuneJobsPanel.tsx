@@ -1,4 +1,4 @@
-import { useFinetuneJobs } from "@/contexts/FinetuneJobsContext";
+import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { FinetuneJobStatusBadge } from "./FinetuneJobStatusBadge";
 import { formatFinetuneJobDate } from "./content/utils";
 import { Button } from "@/components/ui/button";
@@ -117,7 +117,7 @@ export function FinetuneJobsPanel({ className }: FinetuneJobsPanelProps) {
     loadJobs,
     isSidebarOpen,
     setIsSidebarOpen,
-  } = useFinetuneJobs();
+  } = FinetuneJobsConsumer();
 
   if (!isSidebarOpen) {
     return null;

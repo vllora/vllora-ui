@@ -5,9 +5,8 @@
  * Uses FinetuneJobsContext to get job data.
  */
 
-import { useMemo } from "react";
 import { Loader2 } from "lucide-react";
-import { useFinetuneJobs } from "@/contexts/FinetuneJobsContext";
+import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { EmptyState } from "./EmptyState";
 import { JobStatusCard } from "./JobStatusCard";
 
@@ -25,15 +24,7 @@ export function FinetuneJobCard({
   onJobClick,
   canStartJob = true,
 }: FinetuneJobCardProps) {
-  const { filteredJobs, isLoading } = useFinetuneJobs();
-
-  // Get the most recent job
-  const latestJob = useMemo(() => {
-    if (filteredJobs.length === 0) return null;
-    return [...filteredJobs].sort(
-      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    )[0];
-  }, [filteredJobs]);
+  const { filteredJobs, latestJob, isLoading } = FinetuneJobsConsumer();
 
   // Show loading state
   if (isLoading && filteredJobs.length === 0) {
