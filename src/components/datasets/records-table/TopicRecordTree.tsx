@@ -6,11 +6,10 @@
  */
 
 import { useState, useMemo } from "react";
-import { ChevronDown, Folder } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import { RecordRow } from "./RecordRow";
 import { TopicTreeNodeRow } from "./TopicTreeNodeRow";
+import { TopicNodeHeader } from "./TopicNodeHeader";
 import type { AvailableTopic } from "../record-utils";
 
 interface TopicRecordTreeProps {
@@ -102,6 +101,7 @@ export function TopicRecordTree({
       {unassignedRecords.length > 0 && (
         <UnassignedSection
           records={unassignedRecords}
+          totalRecords={records.length}
           onUpdateTopic={onUpdateTopic}
           onDelete={onDelete}
           onSave={onSave}
@@ -123,6 +123,7 @@ export function TopicRecordTree({
           parentPath={[]}
           recordsByTopic={recordsByTopic}
           descendantCounts={descendantCounts}
+          totalRecords={records.length}
           onUpdateTopic={onUpdateTopic}
           onDelete={onDelete}
           onSave={onSave}
@@ -140,6 +141,7 @@ export function TopicRecordTree({
 
 interface UnassignedSectionProps {
   records: DatasetRecord[];
+  totalRecords: number;
   onUpdateTopic: (recordId: string, topic: string, isNew?: boolean) => Promise<void>;
   onDelete: (recordId: string) => void;
   onSave?: (recordId: string, data: unknown) => Promise<void>;
@@ -153,6 +155,7 @@ interface UnassignedSectionProps {
 
 function UnassignedSection({
   records,
+  totalRecords,
   onUpdateTopic,
   onDelete,
   onSave,
@@ -164,32 +167,23 @@ function UnassignedSection({
   availableTopics,
 }: UnassignedSectionProps) {
   const [isExpanded, setIsExpanded] = useState(true);
+  const percentage = totalRecords > 0 ? (records.length / totalRecords) * 100 : 0;
 
   return (
-    <div className="border-b border-border/50">
-      <button
-        className="w-full flex items-center gap-3 py-3 px-4 text-left transition-colors hover:bg-muted/40"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        <span className="w-5 h-5 flex items-center justify-center shrink-0">
-          <ChevronDown
-            className={cn(
-              "w-4 h-4 text-muted-foreground transition-transform duration-200",
-              !isExpanded && "-rotate-90"
-            )}
-          />
-        </span>
-        <Folder className="w-4 h-4 text-zinc-500 shrink-0" />
-        <span className="text-sm font-medium text-zinc-400 uppercase tracking-wide">
-          Unassigned
-        </span>
-        <span className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-zinc-800 text-zinc-400 text-xs font-semibold tracking-wider shrink-0">
-          <span>{records.length.toLocaleString()}</span>
-        </span>
-      </button>
+    <div>
+      <TopicNodeHeader
+        path={[]}
+        hasContent={true}
+        isExpanded={isExpanded}
+        onToggle={() => setIsExpanded(!isExpanded)}
+        totalCount={records.length}
+        percentage={percentage}
+        hasChildren={false}
+        variant="unassigned"
+      />
 
       {isExpanded && (
-        <div className="p-2 space-y-2 bg-muted/10">
+        <div className="p-2 space-y-1.5 bg-transparent">
           {records.map((record) => (
             <RecordRow
               key={record.id}

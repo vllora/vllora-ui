@@ -75,17 +75,16 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
     <div
       ref={ref}
       className={cn(
-        "flex flex-col rounded-lg border border-border/40 bg-card/30 overflow-hidden",
-        isExpanded && "border-border/60 shadow-md"
+        "flex flex-col rounded-md overflow-hidden transition-colors bg-zinc-800/30",
+        isExpanded ? "ring-1 ring-zinc-700/50" : "hover:bg-zinc-800/50",
+        selected && "bg-[rgb(var(--theme-500))]/10 ring-1 ring-[rgb(var(--theme-500))]/30"
       )}
     >
       {/* Main row */}
       <div
         className={cn(
-          "px-4 py-4 flex items-center gap-4 transition-colors",
-          !isExpanded && "hover:bg-muted/30",
-          selected && "bg-[rgb(var(--theme-500))]/5",
-          isExpanded && "bg-zinc-800/50"
+          "px-3 py-3 flex items-center gap-3 transition-colors",
+          isExpanded && "border-b border-zinc-700/50"
         )}
       >
         {/* Expand/Collapse toggle or viewing indicator */}
