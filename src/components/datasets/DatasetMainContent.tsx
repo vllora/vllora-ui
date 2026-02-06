@@ -126,6 +126,8 @@ export function DatasetMainContent({
           viewMode={viewMode}
           onViewModeChange={onViewModeChange}
           onExport={onExport}
+          records={records}
+          datasetId={datasetId}
         />
       </div>
 
@@ -156,7 +158,7 @@ export function DatasetMainContent({
             records={records}
             datasetId={datasetId}
             showHeader={true}
-            showFooter={true}
+            showFooter={false}
             height="auto"
             groupByTopic={true}
             topicHierarchy={topicHierarchy}

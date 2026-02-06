@@ -13,7 +13,7 @@ import {
   getJobFailedGradingCount,
 } from "@/types/dry-run-job";
 import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
-import { EvaluationEmptyState, DryRunEmptyState } from "./EvaluationEmptyState";
+import { DryRunEmptyState } from "./EvaluationEmptyState";
 import { EvaluationFailedState } from "./EvaluationFailedState";
 import { EvaluationRunningState } from "./EvaluationRunningState";
 import { EvaluationResultsState } from "./EvaluationResultsState";
@@ -28,12 +28,13 @@ export interface DryRunEvaluationCardProps {
   onDryRunClick?: () => void;
 }
 
-export function DryRunEvaluationCard({ evalScript, onConfigureClick, onDryRunClick }: DryRunEvaluationCardProps) {
+export function DryRunEvaluationCard({ evalScript, onDryRunClick }: DryRunEvaluationCardProps) {
   const { jobs, isLoading, runningJob, lastCompletedJob } = DryRunJobsConsumer();
 
   // No eval script - show setup prompt (clickable)
   if (!evalScript) {
-    return <EvaluationEmptyState onConfigureClick={onConfigureClick} />;
+    return <></>
+    // return <EvaluationEmptyState onConfigureClick={onConfigureClick} />;
   }
 
   // Dry run is currently running - show progress with summary stats
@@ -87,5 +88,5 @@ export function DryRunEvaluationCard({ evalScript, onConfigureClick, onDryRunCli
   }
 
   // Show evaluation results with distribution bars
-  return <EvaluationResultsState stats={dryRunStats} onDryRunClick={onDryRunClick} />;
+  return <EvaluationResultsState job={lastCompletedJob} onDryRunClick={onDryRunClick} />;
 }
