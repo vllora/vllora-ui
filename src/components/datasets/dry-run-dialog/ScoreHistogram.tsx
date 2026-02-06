@@ -158,10 +158,11 @@ function CustomTooltip({
 
   const data = payload[0].payload;
   return (
-    <div className="bg-popover border rounded-md shadow-md p-2 text-sm">
-      <p className="font-medium">Score: {data.range}</p>
-      <p className="text-muted-foreground">
-        {data.count} samples ({data.percentage.toFixed(1)}%)
+    <div className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl p-3 text-sm">
+      <p className="font-semibold text-zinc-100">Score: {data.range}</p>
+      <p className="text-zinc-400 mt-1">
+        <span className="font-mono text-zinc-200">{data.count}</span> samples
+        <span className="text-zinc-500 ml-1">({data.percentage.toFixed(1)}%)</span>
       </p>
     </div>
   );
@@ -209,13 +210,14 @@ export function ScoreHistogram({
     );
   }
 
-  // Determine bar color based on score range
+  // Determine bar color based on score range - matches DISTRIBUTION_BINS colors
   const getBarColor = (bin: HistogramBin) => {
     const midpoint = (bin.rangeStart + bin.rangeEnd) / 2;
-    if (midpoint < 0.2) return "hsl(var(--destructive))";
-    if (midpoint < 0.4) return "hsl(38 92% 50%)"; // amber
-    if (midpoint < 0.7) return "hsl(var(--primary))";
-    return "hsl(142 76% 36%)"; // green
+    if (midpoint < 0.2) return "#ef4444"; // red
+    if (midpoint < 0.4) return "#f97316"; // orange
+    if (midpoint < 0.6) return "#eab308"; // yellow
+    if (midpoint < 0.8) return "#84cc16"; // lime
+    return "#10b981"; // emerald
   };
 
   return (
@@ -225,45 +227,46 @@ export function ScoreHistogram({
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={histogramData}
-            margin={{ top: 10, right: 10, left: 0, bottom: 20 }}
+            margin={{ top: 20, right: 10, left: 0, bottom: 60 }}
           >
             <XAxis
               dataKey="range"
-              tick={{ fontSize: 10 }}
+              tick={{ fontSize: 10, fill: '#71717a' }}
               interval={0}
               angle={-45}
               textAnchor="end"
-              height={50}
-              axisLine={false}
+              dy={10}
+              axisLine={{ stroke: '#3f3f46' }}
               tickLine={false}
             />
             <YAxis
-              tick={{ fontSize: 11 }}
+              tick={{ fontSize: 11, fill: '#71717a' }}
               tickFormatter={(value) => `${value}`}
-              axisLine={false}
+              axisLine={{ stroke: '#3f3f46' }}
               tickLine={false}
             />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
             {/* Mean line */}
             {showMean && (
               <ReferenceLine
                 x={histogramData.findIndex(
                   (b) => stats.mean >= b.rangeStart && stats.mean < b.rangeEnd
                 )}
-                stroke="hsl(var(--primary))"
+                stroke="#10b981"
                 strokeDasharray="5 5"
                 strokeWidth={2}
                 label={{
                   value: `Mean: ${stats.mean.toFixed(2)}`,
                   position: "top",
                   fontSize: 11,
-                  fill: "hsl(var(--primary))",
+                  fill: "#10b981",
+                  fontWeight: 600,
                 }}
               />
             )}
-            <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={40}>
+            <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={50}>
               {histogramData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={getBarColor(entry)} fillOpacity={0.8} />
+                <Cell key={`cell-${index}`} fill={getBarColor(entry)} fillOpacity={0.85} />
               ))}
             </Bar>
           </BarChart>
@@ -278,27 +281,45 @@ export function ScoreHistogram({
               label="Mean"
               value={stats.mean.toFixed(2)}
               highlight
-              description="Average score across all samples. Higher is better. Ideal range: 0.3-0.8"
+              tooltipTitle="Mean (Average Score)"
+              tooltipDescription="Sum of all scores divided by sample count. Represents the central tendency of your evaluation results."
+              tooltipRanges={[
+                { range: "≥ 0.8", color: "text-emerald-400", meaning: "Excellent quality" },
+                { range: "0.5–0.8", color: "text-amber-400", meaning: "Needs improvement" },
+                { range: "< 0.5", color: "text-red-400", meaning: "Poor quality" },
+              ]}
+              learnMoreUrl="https://en.wikipedia.org/wiki/Arithmetic_mean"
             />
             <StatBox
               label="Std Dev"
               value={stats.std.toFixed(2)}
-              description="Standard deviation measures score spread. Formula: sqrt(Σ(x - mean)² / n). Low (<0.1) may indicate grader not differentiating well"
+              tooltipTitle="Standard Deviation (σ)"
+              tooltipDescription="Measures how spread out scores are from the mean. Lower values indicate more consistent, predictable quality."
+              tooltipRanges={[
+                { range: "≤ 0.15", color: "text-emerald-400", meaning: "Very consistent" },
+                { range: "0.15–0.25", color: "text-amber-400", meaning: "Moderate variance" },
+                { range: "> 0.25", color: "text-red-400", meaning: "High variance" },
+              ]}
+              learnMoreUrl="https://en.wikipedia.org/wiki/Standard_deviation"
             />
             <StatBox
               label="Min"
               value={stats.min.toFixed(2)}
-              description="Lowest score in the sample. Very low values may indicate problematic examples"
+              tooltipTitle="Minimum Score"
+              tooltipDescription="The lowest evaluation score in the sample. Very low minimums may indicate problematic examples or edge cases that need attention."
             />
             <StatBox
               label="Max"
               value={stats.max.toFixed(2)}
-              description="Highest score in the sample. Very high values across all samples may indicate lenient grading"
+              tooltipTitle="Maximum Score"
+              tooltipDescription="The highest evaluation score in the sample. A max of 1.0 across many samples may indicate lenient grading criteria."
             />
             <StatBox
               label="Median"
               value={stats.median.toFixed(2)}
-              description="Middle value when scores are sorted. Less affected by outliers than mean"
+              tooltipTitle="Median Score"
+              tooltipDescription="The middle value when scores are sorted. Less affected by outliers than mean, useful for skewed distributions."
+              learnMoreUrl="https://en.wikipedia.org/wiki/Median"
             />
           </div>
         </TooltipProvider>
@@ -343,43 +364,76 @@ export function ScoreHistogram({
   );
 }
 
+interface TooltipRange {
+  range: string;
+  color: string;
+  meaning: string;
+}
+
 function StatBox({
   label,
   value,
   highlight = false,
-  description,
+  tooltipTitle,
+  tooltipDescription,
+  tooltipRanges,
+  learnMoreUrl,
 }: {
   label: string;
   value: string;
   highlight?: boolean;
-  description?: string;
+  tooltipTitle?: string;
+  tooltipDescription?: string;
+  tooltipRanges?: TooltipRange[];
+  learnMoreUrl?: string;
 }) {
   const content = (
     <div
       className={cn(
-        "rounded-md border p-2 cursor-help",
-        highlight && "bg-primary/5 border-primary/20"
+        "rounded-md border border-zinc-800 bg-zinc-900/50 p-2.5 cursor-help transition-colors hover:bg-zinc-900/80",
+        highlight && "border-emerald-500/30 bg-emerald-500/5"
       )}
     >
       <div className="flex items-center justify-center gap-1">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        {description && (
-          <HelpCircle className="h-3 w-3 text-muted-foreground/50" />
+        <p className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</p>
+        {tooltipDescription && (
+          <HelpCircle className="h-3 w-3 text-zinc-600" />
         )}
       </div>
-      <p className={cn("text-lg font-semibold", highlight && "text-primary")}>
+      <p className={cn("text-lg font-mono font-semibold text-zinc-200 mt-0.5", highlight && "text-emerald-400")}>
         {value}
       </p>
     </div>
   );
 
-  if (!description) return content;
+  if (!tooltipDescription) return content;
 
   return (
     <UITooltip>
       <TooltipTrigger asChild>{content}</TooltipTrigger>
-      <TooltipContent side="bottom" className="max-w-[200px] text-xs">
-        <p>{description}</p>
+      <TooltipContent side="bottom" className="max-w-[280px] text-xs p-3">
+        {tooltipTitle && <p className="font-semibold mb-1">{tooltipTitle}</p>}
+        <p className="text-muted-foreground mb-2">{tooltipDescription}</p>
+        {tooltipRanges && tooltipRanges.length > 0 && (
+          <div className="text-muted-foreground border-t border-zinc-700 pt-2 mt-2">
+            {tooltipRanges.map((r, i) => (
+              <p key={i} className="mb-1">
+                <span className={r.color}>{r.range}</span> — {r.meaning}
+              </p>
+            ))}
+          </div>
+        )}
+        {learnMoreUrl && (
+          <a
+            href={learnMoreUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-400 hover:underline block mt-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            Learn more →
+          </a>
+        )}
       </TooltipContent>
     </UITooltip>
   );
