@@ -180,6 +180,7 @@ export function LucyChat({
   // Get tool calls state from store
   const toolCalls = useChatStateStore((state) => state.toolCalls);
   const hasPendingToolCalls = useChatStateStore((state) => state.hasPendingToolCalls);
+  const failAllPendingToolCalls = useChatStateStore((state) => state.failAllPendingToolCalls);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -234,8 +235,12 @@ export function LucyChat({
       return;
     }
 
-    // Skip if chat is busy
-    if (isStreaming || isLoading) {
+    // Check if there are pending tool calls (like ask_follow_up waiting for user input)
+    const hasPending = hasPendingToolCalls();
+
+    // Skip if chat is busy streaming/loading AND there are no pending tool calls to dismiss
+    // If there ARE pending tool calls, we should dismiss them and proceed with the new prompt
+    if ((isStreaming || isLoading) && !hasPending) {
       return;
     }
 
@@ -245,6 +250,21 @@ export function LucyChat({
 
     // Small delay to ensure component is fully mounted
     const timer = setTimeout(() => {
+      // Clear old todos when starting a new operation
+      // This ensures old task progress doesn't persist when a new prompt is triggered
+      setLocalTodos([]);
+      useChatStateStore.getState().setTodos([]);
+
+      // Dismiss any pending tool calls (e.g., ask_follow_up forms) before sending new message
+      // This ensures the form doesn't persist when a new external prompt is triggered
+      if (hasPending) {
+        failAllPendingToolCalls('Dismissed by new prompt');
+      }
+      // Stop any active streaming before sending new message
+      if (isStreaming) {
+        stopStreaming();
+        useChatStateStore.getState().resetStreamingStates();
+      }
       sendMessage([{ part_type: 'text', data: autoTriggerPrompt }]);
       // Reset pending after send completes
       autoTriggerPendingRef.current = false;
@@ -254,7 +274,7 @@ export function LucyChat({
       clearTimeout(timer);
       autoTriggerPendingRef.current = false;
     };
-  }, [autoTriggerPrompt, isStreaming, isLoading, sendMessage]);
+  }, [autoTriggerPrompt, isStreaming, isLoading, sendMessage, stopStreaming, hasPendingToolCalls, failAllPendingToolCalls]);
 
   // Reset auto-trigger tracking when threadId changes (new chat)
   useEffect(() => {

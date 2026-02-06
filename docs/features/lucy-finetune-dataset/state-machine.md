@@ -166,7 +166,7 @@ function isValidStepTransition(from: FinetuneStep, to: FinetuneStep): boolean {
 |----------|-------|
 | Required | **No** (optional - improves organization) |
 | Can Skip To | `grader_config` directly |
-| Tools | `generate_topics`, `apply_topic_hierarchy` |
+| Tools | `generate_topics`, `apply_topic_hierarchy`, `adjust_topic_hierarchy`, `get_topic_hierarchy` |
 | Output | `topicsConfig` object stored in workflow |
 
 **State Transitions:**
@@ -224,7 +224,7 @@ interface CategorizationResult {
 | Required | **No** (optional - improves data balance) |
 | Depends On | Steps 1-2 (if skipped, this is also skipped) |
 | Can Skip To | `grader_config` directly |
-| Tools | `analyze_coverage`, `generate_synthetic_data` |
+| Tools | `analyze_coverage`, `generate_synthetic_data`, `generate_initial_data` |
 | Output | `coverageGeneration` object stored in workflow |
 
 **Two Supported Workflows:**

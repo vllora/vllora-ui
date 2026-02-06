@@ -14,7 +14,7 @@ The Lucy Dataset Agent follows a **3-tier architecture** with tools executing lo
 │  ┌────────────────────────┐   ┌─────────────────────────────────────┐  │
 │  │ LucyDatasetAssistant   │   │    distri-finetune-tools/           │  │
 │  │ - Sidebar UI           │   │    - Workflow tools (4)             │  │
-│  │ - Auto-analysis        │   │    - Step tools (17)                │  │
+│  │ - Auto-analysis        │   │    - Step tools (20)                │  │
 │  │ - Quick actions        │   │    - Execute locally in browser     │  │
 │  └────────────────────────┘   └─────────────────────────────────────┘  │
 │           │                              │                              │
@@ -63,9 +63,11 @@ The Lucy Dataset Agent follows a **3-tier architecture** with tools executing lo
 | Name | `vllora_finetune_agent` |
 | Model | `gpt-4.1` |
 | Temperature | `0.2` |
-| Max Iterations | `20` |
+| Max Iterations | `30` |
 | Tool Format | `provider` |
-| Total Tools | 21 (4 workflow + 17 step) |
+| External Tool Timeout | `600s` (10 min for user responses) |
+| Sub-Agents | `finetune_analysis`, `finetune_topics`, `finetune_workflow` |
+| Total Tools | 24 (4 workflow + 20 step) |
 
 The agent is defined using Distri's markdown-based agent definition format. Key sections:
 - **ROLE**: Process-focused finetune assistant
@@ -73,6 +75,43 @@ The agent is defined using Distri's markdown-based agent definition format. Key 
 - **WORKFLOW OVERVIEW**: 7-step pipeline description
 - **STEP GUIDANCE**: Detailed instructions for each step
 - **RULES**: Critical rules for safe operation
+
+---
+
+### 1.5. Sub-Agent Architecture
+
+The orchestrator (`vllora_finetune_agent`) delegates specialized tasks to sub-agents rather than executing tools directly:
+
+| Sub-Agent | Purpose | Tools |
+|-----------|---------|-------|
+| `finetune_analysis` | Dataset analysis, pattern identification | `get_dataset_records`, `get_dataset_stats` |
+| `finetune_topics` | Topic hierarchy generation/manipulation | `generate_topics`, `apply_topic_hierarchy`, `adjust_topic_hierarchy`, `get_topic_hierarchy` |
+| `finetune_workflow` | Workflow operations, training, deployment | All workflow + training tools |
+
+**Delegation Flow:**
+```
+vllora_finetune_agent (Orchestrator)
+    │
+    ├── transfer_to_agent("finetune_analysis", "Analyze dataset...")
+    │       └── Calls get_dataset_stats, get_dataset_records
+    │
+    ├── transfer_to_agent("finetune_topics", "Generate topics...")
+    │       └── Calls generate_topics, apply_topic_hierarchy
+    │
+    └── transfer_to_agent("finetune_workflow", "Start training...")
+            └── Calls start_training, run_dry_run, etc.
+```
+
+**Benefits:**
+- **Separation of concerns**: Each sub-agent is specialized for its domain
+- **Smaller context windows**: Sub-agents only load relevant tools
+- **Cleaner orchestration**: Main agent focuses on UX and workflow guidance
+
+**Agent Definition Files:**
+- `gateway/agents/finetune/vllora-finetune-agent.md` (Orchestrator)
+- `gateway/agents/finetune/finetune-analysis-agent.md`
+- `gateway/agents/finetune/finetune-topics-agent.md`
+- `gateway/agents/finetune/finetune-workflow-agent.md`
 
 ---
 
@@ -129,12 +168,13 @@ distri/
 
 ### 3.5. Builtin Tools (from Distri)
 
-The agent has access to two **builtin tools** provided by the Distri framework:
+The agent has access to **builtin tools** provided by the Distri framework:
 
 | Tool | Purpose | UI Component |
 |------|---------|--------------|
 | `final` | Mark agent response as final | N/A |
 | `write_todos` | Track sub-tasks with real-time progress updates | `TodosDisplay` from `@distri/react` |
+| `transfer_to_agent` | Delegate task to a sub-agent | N/A (server-side routing) |
 
 #### write_todos
 
@@ -210,10 +250,14 @@ interface UseFineTuneAgentChatReturn {
 **Tools Array Composition:**
 ```typescript
 // In useFineTuneAgentChat.ts
-const tools = useMemo<DistriAnyTool[]>(() => [...finetuneTools], []);
+const tools = useMemo<DistriAnyTool[]>(
+  () => [...finetuneTools, createAskFollowUpTool()],
+  []
+);
 ```
 
-- `finetuneTools`: All 21 function tools (workflow + step tools)
+- `finetuneTools`: All 24 function tools (workflow + step tools)
+- `createAskFollowUpTool()`: UI tool for presenting options to users
 
 **Context Injection Pattern:**
 ```typescript
@@ -242,9 +286,12 @@ distri-finetune-tools/
 │   │   ├── backend.ts    # Template-based generation
 │   │   └── index.ts
 │   ├── apply-hierarchy.ts
+│   ├── adjust-hierarchy.ts       # Natural language topic adjustments
+│   ├── topic-manipulation.ts     # get_topic_hierarchy tool
 │   ├── categorize-records.ts
 │   ├── analyze-coverage.ts
 │   ├── generate-synthetic.ts
+│   ├── generate-initial-data.ts  # Generate data for empty datasets
 │   ├── configure-grader.ts
 │   ├── test-grader.ts
 │   ├── validate-records.ts
@@ -258,7 +305,10 @@ distri-finetune-tools/
 │   ├── get-dataset-stats.ts
 │   ├── update-record.ts
 │   └── helpers.ts
-├── topic-tools.ts        # Topic-specific utilities
+├── todos/
+│   └── index.ts          # Todo list tool definitions
+├── ui/
+│   └── index.ts          # UI-specific tools (ask_follow_up)
 └── eval-tools.ts         # Evaluation utilities
 ```
 
@@ -271,13 +321,13 @@ distri-finetune-tools/
 | `advance_to_step` | Move to next step (with skip support) |
 | `rollback_to_step` | Return to previous step via snapshots |
 
-#### Step Tools (17)
+#### Step Tools (20)
 
 | Category | Tools |
 |----------|-------|
-| **Topics (Step 1)** | `generate_topics`, `apply_topic_hierarchy` |
+| **Topics (Step 1)** | `generate_topics`, `apply_topic_hierarchy`, `adjust_topic_hierarchy`, `get_topic_hierarchy` |
 | **Categorize (Step 2)** | `categorize_records` |
-| **Coverage (Step 3)** | `analyze_coverage`, `generate_synthetic_data` |
+| **Coverage (Step 3)** | `analyze_coverage`, `generate_synthetic_data`, `generate_initial_data` |
 | **Grader (Step 4)** | `configure_grader`, `test_grader_sample` |
 | **Upload/Sync** | `upload_dataset`, `sync_evaluator` |
 | **Dry Run (Step 5)** | `run_dry_run` |
@@ -356,7 +406,7 @@ interface FinetuneWorkflowState {
 ## Key Design Decisions
 
 ### 1. Frontend Tool Execution
-All 21 tools execute in the browser via JavaScript handlers. This allows:
+All 24 tools execute in the browser via JavaScript handlers. This allows:
 - Direct access to IndexedDB
 - No backend API needed for data operations
 - Real-time UI updates via emitter events
@@ -421,12 +471,12 @@ Workflow snapshots stored in IndexedDB enable:
 ### Potential Considerations
 
 1. **Tool Definition Sync** - Tools defined in both:
-   - Agent `.md` file (`[tools].external` array)
+   - Agent `.md` files (`[tools].external` array in each sub-agent)
    - Frontend TypeScript (`DistriFnTool` definitions)
 
-   These must stay in sync manually.
+   These must stay in sync manually across 4 agent definition files.
 
-2. **Browser-Only Execution** - All 21 tools execute in browser. For operations like `start_training` or `deploy_model`, consider:
+2. **Browser-Only Execution** - All 24 tools execute in browser. For operations like `start_training` or `deploy_model`, consider:
    - Access to GPU resources
    - Long-running jobs
    - Secure API key handling
