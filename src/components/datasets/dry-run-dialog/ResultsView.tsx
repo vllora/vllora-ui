@@ -140,7 +140,7 @@ export function ResultsView({
             /* Normal stats view when evaluations succeeded */
             <>
               {scores.length > 0 && (
-                <ScoreHistogram scores={scores} showMean showStats />
+                <ScoreHistogram scores={scores} showMean showStats resultDiagnosis={result.diagnosis} />
               )}
 
               {/* Recommendations */}

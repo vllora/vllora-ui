@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/tooltip";
 import { HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { DryRunDiagnosis } from "@/types/dataset-types";
 
 interface ScoreHistogramProps {
   /** Array of scores (0.0 - 1.0) */
@@ -36,6 +37,8 @@ interface ScoreHistogramProps {
   showMean?: boolean;
   /** Show statistics below chart */
   showStats?: boolean;
+  /** Actual diagnosis from result (if provided, uses this instead of recalculating) */
+  resultDiagnosis?: DryRunDiagnosis;
 }
 
 interface HistogramBin {
@@ -170,6 +173,7 @@ export function ScoreHistogram({
   height = 200,
   showMean = true,
   showStats = true,
+  resultDiagnosis,
 }: ScoreHistogramProps) {
   const histogramData = useMemo(
     () => calculateHistogram(scores, bins),
@@ -177,7 +181,22 @@ export function ScoreHistogram({
   );
 
   const stats = useMemo(() => calculateStats(scores), [scores]);
-  const diagnosis = useMemo(() => getDiagnosis(stats), [stats]);
+  const localDiagnosis = useMemo(() => getDiagnosis(stats), [stats]);
+
+  // Use result diagnosis if provided, otherwise fall back to local calculation
+  const diagnosis = useMemo(() => {
+    if (resultDiagnosis) {
+      // Convert result diagnosis format to local format
+      const issues = resultDiagnosis.issues?.map(i => i.message) || resultDiagnosis.warnings || [];
+      return {
+        verdict: resultDiagnosis.verdict,
+        issues,
+        color: resultDiagnosis.verdict === "GO" ? "text-green-600" : resultDiagnosis.verdict === "NO-GO" ? "text-red-600" : "text-amber-600",
+        bgColor: resultDiagnosis.verdict === "GO" ? "bg-green-100 dark:bg-green-900/30" : resultDiagnosis.verdict === "NO-GO" ? "bg-red-100 dark:bg-red-900/30" : "bg-amber-100 dark:bg-amber-900/30",
+      };
+    }
+    return localDiagnosis;
+  }, [resultDiagnosis, localDiagnosis]);
 
   if (scores.length === 0) {
     return (
