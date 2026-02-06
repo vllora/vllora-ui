@@ -10,10 +10,8 @@
  */
 
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
-import { Loader2, Download } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 import { DatasetUtilityBar } from "./dataset-detail-header/DatasetUtilityBar";
-import { ViewModeToggle } from "./dataset-detail-header/ViewModeToggle";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { emitter } from "@/utils/eventEmitter";
 import { DeleteConfirmationDialog } from "./DeleteConfirmationDialog";
@@ -26,7 +24,6 @@ import { SanitizeDataDialog } from "./SanitizeDataDialog";
 import { DryRunDialog } from "./dry-run-dialog";
 import { getLeafTopicsFromHierarchy, computeCoverageStats, computeDatasetInsights } from "./record-utils";
 import { getTopicCounts } from "./topic-hierarchy-utils";
-import { DatasetOverviewCard } from "./dataset-detail-header/overview-card";
 import { DryRunEvaluationCard } from "./dataset-detail-header/evaluation-card";
 import { FinetuneJobCard } from "./dataset-detail-header/finetune-job-card";
 import { RecordsAnalyticsDialog } from "./dataset-detail-header/detail-records-analytics-dialog";
@@ -300,47 +297,27 @@ export function DatasetDetailContentV2() {
 
         {/* Main content area - Records, Evaluator, or Jobs based on active section */}
         {activeSection === "records" && (
-          <>
-          {/* Dataset Overview Card with Actions */}
-          <div className="px-4 py-3 border-b border-border">
-            <div className="flex items-start gap-3">
-              {/* Card takes most of the space */}
-              <div className="flex-1 min-w-0">
-                <DatasetOverviewCard
-                  total={insights.totalRecords}
-                  original={insights.originalRecords}
-                  generated={insights.generatedRecords}
-                  topicDistribution={insights.topicDistribution}
-                  uncategorizedCount={insights.uncategorizedCount}
-                  leafTopicCount={availableTopics.length}
-                  balanceRating={cardCoverageStats?.balanceRating}
-                  balanceScore={cardCoverageStats?.balanceScore}
-                  onClick={() => setAnalyticsDialogOpen(true)}
-                  onImportClick={() => setImportDialog(true)}
-                />
-              </div>
-              {/* Action buttons */}
-              <div className="flex items-center gap-2 shrink-0 pt-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-3 gap-1.5 text-xs"
-                  onClick={handleExport}
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Export
-                </Button>
-                <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
-              </div>
-            </div>
-          </div>
           <DatasetMainContent
             viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            onExport={handleExport}
             datasetId={datasetId}
             records={sortedRecords}
             topicHierarchy={dataset.topicHierarchy?.hierarchy}
             coverageStats={canvasCoverageStats}
             availableTopics={availableTopics}
+            overviewStats={{
+              total: insights.totalRecords,
+              original: insights.originalRecords,
+              generated: insights.generatedRecords,
+              topicDistribution: insights.topicDistribution,
+              uncategorizedCount: insights.uncategorizedCount,
+              balanceRating: cardCoverageStats?.balanceRating,
+              balanceScore: cardCoverageStats?.balanceScore,
+            }}
+            leafTopicCount={availableTopics.length}
+            onOverviewClick={() => setAnalyticsDialogOpen(true)}
+            onImportClick={() => setImportDialog(true)}
             selectedTopic={selectedTopic}
             onSelectTopic={setSelectedTopic}
             selectedRecord={selectedRecord}
@@ -359,7 +336,6 @@ export function DatasetDetailContentV2() {
             onGenerateSubtopics={handleGenerateSubtopics}
             datasetObjective={dataset.datasetObjective}
           />
-          </>
         )}
         {activeSection === "evaluator" && (
           <>

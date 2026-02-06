@@ -2,25 +2,45 @@
  * DatasetMainContent
  *
  * Main content area for displaying dataset records.
- * Switches between Canvas (topic hierarchy) and Table views.
+ * Includes header with overview card, and switches between Canvas/Table views.
  * Note: Evaluator is now a separate section, not handled here.
  */
 
 import type { ViewMode } from "./dataset-detail-header/DatasetUtilityBar";
 import type { CoverageStats, DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import type { AvailableTopic } from "./record-utils";
+import { RecordsSectionHeader } from "./dataset-detail-header/RecordsSectionHeader";
+import { DatasetOverviewCard } from "./dataset-detail-header/overview-card";
 import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
 import { RecordsTable } from "./records-table/RecordsTable";
 import { RecordDetailSidebar } from "./records-table/RecordDetailSidebar";
 import { EmptyRecordsState } from "./EmptyRecordsState";
 
+type BalanceRating = "excellent" | "good" | "fair" | "poor" | "critical";
+
 export interface DatasetMainContentProps {
   viewMode: ViewMode;
+  onViewModeChange: (mode: ViewMode) => void;
+  onExport: () => void;
   datasetId: string;
   records: DatasetRecord[];
   topicHierarchy?: TopicHierarchyNode[];
   coverageStats?: CoverageStats;
   availableTopics: AvailableTopic[];
+
+  // Overview card props
+  overviewStats: {
+    total: number;
+    original: number;
+    generated: number;
+    topicDistribution: Record<string, number>;
+    uncategorizedCount: number;
+    balanceRating?: BalanceRating;
+    balanceScore?: number;
+  };
+  leafTopicCount: number;
+  onOverviewClick: () => void;
+  onImportClick: () => void;
 
   // Canvas state
   selectedTopic: string | null;
@@ -48,11 +68,17 @@ export interface DatasetMainContentProps {
 
 export function DatasetMainContent({
   viewMode,
+  onViewModeChange,
+  onExport,
   datasetId,
   records,
   topicHierarchy,
   coverageStats,
   availableTopics,
+  overviewStats,
+  leafTopicCount,
+  onOverviewClick,
+  onImportClick,
   selectedTopic,
   onSelectTopic,
   selectedRecord,
@@ -80,6 +106,31 @@ export function DatasetMainContent({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Records Section Header */}
+      <div className="px-4 py-3 border-b border-border space-y-3">
+        {/* Overview card */}
+        <DatasetOverviewCard
+          total={overviewStats.total}
+          original={overviewStats.original}
+          generated={overviewStats.generated}
+          topicDistribution={overviewStats.topicDistribution}
+          uncategorizedCount={overviewStats.uncategorizedCount}
+          leafTopicCount={leafTopicCount}
+          balanceRating={overviewStats.balanceRating}
+          balanceScore={overviewStats.balanceScore}
+          onClick={onOverviewClick}
+          onImportClick={onImportClick}
+        />
+        {/* View controls below card */}
+        <RecordsSectionHeader
+          viewMode={viewMode}
+          onViewModeChange={onViewModeChange}
+          onExport={onExport}
+        />
+      </div>
+
+      {/* Main content area */}
+      <div className="flex-1 flex flex-col overflow-hidden">
       {viewMode === "canvas" ? (
         <TopicHierarchyCanvas
           hierarchy={topicHierarchy}
@@ -131,6 +182,7 @@ export function DatasetMainContent({
           />
         </>
       )}
+      </div>
     </div>
   );
 }

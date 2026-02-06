@@ -7,6 +7,12 @@
 
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { TopicCanvasConsumer } from "./TopicCanvasContext";
 import { cn } from "@/lib/utils";
 
@@ -36,16 +42,21 @@ export function CanvasToolbar({ className, onFitView }: CanvasToolbarProps) {
         className
       )}
     >
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={handleRelayout}
-        className="h-8 px-3 text-sm gap-2 rounded-full"
-        title="Re-arrange nodes automatically"
-      >
-        <RefreshCw className="h-4 w-4" />
-        Relayout
-      </Button>
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleRelayout}
+              className="h-8 w-8 rounded-full"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Relayout</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </div>
   );
 }
