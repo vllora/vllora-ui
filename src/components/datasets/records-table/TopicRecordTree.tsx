@@ -48,7 +48,9 @@ function calculateDescendantCounts(
 ): number {
   let total = 0;
   for (const node of nodes) {
-    const directCount = recordsByTopic.get(node.name)?.length || 0;
+    // Records can be stored by either node.id or node.name, try both
+    const directCount = (recordsByTopic.get(node.id)?.length || 0) +
+                        (node.id !== node.name ? (recordsByTopic.get(node.name)?.length || 0) : 0);
     const childCount = node.children
       ? calculateDescendantCounts(node.children, recordsByTopic, counts)
       : 0;
@@ -96,6 +98,22 @@ export function TopicRecordTree({
 
   return (
     <div>
+      {/* Unassigned records section - show first for visibility */}
+      {unassignedRecords.length > 0 && (
+        <UnassignedSection
+          records={unassignedRecords}
+          onUpdateTopic={onUpdateTopic}
+          onDelete={onDelete}
+          onSave={onSave}
+          selectable={selectable}
+          selectedIds={selectedIds}
+          onSelectRecord={onSelectRecord}
+          onExpand={onExpand}
+          viewingRecordId={viewingRecordId}
+          availableTopics={availableTopics}
+        />
+      )}
+
       {/* Render hierarchy tree */}
       {hierarchy.map((node) => (
         <TopicTreeNodeRow
@@ -116,22 +134,6 @@ export function TopicRecordTree({
           availableTopics={availableTopics}
         />
       ))}
-
-      {/* Unassigned records section */}
-      {unassignedRecords.length > 0 && (
-        <UnassignedSection
-          records={unassignedRecords}
-          onUpdateTopic={onUpdateTopic}
-          onDelete={onDelete}
-          onSave={onSave}
-          selectable={selectable}
-          selectedIds={selectedIds}
-          onSelectRecord={onSelectRecord}
-          onExpand={onExpand}
-          viewingRecordId={viewingRecordId}
-          availableTopics={availableTopics}
-        />
-      )}
     </div>
   );
 }
@@ -164,7 +166,7 @@ function UnassignedSection({
   const [isExpanded, setIsExpanded] = useState(true);
 
   return (
-    <div className="border-t border-border/50">
+    <div className="border-b border-border/50">
       <button
         className="w-full flex items-center gap-3 py-3 px-4 text-left transition-colors hover:bg-muted/40"
         onClick={() => setIsExpanded(!isExpanded)}
@@ -177,13 +179,12 @@ function UnassignedSection({
             )}
           />
         </span>
-        <Folder className="w-4 h-4 text-muted-foreground shrink-0" />
-        <span className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+        <Folder className="w-4 h-4 text-zinc-500 shrink-0" />
+        <span className="text-sm font-medium text-zinc-400 uppercase tracking-wide">
           Unassigned
         </span>
-        <span className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-muted text-muted-foreground text-xs font-semibold uppercase tracking-wider">
+        <span className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-zinc-800 text-zinc-400 text-xs font-semibold tracking-wider shrink-0">
           <span>{records.length.toLocaleString()}</span>
-          <span className="opacity-70">RECORDS</span>
         </span>
       </button>
 

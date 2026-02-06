@@ -104,7 +104,7 @@ function ScoreDonut({ score, color, comparison }: { score: number; color: string
 /** Vertical bar chart distribution (histogram style) */
 function DistributionSection({ distribution, totalSamples }: { distribution: ScoreDistribution; totalSamples: number }) {
   const maxCount = Math.max(...Object.values(distribution), 1);
-  const barMaxHeight = 48; // pixels
+  const barMaxHeight = 40; // pixels
 
   return (
     <div className="flex-1 flex flex-col px-4 border-l border-zinc-800">
@@ -112,7 +112,7 @@ function DistributionSection({ distribution, totalSamples }: { distribution: Sco
         <span className="text-[9px] text-muted-foreground uppercase tracking-wider">Score Distribution</span>
         <span className="text-[9px] text-muted-foreground">{totalSamples} total</span>
       </div>
-      <div className="flex items-end gap-1.5" style={{ height: barMaxHeight }}>
+      <div className="flex items-end gap-1" style={{ height: barMaxHeight }}>
         <TooltipProvider delayDuration={200}>
           {DISTRIBUTION_BINS.map((bin) => {
             const count = distribution[bin.key] || 0;
@@ -139,9 +139,13 @@ function DistributionSection({ distribution, totalSamples }: { distribution: Sco
           })}
         </TooltipProvider>
       </div>
-      <div className="flex justify-between mt-1 text-[8px] text-muted-foreground">
-        <span>0</span>
-        <span>1</span>
+      {/* X-axis labels */}
+      <div className="flex gap-1 mt-1">
+        {DISTRIBUTION_BINS.map((bin) => (
+          <span key={bin.key} className="flex-1 text-[7px] text-muted-foreground text-center truncate">
+            {bin.label.split('-')[1]}
+          </span>
+        ))}
       </div>
     </div>
   );

@@ -6,7 +6,7 @@
  */
 
 import { useState } from "react";
-import { ChevronRight, ChevronDown } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import { RecordRow } from "./RecordRow";
@@ -48,8 +48,11 @@ export function TopicTreeNodeRow({
   const [isExpanded, setIsExpanded] = useState(true); // Expand all by default
 
   const hasChildren = node.children && node.children.length > 0;
-  const records = recordsByTopic.get(node.id) || [];
-  const hasRecords = records.length > 0;
+  // Records can be keyed by either node.id or node.name, try both
+  const recordsById = recordsByTopic.get(node.id) || [];
+  const recordsByName = node.id !== node.name ? (recordsByTopic.get(node.name) || []) : [];
+  const directRecords = [...recordsById, ...recordsByName];
+  const hasRecords = directRecords.length > 0;
   const hasContent = hasChildren || hasRecords;
   const totalCount = descendantCounts.get(node.id) || 0;
 
@@ -61,40 +64,42 @@ export function TopicTreeNodeRow({
       {/* Node header - breadcrumb style */}
       <button
         className={cn(
-          "w-full flex items-center gap-3 py-3 px-4 text-left transition-colors",
-          "hover:bg-muted/40 border-b border-border/50",
-          hasContent ? "cursor-pointer" : "cursor-default opacity-60"
+          "w-full flex items-center gap-2 py-2.5 px-4 text-left transition-colors",
+          "hover:bg-muted/30 border-b border-border/30",
+          hasContent ? "cursor-pointer" : "cursor-default opacity-50"
         )}
         onClick={() => hasContent && setIsExpanded(!isExpanded)}
         disabled={!hasContent}
       >
         {/* Expand/collapse chevron */}
-        <span className="w-5 h-5 flex items-center justify-center shrink-0">
+        <span className="w-4 h-4 flex items-center justify-center shrink-0">
           {hasContent ? (
-            <ChevronDown
+            <ChevronRight
               className={cn(
-                "w-4 h-4 text-muted-foreground transition-transform duration-200",
-                !isExpanded && "-rotate-90"
+                "w-3.5 h-3.5 text-zinc-500 transition-transform duration-200",
+                isExpanded && "rotate-90"
               )}
             />
-          ) : null}
+          ) : (
+            <span className="w-1.5 h-1.5 rounded-full bg-zinc-700" />
+          )}
         </span>
 
         {/* Breadcrumb path */}
-        <div className="flex items-center gap-2 flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
           {currentPath.map((segment, index) => {
             const isLast = index === currentPath.length - 1;
             return (
-              <span key={index} className="flex items-center gap-2 shrink-0">
+              <span key={index} className="flex items-center gap-1.5 shrink-0">
                 {index > 0 && (
-                  <ChevronRight className="w-4 h-4 text-muted-foreground/50" />
+                  <ChevronRight className="w-3 h-3 text-zinc-600" />
                 )}
                 <span
                   className={cn(
-                    "text-xs uppercase tracking-wide",
+                    "text-xs",
                     isLast
-                      ? "font-bold text-emerald-500"
-                      : "font-medium text-muted-foreground"
+                      ? "font-semibold text-emerald-400"
+                      : "text-zinc-500"
                   )}
                 >
                   {segment}
@@ -104,13 +109,13 @@ export function TopicTreeNodeRow({
           })}
         </div>
 
-        {/* Record count badge */}
-        {totalCount > 0 && (
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-500/15 text-emerald-500 text-xs tracking-wider shrink-0">
-            <span>{totalCount.toLocaleString()}</span>
-            <span className="text-emerald-500">records</span>
-          </span>
-        )}
+        {/* Record count */}
+        <span className={cn(
+          "text-xs tabular-nums shrink-0 min-w-[2rem] text-right",
+          totalCount > 0 ? "text-zinc-300" : "text-zinc-600"
+        )}>
+          {totalCount}
+        </span>
       </button>
 
       {/* Expanded content */}
@@ -138,10 +143,10 @@ export function TopicTreeNodeRow({
               />
             ))}
 
-          {/* Records at this node (only shown for leaf nodes) */}
+          {/* Records at this node */}
           {hasRecords && (
             <div className="p-2 space-y-2">
-              {records.map((record) => (
+              {directRecords.map((record) => (
                 <RecordRow
                   key={record.id}
                   record={record}
