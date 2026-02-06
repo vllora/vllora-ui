@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Pencil, Check, X } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
-import { DatasetStatsCards } from "./DatasetStatsCards";
 // import { DatasetBreadcrumb } from "./DatasetBreadcrumb";
 import { WorkflowStepIndicator } from "./WorkflowStepIndicator";
 
@@ -111,9 +110,6 @@ export function DatasetDetailHeader() {
 
         </div>
       </div>
-
-      {/* Stats Cards */}
-      <DatasetStatsCards />
     </div>
   );
 }

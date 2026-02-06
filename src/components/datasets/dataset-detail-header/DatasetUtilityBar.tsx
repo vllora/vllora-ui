@@ -6,7 +6,7 @@
  * - Evaluator section: No additional actions (panel has its own controls)
  */
 
-import { Download, RotateCcw, Copy } from "lucide-react";
+import { RotateCcw, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/tooltip";
 // import { FinetuneButton } from "@/components/datasets/FinetuneButton";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
-import { ViewModeToggle, type ViewMode } from "./ViewModeToggle";
+import type { ViewMode } from "./ViewModeToggle";
 import { SectionTabs } from "./SectionTabs";
 
 export type { ViewMode };
@@ -52,9 +52,10 @@ export interface DatasetUtilityBarProps {
 export function DatasetUtilityBar({
   activeSection,
   onSectionChange,
-  viewMode,
-  onViewModeChange,
-  onExport,
+  // Records section props (now passed through to card)
+  viewMode: _viewMode,
+  onViewModeChange: _onViewModeChange,
+  onExport: _onExport,
   // hasRecords,
   recordsCount = 0,
   hasEvaluator,
@@ -63,15 +64,17 @@ export function DatasetUtilityBar({
   onEvaluatorReset,
   onEvaluatorCopy,
 }: DatasetUtilityBarProps) {
-  // const canFinetune = hasRecords && hasEvaluator;
+  // Suppress unused variable warnings - these are passed through to parent
+  void _viewMode;
+  void _onViewModeChange;
+  void _onExport;
+
   const { filteredJobs } = FinetuneJobsConsumer();
 
   // Count active jobs (pending or running)
   const activeJobsCount = filteredJobs.filter(
     (job) => job.status === "pending" || job.status === "running"
   ).length;
-
-  const isRecordsSection = activeSection === "records";
 
   return (
     <div className="px-4 py-1.5 border-b border-border flex items-center justify-between">
@@ -86,31 +89,6 @@ export function DatasetUtilityBar({
 
       {/* Right side: Context-sensitive actions */}
       <div className="flex items-center gap-2">
-        {/* Records section actions */}
-        {isRecordsSection && (
-          <>
-            {/* Export button */}
-            <TooltipProvider delayDuration={300}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2.5"
-                    onClick={onExport}
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Export dataset</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-
-            {/* View mode toggle */}
-            <ViewModeToggle viewMode={viewMode} onViewModeChange={onViewModeChange} />
-          </>
-        )}
-
         {/* Evaluator section actions */}
         {activeSection === "evaluator" && (
           <>

@@ -20,6 +20,8 @@ export interface DatasetOverviewCardProps {
   uncategorizedCount: number;
   balanceRating?: BalanceRating;
   balanceScore?: number;
+  /** Total number of leaf topics in the hierarchy */
+  leafTopicCount?: number;
   // Click handler for filled state (show analytics)
   onClick?: () => void;
   // Handler for empty state (import records)
@@ -34,6 +36,7 @@ export function DatasetOverviewCard({
   uncategorizedCount,
   balanceRating,
   balanceScore,
+  leafTopicCount,
   onClick,
   onImportClick,
 }: DatasetOverviewCardProps) {
@@ -51,6 +54,7 @@ export function DatasetOverviewCard({
       uncategorizedCount={uncategorizedCount}
       balanceRating={balanceRating}
       balanceScore={balanceScore}
+      leafTopicCount={leafTopicCount}
       onClick={onClick}
     />
   );

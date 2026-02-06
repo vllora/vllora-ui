@@ -10,8 +10,10 @@
  */
 
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { DatasetUtilityBar } from "./dataset-detail-header/DatasetUtilityBar";
+import { ViewModeToggle } from "./dataset-detail-header/ViewModeToggle";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { emitter } from "@/utils/eventEmitter";
 import { DeleteConfirmationDialog } from "./DeleteConfirmationDialog";
@@ -22,8 +24,12 @@ import { TopicHierarchyDialog } from "./topics-dialog";
 import { GenerateSyntheticDataDialog } from "./GenerateSyntheticDataDialog";
 import { SanitizeDataDialog } from "./SanitizeDataDialog";
 import { DryRunDialog } from "./dry-run-dialog";
-import { getLeafTopicsFromHierarchy } from "./record-utils";
+import { getLeafTopicsFromHierarchy, computeCoverageStats, computeDatasetInsights } from "./record-utils";
 import { getTopicCounts } from "./topic-hierarchy-utils";
+import { DatasetOverviewCard } from "./dataset-detail-header/overview-card";
+import { DryRunEvaluationCard } from "./dataset-detail-header/evaluation-card";
+import { FinetuneJobCard } from "./dataset-detail-header/finetune-job-card";
+import { RecordsAnalyticsDialog } from "./dataset-detail-header/detail-records-analytics-dialog";
 import { DatasetDetailHeader } from "./dataset-detail-header";
 import { DatasetMainContent } from "./DatasetMainContent";
 import { DatasetNotFound } from "./DatasetNotFound";
@@ -130,6 +136,16 @@ export function DatasetDetailContentV2() {
 
   // Ref for EvaluationConfigPanel to expose reset/copy methods
   const evaluatorPanelRef = useRef<EvaluationConfigPanelRef>(null);
+
+  // Dialog state for records analytics
+  const [analyticsDialogOpen, setAnalyticsDialogOpen] = useState(false);
+
+  // Compute insights for stats cards
+  const insights = useMemo(() => computeDatasetInsights(sortedRecords), [sortedRecords]);
+  const cardCoverageStats = useMemo(() => computeCoverageStats({
+    records: sortedRecords,
+    topic_hierarchy: dataset?.topicHierarchy
+  }), [sortedRecords, dataset?.topicHierarchy]);
 
   // Compute available topics from hierarchy for topic selection
   const availableTopics = useMemo(
@@ -284,6 +300,40 @@ export function DatasetDetailContentV2() {
 
         {/* Main content area - Records, Evaluator, or Jobs based on active section */}
         {activeSection === "records" && (
+          <>
+          {/* Dataset Overview Card with Actions */}
+          <div className="px-4 py-3 border-b border-border">
+            <div className="flex items-start gap-3">
+              {/* Card takes most of the space */}
+              <div className="flex-1 min-w-0">
+                <DatasetOverviewCard
+                  total={insights.totalRecords}
+                  original={insights.originalRecords}
+                  generated={insights.generatedRecords}
+                  topicDistribution={insights.topicDistribution}
+                  uncategorizedCount={insights.uncategorizedCount}
+                  leafTopicCount={availableTopics.length}
+                  balanceRating={cardCoverageStats?.balanceRating}
+                  balanceScore={cardCoverageStats?.balanceScore}
+                  onClick={() => setAnalyticsDialogOpen(true)}
+                  onImportClick={() => setImportDialog(true)}
+                />
+              </div>
+              {/* Action buttons */}
+              <div className="flex items-center gap-2 shrink-0 pt-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-3 gap-1.5 text-xs"
+                  onClick={handleExport}
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Export
+                </Button>
+                <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
+              </div>
+            </div>
+          </div>
           <DatasetMainContent
             viewMode={viewMode}
             datasetId={datasetId}
@@ -309,8 +359,18 @@ export function DatasetDetailContentV2() {
             onGenerateSubtopics={handleGenerateSubtopics}
             datasetObjective={dataset.datasetObjective}
           />
+          </>
         )}
         {activeSection === "evaluator" && (
+          <>
+          {/* Dry Run Evaluation Card */}
+          <div className="px-4 py-3 border-b border-border">
+            <DryRunEvaluationCard
+              evalScript={dataset?.evalScript}
+              onConfigureClick={() => {/* Already on evaluator tab */}}
+              onDryRunClick={() => setDryRunDialog(true)}
+            />
+          </div>
           <div className="flex-1 flex flex-col overflow-hidden">
             <EvaluationConfigPanel
               ref={evaluatorPanelRef}
@@ -320,13 +380,33 @@ export function DatasetDetailContentV2() {
               onOpenDryRun={() => setDryRunDialog(true)}
             />
           </div>
+          </>
         )}
         {activeSection === "jobs" && (
+          <>
+          {/* Finetune Job Card */}
+          <div className="px-4 py-3 border-b border-border">
+            <FinetuneJobCard
+              onStartClick={() => {/* Already on jobs tab */}}
+              onJobClick={(jobId) => {
+                // Dispatch event to expand the specific job
+                if (jobId) {
+                  window.dispatchEvent(
+                    new CustomEvent("finetune-expand-job", {
+                      detail: { jobId },
+                    })
+                  );
+                }
+              }}
+              canStartJob={hasRecords && hasEvaluator}
+            />
+          </div>
           <FinetuneJobsContent
             datasetId={datasetId}
             canCreateJob={hasRecords && hasEvaluator}
             trainingConfig={dataset.trainingConfig}
           />
+          </>
         )}
       </div>
 
@@ -404,6 +484,22 @@ export function DatasetDetailContentV2() {
         onOpenChange={setDryRunDialog}
         recordCount={sortedRecords.length}
         hasGraderConfig={!!dataset?.evalScript}
+      />
+
+      {/* Records Analytics Dialog */}
+      <RecordsAnalyticsDialog
+        open={analyticsDialogOpen}
+        onOpenChange={setAnalyticsDialogOpen}
+        records={sortedRecords}
+        recordStats={{
+          total: insights.totalRecords,
+          original: insights.originalRecords,
+          generated: insights.generatedRecords,
+          topicDistribution: insights.topicDistribution,
+          uncategorizedCount: insights.uncategorizedCount,
+          balanceRating: cardCoverageStats?.balanceRating,
+          balanceScore: cardCoverageStats?.balanceScore,
+        }}
       />
     </div>
     </DryRunJobsProvider>
