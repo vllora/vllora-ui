@@ -120,7 +120,7 @@ export function ObjectiveInputTab({
       {/* Sample Dataset CTA */}
       {onLoadSample && (
         <div className="flex items-center justify-center gap-2 mt-4">
-          <div className="h-px w-12 bg-gradient-to-r from-transparent to-border/50" />
+          <div className="h-px w-12" />
           <button
             onClick={onLoadSample}
             disabled={isLoadingSample}

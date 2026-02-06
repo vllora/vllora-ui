@@ -193,6 +193,22 @@ export interface DryRunStats {
   };
 }
 
+// Training configuration for finetune jobs (from sample or user-configured)
+export interface SampleTrainingConfig {
+  base_model?: string;
+  training_config?: {
+    learning_rate?: number;
+    lora_rank?: number;
+    epochs?: number;
+    batch_size?: number;
+  };
+  inference_parameters?: {
+    max_output_tokens?: number;
+    temperature?: number;
+    top_p?: number;
+  };
+}
+
 // Dataset state for tracking finetune progress
 export type DatasetState = 'draft' | 'in_finetune' | 'completed';
 
@@ -248,6 +264,8 @@ export interface Dataset {
   dryRunStats?: DryRunStats;
   // Dataset statistics for UI display (updated by get_dataset_stats)
   stats?: DatasetStats;
+  // Training configuration (from sample or user-configured)
+  trainingConfig?: SampleTrainingConfig;
 }
 
 // Combined view for UI (dataset + its records)

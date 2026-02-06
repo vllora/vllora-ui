@@ -6,7 +6,7 @@
  */
 
 import * as datasetsDB from './datasets-db';
-import type { TopicHierarchyConfig } from '@/types/dataset-types';
+import type { TopicHierarchyConfig, SampleTrainingConfig } from '@/types/dataset-types';
 
 export interface SampleDatasetConfig {
   id: string;
@@ -35,11 +35,12 @@ export const SAMPLE_DATASETS: SampleDatasetConfig[] = [
 async function loadSampleFiles(folder: string) {
   const basePath = `/samples/${folder}`;
 
-  // Load all three files in parallel
-  const [datasetResponse, topicsResponse, evaluationResponse] = await Promise.all([
+  // Load all files in parallel (training-config is optional)
+  const [datasetResponse, topicsResponse, evaluationResponse, trainingConfigResponse] = await Promise.all([
     fetch(`${basePath}/dataset.jsonl`),
     fetch(`${basePath}/topics.json`),
     fetch(`${basePath}/evaluation.js`),
+    fetch(`${basePath}/training-config.json`).catch(() => null),
   ]);
 
   if (!datasetResponse.ok) {
@@ -55,6 +56,12 @@ async function loadSampleFiles(folder: string) {
   const datasetText = await datasetResponse.text();
   const topicsJson = await topicsResponse.json();
   const evaluationScript = await evaluationResponse.text();
+
+  // Training config is optional
+  let trainingConfig: SampleTrainingConfig | undefined;
+  if (trainingConfigResponse?.ok) {
+    trainingConfig = await trainingConfigResponse.json();
+  }
 
   // Parse JSONL records and transform to expected DataInfo format
   // JSONL format: { messages: [...], tools?: [...] }
@@ -94,7 +101,7 @@ async function loadSampleFiles(folder: string) {
     })
     .filter(Boolean);
 
-  return { records, topics: topicsJson, evaluationScript };
+  return { records, topics: topicsJson, evaluationScript, trainingConfig };
 }
 
 /**
@@ -104,7 +111,7 @@ export async function createSampleDataset(
   config: SampleDatasetConfig
 ): Promise<{ datasetId: string; recordCount: number }> {
   // Load sample files
-  const { records, topics, evaluationScript } = await loadSampleFiles(config.folder);
+  const { records, topics, evaluationScript, trainingConfig } = await loadSampleFiles(config.folder);
 
   // Create the dataset
   const dataset = await datasetsDB.createDataset(
@@ -136,6 +143,11 @@ export async function createSampleDataset(
   // Set up evaluation script if available
   if (evaluationScript) {
     await datasetsDB.updateDatasetEvalScript(dataset.id, evaluationScript);
+  }
+
+  // Set up training configuration if available (for sample datasets)
+  if (trainingConfig) {
+    await datasetsDB.updateDatasetTrainingConfig(dataset.id, trainingConfig);
   }
 
   return {

@@ -323,6 +323,7 @@ export function DatasetDetailContentV2() {
           <FinetuneJobsContent
             datasetId={datasetId}
             canCreateJob={hasRecords && hasEvaluator}
+            trainingConfig={dataset.trainingConfig}
           />
         )}
       </div>

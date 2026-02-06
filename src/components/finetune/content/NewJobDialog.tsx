@@ -43,6 +43,7 @@ import {
 import { quickFinetune } from "@/services/quick-finetune";
 import { toast } from "sonner";
 import { BASE_MODELS } from "./constants";
+import type { SampleTrainingConfig } from "@/types/dataset-types";
 
 interface NewJobDialogProps {
   datasetId: string;
@@ -50,22 +51,33 @@ interface NewJobDialogProps {
   disabled?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Initial training config (from sample dataset or user-configured) */
+  initialConfig?: SampleTrainingConfig;
 }
 
-export function NewJobDialog({ datasetId, onSuccess, disabled, open, onOpenChange }: NewJobDialogProps) {
-  const [baseModel, setBaseModel] = useState("llama-v3-8b-instruct");
+export function NewJobDialog({ datasetId, onSuccess, disabled, open, onOpenChange, initialConfig }: NewJobDialogProps) {
+  // Use initial config from sample dataset if available, otherwise use defaults
+  const defaultBaseModel = initialConfig?.base_model || "llama-v3-8b-instruct";
+  const defaultLearningRate = initialConfig?.training_config?.learning_rate ?? DEFAULT_TRAINING_CONFIG.learning_rate;
+  const defaultEpochs = initialConfig?.training_config?.epochs ?? DEFAULT_TRAINING_CONFIG.epochs;
+  const defaultBatchSize = initialConfig?.training_config?.batch_size ?? DEFAULT_TRAINING_CONFIG.batch_size;
+  const defaultLoraRank = initialConfig?.training_config?.lora_rank ?? DEFAULT_TRAINING_CONFIG.lora_rank;
+  const defaultMaxOutputTokens = initialConfig?.inference_parameters?.max_output_tokens ?? DEFAULT_INFERENCE_PARAMETERS.max_output_tokens;
+  const defaultTemperature = initialConfig?.inference_parameters?.temperature ?? DEFAULT_INFERENCE_PARAMETERS.temperature;
+
+  const [baseModel, setBaseModel] = useState(defaultBaseModel);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Training config
-  const [learningRate, setLearningRate] = useState(String(DEFAULT_TRAINING_CONFIG.learning_rate));
-  const [epochs, setEpochs] = useState(String(DEFAULT_TRAINING_CONFIG.epochs));
-  const [batchSize, setBatchSize] = useState(String(DEFAULT_TRAINING_CONFIG.batch_size));
-  const [loraRank, setLoraRank] = useState(String(DEFAULT_TRAINING_CONFIG.lora_rank));
+  const [learningRate, setLearningRate] = useState(String(defaultLearningRate));
+  const [epochs, setEpochs] = useState(String(defaultEpochs));
+  const [batchSize, setBatchSize] = useState(String(defaultBatchSize));
+  const [loraRank, setLoraRank] = useState(String(defaultLoraRank));
 
   // Inference parameters
-  const [maxOutputTokens, setMaxOutputTokens] = useState(String(DEFAULT_INFERENCE_PARAMETERS.max_output_tokens));
-  const [temperature, setTemperature] = useState(String(DEFAULT_INFERENCE_PARAMETERS.temperature));
+  const [maxOutputTokens, setMaxOutputTokens] = useState(String(defaultMaxOutputTokens));
+  const [temperature, setTemperature] = useState(String(defaultTemperature));
 
   const handleSubmit = useCallback(async () => {
     if (!datasetId || isSubmitting) return;

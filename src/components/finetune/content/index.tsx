@@ -25,13 +25,16 @@ import {
 } from "lucide-react";
 import { FinetuneJobTableRow } from "./FinetuneJobTableRow";
 import { NewJobDialog } from "./NewJobDialog";
+import type { SampleTrainingConfig } from "@/types/dataset-types";
 
 interface FinetuneJobsContentProps {
   datasetId?: string;
   canCreateJob?: boolean;
+  /** Initial training config from dataset (e.g., from sample) */
+  trainingConfig?: SampleTrainingConfig;
 }
 
-export function FinetuneJobsContent({ datasetId, canCreateJob = true }: FinetuneJobsContentProps) {
+export function FinetuneJobsContent({ datasetId, canCreateJob = true, trainingConfig }: FinetuneJobsContentProps) {
   const { filteredJobs, isLoading, error, loadJobs } = useFinetuneJobs();
   const [showNewJobDialog, setShowNewJobDialog] = useState(false);
 
@@ -135,6 +138,7 @@ export function FinetuneJobsContent({ datasetId, canCreateJob = true }: Finetune
           disabled={hasActiveJob}
           open={showNewJobDialog}
           onOpenChange={setShowNewJobDialog}
+          initialConfig={trainingConfig}
         />
       )}
     </div>
