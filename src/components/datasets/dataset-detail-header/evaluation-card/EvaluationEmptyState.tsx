@@ -7,6 +7,7 @@
 
 import { FlaskConical, Sparkles, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CardHeader } from "../CardHeader";
 
 interface EvaluationEmptyStateProps {
   /** Callback when clicking to configure evaluation */
@@ -66,6 +67,8 @@ export function EvaluationEmptyState({
 
       {/* Glow effect on hover */}
       <div className="absolute -top-12 -right-12 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+      <CardHeader label="Grader" />
 
       {/* Content */}
       <div className="relative flex items-center gap-4">
@@ -146,6 +149,8 @@ export function DryRunEmptyState({
 
       {/* Glow effect on hover */}
       <div className="absolute -top-12 -right-12 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+      <CardHeader label="Dry Run" />
 
       {/* Content */}
       <div className="relative flex items-center gap-4">

@@ -7,24 +7,29 @@
 import { useMemo } from "react";
 import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { FinetuneJob } from "@/services/finetune-api";
 import { formatFinetuneJobDate, computeTrainingSummary } from "@/components/finetune/content/utils";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { STATUS_CONFIG } from "./constants";
+import { CardHeader } from "../CardHeader";
 
 interface JobStatusCardProps {
-  job: FinetuneJob;
   onClick?: () => void;
 }
 
-export function JobStatusCard({ job, onClick }: JobStatusCardProps) {
+export function JobStatusCard({ onClick }: JobStatusCardProps) {
+  // Get latest job and evaluations from context
+  const { latestJob, getJobEvaluations } = FinetuneJobsConsumer();
+
+  // Early return if no job (shouldn't happen if parent checks)
+  if (!latestJob) return null;
+
+  const job = latestJob;
   const config = STATUS_CONFIG[job.status];
   const Icon = config.icon;
   const isActive = job.status === "pending" || job.status === "running";
+  const isSucceeded = job.status === "succeeded";
 
-  // Get evaluations from context (single polling instance)
-  const { getJobEvaluations } = FinetuneJobsConsumer();
-  const { data: evalResults } = isActive ? getJobEvaluations(job.id) : { data: null };
+  const { data: evalResults } = getJobEvaluations(job.id);
 
   // Compute training summary from evaluation results
   const trainingSummary = useMemo(() => {
@@ -36,7 +41,7 @@ export function JobStatusCard({ job, onClick }: JobStatusCardProps) {
     <button
       onClick={onClick}
       className={cn(
-        "group relative w-full px-4 py-3 rounded-lg min-h-[88px] overflow-hidden",
+        "group relative w-full flex flex-col px-4 py-3 rounded-lg min-h-[88px] overflow-hidden text-left",
         `bg-gradient-to-br ${config.bgGradient}`,
         "border border-zinc-800/60",
         "hover:border-zinc-700/60",
@@ -53,6 +58,8 @@ export function JobStatusCard({ job, onClick }: JobStatusCardProps) {
           }}
         />
       </div>
+
+      <CardHeader label="Training" />
 
       {/* Content */}
       <div className="relative flex items-center gap-4">
@@ -79,11 +86,9 @@ export function JobStatusCard({ job, onClick }: JobStatusCardProps) {
             <span className={cn("text-sm font-medium", config.color)}>
               {config.label}
             </span>
-            {isActive && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800/50 text-zinc-400 border border-zinc-700/30">
-                {job.base_model}
-              </span>
-            )}
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800/50 text-zinc-400 border border-zinc-700/30">
+              {job.base_model}
+            </span>
           </div>
           {/* Show training progress for running jobs */}
           {isActive && trainingSummary ? (
@@ -100,6 +105,33 @@ export function JobStatusCard({ job, onClick }: JobStatusCardProps) {
                 {trainingSummary.latestAvgScore !== null && (
                   <span>
                     <span className="text-zinc-500">Avg:</span>{" "}
+                    <span className={cn(
+                      "font-mono",
+                      trainingSummary.latestAvgScore >= 0.7
+                        ? "text-green-400"
+                        : trainingSummary.latestAvgScore >= 0.4
+                        ? "text-yellow-400"
+                        : "text-red-400"
+                    )}>
+                      {trainingSummary.latestAvgScore.toFixed(2)}
+                    </span>
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] text-zinc-500">
+                Started {formatFinetuneJobDate(job.created_at)}
+              </span>
+            </div>
+          ) : isSucceeded && trainingSummary ? (
+            <div className="flex flex-col gap-0.5 mt-0.5">
+              <div className="flex items-center gap-3 text-xs text-zinc-400">
+                <span>
+                  <span className="text-zinc-500">Epochs:</span>{" "}
+                  <span className="font-mono">{trainingSummary.latestEpoch ?? 0}</span>
+                </span>
+                {trainingSummary.latestAvgScore !== null && (
+                  <span>
+                    <span className="text-zinc-500">Final Avg:</span>{" "}
                     <span className={cn(
                       "font-mono",
                       trainingSummary.latestAvgScore >= 0.7

@@ -7,6 +7,7 @@
 
 import { Database, ArrowRight, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CardHeader } from "../CardHeader";
 
 interface OverviewEmptyStateProps {
   onClick?: () => void;
@@ -37,6 +38,8 @@ export function OverviewEmptyState({ onClick }: OverviewEmptyStateProps) {
 
       {/* Glow effect on hover */}
       <div className="absolute -top-12 -right-12 w-24 h-24 bg-cyan-500/10 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+      <CardHeader label="Dataset" />
 
       {/* Content */}
       <div className="relative flex items-center gap-4">

@@ -2,6 +2,7 @@
  * NewJobDialog
  *
  * Dialog component for creating a new finetune job with configurable parameters.
+ * Styled consistently with DryRunDialog for visual coherence.
  */
 
 import { useState, useCallback } from "react";
@@ -27,6 +28,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Separator } from "@/components/ui/separator";
 import {
   ChevronDown,
   ChevronRight,
@@ -138,10 +140,10 @@ export function NewJobDialog({ datasetId, onSuccess, disabled, open, onOpenChang
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="max-w-[70vw] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-primary" />
+            <Sparkles className="h-5 w-5" />
             New Finetune Job
           </DialogTitle>
           <DialogDescription>
@@ -149,12 +151,12 @@ export function NewJobDialog({ datasetId, onSuccess, disabled, open, onOpenChang
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="flex-1 space-y-4 py-2">
           {/* Base Model Selection */}
-          <div className="space-y-2">
-            <Label htmlFor="base-model" className="text-sm">Base Model</Label>
+          <div>
+            <label className="text-sm text-zinc-400 mb-2 block">Base Model</label>
             <Select value={baseModel} onValueChange={setBaseModel}>
-              <SelectTrigger id="base-model" className="h-10">
+              <SelectTrigger className="w-full bg-zinc-800/50 border-zinc-700 text-zinc-300 ring-0 ring-offset-0 focus:ring-0 focus:ring-offset-0 focus:outline-none">
                 <SelectValue placeholder="Select base model" />
               </SelectTrigger>
               <SelectContent>
@@ -165,12 +167,15 @@ export function NewJobDialog({ datasetId, onSuccess, disabled, open, onOpenChang
                 ))}
               </SelectContent>
             </Select>
+            <p className="text-xs text-zinc-500 mt-2">
+              Model to fine-tune with your dataset
+            </p>
           </div>
 
           {/* Advanced Settings Toggle */}
           <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
             <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-1.5 text-sm px-0 text-muted-foreground hover:text-foreground">
+              <Button variant="ghost" size="sm" className="gap-1.5 text-sm px-0 text-zinc-400 hover:text-zinc-200 hover:bg-transparent">
                 <Settings2 className="h-4 w-4" />
                 {showAdvanced ? "Hide" : "Show"} Advanced Settings
                 {showAdvanced ? (
@@ -184,51 +189,51 @@ export function NewJobDialog({ datasetId, onSuccess, disabled, open, onOpenChang
             <CollapsibleContent className="pt-4 space-y-4">
               {/* Training Config */}
               <div className="space-y-3">
-                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Training Configuration</h4>
+                <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Training Configuration</h4>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label htmlFor="learning-rate" className="text-xs text-muted-foreground">Learning Rate</Label>
+                    <Label htmlFor="learning-rate" className="text-xs text-zinc-400">Learning Rate</Label>
                     <Input
                       id="learning-rate"
                       type="number"
                       step="0.00001"
                       value={learningRate}
                       onChange={(e) => setLearningRate(e.target.value)}
-                      className="h-9"
+                      className="h-9 bg-zinc-800/50 border-zinc-700 text-zinc-300 focus-visible:ring-zinc-600"
                       placeholder="0.0001"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="epochs" className="text-xs text-muted-foreground">Epochs</Label>
+                    <Label htmlFor="epochs" className="text-xs text-zinc-400">Epochs</Label>
                     <Input
                       id="epochs"
                       type="number"
                       step="0.5"
                       value={epochs}
                       onChange={(e) => setEpochs(e.target.value)}
-                      className="h-9"
+                      className="h-9 bg-zinc-800/50 border-zinc-700 text-zinc-300 focus-visible:ring-zinc-600"
                       placeholder="2.0"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="batch-size" className="text-xs text-muted-foreground">Batch Size</Label>
+                    <Label htmlFor="batch-size" className="text-xs text-zinc-400">Batch Size</Label>
                     <Input
                       id="batch-size"
                       type="number"
                       value={batchSize}
                       onChange={(e) => setBatchSize(e.target.value)}
-                      className="h-9"
+                      className="h-9 bg-zinc-800/50 border-zinc-700 text-zinc-300 focus-visible:ring-zinc-600"
                       placeholder="65536"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="lora-rank" className="text-xs text-muted-foreground">LoRA Rank</Label>
+                    <Label htmlFor="lora-rank" className="text-xs text-zinc-400">LoRA Rank</Label>
                     <Input
                       id="lora-rank"
                       type="number"
                       value={loraRank}
                       onChange={(e) => setLoraRank(e.target.value)}
-                      className="h-9"
+                      className="h-9 bg-zinc-800/50 border-zinc-700 text-zinc-300 focus-visible:ring-zinc-600"
                       placeholder="16"
                     />
                   </div>
@@ -237,21 +242,21 @@ export function NewJobDialog({ datasetId, onSuccess, disabled, open, onOpenChang
 
               {/* Inference Parameters */}
               <div className="space-y-3">
-                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Inference Parameters</h4>
+                <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Inference Parameters</h4>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label htmlFor="max-output-tokens" className="text-xs text-muted-foreground">Max Output Tokens</Label>
+                    <Label htmlFor="max-output-tokens" className="text-xs text-zinc-400">Max Output Tokens</Label>
                     <Input
                       id="max-output-tokens"
                       type="number"
                       value={maxOutputTokens}
                       onChange={(e) => setMaxOutputTokens(e.target.value)}
-                      className="h-9"
+                      className="h-9 bg-zinc-800/50 border-zinc-700 text-zinc-300 focus-visible:ring-zinc-600"
                       placeholder="2048"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="temperature" className="text-xs text-muted-foreground">Temperature</Label>
+                    <Label htmlFor="temperature" className="text-xs text-zinc-400">Temperature</Label>
                     <Input
                       id="temperature"
                       type="number"
@@ -260,7 +265,7 @@ export function NewJobDialog({ datasetId, onSuccess, disabled, open, onOpenChang
                       max="2"
                       value={temperature}
                       onChange={(e) => setTemperature(e.target.value)}
-                      className="h-9"
+                      className="h-9 bg-zinc-800/50 border-zinc-700 text-zinc-300 focus-visible:ring-zinc-600"
                       placeholder="0.7"
                     />
                   </div>
@@ -270,28 +275,36 @@ export function NewJobDialog({ datasetId, onSuccess, disabled, open, onOpenChang
           </Collapsible>
         </div>
 
-        {/* Actions */}
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={isSubmitting || disabled}
-            className="gap-1.5"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Starting...
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4" />
-                Start Training
-              </>
-            )}
-          </Button>
+        {/* Footer */}
+        <div className="shrink-0 pt-2">
+          <Separator className="bg-zinc-800 mb-4" />
+          <div className="flex items-center justify-between">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onOpenChange(false)}
+              className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              disabled={isSubmitting || disabled}
+              className="gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Starting...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4" />
+                  Start Training
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

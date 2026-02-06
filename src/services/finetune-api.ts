@@ -677,18 +677,18 @@ export async function updateDatasetEvalScript(
   datasetId: string,
   script: string
 ): Promise<UpdateEvaluatorResponse> {
-  const evaluator = {
-    type: 'js',
-    config: {
-      script,
-      completion_params: {
-        model: 'gpt-4o-mini',
-      },
-    },
-  };
+  // const evaluator = {
+  //   type: 'js',
+  //   config: {
+  //     script,
+  //     completion_params: {
+  //       model: 'gpt-4o-mini',
+  //     },
+  //   },
+  // };
   const response = await apiClient(`/finetune/datasets/${datasetId}/evaluator`, {
     method: 'PATCH',
-    body: JSON.stringify({ evaluator }),
+    body: JSON.stringify({ evaluator: { type: 'js', script } }),
   });
   return handleApiResponse<UpdateEvaluatorResponse>(response);
 }

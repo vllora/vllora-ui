@@ -5,6 +5,7 @@
  */
 
 import { OverviewChart } from "./OverviewChart";
+import { CardHeader } from "../CardHeader";
 
 type BalanceRating = "excellent" | "good" | "fair" | "poor" | "critical";
 
@@ -32,8 +33,9 @@ export function OverviewFilledState({
   return (
     <button
       onClick={onClick}
-      className="w-full flex px-4 py-3 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors cursor-pointer text-left"
+      className="w-full flex flex-col px-4 py-3 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors cursor-pointer text-left"
     >
+      <CardHeader label="Dataset" />
       <OverviewChart
         total={total}
         original={original}

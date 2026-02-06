@@ -6,7 +6,7 @@
  * - Evaluator section: No additional actions (panel has its own controls)
  */
 
-import { Download, ListChecks, Database, RotateCcw, Copy, Check, FlaskConical } from "lucide-react";
+import { Download, RotateCcw, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -14,13 +14,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { FinetuneButton } from "@/components/datasets/FinetuneButton";
+// import { FinetuneButton } from "@/components/datasets/FinetuneButton";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
-import { cn } from "@/lib/utils";
 import { ViewModeToggle, type ViewMode } from "./ViewModeToggle";
+import { SectionTabs } from "./SectionTabs";
 
 export type { ViewMode };
-
 export type DatasetSection = "records" | "evaluator" | "jobs";
 
 export interface DatasetUtilityBarProps {
@@ -36,6 +35,8 @@ export interface DatasetUtilityBarProps {
   onExport?: () => void;
   /** Whether the dataset has records */
   hasRecords?: boolean;
+  /** Number of records in the dataset */
+  recordsCount?: number;
   /** Whether the dataset has an evaluation function configured */
   hasEvaluator?: boolean;
   /** Callback when finetune button is clicked */
@@ -48,38 +49,21 @@ export interface DatasetUtilityBarProps {
   onEvaluatorCopy?: () => void;
 }
 
-const SECTION_TABS = [
-  {
-    id: "records" as const,
-    label: "Records",
-    icon: Database,
-  },
-  {
-    id: "evaluator" as const,
-    label: "Evaluator",
-    icon: FlaskConical,
-  },
-  {
-    id: "jobs" as const,
-    label: "Jobs",
-    icon: ListChecks,
-  },
-];
-
 export function DatasetUtilityBar({
   activeSection,
   onSectionChange,
   viewMode,
   onViewModeChange,
   onExport,
-  hasRecords,
+  // hasRecords,
+  recordsCount = 0,
   hasEvaluator,
-  onFinetune,
-  isFinetuning,
+  // onFinetune,
+  // isFinetuning,
   onEvaluatorReset,
   onEvaluatorCopy,
 }: DatasetUtilityBarProps) {
-  const canFinetune = hasRecords && hasEvaluator;
+  // const canFinetune = hasRecords && hasEvaluator;
   const { filteredJobs } = FinetuneJobsConsumer();
 
   // Count active jobs (pending or running)
@@ -92,46 +76,13 @@ export function DatasetUtilityBar({
   return (
     <div className="px-4 py-1.5 border-b border-border flex items-center justify-between">
       {/* Left side: Section tabs */}
-      <div className="flex items-center">
-        {SECTION_TABS.map((tab) => {
-          const isActive = activeSection === tab.id;
-          const Icon = tab.icon;
-
-          return (
-            <button
-              key={tab.id}
-              onClick={() => onSectionChange(tab.id)}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors rounded-md relative",
-                "hover:bg-muted/50",
-                isActive
-                  ? "text-foreground bg-muted"
-                  : "text-muted-foreground",
-              )}
-            >
-              <Icon className="w-4 h-4" />
-              <span>{tab.label}</span>
-              {/* Configured indicator for evaluator */}
-              {tab.id === "evaluator" && hasEvaluator && (
-                <TooltipProvider delayDuration={300}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Check className="w-3.5 h-3.5 text-green-500" />
-                    </TooltipTrigger>
-                    <TooltipContent>Evaluator is configured</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-              {/* Active jobs count badge for jobs tab */}
-              {tab.id === "jobs" && activeJobsCount > 0 && (
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[rgb(var(--theme-500))] text-[10px] font-medium text-white">
-                  {activeJobsCount}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+      <SectionTabs
+        activeSection={activeSection}
+        onSectionChange={onSectionChange}
+        recordsCount={recordsCount}
+        hasEvaluator={hasEvaluator}
+        activeJobsCount={activeJobsCount}
+      />
 
       {/* Right side: Context-sensitive actions */}
       <div className="flex items-center gap-2">
@@ -199,7 +150,7 @@ export function DatasetUtilityBar({
         )}
 
         {/* Finetune button - always visible in all tabs */}
-        <FinetuneButton
+        {/* <FinetuneButton
           onFinetune={onFinetune}
           isFinetuning={isFinetuning}
           disabled={!canFinetune || activeJobsCount > 0}
@@ -212,7 +163,7 @@ export function DatasetUtilityBar({
                   ? "A finetune job is already running. View progress in the Jobs tab."
                   : "Start finetune workflow"
           }
-        />
+        /> */}
       </div>
     </div>
   );

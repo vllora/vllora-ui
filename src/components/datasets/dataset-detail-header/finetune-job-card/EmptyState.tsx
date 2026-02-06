@@ -6,6 +6,7 @@
 
 import { Play, ArrowRight, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CardHeader } from "../CardHeader";
 
 interface EmptyStateProps {
   onStartClick?: () => void;
@@ -39,6 +40,8 @@ export function EmptyState({ onStartClick, canStartJob }: EmptyStateProps) {
 
       {/* Glow effect on hover */}
       <div className="absolute -top-12 -right-12 w-24 h-24 bg-violet-500/10 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+      <CardHeader label="Training" />
 
       {/* Content */}
       <div className="relative flex items-center gap-4">

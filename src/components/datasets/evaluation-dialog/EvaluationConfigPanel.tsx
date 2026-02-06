@@ -13,6 +13,7 @@ import {
   Code2,
   Copy,
   RotateCcw,
+  Play,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 
@@ -95,10 +96,12 @@ interface EvaluationConfigPanelProps {
   onSave: (script: string) => Promise<void>;
   /** Hide header action buttons (Reset/Copy) when they're shown externally */
   hideHeaderActions?: boolean;
+  /** Callback to open the dry run dialog */
+  onOpenDryRun?: () => void;
 }
 
 export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, EvaluationConfigPanelProps>(
-  function EvaluationConfigPanel({ evalScript, onSave, hideHeaderActions = false }, ref) {
+  function EvaluationConfigPanel({ evalScript, onSave, hideHeaderActions = false, onOpenDryRun }, ref) {
   // JavaScript evaluator state
   const [script, setScript] = useState(DEFAULT_SCRIPT);
 
@@ -205,7 +208,22 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-end px-5 py-3 border-t border-border bg-muted/20 shrink-0">
+      <div className="flex items-center justify-between px-5 py-3 border-t border-border bg-muted/20 shrink-0">
+        {/* Run Dry Run button - show when script is saved */}
+        <div>
+          {onOpenDryRun && evalScript && !hasChanges && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onOpenDryRun}
+              className="gap-2 h-7"
+            >
+              <Play className="w-3.5 h-3.5" />
+              Run Dry Run
+            </Button>
+          )}
+        </div>
+
         {/* Save button */}
         <Button
           size="sm"

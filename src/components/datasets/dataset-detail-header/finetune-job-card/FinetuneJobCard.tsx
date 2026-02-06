@@ -41,5 +41,5 @@ export function FinetuneJobCard({
   }
 
   // Show job status
-  return <JobStatusCard job={latestJob} onClick={() => onJobClick?.(latestJob.id)} />;
+  return <JobStatusCard onClick={() => onJobClick?.(latestJob.id)} />;
 }

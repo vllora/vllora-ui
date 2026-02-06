@@ -15,6 +15,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { DryRunStats } from "@/types/dataset-types";
+import { CardHeader } from "../CardHeader";
 
 interface EvaluationResultsStateProps {
   /** Dry run statistics */
@@ -83,32 +84,33 @@ export function EvaluationResultsState({
     <TooltipProvider delayDuration={200}>
       <button
         onClick={onDryRunClick}
-        className="w-full px-4 py-3 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors text-left group"
+        className="w-full flex flex-col px-4 py-3 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors text-left group"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-muted-foreground">Evaluation</span>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border cursor-help ${config.pill}`}>
-                {config.label}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="left" className="max-w-[240px] text-xs">
-              <p className="font-medium mb-1">{config.title}</p>
-              <p className="text-muted-foreground">{config.description}</p>
-              <a
-                href="https://cookbook.openai.com/examples/reinforcement_fine_tuning"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 text-blue-400 hover:text-blue-300 mt-2"
-                onClick={(e) => e.stopPropagation()}
-              >
-                Learn more <ExternalLink className="w-3 h-3" />
-              </a>
-            </TooltipContent>
-          </Tooltip>
-        </div>
+        <CardHeader
+          label="Dry Run"
+          rightContent={
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border cursor-help ${config.pill}`}>
+                  {config.label}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="left" className="max-w-[240px] text-xs">
+                <p className="font-medium mb-1">{config.title}</p>
+                <p className="text-muted-foreground">{config.description}</p>
+                <a
+                  href="https://cookbook.openai.com/examples/reinforcement_fine_tuning"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-blue-400 hover:text-blue-300 mt-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Learn more <ExternalLink className="w-3 h-3" />
+                </a>
+              </TooltipContent>
+            </Tooltip>
+          }
+        />
 
         {/* Mini Histogram */}
         <div className="h-16 w-full">

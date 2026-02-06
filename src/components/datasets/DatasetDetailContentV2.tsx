@@ -274,6 +274,7 @@ export function DatasetDetailContentV2() {
           onViewModeChange={setViewMode}
           onExport={handleExport}
           hasRecords={hasRecords}
+          recordsCount={sortedRecords.length}
           hasEvaluator={hasEvaluator}
           onFinetune={handleFinetune}
           isFinetuning={isFinetuning}
@@ -316,6 +317,7 @@ export function DatasetDetailContentV2() {
               evalScript={dataset.evalScript}
               onSave={handleSaveEvaluationConfig}
               hideHeaderActions
+              onOpenDryRun={() => setDryRunDialog(true)}
             />
           </div>
         )}
