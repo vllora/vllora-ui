@@ -7,7 +7,7 @@
 
 import { Loader2 } from "lucide-react";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
-import { EmptyState } from "./EmptyState";
+// import { EmptyState } from "./EmptyState";
 import { JobStatusCard } from "./JobStatusCard";
 
 export interface FinetuneJobCardProps {
@@ -20,9 +20,9 @@ export interface FinetuneJobCardProps {
 }
 
 export function FinetuneJobCard({
-  onStartClick,
+  // onStartClick,
   onJobClick,
-  canStartJob = true,
+  // canStartJob = true,
 }: FinetuneJobCardProps) {
   const { filteredJobs, latestJob, isLoading } = FinetuneJobsConsumer();
 
@@ -37,7 +37,8 @@ export function FinetuneJobCard({
 
   // No jobs yet - show empty state with CTA
   if (!latestJob) {
-    return <EmptyState onStartClick={onStartClick} canStartJob={canStartJob} />;
+    return <></>
+    // return <EmptyState onStartClick={onStartClick} canStartJob={canStartJob} />;
   }
 
   // Show job status
