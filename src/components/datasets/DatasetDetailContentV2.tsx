@@ -35,6 +35,8 @@ import { EvaluationConfigPanel } from "./evaluation-dialog/EvaluationConfigPanel
 import { FinetuneJobsContent } from "@/components/finetune/content";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { DryRunJobsProvider } from "@/contexts/DryRunJobsContext";
+import { DatasetReadmeViewer } from "./DatasetReadmeViewer";
+import { useDatasetReadme } from "@/hooks/useDatasetReadme";
 import type { CoverageStats } from "@/types/dataset-types";
 
 export function DatasetDetailContentV2() {
@@ -131,6 +133,13 @@ export function DatasetDetailContentV2() {
 
   // Dialog state for records analytics
   const [analyticsDialogOpen, setAnalyticsDialogOpen] = useState(false);
+
+  // README auto-generation hook
+  const { readme, readmeUpdatedAt, regenerateReadme, exportReadme } = useDatasetReadme({
+    dataset,
+    records: sortedRecords,
+    autoUpdate: true,
+  });
 
   // Compute insights for stats cards
   const insights = useMemo(() => computeDatasetInsights(sortedRecords), [sortedRecords]);
@@ -335,6 +344,17 @@ export function DatasetDetailContentV2() {
                 trainingConfig={dataset.trainingConfig}
               />
             </>
+          )}
+          {activeSection === "readme" && (
+            <div className="flex-1 overflow-hidden p-4">
+              <DatasetReadmeViewer
+                readme={readme}
+                readmeUpdatedAt={readmeUpdatedAt}
+                onExport={exportReadme}
+                onRegenerate={regenerateReadme}
+                className="h-full"
+              />
+            </div>
           )}
         </div>
 

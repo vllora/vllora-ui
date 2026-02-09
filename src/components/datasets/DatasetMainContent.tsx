@@ -99,7 +99,10 @@ export function DatasetMainContent({
   if (records.length === 0) {
     return (
       <div className="flex-1 flex flex-col overflow-hidden">
-        <EmptyRecordsState datasetObjective={datasetObjective} />
+        <EmptyRecordsState
+          datasetObjective={datasetObjective}
+          hasTopicHierarchy={!!(topicHierarchy && topicHierarchy.length > 0)}
+        />
       </div>
     );
   }

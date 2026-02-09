@@ -15,6 +15,7 @@ import { useAgent, useChatMessages, createAskFollowUpTool } from '@distri/react'
 import type { DistriAnyTool } from '@distri/react';
 import { uuidv4, DistriMessage, DistriClient } from '@distri/core';
 import { finetuneTools, workflowToContext } from '@/lib/distri-finetune-tools';
+import { stockfishTools, isChessDataset } from '@/lib/distri-finetune-tools/steps';
 import { finetuneWorkflowService, FinetuneWorkflowState } from '@/services/finetune-workflow-db';
 import { getDatasetById } from '@/services/datasets-db';
 
@@ -105,7 +106,7 @@ interface UseFineTuneAgentChatReturn {
 export function useFineTuneAgentChat(
   options: UseFineTuneAgentChatOptions
 ): UseFineTuneAgentChatReturn {
-  const { datasetId } = options;
+  const { datasetId, trainingGoals } = options;
 
   // Agent state
   const { agent, loading: agentLoading } = useAgent({
@@ -127,10 +128,18 @@ export function useFineTuneAgentChat(
   // Track if dataset has eval script configured (via UI, separate from workflow)
   const [datasetHasEvalScript, setDatasetHasEvalScript] = useState(false);
 
+  // Check if this is a chess-related dataset (enables Stockfish tools)
+  const isChess = useMemo(() => isChessDataset(trainingGoals), [trainingGoals]);
+
   // Tools - includes finetune tools + UI tools (ask_follow_up)
+  // Conditionally includes Stockfish tools for chess datasets
   const tools = useMemo<DistriAnyTool[]>(
-    () => [...finetuneTools, createAskFollowUpTool()],
-    []
+    () => [
+      ...finetuneTools,
+      ...(isChess ? stockfishTools : []),
+      createAskFollowUpTool(),
+    ],
+    [isChess]
   );
 
   // Chat messages

@@ -2,48 +2,57 @@
  * EmptyRecordsState
  *
  * Empty state component shown when a dataset has no records.
- * Provides guidance and actions to help users add records.
- * Generate Data triggers Lucy assistant to help create initial data.
+ * Minimal design - Lucy handles guidance via context injection.
  */
 
-import { Database, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { emitter } from "@/utils/eventEmitter";
 
 interface EmptyRecordsStateProps {
   datasetObjective?: string;
+  hasTopicHierarchy?: boolean;
 }
 
 export function EmptyRecordsState({ datasetObjective }: EmptyRecordsStateProps) {
-  const handleGenerateData = () => {
-    // Build a prompt for Lucy based on whether we have an objective
+  const handleGetStarted = () => {
+    // Simple prompt - Lucy already has full context via workflowToContext
     const prompt = datasetObjective
-      ? `This dataset has no records yet. The training objective is: "${datasetObjective}". Please help me generate initial training data for this objective. You can either generate data directly based on the objective, or suggest creating a topic hierarchy first to organize the data generation.`
-      : `This dataset has no records yet. Please help me generate initial training data. You can either help me define a training objective first, or suggest creating a topic hierarchy to organize the data generation.`;
-
+      ? "Help me generate training data for this dataset."
+      : "Help me get started with this dataset.";
     emitter.emit("vllora_lucy_prompt", { prompt });
   };
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-8 gap-6">
-      {/* Icon */}
-      <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center">
-        <Database className="w-8 h-8 text-muted-foreground" />
-      </div>
+    <div className="flex-1 flex flex-col items-center justify-center p-8">
+      <div className="flex flex-col items-center gap-6 max-w-sm text-center">
+        {/* Subtle decorative element */}
+        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[rgb(var(--theme-500))]/10 to-[rgb(var(--theme-500))]/5 flex items-center justify-center">
+          <Sparkles className="w-5 h-5 text-[rgb(var(--theme-500))]" />
+        </div>
 
-      {/* Message */}
-      <div className="text-center space-y-2">
-        <h3 className="text-lg font-medium text-foreground">No records yet</h3>
-        <p className="text-sm text-muted-foreground max-w-md">
-          Ask Lucy to generate initial training data based on your dataset objective.
-        </p>
-      </div>
+        {/* Copy */}
+        <div className="space-y-2">
+          <h3 className="text-base font-medium text-foreground">
+            {datasetObjective ? "Ready to generate data" : "Get started"}
+          </h3>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            {datasetObjective
+              ? "Chat with Lucy to create training examples, upload reference docs, or import existing data."
+              : "Define your training objective and Lucy will help you build your dataset."}
+          </p>
+        </div>
 
-      {/* Actions */}
-      <Button onClick={handleGenerateData} className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white">
-        <Sparkles className="w-4 h-4" />
-        Generate Data
-      </Button>
+        {/* CTA */}
+        <Button
+          onClick={handleGetStarted}
+          size="sm"
+          className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          {datasetObjective ? "Generate with Lucy" : "Get Started"}
+        </Button>
+      </div>
     </div>
   );
 }

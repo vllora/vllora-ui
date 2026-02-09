@@ -26,6 +26,20 @@ export { analyzeCoverageHandler, analyzeCoverageTool } from './analyze-coverage'
 export { generateSyntheticDataHandler, generateSyntheticDataTool } from './generate-synthetic';
 export { generateInitialDataHandler, generateInitialDataTool } from './generate-initial-data';
 export { generateRecordVariantsHandler, generateRecordVariantsTool } from './generate-record-variants';
+export { generatePreviewHandler, generatePreviewTool } from './generate-preview';
+
+// Knowledge Sources (for grounded data generation)
+export {
+  uploadKnowledgeSourceHandler,
+  uploadKnowledgeSourceTool,
+  listKnowledgeSourcesHandler,
+  listKnowledgeSourcesTool,
+  extractTopicsFromSourceHandler,
+  extractTopicsFromSourceTool,
+  searchKnowledgeHandler,
+  searchKnowledgeTool,
+  knowledgeSourceTools,
+} from './knowledge-sources';
 
 // Grader Configuration (Step 4)
 export { configureGraderHandler, configureGraderTool } from './configure-grader';
@@ -55,6 +69,22 @@ export { getDatasetRecordsHandler, getDatasetRecordsTool } from './get-dataset-r
 export { getDatasetStatsHandler, getDatasetStatsTool } from './get-dataset-stats';
 export { updateRecordHandler, updateRecordTool } from './update-record';
 
+// README
+export { regenerateReadmeHandler, regenerateReadmeTool } from './regenerate-readme';
+
+// Stockfish Chess Analysis (conditionally used for chess datasets only)
+export {
+  analyzeChessPositionHandler,
+  analyzeChessPositionTool,
+  classifyChessMoveHandler,
+  classifyChessMoveTool,
+  stockfishTools,
+  stockfishToolHandlers,
+  isChessDataset,
+  STOCKFISH_TOOL_NAMES,
+  type StockfishToolName,
+} from './stockfish-tools';
+
 // Re-export helpers
 export * from './helpers';
 
@@ -71,6 +101,17 @@ import { analyzeCoverageHandler, analyzeCoverageTool } from './analyze-coverage'
 import { generateSyntheticDataHandler, generateSyntheticDataTool } from './generate-synthetic';
 import { generateInitialDataHandler, generateInitialDataTool } from './generate-initial-data';
 import { generateRecordVariantsHandler, generateRecordVariantsTool } from './generate-record-variants';
+import { generatePreviewHandler, generatePreviewTool } from './generate-preview';
+import {
+  uploadKnowledgeSourceHandler,
+  uploadKnowledgeSourceTool,
+  listKnowledgeSourcesHandler,
+  listKnowledgeSourcesTool,
+  extractTopicsFromSourceHandler,
+  extractTopicsFromSourceTool,
+  searchKnowledgeHandler,
+  searchKnowledgeTool,
+} from './knowledge-sources';
 import { configureGraderHandler, configureGraderTool } from './configure-grader';
 import { testGraderSampleHandler, testGraderSampleTool } from './test-grader';
 import { validateRecordsHandler, validateRecordsTool } from './validate-records';
@@ -83,6 +124,9 @@ import { deployModelHandler, deployModelTool } from './deploy-model';
 import { getDatasetRecordsHandler, getDatasetRecordsTool } from './get-dataset-records';
 import { getDatasetStatsHandler, getDatasetStatsTool } from './get-dataset-stats';
 import { updateRecordHandler, updateRecordTool } from './update-record';
+import { regenerateReadmeHandler, regenerateReadmeTool } from './regenerate-readme';
+// Note: Stockfish tools (analyzeChessPositionTool, classifyChessMoveTool) are NOT imported here
+// They are conditionally added via stockfishTools in useFineTuneAgentChat for chess datasets only
 
 // =============================================================================
 // Tool Names and Aggregated Exports
@@ -98,6 +142,11 @@ export const STEP_TOOL_NAMES = [
   'generate_synthetic_data',
   'generate_initial_data',
   'generate_record_variants',
+  'generate_preview',
+  'upload_knowledge_source',
+  'list_knowledge_sources',
+  'extract_topics_from_source',
+  'search_knowledge',
   'configure_grader',
   'validate_records',
   'test_grader_sample',
@@ -110,6 +159,9 @@ export const STEP_TOOL_NAMES = [
   'get_dataset_records',
   'get_dataset_stats',
   'update_record',
+  'regenerate_readme',
+  // Note: Stockfish tools ('analyze_chess_position', 'classify_chess_move') are NOT in this list
+  // They are conditionally available for chess datasets only via stockfishTools export
 ] as const;
 
 export type StepToolName = (typeof STEP_TOOL_NAMES)[number];
@@ -128,6 +180,11 @@ export const stepTools: DistriFnTool[] = [
   generateSyntheticDataTool,
   generateInitialDataTool,
   generateRecordVariantsTool,
+  generatePreviewTool,
+  uploadKnowledgeSourceTool,
+  listKnowledgeSourcesTool,
+  extractTopicsFromSourceTool,
+  searchKnowledgeTool,
   configureGraderTool,
   validateRecordsTool,
   testGraderSampleTool,
@@ -140,6 +197,9 @@ export const stepTools: DistriFnTool[] = [
   getDatasetRecordsTool,
   getDatasetStatsTool,
   updateRecordTool,
+  regenerateReadmeTool,
+  // Note: Stockfish tools are NOT included here - they are conditionally added
+  // via stockfishTools in useFineTuneAgentChat for chess datasets only
 ];
 
 export const stepToolHandlers: Record<string, ToolHandler> = {
@@ -152,6 +212,11 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   generate_synthetic_data: generateSyntheticDataHandler,
   generate_initial_data: generateInitialDataHandler,
   generate_record_variants: generateRecordVariantsHandler,
+  generate_preview: generatePreviewHandler,
+  upload_knowledge_source: uploadKnowledgeSourceHandler,
+  list_knowledge_sources: listKnowledgeSourcesHandler,
+  extract_topics_from_source: extractTopicsFromSourceHandler,
+  search_knowledge: searchKnowledgeHandler,
   configure_grader: configureGraderHandler,
   validate_records: validateRecordsHandler,
   test_grader_sample: testGraderSampleHandler,
@@ -164,4 +229,6 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   get_dataset_records: getDatasetRecordsHandler,
   get_dataset_stats: getDatasetStatsHandler,
   update_record: updateRecordHandler,
+  regenerate_readme: regenerateReadmeHandler,
+  // Note: Stockfish handlers are in stockfishToolHandlers export, not here
 };

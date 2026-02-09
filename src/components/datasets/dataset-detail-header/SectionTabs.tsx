@@ -4,7 +4,7 @@
  * Tab navigation for dataset detail sections (Records, Evaluator, Jobs).
  */
 
-import { Database, FlaskConical, ListChecks, Check, type LucideIcon } from "lucide-react";
+import { Database, FlaskConical, ListChecks, FileText, Check, type LucideIcon } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -35,6 +35,11 @@ const SECTION_TABS: TabConfig[] = [
     id: "jobs",
     label: "Jobs",
     icon: ListChecks,
+  },
+  {
+    id: "readme",
+    label: "README",
+    icon: FileText,
   },
 ];
 

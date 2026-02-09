@@ -7,6 +7,7 @@
 import type { DistriFnTool } from "@distri/core";
 import * as workflowDB from "@/services/finetune-workflow-db";
 import * as datasetsDB from "@/services/datasets-db";
+import * as knowledgeDB from "@/services/knowledge-sources-db";
 import type { ToolHandler } from "../../types";
 import type { TopicHierarchyNode } from "@/types/dataset-types";
 import { countLeafTopics } from "../helpers";
@@ -14,9 +15,32 @@ import { countLeafTopics } from "../helpers";
 import { generateTopicsViaBackend } from "./backend";
 import { generateTopicsViaFrontend } from "./frontend";
 
+/**
+ * Extract topics from all knowledge sources for a dataset
+ * Returns a flat list of unique topic strings
+ */
+async function getKnowledgeSourceTopics(datasetId: string): Promise<string[]> {
+  try {
+    const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
+    const allTopics: string[] = [];
+
+    for (const source of sources) {
+      if (source.status === "ready" && source.extractedContent?.topics) {
+        allTopics.push(...source.extractedContent.topics);
+      }
+    }
+
+    // Deduplicate and return
+    return [...new Set(allTopics)];
+  } catch (error) {
+    console.warn("[generate_topics] Failed to get knowledge source topics:", error);
+    return [];
+  }
+}
+
 // Feature flag: Set to true to use the backend topic hierarchy generation endpoint
 // Set to false to use the existing frontend LLM-based generation
-const USE_BACKEND_TOPIC_GENERATION = true;
+const USE_BACKEND_TOPIC_GENERATION = false;
 
 export const generateTopicsHandler: ToolHandler = async (params) => {
   try {
@@ -27,6 +51,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
       degree = 2,
       max_topics = 3,
       focus,
+      seed_topics,
     } = params;
 
     if (!workflow_id || typeof workflow_id !== "string") {
@@ -78,6 +103,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
       degree,
       max_topics,
       focus,
+      seed_topics: Array.isArray(seed_topics) ? seed_topics.length : 0,
     });
     console.log("[generate_topics] Parsed values:", {
       depthValue,
@@ -102,6 +128,21 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
         .slice(0, 20)
         .map((r) => ({ data: r.data }));
 
+      // Get seed topics: use explicit param if provided, otherwise auto-fetch from knowledge sources
+      let seedTopicsValue: string[] | undefined;
+      if (Array.isArray(seed_topics) && seed_topics.length > 0) {
+        // Lucy explicitly provided seed topics
+        seedTopicsValue = seed_topics.filter((t): t is string => typeof t === "string" && t.trim() !== "");
+        console.log("[generate_topics] Using explicit seed topics from Lucy:", seedTopicsValue);
+      } else {
+        // Auto-fetch from knowledge sources (PDFs, etc.)
+        const autoTopics = await getKnowledgeSourceTopics(workflow.datasetId);
+        if (autoTopics.length > 0) {
+          seedTopicsValue = autoTopics;
+          console.log("[generate_topics] Using auto-fetched topics from knowledge sources:", seedTopicsValue);
+        }
+      }
+
       const result = await generateTopicsViaBackend(
         workflow.trainingGoals || "Generate diverse training data",
         depthValue,
@@ -109,6 +150,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
         formattedRecords,
         maxTopicsValue,
         focusValue,
+        seedTopicsValue,
       );
 
       if (!result.success || !result.hierarchy) {
@@ -120,11 +162,28 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
 
       hierarchy = result.hierarchy;
     } else {
-      // Use existing frontend LLM-based topic generation
+      // Use frontend LLM-based topic generation with full context
+      // Get seed topics: use explicit param if provided, otherwise auto-fetch from knowledge sources
+      let seedTopicsValue: string[] | undefined;
+      if (Array.isArray(seed_topics) && seed_topics.length > 0) {
+        seedTopicsValue = seed_topics.filter((t): t is string => typeof t === "string" && t.trim() !== "");
+        console.log("[generate_topics] Using explicit seed topics from Lucy:", seedTopicsValue);
+      } else {
+        const autoTopics = await getKnowledgeSourceTopics(workflow.datasetId);
+        if (autoTopics.length > 0) {
+          seedTopicsValue = autoTopics;
+          console.log("[generate_topics] Using auto-fetched topics from knowledge sources:", seedTopicsValue);
+        }
+      }
+
       const result = await generateTopicsViaFrontend(
         workflow.datasetId,
         depthValue,
         degreeValue,
+        maxTopicsValue,
+        workflow.trainingGoals,
+        focusValue,
+        seedTopicsValue,
       );
 
       if (!result.success || !result.hierarchy) {
@@ -180,7 +239,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
 export const generateTopicsTool: DistriFnTool = {
   name: "generate_topics",
   description:
-    "Auto-generate topic hierarchy from dataset content. Available in topics_config and grader_config steps.",
+    "Auto-generate topic hierarchy from dataset content. If knowledge sources (PDFs, documents) have been uploaded, their extracted topics will be used to seed the hierarchy. Available in topics_config and grader_config steps.",
   type: "function",
   parameters: {
     type: "object",
@@ -211,6 +270,12 @@ export const generateTopicsTool: DistriFnTool = {
         type: "string",
         description:
           'Optional user guidance for topic generation. Examples: "focus on error handling scenarios", "organize by difficulty level", "emphasize edge cases", "structure around user journey stages"',
+      },
+      seed_topics: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          'Optional list of topics to seed the hierarchy. If not provided, topics are auto-extracted from uploaded knowledge sources (PDFs). Use this to explicitly control which topics to include. Examples: ["sicilian_defense", "kings_gambit", "endgame_techniques"]',
       },
     },
     required: ["workflow_id"],

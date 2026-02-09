@@ -10,7 +10,7 @@ import type { ViewMode } from "./ViewModeToggle";
 import { SectionTabs } from "./SectionTabs";
 
 export type { ViewMode };
-export type DatasetSection = "records" | "evaluator" | "jobs";
+export type DatasetSection = "records" | "evaluator" | "jobs" | "readme";
 
 export interface DatasetUtilityBarProps {
   /** Current active section */

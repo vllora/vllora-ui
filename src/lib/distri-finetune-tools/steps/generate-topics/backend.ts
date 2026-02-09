@@ -16,6 +16,7 @@ interface BackendTopicHierarchyRequest {
   model?: string;
   temperature?: number;
   focus?: string;
+  seed_topics?: string[]; // Topics extracted from knowledge sources (PDFs, etc.)
 }
 
 interface BackendTopicHierarchyResponse {
@@ -39,6 +40,7 @@ export interface GenerateTopicsResult {
  * @param records - Sample records from the dataset
  * @param maxTopics - Maximum number of root topics (default: 3)
  * @param focus - Optional focus areas for topic generation (e.g., "error handling", "edge cases")
+ * @param seedTopics - Optional topics from knowledge sources (PDFs) to guide hierarchy generation
  */
 export async function generateTopicsViaBackend(
   goals: string,
@@ -47,6 +49,7 @@ export async function generateTopicsViaBackend(
   records: Array<{ data: unknown }>,
   maxTopics: number = 3,
   focus?: string,
+  seedTopics?: string[],
 ): Promise<GenerateTopicsResult> {
   const url = `${getBackendUrl()}/finetune/topic-hierarchy/generate`;
 
@@ -57,6 +60,7 @@ export async function generateTopicsViaBackend(
     records,
     max_topics: maxTopics,
     ...(focus && { focus }),
+    ...(seedTopics && seedTopics.length > 0 && { seed_topics: seedTopics }),
   };
 
   console.log('[generateTopicsViaBackend] Request URL:', url);
@@ -67,6 +71,7 @@ export async function generateTopicsViaBackend(
     records_count: records.length,
     max_topics: maxTopics,
     focus,
+    seed_topics_count: seedTopics?.length || 0,
   });
 
   const response = await fetch(url, {

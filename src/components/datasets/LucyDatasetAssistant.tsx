@@ -74,7 +74,7 @@ export function LucyDatasetAssistant() {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   // Get dataset from context (rendered inside DatasetDetailProvider)
-  const { dataset: currentDataset, datasetId: selectedDatasetId, isLoading: datasetLoading } = DatasetDetailConsumer();
+  const { dataset: currentDataset, datasetId: selectedDatasetId, isLoading: datasetLoading, records } = DatasetDetailConsumer();
 
   // Lucy agent state
   const { isConnected, reconnect } = useDistriConnection();
@@ -109,6 +109,10 @@ export function LucyDatasetAssistant() {
   // Store workflow ref to use in timeout without adding to dependencies
   const workflowRef = useRef(workflow);
   workflowRef.current = workflow;
+
+  // Store records ref to use in timeout without adding to dependencies
+  const recordsRef = useRef(records);
+  recordsRef.current = records;
 
   // Proactive behavior: auto-analyze dataset when viewing it for the first time
   useEffect(() => {
@@ -147,8 +151,12 @@ export function LucyDatasetAssistant() {
       // Double-check we haven't already triggered and messages are still empty
       if (lastAnalyzedDatasetRef.current !== targetDatasetId && messagesRef.current.length === 0) {
         lastAnalyzedDatasetRef.current = targetDatasetId;
-        // Use ref to get latest workflow value at trigger time
-        setAutoTriggerPrompt(buildDatasetAnalysisPrompt({ dataset: promptDataset, workflow: workflowRef.current }));
+        // Use refs to get latest values at trigger time
+        setAutoTriggerPrompt(buildDatasetAnalysisPrompt({
+          dataset: promptDataset,
+          workflow: workflowRef.current,
+          recordCount: recordsRef.current.length,
+        }));
       }
     }, 300);
 

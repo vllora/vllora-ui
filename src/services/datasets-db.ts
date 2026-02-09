@@ -1035,3 +1035,37 @@ export async function updateDatasetTrainingConfig(
   });
 }
 
+/**
+ * Update the auto-generated README for a dataset
+ */
+export async function updateDatasetReadme(
+  datasetId: string,
+  readme: string
+): Promise<void> {
+  const db = await getDB();
+  const now = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('datasets', 'readwrite');
+    const store = tx.objectStore('datasets');
+
+    const getRequest = store.get(datasetId);
+    getRequest.onsuccess = () => {
+      const dataset = getRequest.result;
+      if (dataset) {
+        dataset.readme = readme;
+        dataset.readmeUpdatedAt = now;
+        dataset.updatedAt = now;
+        store.put(dataset);
+      }
+    };
+
+    tx.oncomplete = () => {
+      // Emit refresh event so context auto-syncs with IndexedDB
+      emitter.emit(DATASET_REFRESH_EVENT as any, { datasetId });
+      resolve();
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
