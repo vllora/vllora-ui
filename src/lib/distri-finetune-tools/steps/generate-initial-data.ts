@@ -14,6 +14,10 @@ import { fetchLucyConfig, type LucyConfig } from "@/lib/agent-sync";
 import type { ToolHandler } from "../types";
 import type { DataInfo } from "@/types/dataset-types";
 import * as workflowDB from "@/services/finetune-workflow-db";
+import { emitter } from "@/utils/eventEmitter";
+
+// Batch size for generation - smaller batches are faster and more reliable
+const BATCH_SIZE = 10;
 
 // Cache for Lucy config
 let cachedLucyConfig: LucyConfig | null = null;
@@ -364,6 +368,9 @@ async function callLLMForInitialData(
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
+      console.log(`[generateInitialData] LLM call attempt ${attempt + 1}/3 for ${count} examples...`);
+      const startTime = Date.now();
+
       const response = await distriClient.llm(messages, [], {
         model_settings: {
           ...modelSettingsFromConfig,
@@ -373,21 +380,28 @@ async function callLLMForInitialData(
         },
       });
 
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.log(`[generateInitialData] LLM call completed in ${elapsed}s`);
+
       if (!response.content) {
         throw new Error("LLM returned empty response");
       }
 
       const parsed = JSON.parse(response.content.trim());
+      console.log(`[generateInitialData] Parsed ${parsed.examples?.length || 0} examples from response`);
       return parsed.examples || [];
     } catch (err) {
       lastError = err;
+      console.error(`[generateInitialData] LLM call attempt ${attempt + 1} failed:`, err);
       if (attempt < 2) {
         const backoffMs = 800 * Math.pow(2, attempt);
+        console.log(`[generateInitialData] Retrying in ${backoffMs}ms...`);
         await new Promise((resolve) => setTimeout(resolve, backoffMs));
       }
     }
   }
 
+  console.error("[generateInitialData] All LLM attempts failed:", lastError);
   throw lastError instanceof Error ? lastError : new Error("LLM call failed");
 }
 
@@ -462,7 +476,7 @@ export const generateInitialDataHandler: ToolHandler = async (
       return { success: false, error: `Dataset ${dataset_id} not found` };
     }
     // get workflow
-    const workflow = await workflowDB.getWorkflow(dataset_id);
+    const workflow = await workflowDB.getWorkflowByDataset(dataset_id);
     console.log("======== [generateInitialData] Workflow:", workflow);
     if (workflow) {
       // check if workflow is in topics_config or grader_config
@@ -511,41 +525,98 @@ export const generateInitialDataHandler: ToolHandler = async (
       );
     }
 
-    // Generate examples using LLM
-    const examples = await callLLMForInitialData(
-      objective,
-      count,
-      generation_mode,
-      user_guidance,
-      knowledgeContext,
-    );
-    console.log("[generateInitialData] Generated", examples.length, "examples");
+    // Calculate batches
+    const totalBatches = Math.ceil(count / BATCH_SIZE);
+    let totalGenerated = 0;
+    const allExamples: GeneratedExample[] = [];
 
-    // Convert to dataset records and save (without topics - user can define topics later)
-    const recordsToAdd = examples.map((example) => ({
-      data: exampleToDataInfo(example, generation_mode),
-      is_generated: true,
-      metadata: {
-        generation_source: "initial_data",
-        generation_mode,
-        generated_at_ms: Date.now(),
-      },
-    }));
+    // Emit started event
+    emitter.emit("vllora_data_generation_progress", {
+      datasetId: dataset_id,
+      status: "started",
+      total: count,
+      completed: 0,
+      currentBatch: 0,
+      totalBatches,
+    });
 
-    const addedRecords = await datasetsDB.addRecordsToDataset(
-      dataset_id,
-      recordsToAdd,
-    );
-    console.log(
-      "[generateInitialData] Added",
-      addedRecords.length,
-      "records to dataset",
-    );
+    console.log(`[generateInitialData] Generating ${count} examples in ${totalBatches} batches of ${BATCH_SIZE}`);
+
+    // Generate examples in batches
+    for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+      const remaining = count - totalGenerated;
+      const batchSize = Math.min(BATCH_SIZE, remaining);
+
+      console.log(`[generateInitialData] Starting batch ${batchIndex + 1}/${totalBatches} (${batchSize} examples)`);
+
+      try {
+        const batchExamples = await callLLMForInitialData(
+          objective,
+          batchSize,
+          generation_mode,
+          user_guidance,
+          knowledgeContext,
+        );
+
+        allExamples.push(...batchExamples);
+        totalGenerated += batchExamples.length;
+
+        // Convert batch to records and save immediately
+        const batchRecords = batchExamples.map((example) => ({
+          data: exampleToDataInfo(example, generation_mode),
+          is_generated: true,
+          metadata: {
+            generation_source: "initial_data",
+            generation_mode,
+            generated_at_ms: Date.now(),
+            batch_index: batchIndex,
+          },
+        }));
+
+        const addedBatchRecords = await datasetsDB.addRecordsToDataset(
+          dataset_id,
+          batchRecords,
+        );
+
+        console.log(`[generateInitialData] Batch ${batchIndex + 1} complete: added ${addedBatchRecords.length} records (total: ${totalGenerated})`);
+
+        // Emit progress event
+        emitter.emit("vllora_data_generation_progress", {
+          datasetId: dataset_id,
+          status: "progress",
+          total: count,
+          completed: totalGenerated,
+          currentBatch: batchIndex + 1,
+          totalBatches,
+        });
+      } catch (batchError) {
+        console.error(`[generateInitialData] Batch ${batchIndex + 1} failed:`, batchError);
+        // Continue with other batches even if one fails
+        if (totalGenerated === 0) {
+          // If first batch fails with no records generated, throw
+          throw batchError;
+        }
+        // Otherwise continue and report partial success
+        break;
+      }
+    }
+
+    console.log("[generateInitialData] Generation complete:", totalGenerated, "examples total");
+
+    // Emit completed event
+    emitter.emit("vllora_data_generation_progress", {
+      datasetId: dataset_id,
+      status: "completed",
+      total: count,
+      completed: totalGenerated,
+      currentBatch: totalBatches,
+      totalBatches,
+    });
 
     return {
       success: true,
       dataset_name: dataset.name,
-      records_created: addedRecords.length,
+      records_created: totalGenerated,
       training_objective: objective,
       knowledge_sources_used: knowledgeContext.hasKnowledge
         ? knowledgeContext.sourceCount
@@ -553,6 +624,19 @@ export const generateInitialDataHandler: ToolHandler = async (
     };
   } catch (error) {
     console.error("[generateInitialData] Failed:", error);
+    const { dataset_id } = params as unknown as GenerateInitialDataParams;
+
+    // Emit failed event
+    if (dataset_id) {
+      emitter.emit("vllora_data_generation_progress", {
+        datasetId: dataset_id,
+        status: "failed",
+        total: 0,
+        completed: 0,
+        error: error instanceof Error ? error.message : "Failed to generate initial data",
+      });
+    }
+
     return {
       success: false,
       error:

@@ -111,6 +111,9 @@ Rules:
 - Create a balanced topic hierarchy based on the objective and knowledge
 - Topics should be specific enough to generate focused training data
 - Aim for 4-8 top-level topics with 2-4 subtopics each where appropriate
+- IMPORTANT: Each top-level topic should have target_count of 30-50 examples minimum
+- IMPORTANT: Each subtopic should have target_count of 15-25 examples minimum
+- High-quality fine-tuning requires substantial training data (100+ examples total)
 - Grader criteria should be specific to the domain
 - Be realistic about what can be achieved with the available knowledge
 - Output MUST be valid JSON matching the schema`;
@@ -127,6 +130,9 @@ Create a comprehensive plan including:
 2. Data generation strategy (how many examples per topic)
 3. Evaluation criteria (how to grade model responses)
 
+IMPORTANT: Each topic should have at least 30-50 examples. Subtopics should have at least 15-25 examples each.
+High-quality fine-tuning requires substantial training data.
+
 Target seed count: {{seed_count}} initial examples
 
 Output Format:
@@ -135,12 +141,12 @@ Output Format:
     {
       "name": "Topic Name",
       "description": "What this topic covers",
-      "target_count": 10,
+      "target_count": 40,
       "subtopics": [
         {
           "name": "Subtopic Name",
           "description": "Subtopic description",
-          "target_count": 5
+          "target_count": 20
         }
       ]
     }
@@ -330,6 +336,9 @@ export const proposeSetupPlanHandler: ToolHandler = async (
     if (!dataset_id) {
       return { success: false, error: 'dataset_id is required' };
     }
+
+    // Emit event so right panel shows loading state
+    emitter.emit('vllora_setup_plan_generating', { datasetId: dataset_id });
 
     // Get dataset
     const dataset = await datasetsDB.getDatasetById(dataset_id);

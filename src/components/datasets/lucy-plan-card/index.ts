@@ -5,4 +5,5 @@
  */
 
 export { SetupPlanCard } from './SetupPlanCard';
+export { SetupPlanEditor } from './SetupPlanEditor';
 export { ExecutionProgressCard } from './ExecutionProgressCard';

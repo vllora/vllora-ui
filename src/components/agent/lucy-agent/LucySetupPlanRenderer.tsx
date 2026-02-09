@@ -7,11 +7,9 @@
 
 import { ToolCall, extractToolResultData } from '@distri/core';
 import { ToolCallState } from '@distri/react';
-import { Loader2, ChevronDown, ChevronRight, Wrench } from 'lucide-react';
+import { Loader2, ChevronDown, ChevronRight, Wrench, CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
-import { emitter } from '@/utils/eventEmitter';
-import { SetupPlanCard, ExecutionProgressCard } from '@/components/datasets/lucy-plan-card';
-import type { SetupPlan } from '@/lib/distri-finetune-tools/steps/propose-setup-plan';
+import { ExecutionProgressCard } from '@/components/datasets/lucy-plan-card';
 import { tryParseJson } from '@/utils/modelUtils';
 
 // Local type definition to avoid circular imports
@@ -130,18 +128,19 @@ export function LucySetupPlanRenderer({ toolCall, state }: ToolRendererProps) {
     );
   }
 
-  // If there's a plan, show the SetupPlanCard
+  // If there's a plan, show a simplified message (plan is displayed in right panel)
   if (isCompleted && result?.success && result?.plan) {
-    const plan: SetupPlan = result.plan;
-
-    const handleApprove = (approvedPlan: SetupPlan) => {
-      // Emit event to trigger Lucy with approval message
-      emitter.emit('vllora_lucy_prompt', {
-        prompt: `I approve the setup plan. Please execute it now using the execute_setup_plan tool with the following plan:\n\n${JSON.stringify(approvedPlan)}`,
-      });
-    };
-
-    return <SetupPlanCard plan={plan} onApprove={handleApprove} />;
+    return (
+      <div className="border border-green-500/30 rounded-lg bg-green-500/10 p-4">
+        <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+          <CheckCircle2 className="w-4 h-4" />
+          <span className="text-sm font-medium">Setup plan ready</span>
+        </div>
+        <div className="text-sm text-muted-foreground mt-1">
+          Review the plan in the main panel on the right, then click &quot;Approve &amp; Execute&quot; to proceed.
+        </div>
+      </div>
+    );
   }
 
   // If sources are still processing, show a waiting message with indicator

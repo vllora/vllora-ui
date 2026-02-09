@@ -14,7 +14,7 @@ import { DatasetOverviewCard } from "./dataset-detail-header/overview-card";
 import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
 import { RecordsTable } from "./records-table/RecordsTable";
 import { RecordDetailSidebar } from "./records-table/RecordDetailSidebar";
-import { EmptyRecordsWithPlan } from "./EmptyRecordsWithPlan";
+import { EmptyRecordsState } from "./EmptyRecordsState";
 
 type BalanceRating = "excellent" | "good" | "fair" | "poor" | "critical";
 
@@ -100,6 +100,7 @@ export function DatasetMainContent({
     return (
       <div className="flex-1 flex flex-col overflow-hidden">
         <EmptyRecordsState
+          datasetId={datasetId}
           datasetObjective={datasetObjective}
           hasTopicHierarchy={!!(topicHierarchy && topicHierarchy.length > 0)}
         />

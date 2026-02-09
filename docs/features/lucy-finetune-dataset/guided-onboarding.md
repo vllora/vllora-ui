@@ -33,36 +33,39 @@ User uploads documents to empty dataset
 │  - Extracts topics from documents   │
 │  - Calls LLM to generate plan       │
 │  - Returns SetupPlan object         │
+│  - Emits vllora_setup_plan_proposed │
 └─────────────────────────────────────┘
          │
-         ▼
-┌─────────────────────────────────────┐
-│  LucySetupPlanRenderer              │
-│  - Renders SetupPlanCard component  │
-│  - Shows: topics, data strategy,    │
-│    grader config, execution steps   │
-│  - User can edit seed count         │
-│  - "Approve & Execute" button       │
-└─────────────────────────────────────┘
-         │
-         ▼ (User clicks Approve)
-┌─────────────────────────────────────┐
-│  execute_setup_plan tool            │
-│  - Step 1: Apply topic hierarchy    │
-│  - Step 2: Generate initial data    │
-│  - Step 3: Configure evaluator      │
-│  - Step 4: Upload to backend        │
-│  - Step 5: Run dry run validation   │
-│  - Emits progress events            │
-└─────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────┐
-│  ExecutionProgressCard              │
-│  - Shows real-time step progress    │
-│  - Listens to progress events       │
-│  - Final: "Ready for fine-tuning!"  │
-└─────────────────────────────────────┘
+         ├────────────────────────────────────┐
+         ▼                                    ▼
+┌─────────────────────────┐    ┌─────────────────────────────────────┐
+│  Lucy Chat (Left)       │    │  README Tab (Right)                 │
+│  LucySetupPlanRenderer  │    │  ReadmeWithPlan                     │
+│  - Shows confirmation   │    │  - Shows loading while generating   │
+│    message              │    │  - Displays SetupPlanEditor         │
+│  - Points user to right │    │  - Editable markdown format         │
+│    panel                │    │  - User modifies plan if needed     │
+└─────────────────────────┘    │  - "Approve & Execute" button       │
+                               └─────────────────────────────────────┘
+                                              │
+                                              ▼ (User clicks Approve)
+                               ┌─────────────────────────────────────┐
+                               │  execute_setup_plan tool            │
+                               │  - Step 1: Apply topic hierarchy    │
+                               │  - Step 2: Generate initial data    │
+                               │  - Step 3: Configure evaluator      │
+                               │  - Step 4: Upload to backend        │
+                               │  - Step 5: Run dry run validation   │
+                               │  - Emits progress events            │
+                               └─────────────────────────────────────┘
+                                              │
+                                              ▼
+                               ┌─────────────────────────────────────┐
+                               │  ExecutionProgressCard              │
+                               │  - Shows real-time step progress    │
+                               │  - Listens to progress events       │
+                               │  - Final: "Ready for fine-tuning!"  │
+                               └─────────────────────────────────────┘
 ```
 
 ## Trigger Conditions
@@ -179,11 +182,35 @@ interface ExecuteSetupPlanResult {
 
 ## UI Components
 
-### SetupPlanCard
+### SetupPlanEditor (Right Panel)
+
+Located at: `/ui/src/components/datasets/lucy-plan-card/SetupPlanEditor.tsx`
+
+The primary component for viewing and editing setup plans. Displayed in the main content area (right panel) when a plan is proposed. Features:
+- **Markdown view** - Plan rendered as readable markdown
+- **Edit mode** - Toggle to edit the markdown directly
+- **Approve & Execute** - Button to proceed with the plan
+- **Dismiss** - Button to close and discard the plan
+
+**Props:**
+```typescript
+interface SetupPlanEditorProps {
+  plan: SetupPlan;
+  onApprove: (plan: SetupPlan) => void;
+  onDismiss?: () => void;
+}
+```
+
+The editor converts the SetupPlan to markdown for editing and parses changes back when approved. Key editable fields:
+- Seed count
+- Passing threshold
+- Topic target counts
+
+### SetupPlanCard (Legacy/Compact)
 
 Located at: `/ui/src/components/datasets/lucy-plan-card/SetupPlanCard.tsx`
 
-Displays the proposed setup plan with expandable sections:
+Compact card version with expandable sections (used as fallback or in constrained spaces):
 - **Knowledge Sources** - Documents analyzed
 - **Topics** - Hierarchical topic structure with counts
 - **Data Generation** - Strategy and seed count (editable)
@@ -218,13 +245,36 @@ interface ExecutionProgressCardProps {
 **Event Subscription:**
 The component subscribes to `vllora_setup_plan_progress` events to receive real-time updates.
 
+### ReadmeWithPlan
+
+Located at: `/ui/src/components/datasets/ReadmeWithPlan.tsx`
+
+Wrapper component for the README tab that handles setup plan display. It:
+- Shows loading state while Lucy is generating a plan
+- Listens for `vllora_setup_plan_proposed` events
+- Displays SetupPlanEditor when a plan is proposed
+- Falls back to DatasetReadmeViewer otherwise
+- Handles plan approval and dismissal
+
+**Props:**
+```typescript
+interface ReadmeWithPlanProps {
+  datasetId: string;
+  readme: string | null;
+  readmeUpdatedAt: number | null;
+  onExport: () => void;
+  onRegenerate: () => Promise<void>;
+  className?: string;
+}
+```
+
 ### LucySetupPlanRenderer
 
 Located at: `/ui/src/components/agent/lucy-agent/LucySetupPlanRenderer.tsx`
 
-Custom tool renderer for `propose_setup_plan` tool. Handles:
+Custom tool renderer for `propose_setup_plan` tool in the chat. Shows:
 - Loading state while generating plan
-- Success state with SetupPlanCard
+- Success confirmation pointing to the right panel
 - Error state display
 - "Requires knowledge sources" message
 
@@ -238,6 +288,34 @@ Custom tool renderer for `execute_setup_plan` tool. Handles:
 - Error state display
 
 ## Event Flow
+
+### Plan Generating Event
+
+When `propose_setup_plan` starts, it emits an event to switch to the README tab and show loading:
+
+```typescript
+emitter.emit('vllora_setup_plan_generating', { datasetId: string });
+```
+
+`DatasetDetailContentV2` listens for this event and automatically switches to the README tab. `ReadmeWithPlan` displays a loading state while the plan is being generated.
+
+### Plan Proposed Event
+
+When `propose_setup_plan` completes, it emits an event so the right panel can display the plan:
+
+```typescript
+emitter.emit('vllora_setup_plan_proposed', { datasetId: string, plan: SetupPlan });
+```
+
+The `ReadmeWithPlan` component listens for this event and displays the `SetupPlanEditor`.
+
+### Plan Dismissed Event
+
+When the user dismisses the plan without approving:
+
+```typescript
+emitter.emit('vllora_setup_plan_dismissed', { datasetId: string });
+```
 
 ### Progress Events
 
@@ -255,7 +333,7 @@ After execution completes, a workflow updated event is emitted to trigger UI ref
 emitter.emit('vllora_workflow_updated', { datasetId: string });
 ```
 
-The `useFineTuneAgentChat` hook listens for this event and automatically refreshes the workflow state, ensuring the next agent message has the current context.
+The `useFineTuneAgentChat` hook listens for this event and automatically refreshes the workflow state, ensuring the next agent message has the current context. The `ReadmeWithPlan` component also listens for this to clear any displayed plan.
 
 **ExecutionProgress Structure:**
 ```typescript
@@ -321,10 +399,14 @@ Also has access to both tools for delegated execution scenarios.
 |-----------|------|
 | propose_setup_plan tool | `/ui/src/lib/distri-finetune-tools/steps/propose-setup-plan.ts` |
 | execute_setup_plan tool | `/ui/src/lib/distri-finetune-tools/steps/execute-setup-plan.ts` |
+| SetupPlanEditor | `/ui/src/components/datasets/lucy-plan-card/SetupPlanEditor.tsx` |
 | SetupPlanCard | `/ui/src/components/datasets/lucy-plan-card/SetupPlanCard.tsx` |
 | ExecutionProgressCard | `/ui/src/components/datasets/lucy-plan-card/ExecutionProgressCard.tsx` |
+| ReadmeWithPlan | `/ui/src/components/datasets/ReadmeWithPlan.tsx` |
 | Tool Renderers | `/ui/src/components/agent/lucy-agent/LucySetupPlanRenderer.tsx` |
 | Lucy Assistant | `/ui/src/components/datasets/LucyDatasetAssistant.tsx` |
+| DatasetDetailContentV2 | `/ui/src/components/datasets/DatasetDetailContentV2.tsx` |
+| Event Emitter | `/ui/src/utils/eventEmitter.ts` |
 | Orchestrator Agent | `/gateway/agents/finetune/vllora-finetune-agent.md` |
 | Workflow Agent | `/gateway/agents/finetune/finetune-workflow-agent.md` |
 

@@ -6,7 +6,7 @@
  * Documentation tabs (Docs, README) on the right, separated by a divider.
  */
 
-import { Database, FlaskConical, ListChecks, FileText, FolderOpen, Check, type LucideIcon } from "lucide-react";
+import { Database, FlaskConical, ListChecks, FileText, FolderOpen, Check, Wand2, type LucideIcon } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -41,12 +41,17 @@ const WORKFLOW_TABS: TabConfig[] = [
   },
 ];
 
-// Documentation tabs (right side) - not part of main workflow
+// Documentation & setup tabs (right side)
 const DOCUMENTATION_TABS: TabConfig[] = [
   {
     id: "docs",
     label: "Docs",
     icon: FolderOpen,
+  },
+  {
+    id: "plan",
+    label: "Plan",
+    icon: Wand2,
   },
   {
     id: "readme",
@@ -68,6 +73,8 @@ interface SectionTabsProps {
   activeJobsCount?: number;
   /** Number of uploaded knowledge sources */
   knowledgeSourcesCount?: number;
+  /** Whether a plan is being generated or proposed */
+  hasPlanActivity?: boolean;
 }
 
 export function SectionTabs({
@@ -77,6 +84,7 @@ export function SectionTabs({
   hasEvaluator,
   activeJobsCount = 0,
   knowledgeSourcesCount = 0,
+  hasPlanActivity = false,
 }: SectionTabsProps) {
   const renderTab = (tab: TabConfig) => {
     const isActive = activeSection === tab.id;
@@ -127,6 +135,14 @@ export function SectionTabs({
         {tab.id === "docs" && knowledgeSourcesCount > 0 && (
           <span className="min-w-[1.25rem] h-5 px-1.5 flex items-center justify-center rounded bg-blue-500/20 text-blue-500 text-[11px] font-medium tabular-nums">
             {knowledgeSourcesCount}
+          </span>
+        )}
+
+        {/* Plan activity indicator (pulsing dot) */}
+        {tab.id === "plan" && hasPlanActivity && (
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[rgb(var(--theme-500))] opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-[rgb(var(--theme-500))]" />
           </span>
         )}
 

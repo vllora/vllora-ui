@@ -1,13 +1,11 @@
 /**
  * WorkflowStepIndicator
  *
- * Simplified milestone-based workflow indicator showing 4 key stages:
- * 1. Data Preparation (topics_config, categorize, coverage_generation)
- * 2. Evaluation Config (grader_config, dry_run)
- * 3. Finetune (training)
- * 4. Deploy (deployment)
+ * Shows either:
+ * - Setup plan execution progress (5 steps: Topics → Generate → Eval → Upload → Dry Run)
+ * - Or simplified milestone-based workflow indicator (4 stages: Data → Eval → Train → Deploy)
  *
- * Milestones are marked complete based on actual achievements, not workflow steps.
+ * Automatically switches to execution mode when a setup plan is running.
  */
 
 import { useEffect, useState } from "react";
@@ -23,7 +21,9 @@ import {
   type FinetuneWorkflowState,
   getWorkflowByDataset,
 } from "@/services/finetune-workflow-db";
-import { Check, Loader2, Database, FlaskConical, Sparkles, Rocket } from "lucide-react";
+import { emitter } from "@/utils/eventEmitter";
+import type { ExecutionProgress, ExecutionStepStatus } from "@/lib/distri-finetune-tools/steps/execute-setup-plan";
+import { Check, Loader2, Database, FlaskConical, Sparkles, Rocket, FolderTree, FileText, Upload, PlayCircle, XCircle } from "lucide-react";
 
 // Map original workflow steps to milestones
 const DATA_PREP_STEPS: FinetuneStep[] = ["topics_config", "categorize", "coverage_generation"];
@@ -89,6 +89,15 @@ interface WorkflowStepIndicatorProps {
 
 type MilestoneStatus = "completed" | "in_progress" | "pending";
 
+// Execution step icons mapping
+const EXECUTION_STEP_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  topics: FolderTree,
+  generate: FileText,
+  grader: FlaskConical,
+  upload: Upload,
+  dryrun: PlayCircle,
+};
+
 export function WorkflowStepIndicator({
   datasetId,
   className,
@@ -100,6 +109,7 @@ export function WorkflowStepIndicator({
 }: WorkflowStepIndicatorProps) {
   const [workflow, setWorkflow] = useState<FinetuneWorkflowState | null>(null);
   const [loading, setLoading] = useState(true);
+  const [executionProgress, setExecutionProgress] = useState<ExecutionProgress | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -125,10 +135,29 @@ export function WorkflowStepIndicator({
       }
     };
 
+    // Listen for execution progress events
+    const handleExecutionProgress = ({ progress }: { progress: ExecutionProgress }) => {
+      if (progress.dataset_id === datasetId) {
+        setExecutionProgress(progress);
+        // Auto-clear after completion
+        if (progress.is_complete) {
+          setTimeout(() => {
+            if (mounted) {
+              setExecutionProgress(null);
+              loadWorkflow(); // Refresh workflow state
+            }
+          }, 3000);
+        }
+      }
+    };
+
     window.addEventListener("finetune-workflow-updated" as any, handleWorkflowUpdate);
+    emitter.on("vllora_setup_plan_progress" as any, handleExecutionProgress);
+
     return () => {
       mounted = false;
       window.removeEventListener("finetune-workflow-updated" as any, handleWorkflowUpdate);
+      emitter.off("vllora_setup_plan_progress" as any, handleExecutionProgress);
     };
   }, [datasetId]);
 
@@ -177,6 +206,109 @@ export function WorkflowStepIndicator({
     );
   }
 
+  // Show execution progress if a setup plan is running
+  if (executionProgress && !executionProgress.is_complete) {
+    return (
+      <TooltipProvider delayDuration={100}>
+        <div className={cn("flex items-center flex-1", className)}>
+          {executionProgress.steps.map((step, index) => {
+            const isLast = index === executionProgress.steps.length - 1;
+            const Icon = EXECUTION_STEP_ICONS[step.id] || Database;
+
+            const getStatusColor = (status: ExecutionStepStatus) => {
+              switch (status) {
+                case "completed":
+                  return "bg-emerald-500/20 text-emerald-500";
+                case "running":
+                  return "bg-primary/20 text-primary ring-2 ring-primary/30";
+                case "failed":
+                  return "bg-red-500/20 text-red-500";
+                default:
+                  return "bg-zinc-800 text-zinc-500";
+              }
+            };
+
+            const getTextColor = (status: ExecutionStepStatus) => {
+              switch (status) {
+                case "completed":
+                  return "text-emerald-500";
+                case "running":
+                  return "text-primary";
+                case "failed":
+                  return "text-red-500";
+                default:
+                  return "text-zinc-500";
+              }
+            };
+
+            const getConnectorColor = (status: ExecutionStepStatus) => {
+              return status === "completed" ? "bg-emerald-500/40" : "bg-zinc-700";
+            };
+
+            return (
+              <div key={step.id} className="flex flex-1 items-center">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-1.5">
+                      {/* Circle indicator */}
+                      <div
+                        className={cn(
+                          "w-6 h-6 rounded-full flex items-center justify-center transition-all",
+                          getStatusColor(step.status)
+                        )}
+                      >
+                        {step.status === "running" ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : step.status === "completed" ? (
+                          <Check className="w-3 h-3" />
+                        ) : step.status === "failed" ? (
+                          <XCircle className="w-3 h-3" />
+                        ) : (
+                          <Icon className="w-3 h-3" />
+                        )}
+                      </div>
+                      {/* Short label */}
+                      <span
+                        className={cn(
+                          "text-[11px] font-medium hidden sm:inline",
+                          getTextColor(step.status)
+                        )}
+                      >
+                        {step.name.split(" ")[0]}
+                      </span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">
+                    <div className="space-y-1">
+                      <div className="font-semibold">{step.name}</div>
+                      {step.message && (
+                        <p className="text-muted-foreground">{step.message}</p>
+                      )}
+                      {step.error && (
+                        <p className="text-red-400">{step.error}</p>
+                      )}
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+
+                {/* Connector line */}
+                {!isLast && (
+                  <div
+                    className={cn(
+                      "flex-1 h-[2px] mx-2 min-w-4",
+                      getConnectorColor(step.status)
+                    )}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </TooltipProvider>
+    );
+  }
+
+  // Default: show milestone-based workflow indicator
   return (
     <TooltipProvider delayDuration={100}>
       <div className={cn("flex items-center flex-1", className)}>

@@ -2,8 +2,6 @@
 // Updated to provide and log detailed reasoning
 
 function evaluate(input) {
-    // 0. Debug logging
-    console.log("DEBUG: evaluate() called.");
 
     // 1. Extract the actual response and history from the input
     let response = "";
@@ -26,7 +24,6 @@ function evaluate(input) {
 
     // 2. Guard clause for empty response
     if (!response || response.trim() === "") {
-        console.log("DEBUG: Empty response detected.");
         return {
             score: 0,
             reason: "Model failed to produce a response (empty output or could not be extracted)."
@@ -88,8 +85,6 @@ Answer in JSON format:
 
     // 4. Call LLM-as-judge
     try {
-        console.log("Calling LLM-as-judge with extracted response length: " + response.length);
-
         // MODIFY INPUT IN-PLACE to ensure compatibility with host constraints
         input.history = history;
         input.response = response;
@@ -125,7 +120,6 @@ Answer in JSON format:
         }
 
         if (!judgeReasoning) judgeReasoning = "No reasoning provided by LLM";
-        console.log("Judge Reasoning Found: " + judgeReasoning.substring(0, 50) + "...");
 
         // Calculate final score as the weighted average of metrics (0-5 range)
         const total = chessAccuracy + pedagogy + tone + clarity;

@@ -10,14 +10,49 @@
 import type { DistriFnTool } from '@distri/core';
 import { emitter } from '@/utils/eventEmitter';
 import * as datasetsDB from '@/services/datasets-db';
+import * as workflowDB from '@/services/finetune-workflow-db';
 import type { ToolHandler } from '../types';
 import type { SetupPlan } from './propose-setup-plan';
 import type { TopicHierarchyNode } from '@/types/dataset-types';
 
+// =============================================================================
+// Pending Plan Store (populated by UI event, consumed by handler)
+// =============================================================================
+
+let pendingApprovedPlan: { datasetId: string; plan: SetupPlan } | null = null;
+
+// Listen for plan approval events from UI
+emitter.on('vllora_setup_plan_approved', ({ datasetId, plan }) => {
+  console.log('[executeSetupPlan] Received plan approval event for dataset:', datasetId);
+  pendingApprovedPlan = { datasetId, plan: plan as SetupPlan };
+  // Auto-clear after 60 seconds to avoid stale data
+  setTimeout(() => {
+    if (pendingApprovedPlan?.datasetId === datasetId) {
+      pendingApprovedPlan = null;
+    }
+  }, 60000);
+});
+
+/**
+ * Get and consume the pending approved plan for a dataset
+ */
+export function consumePendingPlan(datasetId: string): SetupPlan | null {
+  console.log('[executeSetupPlan] Attempting to consume pending plan for:', datasetId);
+  console.log('[executeSetupPlan] Current pending plan:', pendingApprovedPlan?.datasetId);
+  if (pendingApprovedPlan?.datasetId === datasetId) {
+    const plan = pendingApprovedPlan.plan;
+    pendingApprovedPlan = null;
+    console.log('[executeSetupPlan] Successfully consumed pending plan');
+    return plan;
+  }
+  console.log('[executeSetupPlan] No pending plan found');
+  return null;
+}
+
 // Import step handlers
 import { applyTopicHierarchyHandler } from './apply-hierarchy';
 import { generateInitialDataHandler } from './generate-initial-data';
-import { configureGraderHandler } from './configure-grader';
+import { categorizeRecordsHandler } from './categorize-records';
 import { uploadDatasetHandler } from './upload-dataset';
 import { runDryRunHandler } from './run-dry-run';
 
@@ -109,10 +144,17 @@ export const executeSetupPlanHandler: ToolHandler = async (
   try {
     console.log('[executeSetupPlan] Starting execution:', executionId);
 
-    const { dataset_id, plan } = params as unknown as ExecuteSetupPlanParams;
+    const { dataset_id, plan: planFromParams } = params as unknown as ExecuteSetupPlanParams;
 
-    if (!dataset_id || !plan) {
-      return { success: false, error: 'dataset_id and plan are required' };
+    if (!dataset_id) {
+      return { success: false, error: 'dataset_id is required' };
+    }
+
+    // Try to get plan from params first, otherwise check pending approved plan
+    const plan = planFromParams || consumePendingPlan(dataset_id);
+
+    if (!plan) {
+      return { success: false, error: 'No plan provided. Please approve a setup plan first.' };
     }
 
     // Verify dataset exists
@@ -121,10 +163,20 @@ export const executeSetupPlanHandler: ToolHandler = async (
       return { success: false, error: `Dataset ${dataset_id} not found` };
     }
 
+    // Get or create workflow for this dataset
+    let workflow = await workflowDB.getWorkflowByDataset(dataset_id);
+    if (!workflow) {
+      console.log('[executeSetupPlan] Creating new workflow for dataset:', dataset_id);
+      workflow = await workflowDB.createWorkflow(dataset_id, dataset.datasetObjective || 'Setup plan execution');
+    }
+    const workflow_id = workflow.id;
+    console.log('[executeSetupPlan] Using workflow:', workflow_id);
+
     // Initialize progress tracking
     const steps: ExecutionStep[] = [
       { id: 'topics', name: 'Apply Topic Hierarchy', status: 'pending' },
       { id: 'generate', name: 'Generate Initial Data', status: 'pending' },
+      { id: 'categorize', name: 'Categorize Records', status: 'pending' },
       { id: 'grader', name: 'Configure Evaluator', status: 'pending' },
       { id: 'upload', name: 'Upload Dataset', status: 'pending' },
       { id: 'dryrun', name: 'Run Dry Run', status: 'pending' },
@@ -171,10 +223,8 @@ export const executeSetupPlanHandler: ToolHandler = async (
       const hierarchyNodes = convertToHierarchyNodes(plan.proposed_topics);
 
       const topicsResult = await applyTopicHierarchyHandler({
-        dataset_id,
+        workflow_id,
         hierarchy: hierarchyNodes,
-        version: '1.0',
-        generated_by: 'setup_plan',
       });
 
       if (!(topicsResult as any).success) {
@@ -187,6 +237,9 @@ export const executeSetupPlanHandler: ToolHandler = async (
         message: `Applied ${plan.total_topic_count} topics`,
         result: topicsResult,
       });
+
+      // Switch to Records tab to show the applied topics
+      emitter.emit('vllora_switch_tab', { datasetId: dataset_id, tab: 'records' });
     } catch (error) {
       updateStep('topics', {
         status: 'failed',
@@ -234,30 +287,85 @@ export const executeSetupPlanHandler: ToolHandler = async (
     }
 
     // =========================================================================
-    // Step 3: Configure Grader
+    // Step 3: Categorize Records
     // =========================================================================
     progress.current_step = 3;
+    updateStep('categorize', {
+      status: 'running',
+      message: 'Categorizing records into topics...',
+    });
+
+    try {
+      const categorizeResult = await categorizeRecordsHandler({
+        workflow_id,
+        confidence_threshold: 0.7,
+      });
+
+      if (!(categorizeResult as any).success) {
+        throw new Error((categorizeResult as any).error || 'Failed to categorize records');
+      }
+
+      const assignedCount = (categorizeResult as any).categorization?.assigned_count || 0;
+      updateStep('categorize', {
+        status: 'completed',
+        message: `Categorized ${assignedCount} records into topics`,
+        result: categorizeResult,
+      });
+    } catch (error) {
+      updateStep('categorize', {
+        status: 'failed',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      progress.has_error = true;
+      throw error;
+    }
+
+    // =========================================================================
+    // Step 4: Configure Grader
+    // =========================================================================
+    progress.current_step = 4;
     updateStep('grader', { status: 'running', message: 'Configuring evaluation grader...' });
 
     try {
-      const graderResult = await configureGraderHandler({
-        dataset_id,
-        grader_type: 'llm_judge',
-        config: {
-          criteria: plan.grader_config.criteria,
-          passing_threshold: plan.grader_config.passing_threshold,
-        },
-      });
+      // Generate a placeholder eval script based on the plan criteria
+      // The user can customize this later in the Evaluator tab
+      const criteriaComments = plan.grader_config.criteria
+        .map((c, i) => ` * ${i + 1}. ${c}`)
+        .join('\n');
 
-      if (!(graderResult as any).success) {
-        throw new Error((graderResult as any).error || 'Failed to configure grader');
-      }
+      const evalScript = `/**
+ * Auto-generated evaluation script
+ *
+ * Criteria to evaluate:
+${criteriaComments}
+ *
+ * Passing threshold: ${plan.grader_config.passing_threshold}
+ *
+ * TODO: Customize this script to properly evaluate responses based on your criteria.
+ */
+function evaluate(input, output) {
+  // Placeholder implementation - always returns passing score
+  // Replace this with actual evaluation logic
+  return {
+    score: ${plan.grader_config.passing_threshold},
+    reasoning: "Auto-generated placeholder. Please customize this evaluator."
+  };
+}`;
+
+      // Save eval script directly to dataset
+      await datasetsDB.updateDatasetEvalScript(dataset_id, evalScript);
+
+      // Update workflow grader config metadata
+      await workflowDB.updateStepData(workflow_id, 'graderConfig', {
+        type: 'js',
+        configuredAt: Date.now(),
+      });
 
       summary.grader_configured = true;
       updateStep('grader', {
         status: 'completed',
-        message: 'Evaluation grader configured',
-        result: graderResult,
+        message: 'Evaluation grader configured (placeholder - customize in Evaluator tab)',
+        result: { success: true, grader_type: 'js' },
       });
     } catch (error) {
       updateStep('grader', {
@@ -269,17 +377,18 @@ export const executeSetupPlanHandler: ToolHandler = async (
     }
 
     // =========================================================================
-    // Step 4: Upload Dataset
+    // Step 5: Upload Dataset
     // =========================================================================
-    progress.current_step = 4;
+    progress.current_step = 5;
     updateStep('upload', { status: 'running', message: 'Uploading dataset to backend...' });
 
     try {
       const uploadResult = await uploadDatasetHandler({
-        dataset_id,
+        workflow_id,
+        force_reupload: true,
       });
 
-      if (!(uploadResult as any).success) {
+      if (!(uploadResult as any).success && !(uploadResult as any).already_uploaded) {
         throw new Error((uploadResult as any).error || 'Failed to upload dataset');
       }
 
@@ -298,9 +407,9 @@ export const executeSetupPlanHandler: ToolHandler = async (
     }
 
     // =========================================================================
-    // Step 5: Run Dry Run
+    // Step 6: Run Dry Run
     // =========================================================================
-    progress.current_step = 5;
+    progress.current_step = 6;
     updateStep('dryrun', {
       status: 'running',
       message: 'Running dry run evaluation...',
@@ -308,9 +417,15 @@ export const executeSetupPlanHandler: ToolHandler = async (
     });
 
     try {
+      // Calculate sample percentage (aim for ~10 samples, but use percentage)
+      const targetSamples = Math.min(summary.records_generated, 10);
+      const samplePercentage = summary.records_generated > 0
+        ? Math.ceil((targetSamples / summary.records_generated) * 100)
+        : 100;
+
       const dryRunResult = await runDryRunHandler({
-        dataset_id,
-        sample_size: Math.min(summary.records_generated, 10),
+        workflow_id,
+        sample_percentage: samplePercentage,
       });
 
       if (!(dryRunResult as any).success) {
@@ -323,7 +438,7 @@ export const executeSetupPlanHandler: ToolHandler = async (
 
       updateStep('dryrun', {
         status: 'completed',
-        message: `Dry run complete (${Math.round((summary.dry_run_pass_rate || 0) * 100)}% pass rate)`,
+        message: `Dry run started in background`,
         result: dryRunResult,
       });
     } catch (error) {
@@ -374,11 +489,14 @@ export const executeSetupPlanTool: DistriFnTool = {
 This tool runs all setup steps sequentially:
 1. Apply topic hierarchy
 2. Generate initial training data
-3. Configure evaluation grader
-4. Upload dataset to backend
-5. Run dry run evaluation
+3. Categorize records into topics
+4. Configure evaluation grader
+5. Upload dataset to backend
+6. Run dry run evaluation
 
 Use this tool ONLY after the user has approved a plan from propose_setup_plan.
+When the user says "I approve the setup plan" or similar, call this tool with just the dataset_id.
+The approved plan is automatically retrieved from the UI approval event.
 
 The tool emits progress events so the UI can show real-time updates.
 After completion, the dataset is ready for fine-tuning.`,
@@ -392,10 +510,10 @@ After completion, the dataset is ready for fine-tuning.`,
       },
       plan: {
         type: 'object',
-        description: 'The approved setup plan from propose_setup_plan',
+        description: 'Optional: The setup plan. If not provided, retrieves from UI approval.',
       },
     },
-    required: ['dataset_id', 'plan'],
+    required: ['dataset_id'],
   },
   autoExecute: true,
   handler: async (input) =>
