@@ -12,9 +12,63 @@ import * as knowledgeDB from "@/services/knowledge-sources-db";
 import { getDistriUrl } from "@/config/api";
 import { fetchLucyConfig, type LucyConfig } from "@/lib/agent-sync";
 import type { ToolHandler } from "../types";
-import type { DataInfo } from "@/types/dataset-types";
+import type { DataInfo, TopicHierarchyNode } from "@/types/dataset-types";
 import * as workflowDB from "@/services/finetune-workflow-db";
 import { emitter } from "@/utils/eventEmitter";
+
+// =============================================================================
+// Topic Hierarchy Helpers
+// =============================================================================
+
+interface LeafTopic {
+  name: string;
+  path: string[]; // Full path from root to leaf
+}
+
+/**
+ * Extract all leaf topics from a hierarchy tree.
+ * A leaf topic is one with no children or empty children array.
+ */
+function getLeafTopics(hierarchy: TopicHierarchyNode[], parentPath: string[] = []): LeafTopic[] {
+  const leaves: LeafTopic[] = [];
+
+  for (const node of hierarchy) {
+    const currentPath = [...parentPath, node.name];
+
+    if (!node.children || node.children.length === 0) {
+      // This is a leaf node
+      leaves.push({ name: node.name, path: currentPath });
+    } else {
+      // Recurse into children
+      leaves.push(...getLeafTopics(node.children, currentPath));
+    }
+  }
+
+  return leaves;
+}
+
+/**
+ * Distribute a count across topics as evenly as possible.
+ * Returns a map of topic name -> count to generate.
+ */
+function distributeCountAcrossTopics(totalCount: number, topics: LeafTopic[]): Map<LeafTopic, number> {
+  const distribution = new Map<LeafTopic, number>();
+
+  if (topics.length === 0) return distribution;
+
+  const baseCount = Math.floor(totalCount / topics.length);
+  let remainder = totalCount % topics.length;
+
+  for (const topic of topics) {
+    const count = baseCount + (remainder > 0 ? 1 : 0);
+    if (count > 0) {
+      distribution.set(topic, count);
+    }
+    if (remainder > 0) remainder--;
+  }
+
+  return distribution;
+}
 
 // Batch size for generation - smaller batches are faster and more reliable
 const BATCH_SIZE = 10;
@@ -37,6 +91,8 @@ interface GenerateInitialDataParams {
   generation_mode?: "rft" | "sft";
   /** Optional user guidance for how to generate the data (e.g., "focus on beginner concepts", "include edge cases") */
   user_guidance?: string;
+  /** If true, distribute generation across topics in the hierarchy */
+  distribute_by_topic?: boolean;
 }
 
 interface GeneratedExample {
@@ -165,6 +221,7 @@ const INITIAL_DATA_GENERATION_USER_RFT = `Generate {{count}} diverse training ex
 Training Objective:
 {{objective}}
 {{user_guidance}}
+{{topic_context}}
 {{knowledge_context}}
 Generate a JSON array of examples. Each example should be a realistic user query/prompt that would be sent to an AI assistant being trained for this objective.
 
@@ -196,6 +253,7 @@ const INITIAL_DATA_GENERATION_USER_SFT = `Generate {{count}} diverse training ex
 Training Objective:
 {{objective}}
 {{user_guidance}}
+{{topic_context}}
 {{knowledge_context}}
 Generate a JSON array of complete conversation examples. Each example should demonstrate the ideal assistant behavior for this objective.
 
@@ -322,6 +380,7 @@ async function callLLMForInitialData(
   mode: "rft" | "sft",
   userGuidance?: string,
   knowledgeContext?: KnowledgeContext,
+  topicContext?: LeafTopic,
 ): Promise<GeneratedExample[]> {
   const lucyConfig = await fetchLucyConfigCached();
   const rawUrl = lucyConfig.distri_url || getDistriUrl();
@@ -340,6 +399,11 @@ async function callLLMForInitialData(
     ? `\nUser's specific guidance:\n${userGuidance}\n`
     : "";
 
+  // Build topic context section if provided
+  const topicSection = topicContext
+    ? `\n--- TOPIC FOCUS ---\nGenerate ALL examples specifically about this topic: "${topicContext.name}"\nTopic path: ${topicContext.path.join(" > ")}\nAll examples MUST be directly relevant to this specific topic.\n--- END TOPIC FOCUS ---\n`
+    : "";
+
   // Build knowledge context section if available
   const knowledgeSection = knowledgeContext
     ? buildKnowledgeContextSection(knowledgeContext)
@@ -349,6 +413,7 @@ async function callLLMForInitialData(
     .replace(/\{\{count\}\}/g, String(count))
     .replace("{{objective}}", objective)
     .replace("{{user_guidance}}", guidanceSection)
+    .replace("{{topic_context}}", topicSection)
     .replace("{{knowledge_context}}", knowledgeSection);
 
   const responseSchema =
@@ -464,6 +529,7 @@ export const generateInitialDataHandler: ToolHandler = async (
       count = 10,
       generation_mode = "rft",
       user_guidance,
+      distribute_by_topic = false,
     } = params as unknown as GenerateInitialDataParams;
 
     if (!dataset_id) {
@@ -525,79 +591,161 @@ export const generateInitialDataHandler: ToolHandler = async (
       );
     }
 
-    // Calculate batches
-    const totalBatches = Math.ceil(count / BATCH_SIZE);
+    // Check if we should use topic-based generation
+    const topicHierarchy = dataset.topicHierarchy?.hierarchy;
+    const leafTopics = (distribute_by_topic && topicHierarchy && topicHierarchy.length > 0)
+      ? getLeafTopics(topicHierarchy)
+      : [];
+    const useTopicBasedGeneration = leafTopics.length > 0;
+
     let totalGenerated = 0;
-    const allExamples: GeneratedExample[] = [];
+    let totalBatches = 0;
 
-    // Emit started event
-    emitter.emit("vllora_data_generation_progress", {
-      datasetId: dataset_id,
-      status: "started",
-      total: count,
-      completed: 0,
-      currentBatch: 0,
-      totalBatches,
-    });
+    if (useTopicBasedGeneration) {
+      // =========================================================================
+      // Topic-based generation: distribute count across leaf topics
+      // =========================================================================
+      const topicDistribution = distributeCountAcrossTopics(count, leafTopics);
+      totalBatches = topicDistribution.size;
 
-    console.log(`[generateInitialData] Generating ${count} examples in ${totalBatches} batches of ${BATCH_SIZE}`);
+      console.log(`[generateInitialData] Using topic-based generation across ${leafTopics.length} leaf topics`);
 
-    // Generate examples in batches
-    for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
-      const remaining = count - totalGenerated;
-      const batchSize = Math.min(BATCH_SIZE, remaining);
+      // Emit started event
+      emitter.emit("vllora_data_generation_progress", {
+        datasetId: dataset_id,
+        status: "started",
+        total: count,
+        completed: 0,
+        currentBatch: 0,
+        totalBatches,
+      });
 
-      console.log(`[generateInitialData] Starting batch ${batchIndex + 1}/${totalBatches} (${batchSize} examples)`);
+      let batchIndex = 0;
+      for (const [topic, topicCount] of topicDistribution) {
+        console.log(`[generateInitialData] Generating ${topicCount} examples for topic: ${topic.path.join(" > ")}`);
 
-      try {
-        const batchExamples = await callLLMForInitialData(
-          objective,
-          batchSize,
-          generation_mode,
-          user_guidance,
-          knowledgeContext,
-        );
-
-        allExamples.push(...batchExamples);
-        totalGenerated += batchExamples.length;
-
-        // Convert batch to records and save immediately
-        const batchRecords = batchExamples.map((example) => ({
-          data: exampleToDataInfo(example, generation_mode),
-          is_generated: true,
-          metadata: {
-            generation_source: "initial_data",
+        try {
+          const topicExamples = await callLLMForInitialData(
+            objective,
+            topicCount,
             generation_mode,
-            generated_at_ms: Date.now(),
-            batch_index: batchIndex,
-          },
-        }));
+            user_guidance,
+            knowledgeContext,
+            topic, // Pass topic context for focused generation
+          );
 
-        const addedBatchRecords = await datasetsDB.addRecordsToDataset(
-          dataset_id,
-          batchRecords,
-        );
+          totalGenerated += topicExamples.length;
 
-        console.log(`[generateInitialData] Batch ${batchIndex + 1} complete: added ${addedBatchRecords.length} records (total: ${totalGenerated})`);
+          // Convert to records with topic already assigned
+          const topicRecords = topicExamples.map((example) => ({
+            data: exampleToDataInfo(example, generation_mode),
+            is_generated: true,
+            topic: topic.name, // Assign topic directly during generation
+            metadata: {
+              generation_source: "initial_data",
+              generation_mode,
+              generated_at_ms: Date.now(),
+              topic_path: topic.path.join(" > "),
+            },
+          }));
 
-        // Emit progress event
-        emitter.emit("vllora_data_generation_progress", {
-          datasetId: dataset_id,
-          status: "progress",
-          total: count,
-          completed: totalGenerated,
-          currentBatch: batchIndex + 1,
-          totalBatches,
-        });
-      } catch (batchError) {
-        console.error(`[generateInitialData] Batch ${batchIndex + 1} failed:`, batchError);
-        // Continue with other batches even if one fails
-        if (totalGenerated === 0) {
-          // If first batch fails with no records generated, throw
-          throw batchError;
+          const addedRecords = await datasetsDB.addRecordsToDataset(
+            dataset_id,
+            topicRecords,
+          );
+
+          console.log(`[generateInitialData] Topic "${topic.name}": added ${addedRecords.length} records (total: ${totalGenerated})`);
+
+          batchIndex++;
+          // Emit progress event
+          emitter.emit("vllora_data_generation_progress", {
+            datasetId: dataset_id,
+            status: "progress",
+            total: count,
+            completed: totalGenerated,
+            currentBatch: batchIndex,
+            totalBatches,
+          });
+        } catch (topicError) {
+          console.error(`[generateInitialData] Topic "${topic.name}" generation failed:`, topicError);
+          // Continue with other topics even if one fails
+          batchIndex++;
         }
-        // Otherwise continue and report partial success
-        break;
+      }
+    } else {
+      // =========================================================================
+      // Standard batch generation (no topic hierarchy)
+      // =========================================================================
+      totalBatches = Math.ceil(count / BATCH_SIZE);
+
+      // Emit started event
+      emitter.emit("vllora_data_generation_progress", {
+        datasetId: dataset_id,
+        status: "started",
+        total: count,
+        completed: 0,
+        currentBatch: 0,
+        totalBatches,
+      });
+
+      console.log(`[generateInitialData] Generating ${count} examples in ${totalBatches} batches of ${BATCH_SIZE}`);
+
+      // Generate examples in batches
+      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+        const remaining = count - totalGenerated;
+        const batchSize = Math.min(BATCH_SIZE, remaining);
+
+        console.log(`[generateInitialData] Starting batch ${batchIndex + 1}/${totalBatches} (${batchSize} examples)`);
+
+        try {
+          const batchExamples = await callLLMForInitialData(
+            objective,
+            batchSize,
+            generation_mode,
+            user_guidance,
+            knowledgeContext,
+          );
+
+          totalGenerated += batchExamples.length;
+
+          // Convert batch to records and save immediately
+          const batchRecords = batchExamples.map((example) => ({
+            data: exampleToDataInfo(example, generation_mode),
+            is_generated: true,
+            metadata: {
+              generation_source: "initial_data",
+              generation_mode,
+              generated_at_ms: Date.now(),
+              batch_index: batchIndex,
+            },
+          }));
+
+          const addedBatchRecords = await datasetsDB.addRecordsToDataset(
+            dataset_id,
+            batchRecords,
+          );
+
+          console.log(`[generateInitialData] Batch ${batchIndex + 1} complete: added ${addedBatchRecords.length} records (total: ${totalGenerated})`);
+
+          // Emit progress event
+          emitter.emit("vllora_data_generation_progress", {
+            datasetId: dataset_id,
+            status: "progress",
+            total: count,
+            completed: totalGenerated,
+            currentBatch: batchIndex + 1,
+            totalBatches,
+          });
+        } catch (batchError) {
+          console.error(`[generateInitialData] Batch ${batchIndex + 1} failed:`, batchError);
+          // Continue with other batches even if one fails
+          if (totalGenerated === 0) {
+            // If first batch fails with no records generated, throw
+            throw batchError;
+          }
+          // Otherwise continue and report partial success
+          break;
+        }
       }
     }
 

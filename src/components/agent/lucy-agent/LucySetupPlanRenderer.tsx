@@ -9,7 +9,7 @@ import { ToolCall, extractToolResultData } from '@distri/core';
 import { ToolCallState } from '@distri/react';
 import { Loader2, ChevronDown, ChevronRight, Wrench, CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
-import { ExecutionProgressCard } from '@/components/datasets/lucy-plan-card';
+import { ExecutionProgressCard } from '@/components/datasets/plan-section';
 import { tryParseJson } from '@/utils/modelUtils';
 
 // Local type definition to avoid circular imports

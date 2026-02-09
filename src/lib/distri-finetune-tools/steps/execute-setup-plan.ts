@@ -52,9 +52,15 @@ export function consumePendingPlan(datasetId: string): SetupPlan | null {
 // Import step handlers
 import { applyTopicHierarchyHandler } from './apply-hierarchy';
 import { generateInitialDataHandler } from './generate-initial-data';
-import { categorizeRecordsHandler } from './categorize-records';
 import { uploadDatasetHandler } from './upload-dataset';
 import { runDryRunHandler } from './run-dry-run';
+
+// Import for README generation
+import * as knowledgeDB from '@/services/knowledge-sources-db';
+import { generateDatasetReadme, type KnowledgeSourceInfo, type SetupPlanSummary } from '@/services/dataset-readme-generator';
+
+// Side-effect import to ensure execution state store is listening for progress events
+import './execution-state-store';
 
 // =============================================================================
 // Types
@@ -173,13 +179,14 @@ export const executeSetupPlanHandler: ToolHandler = async (
     console.log('[executeSetupPlan] Using workflow:', workflow_id);
 
     // Initialize progress tracking
+    // Note: Records are assigned to topics during generation (distribute_by_topic=true)
     const steps: ExecutionStep[] = [
       { id: 'topics', name: 'Apply Topic Hierarchy', status: 'pending' },
       { id: 'generate', name: 'Generate Initial Data', status: 'pending' },
-      { id: 'categorize', name: 'Categorize Records', status: 'pending' },
       { id: 'grader', name: 'Configure Evaluator', status: 'pending' },
       { id: 'upload', name: 'Upload Dataset', status: 'pending' },
       { id: 'dryrun', name: 'Run Dry Run', status: 'pending' },
+      { id: 'readme', name: 'Generate README', status: 'pending' },
     ];
 
     const progress: ExecutionProgress = {
@@ -253,16 +260,19 @@ export const executeSetupPlanHandler: ToolHandler = async (
     // Step 2: Generate Initial Data
     // =========================================================================
     progress.current_step = 2;
+    // Use estimated_records (sum of topic target counts) instead of seed_count
+    // This ensures we generate the number of records shown in the plan
+    const targetRecordCount = plan.estimated_records || plan.data_generation.seed_count;
     updateStep('generate', {
       status: 'running',
-      message: `Generating ${plan.data_generation.seed_count} training examples...`,
+      message: `Generating ${targetRecordCount} training examples...`,
       progress: 0,
     });
 
     try {
       const generateResult = await generateInitialDataHandler({
         dataset_id,
-        count: plan.data_generation.seed_count,
+        count: targetRecordCount,
         use_knowledge: plan.data_generation.grounded_in_knowledge,
         distribute_by_topic: true,
       });
@@ -271,7 +281,7 @@ export const executeSetupPlanHandler: ToolHandler = async (
         throw new Error((generateResult as any).error || 'Failed to generate data');
       }
 
-      summary.records_generated = (generateResult as any).records_created || plan.data_generation.seed_count;
+      summary.records_generated = (generateResult as any).records_created || targetRecordCount;
       updateStep('generate', {
         status: 'completed',
         message: `Generated ${summary.records_generated} training examples`,
@@ -287,43 +297,9 @@ export const executeSetupPlanHandler: ToolHandler = async (
     }
 
     // =========================================================================
-    // Step 3: Categorize Records
+    // Step 3: Configure Grader
     // =========================================================================
     progress.current_step = 3;
-    updateStep('categorize', {
-      status: 'running',
-      message: 'Categorizing records into topics...',
-    });
-
-    try {
-      const categorizeResult = await categorizeRecordsHandler({
-        workflow_id,
-        confidence_threshold: 0.7,
-      });
-
-      if (!(categorizeResult as any).success) {
-        throw new Error((categorizeResult as any).error || 'Failed to categorize records');
-      }
-
-      const assignedCount = (categorizeResult as any).categorization?.assigned_count || 0;
-      updateStep('categorize', {
-        status: 'completed',
-        message: `Categorized ${assignedCount} records into topics`,
-        result: categorizeResult,
-      });
-    } catch (error) {
-      updateStep('categorize', {
-        status: 'failed',
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-      progress.has_error = true;
-      throw error;
-    }
-
-    // =========================================================================
-    // Step 4: Configure Grader
-    // =========================================================================
-    progress.current_step = 4;
     updateStep('grader', { status: 'running', message: 'Configuring evaluation grader...' });
 
     try {
@@ -377,9 +353,9 @@ function evaluate(input, output) {
     }
 
     // =========================================================================
-    // Step 5: Upload Dataset
+    // Step 4: Upload Dataset
     // =========================================================================
-    progress.current_step = 5;
+    progress.current_step = 4;
     updateStep('upload', { status: 'running', message: 'Uploading dataset to backend...' });
 
     try {
@@ -407,9 +383,9 @@ function evaluate(input, output) {
     }
 
     // =========================================================================
-    // Step 6: Run Dry Run
+    // Step 5: Run Dry Run
     // =========================================================================
-    progress.current_step = 6;
+    progress.current_step = 5;
     updateStep('dryrun', {
       status: 'running',
       message: 'Running dry run evaluation...',
@@ -452,6 +428,64 @@ function evaluate(input, output) {
     }
 
     // =========================================================================
+    // Step 6: Generate README
+    // =========================================================================
+    progress.current_step = 6;
+    updateStep('readme', { status: 'running', message: 'Generating README documentation...' });
+
+    try {
+      // Get fresh dataset and records
+      const updatedDataset = await datasetsDB.getDatasetById(dataset_id);
+      const allRecords = await datasetsDB.getRecordsByDatasetId(dataset_id);
+
+      // Get knowledge sources for data provenance
+      const sources = await knowledgeDB.getKnowledgeSourcesByDataset(dataset_id);
+      const knowledgeSources: KnowledgeSourceInfo[] = sources
+        .filter(s => s.status === 'ready')
+        .map(s => ({
+          name: s.name,
+          type: s.type,
+          topics_extracted: s.extractedContent?.topics || [],
+          size: s.size,
+        }));
+
+      // Create setup plan summary
+      const setupPlanSummary: SetupPlanSummary = {
+        executed_at: Date.now(),
+        topics_created: summary.topics_created,
+        records_generated: summary.records_generated,
+        grader_configured: summary.grader_configured,
+        dry_run_completed: summary.dry_run_completed,
+      };
+
+      // Generate README with full context
+      const readme = generateDatasetReadme({
+        dataset: updatedDataset!,
+        records: allRecords,
+        workflow,
+        knowledgeSources,
+        setupPlanSummary,
+      });
+
+      // Save README to dataset
+      await datasetsDB.updateDatasetReadme(dataset_id, readme);
+
+      updateStep('readme', {
+        status: 'completed',
+        message: 'README generated with data provenance and statistics',
+      });
+
+      console.log('[executeSetupPlan] README generated successfully');
+    } catch (error) {
+      // README failure is not fatal
+      updateStep('readme', {
+        status: 'failed',
+        error: error instanceof Error ? error.message : 'Failed to generate README',
+      });
+      console.error('[executeSetupPlan] README generation failed:', error);
+    }
+
+    // =========================================================================
     // Complete
     // =========================================================================
     progress.is_complete = true;
@@ -488,18 +522,18 @@ export const executeSetupPlanTool: DistriFnTool = {
 
 This tool runs all setup steps sequentially:
 1. Apply topic hierarchy
-2. Generate initial training data
-3. Categorize records into topics
-4. Configure evaluation grader
-5. Upload dataset to backend
-6. Run dry run evaluation
+2. Generate initial training data (distributed by topic - records are assigned during generation)
+3. Configure evaluation grader
+4. Upload dataset to backend
+5. Run dry run evaluation
+6. Generate README documentation (includes data provenance, statistics, and structure)
 
 Use this tool ONLY after the user has approved a plan from propose_setup_plan.
 When the user says "I approve the setup plan" or similar, call this tool with just the dataset_id.
 The approved plan is automatically retrieved from the UI approval event.
 
 The tool emits progress events so the UI can show real-time updates.
-After completion, the dataset is ready for fine-tuning.`,
+After completion, the dataset is ready for fine-tuning with full documentation.`,
   type: 'function',
   parameters: {
     type: 'object',

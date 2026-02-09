@@ -18,10 +18,29 @@ import type { FinetuneWorkflowState, FinetuneStep } from './finetune-workflow-db
 // Types
 // =============================================================================
 
+export interface KnowledgeSourceInfo {
+  name: string;
+  type: string;
+  topics_extracted: string[];
+  size?: number;
+}
+
+export interface SetupPlanSummary {
+  executed_at: number;
+  topics_created: number;
+  records_generated: number;
+  grader_configured: boolean;
+  dry_run_completed: boolean;
+}
+
 export interface ReadmeGeneratorOptions {
   dataset: Dataset;
   records: DatasetRecord[];
   workflow?: FinetuneWorkflowState | null;
+  /** Knowledge sources used to generate topics and data */
+  knowledgeSources?: KnowledgeSourceInfo[];
+  /** Summary from setup plan execution */
+  setupPlanSummary?: SetupPlanSummary;
 }
 
 // =============================================================================
@@ -401,6 +420,55 @@ function generateGenerationHistorySection(
 ${rows}`;
 }
 
+function generateKnowledgeSourcesSection(
+  knowledgeSources?: KnowledgeSourceInfo[]
+): string | null {
+  if (!knowledgeSources || knowledgeSources.length === 0) {
+    return null;
+  }
+
+  const rows = knowledgeSources.map((source) => {
+    const topics = source.topics_extracted.length > 0
+      ? source.topics_extracted.slice(0, 3).join(', ') + (source.topics_extracted.length > 3 ? '...' : '')
+      : '_None extracted_';
+    const size = source.size ? `${(source.size / 1024).toFixed(1)} KB` : '-';
+    return `| ${source.name} | ${source.type} | ${size} | ${topics} |`;
+  }).join('\n');
+
+  return `## Data Sources
+
+The following knowledge sources were used to generate the topic hierarchy and ground the training data:
+
+| Document | Type | Size | Topics Extracted |
+|----------|------|------|-----------------|
+${rows}
+
+Training data is grounded in these source materials to ensure accuracy and relevance.`;
+}
+
+function generateSetupPlanSection(
+  summary?: SetupPlanSummary
+): string | null {
+  if (!summary) {
+    return null;
+  }
+
+  const date = formatDate(summary.executed_at);
+
+  return `## Setup Plan Execution
+
+*Executed: ${date}*
+
+| Step | Result |
+|------|--------|
+| Topics Created | ${summary.topics_created} |
+| Records Generated | ${summary.records_generated} |
+| Evaluator Configured | ${summary.grader_configured ? '✓ Yes' : '○ No'} |
+| Dry Run | ${summary.dry_run_completed ? '✓ Completed' : '○ Not run'} |
+
+Records were generated with topics pre-assigned based on the topic hierarchy structure. Each topic received a proportional distribution of training examples.`;
+}
+
 function generateConfigSection(
   dataset: Dataset,
   _workflow: FinetuneWorkflowState | null | undefined
@@ -443,16 +511,24 @@ function generateFooter(): string {
  * Generate a README markdown string for a dataset
  */
 export function generateDatasetReadme(options: ReadmeGeneratorOptions): string {
-  const { dataset, records, workflow } = options;
+  const { dataset, records, workflow, knowledgeSources, setupPlanSummary } = options;
 
   const sections: (string | null)[] = [
     generateHeaderSection(dataset),
     generateOverviewSection(dataset, records),
+    // Data provenance: where the data came from
+    generateKnowledgeSourcesSection(knowledgeSources),
+    // Setup plan execution summary (if applicable)
+    generateSetupPlanSection(setupPlanSummary),
+    // Dataset structure
     generateTopicHierarchySection(dataset, records),
     generateCoverageSection(dataset, records),
+    // Quality metrics
     dataset.dryRunStats ? generateQualitySection(dataset.dryRunStats) : null,
+    // Workflow status
     workflow ? generateWorkflowSection(workflow) : null,
     generateGenerationHistorySection(workflow),
+    // Configuration
     generateConfigSection(dataset, workflow),
     generateFooter(),
   ];

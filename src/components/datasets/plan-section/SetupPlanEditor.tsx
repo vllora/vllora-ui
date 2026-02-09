@@ -87,6 +87,12 @@ ${topicsTable}
 
 ${criteriaTable}
 
+### Evaluator Function Preview
+
+\`\`\`javascript
+${plan.grader_config.template_preview}
+\`\`\`
+
 ---
 
 ## 🚀 Execution Steps
@@ -263,7 +269,7 @@ export function SetupPlanEditor({ plan, onApprove, onDismiss }: SetupPlanEditorP
       {/* Content */}
       <div className="flex-1 overflow-auto">
         {isPreview ? (
-          <div className="p-4">
+          <div className="p-4 text-sm [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_table]:text-xs [&_p]:text-sm [&_li]:text-sm [&_blockquote]:text-sm">
             <LazyMarkdownRenderer content={markdown} />
           </div>
         ) : (

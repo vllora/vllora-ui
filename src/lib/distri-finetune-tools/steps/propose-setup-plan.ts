@@ -457,8 +457,8 @@ export const proposeSetupPlanHandler: ToolHandler = async (
         },
         {
           step: 'Generate Initial Data',
-          description: `Generate ${seed_count} seed training examples grounded in your documents`,
-          estimated_time: '~1-2 minutes',
+          description: `Generate ${estimatedRecords} training examples distributed across topics`,
+          estimated_time: estimatedRecords > 100 ? '~3-5 minutes' : '~1-2 minutes',
         },
         {
           step: 'Configure Evaluator',

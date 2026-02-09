@@ -114,9 +114,27 @@ Chess Tutoring
 
 ## Data Sources
 
-- **Knowledge Sources:** 2 uploaded
-  - `My_System_Nimzowitsch.pdf` (Chess strategy book)
-  - `chess_tactics_workbook.pdf` (Puzzle collection)
+The following knowledge sources were used to generate the topic hierarchy and ground the training data:
+
+| Document | Type | Size | Topics Extracted |
+|----------|------|------|-----------------|
+| My_System_Nimzowitsch.pdf | pdf | 2.4 MB | Chess strategy, Positional play, Prophylaxis... |
+| chess_tactics_workbook.pdf | pdf | 1.1 MB | Pins, Forks, Discovered attacks... |
+
+Training data is grounded in these source materials to ensure accuracy and relevance.
+
+## Setup Plan Execution
+
+*Executed: Jan 15, 2024 2:30 PM*
+
+| Step | Result |
+|------|--------|
+| Topics Created | 12 |
+| Records Generated | 89 |
+| Evaluator Configured | ✓ Yes |
+| Dry Run | ✓ Completed |
+
+Records were generated with topics pre-assigned based on the topic hierarchy structure. Each topic received a proportional distribution of training examples.
 
 ## Configuration
 
@@ -170,6 +188,8 @@ The README should be regenerated when:
 | Workflow step changes | Workflow Status section |
 | Grader configured | Configuration section |
 | Training started/completed | Workflow Status section |
+| **Setup plan executed** | **Full README with data provenance** |
+| Knowledge sources added | Data Sources section |
 
 ## Implementation
 
@@ -178,26 +198,52 @@ The README should be regenerated when:
 ```typescript
 // /ui/src/services/dataset-readme-generator.ts
 
+interface KnowledgeSourceInfo {
+  name: string;
+  type: string;
+  topics_extracted: string[];
+  size?: number;
+}
+
+interface SetupPlanSummary {
+  executed_at: number;
+  topics_created: number;
+  records_generated: number;
+  grader_configured: boolean;
+  dry_run_completed: boolean;
+}
+
 interface ReadmeGeneratorOptions {
   dataset: Dataset;
   records: DatasetRecord[];
   workflow?: FinetuneWorkflow;
-  dryRunStats?: DryRunStats;
+  /** Knowledge sources used to generate topics and data */
+  knowledgeSources?: KnowledgeSourceInfo[];
+  /** Summary from setup plan execution */
+  setupPlanSummary?: SetupPlanSummary;
 }
 
-export async function generateDatasetReadme(
+export function generateDatasetReadme(
   options: ReadmeGeneratorOptions
-): Promise<string> {
-  const { dataset, records, workflow, dryRunStats } = options;
+): string {
+  const { dataset, records, workflow, knowledgeSources, setupPlanSummary } = options;
 
   const sections = [
     generateHeaderSection(dataset),
     generateOverviewSection(dataset, records),
-    generateTopicHierarchySection(dataset.topicHierarchy, records),
-    generateCoverageSection(records, dataset.topicHierarchy),
-    dryRunStats ? generateQualitySection(dryRunStats) : null,
+    // Data provenance: where the data came from
+    generateKnowledgeSourcesSection(knowledgeSources),
+    // Setup plan execution summary (if applicable)
+    generateSetupPlanSection(setupPlanSummary),
+    // Dataset structure
+    generateTopicHierarchySection(dataset, records),
+    generateCoverageSection(dataset, records),
+    // Quality metrics
+    dataset.dryRunStats ? generateQualitySection(dataset.dryRunStats) : null,
+    // Workflow status
     workflow ? generateWorkflowSection(workflow) : null,
     generateGenerationHistorySection(workflow),
+    // Configuration
     generateConfigSection(dataset, workflow),
     generateFooter(),
   ];

@@ -38,7 +38,7 @@ import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { DryRunJobsProvider } from "@/contexts/DryRunJobsContext";
 import { ReadmeWithPlan } from "./ReadmeWithPlan";
 import { KnowledgeSourcesPanel } from "./KnowledgeSourcesPanel";
-import { PlanSection } from "./PlanSection";
+import { PlanSection } from "./plan-section";
 import { useDatasetReadme } from "@/hooks/useDatasetReadme";
 import * as knowledgeDB from "@/services/knowledge-sources-db";
 import type { CoverageStats } from "@/types/dataset-types";

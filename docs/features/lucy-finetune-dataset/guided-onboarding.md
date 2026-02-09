@@ -39,8 +39,8 @@ User uploads documents to empty dataset
          ├────────────────────────────────────┐
          ▼                                    ▼
 ┌─────────────────────────┐    ┌─────────────────────────────────────┐
-│  Lucy Chat (Left)       │    │  README Tab (Right)                 │
-│  LucySetupPlanRenderer  │    │  ReadmeWithPlan                     │
+│  Lucy Chat (Left)       │    │  Plan Tab (Right)                   │
+│  LucySetupPlanRenderer  │    │  PlanSection                        │
 │  - Shows confirmation   │    │  - Shows loading while generating   │
 │    message              │    │  - Displays SetupPlanEditor         │
 │  - Points user to right │    │  - Editable markdown format         │
@@ -175,10 +175,15 @@ interface ExecuteSetupPlanResult {
 
 **Execution Steps:**
 1. **Apply Topic Hierarchy** - Creates topic structure from proposed_topics
-2. **Generate Initial Data** - Creates seed training examples
+2. **Generate Initial Data** - Creates seed training examples (distributed by topic - records are assigned to topics during generation, no separate categorization needed)
 3. **Configure Evaluator** - Sets up LLM-as-Judge grader
 4. **Upload Dataset** - Syncs to backend
 5. **Run Dry Run** - Validates with current model (non-fatal if fails)
+6. **Generate README** - Creates comprehensive documentation including:
+   - Data provenance (which knowledge sources were used)
+   - Topic hierarchy visualization
+   - Record statistics and coverage analysis
+   - Setup plan execution summary
 
 ## UI Components
 
@@ -245,16 +250,32 @@ interface ExecutionProgressCardProps {
 **Event Subscription:**
 The component subscribes to `vllora_setup_plan_progress` events to receive real-time updates.
 
+### PlanSection
+
+Located at: `/ui/src/components/datasets/PlanSection.tsx`
+
+Dedicated section for setup plan management in the Plan tab. It:
+- Shows loading state while Lucy is generating a plan
+- Listens for `vllora_setup_plan_proposed` events
+- Displays SetupPlanEditor when a plan is proposed
+- Shows ExecutionProgressCard during plan execution
+- Shows empty state with "Generate Setup Plan" button when no plan is active
+- Handles plan approval and dismissal
+
+**Props:**
+```typescript
+interface PlanSectionProps {
+  datasetId: string;
+  isGeneratingPlan?: boolean;
+  className?: string;
+}
+```
+
 ### ReadmeWithPlan
 
 Located at: `/ui/src/components/datasets/ReadmeWithPlan.tsx`
 
-Wrapper component for the README tab that handles setup plan display. It:
-- Shows loading state while Lucy is generating a plan
-- Listens for `vllora_setup_plan_proposed` events
-- Displays SetupPlanEditor when a plan is proposed
-- Falls back to DatasetReadmeViewer otherwise
-- Handles plan approval and dismissal
+Simple wrapper component for the README tab that renders the DatasetReadmeViewer. Plan functionality has been moved to the separate PlanSection component.
 
 **Props:**
 ```typescript
@@ -291,13 +312,13 @@ Custom tool renderer for `execute_setup_plan` tool. Handles:
 
 ### Plan Generating Event
 
-When `propose_setup_plan` starts, it emits an event to switch to the README tab and show loading:
+When `propose_setup_plan` starts, it emits an event to switch to the Plan tab and show loading:
 
 ```typescript
 emitter.emit('vllora_setup_plan_generating', { datasetId: string });
 ```
 
-`DatasetDetailContentV2` listens for this event and automatically switches to the README tab. `ReadmeWithPlan` displays a loading state while the plan is being generated.
+`DatasetDetailContentV2` listens for this event and automatically switches to the Plan tab. `PlanSection` displays a loading state while the plan is being generated.
 
 ### Plan Proposed Event
 
@@ -307,7 +328,7 @@ When `propose_setup_plan` completes, it emits an event so the right panel can di
 emitter.emit('vllora_setup_plan_proposed', { datasetId: string, plan: SetupPlan });
 ```
 
-The `ReadmeWithPlan` component listens for this event and displays the `SetupPlanEditor`.
+The `PlanSection` component listens for this event and displays the `SetupPlanEditor`.
 
 ### Plan Dismissed Event
 
@@ -333,7 +354,7 @@ After execution completes, a workflow updated event is emitted to trigger UI ref
 emitter.emit('vllora_workflow_updated', { datasetId: string });
 ```
 
-The `useFineTuneAgentChat` hook listens for this event and automatically refreshes the workflow state, ensuring the next agent message has the current context. The `ReadmeWithPlan` component also listens for this to clear any displayed plan.
+The `useFineTuneAgentChat` hook listens for this event and automatically refreshes the workflow state, ensuring the next agent message has the current context. The `PlanSection` component also listens for this to clear any displayed plan.
 
 **ExecutionProgress Structure:**
 ```typescript
@@ -399,10 +420,14 @@ Also has access to both tools for delegated execution scenarios.
 |-----------|------|
 | propose_setup_plan tool | `/ui/src/lib/distri-finetune-tools/steps/propose-setup-plan.ts` |
 | execute_setup_plan tool | `/ui/src/lib/distri-finetune-tools/steps/execute-setup-plan.ts` |
-| SetupPlanEditor | `/ui/src/components/datasets/lucy-plan-card/SetupPlanEditor.tsx` |
-| SetupPlanCard | `/ui/src/components/datasets/lucy-plan-card/SetupPlanCard.tsx` |
-| ExecutionProgressCard | `/ui/src/components/datasets/lucy-plan-card/ExecutionProgressCard.tsx` |
+| generate_initial_data tool | `/ui/src/lib/distri-finetune-tools/steps/generate-initial-data.ts` |
+| execution_state_store | `/ui/src/lib/distri-finetune-tools/steps/execution-state-store.ts` |
+| PlanSection | `/ui/src/components/datasets/plan-section/PlanSection.tsx` |
+| SetupPlanEditor | `/ui/src/components/datasets/plan-section/SetupPlanEditor.tsx` |
+| SetupPlanCard | `/ui/src/components/datasets/plan-section/SetupPlanCard.tsx` |
+| ExecutionProgressCard | `/ui/src/components/datasets/plan-section/ExecutionProgressCard.tsx` |
 | ReadmeWithPlan | `/ui/src/components/datasets/ReadmeWithPlan.tsx` |
+| SectionTabs | `/ui/src/components/datasets/dataset-detail-header/SectionTabs.tsx` |
 | Tool Renderers | `/ui/src/components/agent/lucy-agent/LucySetupPlanRenderer.tsx` |
 | Lucy Assistant | `/ui/src/components/datasets/LucyDatasetAssistant.tsx` |
 | DatasetDetailContentV2 | `/ui/src/components/datasets/DatasetDetailContentV2.tsx` |

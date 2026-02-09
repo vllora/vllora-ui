@@ -9,15 +9,18 @@
  */
 
 import { useEffect, useState } from "react";
-import { Sparkles, Wand2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { emitter } from "@/utils/eventEmitter";
-import { SetupPlanEditor, ExecutionProgressCard } from "./lucy-plan-card";
+import { SetupPlanEditor } from "./SetupPlanEditor";
+import { ExecutionProgressCard } from "./ExecutionProgressCard";
+import { PlanEmptyState } from "./PlanEmptyState";
+import { PlanLoadingState } from "./PlanLoadingState";
 import type { SetupPlan } from "@/lib/distri-finetune-tools/steps/propose-setup-plan";
 import type { ExecutionProgress } from "@/lib/distri-finetune-tools/steps/execute-setup-plan";
 // Side-effect import to ensure the event listener for plan approval is registered
 import "@/lib/distri-finetune-tools/steps/execute-setup-plan";
+// Import execution state store to get current execution on mount
+import { getCurrentExecution } from "@/lib/distri-finetune-tools/steps/execution-state-store";
 
 interface PlanSectionProps {
   datasetId: string;
@@ -33,6 +36,16 @@ export function PlanSection({
   const [proposedPlan, setProposedPlan] = useState<SetupPlan | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionProgress, setExecutionProgress] = useState<ExecutionProgress | null>(null);
+
+  // On mount, check if there's an active execution in progress
+  // This handles the case where user switches to Plan tab after execution started
+  useEffect(() => {
+    const currentExecution = getCurrentExecution(datasetId);
+    if (currentExecution && !currentExecution.is_complete) {
+      setExecutionProgress(currentExecution);
+      setIsExecuting(true);
+    }
+  }, [datasetId]);
 
   // Listen for setup plan events
   useEffect(() => {
@@ -84,6 +97,11 @@ export function PlanSection({
     }) => {
       if (progress.dataset_id === datasetId) {
         setExecutionProgress(progress);
+        // If we receive progress and execution is not complete, ensure isExecuting is true
+        // This handles the case where user navigates to Plan tab after execution started
+        if (!progress.is_complete) {
+          setIsExecuting(true);
+        }
         if (progress.is_complete) {
           // Keep showing progress for 2 seconds then clear
           setTimeout(() => {
@@ -127,47 +145,14 @@ export function PlanSection({
     setExecutionProgress(null);
   };
 
-  const handleGeneratePlan = () => {
-    emitter.emit("vllora_lucy_prompt", {
-      prompt: `Please analyze my dataset and create a setup plan using the propose_setup_plan tool.`,
-    });
-  };
-
   // Show loading state while generating (controlled by parent)
   if (isGeneratingPlan) {
-    return (
-      <div className={cn("flex-1 flex flex-col items-center justify-center p-8", className)}>
-        <div className="flex flex-col items-center gap-6 max-w-sm text-center">
-          <div className="space-y-2">
-            <h3 className="text-base font-medium text-foreground">
-              Creating your setup plan
-            </h3>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Lucy is analyzing your documents and creating a customized plan for generating training data...
-            </p>
-          </div>
-          <div className="w-48 h-1 bg-muted rounded-full overflow-hidden">
-            <div
-              className="h-full bg-[rgb(var(--theme-500))] rounded-full"
-              style={{
-                animation: "progress 2s ease-in-out infinite",
-              }}
-            />
-          </div>
-        </div>
-        <style>{`
-          @keyframes progress {
-            0% { width: 0%; }
-            50% { width: 100%; }
-            100% { width: 0%; }
-          }
-        `}</style>
-      </div>
-    );
+    return <PlanLoadingState className={className} />;
   }
 
   // Show execution progress while plan is being executed
-  if (isExecuting) {
+  // Also show if we have in-progress execution data (handles tab switching during execution)
+  if (isExecuting || (executionProgress && !executionProgress.is_complete)) {
     return (
       <div className={cn("flex-1 flex flex-col items-center justify-center p-8", className)}>
         <div className="w-full max-w-lg">
@@ -196,39 +181,5 @@ export function PlanSection({
   }
 
   // Empty state - no plan active
-  return (
-    <div className={cn("flex-1 flex flex-col items-center justify-center p-8", className)}>
-      <div className="flex flex-col items-center gap-6 max-w-md text-center">
-        {/* Icon */}
-        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[rgb(var(--theme-500))]/15 to-[rgb(var(--theme-500))]/5 flex items-center justify-center">
-          <Wand2 className="w-6 h-6 text-[rgb(var(--theme-500))]" />
-        </div>
-
-        {/* Copy */}
-        <div className="space-y-2">
-          <h3 className="text-lg font-medium text-foreground">
-            Setup Plan
-          </h3>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            Let Lucy analyze your dataset and create a customized setup plan.
-            She'll suggest topics, generate training data, and configure evaluation.
-          </p>
-        </div>
-
-        {/* CTA */}
-        <Button
-          onClick={handleGeneratePlan}
-          className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
-        >
-          <Sparkles className="w-4 h-4" />
-          Generate Setup Plan
-        </Button>
-
-        {/* Helper text */}
-        <p className="text-xs text-muted-foreground">
-          You can also ask Lucy directly in the chat to create a plan
-        </p>
-      </div>
-    </div>
-  );
+  return <PlanEmptyState className={className} />;
 }
