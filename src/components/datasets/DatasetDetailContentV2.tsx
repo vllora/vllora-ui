@@ -229,206 +229,207 @@ export function DatasetDetailContentV2() {
 
   return (
     <DryRunJobsProvider dataset={dataset}>
-    <div className="flex-1 flex overflow-hidden">
-      {/* Lucy Assistant on the left */}
-      <LucyDatasetAssistant />
+      <div className="flex-1 flex overflow-hidden">
+        {/* Lucy Assistant on the left */}
+        <LucyDatasetAssistant />
 
-      {/* Main content on the right */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header with dataset objective and insights */}
-        <div className="px-4 py-2 border-b border-border">
-          <DatasetDetailHeader />
+        {/* Main content on the right */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Header with dataset objective and insights */}
+          <div className="px-4 py-2 border-b border-border">
+            <DatasetDetailHeader />
+          </div>
+
+          {/* Section tabs */}
+          <DatasetUtilityBar
+            activeSection={activeSection}
+            onSectionChange={setActiveSection}
+            recordsCount={sortedRecords.length}
+            hasEvaluator={hasEvaluator}
+          />
+
+          {/* Main content area - Records, Evaluator, or Jobs based on active section */}
+          {activeSection === "records" && (
+            <DatasetMainContent
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+              onExport={handleExport}
+              datasetId={datasetId}
+              records={sortedRecords}
+              topicHierarchy={dataset.topicHierarchy?.hierarchy}
+              coverageStats={canvasCoverageStats}
+              availableTopics={availableTopics}
+              overviewStats={{
+                total: insights.totalRecords,
+                original: insights.originalRecords,
+                generated: insights.generatedRecords,
+                topicDistribution: insights.topicDistribution,
+                uncategorizedCount: insights.uncategorizedCount,
+                balanceRating: cardCoverageStats?.balanceRating,
+                balanceScore: cardCoverageStats?.balanceScore,
+              }}
+              leafTopicCount={availableTopics.length}
+              onOverviewClick={() => setAnalyticsDialogOpen(true)}
+              onImportClick={() => setImportDialog(true)}
+              selectedTopic={selectedTopic}
+              onSelectTopic={setSelectedTopic}
+              selectedRecord={selectedRecord}
+              selectedRecordId={selectedRecordId}
+              onSelectRecordId={setSelectedRecordId}
+              onAddTopic={handleAddTopic}
+              onRenameTopic={handleRenameTopic}
+              onDeleteTopic={handleDeleteTopic}
+              onUpdateRecordTopic={handleUpdateRecordTopic}
+              onDeleteRecord={(recordId) =>
+                setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
+              }
+              onSaveRecord={handleSaveRecordData}
+              onCreateChildTopic={handleCreateChildTopic}
+              onGenerateForTopic={handleGenerateForTopic}
+              onGenerateSubtopics={handleGenerateSubtopics}
+              datasetObjective={dataset.datasetObjective}
+            />
+          )}
+          {activeSection === "evaluator" && (
+            <>
+              {/* Dry Run Evaluation Card */}
+
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {dataset?.evalScript && <div className="px-2 py-2">
+                  <DryRunEvaluationCard
+                    evalScript={dataset?.evalScript}
+                    onConfigureClick={() => {/* Already on evaluator tab */ }}
+                    onDryRunClick={() => setDryRunDialog(true)}
+                  />
+                </div>}
+                <EvaluationConfigPanel
+                  evalScript={dataset.evalScript}
+                  onSave={handleSaveEvaluationConfig}
+                  onOpenDryRun={() => setDryRunDialog(true)}
+                />
+              </div>
+            </>
+          )}
+          {activeSection === "jobs" && (
+            <>
+              {/* Finetune Job Card */}
+              <div className="px-4">
+                <FinetuneJobCard
+                  onStartClick={() => {/* Already on jobs tab */ }}
+                  onJobClick={(jobId) => {
+                    // Dispatch event to expand the specific job
+                    if (jobId) {
+                      window.dispatchEvent(
+                        new CustomEvent("finetune-expand-job", {
+                          detail: { jobId },
+                        })
+                      );
+                    }
+                  }}
+                  canStartJob={hasRecords && hasEvaluator}
+                />
+              </div>
+              <FinetuneJobsContent
+                datasetId={datasetId}
+                canCreateJob={hasRecords && hasEvaluator}
+                trainingConfig={dataset.trainingConfig}
+              />
+            </>
+          )}
         </div>
 
-        {/* Section tabs */}
-        <DatasetUtilityBar
-          activeSection={activeSection}
-          onSectionChange={setActiveSection}
-          recordsCount={sortedRecords.length}
-          hasEvaluator={hasEvaluator}
+        {/* Dialogs */}
+        <DeleteConfirmationDialog
+          confirmation={deleteConfirm}
+          onOpenChange={() => setDeleteConfirm(null)}
+          onConfirm={handleDeleteConfirm}
         />
 
-        {/* Main content area - Records, Evaluator, or Jobs based on active section */}
-        {activeSection === "records" && (
-          <DatasetMainContent
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-            onExport={handleExport}
-            datasetId={datasetId}
-            records={sortedRecords}
-            topicHierarchy={dataset.topicHierarchy?.hierarchy}
-            coverageStats={canvasCoverageStats}
-            availableTopics={availableTopics}
-            overviewStats={{
-              total: insights.totalRecords,
-              original: insights.originalRecords,
-              generated: insights.generatedRecords,
-              topicDistribution: insights.topicDistribution,
-              uncategorizedCount: insights.uncategorizedCount,
-              balanceRating: cardCoverageStats?.balanceRating,
-              balanceScore: cardCoverageStats?.balanceScore,
-            }}
-            leafTopicCount={availableTopics.length}
-            onOverviewClick={() => setAnalyticsDialogOpen(true)}
-            onImportClick={() => setImportDialog(true)}
-            selectedTopic={selectedTopic}
-            onSelectTopic={setSelectedTopic}
-            selectedRecord={selectedRecord}
-            selectedRecordId={selectedRecordId}
-            onSelectRecordId={setSelectedRecordId}
-            onAddTopic={handleAddTopic}
-            onRenameTopic={handleRenameTopic}
-            onDeleteTopic={handleDeleteTopic}
-            onUpdateRecordTopic={handleUpdateRecordTopic}
-            onDeleteRecord={(recordId) =>
-              setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
-            }
-            onSaveRecord={handleSaveRecordData}
-            onCreateChildTopic={handleCreateChildTopic}
-            onGenerateForTopic={handleGenerateForTopic}
-            onGenerateSubtopics={handleGenerateSubtopics}
-            datasetObjective={dataset.datasetObjective}
-          />
-        )}
-        {activeSection === "evaluator" && (
-          <>
-          {/* Dry Run Evaluation Card */}
-          <div className="px-4 py-3 border-b border-border">
-            <DryRunEvaluationCard
-              evalScript={dataset?.evalScript}
-              onConfigureClick={() => {/* Already on evaluator tab */}}
-              onDryRunClick={() => setDryRunDialog(true)}
-            />
-          </div>
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <EvaluationConfigPanel
-              evalScript={dataset.evalScript}
-              onSave={handleSaveEvaluationConfig}
-              onOpenDryRun={() => setDryRunDialog(true)}
-            />
-          </div>
-          </>
-        )}
-        {activeSection === "jobs" && (
-          <>
-          {/* Finetune Job Card */}
-          <div className="px-4 py-3 border-b border-border">
-            <FinetuneJobCard
-              onStartClick={() => {/* Already on jobs tab */}}
-              onJobClick={(jobId) => {
-                // Dispatch event to expand the specific job
-                if (jobId) {
-                  window.dispatchEvent(
-                    new CustomEvent("finetune-expand-job", {
-                      detail: { jobId },
-                    })
-                  );
-                }
-              }}
-              canStartJob={hasRecords && hasEvaluator}
-            />
-          </div>
-          <FinetuneJobsContent
-            datasetId={datasetId}
-            canCreateJob={hasRecords && hasEvaluator}
-            trainingConfig={dataset.trainingConfig}
-          />
-          </>
-        )}
+        {/* Assign topic dialog */}
+        <AssignTopicDialog
+          open={assignTopicDialog}
+          onOpenChange={setAssignTopicDialog}
+          selectedCount={selectedRecordIds.size}
+          onAssign={handleBulkAssignTopic}
+          availableTopics={availableTopics}
+          onAutoTag={handleAutoTagSelected}
+          isAutoTagging={isAutoTagging}
+          autoTagProgress={autoTagProgress}
+          onClearTopics={handleClearSelectedRecordTopics}
+        />
+
+        {/* Import data dialog */}
+        <IngestDataDialog
+          open={importDialog}
+          onOpenChange={setImportDialog}
+          datasetId={dataset.id}
+          onImport={handleImportRecords}
+          currentRecordCount={sortedRecords.length}
+        />
+
+        {/* Create dataset dialog */}
+        <CreateDatasetDialog />
+
+        {/* Topic hierarchy dialog */}
+        <TopicHierarchyDialog
+          open={topicHierarchyDialog}
+          onOpenChange={setTopicHierarchyDialog}
+          initialConfig={dataset.topicHierarchy}
+          onApply={handleApplyTopicHierarchy}
+          onGenerate={handleGenerateHierarchy}
+          isGenerating={isGeneratingHierarchy}
+          onAutoTag={handleAutoTagRecords}
+          isAutoTagging={isAutoTagging}
+          autoTagProgress={autoTagProgress}
+          recordCount={sortedRecords.length}
+          topicCounts={topicCounts}
+          recordsWithTopicsCount={recordsWithTopicsCount}
+          onClearRecordTopics={handleClearRecordTopics}
+          onRenameTopic={handleRenameTopicInRecords}
+          onDeleteTopic={handleDeleteTopicFromRecords}
+        />
+
+        {/* Generate synthetic data dialog */}
+        <GenerateSyntheticDataDialog
+          open={generateDataDialog}
+          onOpenChange={setGenerateDataDialog}
+          availableTopics={availableTopics}
+          sampleRecords={selectedRecords}
+          onGenerate={handleGenerateTraces}
+          isGenerating={isGeneratingTraces}
+        />
+
+        {/* Sanitize data dialog */}
+        <SanitizeDataDialog
+          open={sanitizeDataDialog}
+          onOpenChange={setSanitizeDataDialog}
+          records={sortedRecords}
+        />
+
+        {/* Dry run validation dialog */}
+        <DryRunDialog
+          open={dryRunDialog}
+          onOpenChange={setDryRunDialog}
+          recordCount={sortedRecords.length}
+          hasGraderConfig={!!dataset?.evalScript}
+        />
+
+        {/* Records Analytics Dialog */}
+        <RecordsAnalyticsDialog
+          open={analyticsDialogOpen}
+          onOpenChange={setAnalyticsDialogOpen}
+          records={sortedRecords}
+          recordStats={{
+            total: insights.totalRecords,
+            original: insights.originalRecords,
+            generated: insights.generatedRecords,
+            topicDistribution: insights.topicDistribution,
+            uncategorizedCount: insights.uncategorizedCount,
+            balanceRating: cardCoverageStats?.balanceRating,
+            balanceScore: cardCoverageStats?.balanceScore,
+          }}
+        />
       </div>
-
-      {/* Dialogs */}
-      <DeleteConfirmationDialog
-        confirmation={deleteConfirm}
-        onOpenChange={() => setDeleteConfirm(null)}
-        onConfirm={handleDeleteConfirm}
-      />
-
-      {/* Assign topic dialog */}
-      <AssignTopicDialog
-        open={assignTopicDialog}
-        onOpenChange={setAssignTopicDialog}
-        selectedCount={selectedRecordIds.size}
-        onAssign={handleBulkAssignTopic}
-        availableTopics={availableTopics}
-        onAutoTag={handleAutoTagSelected}
-        isAutoTagging={isAutoTagging}
-        autoTagProgress={autoTagProgress}
-        onClearTopics={handleClearSelectedRecordTopics}
-      />
-
-      {/* Import data dialog */}
-      <IngestDataDialog
-        open={importDialog}
-        onOpenChange={setImportDialog}
-        datasetId={dataset.id}
-        onImport={handleImportRecords}
-        currentRecordCount={sortedRecords.length}
-      />
-
-      {/* Create dataset dialog */}
-      <CreateDatasetDialog />
-
-      {/* Topic hierarchy dialog */}
-      <TopicHierarchyDialog
-        open={topicHierarchyDialog}
-        onOpenChange={setTopicHierarchyDialog}
-        initialConfig={dataset.topicHierarchy}
-        onApply={handleApplyTopicHierarchy}
-        onGenerate={handleGenerateHierarchy}
-        isGenerating={isGeneratingHierarchy}
-        onAutoTag={handleAutoTagRecords}
-        isAutoTagging={isAutoTagging}
-        autoTagProgress={autoTagProgress}
-        recordCount={sortedRecords.length}
-        topicCounts={topicCounts}
-        recordsWithTopicsCount={recordsWithTopicsCount}
-        onClearRecordTopics={handleClearRecordTopics}
-        onRenameTopic={handleRenameTopicInRecords}
-        onDeleteTopic={handleDeleteTopicFromRecords}
-      />
-
-      {/* Generate synthetic data dialog */}
-      <GenerateSyntheticDataDialog
-        open={generateDataDialog}
-        onOpenChange={setGenerateDataDialog}
-        availableTopics={availableTopics}
-        sampleRecords={selectedRecords}
-        onGenerate={handleGenerateTraces}
-        isGenerating={isGeneratingTraces}
-      />
-
-      {/* Sanitize data dialog */}
-      <SanitizeDataDialog
-        open={sanitizeDataDialog}
-        onOpenChange={setSanitizeDataDialog}
-        records={sortedRecords}
-      />
-
-      {/* Dry run validation dialog */}
-      <DryRunDialog
-        open={dryRunDialog}
-        onOpenChange={setDryRunDialog}
-        recordCount={sortedRecords.length}
-        hasGraderConfig={!!dataset?.evalScript}
-      />
-
-      {/* Records Analytics Dialog */}
-      <RecordsAnalyticsDialog
-        open={analyticsDialogOpen}
-        onOpenChange={setAnalyticsDialogOpen}
-        records={sortedRecords}
-        recordStats={{
-          total: insights.totalRecords,
-          original: insights.originalRecords,
-          generated: insights.generatedRecords,
-          topicDistribution: insights.topicDistribution,
-          uncategorizedCount: insights.uncategorizedCount,
-          balanceRating: cardCoverageStats?.balanceRating,
-          balanceScore: cardCoverageStats?.balanceScore,
-        }}
-      />
-    </div>
     </DryRunJobsProvider>
   );
 }
