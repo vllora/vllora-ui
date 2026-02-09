@@ -95,14 +95,17 @@ export function DatasetMainContent({
   onGenerateSubtopics,
   datasetObjective,
 }: DatasetMainContentProps) {
-  // Show empty state when no records
-  if (records.length === 0) {
+  const hasTopics = topicHierarchy && topicHierarchy.length > 0;
+
+  // Show empty state only when no records AND no topic hierarchy
+  // If topics exist, show the table/canvas with empty topic groups
+  if (records.length === 0 && !hasTopics) {
     return (
       <div className="flex-1 flex flex-col overflow-hidden">
         <EmptyRecordsState
           datasetId={datasetId}
           datasetObjective={datasetObjective}
-          hasTopicHierarchy={!!(topicHierarchy && topicHierarchy.length > 0)}
+          hasTopicHierarchy={false}
         />
       </div>
     );

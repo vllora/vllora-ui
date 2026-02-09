@@ -130,9 +130,11 @@ function convertToHierarchyNodes(
   return proposedTopics.map((topic) => ({
     id: generateTopicId(),
     name: topic.name,
+    description: topic.description,
     children: topic.subtopics?.map((sub) => ({
       id: generateTopicId(),
       name: sub.name,
+      description: sub.description,
       children: [],
     })) || [],
   }));

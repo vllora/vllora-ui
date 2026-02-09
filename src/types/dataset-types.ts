@@ -36,6 +36,8 @@ export interface DataInfo {
 export interface TopicHierarchyNode {
   id: string;
   name: string;
+  /** Optional description explaining what this topic covers */
+  description?: string;
   children?: TopicHierarchyNode[];
   // Whether this node is selected/checked
   selected?: boolean;

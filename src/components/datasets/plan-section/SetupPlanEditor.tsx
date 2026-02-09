@@ -20,7 +20,7 @@ interface SetupPlanEditorProps {
 }
 
 // Convert SetupPlan to editable markdown with professional formatting
-function planToMarkdown(plan: SetupPlan): string {
+export function planToMarkdown(plan: SetupPlan): string {
   // Calculate total examples
   const totalExamples = plan.proposed_topics.reduce((acc, t) => {
     const topicTotal = t.target_count + (t.subtopics?.reduce((s, sub) => s + sub.target_count, 0) || 0);

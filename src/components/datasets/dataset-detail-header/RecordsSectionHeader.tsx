@@ -5,11 +5,12 @@
  * Shows record stats on left (like footer), Export button and ViewModeToggle on right.
  */
 
-import { useState } from "react";
-import { Download, Copy, CheckCheck } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Download, Copy, CheckCheck, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ViewModeToggle, type ViewMode } from "./ViewModeToggle";
 import type { DatasetRecord } from "@/types/dataset-types";
+import { emitter } from "@/utils/eventEmitter";
 
 export interface RecordsSectionHeaderProps {
   viewMode: ViewMode;
@@ -27,6 +28,34 @@ export function RecordsSectionHeader({
   datasetId,
 }: RecordsSectionHeaderProps) {
   const [copied, setCopied] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState<{
+    completed: number;
+    total: number;
+  } | null>(null);
+
+  // Listen for data generation progress events
+  useEffect(() => {
+    const handleProgress = (event: {
+      datasetId: string;
+      status: string;
+      completed?: number;
+      total?: number;
+    }) => {
+      if (datasetId && event.datasetId !== datasetId) return;
+
+      if ((event.status === 'started' || event.status === 'progress') &&
+          event.completed !== undefined && event.total !== undefined) {
+        setGenerationProgress({ completed: event.completed, total: event.total });
+      } else if (event.status === 'completed' || event.status === 'failed') {
+        setGenerationProgress(null);
+      }
+    };
+
+    emitter.on('vllora_data_generation_progress', handleProgress);
+    return () => {
+      emitter.off('vllora_data_generation_progress', handleProgress);
+    };
+  }, [datasetId]);
 
   // Calculate summary stats (same as footer)
   const totalRecords = records.length;
@@ -98,6 +127,15 @@ export function RecordsSectionHeader({
         )}
       </div>
       <div className="flex items-center gap-2">
+        {/* Generation progress indicator */}
+        {generationProgress && (
+          <div className="flex items-center gap-1.5 text-emerald-400 text-xs px-2 py-1 bg-emerald-500/10 rounded-md">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <span>
+              Generating {generationProgress.completed}/{generationProgress.total}
+            </span>
+          </div>
+        )}
         <Button
           variant="outline"
           size="sm"

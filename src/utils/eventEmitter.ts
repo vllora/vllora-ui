@@ -106,6 +106,12 @@ type VlloraEvents = {
     completed: number;
     currentBatch?: number;
     totalBatches?: number;
+    /** Current topic being generated (for showing loading indicator) */
+    currentTopic?: string;
+    /** Records completed for current topic */
+    topicCompleted?: number;
+    /** Total records to generate for current topic */
+    topicTotal?: number;
     error?: string;
   };
   // Switch to a specific tab during execution

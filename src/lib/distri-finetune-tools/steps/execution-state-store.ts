@@ -7,10 +7,14 @@
  */
 
 import type { ExecutionProgress } from './execute-setup-plan';
+import type { SetupPlan } from './propose-setup-plan';
 import { emitter } from '@/utils/eventEmitter';
 
 // Simple in-memory store for current execution per dataset
 const executionStore = new Map<string, ExecutionProgress>();
+
+// Store the plan being executed (so we can show it during execution)
+const executingPlanStore = new Map<string, SetupPlan>();
 
 /**
  * Get current execution progress for a dataset
@@ -32,6 +36,21 @@ export function hasActiveExecution(datasetId: string): boolean {
  */
 export function clearExecution(datasetId: string): void {
   executionStore.delete(datasetId);
+  executingPlanStore.delete(datasetId);
+}
+
+/**
+ * Get the plan currently being executed for a dataset
+ */
+export function getExecutingPlan(datasetId: string): SetupPlan | null {
+  return executingPlanStore.get(datasetId) || null;
+}
+
+/**
+ * Set the plan being executed for a dataset
+ */
+export function setExecutingPlan(datasetId: string, plan: SetupPlan): void {
+  executingPlanStore.set(datasetId, plan);
 }
 
 // Subscribe to progress events and update the store
@@ -49,6 +68,13 @@ emitter.on('vllora_setup_plan_progress' as any, ({ progress }: { progress: Execu
         }
       }, 5000);
     }
+  }
+});
+
+// Store the plan when it's approved for execution
+emitter.on('vllora_setup_plan_approved', ({ datasetId, plan }: { datasetId: string; plan: unknown }) => {
+  if (datasetId && plan) {
+    executingPlanStore.set(datasetId, plan as SetupPlan);
   }
 });
 

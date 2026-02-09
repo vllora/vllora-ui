@@ -11,16 +11,17 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { emitter } from "@/utils/eventEmitter";
-import { SetupPlanEditor } from "./SetupPlanEditor";
+import { SetupPlanEditor, planToMarkdown } from "./SetupPlanEditor";
 import { ExecutionProgressCard } from "./ExecutionProgressCard";
 import { PlanEmptyState } from "./PlanEmptyState";
 import { PlanLoadingState } from "./PlanLoadingState";
 import type { SetupPlan } from "@/lib/distri-finetune-tools/steps/propose-setup-plan";
+import LazyMarkdownRenderer from "@/components/chat/LazyMarkdownRenderer";
 import type { ExecutionProgress } from "@/lib/distri-finetune-tools/steps/execute-setup-plan";
 // Side-effect import to ensure the event listener for plan approval is registered
 import "@/lib/distri-finetune-tools/steps/execute-setup-plan";
 // Import execution state store to get current execution on mount
-import { getCurrentExecution } from "@/lib/distri-finetune-tools/steps/execution-state-store";
+import { getCurrentExecution, getExecutingPlan } from "@/lib/distri-finetune-tools/steps/execution-state-store";
 
 interface PlanSectionProps {
   datasetId: string;
@@ -44,6 +45,11 @@ export function PlanSection({
     if (currentExecution && !currentExecution.is_complete) {
       setExecutionProgress(currentExecution);
       setIsExecuting(true);
+      // Also get the plan being executed so we can display it
+      const executingPlan = getExecutingPlan(datasetId);
+      if (executingPlan) {
+        setProposedPlan(executingPlan);
+      }
     }
   }, [datasetId]);
 
@@ -133,9 +139,9 @@ export function PlanSection({
     emitter.emit("vllora_lucy_prompt", {
       prompt: `I approve the setup plan. Please execute it now.`,
     });
-    // Start showing execution progress instead of clearing
+    // Start showing execution progress - keep the plan so we can show markdown
     setIsExecuting(true);
-    setProposedPlan(null);
+    // Keep proposedPlan so we can display markdown during execution
   };
 
   const handleDismiss = () => {
@@ -154,14 +160,28 @@ export function PlanSection({
   // Also show if we have in-progress execution data (handles tab switching during execution)
   if (isExecuting || (executionProgress && !executionProgress.is_complete)) {
     return (
-      <div className={cn("flex-1 flex flex-col items-center justify-center p-8", className)}>
-        <div className="w-full max-w-lg">
-          <ExecutionProgressCard
-            initialProgress={executionProgress || undefined}
-            onComplete={() => {
-              // Will auto-clear after timeout in the progress handler
-            }}
-          />
+      <div className={cn("flex-1 flex overflow-hidden", className)}>
+        {/* Plan markdown on the left */}
+        {proposedPlan && (
+          <div className="flex-1 overflow-auto border-r border-border">
+            <div className="p-4 text-sm [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_table]:text-xs [&_p]:text-sm [&_li]:text-sm [&_blockquote]:text-sm">
+              <LazyMarkdownRenderer content={planToMarkdown(proposedPlan)} />
+            </div>
+          </div>
+        )}
+        {/* Execution progress on the right */}
+        <div className={cn(
+          "flex flex-col items-center justify-start p-6 overflow-auto",
+          proposedPlan ? "w-[400px] shrink-0" : "flex-1"
+        )}>
+          <div className="w-full max-w-lg sticky top-0">
+            <ExecutionProgressCard
+              initialProgress={executionProgress || undefined}
+              onComplete={() => {
+                // Will auto-clear after timeout in the progress handler
+              }}
+            />
+          </div>
         </div>
       </div>
     );
