@@ -6,7 +6,7 @@
  */
 
 import { useMemo } from "react";
-import { Database, Layers, BarChart3, HelpCircle } from "lucide-react";
+import { Database, Layers, HelpCircle } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -14,6 +14,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TopicsHelpTooltip } from "./TopicsHelpTooltip";
+import { BalanceRatingTooltip } from "./BalanceRatingTooltip";
 
 type BalanceRating = "excellent" | "good" | "fair" | "poor" | "critical";
 
@@ -225,18 +226,13 @@ export function OverviewFilledState({
               )}
             </div>
             {/* Only show balance when there are categorized records */}
-            {balanceConfig && topicsWithRecords > 0 && (
-              <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full ${balanceConfig.bgColor}`}>
-                <BarChart3 className={`w-3 h-3 ${balanceConfig.color}`} />
-                <span className={`text-xs font-medium capitalize ${balanceConfig.color}`}>
-                  {balanceRating}
-                </span>
-                {balanceScore !== undefined && (
-                  <span className="text-xs text-zinc-500">
-                    ({Math.round(balanceScore * 100)}%)
-                  </span>
-                )}
-              </div>
+            {balanceConfig && topicsWithRecords > 0 && balanceRating && (
+              <BalanceRatingTooltip
+                rating={balanceRating}
+                score={balanceScore}
+                colorClass={balanceConfig.color}
+                bgColorClass={balanceConfig.bgColor}
+              />
             )}
           </div>
 

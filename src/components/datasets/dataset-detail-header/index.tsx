@@ -17,6 +17,7 @@ export function DatasetDetailHeader() {
   const {
     dataset,
     datasetId,
+    records,
     // datasets,
     // datasetRecordCounts,
     // onBack,
@@ -93,8 +94,9 @@ export function DatasetDetailHeader() {
               <WorkflowStepIndicator
                 datasetId={datasetId}
                 className="shrink-0 pt-1"
-                hasGraderConfig={!!dataset?.evalScript}
-                onDryRunClick={() => setDryRunDialog(true)}
+                hasRecords={records.length > 0}
+                hasEvalFunction={!!dataset?.evalScript}
+                onEvalConfigClick={() => setDryRunDialog(true)}
               />
             </div>
 
