@@ -35,6 +35,12 @@ interface TopicRecordTreeProps {
   viewingRecordId?: string | null;
   /** Available topics for topic cell */
   availableTopics?: AvailableTopic[];
+  /** Handler for deleting a topic */
+  onDeleteTopic?: (topicName: string) => void;
+  /** Handler for generating records for a topic */
+  onGenerateForTopic?: (topicPath: string) => void;
+  /** Handler for generating subtopics (null = root level) */
+  onGenerateSubtopics?: (topicPath: string | null) => void;
 }
 
 /**
@@ -72,6 +78,9 @@ export function TopicRecordTree({
   onExpand,
   viewingRecordId,
   availableTopics = [],
+  onDeleteTopic,
+  onGenerateForTopic,
+  onGenerateSubtopics,
 }: TopicRecordTreeProps) {
   // Group records by topic
   const recordsByTopic = useMemo(() => {
@@ -133,6 +142,9 @@ export function TopicRecordTree({
           onExpand={onExpand}
           viewingRecordId={viewingRecordId}
           availableTopics={availableTopics}
+          onDeleteTopic={onDeleteTopic}
+          onGenerateForTopic={onGenerateForTopic}
+          onGenerateSubtopics={onGenerateSubtopics}
         />
       ))}
     </div>

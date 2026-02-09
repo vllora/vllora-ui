@@ -13,6 +13,7 @@ export interface DatasetRecord {
   spanId?: string;             // For duplicate detection and keeping track of span (optional - undefined for generated data)
   topic?: string;              // Leaf topic ID using path syntax (e.g., "Category/Subcategory/Topic")
   is_generated?: boolean;      // True for synthetic/generated traces
+  sourceRecordId?: string;     // ID of parent record this was generated from (for variant tracking)
   evaluation?: DatasetEvaluation;
   createdAt: number;
   updatedAt: number;           // Last modified timestamp

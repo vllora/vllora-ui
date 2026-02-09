@@ -2,13 +2,19 @@
  * TopicNodeHeader
  *
  * Renders a collapsible header row for a topic tree node.
- * Shows breadcrumb path, record count, and coverage indicator.
+ * Shows breadcrumb path, record count, coverage indicator, and action buttons.
  */
 
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Trash2, GitBranch, Grid2X2Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CoverageIndicator } from "../dataset-canvas/CoverageIndicator";
 import { BreadcrumbPath } from "./BreadcrumbPath";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export interface TopicNodeHeaderProps {
   /** Breadcrumb path segments */
@@ -27,6 +33,12 @@ export interface TopicNodeHeaderProps {
   hasChildren: boolean;
   /** Accent color variant */
   variant?: "default" | "unassigned";
+  /** Handler for deleting a topic */
+  onDeleteTopic?: (topicName: string) => void;
+  /** Handler for generating records for a topic */
+  onGenerateForTopic?: (topicPath: string) => void;
+  /** Handler for generating subtopics (null = root level) */
+  onGenerateSubtopics?: (topicPath: string | null) => void;
 }
 
 export function TopicNodeHeader({
@@ -38,63 +50,143 @@ export function TopicNodeHeader({
   percentage,
   hasChildren,
   variant = "default",
+  onDeleteTopic,
+  onGenerateForTopic,
+  onGenerateSubtopics,
 }: TopicNodeHeaderProps) {
   const isUnassigned = variant === "unassigned";
+  const topicPath = path.join("/");
+  const topicName = path[path.length - 1] || "";
+  const hasActions = !isUnassigned && (onGenerateForTopic || onGenerateSubtopics || onDeleteTopic);
 
   return (
-    <button
-      className={cn(
-        "w-full flex items-center gap-2 py-2 px-3 text-left transition-colors",
-        "bg-zinc-900/60 hover:bg-zinc-800/60 border-l-2",
-        isUnassigned ? "border-l-amber-500/40" : "border-l-emerald-500/40",
-        hasContent ? "cursor-pointer" : "cursor-default opacity-50"
-      )}
-      onClick={() => hasContent && onToggle()}
-      disabled={!hasContent}
-    >
-      {/* Expand/collapse chevron */}
-      <span className="w-6 h-6 flex items-center justify-center shrink-0">
-        {hasContent ? (
-          <ChevronRight
-            className={cn(
-              "w-4 h-4 transition-transform duration-200",
-              isUnassigned ? "text-amber-500/70" : "text-emerald-500/70",
-              isExpanded && "rotate-90"
-            )}
-          />
+    <TooltipProvider delayDuration={300}>
+      <div
+        className={cn(
+          "group w-full flex items-center gap-2 py-2 px-3 text-left transition-colors",
+          "bg-zinc-900/60 hover:bg-zinc-800/60 border-l-2",
+          isUnassigned ? "border-l-amber-500/40" : "border-l-emerald-500/40"
+        )}
+      >
+        {/* Expand/collapse button */}
+        <button
+          className={cn(
+            "w-6 h-6 flex items-center justify-center shrink-0",
+            hasContent ? "cursor-pointer" : "cursor-default opacity-50"
+          )}
+          onClick={() => hasContent && onToggle()}
+          disabled={!hasContent}
+        >
+          {hasContent ? (
+            <ChevronRight
+              className={cn(
+                "w-4 h-4 transition-transform duration-200",
+                isUnassigned ? "text-amber-500/70" : "text-emerald-500/70",
+                isExpanded && "rotate-90"
+              )}
+            />
+          ) : (
+            <span className="w-1.5 h-1.5 rounded-full bg-zinc-700" />
+          )}
+        </button>
+
+        {/* Content: breadcrumb or simple label */}
+        {isUnassigned ? (
+          <span className="text-xs font-medium text-amber-400 flex-1">
+            Unassigned
+          </span>
         ) : (
-          <span className="w-1.5 h-1.5 rounded-full bg-zinc-700" />
+          <BreadcrumbPath path={path} />
         )}
-      </span>
 
-      {/* Content: breadcrumb or simple label */}
-      {isUnassigned ? (
-        <span className="text-xs font-medium text-amber-400 flex-1">
-          Unassigned
-        </span>
-      ) : (
-        <BreadcrumbPath path={path} />
-      )}
-
-      {/* Record count and coverage indicator - hide when expanded with children */}
-      <div className="flex items-center justify-end gap-2 shrink-0">
-        {(!isExpanded || !hasChildren) && (
-          <>
-            <span className={cn(
-              "text-xs tabular-nums px-1.5 py-0.5 rounded",
-              totalCount > 0 ? "bg-zinc-700/50 text-muted-foreground" : "bg-zinc-800 text-zinc-600"
-            )}>
-              {totalCount}
-            </span>
-            {totalCount > 0 && (
-              <CoverageIndicator
-                coveragePercentage={percentage}
-                recordCount={totalCount}
-              />
+        {/* Action buttons - show on hover */}
+        {hasActions && (
+          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+            {/* Generate Records button */}
+            {onGenerateForTopic && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onGenerateForTopic(topicPath);
+                    }}
+                    className="flex items-center justify-center w-6 h-6 rounded hover:bg-zinc-700 transition-colors text-muted-foreground hover:text-foreground"
+                  >
+                    <Grid2X2Plus className="w-3.5 h-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={4}>
+                  Generate records
+                </TooltipContent>
+              </Tooltip>
             )}
-          </>
+
+            {/* Generate Sub-topics button */}
+            {onGenerateSubtopics && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onGenerateSubtopics(topicPath);
+                    }}
+                    className="flex items-center justify-center w-6 h-6 rounded hover:bg-zinc-700 transition-colors text-muted-foreground hover:text-foreground"
+                  >
+                    <GitBranch className="w-3.5 h-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={4}>
+                  Generate sub-topics
+                </TooltipContent>
+              </Tooltip>
+            )}
+
+            {/* Delete button */}
+            {onDeleteTopic && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteTopic(topicName);
+                    }}
+                    className="flex items-center justify-center w-6 h-6 rounded hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" sideOffset={4}>
+                  Delete topic
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
         )}
+
+        {/* Record count and coverage indicator - hide when expanded with children */}
+        <div className="flex items-center justify-end gap-2 shrink-0 ml-auto">
+          {(!isExpanded || !hasChildren) && (
+            <>
+              <span className={cn(
+                "text-xs tabular-nums px-1.5 py-0.5 rounded",
+                totalCount > 0 ? "bg-zinc-700/50 text-muted-foreground" : "bg-zinc-800 text-zinc-600"
+              )}>
+                {totalCount}
+              </span>
+              {totalCount > 0 && (
+                <CoverageIndicator
+                  coveragePercentage={percentage}
+                  recordCount={totalCount}
+                />
+              )}
+            </>
+          )}
+        </div>
       </div>
-    </button>
+    </TooltipProvider>
   );
 }

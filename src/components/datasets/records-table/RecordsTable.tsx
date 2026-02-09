@@ -55,6 +55,12 @@ interface RecordsTableProps {
   availableTopics?: AvailableTopic[];
   /** Topic hierarchy for nested tree display */
   topicHierarchy?: TopicHierarchyNode[];
+  /** Handler for deleting a topic */
+  onDeleteTopic?: (topicName: string) => void;
+  /** Handler for generating records for a topic */
+  onGenerateForTopic?: (topicPath: string) => void;
+  /** Handler for generating subtopics (null = root level) */
+  onGenerateSubtopics?: (topicPath: string | null) => void;
 }
 
 /** Represents a group of records by topic */
@@ -88,6 +94,9 @@ export function RecordsTable({
   groupByTopic = false,
   availableTopics = [],
   topicHierarchy,
+  onDeleteTopic,
+  onGenerateForTopic,
+  onGenerateSubtopics,
 }: RecordsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -265,6 +274,9 @@ export function RecordsTable({
             onExpand={onExpand}
             viewingRecordId={viewingRecordId}
             availableTopics={availableTopics}
+            onDeleteTopic={onDeleteTopic}
+            onGenerateForTopic={onGenerateForTopic}
+            onGenerateSubtopics={onGenerateSubtopics}
           />
         </div>
         {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}

@@ -5,9 +5,10 @@
  * Supports inline expansion to show detailed view.
  */
 
-import { useState, forwardRef } from "react";
+import { useState, forwardRef, useCallback } from "react";
 import { DatasetRecord } from "@/types/dataset-types";
 import { cn } from "@/lib/utils";
+import { emitter } from "@/utils/eventEmitter";
 import { ConversationThreadCell, ToolsBadge, StatsBadge, TopicCell, RecordExpandedDetail, RecordActions, SelectionCheckbox } from "./cells";
 import { RecordDataDialog } from "./RecordDataDialog";
 import { COLUMN_WIDTHS } from "../table-columns";
@@ -68,6 +69,21 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
   const handleToggleExpand = onExpand
     ? () => onExpand(record)
     : (onToggleExpand ?? (() => setInternalExpanded(!internalExpanded)));
+
+  // Handler to trigger Lucy for variant generation
+  const handleGenerateVariants = useCallback(() => {
+    // Extract a brief summary from the record for context
+    const data = record.data as { input?: { messages?: Array<{ role: string; content: string }> } } | null;
+    const messages = data?.input?.messages || [];
+    const userMessage = messages.find(m => m.role === "user")?.content || "";
+    const preview = userMessage.length > 100 ? userMessage.substring(0, 100) + "..." : userMessage;
+
+    const topicInfo = record.topic ? ` This record is in topic "${record.topic}".` : "";
+
+    emitter.emit("vllora_lucy_prompt", {
+      prompt: `I want to generate variants from record ${record.id}.${topicInfo} The record contains: "${preview}". Please ask me how many variants I want to generate and if I have any specific guidance for the variations.`
+    });
+  }, [record]);
 
   return (
     <div
@@ -130,6 +146,7 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
           <RecordActions
             onEdit={onSave ? () => setEditDialogOpen(true) : undefined}
             onDelete={() => onDelete(record.id)}
+            onGenerateVariants={handleGenerateVariants}
           />
         </div>
       </div>

@@ -168,6 +168,9 @@ export function DatasetMainContent({
             onSave={onSaveRecord}
             onExpand={(record) => onSelectRecordId(record.id)}
             viewingRecordId={selectedRecordId}
+            onDeleteTopic={onDeleteTopic}
+            onGenerateForTopic={onGenerateForTopic}
+            onGenerateSubtopics={onGenerateSubtopics}
           />
 
           {/* Record Detail Sidebar (Sheet - renders via portal) */}

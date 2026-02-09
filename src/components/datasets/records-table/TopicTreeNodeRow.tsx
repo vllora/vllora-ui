@@ -32,6 +32,12 @@ export interface TopicTreeNodeRowProps {
   onExpand?: (record: DatasetRecord) => void;
   viewingRecordId?: string | null;
   availableTopics: AvailableTopic[];
+  /** Handler for deleting a topic */
+  onDeleteTopic?: (topicName: string) => void;
+  /** Handler for generating records for a topic */
+  onGenerateForTopic?: (topicPath: string) => void;
+  /** Handler for generating subtopics (null = root level) */
+  onGenerateSubtopics?: (topicPath: string | null) => void;
 }
 
 export function TopicTreeNodeRow({
@@ -50,6 +56,9 @@ export function TopicTreeNodeRow({
   onExpand,
   viewingRecordId,
   availableTopics,
+  onDeleteTopic,
+  onGenerateForTopic,
+  onGenerateSubtopics,
 }: TopicTreeNodeRowProps) {
   const [isExpanded, setIsExpanded] = useState(true); // Expand all by default
 
@@ -76,6 +85,9 @@ export function TopicTreeNodeRow({
         totalCount={totalCount}
         percentage={percentage}
         hasChildren={!!hasChildren}
+        onDeleteTopic={onDeleteTopic}
+        onGenerateForTopic={onGenerateForTopic}
+        onGenerateSubtopics={onGenerateSubtopics}
       />
 
       {/* Expanded content */}
@@ -101,6 +113,9 @@ export function TopicTreeNodeRow({
                 onExpand={onExpand}
                 viewingRecordId={viewingRecordId}
                 availableTopics={availableTopics}
+                onDeleteTopic={onDeleteTopic}
+                onGenerateForTopic={onGenerateForTopic}
+                onGenerateSubtopics={onGenerateSubtopics}
               />
             ))}
 
