@@ -10,7 +10,7 @@ import type { ViewMode } from "./ViewModeToggle";
 import { SectionTabs } from "./SectionTabs";
 
 export type { ViewMode };
-export type DatasetSection = "records" | "evaluator" | "jobs" | "readme";
+export type DatasetSection = "records" | "evaluator" | "jobs" | "readme" | "docs";
 
 export interface DatasetUtilityBarProps {
   /** Current active section */
@@ -21,6 +21,8 @@ export interface DatasetUtilityBarProps {
   recordsCount?: number;
   /** Whether the dataset has an evaluation function configured */
   hasEvaluator?: boolean;
+  /** Number of uploaded knowledge sources */
+  knowledgeSourcesCount?: number;
 }
 
 export function DatasetUtilityBar({
@@ -28,6 +30,7 @@ export function DatasetUtilityBar({
   onSectionChange,
   recordsCount = 0,
   hasEvaluator,
+  knowledgeSourcesCount = 0,
 }: DatasetUtilityBarProps) {
   const { filteredJobs } = FinetuneJobsConsumer();
 
@@ -44,6 +47,7 @@ export function DatasetUtilityBar({
         recordsCount={recordsCount}
         hasEvaluator={hasEvaluator}
         activeJobsCount={activeJobsCount}
+        knowledgeSourcesCount={knowledgeSourcesCount}
       />
     </div>
   );

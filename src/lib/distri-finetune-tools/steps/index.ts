@@ -72,6 +72,16 @@ export { updateRecordHandler, updateRecordTool } from './update-record';
 // README
 export { regenerateReadmeHandler, regenerateReadmeTool } from './regenerate-readme';
 
+// Guided Onboarding (Setup Plan)
+export { proposeSetupPlanHandler, proposeSetupPlanTool, type SetupPlan } from './propose-setup-plan';
+export {
+  executeSetupPlanHandler,
+  executeSetupPlanTool,
+  type ExecutionProgress,
+  type ExecutionStep,
+  type ExecutionStepStatus,
+} from './execute-setup-plan';
+
 // Stockfish Chess Analysis (conditionally used for chess datasets only)
 export {
   analyzeChessPositionHandler,
@@ -125,6 +135,8 @@ import { getDatasetRecordsHandler, getDatasetRecordsTool } from './get-dataset-r
 import { getDatasetStatsHandler, getDatasetStatsTool } from './get-dataset-stats';
 import { updateRecordHandler, updateRecordTool } from './update-record';
 import { regenerateReadmeHandler, regenerateReadmeTool } from './regenerate-readme';
+import { proposeSetupPlanHandler, proposeSetupPlanTool } from './propose-setup-plan';
+import { executeSetupPlanHandler, executeSetupPlanTool } from './execute-setup-plan';
 // Note: Stockfish tools (analyzeChessPositionTool, classifyChessMoveTool) are NOT imported here
 // They are conditionally added via stockfishTools in useFineTuneAgentChat for chess datasets only
 
@@ -160,6 +172,8 @@ export const STEP_TOOL_NAMES = [
   'get_dataset_stats',
   'update_record',
   'regenerate_readme',
+  'propose_setup_plan',
+  'execute_setup_plan',
   // Note: Stockfish tools ('analyze_chess_position', 'classify_chess_move') are NOT in this list
   // They are conditionally available for chess datasets only via stockfishTools export
 ] as const;
@@ -198,6 +212,8 @@ export const stepTools: DistriFnTool[] = [
   getDatasetStatsTool,
   updateRecordTool,
   regenerateReadmeTool,
+  proposeSetupPlanTool,
+  executeSetupPlanTool,
   // Note: Stockfish tools are NOT included here - they are conditionally added
   // via stockfishTools in useFineTuneAgentChat for chess datasets only
 ];
@@ -230,5 +246,7 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   get_dataset_stats: getDatasetStatsHandler,
   update_record: updateRecordHandler,
   regenerate_readme: regenerateReadmeHandler,
+  propose_setup_plan: proposeSetupPlanHandler,
+  execute_setup_plan: executeSetupPlanHandler,
   // Note: Stockfish handlers are in stockfishToolHandlers export, not here
 };

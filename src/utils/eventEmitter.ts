@@ -84,6 +84,16 @@ type VlloraEvents = {
   vllora_dry_run_job_update: { jobId: string; job: DryRunJob };
   // Lucy assistant prompt trigger (from UI actions like "Generate for topic")
   vllora_lucy_prompt: { prompt: string };
+  // Knowledge source events
+  vllora_knowledge_source_updated: { datasetId: string };
+  // Setup plan execution progress
+  vllora_setup_plan_progress: { progress: unknown };
+  // Setup plan proposed (for displaying in right panel)
+  vllora_setup_plan_proposed: { datasetId: string; plan: unknown };
+  // Setup plan dismissed (user closed the card without approving)
+  vllora_setup_plan_dismissed: { datasetId: string };
+  // Workflow updated (triggers refresh in UI)
+  vllora_workflow_updated: { datasetId: string };
 };
 
 // ============================================================================

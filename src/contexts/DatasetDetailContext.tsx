@@ -48,7 +48,7 @@ import type { ImportMode } from "@/components/datasets/IngestDataDialog";
 export type ViewMode = "canvas" | "table";
 
 /** Active section tab */
-export type DatasetSection = "records" | "evaluator" | "jobs" | "readme";
+export type DatasetSection = "records" | "evaluator" | "jobs" | "readme" | "docs";
 
 interface DatasetDetailHookProps {
   datasetId: string;

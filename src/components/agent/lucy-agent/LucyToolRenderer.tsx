@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { LucySetupPlanRenderer, LucyExecutePlanRenderer } from './LucySetupPlanRenderer';
 
 // ============================================================================
 // Types
@@ -223,7 +224,10 @@ export function LucyCodeToolRenderer({ toolCall, state }: ToolRendererProps) {
  * Maps tool names to their custom renderers.
  */
 export const lucyToolRenderers: ToolRendererMap = {
-  // Add specific tool renderers here
+  // Setup plan tools
+  propose_setup_plan: LucySetupPlanRenderer,
+  execute_setup_plan: LucyExecutePlanRenderer,
+  // Add more specific tool renderers here
   // 'search': LucySearchToolRenderer,
   // 'execute_code': LucyCodeToolRenderer,
 };

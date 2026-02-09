@@ -1,13 +1,14 @@
 /**
  * Generate Initial Data Tool
  *
- * Generates initial seed records for empty datasets using only the training objective.
- * This enables data generation when no existing records exist to build upon.
+ * Generates initial seed records for empty datasets using the training objective
+ * and optionally uploaded knowledge sources (PDFs, documents) for grounded generation.
  */
 
 import type { DistriFnTool } from "@distri/core";
 import { DistriClient, type DistriMessage } from "@distri/core";
 import * as datasetsDB from "@/services/datasets-db";
+import * as knowledgeDB from "@/services/knowledge-sources-db";
 import { getDistriUrl } from "@/config/api";
 import { fetchLucyConfig, type LucyConfig } from "@/lib/agent-sync";
 import type { ToolHandler } from "../types";
@@ -40,12 +41,100 @@ interface GeneratedExample {
   assistant_response?: string;
 }
 
+interface KnowledgeContext {
+  hasKnowledge: boolean;
+  sourceCount: number;
+  sourceNames: string[];
+  combinedText: string;
+  topics: string[];
+  sections: Array<{ title: string; content: string }>;
+}
+
 interface GenerateInitialDataResult {
   success: boolean;
   error?: string;
   dataset_name?: string;
   records_created?: number;
   training_objective?: string;
+  knowledge_sources_used?: number;
+}
+
+// =============================================================================
+// Knowledge Source Fetching
+// =============================================================================
+
+async function getKnowledgeContext(datasetId: string): Promise<KnowledgeContext> {
+  try {
+    const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
+    const readySources = sources.filter(
+      (s) => s.status === "ready" && s.extractedContent
+    );
+
+    if (readySources.length === 0) {
+      return {
+        hasKnowledge: false,
+        sourceCount: 0,
+        sourceNames: [],
+        combinedText: "",
+        topics: [],
+        sections: [],
+      };
+    }
+
+    const sourceNames: string[] = [];
+    const allTopics: string[] = [];
+    const allSections: Array<{ title: string; content: string }> = [];
+    const textParts: string[] = [];
+
+    for (const source of readySources) {
+      sourceNames.push(source.name);
+      const extracted = source.extractedContent!;
+
+      // Collect topics
+      if (extracted.topics) {
+        allTopics.push(...extracted.topics);
+      }
+
+      // Collect sections (limit content length per section)
+      if (extracted.sections) {
+        for (const section of extracted.sections) {
+          allSections.push({
+            title: section.title,
+            content: section.content.substring(0, 1000),
+          });
+        }
+      }
+
+      // Collect text (limit per source to avoid token overflow)
+      if (extracted.text) {
+        textParts.push(
+          `--- From: ${source.name} ---\n${extracted.text.substring(0, 3000)}`
+        );
+      }
+    }
+
+    // Deduplicate topics
+    const uniqueTopics = [...new Set(allTopics)];
+
+    return {
+      hasKnowledge: true,
+      sourceCount: readySources.length,
+      sourceNames,
+      combinedText: textParts.join("\n\n"),
+      topics: uniqueTopics,
+      sections: allSections.slice(0, 20), // Limit sections
+    };
+  } catch (error) {
+    console.warn("[generateInitialData] Failed to fetch knowledge sources:", error);
+    return {
+      hasKnowledge: false,
+      sourceCount: 0,
+      sourceNames: [],
+      combinedText: "",
+      topics: [],
+      sections: [],
+    };
+  }
 }
 
 // =============================================================================
@@ -63,6 +152,8 @@ Rules:
 - For RFT mode, only generate the user prompt (assistant learns through reinforcement)
 - Vary the complexity, length, and style across examples
 - Include edge cases and challenging scenarios
+- When knowledge sources are provided, GROUND your examples in that material
+- Reference specific concepts, terminology, and scenarios from the knowledge sources
 - Output MUST be valid JSON matching the schema`;
 
 const INITIAL_DATA_GENERATION_USER_RFT = `Generate {{count}} diverse training examples for the following objective:
@@ -70,6 +161,7 @@ const INITIAL_DATA_GENERATION_USER_RFT = `Generate {{count}} diverse training ex
 Training Objective:
 {{objective}}
 {{user_guidance}}
+{{knowledge_context}}
 Generate a JSON array of examples. Each example should be a realistic user query/prompt that would be sent to an AI assistant being trained for this objective.
 
 For each example, provide:
@@ -100,6 +192,7 @@ const INITIAL_DATA_GENERATION_USER_SFT = `Generate {{count}} diverse training ex
 Training Objective:
 {{objective}}
 {{user_guidance}}
+{{knowledge_context}}
 Generate a JSON array of complete conversation examples. Each example should demonstrate the ideal assistant behavior for this objective.
 
 For each example, provide:
@@ -186,11 +279,45 @@ const INITIAL_DATA_RESPONSE_SCHEMA_SFT = {
 // LLM Call
 // =============================================================================
 
+function buildKnowledgeContextSection(knowledge: KnowledgeContext): string {
+  if (!knowledge.hasKnowledge) {
+    return "";
+  }
+
+  const parts: string[] = [
+    "\n--- KNOWLEDGE SOURCES (Ground your examples in this material) ---",
+    `Sources: ${knowledge.sourceNames.join(", ")}`,
+  ];
+
+  // Add topics if available
+  if (knowledge.topics.length > 0) {
+    parts.push(`\nKey topics from sources: ${knowledge.topics.slice(0, 15).join(", ")}`);
+  }
+
+  // Add sections if available (most structured)
+  if (knowledge.sections.length > 0) {
+    parts.push("\nKey sections from sources:");
+    for (const section of knowledge.sections.slice(0, 10)) {
+      parts.push(`\n[${section.title}]\n${section.content.substring(0, 500)}...`);
+    }
+  } else if (knowledge.combinedText) {
+    // Fall back to raw text if no sections
+    parts.push("\nContent excerpts:");
+    parts.push(knowledge.combinedText.substring(0, 4000));
+  }
+
+  parts.push("\n--- END KNOWLEDGE SOURCES ---\n");
+  parts.push("IMPORTANT: Generate examples that reference specific concepts, terminology, and scenarios from the knowledge sources above.");
+
+  return parts.join("\n");
+}
+
 async function callLLMForInitialData(
   objective: string,
   count: number,
   mode: "rft" | "sft",
   userGuidance?: string,
+  knowledgeContext?: KnowledgeContext,
 ): Promise<GeneratedExample[]> {
   const lucyConfig = await fetchLucyConfigCached();
   const rawUrl = lucyConfig.distri_url || getDistriUrl();
@@ -209,10 +336,16 @@ async function callLLMForInitialData(
     ? `\nUser's specific guidance:\n${userGuidance}\n`
     : "";
 
+  // Build knowledge context section if available
+  const knowledgeSection = knowledgeContext
+    ? buildKnowledgeContextSection(knowledgeContext)
+    : "";
+
   const userPrompt = userPromptTemplate
     .replace(/\{\{count\}\}/g, String(count))
     .replace("{{objective}}", objective)
-    .replace("{{user_guidance}}", guidanceSection);
+    .replace("{{user_guidance}}", guidanceSection)
+    .replace("{{knowledge_context}}", knowledgeSection);
 
   const responseSchema =
     mode === "rft"
@@ -365,12 +498,26 @@ export const generateInitialDataHandler: ToolHandler = async (
       );
     }
 
+    // Fetch knowledge sources for grounded generation
+    const knowledgeContext = await getKnowledgeContext(dataset_id);
+    if (knowledgeContext.hasKnowledge) {
+      console.log(
+        "[generateInitialData] Using knowledge sources:",
+        knowledgeContext.sourceNames.join(", "),
+      );
+      console.log(
+        "[generateInitialData] Knowledge topics:",
+        knowledgeContext.topics.slice(0, 5).join(", "),
+      );
+    }
+
     // Generate examples using LLM
     const examples = await callLLMForInitialData(
       objective,
       count,
       generation_mode,
       user_guidance,
+      knowledgeContext,
     );
     console.log("[generateInitialData] Generated", examples.length, "examples");
 
@@ -400,6 +547,9 @@ export const generateInitialDataHandler: ToolHandler = async (
       dataset_name: dataset.name,
       records_created: addedRecords.length,
       training_objective: objective,
+      knowledge_sources_used: knowledgeContext.hasKnowledge
+        ? knowledgeContext.sourceCount
+        : undefined,
     };
   } catch (error) {
     console.error("[generateInitialData] Failed:", error);
@@ -425,6 +575,15 @@ Use this tool when:
 This tool generates diverse training examples based on the dataset's training objective.
 You can optionally provide user guidance to focus the generation on specific aspects.
 Generated records can then be used as seeds for further data generation or topic analysis.
+
+**Knowledge Source Integration:**
+If the dataset has uploaded knowledge sources (PDFs, documents), this tool automatically:
+- Fetches all ready knowledge sources for the dataset
+- Extracts topics, sections, and content from the sources
+- Grounds the generated examples in the source material
+- References specific concepts, terminology, and scenarios from the documents
+
+This produces higher quality, more accurate training data that aligns with reference material.
 
 **Generation Modes:**
 - RFT (default): Generates prompts only (empty output for reinforcement learning rollouts)

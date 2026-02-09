@@ -14,7 +14,7 @@ import { DatasetOverviewCard } from "./dataset-detail-header/overview-card";
 import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
 import { RecordsTable } from "./records-table/RecordsTable";
 import { RecordDetailSidebar } from "./records-table/RecordDetailSidebar";
-import { EmptyRecordsState } from "./EmptyRecordsState";
+import { EmptyRecordsWithPlan } from "./EmptyRecordsWithPlan";
 
 type BalanceRating = "excellent" | "good" | "fair" | "poor" | "critical";
 

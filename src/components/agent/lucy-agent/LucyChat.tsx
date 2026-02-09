@@ -364,24 +364,36 @@ export function LucyChat({
     });
   }, []);
 
-  // Handle adding images
+  // Check if file is an accepted type
+  const isAcceptedFile = useCallback((file: File): boolean => {
+    // Images
+    if (file.type.startsWith('image/')) return true;
+    // PDFs
+    if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) return true;
+    // Text files
+    if (['text/plain', 'text/markdown', 'application/json', 'text/csv'].includes(file.type)) return true;
+    if (file.name.match(/\.(txt|md|json|csv)$/)) return true;
+    return false;
+  }, []);
+
+  // Handle adding files (images, PDFs, documents)
   const handleAddImages = useCallback(async (files: FileList | File[]) => {
-    const imageFiles = Array.from(files).filter((file) => file.type.startsWith('image/'));
-    for (const file of imageFiles) {
+    const acceptedFiles = Array.from(files).filter(isAcceptedFile);
+    for (const file of acceptedFiles) {
       const id = Date.now().toString() + Math.random().toString(36).substring(2, 11);
-      const preview = URL.createObjectURL(file);
+      const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : '';
       const base64 = await readFileAsBase64(file);
       const newImage: AttachedImage = {
         id,
         file,
         preview,
         base64,
-        mimeType: file.type || 'image/png',
+        mimeType: file.type || 'application/octet-stream',
         name: file.name,
       };
       setAttachedImages((prev) => [...prev, newImage]);
     }
-  }, [readFileAsBase64]);
+  }, [readFileAsBase64, isAcceptedFile]);
 
   // Handle removing an image
   const handleRemoveImage = useCallback((id: string) => {

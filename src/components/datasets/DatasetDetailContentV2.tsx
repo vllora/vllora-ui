@@ -36,7 +36,9 @@ import { FinetuneJobsContent } from "@/components/finetune/content";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { DryRunJobsProvider } from "@/contexts/DryRunJobsContext";
 import { DatasetReadmeViewer } from "./DatasetReadmeViewer";
+import { KnowledgeSourcesPanel } from "./KnowledgeSourcesPanel";
 import { useDatasetReadme } from "@/hooks/useDatasetReadme";
+import * as knowledgeDB from "@/services/knowledge-sources-db";
 import type { CoverageStats } from "@/types/dataset-types";
 
 export function DatasetDetailContentV2() {
@@ -133,6 +135,37 @@ export function DatasetDetailContentV2() {
 
   // Dialog state for records analytics
   const [analyticsDialogOpen, setAnalyticsDialogOpen] = useState(false);
+
+  // Knowledge sources count for Docs tab badge
+  const [knowledgeSourcesCount, setKnowledgeSourcesCount] = useState(0);
+
+  // Fetch knowledge sources count
+  const fetchKnowledgeSourcesCount = useCallback(async () => {
+    if (!datasetId) return;
+    try {
+      const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
+      setKnowledgeSourcesCount(sources.length);
+    } catch (error) {
+      console.error("[DatasetDetailContentV2] Error fetching knowledge sources:", error);
+    }
+  }, [datasetId]);
+
+  // Initial fetch and listen for updates
+  useEffect(() => {
+    fetchKnowledgeSourcesCount();
+
+    // Listen for knowledge source updates
+    const handleKnowledgeSourceUpdate = ({ datasetId: updatedDatasetId }: { datasetId: string }) => {
+      if (updatedDatasetId === datasetId) {
+        fetchKnowledgeSourcesCount();
+      }
+    };
+
+    emitter.on("vllora_knowledge_source_updated", handleKnowledgeSourceUpdate);
+    return () => {
+      emitter.off("vllora_knowledge_source_updated", handleKnowledgeSourceUpdate);
+    };
+  }, [datasetId, fetchKnowledgeSourcesCount]);
 
   // README auto-generation hook
   const { readme, readmeUpdatedAt, regenerateReadme, exportReadme } = useDatasetReadme({
@@ -255,6 +288,7 @@ export function DatasetDetailContentV2() {
             onSectionChange={setActiveSection}
             recordsCount={sortedRecords.length}
             hasEvaluator={hasEvaluator}
+            knowledgeSourcesCount={knowledgeSourcesCount}
           />
 
           {/* Main content area - Records, Evaluator, or Jobs based on active section */}
@@ -355,6 +389,12 @@ export function DatasetDetailContentV2() {
                 className="h-full"
               />
             </div>
+          )}
+          {activeSection === "docs" && (
+            <KnowledgeSourcesPanel
+              datasetId={datasetId}
+              className="flex-1"
+            />
           )}
         </div>
 

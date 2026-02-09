@@ -18,6 +18,7 @@ import { finetuneTools, workflowToContext } from '@/lib/distri-finetune-tools';
 import { stockfishTools, isChessDataset } from '@/lib/distri-finetune-tools/steps';
 import { finetuneWorkflowService, FinetuneWorkflowState } from '@/services/finetune-workflow-db';
 import { getDatasetById } from '@/services/datasets-db';
+import { emitter } from '@/utils/eventEmitter';
 
 // Type for chat messages returned by useChatMessages
 // This is a union type that includes DistriMessage and other event types
@@ -95,8 +96,8 @@ interface UseFineTuneAgentChatReturn {
   handleNewChat: () => void;
   /** Refresh workflow state from IndexedDB */
   refreshWorkflow: () => Promise<void>;
-  /** Prepare message with context injection */
-  prepareMessage: (userMessage: string) => DistriMessage;
+  /** Prepare message with context injection (supports additional parts like files) */
+  prepareMessage: (userMessage: string, additionalParts?: any[]) => DistriMessage;
 }
 
 // ============================================================================
@@ -183,6 +184,21 @@ export function useFineTuneAgentChat(
     refreshWorkflow();
   }, [refreshWorkflow]);
 
+  // Listen for workflow updated events (e.g., after execute_setup_plan completes)
+  useEffect(() => {
+    const handleWorkflowUpdated = ({ datasetId: updatedDatasetId }: { datasetId: string }) => {
+      if (updatedDatasetId === datasetId) {
+        console.log('[useFineTuneAgentChat] Workflow updated event received, refreshing...');
+        refreshWorkflow();
+      }
+    };
+
+    emitter.on('vllora_workflow_updated', handleWorkflowUpdated);
+    return () => {
+      emitter.off('vllora_workflow_updated', handleWorkflowUpdated);
+    };
+  }, [datasetId, refreshWorkflow]);
+
   // Update thread ID when dataset changes
   useEffect(() => {
     const stored = getStoredThreadId(datasetId);
@@ -202,18 +218,24 @@ export function useFineTuneAgentChat(
     setThreadId(newThreadId);
   }, [datasetId]);
 
-  // Prepare message with context injection
+  // Prepare message with context injection (supports file parts)
   const prepareMessage = useCallback(
-    (userMessage: string): DistriMessage => {
+    (userMessage: string, additionalParts?: any[]): DistriMessage => {
       // Build context from current workflow state
       const contextText = buildContextMessage(datasetId, workflow, datasetHasEvalScript);
 
       // Create message with context prepended
       const fullMessage = `${contextText}\n\nUser message: ${userMessage}`;
 
-      return DistriClient.initDistriMessage('user', [
-        { part_type: 'text', data: fullMessage },
-      ]);
+      // Start with the text part
+      const parts: any[] = [{ part_type: 'text', data: fullMessage }];
+
+      // Add any additional parts (files, images, etc.)
+      if (additionalParts && additionalParts.length > 0) {
+        parts.push(...additionalParts);
+      }
+
+      return DistriClient.initDistriMessage('user', parts);
     },
     [datasetId, workflow, datasetHasEvalScript]
   );
