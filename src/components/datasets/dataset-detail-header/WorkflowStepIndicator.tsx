@@ -179,7 +179,7 @@ export function WorkflowStepIndicator({
 
   return (
     <TooltipProvider delayDuration={100}>
-      <div className={cn("flex items-center", className)}>
+      <div className={cn("flex items-center flex-1", className)}>
         {MILESTONES.map((milestone, index) => {
           const status = getMilestoneStatus(milestone);
           const isLast = index === MILESTONES.length - 1;
@@ -190,7 +190,7 @@ export function WorkflowStepIndicator({
           const handleClick = isClickable ? onEvalConfigClick : undefined;
 
           return (
-            <div key={milestone.id} className="flex items-center">
+            <div key={milestone.id} className="flex flex-1 items-center">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
@@ -317,11 +317,11 @@ export function WorkflowStepIndicator({
                 </TooltipContent>
               </Tooltip>
 
-              {/* Connector line */}
+              {/* Connector line - flexible to fill space */}
               {!isLast && (
                 <div
                   className={cn(
-                    "w-6 h-[2px] mx-1",
+                    "flex-1 h-[2px] mx-2 min-w-4",
                     status === "completed"
                       ? "bg-emerald-500/40"
                       : "bg-zinc-700"

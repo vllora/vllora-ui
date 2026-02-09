@@ -57,9 +57,9 @@ export function DatasetDetailHeader() {
         <div className="flex items-start justify-between gap-4">
           {/* Left: Title and edit controls */}
           <div className="flex-1 min-w-0">
-            <div className="flex flex-row justify-between">
+            <div className="flex flex-row items-center gap-4 mb-2">
               {isEditing ? (
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2">
                   <Input
                     value={editingName}
                     onChange={(e) => setEditingName(e.target.value)}
@@ -78,7 +78,7 @@ export function DatasetDetailHeader() {
                   </Button>
                 </div>
               ) : (
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2">
                   <h1 className="text-2xl font-bold truncate">{name}</h1>
                   <Button
                     variant="ghost"
@@ -90,10 +90,10 @@ export function DatasetDetailHeader() {
                   </Button>
                 </div>
               )}
-              {/* Right: Workflow State Indicator */}
+              {/* Workflow State Indicator - next to title */}
               <WorkflowStepIndicator
                 datasetId={datasetId}
-                className="shrink-0 pt-1"
+                className="shrink-0"
                 hasRecords={records.length > 0}
                 hasEvalFunction={!!dataset?.evalScript}
                 onEvalConfigClick={() => setDryRunDialog(true)}
