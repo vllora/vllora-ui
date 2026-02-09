@@ -6,6 +6,7 @@
  */
 
 import { useMemo } from "react";
+import { GitBranch } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DatasetRecord, DataInfo } from "@/types/dataset-types";
 import { ToolDefinitionsViewer } from "@/components/chat/traces/TraceRow/span-info/DetailView/tool-definitions-viewer";
@@ -67,6 +68,24 @@ export function MetadataPanel({ record, topicPath }: MetadataPanelProps) {
         </div>
       )}
 
+      {/* Source Record (for variants) */}
+      {record.sourceRecordId && (
+        <div>
+          <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+            Variant Source
+          </h4>
+          <div className="flex items-center gap-2 text-sm">
+            <GitBranch className="w-3.5 h-3.5 text-violet-400" />
+            <span className="text-violet-400 font-medium">
+              Generated from record
+            </span>
+          </div>
+          <p className="text-xs text-zinc-500 mt-1 font-mono">
+            {record.sourceRecordId}
+          </p>
+        </div>
+      )}
+
       {/* Metadata */}
       <div>
         <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
@@ -83,8 +102,8 @@ export function MetadataPanel({ record, topicPath }: MetadataPanelProps) {
           {record.is_generated && (
             <MetadataRow
               label="Type"
-              value={record.is_generated ? "Generated" : "Recorded"}
-              valueColor={record.is_generated ? "text-violet-400" : "text-blue-400"}
+              value={record.sourceRecordId ? "Variant" : "Generated"}
+              valueColor="text-violet-400"
             />
           )}
           <MetadataRow

@@ -18,9 +18,11 @@ export { extractMessages } from "./ConversationThreadCell.utilities";
 interface ConversationThreadCellProps {
   data: unknown;
   className?: string;
+  /** If this record is a variant, show the source record ID */
+  sourceRecordId?: string;
 }
 
-export function ConversationThreadCell({ data, className }: ConversationThreadCellProps) {
+export function ConversationThreadCell({ data, className, sourceRecordId }: ConversationThreadCellProps) {
   const messages = extractMessages(data);
 
   const displayMessagesCount = Math.min(messages.length, 2);
@@ -56,11 +58,26 @@ export function ConversationThreadCell({ data, className }: ConversationThreadCe
           </div>
         );
       })}
-      {messages.length > displayMessagesCount && (
+      {/* Variant indicator or message count */}
+      {sourceRecordId ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            // Emit event to scroll to and highlight the source record
+            window.dispatchEvent(new CustomEvent('vllora_highlight_record', {
+              detail: { recordId: sourceRecordId }
+            }));
+          }}
+          className="text-[10px] text-violet-400/80 pl-10 hover:text-violet-300 hover:underline cursor-pointer text-left"
+        >
+          ↳ variant of {sourceRecordId.slice(0, 8)}...
+        </button>
+      ) : messages.length > displayMessagesCount ? (
         <span className="text-[10px] text-zinc-500 pl-10">
           +{messages.length - displayMessagesCount} more...
         </span>
-      )}
+      ) : null}
     </div>
   );
 }

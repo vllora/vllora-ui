@@ -5,7 +5,7 @@
  * Uses @tanstack/react-virtual for efficient rendering of large lists.
  */
 
-import { useRef, useState, useCallback, useMemo } from "react";
+import { useRef, useState, useCallback, useMemo, useEffect } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import { Loader2, ChevronDown, ChevronRight, Check, Minus } from "lucide-react";
@@ -109,6 +109,12 @@ export function RecordsTable({
   // Expanded rows state (tracks which rows are expanded for virtualized list)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
+  // Highlighted record state (for scrolling to variant source)
+  const [highlightedRecordId, setHighlightedRecordId] = useState<string | null>(null);
+
+  // Refs for record rows to enable scrolling
+  const recordRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
   // Use controlled or internal state
   const selectedIds = controlledSelectedIds ?? internalSelectedIds;
   const setSelectedIds = onSelectionChange ?? setInternalSelectedIds;
@@ -116,6 +122,45 @@ export function RecordsTable({
   const displayRecords = maxRecords > 0 ? records.slice(0, maxRecords) : records;
   const hasMore = maxRecords > 0 && records.length > maxRecords;
   const shouldVirtualize = displayRecords.length > VIRTUALIZATION_THRESHOLD && !groupByTopic;
+
+  // Listen for highlight record events (from variant source clicks)
+  useEffect(() => {
+    const handleHighlightRecord = (event: CustomEvent<{ recordId: string }>) => {
+      const { recordId } = event.detail;
+
+      // Find if this record exists in our list
+      const recordExists = displayRecords.some(r => r.id === recordId);
+      if (!recordExists) return;
+
+      // Set highlighted state
+      setHighlightedRecordId(recordId);
+
+      // Scroll to the record
+      const recordElement = recordRefs.current.get(recordId);
+      if (recordElement) {
+        recordElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+
+      // Clear highlight after animation
+      setTimeout(() => {
+        setHighlightedRecordId(null);
+      }, 2000);
+    };
+
+    window.addEventListener('vllora_highlight_record', handleHighlightRecord as EventListener);
+    return () => {
+      window.removeEventListener('vllora_highlight_record', handleHighlightRecord as EventListener);
+    };
+  }, [displayRecords]);
+
+  // Callback ref to store record element references
+  const setRecordRef = useCallback((recordId: string) => (el: HTMLDivElement | null) => {
+    if (el) {
+      recordRefs.current.set(recordId, el);
+    } else {
+      recordRefs.current.delete(recordId);
+    }
+  }, []);
 
   // Compute container style based on height prop
   const containerStyle = height === "auto" ? { height: "100%" } : { height };
@@ -277,6 +322,8 @@ export function RecordsTable({
             onDeleteTopic={onDeleteTopic}
             onGenerateForTopic={onGenerateForTopic}
             onGenerateSubtopics={onGenerateSubtopics}
+            highlightedRecordId={highlightedRecordId}
+            setRecordRef={setRecordRef}
           />
         </div>
         {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
@@ -371,6 +418,7 @@ export function RecordsTable({
                       {group.records.map((record) => (
                         <RecordRow
                           key={record.id}
+                          ref={setRecordRef(record.id)}
                           record={record}
                           onUpdateTopic={onUpdateTopic}
                           onDelete={onDelete}
@@ -381,6 +429,7 @@ export function RecordsTable({
                           onExpand={onExpand}
                           availableTopics={availableTopics}
                           hideTopic
+                          isHighlighted={highlightedRecordId === record.id}
                         />
                       ))}
                     </div>
@@ -415,6 +464,7 @@ export function RecordsTable({
           {displayRecords.map((record) => (
             <RecordRow
               key={record.id}
+              ref={setRecordRef(record.id)}
               record={record}
               onUpdateTopic={onUpdateTopic}
               onDelete={onDelete}
@@ -424,6 +474,7 @@ export function RecordsTable({
               onSelect={(checked) => handleSelectRecord(record.id, checked)}
               onExpand={onExpand}
               availableTopics={availableTopics}
+              isHighlighted={highlightedRecordId === record.id}
             />
           ))}
           {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
@@ -477,6 +528,7 @@ export function RecordsTable({
                 }}
               >
                 <RecordRow
+                  ref={setRecordRef(record.id)}
                   record={record}
                   onUpdateTopic={onUpdateTopic}
                   onDelete={onDelete}
@@ -488,6 +540,7 @@ export function RecordsTable({
                   availableTopics={availableTopics}
                   isExpanded={isRowExpanded}
                   onToggleExpand={() => toggleRowExpansion(record.id)}
+                  isHighlighted={highlightedRecordId === record.id}
                 />
               </div>
             );

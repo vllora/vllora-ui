@@ -52,43 +52,46 @@ function getCoverageColorClass(color: string, type: 'bg' | 'text'): string {
   return colorMap[color]?.[type] ?? colorMap.red[type];
 }
 
+interface CoverageTooltipContent {
+  headline: string;
+  description: string;
+  whyItMatters: string;
+  howToImprove: string;
+}
+
 /**
- * Generate tooltip content explaining coverage status
+ * Generate tooltip content explaining coverage status in beginner-friendly terms
  */
-function getCoverageTooltip(color: string, percentage: number, count: number): { status: string; explanation: string; suggestion: string } {
-  const statusMap: Record<string, string> = {
-    green: 'Good coverage',
-    yellow: 'Medium coverage',
-    orange: 'Low coverage',
-    red: 'Critical - insufficient for training',
-  };
+function getCoverageTooltip(color: string, percentage: number, count: number): CoverageTooltipContent {
+  const exampleWord = count === 1 ? 'example' : 'examples';
+  const headline = `Topic coverage: ${percentage.toFixed(0)}% (${count} ${exampleWord})`;
+  const description = 'This tells you how much of your training data is about this topic.';
 
-  // Check which threshold is limiting
-  const percentageColor = percentage >= 20 ? 'green' : percentage >= 10 ? 'yellow' : percentage >= 5 ? 'orange' : 'red';
-  const countColor = count >= MIN_RECORDS_GREEN ? 'green' : count >= MIN_RECORDS_YELLOW ? 'yellow' : count >= MIN_RECORDS_ORANGE ? 'orange' : 'red';
-
-  const explanation = `${count} records (${percentage.toFixed(1)}% of dataset)`;
-  let suggestion = '';
+  let whyItMatters = '';
+  let howToImprove = '';
 
   if (color === 'green') {
-    suggestion = 'Ready for training';
-  } else if (countColor !== 'green' && percentageColor === 'green') {
-    // Count is the limiting factor
-    const needed = color === 'red' ? MIN_RECORDS_ORANGE : color === 'orange' ? MIN_RECORDS_YELLOW : MIN_RECORDS_GREEN;
-    suggestion = `Need ${needed - count} more records`;
-  } else if (percentageColor !== 'green' && countColor === 'green') {
-    // Percentage is the limiting factor (other topics have too many)
-    suggestion = 'Other topics are over-represented';
+    whyItMatters = 'With enough examples, the model will learn this topic reliably.';
+    howToImprove = 'You have good coverage. Ready to train!';
+  } else if (color === 'yellow') {
+    whyItMatters = 'The model will learn this topic, but more examples would make it more consistent.';
+    const needed = Math.max(MIN_RECORDS_GREEN - count, 10);
+    howToImprove = `Add ~${needed} more examples for this topic (or its subtopics) for best results.`;
+  } else if (color === 'orange') {
+    whyItMatters = 'With few examples, the model may be inconsistent on questions in this topic.';
+    const needed = Math.max(MIN_RECORDS_YELLOW - count, 10);
+    howToImprove = `Add ${needed}+ examples for this topic (or its subtopics) to improve reliability.`;
   } else {
-    // Both are limiting
-    const neededCount = color === 'red' ? MIN_RECORDS_ORANGE : color === 'orange' ? MIN_RECORDS_YELLOW : MIN_RECORDS_GREEN;
-    suggestion = `Need ${Math.max(0, neededCount - count)} more records`;
+    whyItMatters = 'With too few examples, the model may be inconsistent or guess on questions in this topic.';
+    const needed = Math.max(MIN_RECORDS_ORANGE - count, 10);
+    howToImprove = `Add ${needed}+ examples for this topic (or its subtopics) to make results more reliable.`;
   }
 
   return {
-    status: statusMap[color] || 'Unknown',
-    explanation,
-    suggestion,
+    headline,
+    description,
+    whyItMatters,
+    howToImprove,
   };
 }
 
@@ -127,13 +130,33 @@ export function CoverageIndicator({ coveragePercentage, recordCount }: CoverageI
             </span>
           </div>
         </TooltipTrigger>
-        <TooltipContent side="bottom" className="max-w-[200px]">
-          <div className="text-xs space-y-1">
-            <p className={cn("font-semibold", getCoverageColorClass(coverageColor, 'text'))}>
-              {tooltip.status}
-            </p>
-            <p className="text-muted-foreground">{tooltip.explanation}</p>
-            <p className="text-foreground">{tooltip.suggestion}</p>
+        <TooltipContent side="bottom" className="max-w-[300px]">
+          <div className="text-xs space-y-2.5">
+            {/* Headline */}
+            <div>
+              <p className={cn("font-semibold", getCoverageColorClass(coverageColor, 'text'))}>
+                {tooltip.headline}
+              </p>
+              <p className="text-muted-foreground text-[11px] mt-0.5">
+                {tooltip.description}
+              </p>
+            </div>
+
+            {/* Why it matters */}
+            <div>
+              <p className="font-medium text-foreground text-[11px]">Why it matters</p>
+              <p className="text-muted-foreground text-[11px] mt-0.5">
+                {tooltip.whyItMatters}
+              </p>
+            </div>
+
+            {/* How to improve */}
+            <div>
+              <p className="font-medium text-foreground text-[11px]">How to improve</p>
+              <p className="text-muted-foreground text-[11px] mt-0.5">
+                {tooltip.howToImprove}
+              </p>
+            </div>
           </div>
         </TooltipContent>
       </Tooltip>

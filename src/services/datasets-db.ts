@@ -722,6 +722,7 @@ export async function addRecordsToDataset(
     metadata?: Record<string, unknown>;
     topic?: string;
     is_generated?: boolean;
+    sourceRecordId?: string;
     evaluation?: DatasetEvaluation;
   }>,
   defaultTopic?: string
@@ -740,6 +741,7 @@ export async function addRecordsToDataset(
       metadata: recordData.metadata,
       topic: topic || undefined,
       is_generated: recordData.is_generated ?? false,
+      sourceRecordId: recordData.sourceRecordId,
       evaluation: recordData.evaluation,
       createdAt: now,
       updatedAt: now,

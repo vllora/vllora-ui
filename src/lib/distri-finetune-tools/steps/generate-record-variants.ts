@@ -61,20 +61,26 @@ Rules:
 - Each variant should be meaningfully different (not just minor word changes)
 - Output MUST be valid JSON matching the schema`;
 
-const VARIANT_GENERATION_USER = `Generate {{count}} variations of the user message below. Keep the system prompt exactly the same.
+const VARIANT_GENERATION_USER = `Generate {{count}} variations of the FINAL user message in the conversation below.
 
-SYSTEM PROMPT (keep this unchanged):
-{{system_prompt}}
+IMPORTANT:
+- Keep ALL previous messages (system prompt, prior turns) EXACTLY the same
+- ONLY vary the final user message
+- Maintain the same conversational context
 
-ORIGINAL USER MESSAGE (create variations of this):
-{{user_message}}
+CONVERSATION CONTEXT (preserve this history unchanged):
+{{conversation_context}}
+
+FINAL USER MESSAGE TO VARY:
+{{final_user_message}}
 {{guidance_section}}
-Create user message variations that:
+Create variations of the final user message that:
 - Ask about similar topics but with different specific scenarios or angles
 - Vary the complexity (some simpler, some more complex questions)
 - Use different phrasings, tones, and styles (formal, casual, brief, detailed)
 - Explore different aspects of the same domain
-- Are realistic queries a user might actually ask
+- Are realistic follow-up queries given the conversation context
+- Make sense as a continuation of the prior conversation
 
 Output Format:
 {
@@ -121,35 +127,52 @@ const VARIANT_RESPONSE_SCHEMA = {
 // Helper Functions
 // =============================================================================
 
-function extractMessagesFromRecord(record: DatasetRecord): { systemPrompt: string; userMessage: string } | null {
+interface ExtractedConversation {
+  /** All messages before the final user message (context to preserve) */
+  prefixMessages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+  /** The final user message to generate variants of */
+  finalUserMessage: string;
+}
+
+function extractMessagesFromRecord(record: DatasetRecord): ExtractedConversation | null {
   const data = record.data as DataInfo | null;
   if (!data?.input?.messages || !Array.isArray(data.input.messages)) {
     return null;
   }
 
   const messages = data.input.messages;
-  let systemPrompt = "";
-  let userMessage = "";
 
-  for (const msg of messages) {
-    if (msg.role === "system" && msg.content) {
-      systemPrompt = msg.content;
-    }
-    if (msg.role === "user" && msg.content) {
-      userMessage = msg.content; // Take the last user message
+  // Find the last user message index
+  let lastUserIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "user" && messages[i].content) {
+      lastUserIdx = i;
+      break;
     }
   }
 
-  if (!userMessage) {
-    return null;
+  if (lastUserIdx === -1) {
+    return null; // No user message found
   }
 
-  return { systemPrompt, userMessage };
+  // Prefix = all messages before the last user message
+  const prefixMessages = messages.slice(0, lastUserIdx).map((msg) => ({
+    role: msg.role as "system" | "user" | "assistant",
+    content: msg.content || "",
+  }));
+
+  const finalUserMessage = messages[lastUserIdx].content || "";
+
+  return { prefixMessages, finalUserMessage };
 }
 
-function variantToDataInfo(variant: GeneratedVariant, systemPrompt: string): DataInfo {
+function variantToDataInfo(
+  variant: GeneratedVariant,
+  prefixMessages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+): DataInfo {
+  // Reconstruct the conversation: prefix messages + varied final user message
   const inputMessages = [
-    { role: "system" as const, content: systemPrompt },
+    ...prefixMessages,
     { role: "user" as const, content: variant.user_message },
   ];
 
@@ -171,8 +194,8 @@ function variantToDataInfo(variant: GeneratedVariant, systemPrompt: string): Dat
 // =============================================================================
 
 async function callLLMForVariants(
-  systemPrompt: string,
-  userMessage: string,
+  prefixMessages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+  finalUserMessage: string,
   count: number,
   guidance?: string,
 ): Promise<GeneratedVariant[]> {
@@ -187,10 +210,15 @@ async function callLLMForVariants(
     ? `\nUser's specific guidance for variations:\n${guidance}\n`
     : "";
 
+  // Format prefix messages as conversation context
+  const conversationContext = prefixMessages.length > 0
+    ? prefixMessages.map((msg) => `[${msg.role.toUpperCase()}]: ${msg.content}`).join("\n\n")
+    : "(No prior context - this is the first message)";
+
   const userPrompt = VARIANT_GENERATION_USER
     .replace(/\{\{count\}\}/g, String(count))
-    .replace("{{system_prompt}}", systemPrompt)
-    .replace("{{user_message}}", userMessage)
+    .replace("{{conversation_context}}", conversationContext)
+    .replace("{{final_user_message}}", finalUserMessage)
     .replace("{{guidance_section}}", guidanceSection);
 
   const messages: DistriMessage[] = [
@@ -278,15 +306,15 @@ export const generateRecordVariantsHandler: ToolHandler = async (
     }
 
     console.log("[generateRecordVariants] Source record extracted:", {
-      systemPrompt: extracted.systemPrompt.substring(0, 50) + "...",
-      userMessage: extracted.userMessage.substring(0, 50) + "...",
+      prefixMessageCount: extracted.prefixMessages.length,
+      finalUserMessage: extracted.finalUserMessage.substring(0, 50) + "...",
       topic: sourceRecord.topic,
     });
 
     // Generate variants using LLM
     const variants = await callLLMForVariants(
-      extracted.systemPrompt,
-      extracted.userMessage,
+      extracted.prefixMessages,
+      extracted.finalUserMessage,
       count,
       guidance,
     );
@@ -294,8 +322,9 @@ export const generateRecordVariantsHandler: ToolHandler = async (
     console.log("[generateRecordVariants] Generated", variants.length, "variants");
 
     // Convert to dataset records with lineage tracking
+    // Each variant preserves the full conversation history, only varying the final user message
     const recordsToAdd = variants.map((variant) => ({
-      data: variantToDataInfo(variant),
+      data: variantToDataInfo(variant, extracted.prefixMessages),
       is_generated: true,
       topic: sourceRecord.topic, // Inherit topic from source
       sourceRecordId: record_id, // Track lineage
@@ -346,12 +375,13 @@ Use this tool when:
 - You need to expand the dataset with similar but different examples
 
 The tool will:
-1. Extract the conversation from the source record
-2. Generate N variations using LLM
-3. Create new records that inherit the source record's topic
-4. Track lineage via sourceRecordId for provenance
+1. Extract the conversation from the source record (supports multi-turn conversations)
+2. Preserve all conversation history (system prompt, prior user/assistant turns)
+3. Generate N variations of ONLY the final user message
+4. Create new records that inherit the source record's topic
+5. Track lineage via sourceRecordId for provenance
 
-Generated variants maintain the same topic as the source record and are marked as generated.`,
+Generated variants keep the full conversation history unchanged and only vary the final user message.`,
   type: "function",
   parameters: {
     type: "object",

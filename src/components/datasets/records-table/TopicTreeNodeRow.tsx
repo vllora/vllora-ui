@@ -38,6 +38,10 @@ export interface TopicTreeNodeRowProps {
   onGenerateForTopic?: (topicPath: string) => void;
   /** Handler for generating subtopics (null = root level) */
   onGenerateSubtopics?: (topicPath: string | null) => void;
+  /** ID of record to highlight (for variant source navigation) */
+  highlightedRecordId?: string | null;
+  /** Callback to set record ref for scrolling */
+  setRecordRef?: (recordId: string) => (el: HTMLDivElement | null) => void;
 }
 
 export function TopicTreeNodeRow({
@@ -59,6 +63,8 @@ export function TopicTreeNodeRow({
   onDeleteTopic,
   onGenerateForTopic,
   onGenerateSubtopics,
+  highlightedRecordId,
+  setRecordRef,
 }: TopicTreeNodeRowProps) {
   const [isExpanded, setIsExpanded] = useState(true); // Expand all by default
 
@@ -116,6 +122,8 @@ export function TopicTreeNodeRow({
                 onDeleteTopic={onDeleteTopic}
                 onGenerateForTopic={onGenerateForTopic}
                 onGenerateSubtopics={onGenerateSubtopics}
+                highlightedRecordId={highlightedRecordId}
+                setRecordRef={setRecordRef}
               />
             ))}
 
@@ -125,6 +133,7 @@ export function TopicTreeNodeRow({
               {directRecords.map((record) => (
                 <RecordRow
                   key={record.id}
+                  ref={setRecordRef?.(record.id)}
                   record={record}
                   onUpdateTopic={onUpdateTopic}
                   onDelete={onDelete}
@@ -136,6 +145,7 @@ export function TopicTreeNodeRow({
                   isViewing={viewingRecordId === record.id}
                   availableTopics={availableTopics}
                   hideTopic
+                  isHighlighted={highlightedRecordId === record.id}
                 />
               ))}
             </div>

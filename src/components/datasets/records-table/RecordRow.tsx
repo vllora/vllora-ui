@@ -42,6 +42,8 @@ interface RecordRowProps {
   isExpanded?: boolean;
   /** Controlled expansion toggle (for virtualized lists) */
   onToggleExpand?: () => void;
+  /** Whether this record is temporarily highlighted (e.g., when navigating to source) */
+  isHighlighted?: boolean;
 }
 
 export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function RecordRow({
@@ -58,6 +60,7 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
   hideTopic = false,
   isExpanded: controlledExpanded,
   onToggleExpand,
+  isHighlighted = false,
 }, ref) {
   // Internal state for uncontrolled mode
   const [internalExpanded, setInternalExpanded] = useState(false);
@@ -90,9 +93,10 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
       ref={ref}
       onClick={handleToggleExpand}
       className={cn(
-        "flex flex-col rounded-md overflow-hidden transition-colors bg-zinc-800/30",
+        "group flex flex-col rounded-md overflow-hidden transition-colors bg-zinc-800/30",
         isExpanded ? "ring-1 ring-zinc-700/50" : "hover:bg-zinc-800/50",
-        selected && "bg-[rgb(var(--theme-500))]/10 ring-1 ring-[rgb(var(--theme-500))]/30"
+        selected && "bg-[rgb(var(--theme-500))]/10 ring-1 ring-[rgb(var(--theme-500))]/30",
+        isHighlighted && "ring-2 ring-violet-500 bg-violet-500/20 animate-pulse"
       )}
     >
       {/* Main row */}
@@ -117,6 +121,7 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
         <ConversationThreadCell
           data={record.data}
           className={COLUMN_WIDTHS.thread}
+          sourceRecordId={record.sourceRecordId}
         />
 
         {/* Tools Badge */}
@@ -141,8 +146,11 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
           <StatsBadge data={record.data} />
         </div>
 
-        {/* Actions */}
-        <div className={cn("flex items-center justify-center", COLUMN_WIDTHS.deepDiveActions)}>
+        {/* Actions - shown on hover */}
+        <div className={cn(
+          "flex items-center justify-end pr-2 opacity-0 group-hover:opacity-100 transition-opacity",
+          COLUMN_WIDTHS.deepDiveActions
+        )}>
           <RecordActions
             onEdit={onSave ? () => setEditDialogOpen(true) : undefined}
             onDelete={() => onDelete(record.id)}

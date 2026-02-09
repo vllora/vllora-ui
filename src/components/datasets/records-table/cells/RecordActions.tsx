@@ -1,59 +1,92 @@
 /**
  * RecordActions
  *
- * Dropdown menu with actions for a dataset record (edit, delete, generate variants, etc.)
+ * Icon buttons for record actions (edit, generate variants, delete).
+ * Shown on hover via parent component's CSS.
  */
 
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { MoreVertical, Pencil, Trash2, GitBranch } from "lucide-react";
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Pencil, Trash2, GitBranch } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface RecordActionsProps {
   onEdit?: () => void;
   onDelete: () => void;
   onGenerateVariants?: () => void;
+  className?: string;
 }
 
-export function RecordActions({ onEdit, onDelete, onGenerateVariants }: RecordActionsProps) {
+export function RecordActions({ onEdit, onDelete, onGenerateVariants, className }: RecordActionsProps) {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-9 w-9 p-0 border-border/50 bg-transparent hover:bg-muted/50"
-        >
-          <MoreVertical className="w-4 h-4 text-muted-foreground" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
+    <TooltipProvider delayDuration={300}>
+      <div className={cn("flex items-center gap-1", className)}>
         {onEdit && (
-          <DropdownMenuItem onClick={onEdit}>
-            <Pencil className="w-4 h-4 mr-2" />
-            Edit
-          </DropdownMenuItem>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit();
+                }}
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              Edit record
+            </TooltipContent>
+          </Tooltip>
         )}
+
         {onGenerateVariants && (
-          <DropdownMenuItem onClick={onGenerateVariants}>
-            <GitBranch className="w-4 h-4 mr-2" />
-            Generate variants
-          </DropdownMenuItem>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0 text-muted-foreground hover:text-violet-400 hover:bg-violet-500/10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onGenerateVariants();
+                }}
+              >
+                <GitBranch className="w-3.5 h-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              Generate variants
+            </TooltipContent>
+          </Tooltip>
         )}
-        {(onEdit || onGenerateVariants) && <DropdownMenuSeparator />}
-        <DropdownMenuItem
-          onClick={onDelete}
-          className="text-red-500 focus:text-red-500"
-        >
-          <Trash2 className="w-4 h-4 mr-2" />
-          Delete
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0 text-muted-foreground hover:text-red-500 hover:bg-red-500/10"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            Delete record
+          </TooltipContent>
+        </Tooltip>
+      </div>
+    </TooltipProvider>
   );
 }

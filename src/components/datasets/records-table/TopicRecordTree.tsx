@@ -41,6 +41,10 @@ interface TopicRecordTreeProps {
   onGenerateForTopic?: (topicPath: string) => void;
   /** Handler for generating subtopics (null = root level) */
   onGenerateSubtopics?: (topicPath: string | null) => void;
+  /** ID of record to highlight (for variant source navigation) */
+  highlightedRecordId?: string | null;
+  /** Callback to set record ref for scrolling */
+  setRecordRef?: (recordId: string) => (el: HTMLDivElement | null) => void;
 }
 
 /**
@@ -81,6 +85,8 @@ export function TopicRecordTree({
   onDeleteTopic,
   onGenerateForTopic,
   onGenerateSubtopics,
+  highlightedRecordId,
+  setRecordRef,
 }: TopicRecordTreeProps) {
   // Group records by topic
   const recordsByTopic = useMemo(() => {
@@ -120,6 +126,8 @@ export function TopicRecordTree({
           onExpand={onExpand}
           viewingRecordId={viewingRecordId}
           availableTopics={availableTopics}
+          highlightedRecordId={highlightedRecordId}
+          setRecordRef={setRecordRef}
         />
       )}
 
@@ -145,6 +153,8 @@ export function TopicRecordTree({
           onDeleteTopic={onDeleteTopic}
           onGenerateForTopic={onGenerateForTopic}
           onGenerateSubtopics={onGenerateSubtopics}
+          highlightedRecordId={highlightedRecordId}
+          setRecordRef={setRecordRef}
         />
       ))}
     </div>
@@ -163,6 +173,8 @@ interface UnassignedSectionProps {
   onExpand?: (record: DatasetRecord) => void;
   viewingRecordId?: string | null;
   availableTopics: AvailableTopic[];
+  highlightedRecordId?: string | null;
+  setRecordRef?: (recordId: string) => (el: HTMLDivElement | null) => void;
 }
 
 function UnassignedSection({
@@ -177,6 +189,8 @@ function UnassignedSection({
   onExpand,
   viewingRecordId,
   availableTopics,
+  highlightedRecordId,
+  setRecordRef,
 }: UnassignedSectionProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const percentage = totalRecords > 0 ? (records.length / totalRecords) * 100 : 0;
@@ -199,6 +213,7 @@ function UnassignedSection({
           {records.map((record) => (
             <RecordRow
               key={record.id}
+              ref={setRecordRef?.(record.id)}
               record={record}
               onUpdateTopic={onUpdateTopic}
               onDelete={onDelete}
@@ -210,6 +225,7 @@ function UnassignedSection({
               isViewing={viewingRecordId === record.id}
               availableTopics={availableTopics}
               hideTopic
+              isHighlighted={highlightedRecordId === record.id}
             />
           ))}
         </div>
