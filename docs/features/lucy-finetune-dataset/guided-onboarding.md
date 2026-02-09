@@ -48,7 +48,16 @@ User uploads documents to empty dataset
 └─────────────────────────┘    │  - "Approve & Execute" button       │
                                └─────────────────────────────────────┘
                                               │
-                                              ▼ (User clicks Approve)
+                          ┌───────────────────┼───────────────────┐
+                          │                   │                   │
+                          ▼ (User requests    │                   ▼ (User clicks
+                             changes)         │                      Approve)
+               ┌─────────────────────────┐    │
+               │  adjust_setup_plan tool  │    │
+               │  - Takes user feedback   │    │
+               │  - Regenerates plan      │    │
+               │  - Emits updated plan    │────┘
+               └─────────────────────────┘
                                ┌─────────────────────────────────────┐
                                │  execute_setup_plan tool            │
                                │  - Step 1: Apply topic hierarchy    │
@@ -145,6 +154,32 @@ interface SetupPlan {
 }
 ```
 
+### `adjust_setup_plan`
+
+Adjusts an existing setup plan based on user feedback via chat.
+
+**Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `dataset_id` | string | Yes | The dataset ID |
+| `current_plan` | SetupPlan | Yes | The current setup plan to adjust |
+| `user_feedback` | string | Yes | User's feedback/request for changes (e.g., "reduce to 5 topics with 50 records each") |
+
+**Returns:**
+```typescript
+interface AdjustSetupPlanResult {
+  success: boolean;
+  error?: string;
+  plan?: SetupPlan;
+  message?: string;
+}
+```
+
+**Use Cases:**
+- User requests changes to the plan (e.g., "reduce to 5 topics", "increase examples to 100 each")
+- User wants to modify topic structure, counts, or grader criteria
+- The adjusted plan is shown to the user for approval via the same `vllora_setup_plan_proposed` event
+
 ### `execute_setup_plan`
 
 Executes all steps in the approved setup plan automatically.
@@ -184,6 +219,103 @@ interface ExecuteSetupPlanResult {
    - Topic hierarchy visualization
    - Record statistics and coverage analysis
    - Setup plan execution summary
+
+## Progress Indicators
+
+### Dataset-Level Progress (RecordsSectionHeader)
+
+The `RecordsSectionHeader` component shows overall data generation progress near the Export button:
+
+```typescript
+// Displays: "Generating X/Y" with animated spinner
+{generationProgress && (
+  <div className="flex items-center gap-1.5 text-emerald-400 text-xs px-2 py-1 bg-emerald-500/10 rounded-md">
+    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+    <span>Generating {generationProgress.completed}/{generationProgress.total}</span>
+  </div>
+)}
+```
+
+The component listens for `vllora_data_generation_progress` events with `completed` and `total` fields.
+
+### Per-Topic Progress (TopicNodeHeader)
+
+Individual topics show generation progress while records are being created for that specific topic:
+
+```typescript
+// In TopicNodeHeader.tsx
+{isGenerating && (
+  <div className="flex items-center gap-1.5 text-emerald-400">
+    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+    <span className="text-xs">
+      {generatingProgress
+        ? `Generating... ${generatingProgress.completed}/${generatingProgress.total}`
+        : "Generating..."}
+    </span>
+  </div>
+)}
+```
+
+The per-topic progress uses `topicCompleted` and `topicTotal` fields from the event (distinct from the dataset-level `completed`/`total`).
+
+### Progress Event Structure
+
+```typescript
+interface DataGenerationProgressEvent {
+  datasetId: string;
+  status: 'started' | 'progress' | 'completed' | 'failed';
+  // Dataset-level progress
+  total: number;
+  completed: number;
+  // Per-topic progress (for topic-level indicators)
+  currentTopic?: string;
+  topicCompleted?: number;
+  topicTotal?: number;
+  error?: string;
+}
+```
+
+## Plan Execution State Persistence
+
+### execution-state-store.ts
+
+Located at: `/ui/src/lib/distri-finetune-tools/steps/execution-state-store.ts`
+
+A simple in-memory store that persists execution progress across tab switches. This allows users to:
+- Switch away from the Plan tab during execution
+- Return to see current progress
+- View the plan markdown alongside execution progress
+
+**Key functions:**
+```typescript
+// Get current execution progress for a dataset
+getCurrentExecution(datasetId: string): ExecutionProgress | null
+
+// Check if a dataset has an active execution
+hasActiveExecution(datasetId: string): boolean
+
+// Get the plan being executed (for displaying during execution)
+getExecutingPlan(datasetId: string): SetupPlan | null
+
+// Store the plan when approved (called automatically via event)
+setExecutingPlan(datasetId: string, plan: SetupPlan): void
+```
+
+The store automatically:
+- Updates on `vllora_setup_plan_progress` events
+- Stores the plan on `vllora_setup_plan_approved` events
+- Auto-clears completed executions after 5 seconds
+
+### Plan Markdown During Execution
+
+When a plan is being executed, the `PlanSection` component shows a split view:
+- **Left side**: The plan rendered as markdown (read-only)
+- **Right side**: `ExecutionProgressCard` with step-by-step progress
+
+This is achieved by:
+1. Storing the plan in `executingPlanStore` when approved
+2. Retrieving it in `PlanSection` on mount via `getExecutingPlan()`
+3. Displaying both the plan markdown and progress card side-by-side
 
 ## UI Components
 
@@ -418,7 +550,13 @@ Also has access to both tools for delegated execution scenarios.
 
 | Component | Path |
 |-----------|------|
-| propose_setup_plan tool | `/ui/src/lib/distri-finetune-tools/steps/propose-setup-plan.ts` |
+| propose_setup_plan folder | `/ui/src/lib/distri-finetune-tools/steps/propose-setup-plan/` |
+| propose_setup_plan types | `/ui/src/lib/distri-finetune-tools/steps/propose-setup-plan/types.ts` |
+| propose_setup_plan handler | `/ui/src/lib/distri-finetune-tools/steps/propose-setup-plan/handler.ts` |
+| propose_setup_plan prompts | `/ui/src/lib/distri-finetune-tools/steps/propose-setup-plan/prompts.ts` |
+| adjust_setup_plan tool | `/ui/src/lib/distri-finetune-tools/steps/propose-setup-plan/adjust-plan.ts` |
+| grader_template utility | `/ui/src/lib/distri-finetune-tools/steps/propose-setup-plan/grader-template.ts` |
+| llm_service utility | `/ui/src/lib/distri-finetune-tools/steps/propose-setup-plan/llm-service.ts` |
 | execute_setup_plan tool | `/ui/src/lib/distri-finetune-tools/steps/execute-setup-plan.ts` |
 | generate_initial_data tool | `/ui/src/lib/distri-finetune-tools/steps/generate-initial-data.ts` |
 | execution_state_store | `/ui/src/lib/distri-finetune-tools/steps/execution-state-store.ts` |
@@ -429,6 +567,10 @@ Also has access to both tools for delegated execution scenarios.
 | ReadmeWithPlan | `/ui/src/components/datasets/ReadmeWithPlan.tsx` |
 | SectionTabs | `/ui/src/components/datasets/dataset-detail-header/SectionTabs.tsx` |
 | Tool Renderers | `/ui/src/components/agent/lucy-agent/LucySetupPlanRenderer.tsx` |
+| RecordsSectionHeader | `/ui/src/components/datasets/dataset-detail-header/RecordsSectionHeader.tsx` |
+| TopicRecordTree | `/ui/src/components/datasets/records-table/TopicRecordTree.tsx` |
+| TopicNodeHeader | `/ui/src/components/datasets/records-table/TopicNodeHeader.tsx` |
+| TopicTreeNodeRow | `/ui/src/components/datasets/records-table/TopicTreeNodeRow.tsx` |
 | Lucy Assistant | `/ui/src/components/datasets/LucyDatasetAssistant.tsx` |
 | DatasetDetailContentV2 | `/ui/src/components/datasets/DatasetDetailContentV2.tsx` |
 | Event Emitter | `/ui/src/utils/eventEmitter.ts` |

@@ -73,6 +73,9 @@ function distributeCountAcrossTopics(totalCount: number, topics: LeafTopic[]): M
 // Batch size for generation - smaller batches are faster and more reliable
 const BATCH_SIZE = 10;
 
+// Number of parallel requests to make - balance between speed and API rate limits
+const PARALLEL_REQUESTS = 3;
+
 // Cache for Lucy config
 let cachedLucyConfig: LucyConfig | null = null;
 const fetchLucyConfigCached = async (): Promise<LucyConfig> => {
@@ -371,7 +374,9 @@ function buildKnowledgeContextSection(knowledge: KnowledgeContext): string {
   parts.push("\n--- END KNOWLEDGE SOURCES ---\n");
   parts.push("IMPORTANT: Generate examples that reference specific concepts, terminology, and scenarios from the knowledge sources above.");
 
-  return parts.join("\n");
+  let result = parts.join("\n");
+  console.log(" ===== [generateInitialData] Knowledge context section:\n", result);
+  return result;
 }
 
 async function callLLMForInitialData(
@@ -603,19 +608,40 @@ export const generateInitialDataHandler: ToolHandler = async (
 
     if (useTopicBasedGeneration) {
       // =========================================================================
-      // Topic-based generation: distribute count across leaf topics
+      // Topic-based generation: distribute count across leaf topics - PARALLEL
       // Each topic's count is further batched to avoid timeouts
       // =========================================================================
       const topicDistribution = distributeCountAcrossTopics(count, leafTopics);
 
-      // Calculate total batches (each topic may have multiple batches)
-      let totalBatchCount = 0;
-      for (const [, topicCount] of topicDistribution) {
-        totalBatchCount += Math.ceil(topicCount / BATCH_SIZE);
+      // Build a flat list of all batch jobs
+      interface BatchJob {
+        topic: LeafTopic;
+        topicCount: number;
+        batchIndex: number;
+        batchSize: number;
+        globalIndex: number;
       }
-      totalBatches = totalBatchCount;
+      const allBatchJobs: BatchJob[] = [];
+      let globalIndex = 0;
 
-      console.log(`[generateInitialData] Using topic-based generation across ${leafTopics.length} leaf topics (~${totalBatches} batches)`);
+      for (const [topic, topicCount] of topicDistribution) {
+        const topicBatches = Math.ceil(topicCount / BATCH_SIZE);
+        let remaining = topicCount;
+        for (let i = 0; i < topicBatches; i++) {
+          const batchSize = Math.min(BATCH_SIZE, remaining);
+          allBatchJobs.push({
+            topic,
+            topicCount,
+            batchIndex: i,
+            batchSize,
+            globalIndex: globalIndex++,
+          });
+          remaining -= batchSize;
+        }
+      }
+
+      totalBatches = allBatchJobs.length;
+      console.log(`[generateInitialData] Using topic-based generation across ${leafTopics.length} leaf topics (${totalBatches} batches, ${PARALLEL_REQUESTS} parallel)`);
 
       // Emit started event
       emitter.emit("vllora_data_generation_progress", {
@@ -627,76 +653,84 @@ export const generateInitialDataHandler: ToolHandler = async (
         totalBatches,
       });
 
-      let batchIndex = 0;
-      for (const [topic, topicCount] of topicDistribution) {
-        console.log(`[generateInitialData] Generating ${topicCount} examples for topic: ${topic.path.join(" > ")}`);
+      // Track per-topic progress
+      const topicProgress = new Map<string, number>();
+      let completedBatches = 0;
 
-        // Break topic generation into batches
-        let topicGenerated = 0;
-        const topicBatches = Math.ceil(topicCount / BATCH_SIZE);
+      // Process batch jobs in parallel chunks
+      for (let chunkStart = 0; chunkStart < allBatchJobs.length; chunkStart += PARALLEL_REQUESTS) {
+        const chunkEnd = Math.min(chunkStart + PARALLEL_REQUESTS, allBatchJobs.length);
+        const chunkJobs = allBatchJobs.slice(chunkStart, chunkEnd);
 
-        for (let topicBatchIdx = 0; topicBatchIdx < topicBatches; topicBatchIdx++) {
-          const remaining = topicCount - topicGenerated;
-          const batchSize = Math.min(BATCH_SIZE, remaining);
+        console.log(`[generateInitialData] Processing batches ${chunkStart + 1}-${chunkEnd} of ${totalBatches}`);
 
-          try {
-            console.log(`[generateInitialData] Topic "${topic.name}" batch ${topicBatchIdx + 1}/${topicBatches} (${batchSize} examples)`);
+        // Create parallel requests for this chunk
+        const batchPromises = chunkJobs.map(job =>
+          callLLMForInitialData(
+            objective,
+            job.batchSize,
+            generation_mode,
+            user_guidance,
+            knowledgeContext,
+            job.topic,
+          ).then(examples => ({ job, examples }))
+            .catch(err => {
+              console.error(`[generateInitialData] Topic "${job.topic.name}" batch ${job.batchIndex + 1} failed:`, err);
+              return { job, examples: [] as GeneratedExample[] };
+            })
+        );
 
-            const batchExamples = await callLLMForInitialData(
-              objective,
-              batchSize,
-              generation_mode,
-              user_guidance,
-              knowledgeContext,
-              topic, // Pass topic context for focused generation
-            );
+        // Wait for all parallel batches to complete
+        const results = await Promise.all(batchPromises);
 
-            topicGenerated += batchExamples.length;
-            totalGenerated += batchExamples.length;
-
-            // Convert to records with topic already assigned
-            const topicRecords = batchExamples.map((example) => ({
-              data: exampleToDataInfo(example, generation_mode),
-              is_generated: true,
-              topic: topic.name, // Assign topic directly during generation
-              metadata: {
-                generation_source: "initial_data",
-                generation_mode,
-                generated_at_ms: Date.now(),
-                topic_path: topic.path.join(" > "),
-              },
-            }));
-
-            const addedRecords = await datasetsDB.addRecordsToDataset(
-              dataset_id,
-              topicRecords,
-            );
-
-            console.log(`[generateInitialData] Topic "${topic.name}" batch ${topicBatchIdx + 1}: added ${addedRecords.length} records (topic: ${topicGenerated}, total: ${totalGenerated})`);
-
-            batchIndex++;
-            // Emit progress event after each batch
-            emitter.emit("vllora_data_generation_progress", {
-              datasetId: dataset_id,
-              status: "progress",
-              total: count,
-              completed: totalGenerated,
-              currentBatch: batchIndex,
-              totalBatches,
-              currentTopic: topic.name,
-              topicCompleted: topicGenerated,
-              topicTotal: topicCount,
-            });
-          } catch (batchError) {
-            console.error(`[generateInitialData] Topic "${topic.name}" batch ${topicBatchIdx + 1} failed:`, batchError);
-            batchIndex++;
-            // Continue with next batch/topic even if one fails
+        // Process results and save to DB
+        for (const { job, examples } of results) {
+          if (examples.length === 0) {
+            completedBatches++;
+            continue;
           }
+
+          totalGenerated += examples.length;
+
+          // Update per-topic progress
+          const currentTopicProgress = (topicProgress.get(job.topic.name) || 0) + examples.length;
+          topicProgress.set(job.topic.name, currentTopicProgress);
+
+          // Convert to records with topic already assigned
+          const topicRecords = examples.map((example) => ({
+            data: exampleToDataInfo(example, generation_mode),
+            is_generated: true,
+            topic: job.topic.name,
+            metadata: {
+              generation_source: "initial_data",
+              generation_mode,
+              generated_at_ms: Date.now(),
+              topic_path: job.topic.path.join(" > "),
+            },
+          }));
+
+          const addedRecords = await datasetsDB.addRecordsToDataset(
+            dataset_id,
+            topicRecords,
+          );
+
+          console.log(`[generateInitialData] Topic "${job.topic.name}" batch ${job.batchIndex + 1}: added ${addedRecords.length} records (topic: ${currentTopicProgress}, total: ${totalGenerated})`);
+          completedBatches++;
         }
+
+        // Emit progress event after each parallel chunk
+        emitter.emit("vllora_data_generation_progress", {
+          datasetId: dataset_id,
+          status: "progress",
+          total: count,
+          completed: totalGenerated,
+          currentBatch: completedBatches,
+          totalBatches,
+        });
       }
     } else {
       // =========================================================================
-      // Standard batch generation (no topic hierarchy)
+      // Standard batch generation (no topic hierarchy) - PARALLEL
       // =========================================================================
       totalBatches = Math.ceil(count / BATCH_SIZE);
 
@@ -710,28 +744,47 @@ export const generateInitialDataHandler: ToolHandler = async (
         totalBatches,
       });
 
-      console.log(`[generateInitialData] Generating ${count} examples in ${totalBatches} batches of ${BATCH_SIZE}`);
+      console.log(`[generateInitialData] Generating ${count} examples in ${totalBatches} batches of ${BATCH_SIZE} (${PARALLEL_REQUESTS} parallel)`);
 
-      // Generate examples in batches
-      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
-        const remaining = count - totalGenerated;
-        const batchSize = Math.min(BATCH_SIZE, remaining);
+      // Process batches in parallel chunks
+      let completedBatches = 0;
+      for (let chunkStart = 0; chunkStart < totalBatches; chunkStart += PARALLEL_REQUESTS) {
+        const chunkEnd = Math.min(chunkStart + PARALLEL_REQUESTS, totalBatches);
+        const batchPromises: Promise<{ batchIndex: number; examples: GeneratedExample[] }>[] = [];
 
-        console.log(`[generateInitialData] Starting batch ${batchIndex + 1}/${totalBatches} (${batchSize} examples)`);
+        // Create parallel batch requests
+        for (let batchIndex = chunkStart; batchIndex < chunkEnd; batchIndex++) {
+          const batchStartCount = batchIndex * BATCH_SIZE;
+          const remaining = count - batchStartCount;
+          const batchSize = Math.min(BATCH_SIZE, remaining);
 
-        try {
-          const batchExamples = await callLLMForInitialData(
-            objective,
-            batchSize,
-            generation_mode,
-            user_guidance,
-            knowledgeContext,
+          console.log(`[generateInitialData] Queuing batch ${batchIndex + 1}/${totalBatches} (${batchSize} examples)`);
+
+          batchPromises.push(
+            callLLMForInitialData(
+              objective,
+              batchSize,
+              generation_mode,
+              user_guidance,
+              knowledgeContext,
+            ).then(examples => ({ batchIndex, examples }))
+              .catch(err => {
+                console.error(`[generateInitialData] Batch ${batchIndex + 1} failed:`, err);
+                return { batchIndex, examples: [] as GeneratedExample[] };
+              })
           );
+        }
 
-          totalGenerated += batchExamples.length;
+        // Wait for all parallel batches to complete
+        const results = await Promise.all(batchPromises);
 
-          // Convert batch to records and save immediately
-          const batchRecords = batchExamples.map((example) => ({
+        // Process results and save to DB
+        for (const { batchIndex, examples } of results) {
+          if (examples.length === 0) continue;
+
+          totalGenerated += examples.length;
+
+          const batchRecords = examples.map((example) => ({
             data: exampleToDataInfo(example, generation_mode),
             is_generated: true,
             metadata: {
@@ -748,25 +801,23 @@ export const generateInitialDataHandler: ToolHandler = async (
           );
 
           console.log(`[generateInitialData] Batch ${batchIndex + 1} complete: added ${addedBatchRecords.length} records (total: ${totalGenerated})`);
+        }
 
-          // Emit progress event
-          emitter.emit("vllora_data_generation_progress", {
-            datasetId: dataset_id,
-            status: "progress",
-            total: count,
-            completed: totalGenerated,
-            currentBatch: batchIndex + 1,
-            totalBatches,
-          });
-        } catch (batchError) {
-          console.error(`[generateInitialData] Batch ${batchIndex + 1} failed:`, batchError);
-          // Continue with other batches even if one fails
-          if (totalGenerated === 0) {
-            // If first batch fails with no records generated, throw
-            throw batchError;
-          }
-          // Otherwise continue and report partial success
-          break;
+        completedBatches = chunkEnd;
+
+        // Emit progress event after each parallel chunk
+        emitter.emit("vllora_data_generation_progress", {
+          datasetId: dataset_id,
+          status: "progress",
+          total: count,
+          completed: totalGenerated,
+          currentBatch: completedBatches,
+          totalBatches,
+        });
+
+        // If no records generated at all after first chunk, throw
+        if (chunkStart === 0 && totalGenerated === 0) {
+          throw new Error("Failed to generate any records in first batch");
         }
       }
     }

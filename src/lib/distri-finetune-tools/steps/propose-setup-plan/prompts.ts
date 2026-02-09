@@ -3,20 +3,39 @@
  */
 
 export const PLAN_GENERATION_SYSTEM = `You are an expert at designing fine-tuning workflows for LLMs.
-Your task is to create a comprehensive setup plan based on the training objective and available knowledge sources.
+Your task is to create a setup plan based on the training objective and available knowledge sources.
 
-Rules:
-- Create a balanced topic hierarchy based on the objective and knowledge
-- CRITICAL: Topic names MUST be SHORT and CONCISE (2-4 words max, like "FEN Analysis", "Opening Theory", "Tactical Patterns")
-- Put detailed explanations in the description field, NOT in the name
-- Topics should be specific enough to generate focused training data
-- Aim for 4-8 top-level topics with 2-4 subtopics each where appropriate
-- IMPORTANT: Each top-level topic should have target_count of 30-50 examples minimum
-- IMPORTANT: Each subtopic should have target_count of 15-25 examples minimum
-- High-quality fine-tuning requires substantial training data (100+ examples total)
-- Grader criteria should be specific to the domain
-- Be realistic about what can be achieved with the available knowledge
-- Output MUST be valid JSON matching the schema`;
+## ABSOLUTE REQUIREMENTS
+
+1. **DEFAULT STRUCTURE: 2-LEVEL HIERARCHY WITH 5 LEAF TOPICS**
+   - Create 2-3 parent categories (target_count = 0)
+   - Distribute exactly 5 leaf subtopics across parents
+   - Each leaf subtopic gets target_count = 30 (default)
+   - Total: 5 leaf topics × 30 records = 150 records
+
+2. **TOPIC NAMING**
+   - Names MUST be SHORT: 2-4 words max
+   - Examples: "FEN Analysis", "Opening Theory", "Tactical Patterns"
+   - Put details in description field, NOT in name
+
+3. **STRUCTURE RULES**
+   - Parent topics: target_count = 0 (records go to children)
+   - Leaf subtopics: target_count = 30 each
+   - Total leaf count: exactly 5
+
+4. **OUTPUT**
+   - Valid JSON matching the schema
+   - Grader criteria specific to the domain
+
+Example output structure for chess tutoring:
+- Category: "Game Analysis" (target_count: 0)
+  - Subtopic: "Opening Moves" (target_count: 30)
+  - Subtopic: "Midgame Strategy" (target_count: 30)
+- Category: "Tactical Skills" (target_count: 0)
+  - Subtopic: "Basic Tactics" (target_count: 30)
+  - Subtopic: "Advanced Patterns" (target_count: 30)
+  - Subtopic: "Endgame Techniques" (target_count: 30)
+Total: 5 leaf topics, 150 records`;
 
 export const PLAN_GENERATION_USER = `Create a setup plan for fine-tuning a model.
 
@@ -25,43 +44,33 @@ Training Objective:
 
 {{knowledge_section}}
 
-Create a comprehensive plan including:
-1. Topic hierarchy (organized categories for training data)
-2. Data generation strategy (how many examples per topic)
-3. Evaluation criteria (how to grade model responses)
+## REQUIREMENTS (FOLLOW EXACTLY)
 
-IMPORTANT: Each topic should have at least 30-50 examples. Subtopics should have at least 15-25 examples each.
-High-quality fine-tuning requires substantial training data.
+1. Create exactly 5 LEAF topics (where records are assigned)
+2. Organize in 2-LEVEL hierarchy: 2-3 parent categories with subtopics
+3. Parent categories: target_count = 0
+4. Each leaf subtopic: target_count = 30
+5. Total: 5 leaves × 30 = 150 records
 
-Target seed count: {{seed_count}} initial examples
-
-Output Format:
+Output JSON:
 {
   "proposed_topics": [
     {
-      "name": "Short Name",
-      "description": "Detailed description of what this topic covers and what kind of training examples it includes",
-      "target_count": 40,
+      "name": "Category Name",
+      "description": "What this category covers",
+      "target_count": 0,
       "subtopics": [
-        {
-          "name": "Brief Label",
-          "description": "Detailed subtopic description",
-          "target_count": 20
-        }
+        { "name": "Leaf Topic", "description": "Details", "target_count": 30 }
       ]
     }
   ],
   "grader_criteria": [
-    {
-      "name": "Criterion Name",
-      "description": "What this evaluates",
-      "weight": 0.3
-    }
+    { "name": "Criterion", "description": "What it evaluates", "weight": 0.3 }
   ],
-  "strategy_notes": "Brief explanation of the approach"
+  "strategy_notes": "Brief approach"
 }
 
-Example topic names (2-4 words): "FEN Analysis", "Move Selection", "Opening Theory", "Tactical Patterns", "Endgame Techniques", "Beginner Level", "Advanced Concepts"`;
+Remember: EXACTLY 5 leaf subtopics total, each with target_count: 30.`;
 
 export const PLAN_RESPONSE_SCHEMA = {
   type: 'json_schema',

@@ -74,6 +74,7 @@ export { regenerateReadmeHandler, regenerateReadmeTool } from './regenerate-read
 
 // Guided Onboarding (Setup Plan)
 export { proposeSetupPlanHandler, proposeSetupPlanTool, type SetupPlan } from './propose-setup-plan';
+export { adjustSetupPlanHandler, adjustSetupPlanTool } from './propose-setup-plan';
 export {
   executeSetupPlanHandler,
   executeSetupPlanTool,
@@ -135,7 +136,7 @@ import { getDatasetRecordsHandler, getDatasetRecordsTool } from './get-dataset-r
 import { getDatasetStatsHandler, getDatasetStatsTool } from './get-dataset-stats';
 import { updateRecordHandler, updateRecordTool } from './update-record';
 import { regenerateReadmeHandler, regenerateReadmeTool } from './regenerate-readme';
-import { proposeSetupPlanHandler, proposeSetupPlanTool } from './propose-setup-plan';
+import { proposeSetupPlanHandler, proposeSetupPlanTool, adjustSetupPlanHandler, adjustSetupPlanTool } from './propose-setup-plan';
 import { executeSetupPlanHandler, executeSetupPlanTool } from './execute-setup-plan';
 // Note: Stockfish tools (analyzeChessPositionTool, classifyChessMoveTool) are NOT imported here
 // They are conditionally added via stockfishTools in useFineTuneAgentChat for chess datasets only
@@ -173,6 +174,7 @@ export const STEP_TOOL_NAMES = [
   'update_record',
   'regenerate_readme',
   'propose_setup_plan',
+  'adjust_setup_plan',
   'execute_setup_plan',
   // Note: Stockfish tools ('analyze_chess_position', 'classify_chess_move') are NOT in this list
   // They are conditionally available for chess datasets only via stockfishTools export
@@ -213,6 +215,7 @@ export const stepTools: DistriFnTool[] = [
   updateRecordTool,
   regenerateReadmeTool,
   proposeSetupPlanTool,
+  adjustSetupPlanTool,
   executeSetupPlanTool,
   // Note: Stockfish tools are NOT included here - they are conditionally added
   // via stockfishTools in useFineTuneAgentChat for chess datasets only
@@ -247,6 +250,7 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   update_record: updateRecordHandler,
   regenerate_readme: regenerateReadmeHandler,
   propose_setup_plan: proposeSetupPlanHandler,
+  adjust_setup_plan: adjustSetupPlanHandler,
   execute_setup_plan: executeSetupPlanHandler,
   // Note: Stockfish handlers are in stockfishToolHandlers export, not here
 };

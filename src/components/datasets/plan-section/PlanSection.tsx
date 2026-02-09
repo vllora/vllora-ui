@@ -15,6 +15,7 @@ import { SetupPlanEditor, planToMarkdown } from "./SetupPlanEditor";
 import { ExecutionProgressCard } from "./ExecutionProgressCard";
 import { PlanEmptyState } from "./PlanEmptyState";
 import { PlanLoadingState } from "./PlanLoadingState";
+import { PlanCompletedState } from "./PlanCompletedState";
 import type { SetupPlan } from "@/lib/distri-finetune-tools/steps/propose-setup-plan";
 import LazyMarkdownRenderer from "@/components/chat/LazyMarkdownRenderer";
 import type { ExecutionProgress } from "@/lib/distri-finetune-tools/steps/execute-setup-plan";
@@ -37,19 +38,26 @@ export function PlanSection({
   const [proposedPlan, setProposedPlan] = useState<SetupPlan | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionProgress, setExecutionProgress] = useState<ExecutionProgress | null>(null);
+  // Track the last executed plan to show as read-only after completion
+  const [executedPlan, setExecutedPlan] = useState<SetupPlan | null>(null);
+  const [showExecutedPlan, setShowExecutedPlan] = useState(false);
 
   // On mount, check if there's an active execution in progress
   // This handles the case where user switches to Plan tab after execution started
   useEffect(() => {
     const currentExecution = getCurrentExecution(datasetId);
+    const executingPlan = getExecutingPlan(datasetId);
+
     if (currentExecution && !currentExecution.is_complete) {
       setExecutionProgress(currentExecution);
       setIsExecuting(true);
-      // Also get the plan being executed so we can display it
-      const executingPlan = getExecutingPlan(datasetId);
       if (executingPlan) {
         setProposedPlan(executingPlan);
       }
+    } else if (executingPlan) {
+      // Execution completed but we have the plan - show it as read-only
+      setExecutedPlan(executingPlan);
+      setShowExecutedPlan(true);
     }
   }, [datasetId]);
 
@@ -109,11 +117,16 @@ export function PlanSection({
           setIsExecuting(true);
         }
         if (progress.is_complete) {
-          // Keep showing progress for 2 seconds then clear
+          // Keep showing progress briefly, then transition to showing executed plan
           setTimeout(() => {
             setIsExecuting(false);
-            setProposedPlan(null);
             setExecutionProgress(null);
+            // Save the plan as executed plan to show in read-only mode
+            if (proposedPlan) {
+              setExecutedPlan(proposedPlan);
+              setShowExecutedPlan(true);
+            }
+            setProposedPlan(null);
           }, 2000);
         }
       }

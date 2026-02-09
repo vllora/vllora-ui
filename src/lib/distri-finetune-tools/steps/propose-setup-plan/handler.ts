@@ -103,11 +103,15 @@ export const proposeSetupPlanHandler: ToolHandler = async (
     // Call LLM to generate plan
     const llmResult = await callLLMForPlan(objective, seed_count, knowledgeContext);
 
-    // Count total topics
-    let totalTopicCount = llmResult.proposed_topics.length;
+    // Count leaf topics only (topics that will have records assigned)
+    // If a topic has subtopics, count only the subtopics (not the parent)
+    // If a topic has no subtopics, count it as a leaf
+    let totalTopicCount = 0;
     for (const topic of llmResult.proposed_topics) {
-      if (topic.subtopics) {
+      if (topic.subtopics && topic.subtopics.length > 0) {
         totalTopicCount += topic.subtopics.length;
+      } else {
+        totalTopicCount += 1;
       }
     }
 

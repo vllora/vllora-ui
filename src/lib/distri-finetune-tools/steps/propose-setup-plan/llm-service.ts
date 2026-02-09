@@ -73,7 +73,10 @@ export async function callLLMForPlan(
         throw new Error('LLM returned empty response');
       }
 
-      return JSON.parse(response.content.trim());
+      const parsed = JSON.parse(response.content.trim()) as LLMPlanResult;
+
+      // Validate and fix to ensure exactly 5 leaf topics with 30 records each
+      return validateAndFixInitialPlan(parsed);
     } catch (err) {
       lastError = err;
       if (attempt < 2) {
@@ -84,4 +87,125 @@ export async function callLLMForPlan(
   }
 
   throw lastError instanceof Error ? lastError : new Error('LLM call failed');
+}
+
+/**
+ * Validate and fix the initial plan to ensure exactly 5 leaf topics.
+ * LLMs often ignore exact instructions, so we enforce them here.
+ */
+function validateAndFixInitialPlan(result: LLMPlanResult): LLMPlanResult {
+  const DEFAULT_LEAF_COUNT = 5;
+  const DEFAULT_RECORD_COUNT = 30;
+
+  // Count current leaf topics
+  const countLeafs = (topics: ProposedTopic[]): number => {
+    return topics.reduce((acc, t) => {
+      if (t.subtopics && t.subtopics.length > 0) {
+        return acc + t.subtopics.length;
+      }
+      return acc + 1;
+    }, 0);
+  };
+
+  const currentLeafCount = countLeafs(result.proposed_topics);
+
+  if (currentLeafCount === DEFAULT_LEAF_COUNT) {
+    // Correct count, just ensure record counts are right
+    return {
+      ...result,
+      proposed_topics: setRecordCounts(result.proposed_topics, DEFAULT_RECORD_COUNT),
+    };
+  }
+
+  console.log(`[llm-service] Fixing initial plan: LLM returned ${currentLeafCount} leaf topics, required ${DEFAULT_LEAF_COUNT}`);
+
+  // Collect all leaf topics
+  const allLeafs: { name: string; description: string }[] = [];
+  for (const t of result.proposed_topics) {
+    if (t.subtopics && t.subtopics.length > 0) {
+      for (const sub of t.subtopics) {
+        allLeafs.push({ name: sub.name, description: sub.description });
+      }
+    } else {
+      allLeafs.push({ name: t.name, description: t.description });
+    }
+  }
+
+  // Adjust leaf count to exactly 5
+  let adjustedLeafs = [...allLeafs];
+  if (adjustedLeafs.length > DEFAULT_LEAF_COUNT) {
+    adjustedLeafs = adjustedLeafs.slice(0, DEFAULT_LEAF_COUNT);
+  } else if (adjustedLeafs.length < DEFAULT_LEAF_COUNT) {
+    let counter = adjustedLeafs.length + 1;
+    while (adjustedLeafs.length < DEFAULT_LEAF_COUNT) {
+      const source = allLeafs[adjustedLeafs.length % Math.max(1, allLeafs.length)];
+      adjustedLeafs.push({
+        name: source ? `${source.name} ${counter}` : `Topic ${counter}`,
+        description: source?.description || 'Training topic',
+      });
+      counter++;
+    }
+  }
+
+  // Distribute into 2 parent categories
+  const midpoint = Math.ceil(adjustedLeafs.length / 2);
+  const category1Leafs = adjustedLeafs.slice(0, midpoint);
+  const category2Leafs = adjustedLeafs.slice(midpoint);
+
+  // Use existing category names if available
+  const cat1Name = result.proposed_topics[0]?.name || 'Category 1';
+  const cat1Desc = result.proposed_topics[0]?.description || 'Training category';
+  const cat2Name = result.proposed_topics[1]?.name || 'Category 2';
+  const cat2Desc = result.proposed_topics[1]?.description || 'Training category';
+
+  const fixedTopics: ProposedTopic[] = [
+    {
+      name: cat1Name,
+      description: cat1Desc,
+      target_count: 0,
+      subtopics: category1Leafs.map((l) => ({
+        name: l.name,
+        description: l.description,
+        target_count: DEFAULT_RECORD_COUNT,
+      })),
+    },
+    {
+      name: cat2Name,
+      description: cat2Desc,
+      target_count: 0,
+      subtopics: category2Leafs.map((l) => ({
+        name: l.name,
+        description: l.description,
+        target_count: DEFAULT_RECORD_COUNT,
+      })),
+    },
+  ];
+
+  return {
+    ...result,
+    proposed_topics: fixedTopics,
+  };
+}
+
+/**
+ * Set record count on all leaf topics
+ */
+function setRecordCounts(topics: ProposedTopic[], recordCount: number): ProposedTopic[] {
+  return topics.map((t) => {
+    if (t.subtopics && t.subtopics.length > 0) {
+      return {
+        ...t,
+        target_count: 0,
+        subtopics: t.subtopics.map((sub) => ({
+          ...sub,
+          target_count: recordCount,
+        })),
+      };
+    } else {
+      return {
+        ...t,
+        target_count: recordCount,
+      };
+    }
+  });
 }
