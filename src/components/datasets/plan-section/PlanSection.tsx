@@ -15,7 +15,7 @@ import { SetupPlanEditor, planToMarkdown } from "./SetupPlanEditor";
 import { ExecutionProgressCard } from "./ExecutionProgressCard";
 import { PlanEmptyState } from "./PlanEmptyState";
 import { PlanLoadingState } from "./PlanLoadingState";
-import { PlanCompletedState } from "./PlanCompletedState";
+import { PlanExecutedView } from "./PlanExecutedView";
 import type { SetupPlan } from "@/lib/distri-finetune-tools/steps/propose-setup-plan";
 import LazyMarkdownRenderer from "@/components/chat/LazyMarkdownRenderer";
 import type { ExecutionProgress } from "@/lib/distri-finetune-tools/steps/execute-setup-plan";
@@ -74,6 +74,9 @@ export function PlanSection({
         setProposedPlan(plan as SetupPlan);
         setIsExecuting(false);
         setExecutionProgress(null);
+        // Clear executed plan when new plan is proposed
+        setShowExecutedPlan(false);
+        setExecutedPlan(null);
       }
     };
 
@@ -210,6 +213,20 @@ export function PlanSection({
           onDismiss={handleDismiss}
         />
       </div>
+    );
+  }
+
+  // Show executed plan in read-only mode after completion
+  if (showExecutedPlan && executedPlan) {
+    return (
+      <PlanExecutedView
+        plan={executedPlan}
+        onClear={() => {
+          setShowExecutedPlan(false);
+          setExecutedPlan(null);
+        }}
+        className={className}
+      />
     );
   }
 

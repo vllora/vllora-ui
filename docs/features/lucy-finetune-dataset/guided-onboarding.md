@@ -321,7 +321,7 @@ This is achieved by:
 
 ### SetupPlanEditor (Right Panel)
 
-Located at: `/ui/src/components/datasets/lucy-plan-card/SetupPlanEditor.tsx`
+Located at: `/ui/src/components/datasets/plan-section/SetupPlanEditor.tsx`
 
 The primary component for viewing and editing setup plans. Displayed in the main content area (right panel) when a plan is proposed. Features:
 - **Markdown view** - Plan rendered as readable markdown
@@ -345,7 +345,7 @@ The editor converts the SetupPlan to markdown for editing and parses changes bac
 
 ### SetupPlanCard (Legacy/Compact)
 
-Located at: `/ui/src/components/datasets/lucy-plan-card/SetupPlanCard.tsx`
+Located at: `/ui/src/components/datasets/plan-section/SetupPlanCard.tsx`
 
 Compact card version with expandable sections (used as fallback or in constrained spaces):
 - **Knowledge Sources** - Documents analyzed
@@ -362,9 +362,27 @@ interface SetupPlanCardProps {
 }
 ```
 
+### PlanExecutedView
+
+Located at: `/ui/src/components/datasets/plan-section/PlanExecutedView.tsx`
+
+Read-only view of a successfully executed setup plan:
+- Shows plan markdown with success badge
+- Green header with "Plan Executed Successfully" indicator
+- "Clear" button to dismiss the view
+
+**Props:**
+```typescript
+interface PlanExecutedViewProps {
+  plan: SetupPlan;
+  onClear: () => void;
+  className?: string;
+}
+```
+
 ### ExecutionProgressCard
 
-Located at: `/ui/src/components/datasets/lucy-plan-card/ExecutionProgressCard.tsx`
+Located at: `/ui/src/components/datasets/plan-section/ExecutionProgressCard.tsx`
 
 Shows real-time execution progress:
 - Step-by-step status (pending, running, completed, failed)
@@ -564,6 +582,7 @@ Also has access to both tools for delegated execution scenarios.
 | SetupPlanEditor | `/ui/src/components/datasets/plan-section/SetupPlanEditor.tsx` |
 | SetupPlanCard | `/ui/src/components/datasets/plan-section/SetupPlanCard.tsx` |
 | ExecutionProgressCard | `/ui/src/components/datasets/plan-section/ExecutionProgressCard.tsx` |
+| PlanExecutedView | `/ui/src/components/datasets/plan-section/PlanExecutedView.tsx` |
 | ReadmeWithPlan | `/ui/src/components/datasets/ReadmeWithPlan.tsx` |
 | SectionTabs | `/ui/src/components/datasets/dataset-detail-header/SectionTabs.tsx` |
 | Tool Renderers | `/ui/src/components/agent/lucy-agent/LucySetupPlanRenderer.tsx` |
@@ -576,6 +595,41 @@ Also has access to both tools for delegated execution scenarios.
 | Event Emitter | `/ui/src/utils/eventEmitter.ts` |
 | Orchestrator Agent | `/gateway/agents/finetune/vllora-finetune-agent.md` |
 | Workflow Agent | `/gateway/agents/finetune/finetune-workflow-agent.md` |
+
+## Recent Improvements
+
+### Default Plan Structure (5 Leaf Topics)
+
+Initial plans now default to a **2-level hierarchy with exactly 5 leaf topics**:
+- 2-3 parent categories (target_count = 0)
+- 5 leaf subtopics distributed across parents (target_count = 30 each)
+- Total: 150 records by default
+
+The LLM prompt enforces this structure, and `llm-service.ts` includes a `validateAndFixInitialPlan()` function that programmatically ensures exactly 5 leaf topics even if the LLM deviates.
+
+### Parallel Data Generation
+
+Data generation now uses **3 parallel LLM requests** for faster processing:
+- Batch size: 10 records per request
+- Parallel requests: 3 concurrent batches
+- ~3x speedup compared to sequential generation
+
+See `generate-initial-data.ts` for the implementation using `Promise.all()`.
+
+### LLM-as-Judge Evaluator
+
+The evaluator configuration step now uses the pre-generated `template_preview` from the plan:
+- `grader-template.ts` generates a full LLM-as-judge evaluator during plan creation
+- `execute-setup-plan.ts` uses `plan.grader_config.template_preview` directly
+- No more placeholder scripts with `[object Object]` issues
+
+### Executed Plan Read-Only View
+
+After plan execution completes, the Plan tab shows a read-only view:
+- `PlanExecutedView` component displays the executed plan markdown
+- Green "Plan Executed Successfully" badge in header
+- "Clear" button to dismiss and return to empty state
+- Persists across tab switches via `execution-state-store.ts`
 
 ## Troubleshooting
 
