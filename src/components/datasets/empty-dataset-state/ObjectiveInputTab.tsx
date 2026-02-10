@@ -8,13 +8,14 @@
  * Now supports file uploads for knowledge sources.
  */
 
-import { useState, useCallback } from "react";
-import { Sparkles, ArrowRight, Loader2, FlaskConical, Upload, X, FileText } from "lucide-react";
+import { useCallback } from "react";
+import { Sparkles, ArrowRight, Loader2, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   OBJECTIVE_SUGGESTIONS,
   type ObjectiveSuggestion,
 } from "../constants/objective-suggestions";
+import { useKnowledgeSourcesUpload, DragOverlay, FileList, AddDocsButton } from "./KnowledgeSourcesUpload";
 
 interface ObjectiveInputTabProps {
   objective: string;
@@ -33,47 +34,21 @@ export function ObjectiveInputTab({
   isLoading = false,
   isLoadingSample = false,
 }: ObjectiveInputTabProps) {
-  const [files, setFiles] = useState<File[]>([]);
-  const [isDragOver, setIsDragOver] = useState(false);
+  const {
+    files,
+    isDragOver,
+    handleDrop,
+    handleDragOver,
+    handleDragLeave,
+    handleFileInput,
+    removeFile,
+  } = useKnowledgeSourcesUpload();
 
   const handleSuggestionClick = (suggestion: ObjectiveSuggestion) => {
     onObjectiveChange(suggestion.description);
   };
 
   const hasContent = objective.trim().length > 0;
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    const droppedFiles = Array.from(e.dataTransfer.files).filter(
-      (f) => f.type === "application/pdf" || f.type === "text/plain" || f.name.endsWith(".md")
-    );
-    if (droppedFiles.length > 0) {
-      setFiles((prev) => [...prev, ...droppedFiles]);
-    }
-  }, []);
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-  }, []);
-
-  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = Array.from(e.target.files || []);
-    if (selectedFiles.length > 0) {
-      setFiles((prev) => [...prev, ...selectedFiles]);
-    }
-    e.target.value = "";
-  }, []);
-
-  const removeFile = useCallback((index: number) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
-  }, []);
 
   const handleStart = useCallback(() => {
     onStartFinetune(files.length > 0 ? files : undefined);
@@ -88,7 +63,7 @@ export function ObjectiveInputTab({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
       >
-        <div className="rounded-2xl bg-card/95 backdrop-blur-md overflow-hidden">
+        <div className="rounded-2xl bg-card/95 backdrop-blur-md overflow-hidden relative">
           {/* Input Area */}
           <div className="relative">
             {/* Sparkle Icon with subtle animation */}
@@ -108,61 +83,21 @@ export function ObjectiveInputTab({
               className="w-full min-h-[28vh] bg-transparent border-0 border-none outline-none pl-14 pr-6 pt-5 pb-6 text-foreground placeholder:text-muted-foreground/60 resize-none focus:outline-none focus:ring-0 focus:border-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none text-[15px] leading-relaxed"
             />
 
-            {/* Drag overlay */}
-            {isDragOver && (
-              <div className="absolute inset-0 bg-[rgba(var(--theme-500),0.1)] flex items-center justify-center pointer-events-none">
-                <div className="flex items-center gap-2 text-[rgb(var(--theme-500))] font-medium">
-                  <Upload className="w-5 h-5" />
-                  Drop files here
-                </div>
-              </div>
-            )}
-
             {/* Subtle gradient overlay at bottom for depth */}
             <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-card/80 to-transparent pointer-events-none" />
           </div>
 
+          {/* Drag overlay */}
+          {isDragOver && <DragOverlay />}
+
           {/* File upload area - shown below textarea */}
-          {files.length > 0 && (
-            <div className="px-5 py-3 border-t border-border/30 bg-muted/10">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-muted-foreground">Knowledge sources:</span>
-                {files.map((file, index) => (
-                  <div
-                    key={`${file.name}-${index}`}
-                    className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-[rgba(var(--theme-500),0.1)] border border-[rgba(var(--theme-500),0.2)] text-xs"
-                  >
-                    <FileText className="w-3 h-3 text-[rgb(var(--theme-500))]" />
-                    <span className="max-w-[150px] truncate">{file.name}</span>
-                    <button
-                      onClick={() => removeFile(index)}
-                      className="ml-1 text-muted-foreground hover:text-foreground"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <FileList files={files} onRemove={removeFile} />
 
           {/* Footer */}
           <div className="flex items-center justify-between px-5 py-4 border-t border-border/30 bg-muted/20">
             {/* Left side: file upload button + hint */}
             <div className="flex items-center gap-3">
-              <label className="cursor-pointer">
-                <input
-                  type="file"
-                  multiple
-                  accept=".pdf,.txt,.md"
-                  onChange={handleFileInput}
-                  className="hidden"
-                />
-                <span className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-                  <Upload className="w-3.5 h-3.5" />
-                  Add docs
-                </span>
-              </label>
+              <AddDocsButton onFileInput={handleFileInput} />
               <span className="text-xs text-muted-foreground/40">|</span>
               <span className="text-xs text-muted-foreground/60">
                 {hasContent ? (

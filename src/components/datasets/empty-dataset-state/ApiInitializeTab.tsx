@@ -3,6 +3,7 @@
  *
  * Tab content for initializing dataset via API.
  * Features curl command on left, live trace feed on right.
+ * Now supports file uploads for knowledge sources.
  */
 
 import { useState, useEffect, useRef } from "react";
@@ -15,6 +16,7 @@ import { LiveTraceFeed, type Trace } from "./LiveTraceFeed";
 import { CollapsibleCurlCommand } from "./CollapsibleCurlCommand";
 import { inferObjectiveFromTraces } from "./infer-objective";
 import * as datasetsDB from "@/services/datasets-db";
+import { useKnowledgeSourcesUpload, DragOverlay, FileList, AddDocsButton } from "./KnowledgeSourcesUpload";
 
 export const CHESS_TUTOR_INIT_PART_1= "You are an expert chess tutor helping a student improve their chess skills. Your role is to:"
 export const CHESS_TUTOR_INIT_PART_2 = `You are an expert chess tutor helping a student improve their chess skills. Your role is to:
@@ -75,6 +77,16 @@ export function ApiInitializeTab({ hasBackendSpans, traces }: ApiInitializeTabPr
   const [datasetObjective, setDatasetObjective] = useState("");
   const [isInferring, setIsInferring] = useState(false);
   const hasAutoInferred = useRef(false);
+
+  const {
+    files,
+    isDragOver,
+    handleDrop,
+    handleDragOver,
+    handleDragLeave,
+    handleFileInput,
+    removeFile,
+  } = useKnowledgeSourcesUpload();
 
   const handleInferObjective = async () => {
     if (traces.length === 0) return;
@@ -151,8 +163,13 @@ export function ApiInitializeTab({ hasBackendSpans, traces }: ApiInitializeTabPr
       {/* Top Row: Dataset Objective + Live Trace Feed - grows to fill space */}
       <div className="flex-1 flex gap-4 min-h-0 h-[calc(100%-100px)]">
         {/* Left: Dataset Objective - with gradient border effect */}
-        <div className="group flex-1 relative rounded-2xl p-[1px] bg-gradient-to-b from-border/80 via-border/40 to-border/80 hover:from-[rgba(var(--theme-500),0.3)] hover:via-border/40 hover:to-[rgba(var(--theme-500),0.3)] transition-all duration-500">
-          <div className="h-full rounded-2xl bg-card/95 backdrop-blur-md overflow-hidden flex flex-col">
+        <div
+          className={`group flex-1 relative rounded-2xl p-[1px] bg-gradient-to-b from-border/80 via-border/40 to-border/80 hover:from-[rgba(var(--theme-500),0.3)] hover:via-border/40 hover:to-[rgba(var(--theme-500),0.3)] transition-all duration-500 ${isDragOver ? "from-[rgba(var(--theme-500),0.5)] via-[rgba(var(--theme-500),0.3)] to-[rgba(var(--theme-500),0.5)]" : ""}`}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+        >
+          <div className="h-full rounded-2xl bg-card/95 backdrop-blur-md overflow-hidden flex flex-col relative">
             {/* Header */}
             <div className="flex items-center justify-between px-5 pt-4 pb-2 shrink-0">
               <label className="flex items-center gap-2.5 text-sm font-medium">
@@ -194,17 +211,28 @@ export function ApiInitializeTab({ hasBackendSpans, traces }: ApiInitializeTabPr
               <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-card/80 to-transparent pointer-events-none" />
             </div>
 
+            {/* Drag overlay */}
+            {isDragOver && <DragOverlay />}
+
+            {/* File upload area - shown when files exist */}
+            <FileList files={files} onRemove={removeFile} className="shrink-0" />
+
             {/* Footer */}
             <div className="flex items-center justify-between px-5 py-4 border-t border-border/30 bg-muted/20 shrink-0">
-              <span className="text-xs text-muted-foreground/60">
-                {hasContent ? (
-                  <span className="text-muted-foreground/80">
-                    {datasetObjective.length} characters
-                  </span>
-                ) : (
-                  "Guides data generation and evaluation"
-                )}
-              </span>
+              {/* Left side: file upload button + hint */}
+              <div className="flex items-center gap-3">
+                <AddDocsButton onFileInput={handleFileInput} />
+                <span className="text-xs text-muted-foreground/40">|</span>
+                <span className="text-xs text-muted-foreground/60">
+                  {hasContent ? (
+                    <span className="text-muted-foreground/80">
+                      {datasetObjective.length} characters
+                    </span>
+                  ) : (
+                    "Guides data generation and evaluation"
+                  )}
+                </span>
+              </div>
 
               {/* Start Button - shown when traces exist */}
               {traces.length > 0 && (
