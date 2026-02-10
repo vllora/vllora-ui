@@ -3,12 +3,13 @@
  *
  * Displays the auto-generated README for a dataset with options to
  * export as markdown file or copy to clipboard.
+ *
+ * Styled to match the Plan tab aesthetic.
  */
 
 import { memo, useCallback, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, Copy, Check, RefreshCw, FileText } from 'lucide-react';
+import { Download, Copy, Check, RefreshCw, FileText, Sparkles } from 'lucide-react';
 import LazyMarkdownRenderer from '@/components/chat/LazyMarkdownRenderer';
 import { cn } from '@/lib/utils';
 
@@ -66,81 +67,111 @@ export const DatasetReadmeViewer = memo(function DatasetReadmeViewer({
       })
     : null;
 
+  // Empty state - matches Plan tab empty state style
   if (!readme) {
     return (
-      <Card className={cn('flex flex-col items-center justify-center py-12', className)}>
-        <FileText className="w-12 h-12 text-muted-foreground/50 mb-4" />
-        <p className="text-muted-foreground text-center mb-4">
-          No README generated yet.
-          <br />
-          <span className="text-sm">
-            Add records or configure your dataset to generate a README.
-          </span>
-        </p>
-        <Button variant="outline" onClick={handleRegenerate} disabled={isRegenerating}>
-          {isRegenerating ? (
-            <>
-              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-              Generating...
-            </>
-          ) : (
-            <>
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Generate README
-            </>
-          )}
-        </Button>
-      </Card>
+      <div className={cn('flex-1 flex flex-col items-center justify-center p-8', className)}>
+        <div className="flex flex-col items-center gap-6 max-w-md text-center">
+          {/* Icon with gradient background */}
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[rgb(var(--theme-500))]/15 to-[rgb(var(--theme-500))]/5 flex items-center justify-center">
+            <FileText className="w-6 h-6 text-[rgb(var(--theme-500))]" />
+          </div>
+
+          {/* Copy */}
+          <div className="space-y-2">
+            <h3 className="text-lg font-medium text-foreground">
+              Dataset README
+            </h3>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              No README generated yet. Add records or configure your dataset
+              to automatically generate documentation.
+            </p>
+          </div>
+
+          {/* CTA */}
+          <Button
+            onClick={handleRegenerate}
+            disabled={isRegenerating}
+            className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
+          >
+            {isRegenerating ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                Generate README
+              </>
+            )}
+          </Button>
+
+          {/* Helper text */}
+          <p className="text-xs text-muted-foreground">
+            README is auto-updated as you add data and configure your dataset
+          </p>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Card className={cn('flex flex-col h-full', className)}>
-      <CardHeader className="flex-shrink-0 pb-3 border-b">
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="text-lg">Dataset README</CardTitle>
-            {formattedDate && (
-              <p className="text-xs text-muted-foreground mt-1">
-                Last updated: {formattedDate}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleRegenerate}
-              disabled={isRegenerating}
-              className="h-8"
-            >
-              {isRegenerating ? (
-                <RefreshCw className="w-4 h-4 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4" />
-              )}
-              <span className="ml-2 hidden sm:inline">Refresh</span>
-            </Button>
-            <Button variant="ghost" size="sm" onClick={handleCopy} className="h-8">
-              {copied ? (
-                <Check className="w-4 h-4 text-green-500" />
-              ) : (
-                <Copy className="w-4 h-4" />
-              )}
-              <span className="ml-2 hidden sm:inline">{copied ? 'Copied!' : 'Copy'}</span>
-            </Button>
-            <Button variant="outline" size="sm" onClick={onExport} className="h-8">
-              <Download className="w-4 h-4" />
-              <span className="ml-2 hidden sm:inline">Export</span>
-            </Button>
-          </div>
+    <div className={cn('flex flex-col h-full', className)}>
+      {/* Minimal header - matches Plan tab style */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border/50">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <FileText className="w-4 h-4 text-[rgb(var(--theme-500))]" />
+          <span className="text-xs font-medium">README</span>
+          {formattedDate && (
+            <span className="text-xs text-muted-foreground/60">
+              · Updated {formattedDate}
+            </span>
+          )}
         </div>
-      </CardHeader>
-      <CardContent className="flex-1 overflow-auto p-4">
-        <div className="text-sm [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_table]:text-xs [&_p]:text-sm [&_li]:text-sm [&_blockquote]:text-sm">
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleRegenerate}
+            disabled={isRegenerating}
+            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+          >
+            {isRegenerating ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="w-3.5 h-3.5" />
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleCopy}
+            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+          >
+            {copied ? (
+              <Check className="w-3.5 h-3.5 text-green-500" />
+            ) : (
+              <Copy className="w-3.5 h-3.5" />
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onExport}
+            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <Download className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Content - matches Plan tab markdown styling */}
+      <div className="flex-1 overflow-auto">
+        <div className="p-4 text-sm [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_table]:text-xs [&_p]:text-sm [&_li]:text-sm [&_blockquote]:text-sm">
           <LazyMarkdownRenderer content={readme} />
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 });

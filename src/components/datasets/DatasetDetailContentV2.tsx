@@ -489,7 +489,7 @@ export function DatasetDetailContentV2() {
             />
           )}
           {activeSection === "readme" && (
-            <div className="flex-1 overflow-hidden p-4">
+            <div className="flex-1 overflow-hidden">
               <ReadmeWithPlan
                 datasetId={datasetId}
                 readme={readme}
