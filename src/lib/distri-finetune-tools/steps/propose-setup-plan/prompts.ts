@@ -5,7 +5,20 @@
 export const PLAN_GENERATION_SYSTEM = `You are an expert at designing fine-tuning workflows for LLMs.
 Your task is to create a setup plan based on the training objective and available knowledge sources.
 
-## ABSOLUTE REQUIREMENTS
+## TOPIC GENERATION RULES
+
+**IF knowledge sources ARE provided:**
+- **ALWAYS** base your topics on the ACTUAL CONTENT from the documents
+- Use the extracted topics and document sections as your primary guide
+- DO NOT generate generic topics - they must reflect what's in the documents
+- Match the terminology, concepts, and sections found in the documents
+
+**IF NO knowledge sources are provided:**
+- Generate topics based on the training objective
+- Create practical, actionable topic categories that support the training goal
+- Topics should cover the key aspects of what the model needs to learn
+
+## STRUCTURE REQUIREMENTS
 
 1. **DEFAULT STRUCTURE: 2-LEVEL HIERARCHY WITH 5 LEAF TOPICS**
    - Create 2-3 parent categories (target_count = 0)
@@ -15,7 +28,6 @@ Your task is to create a setup plan based on the training objective and availabl
 
 2. **TOPIC NAMING**
    - Names MUST be SHORT: 2-4 words max
-   - Examples: "FEN Analysis", "Opening Theory", "Tactical Patterns"
    - Put details in description field, NOT in name
 
 3. **STRUCTURE RULES**
@@ -25,17 +37,7 @@ Your task is to create a setup plan based on the training objective and availabl
 
 4. **OUTPUT**
    - Valid JSON matching the schema
-   - Grader criteria specific to the domain
-
-Example output structure for chess tutoring:
-- Category: "Game Analysis" (target_count: 0)
-  - Subtopic: "Opening Moves" (target_count: 30)
-  - Subtopic: "Midgame Strategy" (target_count: 30)
-- Category: "Tactical Skills" (target_count: 0)
-  - Subtopic: "Basic Tactics" (target_count: 30)
-  - Subtopic: "Advanced Patterns" (target_count: 30)
-  - Subtopic: "Endgame Techniques" (target_count: 30)
-Total: 5 leaf topics, 150 records`;
+   - Grader criteria specific to the domain`;
 
 export const PLAN_GENERATION_USER = `Create a setup plan for fine-tuning a model.
 
@@ -44,7 +46,7 @@ Training Objective:
 
 {{knowledge_section}}
 
-## REQUIREMENTS (FOLLOW EXACTLY)
+## STRUCTURE REQUIREMENTS (FOLLOW EXACTLY)
 
 1. Create exactly 5 LEAF topics (where records are assigned)
 2. Organize in 2-LEVEL hierarchy: 2-3 parent categories with subtopics
@@ -60,17 +62,17 @@ Output JSON:
       "description": "What this category covers",
       "target_count": 0,
       "subtopics": [
-        { "name": "Leaf Topic", "description": "Details", "target_count": 30 }
+        { "name": "Topic Name", "description": "What this topic covers", "target_count": 30 }
       ]
     }
   ],
   "grader_criteria": [
-    { "name": "Criterion", "description": "What it evaluates" }
+    { "name": "Criterion", "description": "What it evaluates for this specific domain" }
   ],
-  "strategy_notes": "Brief approach"
+  "strategy_notes": "Brief approach for generating training data"
 }
 
-Remember: EXACTLY 5 leaf subtopics total, each with target_count: 30.`;
+Remember: EXACTLY 5 leaf subtopics total.`;
 
 export const PLAN_RESPONSE_SCHEMA = {
   type: 'json_schema',

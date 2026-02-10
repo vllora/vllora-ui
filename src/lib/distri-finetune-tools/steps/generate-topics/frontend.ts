@@ -13,6 +13,10 @@ import { DistriClient, type DistriMessage } from '@distri/core';
 import { getDistriUrl } from '@/config/api';
 import { fetchLucyConfig, type LucyConfig } from '@/lib/agent-sync';
 import * as datasetsDB from '@/services/datasets-db';
+import {
+  buildKnowledgeContext,
+  DOCUMENT_DERIVED_TOPICS_INSTRUCTION,
+} from '../shared/knowledge-context';
 
 // Cache for Lucy config
 let cachedLucyConfig: LucyConfig | null = null;
@@ -42,7 +46,7 @@ export interface GenerateTopicsOptions {
 // LLM Prompt Building
 // =============================================================================
 
-function buildSystemPrompt(seedTopics?: string[]): string {
+function buildSystemPrompt(hasKnowledgeSources: boolean): string {
   let prompt = `You are a hierarchical topic builder for training datasets.
 
 Goal: Generate a topic hierarchy that will be used to organize and generate training data.
@@ -53,12 +57,10 @@ Rules:
 - Topics should be specific and actionable, not generic
 - Output MUST be valid JSON matching the schema (no markdown, no code fences)`;
 
-  if (seedTopics && seedTopics.length > 0) {
+  if (hasKnowledgeSources) {
     prompt += `
 
-IMPORTANT: You have been provided with seed topics extracted from knowledge sources.
-These should inform and guide the hierarchy structure. Incorporate these topics where appropriate:
-${seedTopics.map(t => `- ${t}`).join('\n')}`;
+${DOCUMENT_DERIVED_TOPICS_INSTRUCTION}`;
   }
 
   return prompt;
@@ -139,9 +141,9 @@ function buildUserPrompt(options: {
   maxTopics: number;
   trainingGoals?: string;
   focus?: string;
-  seedTopics?: string[];
+  knowledgeContext?: string;
 }): string {
-  const { records, depth, degree, maxTopics, trainingGoals, focus, seedTopics } = options;
+  const { records, depth, degree, maxTopics, trainingGoals, focus, knowledgeContext } = options;
 
   // Sample records for context (limit to avoid token overflow)
   const sampleRecords = records.slice(0, 10).map(r => {
@@ -174,12 +176,15 @@ ${trainingGoals}`;
 ${focus}`;
   }
 
-  if (seedTopics && seedTopics.length > 0) {
+  // Add rich knowledge context if available
+  if (knowledgeContext) {
     prompt += `
 
-## Seed Topics (from uploaded documents)
-Use these as guidance for the hierarchy structure:
-${seedTopics.map(t => `- ${t}`).join('\n')}`;
+## UPLOADED KNOWLEDGE SOURCES (BASE YOUR TOPICS ON THESE)
+
+${knowledgeContext}
+
+**IMPORTANT**: Your topics MUST be derived from the topics and sections listed above. Do NOT create generic topics - use the SPECIFIC content from these documents.`;
   }
 
   if (sampleRecords.length > 0) {
@@ -197,6 +202,7 @@ ${JSON.stringify(sampleRecords, null, 2)}`;
 3. Go ${depth} levels deep when content warrants it
 4. Topic names: lowercase_with_underscores (e.g., "opening_theory", "tactical_patterns")
 5. Provide brief descriptions for each topic
+${knowledgeContext ? '6. Topics MUST reflect the ACTUAL CONTENT of uploaded documents' : ''}
 
 Generate the topic hierarchy JSON:`;
 
@@ -294,16 +300,20 @@ export async function generateTopicsViaFrontend(
   maxTopics?: number,
   trainingGoals?: string,
   focus?: string,
-  seedTopics?: string[],
+  _seedTopics?: string[], // Deprecated: now using rich knowledge context instead
 ): Promise<GenerateTopicsResult> {
   try {
     // Get records for context
     const records = await datasetsDB.getRecordsByDatasetId(datasetId);
 
+    // Build rich knowledge context using shared module
+    const knowledgeCtx = await buildKnowledgeContext(datasetId);
+    const hasKnowledgeSources = knowledgeCtx.readyCount > 0;
+
     const effectiveMaxTopics = maxTopics || 3;
 
-    // Build prompts
-    const systemPrompt = buildSystemPrompt(seedTopics);
+    // Build prompts with rich knowledge context
+    const systemPrompt = buildSystemPrompt(hasKnowledgeSources);
     const userPrompt = buildUserPrompt({
       records,
       depth,
@@ -311,7 +321,7 @@ export async function generateTopicsViaFrontend(
       maxTopics: effectiveMaxTopics,
       trainingGoals,
       focus,
-      seedTopics,
+      knowledgeContext: knowledgeCtx.contextString || undefined,
     });
 
     console.log('[generateTopicsViaFrontend] Calling LLM with:', {
@@ -319,8 +329,9 @@ export async function generateTopicsViaFrontend(
       depth,
       degree,
       maxTopics: effectiveMaxTopics,
-      hasSeedTopics: !!seedTopics?.length,
-      seedTopicsCount: seedTopics?.length || 0,
+      hasKnowledgeSources,
+      knowledgeSourcesCount: knowledgeCtx.readyCount,
+      extractedTopicsCount: knowledgeCtx.allTopics.length,
     });
 
     // Call LLM

@@ -5,7 +5,6 @@
  */
 
 import * as datasetsDB from '@/services/datasets-db';
-import * as knowledgeDB from '@/services/knowledge-sources-db';
 import { emitter } from '@/utils/eventEmitter';
 import type { ToolHandler } from '../../types';
 import type {
@@ -16,6 +15,7 @@ import type {
 import { callLLMForPlan } from './llm-service';
 import { generateGraderTemplate } from './grader-template';
 import { saveProposedPlan } from '../proposed-plan-store';
+import { buildKnowledgeContext } from '../shared/knowledge-context';
 
 export const proposeSetupPlanHandler: ToolHandler = async (
   params
@@ -48,58 +48,23 @@ export const proposeSetupPlanHandler: ToolHandler = async (
       };
     }
 
-    // Get knowledge sources
-    const sources = await knowledgeDB.getKnowledgeSourcesByDataset(dataset_id);
-    const readySources = sources.filter((s) => s.status === 'ready');
-    const processingSources = sources.filter((s) => s.status === 'processing');
-
-    // Build knowledge context
-    let knowledgeContext: string | undefined;
-    const knowledgeSourcesSummary: { name: string; topics_extracted: string[] }[] = [];
-
-    if (readySources.length > 0) {
-      const contextParts: string[] = [];
-      for (const source of readySources) {
-        const topics = source.extractedContent?.topics || [];
-        knowledgeSourcesSummary.push({
-          name: source.name,
-          topics_extracted: topics,
-        });
-
-        if (source.extractedContent?.text) {
-          contextParts.push(
-            `[${source.name}]:\nTopics: ${topics.join(', ')}\nContent: ${source.extractedContent.text.substring(0, 1500)}...`
-          );
-        }
-      }
-      if (contextParts.length > 0) {
-        knowledgeContext = contextParts.join('\n\n---\n\n');
-      }
-    }
+    // Build knowledge context using shared module
+    const knowledgeCtx = await buildKnowledgeContext(dataset_id);
+    const { contextString: knowledgeContext, sourcesSummary: knowledgeSourcesSummary, readyCount, processingCount } = knowledgeCtx;
 
     // If no ready sources but some are still processing, ask user to wait
-    if (readySources.length === 0 && processingSources.length > 0) {
-      const processingNames = processingSources.map((s) => s.name).join(', ');
+    if (readyCount === 0 && processingCount > 0) {
       return {
         success: true,
         requires_knowledge_sources: true,
         sources_processing: true,
-        message: `Your documents are still being processed: ${processingNames}\n\nPlease wait a moment for processing to complete, then try again. This usually takes about 30-60 seconds per document.`,
+        message: `Your documents are still being processed.\n\nPlease wait a moment for processing to complete, then try again. This usually takes about 30-60 seconds per document.`,
         plan: undefined,
       };
     }
 
-    // If no knowledge sources at all, suggest uploading
-    if (readySources.length === 0) {
-      return {
-        success: true,
-        requires_knowledge_sources: true,
-        message: `I can see you want to train a model for: "${objective}"\n\nTo create the best setup plan, I recommend uploading some reference documents (PDFs, text files) that contain the knowledge you want the model to learn from.\n\nYou can drag & drop files here, or click the attachment button.\n\nAlternatively, I can create a general plan without specific knowledge sources - just let me know!`,
-        plan: undefined,
-      };
-    }
-
-    console.log('[proposeSetupPlan] Generating plan with', readySources.length, 'knowledge sources');
+    // Proceed with or without knowledge sources
+    console.log('[proposeSetupPlan] Generating plan with', readyCount, 'knowledge sources');
 
     // Call LLM to generate plan
     const llmResult = await callLLMForPlan(objective, knowledgeContext);
@@ -137,7 +102,7 @@ export const proposeSetupPlanHandler: ToolHandler = async (
       total_topic_count: totalTopicCount,
       data_generation: {
         strategy: llmResult.strategy_notes,
-        grounded_in_knowledge: readySources.length > 0,
+        grounded_in_knowledge: readyCount > 0,
       },
       grader_config: {
         criteria: llmResult.grader_criteria,

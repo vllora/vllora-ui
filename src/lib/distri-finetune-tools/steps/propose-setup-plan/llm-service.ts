@@ -11,6 +11,7 @@ import {
   PLAN_GENERATION_USER,
   PLAN_RESPONSE_SCHEMA,
 } from './prompts';
+import { wrapKnowledgeContextForPrompt } from '../shared/knowledge-context';
 
 // Cache for Lucy config
 let cachedLucyConfig: LucyConfig | null = null;
@@ -38,9 +39,10 @@ export async function callLLMForPlan(
 
   const modelSettingsFromConfig = lucyConfig.model_settings || {};
 
-  const knowledgeSection = knowledgeContext
-    ? `Available Knowledge Sources:\n${knowledgeContext}\n\nUse these to inform topic categories and ensure grounded content.`
-    : 'No knowledge sources uploaded. Create a general topic structure based on the objective.';
+  const knowledgeSection = wrapKnowledgeContextForPrompt(
+    knowledgeContext || '',
+    !!knowledgeContext
+  );
 
   const userPrompt = PLAN_GENERATION_USER
     .replace('{{objective}}', objective)

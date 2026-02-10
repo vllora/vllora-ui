@@ -162,19 +162,10 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
 
       hierarchy = result.hierarchy;
     } else {
-      // Use frontend LLM-based topic generation with full context
-      // Get seed topics: use explicit param if provided, otherwise auto-fetch from knowledge sources
-      let seedTopicsValue: string[] | undefined;
-      if (Array.isArray(seed_topics) && seed_topics.length > 0) {
-        seedTopicsValue = seed_topics.filter((t): t is string => typeof t === "string" && t.trim() !== "");
-        console.log("[generate_topics] Using explicit seed topics from Lucy:", seedTopicsValue);
-      } else {
-        const autoTopics = await getKnowledgeSourceTopics(workflow.datasetId);
-        if (autoTopics.length > 0) {
-          seedTopicsValue = autoTopics;
-          console.log("[generate_topics] Using auto-fetched topics from knowledge sources:", seedTopicsValue);
-        }
-      }
+      // Use frontend LLM-based topic generation
+      // Note: generateTopicsViaFrontend now automatically fetches rich knowledge context
+      // (including topics, sections, and summaries) using the shared module
+      console.log("[generate_topics] Using frontend generation with automatic knowledge context");
 
       const result = await generateTopicsViaFrontend(
         workflow.datasetId,
@@ -183,7 +174,6 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
         maxTopicsValue,
         workflow.trainingGoals,
         focusValue,
-        seedTopicsValue,
       );
 
       if (!result.success || !result.hierarchy) {
@@ -239,7 +229,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
 export const generateTopicsTool: DistriFnTool = {
   name: "generate_topics",
   description:
-    "Auto-generate topic hierarchy from dataset content. If knowledge sources (PDFs, documents) have been uploaded, their extracted topics will be used to seed the hierarchy. Available in topics_config and grader_config steps.",
+    "Auto-generate topic hierarchy from dataset content. If knowledge sources (PDFs, documents) have been uploaded, their extracted topics and document sections will be used to derive the topic hierarchy - topics will reflect the actual document content rather than generic categories. Available in topics_config and grader_config steps.",
   type: "function",
   parameters: {
     type: "object",
