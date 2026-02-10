@@ -5,7 +5,7 @@
  * Plan functionality has been moved to a separate PlanSection component.
  */
 
-import { DatasetReadmeViewer } from "./DatasetReadmeViewer";
+import { DatasetReadmeViewer } from "./readme-viewer";
 
 interface ReadmeWithPlanProps {
   datasetId: string;
