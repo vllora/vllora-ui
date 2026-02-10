@@ -10,6 +10,7 @@ import type {
   KnowledgeSource,
   KnowledgeSourceType,
   KnowledgeSourceStatus,
+  KnowledgeSourceProgress,
   ExtractedContent,
 } from '@/types/dataset-types';
 
@@ -165,6 +166,33 @@ export async function updateKnowledgeSourceStatus(
         if (status === 'ready' || status === 'failed') {
           source.processedAt = Date.now();
         }
+        store.put(source);
+      }
+    };
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/**
+ * Update a knowledge source's progress (without changing status)
+ */
+export async function updateKnowledgeSourceProgress(
+  id: string,
+  progress: KnowledgeSourceProgress
+): Promise<void> {
+  const db = await getDB();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const getRequest = store.get(id);
+
+    getRequest.onsuccess = () => {
+      const source = getRequest.result;
+      if (source) {
+        source.progress = progress;
         store.put(source);
       }
     };

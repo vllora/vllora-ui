@@ -85,7 +85,16 @@ type VlloraEvents = {
   // Lucy assistant prompt trigger (from UI actions like "Generate for topic")
   vllora_lucy_prompt: { prompt: string };
   // Knowledge source events
-  vllora_knowledge_source_updated: { datasetId: string };
+  vllora_knowledge_source_updated: {
+    datasetId: string;
+    sourceId?: string;
+    progress?: {
+      step: string;
+      current?: number;
+      total?: number;
+      percent?: number;
+    };
+  };
   // Setup plan execution progress
   vllora_setup_plan_progress: { progress: unknown };
   // Setup plan generation started (show loading in right panel and switch to README tab)

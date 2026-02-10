@@ -5,7 +5,7 @@
  * Shows file info, status, extracted topics/sections, and allows expansion.
  */
 
-import { FileText, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { FileText, Trash2, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { KnowledgeSource } from "@/types/dataset-types";
@@ -28,7 +28,7 @@ function getStatusColor(status: KnowledgeSource["status"]) {
     case "ready":
       return "bg-green-500/20 text-green-500";
     case "processing":
-      return "bg-amber-500/20 text-amber-500";
+      return "bg-blue-500/20 text-blue-500";
     case "failed":
       return "bg-red-500/20 text-red-500";
     default:
@@ -37,19 +37,11 @@ function getStatusColor(status: KnowledgeSource["status"]) {
 }
 
 /**
- * Get file type icon color
+ * Get file type icon color - using muted foreground for a cleaner look
  */
-function getTypeColor(type: KnowledgeSource["type"]) {
-  switch (type) {
-    case "pdf":
-      return "text-red-500";
-    case "image":
-      return "text-blue-500";
-    case "url":
-      return "text-purple-500";
-    default:
-      return "text-muted-foreground";
-  }
+function getTypeColor(_type: KnowledgeSource["type"]) {
+  // Use consistent muted color for all file types
+  return "text-muted-foreground";
 }
 
 export function KnowledgeSourceCard({
@@ -125,6 +117,38 @@ export function KnowledgeSourceCard({
           <Trash2 className="w-3.5 h-3.5" />
         </Button>
       </div>
+
+      {/* Processing progress indicator */}
+      {source.status === "processing" && source.progress && (
+        <div className="border-t border-border bg-muted/30 px-3 py-2">
+          <div className="flex items-center gap-2">
+            <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground truncate">
+                {source.progress.step}
+              </p>
+              {source.progress.percent !== undefined && (
+                <div className="mt-1 flex items-center gap-2">
+                  <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-300"
+                      style={{
+                        width: `${Math.min(100, source.progress.percent)}%`,
+                        backgroundColor: 'rgb(var(--theme-500))'
+                      }}
+                    />
+                  </div>
+                  <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
+                    {source.progress.current !== undefined && source.progress.total !== undefined
+                      ? `${source.progress.current}/${source.progress.total}`
+                      : `${Math.round(source.progress.percent)}%`}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Expanded content */}
       {isExpanded && hasContent && (

@@ -293,6 +293,18 @@ export type MarkdownPurpose = 'knowledge' | 'process';
 /** Processing status for knowledge sources */
 export type KnowledgeSourceStatus = 'pending' | 'processing' | 'ready' | 'failed';
 
+/** Progress info for knowledge source processing */
+export interface KnowledgeSourceProgress {
+  /** Current step description */
+  step: string;
+  /** Current step number (e.g., 1 of 5) */
+  current?: number;
+  /** Total steps */
+  total?: number;
+  /** Percentage complete (0-100) */
+  percent?: number;
+}
+
 /** Extracted content from a knowledge source */
 export interface ExtractedContent {
   /** Raw text content */
@@ -329,6 +341,8 @@ export interface KnowledgeSource {
   extractedContent?: ExtractedContent;
   /** Error message if processing failed */
   error?: string;
+  /** Current processing progress */
+  progress?: KnowledgeSourceProgress;
   /** When the source was uploaded */
   createdAt: number;
   /** When processing completed */

@@ -171,10 +171,10 @@ function SourcesProcessingMessage({
   }
 
   return (
-    <div className="border border-amber-500/30 rounded-lg bg-amber-500/10 p-4">
+    <div className="border border-border rounded-lg bg-muted/50 p-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
-          <Loader2 className="w-4 h-4 animate-spin" />
+        <div className="flex items-center gap-2 text-foreground">
+          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
           <span className="text-sm font-medium">Documents still processing</span>
         </div>
         <button

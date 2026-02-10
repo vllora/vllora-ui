@@ -31,6 +31,14 @@ export interface LLMExtractedContent {
   document_type: string;
 }
 
+/** Progress callback for extraction */
+export type ExtractionProgressCallback = (progress: {
+  step: string;
+  current?: number;
+  total?: number;
+  percent?: number;
+}) => void;
+
 interface DocumentStructure {
   sections: Array<{
     title: string;
@@ -387,12 +395,17 @@ function findSectionContent(
 /**
  * Two-pass extraction for large documents
  */
-async function extractWithTwoPass(documentText: string): Promise<LLMExtractedContent> {
+async function extractWithTwoPass(
+  documentText: string,
+  onProgress?: ExtractionProgressCallback
+): Promise<LLMExtractedContent> {
   const cleanedText = cleanText(documentText);
   console.log(`[pdf-llm-extractor] Using two-pass extraction for ${cleanedText.length} chars`);
 
   // Pass 1: Extract document structure
   console.log('[pdf-llm-extractor] Pass 1: Extracting document structure...');
+  onProgress?.({ step: 'Analyzing document structure...', percent: 5 });
+
   const documentSample = createDocumentSample(cleanedText);
   const structurePrompt = STRUCTURE_USER_PROMPT.replace('{{document_sample}}', documentSample);
 
@@ -404,6 +417,7 @@ async function extractWithTwoPass(documentText: string): Promise<LLMExtractedCon
   );
 
   console.log(`[pdf-llm-extractor] Found ${structure.sections.length} sections`);
+  onProgress?.({ step: `Found ${structure.sections.length} sections`, percent: 15 });
 
   // Pass 2: Extract topics from each section
   console.log('[pdf-llm-extractor] Pass 2: Extracting topics from sections...');
@@ -412,10 +426,20 @@ async function extractWithTwoPass(documentText: string): Promise<LLMExtractedCon
 
   // Limit sections to process
   const sectionsToProcess = structure.sections.slice(0, MAX_SECTIONS_TO_PROCESS);
+  const totalSections = sectionsToProcess.length;
 
   for (let i = 0; i < sectionsToProcess.length; i++) {
     const section = sectionsToProcess[i];
     const nextSection = sectionsToProcess[i + 1];
+
+    // Report progress for each section
+    const sectionPercent = 15 + Math.round((i / totalSections) * 80);
+    onProgress?.({
+      step: `Extracting: ${section.title}`,
+      current: i + 1,
+      total: totalSections,
+      percent: sectionPercent,
+    });
 
     try {
       // Find section content
@@ -458,6 +482,8 @@ async function extractWithTwoPass(documentText: string): Promise<LLMExtractedCon
     }
   }
 
+  onProgress?.({ step: 'Finalizing extraction...', percent: 95 });
+
   // Deduplicate topics
   const uniqueTopics = [...new Set(allTopics)];
 
@@ -468,17 +494,26 @@ async function extractWithTwoPass(documentText: string): Promise<LLMExtractedCon
     document_type: structure.document_type,
   };
 
+  onProgress?.({ step: 'Complete', percent: 100 });
+
   return validateExtraction(result);
 }
 
 /**
  * Single-pass extraction for small documents
  */
-async function extractWithSinglePass(documentText: string): Promise<LLMExtractedContent> {
+async function extractWithSinglePass(
+  documentText: string,
+  onProgress?: ExtractionProgressCallback
+): Promise<LLMExtractedContent> {
   const cleanedText = cleanText(documentText);
   console.log(`[pdf-llm-extractor] Using single-pass extraction for ${cleanedText.length} chars`);
 
+  onProgress?.({ step: 'Analyzing document...', percent: 20 });
+
   const userPrompt = EXTRACTION_USER_PROMPT.replace('{{document_text}}', cleanedText);
+
+  onProgress?.({ step: 'Extracting content and topics...', percent: 50 });
 
   const result = await callLLM<LLMExtractedContent>(
     EXTRACTION_SYSTEM_PROMPT,
@@ -486,6 +521,8 @@ async function extractWithSinglePass(documentText: string): Promise<LLMExtracted
     EXTRACTION_RESPONSE_SCHEMA,
     'single_pass_extraction'
   );
+
+  onProgress?.({ step: 'Complete', percent: 100 });
 
   return validateExtraction(result);
 }
@@ -498,18 +535,18 @@ async function extractWithSinglePass(documentText: string): Promise<LLMExtracted
  */
 export async function extractContentWithLLM(
   documentText: string,
-  options: { maxTextLength?: number } = {}
+  options: { maxTextLength?: number; onProgress?: ExtractionProgressCallback } = {}
 ): Promise<LLMExtractedContent> {
-  const { maxTextLength = SINGLE_PASS_MAX_LENGTH } = options;
+  const { maxTextLength = SINGLE_PASS_MAX_LENGTH, onProgress } = options;
 
   // Clean the text first
   const cleanedText = cleanText(documentText);
 
   // Choose extraction strategy based on document size
   if (cleanedText.length <= maxTextLength) {
-    return extractWithSinglePass(cleanedText);
+    return extractWithSinglePass(cleanedText, onProgress);
   } else {
-    return extractWithTwoPass(cleanedText);
+    return extractWithTwoPass(cleanedText, onProgress);
   }
 }
 

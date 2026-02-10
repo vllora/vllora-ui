@@ -10,7 +10,7 @@
  */
 
 import * as pdfjsLib from 'pdfjs-dist';
-import { extractContentWithLLM } from './pdf-llm-extractor';
+import { extractContentWithLLM, type ExtractionProgressCallback } from './pdf-llm-extractor';
 
 // Configure the worker source
 // In Vite/modern bundlers, we can use the bundled worker
@@ -60,6 +60,8 @@ export interface PdfExtractionOptions {
    * - 'llm': LLM-assisted extraction for better quality (default)
    */
   extractionMode?: 'basic' | 'llm';
+  /** Progress callback for reporting extraction status */
+  onProgress?: ExtractionProgressCallback;
 }
 
 // =============================================================================
@@ -137,9 +139,11 @@ export async function extractPdfContent(
   base64Data: string,
   options: PdfExtractionOptions = {}
 ): Promise<PdfExtractionResult> {
-  const { maxPages, detectSections = true, extractionMode = 'llm' } = options;
+  const { maxPages, detectSections = true, extractionMode = 'llm', onProgress } = options;
 
   try {
+    onProgress?.({ step: 'Loading PDF...', percent: 0 });
+
     // Decode base64 to binary
     const binaryString = atob(base64Data);
     const bytes = new Uint8Array(binaryString.length);
@@ -162,6 +166,8 @@ export async function extractPdfContent(
       pageCount: pdf.numPages,
       creationDate: info.CreationDate as string | undefined,
     };
+
+    onProgress?.({ step: `Extracting text from ${pdf.numPages} pages...`, percent: 5 });
 
     // Extract text from each page
     const pageTexts: string[] = [];
@@ -202,7 +208,7 @@ export async function extractPdfContent(
     if (extractionMode === 'llm') {
       console.log('[extractPdfContent] Using LLM-assisted extraction');
       try {
-        const llmResult = await extractContentWithLLM(fullText);
+        const llmResult = await extractContentWithLLM(fullText, { onProgress });
 
         // Convert LLM sections to our format
         const sections: PdfExtractionResult['sections'] = llmResult.sections.map((s, idx) => ({

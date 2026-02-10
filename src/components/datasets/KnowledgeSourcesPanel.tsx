@@ -41,8 +41,25 @@ export function KnowledgeSourcesPanel({ datasetId, className }: KnowledgeSources
     fetchSources();
 
     // Listen for knowledge source updates (e.g., from Lucy uploads)
-    const handleUpdate = ({ datasetId: updatedDatasetId }: { datasetId: string }) => {
-      if (updatedDatasetId === datasetId) {
+    const handleUpdate = ({
+      datasetId: updatedDatasetId,
+      sourceId,
+      progress,
+    }: {
+      datasetId: string;
+      sourceId?: string;
+      progress?: { step: string; current?: number; total?: number; percent?: number };
+    }) => {
+      if (updatedDatasetId !== datasetId) return;
+
+      // If we have a specific source and progress info, just update that source in state
+      // This avoids a full re-fetch and prevents UI flashing
+      if (sourceId && progress) {
+        setSources((prev) =>
+          prev.map((s) => (s.id === sourceId ? { ...s, progress } : s))
+        );
+      } else {
+        // Status change (ready/failed) - do a full refresh
         fetchSources();
       }
     };

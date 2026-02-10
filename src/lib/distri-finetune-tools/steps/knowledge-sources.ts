@@ -8,9 +8,10 @@
 import type { DistriFnTool } from '@distri/core';
 import * as knowledgeDB from '@/services/knowledge-sources-db';
 import type { ToolHandler } from '../types';
-import type { KnowledgeSourceType, ExtractedContent, MarkdownPurpose } from '@/types/dataset-types';
+import type { KnowledgeSourceType, ExtractedContent, MarkdownPurpose, KnowledgeSourceProgress } from '@/types/dataset-types';
 import { extractPdfContent } from './pdf-extractor';
 import { emitter } from '@/utils/eventEmitter';
+import type { ExtractionProgressCallback } from './pdf-llm-extractor';
 
 // =============================================================================
 // Markdown Classification
@@ -221,7 +222,8 @@ async function extractContent(
   type: KnowledgeSourceType,
   content: string,
   _name: string,
-  extractionMode: 'basic' | 'llm' = 'llm'
+  extractionMode: 'basic' | 'llm' = 'llm',
+  onProgress?: ExtractionProgressCallback
 ): Promise<ExtractedContent> {
 
   // Handle markdown files with dual-purpose detection
@@ -310,7 +312,7 @@ async function extractContent(
   if (type === 'pdf') {
     // Use pdfjs-dist for client-side PDF text extraction
     try {
-      const pdfResult = await extractPdfContent(content, { extractionMode });
+      const pdfResult = await extractPdfContent(content, { extractionMode, onProgress });
       return {
         text: pdfResult.text,
         sections: pdfResult.sections,
@@ -422,7 +424,24 @@ async function processExtractionInBackground(
 ): Promise<void> {
   try {
     console.log(`[processExtractionInBackground] Starting extraction for ${sourceId}`);
-    const extractedContent = await extractContent(type, content, name, extractionMode);
+
+    // Create progress callback that updates DB and emits events
+    const onProgress: ExtractionProgressCallback = async (progress) => {
+      const progressInfo: KnowledgeSourceProgress = {
+        step: progress.step,
+        current: progress.current,
+        total: progress.total,
+        percent: progress.percent,
+      };
+
+      // Update progress in DB
+      await knowledgeDB.updateKnowledgeSourceProgress(sourceId, progressInfo);
+
+      // Emit event to notify UI of progress change
+      emitter.emit('vllora_knowledge_source_updated', { datasetId, sourceId, progress: progressInfo });
+    };
+
+    const extractedContent = await extractContent(type, content, name, extractionMode, onProgress);
     await knowledgeDB.updateKnowledgeSourceStatus(sourceId, 'ready', { extractedContent });
     console.log(`[processExtractionInBackground] Extraction complete for ${sourceId}`);
     // Emit event to notify UI of status change
