@@ -101,7 +101,7 @@ export function LucyDatasetAssistant() {
   }, []);
 
   // Get dataset from context (rendered inside DatasetDetailProvider)
-  const { dataset: currentDataset, datasetId: selectedDatasetId, isLoading: datasetLoading, records } = DatasetDetailConsumer();
+  const { dataset: currentDataset, datasetId: selectedDatasetId, isLoading: datasetLoading, records, activeSection } = DatasetDetailConsumer();
 
   // Lucy agent state
   const { isConnected, reconnect } = useDistriConnection();
@@ -402,6 +402,7 @@ export function LucyDatasetAssistant() {
           quickActions={FINETUNE_QUICK_ACTIONS}
           proactivePrompt="Hi! I'm Lucy, your fine-tuning assistant. I'll help you prepare training data, configure evaluation, and train your model. Let me take a look at your dataset..."
           autoTriggerPrompt={autoTriggerPrompt}
+          activeSection={activeSection}
         />
       ) : (
         <div className="flex items-center justify-center h-full">

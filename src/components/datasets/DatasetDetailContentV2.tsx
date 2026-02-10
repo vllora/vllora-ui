@@ -12,6 +12,7 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { DatasetUtilityBar } from "./dataset-detail-header/DatasetUtilityBar";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { emitter } from "@/utils/eventEmitter";
@@ -258,6 +259,11 @@ export function DatasetDetailContentV2() {
 
       // Small delay to let knowledge sources finish processing
       const timer = setTimeout(() => {
+        // Notify user that plan generation is starting
+        toast.info("Lucy is creating a setup plan from your documents...", {
+          duration: 4000,
+        });
+
         // Trigger Lucy to generate the setup plan
         emitter.emit("vllora_lucy_prompt", {
           prompt: `Please analyze the uploaded documents and create a setup plan for this dataset using the propose_setup_plan tool.`,

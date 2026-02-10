@@ -388,7 +388,7 @@ export function LucyChatInput({
               onClick={handleAttachClick}
               disabled={disabled || isStreaming || !onAddImages}
               className="flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors disabled:opacity-50"
-              title="Attach file (images, PDFs, documents)"
+              title="Attach files — documents become reference sources, images are sent to Lucy"
             >
               <Paperclip className="h-4 w-4 text-muted-foreground" />
             </button>

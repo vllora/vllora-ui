@@ -113,7 +113,7 @@ export function KnowledgeSourcesPanel({ datasetId, className }: KnowledgeSources
         <div>
           <h3 className="text-sm font-medium">Knowledge Sources</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Upload documents to ground your training data generation
+            Reference documents that Lucy uses to generate accurate training data
           </p>
         </div>
         <Button variant="ghost" size="sm" onClick={fetchSources} className="h-8 w-8 p-0">
@@ -128,9 +128,9 @@ export function KnowledgeSourcesPanel({ datasetId, className }: KnowledgeSources
             <div className="w-12 h-12 rounded-xl bg-muted/50 flex items-center justify-center mb-4">
               <Upload className="w-6 h-6 text-muted-foreground" />
             </div>
-            <h4 className="text-sm font-medium text-foreground mb-1">No documents uploaded</h4>
-            <p className="text-xs text-muted-foreground max-w-[240px]">
-              Upload PDFs or documents in the chat to use them for grounded data generation.
+            <h4 className="text-sm font-medium text-foreground mb-1">No reference documents yet</h4>
+            <p className="text-xs text-muted-foreground max-w-[280px]">
+              Add reference documents here or via the chat attachment button. Lucy uses these to generate more accurate, grounded training data.
             </p>
           </div>
         ) : (

@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
-import { Check, X, Sparkles } from 'lucide-react';
+import { Check, X, Sparkles, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import type { SetupPlan } from '@/lib/distri-finetune-tools/steps/propose-setup-plan';
@@ -59,12 +59,22 @@ export function SetupPlanEditor({ plan, onApprove, onDismiss }: SetupPlanEditorP
             <LazyMarkdownRenderer content={markdown} />
           </div>
         ) : (
-          <Textarea
-            value={markdown}
-            onChange={(e) => setMarkdown(e.target.value)}
-            className="w-full h-full min-h-[400px] border-0 rounded-none resize-none font-mono text-sm focus-visible:ring-0 focus-visible:ring-offset-0 p-4"
-            placeholder="Edit the setup plan..."
-          />
+          <div className="flex flex-col h-full">
+            {/* Warning banner for edit mode */}
+            <div className="mx-4 mt-3 mb-2 flex items-start gap-2 px-3 py-2 rounded-md border border-amber-500/30 bg-amber-500/10 text-xs">
+              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-amber-600 dark:text-amber-400">
+                <span className="font-medium">Editing the raw plan may affect its structure.</span>
+                {' '}For safer modifications, use Lucy chat to make changes instead.
+              </p>
+            </div>
+            <Textarea
+              value={markdown}
+              onChange={(e) => setMarkdown(e.target.value)}
+              className="w-full flex-1 min-h-[400px] border-0 rounded-none resize-none font-mono text-sm focus-visible:ring-0 focus-visible:ring-offset-0 p-4"
+              placeholder="Edit the setup plan..."
+            />
+          </div>
         )}
       </div>
 

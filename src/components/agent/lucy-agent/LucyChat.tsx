@@ -26,7 +26,9 @@ import { LucyWelcome, QuickAction } from './LucyWelcome';
 import { LucyToolCalls } from './LucyToolCalls';
 import { LucyPendingMessage } from './LucyPendingMessage';
 import { LucyStreamingIndicator } from './LucyStreamingIndicator';
+import { LucyTypingIndicator } from './LucyTypingIndicator';
 import { LucyMessageRenderer } from './messages/LucyMessageRenderer';
+import { LucyAvatar } from './LucyAvatar';
 import { cn } from '@/lib/utils';
 
 // Custom hooks for chat functionality
@@ -65,6 +67,8 @@ export interface LucyChatProps {
   proactivePrompt?: string | null;
   /** Auto-trigger prompt - automatically sends this message when chat is empty */
   autoTriggerPrompt?: string | null;
+  /** Active section for context-aware chat placeholder */
+  activeSection?: string;
 }
 
 // ============================================================================
@@ -90,6 +94,29 @@ const DEFAULT_QUICK_ACTIONS: QuickAction[] = [
 ];
 
 // ============================================================================
+// Helpers
+// ============================================================================
+
+function getPlaceholderForSection(section?: string): string {
+  switch (section) {
+    case 'records':
+      return 'Ask Lucy about your training data...';
+    case 'evaluator':
+      return 'Ask Lucy to set up quality scoring...';
+    case 'jobs':
+      return 'Ask Lucy about training configuration...';
+    case 'deploy':
+      return 'Ask Lucy about deployment options...';
+    case 'docs':
+      return 'Ask Lucy about your documents...';
+    case 'plan':
+      return 'Ask Lucy to create or modify the plan...';
+    default:
+      return 'Ask Lucy to help with your dataset...';
+  }
+}
+
+// ============================================================================
 // Component
 // ============================================================================
 
@@ -108,12 +135,16 @@ export function LucyChat({
   quickActions = DEFAULT_QUICK_ACTIONS,
   proactivePrompt,
   autoTriggerPrompt,
+  activeSection,
 }: LucyChatProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState('');
 
   // Voice input state
   const [isStreamingVoice, setIsStreamingVoice] = useState(false);
+
+  // Auto-analyzing indicator (shown before Lucy's first auto-analysis)
+  const [isAutoAnalyzing, setIsAutoAnalyzing] = useState(false);
 
   // Use store for todos (handles todos_updated events from server)
   const todos = useChatStateStore((state) => state.todos);
@@ -210,8 +241,20 @@ export function LucyChat({
     autoTriggerPendingRef.current = true;
     lastAutoTriggeredPromptRef.current = autoTriggerPrompt;
 
-    // Small delay to ensure component is fully mounted
+    // Detect if this is an initial analysis prompt (longer delay to show indicator)
+    const isAnalysisPrompt = messages.length === 0 && (
+      autoTriggerPrompt.includes('analyze') || autoTriggerPrompt.includes('review')
+    );
+
+    // Show "reviewing" indicator for initial analysis
+    if (isAnalysisPrompt) {
+      setIsAutoAnalyzing(true);
+    }
+
+    // Longer delay for analysis prompts to let user see the "reviewing" indicator
     const timer = setTimeout(() => {
+      setIsAutoAnalyzing(false);
+
       // Clear old todos when starting a new operation
       useChatStateStore.getState().setTodos([]);
 
@@ -227,11 +270,12 @@ export function LucyChat({
       sendMessage([{ part_type: 'text', data: autoTriggerPrompt }]);
       // Reset pending after send completes
       autoTriggerPendingRef.current = false;
-    }, 100);
+    }, isAnalysisPrompt ? 800 : 100);
 
     return () => {
       clearTimeout(timer);
       autoTriggerPendingRef.current = false;
+      setIsAutoAnalyzing(false);
     };
   }, [autoTriggerPrompt, isStreaming, isLoading, sendMessage, stopStreaming, hasPendingToolCalls, failAllPendingToolCalls]);
 
@@ -323,7 +367,7 @@ export function LucyChat({
   // Render
   // ============================================================================
 
-  const showWelcome = messages.length === 0 && !isLoading;
+  const showWelcome = messages.length === 0 && !isLoading && !isAutoAnalyzing;
 
   return (
     <div className={cn('flex flex-col h-full bg-background', className)}>
@@ -336,6 +380,15 @@ export function LucyChat({
               onQuickAction={handleQuickAction}
               proactivePrompt={proactivePrompt}
             />
+          ) : isAutoAnalyzing && messages.length === 0 ? (
+            /* Lucy "reviewing" indicator before first auto-analysis */
+            <div className="flex items-start gap-3 pt-4">
+              <LucyAvatar size="sm" />
+              <div className="flex-1 bg-muted/40 border border-border/50 rounded-2xl rounded-tl-sm px-4 py-3">
+                <LucyTypingIndicator />
+                <p className="text-xs text-muted-foreground mt-1">Lucy is reviewing your dataset...</p>
+              </div>
+            </div>
           ) : (
             <>
               {/* Render messages using LucyMessageRenderer */}
@@ -390,7 +443,7 @@ export function LucyChat({
           isStreaming={isStreaming}
           disabled={isLoading || hasPendingToolCalls()}
           placeholder={
-            isStreaming ? 'Message will be queued...' : 'Ask Lucy to analyze your dataset'
+            isStreaming ? 'Message will be queued...' : getPlaceholderForSection(activeSection)
           }
           // File attachments (images, PDFs, documents)
           attachedImages={attachedImages}

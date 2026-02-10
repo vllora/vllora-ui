@@ -157,7 +157,7 @@ export function AddDocsButton({ onFileInput }: AddDocsButtonProps) {
         onChange={onFileInput}
         className="hidden"
       />
-      <span className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+      <span className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors" title="Attach reference documents (PDFs, text files) to help Lucy generate better training data">
         <Upload className="w-3.5 h-3.5" />
         Add docs
       </span>

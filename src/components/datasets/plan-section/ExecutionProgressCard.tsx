@@ -7,16 +7,18 @@
 
 import { useEffect, useState } from 'react';
 import {
-  CheckCircle2,
+  Check,
   Loader2,
   XCircle,
   AlertCircle,
   Sparkles,
   ArrowRight,
+  Circle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { emitter } from '@/utils/eventEmitter';
+import { DatasetDetailConsumer } from '@/contexts/DatasetDetailContext';
 import type {
   ExecutionProgress,
   ExecutionStepStatus,
@@ -31,6 +33,7 @@ export function ExecutionProgressCard({
   initialProgress,
   onComplete,
 }: ExecutionProgressCardProps) {
+  const { setActiveSection } = DatasetDetailConsumer();
   const [progress, setProgress] = useState<ExecutionProgress | null>(
     initialProgress || null
   );
@@ -62,44 +65,43 @@ export function ExecutionProgressCard({
     return (
       <div className="rounded-lg border border-border bg-card p-4">
         <div className="flex items-center gap-3">
-          <Loader2 className="w-4 h-4 text-primary animate-spin" />
+          <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
           <span className="text-sm text-muted-foreground">Initializing setup...</span>
         </div>
       </div>
     );
   }
 
-  const getStepIndicator = (status: ExecutionStepStatus, index: number) => {
-    const baseClasses = 'w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium transition-all';
+  const getStepIndicator = (status: ExecutionStepStatus) => {
     switch (status) {
       case 'completed':
         return (
-          <div className={cn(baseClasses, 'bg-[rgb(var(--theme-500))] text-white')}>
-            <CheckCircle2 className="w-3.5 h-3.5" />
+          <div className="w-5 h-5 rounded-full bg-[rgb(var(--theme-500))] flex items-center justify-center">
+            <Check className="w-3 h-3 text-white" strokeWidth={3} />
           </div>
         );
       case 'running':
         return (
-          <div className={cn(baseClasses, 'bg-[rgba(var(--theme-500),0.7)] text-white')}>
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          <div className="w-5 h-5 rounded-full border-2 border-[rgb(var(--theme-500))] flex items-center justify-center">
+            <Loader2 className="w-3 h-3 text-[rgb(var(--theme-500))] animate-spin" />
           </div>
         );
       case 'failed':
         return (
-          <div className={cn(baseClasses, 'bg-destructive text-destructive-foreground')}>
-            <XCircle className="w-3.5 h-3.5" />
+          <div className="w-5 h-5 rounded-full bg-destructive flex items-center justify-center">
+            <XCircle className="w-3 h-3 text-white" />
           </div>
         );
       case 'skipped':
         return (
-          <div className={cn(baseClasses, 'bg-amber-500 text-white')}>
-            <AlertCircle className="w-3.5 h-3.5" />
+          <div className="w-5 h-5 rounded-full bg-amber-500/20 flex items-center justify-center">
+            <AlertCircle className="w-3 h-3 text-amber-500" />
           </div>
         );
       default:
         return (
-          <div className={cn(baseClasses, 'bg-muted text-muted-foreground')}>
-            {index + 1}
+          <div className="w-5 h-5 rounded-full border border-border flex items-center justify-center">
+            <Circle className="w-2 h-2 text-muted-foreground/40" fill="currentColor" />
           </div>
         );
     }
@@ -112,21 +114,15 @@ export function ExecutionProgressCard({
 
   return (
     <div className="rounded-lg border border-border bg-card overflow-hidden">
-      {/* Compact Header */}
-      <div className="px-4 py-3 border-b border-border">
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-border/50">
         <div className="flex items-center gap-3">
           {progress.is_complete && !progress.has_error ? (
-            <div className="w-8 h-8 rounded-full bg-[rgba(var(--theme-500),0.15)] flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-            </div>
+            <Sparkles className="w-4 h-4 text-[rgb(var(--theme-500))]" />
           ) : progress.has_error ? (
-            <div className="w-8 h-8 rounded-full bg-destructive/15 flex items-center justify-center">
-              <XCircle className="w-4 h-4 text-destructive" />
-            </div>
+            <XCircle className="w-4 h-4 text-destructive" />
           ) : (
-            <div className="w-8 h-8 rounded-full bg-[rgba(var(--theme-500),0.15)] flex items-center justify-center">
-              <Loader2 className="w-4 h-4 text-[rgb(var(--theme-500))] animate-spin" />
-            </div>
+            <Loader2 className="w-4 h-4 text-[rgb(var(--theme-500))] animate-spin" />
           )}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
@@ -151,9 +147,9 @@ export function ExecutionProgressCard({
           </div>
         </div>
 
-        {/* Inline Progress Bar */}
+        {/* Progress Bar */}
         {!progress.is_complete && (
-          <div className="mt-2.5 h-1.5 bg-muted rounded-full overflow-hidden">
+          <div className="mt-2.5 h-1 bg-muted rounded-full overflow-hidden">
             <div
               className={cn(
                 'h-full rounded-full transition-all duration-500',
@@ -165,41 +161,42 @@ export function ExecutionProgressCard({
         )}
       </div>
 
-      {/* Vertical Step Indicators */}
+      {/* Step List */}
       <div className="px-4 py-3">
         <div className="space-y-0">
           {progress.steps.map((step, index) => (
             <div key={step.id} className="flex gap-3">
-              {/* Indicator column */}
+              {/* Indicator + connector */}
               <div className="flex flex-col items-center">
-                {getStepIndicator(step.status, index)}
+                {getStepIndicator(step.status)}
                 {index < progress.steps.length - 1 && (
                   <div
                     className={cn(
-                      'w-0.5 flex-1 min-h-[16px]',
-                      step.status === 'completed' ? 'bg-[rgb(var(--theme-500))]' : 'bg-muted'
+                      'w-px flex-1 min-h-[12px]',
+                      step.status === 'completed' ? 'bg-border' : 'bg-border/40'
                     )}
                   />
                 )}
               </div>
-              {/* Content column */}
-              <div className={cn('flex-1 min-w-0 pb-3', step.status === 'pending' && 'opacity-50')}>
+              {/* Label */}
+              <div className={cn('flex-1 min-w-0 pb-2.5', step.status === 'pending' && 'opacity-40')}>
                 <span
                   className={cn(
                     'text-xs',
-                    step.status === 'completed' && 'text-[rgb(var(--theme-600))]',
+                    step.status === 'completed' && 'text-foreground/70',
                     step.status === 'failed' && 'text-destructive',
-                    step.status === 'running' && 'text-[rgb(var(--theme-500))] font-medium',
-                    step.status === 'pending' && 'text-muted-foreground'
+                    step.status === 'running' && 'text-foreground font-medium',
+                    step.status === 'pending' && 'text-muted-foreground',
+                    step.status === 'skipped' && 'text-amber-500'
                   )}
                 >
                   {step.name}
                 </span>
                 {step.status === 'running' && step.message && (
-                  <p className="text-xs text-muted-foreground mt-0.5">{step.message}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{step.message}</p>
                 )}
                 {step.error && (
-                  <p className="text-xs text-destructive mt-0.5">{step.error}</p>
+                  <p className="text-[11px] text-destructive mt-0.5">{step.error}</p>
                 )}
               </div>
             </div>
@@ -207,21 +204,18 @@ export function ExecutionProgressCard({
         </div>
       </div>
 
-      {/* Compact Completion Footer */}
+      {/* Completion Footer */}
       {progress.is_complete && !progress.has_error && (
         <div className="px-4 pb-3">
-          <div className="flex items-center justify-between gap-3 p-2.5 rounded-md bg-[rgba(var(--theme-500),0.1)] border border-[rgba(var(--theme-500),0.2)]">
-            <span className="text-xs text-[rgb(var(--theme-600))]">
+          <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-md bg-muted/50 border border-border/50">
+            <span className="text-xs text-muted-foreground">
               Ready for fine-tuning
             </span>
             <Button
               size="sm"
               variant="ghost"
-              className="h-7 px-2 text-xs text-[rgb(var(--theme-600))] hover:text-[rgb(var(--theme-700))] hover:bg-[rgba(var(--theme-500),0.1)]"
-              onClick={() => {
-                const jobsTab = document.querySelector('[data-section="jobs"]') as HTMLElement;
-                if (jobsTab) jobsTab.click();
-              }}
+              className="h-7 px-2 text-xs text-foreground hover:bg-muted"
+              onClick={() => setActiveSection('jobs')}
             >
               Go to Jobs
               <ArrowRight className="w-3.5 h-3.5 ml-1" />

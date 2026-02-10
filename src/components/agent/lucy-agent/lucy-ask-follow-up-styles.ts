@@ -14,8 +14,8 @@ import { configureAskFollowUpStyles } from "@distri/react";
  */
 export function initializeLucyAskFollowUpStyles() {
   configureAskFollowUpStyles({
-    // Root container - compact with subtle border
-    root: "relative rounded-lg p-[1px] bg-gradient-to-b from-[rgba(var(--theme-500),0.3)] via-border/30 to-border/20 shadow-md",
+    // Root container - compact with subtle theme-colored border
+    root: "relative rounded-lg p-[1px] bg-gradient-to-b from-[rgba(var(--theme-500),0.3)] via-[rgba(var(--theme-800),0.3)] to-[rgba(var(--theme-900),0.2)] shadow-md",
 
     // Header - compact
     header:
