@@ -26,7 +26,7 @@ import { LucyWelcome, QuickAction } from './LucyWelcome';
 import { LucyToolCalls } from './LucyToolCalls';
 import { LucyPendingMessage } from './LucyPendingMessage';
 import { LucyStreamingIndicator } from './LucyStreamingIndicator';
-import { LucyMessageRenderer } from './LucyMessageRenderer';
+import { LucyMessageRenderer } from './messages/LucyMessageRenderer';
 import { cn } from '@/lib/utils';
 
 // Custom hooks for chat functionality

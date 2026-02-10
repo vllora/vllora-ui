@@ -6,11 +6,11 @@
 
 import { DistriMessage } from '@distri/core';
 import { useChatStateStore } from '@distri/react';
-import { LucyAvatar } from './LucyAvatar';
-import { LucyStepIndicator } from './LucyStepIndicator';
-import { LucyImageRenderer } from './LucyImageRenderer';
-import { extractContent, formatTimestamp } from './lucy-message-utils';
-import { LucyTextRenderer } from './LucyTextRenderer';
+import { LucyAvatar } from '../LucyAvatar';
+import { LucyStepIndicator } from '../LucyStepIndicator';
+import { LucyImageRenderer } from '../LucyImageRenderer';
+import { extractContent, formatTimestamp } from '../lucy-message-utils';
+import { LucyTextRenderer } from '../LucyTextRenderer';
 
 // ============================================================================
 // Types
@@ -40,19 +40,19 @@ export function LucyAssistantMessage({ message }: LucyAssistantMessageProps) {
       {/* Header */}
       <div className="flex items-center gap-2">
         <LucyAvatar size="sm" />
-        <span className="text-xs text-muted-foreground">
+        <span className="text-xs font-mono text-muted-foreground">
           Lucy {timestamp && <span>• {timestamp}</span>}
         </span>
       </div>
 
       {/* Message content */}
-      <div className="max-w-[85%] ml-8">
+      <div className="max-w-[100%]">
         {/* Step indicator */}
         {step && <LucyStepIndicator step={step} />}
 
         {/* Text content */}
         {content.text && (
-          <div className="bg-zinc-900/80 border border-zinc-700/50 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm overflow-hidden">
+          <div className="bg-zinc-900/40 border border-zinc-800/50 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm overflow-hidden">
             <LucyTextRenderer text={content.text} isStreaming={isStreaming} />
           </div>
         )}

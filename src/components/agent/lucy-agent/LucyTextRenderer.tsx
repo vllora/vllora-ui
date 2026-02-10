@@ -30,10 +30,10 @@ export const LucyTextRenderer = memo(({ text, isStreaming, className }: LucyText
 
   return (
     <>
-      <div className={cn('text-sm', className)}>
+      <div className={cn('text-[13px]', className)}>
         {/* <TextContent content={text} /> */}
         <MarkdownViewer message={displayText} />
-        <div className="flex justify-end mt-2">
+        <div className="flex justify-end mt-1">
           <button
             onClick={() => setShowDialog(true)}
             aria-label="View full content"

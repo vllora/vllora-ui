@@ -18,9 +18,9 @@ export * from './LucyProviderCheck';
 
 // Message rendering components
 export * from './LucyMessage';
-export * from './LucyMessageRenderer';
-export * from './LucyUserMessage';
-export * from './LucyAssistantMessage';
+export * from './messages/LucyMessageRenderer';
+export * from './messages/LucyUserMessage';
+export * from './messages/LucyAssistantMessage';
 export * from './LucyTextRenderer';
 export * from './LucyImageRenderer';
 export * from './LucyStepIndicator';

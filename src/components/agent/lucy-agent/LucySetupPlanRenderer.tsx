@@ -245,7 +245,7 @@ export function LucySetupPlanRenderer({ toolCall, state }: ToolRendererProps) {
       <div className="border border-border rounded-lg bg-muted/30 p-4">
         <div className="flex items-center gap-2 text-muted-foreground">
           <Loader2 className="w-4 h-4 animate-spin" />
-          <span className="text-sm">Analyzing your documents and creating a setup plan...</span>
+          <span className="text-[11px]">Analyzing your documents and creating a setup plan...</span>
         </div>
       </div>
     );
@@ -254,12 +254,12 @@ export function LucySetupPlanRenderer({ toolCall, state }: ToolRendererProps) {
   // If there's a plan, show a simplified message (plan is displayed in right panel)
   if (isCompleted && result?.success && result?.plan) {
     return (
-      <div className="border border-green-500/30 rounded-lg bg-green-500/10 p-4">
+      <div className="rounded-lg bg-green-500/10 p-4">
         <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
           <CheckCircle2 className="w-4 h-4" />
-          <span className="text-sm font-medium">Setup plan ready</span>
+          <span className="text-[12px] font-medium font-mono">Setup plan ready</span>
         </div>
-        <div className="text-sm text-muted-foreground mt-1">
+        <div className="text-[10px] font-mono text-muted-foreground mt-1">
           Review the plan in the main panel on the right, then click &quot;Approve &amp; Execute&quot; to proceed.
         </div>
       </div>

@@ -18,8 +18,8 @@ import { DistriMessage, DistriEvent, DistriChatMessage, isDistriMessage, isDistr
 import { useChatStateStore } from '@distri/react';
 import { LucyUserMessage } from './LucyUserMessage';
 import { LucyAssistantMessage } from './LucyAssistantMessage';
-import { LucyToolExecutionRenderer } from './LucyToolExecutionRenderer';
-import type { ToolRendererMap } from './LucyToolRenderer';
+import { LucyToolExecutionRenderer } from '../LucyToolExecutionRenderer';
+import type { ToolRendererMap } from '../LucyToolRenderer';
 
 // ============================================================================
 // Types
@@ -87,7 +87,7 @@ export function LucyMessageRenderer({
 
       case 'agent_handover':
         return (
-          <div key={`handover-${index}`} className="ml-8 p-3 bg-muted rounded-lg border">
+          <div key={`handover-${index}`} className="p-3 bg-muted rounded-lg border">
             <div className="text-sm text-muted-foreground">
               <strong>Handover to:</strong> {event.data?.to_agent || 'unknown agent'}
             </div>
@@ -98,7 +98,7 @@ export function LucyMessageRenderer({
         return (
           <div
             key={`run-error-${index}`}
-            className="ml-8 p-3 bg-destructive/10 border border-destructive/20 rounded-lg"
+            className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg"
           >
             <div className="text-sm text-destructive">
               <strong>Error:</strong> {event.data?.message || 'Unknown error occurred'}
