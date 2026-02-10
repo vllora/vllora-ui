@@ -40,13 +40,13 @@ export function ArrowSegment({
 
   const getPath = () => {
     if (isFirst && isLast) {
-      return "M 4,0 L 90,0 L 100,18 L 90,36 L 4,36 L 4,0 Z";
+      return "M 4,0 Q 0,0 0,4 L 0,32 Q 0,36 4,36 L 96,36 Q 100,36 100,32 L 100,4 Q 100,0 96,0 Z";
     }
     if (isFirst) {
-      return "M 4,0 L 90,0 L 100,18 L 90,36 L 4,36 L 4,0 Z";
+      return "M 4,0 Q 0,0 0,4 L 0,32 Q 0,36 4,36 L 90,36 L 100,18 L 90,0 Z";
     }
     if (isLast) {
-      return "M 0,0 L 90,0 L 96,0 L 96,36 L 90,36 L 0,36 L 10,18 Z";
+      return "M 0,0 L 96,0 Q 100,0 100,4 L 100,32 Q 100,36 96,36 L 0,36 L 10,18 Z";
     }
     return "M 0,0 L 90,0 L 100,18 L 90,36 L 0,36 L 10,18 Z";
   };
@@ -65,11 +65,6 @@ export function ArrowSegment({
         viewBox="0 0 100 36"
         style={{ overflow: "visible" }}
       >
-        <defs>
-          <clipPath id={`arrow-clip-${isFirst}-${isLast}`}>
-            <path d={path} />
-          </clipPath>
-        </defs>
         <path
           d={path}
           fill={getBgColor()}

@@ -106,7 +106,7 @@ export function SectionTabs({
             return (
               <Tooltip key={tab.id}>
                 <TooltipTrigger asChild>
-                  <div>
+                  <div className="flex-1">
                     <ArrowSegment
                       isFirst={isFirst}
                       isLast={isLast}

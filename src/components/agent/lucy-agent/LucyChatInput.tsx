@@ -130,19 +130,6 @@ export function LucyChatInput({
     }
   }, [value]);
 
-  // Handle keyboard shortcuts
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        if ((value.trim() || attachedImages.length > 0) && !isStreaming && !disabled) {
-          handleSend();
-        }
-      }
-    },
-    [value, attachedImages, isStreaming, disabled]
-  );
-
   // Handle send with files
   const handleSend = useCallback(() => {
     if (isStreaming && onStop) {
@@ -197,6 +184,19 @@ export function LucyChatInput({
       onSend(value);
     }
   }, [value, attachedImages, onSend, onStop, isStreaming]);
+
+  // Handle keyboard shortcuts
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        if ((value.trim() || attachedImages.length > 0) && !isStreaming && !disabled) {
+          handleSend();
+        }
+      }
+    },
+    [value, attachedImages, isStreaming, disabled, handleSend]
+  );
 
   // Handle file selection
   const handleFileSelect = useCallback(

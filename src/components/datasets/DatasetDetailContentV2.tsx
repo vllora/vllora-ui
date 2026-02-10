@@ -254,8 +254,10 @@ export function DatasetDetailContentV2() {
     if (shouldAutoGenerate && datasetId && !hasTriggeredAutoGenerate.current) {
       hasTriggeredAutoGenerate.current = true;
 
-      // Remove the query param to prevent re-triggering
-      setSearchParams({}, { replace: true });
+      // Remove only the autoGeneratePlan param to prevent re-triggering
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete("autoGeneratePlan");
+      setSearchParams(newParams, { replace: true });
 
       // Small delay to let knowledge sources finish processing
       const timer = setTimeout(() => {
@@ -504,6 +506,14 @@ export function DatasetDetailContentV2() {
                 onRegenerate={regenerateReadme}
                 className="h-full"
               />
+            </div>
+          )}
+          {activeSection === "deploy" && (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center space-y-2">
+                <p className="text-muted-foreground text-sm">Deploy is coming soon.</p>
+                <p className="text-muted-foreground text-xs">You will be able to deploy your fine-tuned models here.</p>
+              </div>
             </div>
           )}
           {activeSection === "docs" && (

@@ -58,14 +58,14 @@ export function buildDatasetAnalysisPrompt({
       return `I have uploaded ${knowledgeSourcesCount} document(s) for this dataset. Please use the propose_setup_plan tool to analyze my documents and create a comprehensive setup plan including topic hierarchy, data generation strategy, and evaluation criteria. I'd like to see the full plan before we proceed.`;
     }
 
-    // Has objective but no knowledge sources - offer to proceed without docs
-    if (!hasKnowledgeSources) {
-      return `This is a new dataset ready for fine-tuning setup. Please use the propose_setup_plan tool to create a setup plan based on the training objective. If I have reference documents to upload, I'll add them to the Docs tab.`;
-    }
-
     // Has topics already (rare for empty dataset)
     if (hasTopics) {
       return `Help me generate initial training data. I'd like 10-15 seed examples distributed across the topic categories to get started.`;
+    }
+
+    // Has objective but no knowledge sources - offer to proceed without docs
+    if (!hasKnowledgeSources) {
+      return `This is a new dataset ready for fine-tuning setup. Please use the propose_setup_plan tool to create a setup plan based on the training objective. If I have reference documents to upload, I'll add them to the Docs tab.`;
     }
   }
 
