@@ -59,6 +59,9 @@ import { runDryRunHandler } from './run-dry-run';
 import * as knowledgeDB from '@/services/knowledge-sources-db';
 import { generateDatasetReadme, type KnowledgeSourceInfo, type SetupPlanSummary } from '@/services/dataset-readme-generator';
 
+// Import for finetune job creation
+import { startFinetuneTraining } from '@/services/quick-finetune';
+
 // Side-effect import to ensure execution state store is listening for progress events
 import './execution-state-store';
 
@@ -189,6 +192,7 @@ export const executeSetupPlanHandler: ToolHandler = async (
       { id: 'upload', name: 'Upload Dataset', status: 'pending' },
       { id: 'dryrun', name: 'Run Dry Run', status: 'pending' },
       { id: 'readme', name: 'Generate README', status: 'pending' },
+      { id: 'finetune', name: 'Start Finetune Job', status: 'pending' },
     ];
 
     const progress: ExecutionProgress = {
@@ -220,6 +224,8 @@ export const executeSetupPlanHandler: ToolHandler = async (
       dry_run_completed: false,
       dry_run_pass_rate: undefined as number | undefined,
       ready_to_finetune: false,
+      finetune_job_id: undefined as string | undefined,
+      finetune_job_status: undefined as string | undefined,
     };
 
     // =========================================================================
@@ -467,6 +473,56 @@ export const executeSetupPlanHandler: ToolHandler = async (
     }
 
     // =========================================================================
+    // Step 7: Start Finetune Job
+    // =========================================================================
+    progress.current_step = 7;
+    updateStep('finetune', { status: 'running', message: 'Creating finetune job...' });
+
+    try {
+      // Get the backend dataset ID from the uploaded dataset
+      const datasetForJob = await datasetsDB.getDatasetById(dataset_id);
+      if (!datasetForJob?.backendDatasetId) {
+        throw new Error('Dataset not uploaded to backend');
+      }
+
+      // Start the finetune training job
+      const finetuneResult = await startFinetuneTraining({
+        backendDatasetId: datasetForJob.backendDatasetId,
+        datasetName: datasetForJob.name,
+        workflowId: workflow_id,
+        baseModel: 'llama-v3-8b-instruct',
+      });
+
+      if (!finetuneResult.success) {
+        throw new Error(finetuneResult.error || 'Failed to create finetune job');
+      }
+
+      summary.finetune_job_id = finetuneResult.jobId;
+      summary.finetune_job_status = finetuneResult.status;
+
+      updateStep('finetune', {
+        status: 'completed',
+        message: `Finetune job started: ${finetuneResult.jobId}`,
+        result: finetuneResult,
+      });
+
+      // Emit event so FinetuneJobsContext can refresh
+      emitter.emit('vllora_finetune_job_created', {
+        backendDatasetId: datasetForJob.backendDatasetId,
+        jobId: finetuneResult.jobId,
+      });
+
+      console.log('[executeSetupPlan] Finetune job created:', finetuneResult.jobId);
+    } catch (error) {
+      // Finetune job creation failure is not fatal - user can start manually
+      updateStep('finetune', {
+        status: 'failed',
+        error: error instanceof Error ? error.message : 'Failed to start finetune job',
+      });
+      console.error('[executeSetupPlan] Finetune job creation failed:', error);
+    }
+
+    // =========================================================================
     // Complete
     // =========================================================================
     progress.is_complete = true;
@@ -499,7 +555,7 @@ export const executeSetupPlanHandler: ToolHandler = async (
 
 export const executeSetupPlanTool: DistriFnTool = {
   name: 'execute_setup_plan',
-  description: `Execute an approved setup plan to automatically configure the dataset.
+  description: `Execute an approved setup plan to automatically configure the dataset and start fine-tuning.
 
 This tool runs all setup steps sequentially:
 1. Apply topic hierarchy
@@ -508,13 +564,14 @@ This tool runs all setup steps sequentially:
 4. Upload dataset to backend
 5. Run dry run evaluation
 6. Generate README documentation (includes data provenance, statistics, and structure)
+7. Start finetune job (automatically creates and submits the training job)
 
 Use this tool ONLY after the user has approved a plan from propose_setup_plan.
 When the user says "I approve the setup plan" or similar, call this tool with just the dataset_id.
 The approved plan is automatically retrieved from the UI approval event.
 
 The tool emits progress events so the UI can show real-time updates.
-After completion, the dataset is ready for fine-tuning with full documentation.`,
+After completion, the finetune job is started automatically - no manual intervention needed.`,
   type: 'function',
   parameters: {
     type: 'object',

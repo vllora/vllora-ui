@@ -1,14 +1,13 @@
 /**
  * ExecutionProgressCard
  *
- * Shows real-time progress of setup plan execution.
- * Professional stepper design with status indicators.
+ * Compact execution progress display with inline stepper.
+ * Minimalist design that harmonizes with other plan section components.
  */
 
 import { useEffect, useState } from 'react';
 import {
   CheckCircle2,
-  Circle,
   Loader2,
   XCircle,
   AlertCircle,
@@ -36,7 +35,6 @@ export function ExecutionProgressCard({
     initialProgress || null
   );
 
-  // Update progress when initialProgress changes (handles race condition)
   useEffect(() => {
     if (initialProgress) {
       setProgress(initialProgress);
@@ -46,7 +44,6 @@ export function ExecutionProgressCard({
     }
   }, [initialProgress, onComplete]);
 
-  // Subscribe to progress events for real-time updates
   useEffect(() => {
     const handleProgress = ({ progress: newProgress }: { progress: ExecutionProgress }) => {
       setProgress(newProgress);
@@ -63,112 +60,104 @@ export function ExecutionProgressCard({
 
   if (!progress) {
     return (
-      <div className="rounded-xl border border-border bg-card p-6">
-        <div className="flex flex-col items-center justify-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-            <Loader2 className="w-6 h-6 text-primary animate-spin" />
-          </div>
-          <p className="text-sm text-muted-foreground">Initializing setup...</p>
+      <div className="rounded-lg border border-border bg-card p-4">
+        <div className="flex items-center gap-3">
+          <Loader2 className="w-4 h-4 text-primary animate-spin" />
+          <span className="text-sm text-muted-foreground">Initializing setup...</span>
         </div>
       </div>
     );
   }
 
-  const getStatusIcon = (status: ExecutionStepStatus) => {
+  const getStepIndicator = (status: ExecutionStepStatus, index: number) => {
+    const baseClasses = 'w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium transition-all';
     switch (status) {
       case 'completed':
-        return <CheckCircle2 className="w-5 h-5 text-green-500" />;
+        return (
+          <div className={cn(baseClasses, 'bg-[rgb(var(--theme-500))] text-white')}>
+            <CheckCircle2 className="w-3.5 h-3.5" />
+          </div>
+        );
       case 'running':
-        return <Loader2 className="w-5 h-5 text-primary animate-spin" />;
+        return (
+          <div className={cn(baseClasses, 'bg-[rgba(var(--theme-500),0.7)] text-white')}>
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          </div>
+        );
       case 'failed':
-        return <XCircle className="w-5 h-5 text-destructive" />;
+        return (
+          <div className={cn(baseClasses, 'bg-destructive text-destructive-foreground')}>
+            <XCircle className="w-3.5 h-3.5" />
+          </div>
+        );
       case 'skipped':
-        return <AlertCircle className="w-5 h-5 text-amber-500" />;
+        return (
+          <div className={cn(baseClasses, 'bg-amber-500 text-white')}>
+            <AlertCircle className="w-3.5 h-3.5" />
+          </div>
+        );
       default:
-        return <Circle className="w-5 h-5 text-muted-foreground/30" />;
+        return (
+          <div className={cn(baseClasses, 'bg-muted text-muted-foreground')}>
+            {index + 1}
+          </div>
+        );
     }
   };
 
-  const getStepBgClass = (status: ExecutionStepStatus) => {
-    switch (status) {
-      case 'completed':
-        return 'bg-green-500/10 border-green-500/20';
-      case 'running':
-        return 'bg-primary/10 border-primary/20';
-      case 'failed':
-        return 'bg-destructive/10 border-destructive/20';
-      case 'skipped':
-        return 'bg-amber-500/10 border-amber-500/20';
-      default:
-        return 'bg-muted/30 border-transparent';
-    }
-  };
-
-  const completedCount = progress.steps.filter(
-    (s) => s.status === 'completed'
-  ).length;
+  const completedCount = progress.steps.filter((s) => s.status === 'completed').length;
   const overallProgress = (completedCount / progress.total_steps) * 100;
   const currentStep = progress.steps.find((s) => s.status === 'running');
+  const failedStep = progress.steps.find((s) => s.status === 'failed');
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
-      {/* Header */}
-      <div
-        className={cn(
-          'px-5 py-4 border-b border-border',
-          progress.is_complete && !progress.has_error
-            ? 'bg-gradient-to-r from-green-500/10 to-transparent'
-            : progress.has_error
-            ? 'bg-gradient-to-r from-destructive/10 to-transparent'
-            : 'bg-gradient-to-r from-primary/10 to-transparent'
-        )}
-      >
+    <div className="rounded-lg border border-border bg-card overflow-hidden">
+      {/* Compact Header */}
+      <div className="px-4 py-3 border-b border-border">
         <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              'w-10 h-10 rounded-lg flex items-center justify-center',
-              progress.is_complete && !progress.has_error
-                ? 'bg-green-500/20'
-                : progress.has_error
-                ? 'bg-destructive/20'
-                : 'bg-primary/20'
+          {progress.is_complete && !progress.has_error ? (
+            <div className="w-8 h-8 rounded-full bg-[rgba(var(--theme-500),0.15)] flex items-center justify-center">
+              <Sparkles className="w-4 h-4 text-[rgb(var(--theme-500))]" />
+            </div>
+          ) : progress.has_error ? (
+            <div className="w-8 h-8 rounded-full bg-destructive/15 flex items-center justify-center">
+              <XCircle className="w-4 h-4 text-destructive" />
+            </div>
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-[rgba(var(--theme-500),0.15)] flex items-center justify-center">
+              <Loader2 className="w-4 h-4 text-[rgb(var(--theme-500))] animate-spin" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium truncate">
+                {progress.is_complete && !progress.has_error
+                  ? 'Setup Complete'
+                  : progress.has_error
+                  ? 'Setup Failed'
+                  : currentStep?.name || 'Setting up...'}
+              </span>
+              {!progress.is_complete && (
+                <span className="text-xs text-muted-foreground shrink-0">
+                  {completedCount}/{progress.total_steps}
+                </span>
+              )}
+            </div>
+            {currentStep?.message && !progress.is_complete && (
+              <p className="text-xs text-muted-foreground truncate mt-0.5">
+                {currentStep.message}
+              </p>
             )}
-          >
-            {progress.is_complete && !progress.has_error ? (
-              <Sparkles className="w-5 h-5 text-green-500" />
-            ) : progress.has_error ? (
-              <XCircle className="w-5 h-5 text-destructive" />
-            ) : (
-              <Loader2 className="w-5 h-5 text-primary animate-spin" />
-            )}
-          </div>
-          <div className="flex-1">
-            <h3 className="text-sm font-semibold">
-              {progress.is_complete && !progress.has_error
-                ? 'Setup Complete!'
-                : progress.has_error
-                ? 'Setup Failed'
-                : currentStep
-                ? currentStep.name
-                : 'Setting up...'}
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              {progress.is_complete && !progress.has_error
-                ? 'Your dataset is ready for fine-tuning'
-                : progress.has_error
-                ? 'An error occurred during setup'
-                : `Step ${completedCount + 1} of ${progress.total_steps}`}
-            </p>
           </div>
         </div>
 
-        {/* Progress bar */}
+        {/* Inline Progress Bar */}
         {!progress.is_complete && (
-          <div className="mt-3 h-2 bg-muted rounded-full overflow-hidden">
+          <div className="mt-2.5 h-1.5 bg-muted rounded-full overflow-hidden">
             <div
               className={cn(
                 'h-full rounded-full transition-all duration-500',
-                progress.has_error ? 'bg-destructive' : 'bg-primary'
+                progress.has_error ? 'bg-destructive' : 'bg-[rgb(var(--theme-500))]'
               )}
               style={{ width: `${overallProgress}%` }}
             />
@@ -176,90 +165,81 @@ export function ExecutionProgressCard({
         )}
       </div>
 
-      {/* Steps */}
-      <div className="p-4">
-        <div className="space-y-2">
+      {/* Vertical Step Indicators */}
+      <div className="px-4 py-3">
+        <div className="space-y-0">
           {progress.steps.map((step, index) => (
-            <div
-              key={step.id}
-              className={cn(
-                'flex items-center gap-3 p-3 rounded-lg border transition-all',
-                getStepBgClass(step.status),
-                step.status === 'pending' && 'opacity-50'
-              )}
-            >
-              {/* Step number or icon */}
-              <div className="flex-shrink-0">
-                {step.status === 'pending' ? (
-                  <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground">
-                    {index + 1}
-                  </div>
-                ) : (
-                  getStatusIcon(step.status)
+            <div key={step.id} className="flex gap-3">
+              {/* Indicator column */}
+              <div className="flex flex-col items-center">
+                {getStepIndicator(step.status, index)}
+                {index < progress.steps.length - 1 && (
+                  <div
+                    className={cn(
+                      'w-0.5 flex-1 min-h-[16px]',
+                      step.status === 'completed' ? 'bg-[rgb(var(--theme-500))]' : 'bg-muted'
+                    )}
+                  />
                 )}
               </div>
-
-              {/* Step info */}
-              <div className="flex-1 min-w-0">
-                <p
+              {/* Content column */}
+              <div className={cn('flex-1 min-w-0 pb-3', step.status === 'pending' && 'opacity-50')}>
+                <span
                   className={cn(
-                    'text-sm font-medium',
-                    step.status === 'completed' && 'text-green-600 dark:text-green-400',
+                    'text-xs',
+                    step.status === 'completed' && 'text-[rgb(var(--theme-600))]',
                     step.status === 'failed' && 'text-destructive',
-                    step.status === 'running' && 'text-primary'
+                    step.status === 'running' && 'text-[rgb(var(--theme-500))] font-medium',
+                    step.status === 'pending' && 'text-muted-foreground'
                   )}
                 >
                   {step.name}
-                </p>
-                {step.message && (
+                </span>
+                {step.status === 'running' && step.message && (
                   <p className="text-xs text-muted-foreground mt-0.5">{step.message}</p>
                 )}
                 {step.error && (
                   <p className="text-xs text-destructive mt-0.5">{step.error}</p>
                 )}
               </div>
-
-              {/* Step progress for running step */}
-              {step.status === 'running' && step.progress !== undefined && (
-                <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary rounded-full transition-all"
-                    style={{ width: `${step.progress}%` }}
-                  />
-                </div>
-              )}
             </div>
           ))}
         </div>
       </div>
 
-      {/* Completion footer */}
+      {/* Compact Completion Footer */}
       {progress.is_complete && !progress.has_error && (
-        <div className="px-4 pb-4">
-          <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-green-600 dark:text-green-400">
-                  Ready for fine-tuning!
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Go to the Jobs tab to start training your model
-                </p>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="border-green-500/30 text-green-600 hover:bg-green-500/10"
-                onClick={() => {
-                  // Find and click the Jobs tab
-                  const jobsTab = document.querySelector('[data-section="jobs"]') as HTMLElement;
-                  if (jobsTab) jobsTab.click();
-                }}
-              >
-                Go to Jobs
-                <ArrowRight className="w-4 h-4 ml-1" />
-              </Button>
-            </div>
+        <div className="px-4 pb-3">
+          <div className="flex items-center justify-between gap-3 p-2.5 rounded-md bg-[rgba(var(--theme-500),0.1)] border border-[rgba(var(--theme-500),0.2)]">
+            <span className="text-xs text-[rgb(var(--theme-600))]">
+              Ready for fine-tuning
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-xs text-[rgb(var(--theme-600))] hover:text-[rgb(var(--theme-700))] hover:bg-[rgba(var(--theme-500),0.1)]"
+              onClick={() => {
+                const jobsTab = document.querySelector('[data-section="jobs"]') as HTMLElement;
+                if (jobsTab) jobsTab.click();
+              }}
+            >
+              Go to Jobs
+              <ArrowRight className="w-3.5 h-3.5 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Error Footer */}
+      {progress.has_error && failedStep && (
+        <div className="px-4 pb-3">
+          <div className="p-2.5 rounded-md bg-destructive/10 border border-destructive/20">
+            <p className="text-xs text-destructive font-medium">
+              Failed at: {failedStep.name}
+            </p>
+            {failedStep.error && (
+              <p className="text-xs text-destructive/80 mt-0.5">{failedStep.error}</p>
+            )}
           </div>
         </div>
       )}

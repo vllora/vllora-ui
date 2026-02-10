@@ -204,6 +204,8 @@ interface ExecuteSetupPlanResult {
     dataset_uploaded: boolean;
     dry_run_passed: boolean;
     ready_to_finetune: boolean;
+    finetune_job_id?: string;
+    finetune_job_status?: string;
   };
 }
 ```
@@ -219,6 +221,7 @@ interface ExecuteSetupPlanResult {
    - Topic hierarchy visualization
    - Record statistics and coverage analysis
    - Setup plan execution summary
+7. **Start Finetune Job** - Automatically creates and submits the training job (non-fatal if fails, user can start manually)
 
 ## Progress Indicators
 
