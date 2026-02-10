@@ -60,7 +60,7 @@ import * as knowledgeDB from '@/services/knowledge-sources-db';
 import { generateDatasetReadme, type KnowledgeSourceInfo, type SetupPlanSummary } from '@/services/dataset-readme-generator';
 
 // Import for finetune job creation
-import { quickFinetune, startFinetuneTraining } from '@/services/quick-finetune';
+import { quickFinetune } from '@/services/quick-finetune';
 
 // Side-effect import to ensure execution state store is listening for progress events
 import './execution-state-store';

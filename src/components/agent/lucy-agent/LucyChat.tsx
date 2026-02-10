@@ -2,39 +2,35 @@
  * LucyChat
  *
  * Custom chat interface for Lucy AI assistant.
- * Uses useChat hook from @distri/react for logic.
+ * Uses useChat hook from @distri/react for core chat logic.
+ * Uses custom hooks for pending messages, file attachments, and tool expansion.
  * Uses custom LucyMessageRenderer for Lucy-themed message display.
- * Custom input and welcome components for Lucy branding.
  *
- * Features parity with Chat from @distri/react:
+ * Features:
  * - Message rendering with LucyMessageRenderer (custom Lucy styling)
  * - External tool calls with approval UI
  * - Thinking/typing indicators
  * - Auto-expand for running/error tools
  * - Pending message queue during streaming
- * - Multi-modal support (images)
+ * - Multi-modal support (images, PDFs, documents)
  * - Custom tool renderers
- * - Callbacks for state changes
+ * - Auto-trigger prompts for proactive analysis
  */
 
 import { useCallback, useRef, useEffect, useState } from 'react';
 import { useChat, useChatStateStore, TodosDisplay } from '@distri/react';
 import type { ToolRendererMap, DistriAnyTool } from '@distri/react';
-import {
-  Agent,
-  DistriChatMessage,
-  DistriMessage,
-  DistriPart,
-  ToolExecutionOptions,
-  TodoItem,
-} from '@distri/core';
-import { LucyChatInput, AttachedImage } from './LucyChatInput';
+import { Agent, DistriChatMessage, DistriMessage, DistriPart, ToolExecutionOptions } from '@distri/core';
+import { LucyChatInput } from './LucyChatInput';
 import { LucyWelcome, QuickAction } from './LucyWelcome';
 import { LucyToolCalls } from './LucyToolCalls';
 import { LucyPendingMessage } from './LucyPendingMessage';
 import { LucyStreamingIndicator } from './LucyStreamingIndicator';
 import { LucyMessageRenderer } from './LucyMessageRenderer';
 import { cn } from '@/lib/utils';
+
+// Custom hooks for chat functionality
+import { usePendingMessage, useFileAttachments, useAutoExpandTools } from '@/hooks/chat';
 
 // ============================================================================
 // Types
@@ -115,49 +111,14 @@ export function LucyChat({
 }: LucyChatProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState('');
-  const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
-
-  // Pending message state - accumulates parts when streaming
-  const [pendingMessage, setPendingMessage] = useState<DistriPart[] | null>(null);
-
-  // Image attachments state
-  const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([]);
 
   // Voice input state
   const [isStreamingVoice, setIsStreamingVoice] = useState(false);
 
-  // Todos state - populated by write_todos tool via window events (external tool path)
-  const [localTodos, setLocalTodos] = useState<TodoItem[]>([]);
+  // Use store for todos (handles todos_updated events from server)
+  const todos = useChatStateStore((state) => state.todos);
 
-  // Also subscribe to store todos (builtin tool path - when server handles write_todos)
-  const storeTodos = useChatStateStore((state) => state.todos);
-
-  // Use whichever source has todos - prefer store if it has data (more recent updates)
-  const todos = storeTodos.length > 0 ? storeTodos : localTodos;
-
-  // Listen for todos updates from external write_todos tool
-  useEffect(() => {
-    const handleTodosUpdate = (event: CustomEvent<{ todos: TodoItem[] }>) => {
-      console.log('[LucyChat] Received lucy-todos-updated event:', event.detail.todos);
-      setLocalTodos(event.detail.todos);
-    };
-
-    window.addEventListener('lucy-todos-updated' as any, handleTodosUpdate);
-    return () => {
-      window.removeEventListener('lucy-todos-updated' as any, handleTodosUpdate);
-    };
-  }, []);
-
-  // Debug: log todos state changes
-  useEffect(() => {
-    console.log('[LucyChat] Todos state:', { localTodos, storeTodos, merged: todos });
-  }, [localTodos, storeTodos, todos]);
-
-  // Debug: log external tools on mount
-  useEffect(() => {
-    console.log('[LucyChat] External tools registered:', externalTools?.map(t => t.name));
-  }, [externalTools]);
-
+  // Core chat hook from @distri/react
   const {
     messages,
     isStreaming,
@@ -182,6 +143,26 @@ export function LucyChat({
   const hasPendingToolCalls = useChatStateStore((state) => state.hasPendingToolCalls);
   const failAllPendingToolCalls = useChatStateStore((state) => state.failAllPendingToolCalls);
 
+  // Custom hooks for chat functionality
+  const { pendingMessage, queueOrSend } = usePendingMessage({
+    isStreaming,
+    sendMessage: async (parts) => {
+      await sendMessage(parts);
+    },
+    onError,
+  });
+
+  const {
+    files: attachedImages,
+    addFiles: handleAddImages,
+    removeFile: handleRemoveImage,
+    clearFiles: clearAttachedImages,
+  } = useFileAttachments();
+
+  const { expandedTools, toggleExpansion: toggleToolExpansion } = useAutoExpandTools({
+    toolCalls,
+  });
+
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -189,28 +170,9 @@ export function LucyChat({
     }
   }, [messages, isStreaming, toolCalls]);
 
-  // Auto-expand tools that are running or have errors
-  useEffect(() => {
-    const newExpanded = new Set(expandedTools);
-    let hasChanges = false;
-
-    toolCalls.forEach((toolCall) => {
-      if (
-        toolCall.status === 'running' ||
-        toolCall.status === 'error' ||
-        toolCall.status === 'user_action_required'
-      ) {
-        if (!newExpanded.has(toolCall.tool_call_id)) {
-          newExpanded.add(toolCall.tool_call_id);
-          hasChanges = true;
-        }
-      }
-    });
-
-    if (hasChanges) {
-      setExpandedTools(newExpanded);
-    }
-  }, [toolCalls, expandedTools]);
+  // ============================================================================
+  // Auto-trigger Prompt Logic (Lucy-specific)
+  // ============================================================================
 
   // Track the last auto-triggered prompt to prevent duplicate sends
   const lastAutoTriggeredPromptRef = useRef<string | null>(null);
@@ -251,12 +213,9 @@ export function LucyChat({
     // Small delay to ensure component is fully mounted
     const timer = setTimeout(() => {
       // Clear old todos when starting a new operation
-      // This ensures old task progress doesn't persist when a new prompt is triggered
-      setLocalTodos([]);
       useChatStateStore.getState().setTodos([]);
 
       // Dismiss any pending tool calls (e.g., ask_follow_up forms) before sending new message
-      // This ensures the form doesn't persist when a new external prompt is triggered
       if (hasPending) {
         failAllPendingToolCalls('Dismissed by new prompt');
       }
@@ -282,34 +241,9 @@ export function LucyChat({
     autoTriggerPendingRef.current = false;
   }, [threadId]);
 
-  // Auto-send pending message when streaming ends
-  useEffect(() => {
-    const sendPendingMessage = async () => {
-      if (!isStreaming && pendingMessage && pendingMessage.length > 0) {
-        const messageToSend = [...pendingMessage];
-        setPendingMessage(null);
-
-        try {
-          await sendMessage(messageToSend);
-        } catch (err) {
-          console.error('Failed to send pending message:', err);
-          if (onError && err instanceof Error) {
-            onError(err);
-          }
-        }
-      }
-    };
-
-    sendPendingMessage();
-  }, [isStreaming, pendingMessage, sendMessage, onError]);
-
-  // Helper to convert content to parts
-  const contentToParts = useCallback((content: string | DistriPart[]): DistriPart[] => {
-    if (typeof content === 'string') {
-      return [{ part_type: 'text', data: content }];
-    }
-    return content;
-  }, []);
+  // ============================================================================
+  // Handlers
+  // ============================================================================
 
   // Handle sending a message (with pending queue support)
   const handleSend = useCallback(
@@ -318,26 +252,17 @@ export function LucyChat({
       if (Array.isArray(content) && content.length === 0) return;
 
       setInput('');
+      clearAttachedImages();
 
-      // Clear attached images after sending
-      attachedImages.forEach((img) => URL.revokeObjectURL(img.preview));
-      setAttachedImages([]);
-
-      // If streaming, add to pending message parts instead of sending immediately
-      if (isStreaming) {
-        const newParts = contentToParts(content);
-        setPendingMessage((prev) => (prev ? [...prev, ...newParts] : newParts));
-      } else {
-        await sendMessage(content);
-      }
+      // Use the pending message hook's queueOrSend
+      await queueOrSend(content);
     },
-    [sendMessage, isStreaming, contentToParts, attachedImages]
+    [queueOrSend, clearAttachedImages]
   );
 
   // Handle stop streaming
   const handleStopStreaming = useCallback(() => {
     stopStreaming();
-    // Reset streaming states in the store
     useChatStateStore.getState().resetStreamingStates();
   }, [stopStreaming]);
 
@@ -349,64 +274,10 @@ export function LucyChat({
     [handleSend]
   );
 
-  // Helper to read file as base64
-  const readFileAsBase64 = useCallback((file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        // Remove the data URL prefix (e.g., "data:image/png;base64,")
-        const base64 = result.split(',')[1];
-        resolve(base64);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }, []);
+  // ============================================================================
+  // Voice Input (Browser Speech API)
+  // ============================================================================
 
-  // Check if file is an accepted type
-  const isAcceptedFile = useCallback((file: File): boolean => {
-    // Images
-    if (file.type.startsWith('image/')) return true;
-    // PDFs
-    if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) return true;
-    // Text files
-    if (['text/plain', 'text/markdown', 'application/json', 'text/csv'].includes(file.type)) return true;
-    if (file.name.match(/\.(txt|md|json|csv)$/)) return true;
-    return false;
-  }, []);
-
-  // Handle adding files (images, PDFs, documents)
-  const handleAddImages = useCallback(async (files: FileList | File[]) => {
-    const acceptedFiles = Array.from(files).filter(isAcceptedFile);
-    for (const file of acceptedFiles) {
-      const id = Date.now().toString() + Math.random().toString(36).substring(2, 11);
-      const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : '';
-      const base64 = await readFileAsBase64(file);
-      const newImage: AttachedImage = {
-        id,
-        file,
-        preview,
-        base64,
-        mimeType: file.type || 'application/octet-stream',
-        name: file.name,
-      };
-      setAttachedImages((prev) => [...prev, newImage]);
-    }
-  }, [readFileAsBase64, isAcceptedFile]);
-
-  // Handle removing an image
-  const handleRemoveImage = useCallback((id: string) => {
-    setAttachedImages((prev) => {
-      const image = prev.find((img) => img.id === id);
-      if (image) {
-        URL.revokeObjectURL(image.preview);
-      }
-      return prev.filter((img) => img.id !== id);
-    });
-  }, []);
-
-  // Start browser's Web Speech API
   const startBrowserSpeechRecognition = useCallback(() => {
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -442,29 +313,16 @@ export function LucyChat({
     recognition.start();
   }, []);
 
-  // Handle starting streaming voice input
-  // Uses browser's Web Speech API directly (more reliable than WebSocket-based API)
   const handleStartStreamingVoice = useCallback(() => {
     if (isStreamingVoice) return;
-
     setIsStreamingVoice(true);
     startBrowserSpeechRecognition();
   }, [isStreamingVoice, startBrowserSpeechRecognition]);
 
-  // Toggle tool expansion
-  const toggleToolExpansion = useCallback((toolId: string) => {
-    setExpandedTools((prev) => {
-      const next = new Set(prev);
-      if (next.has(toolId)) {
-        next.delete(toolId);
-      } else {
-        next.add(toolId);
-      }
-      return next;
-    });
-  }, []);
+  // ============================================================================
+  // Render
+  // ============================================================================
 
-  // Check if we should show welcome state
   const showWelcome = messages.length === 0 && !isLoading;
 
   return (
@@ -524,25 +382,25 @@ export function LucyChat({
 
       {/* Input Area */}
       <div className="bg-background/80 backdrop-blur">
-          <LucyChatInput
-            value={input}
-            onChange={setInput}
-            onSend={handleSend}
-            onStop={handleStopStreaming}
-            isStreaming={isStreaming}
-            disabled={isLoading || hasPendingToolCalls()}
-            placeholder={
-              isStreaming ? 'Message will be queued...' : 'Ask Lucy to analyze your dataset'
-            }
-            // Image attachments
-            attachedImages={attachedImages}
-            onRemoveImage={handleRemoveImage}
-            onAddImages={handleAddImages}
-            // Voice input (always enabled - uses browser fallback if no speechToText API)
-            voiceEnabled={true}
-            onStartStreamingVoice={handleStartStreamingVoice}
-            isStreamingVoice={isStreamingVoice}
-          />
+        <LucyChatInput
+          value={input}
+          onChange={setInput}
+          onSend={handleSend}
+          onStop={handleStopStreaming}
+          isStreaming={isStreaming}
+          disabled={isLoading || hasPendingToolCalls()}
+          placeholder={
+            isStreaming ? 'Message will be queued...' : 'Ask Lucy to analyze your dataset'
+          }
+          // File attachments (images, PDFs, documents)
+          attachedImages={attachedImages}
+          onRemoveImage={handleRemoveImage}
+          onAddImages={handleAddImages}
+          // Voice input (always enabled - uses browser fallback if no speechToText API)
+          voiceEnabled={true}
+          onStartStreamingVoice={handleStartStreamingVoice}
+          isStreamingVoice={isStreamingVoice}
+        />
       </div>
     </div>
   );
