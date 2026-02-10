@@ -525,7 +525,7 @@ export const generateInitialDataHandler: ToolHandler = async (
 ): Promise<GenerateInitialDataResult> => {
   try {
     console.log(
-      "[generateInitialData] Starting with params:",
+      "=== [generateInitialData] Starting with params:",
       JSON.stringify(params, null, 2),
     );
 
@@ -566,16 +566,6 @@ export const generateInitialDataHandler: ToolHandler = async (
       };
     }
 
-    console.log(
-      "[generateInitialData] Generating data for objective:",
-      objective.substring(0, 100) + "...",
-    );
-    console.log(
-      "[generateInitialData] Count:",
-      count,
-      "Mode:",
-      generation_mode,
-    );
     if (user_guidance) {
       console.log(
         "[generateInitialData] User guidance:",

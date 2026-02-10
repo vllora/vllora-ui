@@ -7,15 +7,15 @@
 
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { EditableTitle } from "./EditableTitle";
-import { WorkflowStepIndicator } from "./WorkflowStepIndicator";
+// import { WorkflowStepIndicator } from "./WorkflowStepIndicator";
 
 export function DatasetDetailHeader() {
   const {
     dataset,
-    datasetId,
-    records,
+    // datasetId,
+    // records,
     handleRenameDataset,
-    setDryRunDialog,
+    // setDryRunDialog,
   } = DatasetDetailConsumer();
 
   return (
@@ -38,14 +38,14 @@ export function DatasetDetailHeader() {
         )}
 
         {/* Workflow Checklist */}
-        <WorkflowStepIndicator
+        {/* <WorkflowStepIndicator
           datasetId={datasetId}
           className="shrink-0"
           variant="checklist"
           hasRecords={records.length > 0}
           hasEvalFunction={!!dataset?.evalScript}
           onEvalConfigClick={() => setDryRunDialog(true)}
-        />
+        /> */}
       </div>
     </div>
   );

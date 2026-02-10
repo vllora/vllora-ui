@@ -29,7 +29,6 @@ export interface LLMPlanResult {
 
 export async function callLLMForPlan(
   objective: string,
-  seedCount: number,
   knowledgeContext?: string
 ): Promise<LLMPlanResult> {
   const lucyConfig = await fetchLucyConfigCached();
@@ -45,8 +44,7 @@ export async function callLLMForPlan(
 
   const userPrompt = PLAN_GENERATION_USER
     .replace('{{objective}}', objective)
-    .replace('{{knowledge_section}}', knowledgeSection)
-    .replace('{{seed_count}}', String(seedCount));
+    .replace('{{knowledge_section}}', knowledgeSection);
 
   const messages: DistriMessage[] = [
     DistriClient.initDistriMessage('system', [

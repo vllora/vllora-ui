@@ -23,7 +23,7 @@ export const proposeSetupPlanHandler: ToolHandler = async (
   try {
     console.log('[proposeSetupPlan] Starting with params:', JSON.stringify(params, null, 2));
 
-    const { dataset_id, seed_count = 30 } = params as unknown as ProposeSetupPlanParams;
+    const { dataset_id } = params as unknown as ProposeSetupPlanParams;
 
     if (!dataset_id) {
       return { success: false, error: 'dataset_id is required' };
@@ -102,7 +102,7 @@ export const proposeSetupPlanHandler: ToolHandler = async (
     console.log('[proposeSetupPlan] Generating plan with', readySources.length, 'knowledge sources');
 
     // Call LLM to generate plan
-    const llmResult = await callLLMForPlan(objective, seed_count, knowledgeContext);
+    const llmResult = await callLLMForPlan(objective, knowledgeContext);
 
     // Count leaf topics only (topics that will have records assigned)
     // If a topic has subtopics, count only the subtopics (not the parent)
@@ -136,7 +136,6 @@ export const proposeSetupPlanHandler: ToolHandler = async (
       proposed_topics: llmResult.proposed_topics,
       total_topic_count: totalTopicCount,
       data_generation: {
-        seed_count: Math.min(seed_count, estimatedRecords),
         strategy: llmResult.strategy_notes,
         grounded_in_knowledge: readySources.length > 0,
       },
@@ -153,7 +152,7 @@ export const proposeSetupPlanHandler: ToolHandler = async (
         {
           step: 'Generate Initial Data',
           description: `Generate ${estimatedRecords} training examples distributed across topics`,
-          estimated_time: estimatedRecords > 100 ? '~3-5 minutes' : '~1-2 minutes',
+          estimated_time: estimatedRecords > 100 ? '~10-15 minutes' : '~1-2 minutes',
         },
         {
           step: 'Configure Evaluator',

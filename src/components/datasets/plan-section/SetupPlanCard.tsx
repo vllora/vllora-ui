@@ -185,7 +185,7 @@ export function SetupPlanCard({
           id="data"
           icon={Database}
           title="Data Generation"
-          subtitle={`${plan.data_generation.seed_count} seed examples`}
+          subtitle={`${plan.estimated_records} examples`}
         />
         {expandedSections.has('data') && (
           <div className="px-4 pb-3 text-xs space-y-2">

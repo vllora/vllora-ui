@@ -96,7 +96,7 @@ export function SetupPlanEditor({ plan, onApprove, onDismiss }: SetupPlanEditorP
         <Button
           size="sm"
           onClick={handleApprove}
-          className="h-8 gap-1 bg-green-600 hover:bg-green-700 text-white"
+          className="h-8 gap-1 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
         >
           <Check className="w-4 h-4" />
           Approve & Execute

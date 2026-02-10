@@ -4,7 +4,6 @@
 
 export interface ProposeSetupPlanParams {
   dataset_id: string;
-  seed_count?: number;
 }
 
 export interface ProposedTopic {
@@ -36,7 +35,6 @@ export interface SetupPlan {
 
   // Data generation plan
   data_generation: {
-    seed_count: number;
     strategy: string;
     grounded_in_knowledge: boolean;
   };

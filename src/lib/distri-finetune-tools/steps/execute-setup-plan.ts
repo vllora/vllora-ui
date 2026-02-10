@@ -60,7 +60,7 @@ import * as knowledgeDB from '@/services/knowledge-sources-db';
 import { generateDatasetReadme, type KnowledgeSourceInfo, type SetupPlanSummary } from '@/services/dataset-readme-generator';
 
 // Import for finetune job creation
-import { startFinetuneTraining } from '@/services/quick-finetune';
+import { quickFinetune, startFinetuneTraining } from '@/services/quick-finetune';
 
 // Side-effect import to ensure execution state store is listening for progress events
 import './execution-state-store';
@@ -268,9 +268,8 @@ export const executeSetupPlanHandler: ToolHandler = async (
     // Step 2: Generate Initial Data
     // =========================================================================
     progress.current_step = 2;
-    // Use estimated_records (sum of topic target counts) instead of seed_count
-    // This ensures we generate the number of records shown in the plan
-    const targetRecordCount = plan.estimated_records || plan.data_generation.seed_count;
+    // Use estimated_records (sum of topic target counts)
+    const targetRecordCount = plan.estimated_records;
     updateStep('generate', {
       status: 'running',
       message: `Generating ${targetRecordCount} training examples...`,
@@ -486,10 +485,8 @@ export const executeSetupPlanHandler: ToolHandler = async (
       }
 
       // Start the finetune training job
-      const finetuneResult = await startFinetuneTraining({
-        backendDatasetId: datasetForJob.backendDatasetId,
-        datasetName: datasetForJob.name,
-        workflowId: workflow_id,
+      const finetuneResult = await quickFinetune({
+        datasetId: dataset_id,
         baseModel: 'llama-v3-8b-instruct',
       });
 

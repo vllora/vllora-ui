@@ -78,7 +78,6 @@ ${topicsTable}
 
 | Setting | Value |
 |:--------|:------|
-| **Seed Count** | ${plan.data_generation.seed_count} examples |
 | **Strategy** | ${plan.data_generation.strategy} |
 | **Based on Docs** | ${plan.data_generation.grounded_in_knowledge ? '✅ Yes - uses your uploaded documents' : '❌ No - generates from general knowledge'} |
 
@@ -119,12 +118,6 @@ ${stepsContent}
  */
 export function markdownToPlan(md: string, originalPlan: SetupPlan): SetupPlan {
   const plan = JSON.parse(JSON.stringify(originalPlan)) as SetupPlan;
-
-  // Parse seed count from table row: | **Seed Count** | 50 examples |
-  const seedMatch = md.match(/\*\*Seed Count\*\*\s*\|\s*(\d+)/);
-  if (seedMatch) {
-    plan.data_generation.seed_count = parseInt(seedMatch[1], 10);
-  }
 
   // Parse topics from table rows
   // Main topic: | **Topic Name** | 40 | Description |

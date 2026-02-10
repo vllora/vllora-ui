@@ -107,7 +107,10 @@ function formatTopicTree(
     const childPrefix = isLast ? '    ' : '│   ';
 
     const fullPath = parentPath ? `${parentPath}/${node.name}` : node.name;
-    const count = recordsByTopic.get(fullPath) || recordsByTopic.get(node.id) || 0;
+    // Try multiple ways to match: full path, node ID, or just the node name
+    // Records may be saved with just the topic name (e.g., "FEN Insights")
+    // rather than the full path ("Position Analysis/FEN Insights")
+    const count = recordsByTopic.get(fullPath) || recordsByTopic.get(node.id) || recordsByTopic.get(node.name) || 0;
     result += `${prefix}${connector}${node.name} (${count})\n`;
 
     if (node.children?.length) {
@@ -338,7 +341,18 @@ ${diagnosis.recommendations.map((r) => `- ${r}`).join('\n')}`;
   return section;
 }
 
-function generateWorkflowSection(workflow: FinetuneWorkflowState): string {
+function generateWorkflowSection(workflow: FinetuneWorkflowState): string | null {
+  // Don't show workflow section if no progress has been made
+  // (workflow not started and no real steps have progressed)
+  // Note: 'not_started' step is initialized as 'completed', so we exclude it from the check
+  const realSteps: FinetuneStep[] = ['topics_config', 'categorize', 'coverage_generation', 'grader_config', 'dry_run', 'training', 'deployment'];
+  const hasAnyProgress = workflow.currentStep !== 'not_started' ||
+    realSteps.some((step) => workflow.stepStatus[step] !== 'pending');
+
+  if (!hasAnyProgress) {
+    return null;
+  }
+
   const steps: Array<{ name: string; step: FinetuneStep; details?: string }> = [
     { name: 'Topics Configuration', step: 'topics_config' },
     { name: 'Record Categorization', step: 'categorize' },
