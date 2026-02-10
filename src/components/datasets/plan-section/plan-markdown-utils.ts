@@ -40,11 +40,11 @@ ${plan.proposed_topics.map((t) => {
   return `| **${t.name}** | ${t.target_count} | ${t.description} |${subtopicRows ? '\n' + subtopicRows : ''}`;
 }).join('\n')}`;
 
-  // Build criteria table
-  const criteriaTable = `| Criterion | Weight | Description |
-|:----------|:------:|:------------|
+  // Build criteria table (simple list, all equally weighted)
+  const criteriaTable = `| Criterion | Description |
+|:----------|:------------|
 ${plan.grader_config.criteria.map((c) =>
-  `| ${c.name} | ${Math.round(c.weight * 100)}% | ${c.description} |`
+  `| ${c.name} | ${c.description} |`
 ).join('\n')}`;
 
   // Build execution steps
@@ -86,8 +86,6 @@ ${topicsTable}
 
 ## 📊 Evaluation Criteria
 
-**Passing Threshold:** \`${Math.round(plan.grader_config.passing_threshold * 100)}%\`
-
 ${criteriaTable}
 
 ### Evaluator Function Preview
@@ -126,12 +124,6 @@ export function markdownToPlan(md: string, originalPlan: SetupPlan): SetupPlan {
   const seedMatch = md.match(/\*\*Seed Count\*\*\s*\|\s*(\d+)/);
   if (seedMatch) {
     plan.data_generation.seed_count = parseInt(seedMatch[1], 10);
-  }
-
-  // Parse passing threshold: **Passing Threshold:** `75%`
-  const thresholdMatch = md.match(/\*\*Passing Threshold:\*\*\s*`?(\d+)%`?/);
-  if (thresholdMatch) {
-    plan.grader_config.passing_threshold = parseInt(thresholdMatch[1], 10) / 100;
   }
 
   // Parse topics from table rows
@@ -198,24 +190,28 @@ export function markdownToPlan(md: string, originalPlan: SetupPlan): SetupPlan {
     plan.proposed_topics = topics;
   }
 
-  // Parse criteria from table rows: | Criterion Name | 30% | Description |
-  const criteriaTableRegex = /\|\s*([^|*]+)\s*\|\s*(\d+)%\s*\|\s*([^|]+)\|/g;
+  // Parse criteria from table rows: | Criterion Name | Description |
+  const criteriaTableRegex = /\|\s*([^|*]+)\s*\|\s*([^|]+)\|/g;
   const criteria: typeof plan.grader_config.criteria = [];
   let criteriaMatch;
 
-  while ((criteriaMatch = criteriaTableRegex.exec(md)) !== null) {
-    const name = criteriaMatch[1].trim();
-    const weight = parseInt(criteriaMatch[2], 10);
-    const description = criteriaMatch[3].trim();
+  // Find the criteria section
+  const criteriaSection = md.match(/## 📊 Evaluation Criteria[\s\S]*?(?=---|$)/);
+  if (criteriaSection) {
+    const section = criteriaSection[0];
+    while ((criteriaMatch = criteriaTableRegex.exec(section)) !== null) {
+      const name = criteriaMatch[1].trim();
+      const description = criteriaMatch[2].trim();
 
-    // Skip header rows and separator rows
-    if (name.toLowerCase() === 'criterion' || name.startsWith(':') || name.startsWith('-')) continue;
+      // Skip header rows and separator rows
+      if (name.toLowerCase() === 'criterion' || name.startsWith(':') || name.startsWith('-')) continue;
+      if (description.toLowerCase() === 'description' || description.startsWith(':') || description.startsWith('-')) continue;
 
-    criteria.push({
-      name,
-      weight: weight / 100,
-      description,
-    });
+      criteria.push({
+        name,
+        description,
+      });
+    }
   }
 
   if (criteria.length > 0) {

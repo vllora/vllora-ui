@@ -41,6 +41,7 @@ import { KnowledgeSourcesPanel } from "./KnowledgeSourcesPanel";
 import { PlanSection } from "./plan-section";
 import { useDatasetReadme } from "@/hooks/useDatasetReadme";
 import * as knowledgeDB from "@/services/knowledge-sources-db";
+import { getProposedPlan } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
 import type { CoverageStats } from "@/types/dataset-types";
 
 export function DatasetDetailContentV2() {
@@ -221,6 +222,25 @@ export function DatasetDetailContentV2() {
       emitter.off("vllora_workflow_updated", handleWorkflowUpdated);
       emitter.off("vllora_switch_tab", handleSwitchTab);
     };
+  }, [datasetId, setActiveSection]);
+
+  // Check IndexedDB for persisted proposed plan on initial mount only (survives page refresh)
+  // Use a ref to ensure we only auto-switch once, not when user navigates between tabs
+  const hasCheckedPersistedPlan = useRef(false);
+  useEffect(() => {
+    const checkPersistedPlan = async () => {
+      if (!datasetId || hasCheckedPersistedPlan.current) return;
+      hasCheckedPersistedPlan.current = true;
+
+      const persistedPlan = await getProposedPlan(datasetId);
+      if (persistedPlan) {
+        console.log('[DatasetDetailContentV2] Found persisted plan, switching to Plan tab');
+        setHasPlanProposed(true);
+        setActiveSection("plan");
+      }
+    };
+
+    checkPersistedPlan();
   }, [datasetId, setActiveSection]);
 
   // Handle autoGeneratePlan query param (from new dataset with uploaded files)

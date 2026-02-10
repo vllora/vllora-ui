@@ -5,8 +5,9 @@
 import type { GraderCriterion } from './types';
 
 export function generateGraderTemplate(criteria: GraderCriterion[], objective: string): string {
+  // Simple numbered list without weights
   const criteriaList = criteria
-    .map((c, i) => `${i + 1}. **${c.name}** (${Math.round(c.weight * 100)}%): ${c.description}`)
+    .map((c, i) => `${i + 1}. **${c.name}**: ${c.description}`)
     .join('\n');
 
   // Generate snake_case keys for each criterion
@@ -21,7 +22,9 @@ export function generateGraderTemplate(criteria: GraderCriterion[], objective: s
     `        const ${key} = typeof result.${key} === 'number' ? result.${key} : 0;`
   ).join('\n');
 
+  // Simple sum for average calculation
   const scoreSum = criteriaKeys.join(' + ');
+
   const returnMetrics = criteriaKeys.map(key => `            ${key}`).join(',\n');
 
   return `/**
@@ -118,9 +121,10 @@ ${criteriaScoreExtraction}
 
         const judgeReasoning = result.reasoning || "No reasoning provided";
 
-        // Calculate final score (average of all criteria, normalized to 0-1)
+        // Calculate average score across all criteria (each is 0-5)
         const total = ${scoreSum};
-        const avgScore = total / ${criteria.length}.0;
+        const avgScore = total / ${criteria.length};
+        // Normalize to 0-1 (divide by 5 since max score per criterion is 5)
         let finalScore = avgScore / 5.0;
 
         if (isNaN(finalScore)) finalScore = 0;

@@ -15,6 +15,7 @@ import type {
 } from './types';
 import { callLLMForPlan } from './llm-service';
 import { generateGraderTemplate } from './grader-template';
+import { saveProposedPlan } from '../proposed-plan-store';
 
 export const proposeSetupPlanHandler: ToolHandler = async (
   params
@@ -141,7 +142,6 @@ export const proposeSetupPlanHandler: ToolHandler = async (
       },
       grader_config: {
         criteria: llmResult.grader_criteria,
-        passing_threshold: 0.7,
         template_preview: generateGraderTemplate(llmResult.grader_criteria, objective),
       },
       execution_steps: [
@@ -176,6 +176,9 @@ export const proposeSetupPlanHandler: ToolHandler = async (
     };
 
     console.log('[proposeSetupPlan] Plan generated successfully');
+
+    // Persist plan to IndexedDB so it survives page refresh
+    await saveProposedPlan(dataset_id, plan);
 
     // Emit event so the right panel can display the plan card
     emitter.emit('vllora_setup_plan_proposed', { datasetId: dataset_id, plan });

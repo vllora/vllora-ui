@@ -17,7 +17,6 @@ export interface ProposedTopic {
 export interface GraderCriterion {
   name: string;
   description: string;
-  weight: number;
 }
 
 export interface SetupPlan {
@@ -45,7 +44,6 @@ export interface SetupPlan {
   // Grader configuration
   grader_config: {
     criteria: GraderCriterion[];
-    passing_threshold: number;
     template_preview: string;
   };
 

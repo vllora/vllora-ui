@@ -85,6 +85,8 @@ interface WorkflowStepIndicatorProps {
   hasDeployedModel?: boolean;
   /** Callback when eval config milestone is clicked */
   onEvalConfigClick?: () => void;
+  /** Display variant: 'horizontal' (default) or 'checklist' */
+  variant?: 'horizontal' | 'checklist';
 }
 
 type MilestoneStatus = "completed" | "in_progress" | "pending";
@@ -106,6 +108,7 @@ export function WorkflowStepIndicator({
   hasCompletedFinetuneJob = false,
   hasDeployedModel = false,
   onEvalConfigClick,
+  variant = 'horizontal',
 }: WorkflowStepIndicatorProps) {
   const [workflow, setWorkflow] = useState<FinetuneWorkflowState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -308,7 +311,67 @@ export function WorkflowStepIndicator({
     );
   }
 
-  // Default: show milestone-based workflow indicator
+  // Checklist variant: vertical list with clean styling
+  if (variant === 'checklist') {
+    return (
+      <TooltipProvider delayDuration={100}>
+        <div className={cn("flex flex-col gap-1.5", className)}>
+          {MILESTONES.map((milestone, index) => {
+            const status = getMilestoneStatus(milestone);
+            const isClickable = milestone.id === "eval_config" && onEvalConfigClick;
+            const handleClick = isClickable ? onEvalConfigClick : undefined;
+
+            return (
+              <Tooltip key={milestone.id}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={handleClick}
+                    disabled={!isClickable}
+                    className={cn(
+                      "flex items-center gap-2 text-xs transition-colors text-left",
+                      isClickable && "cursor-pointer hover:text-[rgb(var(--theme-500))]",
+                      !isClickable && "cursor-default"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "w-4 h-4 rounded flex items-center justify-center text-[10px] font-medium shrink-0",
+                        status === "completed" && "bg-[rgb(var(--theme-500))] text-white",
+                        status === "in_progress" && "bg-[rgba(var(--theme-500),0.2)] text-[rgb(var(--theme-500))]",
+                        status === "pending" && "bg-muted text-muted-foreground"
+                      )}
+                    >
+                      {status === "completed" ? (
+                        <Check className="w-2.5 h-2.5" />
+                      ) : status === "in_progress" ? (
+                        <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                      ) : (
+                        <span>{index + 1}</span>
+                      )}
+                    </div>
+                    <span
+                      className={cn(
+                        status === "completed" && "text-[rgb(var(--theme-600))]",
+                        status === "in_progress" && "text-[rgb(var(--theme-500))] font-medium",
+                        status === "pending" && "text-muted-foreground"
+                      )}
+                    >
+                      {milestone.label}
+                    </span>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="left" className="text-xs">
+                  {milestone.label}
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </div>
+      </TooltipProvider>
+    );
+  }
+
+  // Default: show milestone-based workflow indicator (horizontal)
   return (
     <TooltipProvider delayDuration={100}>
       <div className={cn("flex items-center flex-1", className)}>

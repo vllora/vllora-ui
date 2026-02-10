@@ -166,7 +166,7 @@ export interface GenerationHistoryStore {
 // =============================================================================
 
 const DB_NAME = 'vllora-finetune';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -222,6 +222,11 @@ export async function getDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('jobEvaluations')) {
         const jobEvalsStore = db.createObjectStore('jobEvaluations', { keyPath: 'jobId' });
         jobEvalsStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+      }
+
+      // Create proposed plans store for persistence across page refresh (added in v4)
+      if (!db.objectStoreNames.contains('proposedPlans')) {
+        db.createObjectStore('proposedPlans', { keyPath: 'datasetId' });
       }
     };
   });

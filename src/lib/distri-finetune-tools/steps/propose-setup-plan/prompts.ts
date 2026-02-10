@@ -65,7 +65,7 @@ Output JSON:
     }
   ],
   "grader_criteria": [
-    { "name": "Criterion", "description": "What it evaluates", "weight": 0.3 }
+    { "name": "Criterion", "description": "What it evaluates" }
   ],
   "strategy_notes": "Brief approach"
 }
@@ -113,9 +113,8 @@ export const PLAN_RESPONSE_SCHEMA = {
             properties: {
               name: { type: 'string' },
               description: { type: 'string' },
-              weight: { type: 'number' },
             },
-            required: ['name', 'description', 'weight'],
+            required: ['name', 'description'],
             additionalProperties: false,
           },
         },

@@ -220,28 +220,15 @@ export function SetupPlanCard({
                   key={i}
                   className="flex items-start gap-2 text-xs"
                 >
-                  <div
-                    className="mt-1 w-8 h-2 rounded-full bg-primary/20 overflow-hidden"
-                  >
-                    <div
-                      className="h-full bg-primary"
-                      style={{ width: `${criterion.weight * 100}%` }}
-                    />
-                  </div>
+                  <div className="mt-1 w-2 h-2 rounded-full bg-primary" />
                   <div className="flex-1">
                     <span className="font-medium">{criterion.name}</span>
-                    <span className="text-muted-foreground ml-1">
-                      ({Math.round(criterion.weight * 100)}%)
-                    </span>
                     <div className="text-muted-foreground">
                       {criterion.description}
                     </div>
                   </div>
                 </div>
               ))}
-            </div>
-            <div className="mt-2 text-xs text-muted-foreground">
-              Passing threshold: {plan.grader_config.passing_threshold * 100}%
             </div>
           </div>
         )}

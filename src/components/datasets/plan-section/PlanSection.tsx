@@ -23,6 +23,8 @@ import type { ExecutionProgress } from "@/lib/distri-finetune-tools/steps/execut
 import "@/lib/distri-finetune-tools/steps/execute-setup-plan";
 // Import execution state store to get current execution on mount
 import { getCurrentExecution, getExecutingPlan } from "@/lib/distri-finetune-tools/steps/execution-state-store";
+// Import proposed plan store for persistence across page refresh
+import { getProposedPlan, clearProposedPlan } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
 
 interface PlanSectionProps {
   datasetId: string;
@@ -42,22 +44,41 @@ export function PlanSection({
   const [executedPlan, setExecutedPlan] = useState<SetupPlan | null>(null);
   const [showExecutedPlan, setShowExecutedPlan] = useState(false);
 
-  // On mount, check if there's an active execution in progress
-  // This handles the case where user switches to Plan tab after execution started
+  // On mount, check for:
+  // 1. Active execution in progress (handles tab switching during execution)
+  // 2. Persisted proposed plan (handles page refresh)
   useEffect(() => {
-    const currentExecution = getCurrentExecution(datasetId);
-    const executingPlan = getExecutingPlan(datasetId);
+    const loadState = async () => {
+      console.log('[PlanSection] loadState called for datasetId:', datasetId);
+      const currentExecution = getCurrentExecution(datasetId);
+      const executingPlan = getExecutingPlan(datasetId);
 
-    if (currentExecution && !currentExecution.is_complete) {
-      setExecutionProgress(currentExecution);
-      setIsExecuting(true);
-      if (executingPlan) {
-        setProposedPlan(executingPlan);
+      console.log('[PlanSection] currentExecution:', currentExecution);
+      console.log('[PlanSection] executingPlan:', executingPlan);
+
+      if (currentExecution && !currentExecution.is_complete) {
+        setExecutionProgress(currentExecution);
+        setIsExecuting(true);
+        if (executingPlan) {
+          setProposedPlan(executingPlan);
+        }
+      } else if (executingPlan) {
+        // Execution completed but we have the plan - show it as read-only
+        setExecutedPlan(executingPlan);
+        setShowExecutedPlan(true);
+      } else {
+        // Check IndexedDB for a persisted proposed plan (survives page refresh)
+        console.log('[PlanSection] Checking IndexedDB for proposed plan...');
+        const persistedPlan = await getProposedPlan(datasetId);
+        console.log('[PlanSection] Persisted plan from IndexedDB:', persistedPlan ? 'FOUND' : 'NOT FOUND');
+        if (persistedPlan) {
+          setProposedPlan(persistedPlan);
+        }
       }
-    } else if (executingPlan) {
-      // Execution completed but we have the plan - show it as read-only
-      setExecutedPlan(executingPlan);
-      setShowExecutedPlan(true);
+    };
+
+    if (datasetId) {
+      loadState();
     }
   }, [datasetId]);
 
@@ -124,9 +145,11 @@ export function PlanSection({
           setTimeout(() => {
             setIsExecuting(false);
             setExecutionProgress(null);
-            // Save the plan as executed plan to show in read-only mode
-            if (proposedPlan) {
-              setExecutedPlan(proposedPlan);
+            // Get plan from execution store to avoid stale closure issue
+            // (proposedPlan captured at effect setup time may be stale)
+            const planFromStore = getExecutingPlan(datasetId);
+            if (planFromStore) {
+              setExecutedPlan(planFromStore);
               setShowExecutedPlan(true);
             }
             setProposedPlan(null);
@@ -149,6 +172,8 @@ export function PlanSection({
   }, [datasetId, executionProgress?.is_complete]);
 
   const handleApprove = (approvedPlan: SetupPlan) => {
+    // Clear persisted plan from IndexedDB (it's now being executed)
+    clearProposedPlan(datasetId);
     // Emit the approved plan via event (Lucy will pick it up)
     emitter.emit("vllora_setup_plan_approved", { datasetId, plan: approvedPlan });
     // Send a simple prompt to Lucy (the plan data is passed via event, not in the message)
@@ -161,6 +186,8 @@ export function PlanSection({
   };
 
   const handleDismiss = () => {
+    // Clear persisted plan from IndexedDB
+    clearProposedPlan(datasetId);
     emitter.emit("vllora_setup_plan_dismissed", { datasetId });
     setProposedPlan(null);
     setIsExecuting(false);

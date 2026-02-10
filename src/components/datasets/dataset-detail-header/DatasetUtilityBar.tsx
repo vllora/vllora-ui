@@ -10,7 +10,7 @@ import type { ViewMode } from "./ViewModeToggle";
 import { SectionTabs } from "./SectionTabs";
 
 export type { ViewMode };
-export type DatasetSection = "records" | "evaluator" | "jobs" | "readme" | "docs" | "plan";
+export type DatasetSection = "records" | "evaluator" | "jobs" | "readme" | "docs" | "plan" | 'deploy';
 
 export interface DatasetUtilityBarProps {
   /** Current active section */
@@ -37,10 +37,8 @@ export function DatasetUtilityBar({
 }: DatasetUtilityBarProps) {
   const { filteredJobs } = FinetuneJobsConsumer();
 
-  // Count active jobs (pending or running)
-  const activeJobsCount = filteredJobs.filter(
-    (job) => job.status === "pending" || job.status === "running"
-  ).length;
+  // Total jobs count (for completion status)
+  const jobsCount = filteredJobs.length;
 
   return (
     <div className="px-4 py-1.5 border-b border-border">
@@ -49,7 +47,7 @@ export function DatasetUtilityBar({
         onSectionChange={onSectionChange}
         recordsCount={recordsCount}
         hasEvaluator={hasEvaluator}
-        activeJobsCount={activeJobsCount}
+        jobsCount={jobsCount}
         knowledgeSourcesCount={knowledgeSourcesCount}
         hasPlanActivity={hasPlanActivity}
       />

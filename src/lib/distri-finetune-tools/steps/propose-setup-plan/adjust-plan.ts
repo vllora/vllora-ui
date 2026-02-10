@@ -507,7 +507,6 @@ export const adjustSetupPlanHandler: ToolHandler = async (
       total_topic_count: totalTopicCount,
       grader_config: {
         criteria: llmResult.grader_criteria,
-        passing_threshold: current_plan.grader_config.passing_threshold,
         template_preview: generateGraderTemplate(llmResult.grader_criteria, current_plan.objective),
       },
       execution_steps: [

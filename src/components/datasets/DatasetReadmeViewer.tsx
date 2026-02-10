@@ -137,7 +137,7 @@ export const DatasetReadmeViewer = memo(function DatasetReadmeViewer({
         </div>
       </CardHeader>
       <CardContent className="flex-1 overflow-auto p-4">
-        <div className="prose prose-sm dark:prose-invert max-w-none">
+        <div className="text-sm [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_table]:text-xs [&_p]:text-sm [&_li]:text-sm [&_blockquote]:text-sm">
           <LazyMarkdownRenderer content={readme} />
         </div>
       </CardContent>
