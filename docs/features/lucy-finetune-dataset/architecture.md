@@ -285,6 +285,15 @@ distri-finetune-tools/
 │   │   ├── frontend.ts   # LLM-based generation
 │   │   ├── backend.ts    # Template-based generation
 │   │   └── index.ts
+│   ├── propose-setup-plan/       # Setup plan generation
+│   │   ├── handler.ts
+│   │   ├── types.ts
+│   │   ├── prompts.ts
+│   │   ├── llm-service.ts
+│   │   └── index.ts
+│   ├── knowledge-sources.ts      # Knowledge source upload & extraction tools
+│   ├── pdf-extractor.ts          # PDF text extraction with pdfjs-dist
+│   ├── pdf-llm-extractor.ts      # LLM-assisted content analysis
 │   ├── apply-hierarchy.ts
 │   ├── adjust-hierarchy.ts       # Natural language topic adjustments
 │   ├── topic-manipulation.ts     # get_topic_hierarchy tool

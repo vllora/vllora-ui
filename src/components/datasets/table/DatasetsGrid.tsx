@@ -8,6 +8,7 @@ import { useState, useMemo, useEffect } from "react";
 import { DatasetsConsumer } from "@/contexts/DatasetsContext";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { getKnowledgeSourceCount } from "@/services/knowledge-sources-db";
 import {
   DeleteConfirmationDialog,
   type DeleteConfirmation,
@@ -40,6 +41,7 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
 
   // State
   const [recordCounts, setRecordCounts] = useState<Record<string, number>>({});
+  const [docsCounts, setDocsCounts] = useState<Record<string, number>>({});
   const [topicStats, setTopicStats] = useState<
     Record<string, { total: number; withTopic: number; topicCount: number }>
   >({});
@@ -76,14 +78,16 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
     return result;
   }, [datasets, searchQuery, activeFilter]);
 
-  // Load record counts and topic stats for all datasets
+  // Load record counts, docs counts, and topic stats for all datasets
   useEffect(() => {
     const loadStats = async () => {
       const counts: Record<string, number> = {};
+      const docs: Record<string, number> = {};
       const stats: Record<string, { total: number; withTopic: number; topicCount: number }> = {};
       await Promise.all(
         datasets.map(async (ds) => {
           counts[ds.id] = await getRecordCount(ds.id);
+          docs[ds.id] = await getKnowledgeSourceCount(ds.id);
           const coverage = await getTopicCoverageStats(ds.id);
           // Count unique topics from the hierarchy
           const topicCount = ds.topicHierarchy?.hierarchy
@@ -93,6 +97,7 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
         })
       );
       setRecordCounts(counts);
+      setDocsCounts(docs);
       setTopicStats(stats);
     };
     if (datasets.length > 0) {
@@ -280,6 +285,7 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
                       state={dataset.state ?? "draft"}
                       recordCount={recordCounts[dataset.id] ?? "..."}
                       topicCount={stats?.topicCount ?? 0}
+                      docsCount={docsCounts[dataset.id] ?? 0}
                       hasTopicHierarchy={!!dataset.topicHierarchy?.hierarchy}
                       updatedAt={dataset.updatedAt}
                       isEditing={isEditing}

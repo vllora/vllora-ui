@@ -3,9 +3,14 @@
  *
  * Uses pdfjs-dist to extract text content from PDF files.
  * Works client-side without requiring a backend server.
+ *
+ * Supports two extraction modes:
+ * - 'basic': Fast, regex-based extraction (original implementation)
+ * - 'llm': LLM-assisted extraction for better quality (default)
  */
 
 import * as pdfjsLib from 'pdfjs-dist';
+import { extractContentWithLLM } from './pdf-llm-extractor';
 
 // Configure the worker source
 // In Vite/modern bundlers, we can use the bundled worker
@@ -35,6 +40,10 @@ export interface PdfExtractionResult {
     subject?: string;
     pageCount: number;
     creationDate?: string;
+    /** Document type (from LLM extraction) */
+    documentType?: string;
+    /** Document summary (from LLM extraction) */
+    documentSummary?: string;
   };
   /** Detected topics/keywords */
   topics: string[];
@@ -45,6 +54,12 @@ export interface PdfExtractionOptions {
   maxPages?: number;
   /** Whether to attempt section detection (default: true) */
   detectSections?: boolean;
+  /**
+   * Extraction mode:
+   * - 'basic': Fast, regex-based extraction (original implementation)
+   * - 'llm': LLM-assisted extraction for better quality (default)
+   */
+  extractionMode?: 'basic' | 'llm';
 }
 
 // =============================================================================
@@ -122,7 +137,7 @@ export async function extractPdfContent(
   base64Data: string,
   options: PdfExtractionOptions = {}
 ): Promise<PdfExtractionResult> {
-  const { maxPages, detectSections = true } = options;
+  const { maxPages, detectSections = true, extractionMode = 'llm' } = options;
 
   try {
     // Decode base64 to binary
@@ -183,7 +198,38 @@ export async function extractPdfContent(
     // Combine all page texts
     const fullText = pageTexts.join('\n\n--- Page Break ---\n\n');
 
-    // Detect sections if enabled
+    // Use LLM extraction mode (default) or basic mode
+    if (extractionMode === 'llm') {
+      console.log('[extractPdfContent] Using LLM-assisted extraction');
+      try {
+        const llmResult = await extractContentWithLLM(fullText);
+
+        // Convert LLM sections to our format
+        const sections: PdfExtractionResult['sections'] = llmResult.sections.map((s, idx) => ({
+          title: s.title,
+          content: s.summary + (s.key_concepts.length > 0 ? `\n\nKey concepts: ${s.key_concepts.join(', ')}` : ''),
+          level: s.level,
+          pageNumber: idx + 1, // Approximate
+        }));
+
+        return {
+          text: fullText,
+          sections,
+          metadata: {
+            ...metadata,
+            documentType: llmResult.document_type,
+            documentSummary: llmResult.document_summary,
+          },
+          topics: llmResult.topics,
+        };
+      } catch (llmError) {
+        console.warn('[extractPdfContent] LLM extraction failed, falling back to basic:', llmError);
+        // Fall through to basic extraction
+      }
+    }
+
+    // Basic extraction mode (original implementation)
+    console.log('[extractPdfContent] Using basic extraction');
     const sections: PdfExtractionResult['sections'] = [];
     if (detectSections) {
       const lines = fullText.split('\n');
@@ -235,7 +281,7 @@ export async function extractPdfContent(
       }
     }
 
-    // Extract topics
+    // Extract topics (basic mode)
     const topics = extractTopics(fullText);
 
     return {

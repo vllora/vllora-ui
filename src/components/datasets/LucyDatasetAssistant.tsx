@@ -195,6 +195,7 @@ export function LucyDatasetAssistant() {
           workflow: workflowRef.current,
           recordCount: recordsRef.current.length,
           knowledgeSourcesCount: knowledgeSourcesCountRef.current,
+          hasEvaluator: !!workflowRef.current?.graderConfig,
         }));
       }
     }, 300);
@@ -202,12 +203,11 @@ export function LucyDatasetAssistant() {
     return () => clearTimeout(timer);
   }, [datasetLoading, workflowLoading, agentLoading, agent, isConnected, selectedDatasetId, currentDataset]);
 
-  // Reset auto-trigger prompt when dataset changes (allow new analysis)
+  // Reset state when dataset changes - always start fresh
   useEffect(() => {
-    // Clear the prompt but don't reset lastAnalyzedDatasetRef
-    // (that's handled in the main effect to allow re-analysis on revisit)
     setAutoTriggerPrompt(null);
     hasSetAutoTriggerRef.current = false;
+    lastAnalyzedDatasetRef.current = null;
   }, [selectedDatasetId]);
 
   // Listen for external prompt triggers (e.g., "Generate for topic" button)

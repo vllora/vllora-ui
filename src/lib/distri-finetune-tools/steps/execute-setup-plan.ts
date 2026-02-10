@@ -329,6 +329,9 @@ export const executeSetupPlanHandler: ToolHandler = async (
         message: 'LLM-as-judge evaluator configured',
         result: { success: true, grader_type: 'llm-as-judge' },
       });
+
+      // Switch to Evaluator tab to show the configured grader
+      emitter.emit('vllora_switch_tab', { datasetId: dataset_id, tab: 'evaluator' });
     } catch (error) {
       updateStep('grader', {
         status: 'failed',
@@ -508,6 +511,9 @@ export const executeSetupPlanHandler: ToolHandler = async (
         backendDatasetId: datasetForJob.backendDatasetId,
         jobId: finetuneResult.jobId,
       });
+
+      // Switch to Jobs tab to show the finetune job progress
+      emitter.emit('vllora_switch_tab', { datasetId: dataset_id, tab: 'jobs' });
 
       console.log('[executeSetupPlan] Finetune job created:', finetuneResult.jobId);
     } catch (error) {

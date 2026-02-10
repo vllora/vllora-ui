@@ -269,6 +269,35 @@ c) Let me show you the flagged ones so you can decide"
 | `extract_topics_from_source` | Extract topic structure from knowledge source |
 | `search_knowledge` | Search indexed knowledge for specific concepts |
 
+#### `upload_knowledge_source` Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `dataset_id` | string | Yes | - | The dataset to associate the knowledge source with |
+| `name` | string | Yes | - | Filename or identifier for the source |
+| `type` | string | Yes | - | Type: `pdf`, `image`, `url`, or `text` |
+| `content` | string | Yes | - | Base64-encoded data (files), URL string, or plain text |
+| `mime_type` | string | No | - | MIME type of the content |
+| `extraction_mode` | string | No | `llm` | PDF extraction mode: `llm` or `basic` |
+
+#### PDF Extraction Modes
+
+| Mode | Speed | Quality | Use Case |
+|------|-------|---------|----------|
+| `llm` (default) | Slower (~5-10s) | High | Production - filters noise, extracts meaningful topics |
+| `basic` | Fast (~1s) | Lower | Development/testing - regex-based, may include noise |
+
+**LLM Mode Benefits:**
+- Filters out metadata sections (copyright, preface, bibliography)
+- Extracts meaningful topics relevant to the document subject
+- Provides document summary and type classification
+- Automatically falls back to basic mode if LLM fails
+
+**Basic Mode:**
+- Uses regex patterns to detect headings and capitalized phrases
+- May include noise like "Page Break", author names, section headers
+- Useful for quick testing or when LLM is unavailable
+
 ### Generation Tools
 
 | Tool | Description |

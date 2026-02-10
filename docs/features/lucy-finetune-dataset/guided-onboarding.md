@@ -580,6 +580,9 @@ Also has access to both tools for delegated execution scenarios.
 | llm_service utility | `/ui/src/lib/distri-finetune-tools/steps/propose-setup-plan/llm-service.ts` |
 | execute_setup_plan tool | `/ui/src/lib/distri-finetune-tools/steps/execute-setup-plan.ts` |
 | generate_initial_data tool | `/ui/src/lib/distri-finetune-tools/steps/generate-initial-data.ts` |
+| knowledge_sources tools | `/ui/src/lib/distri-finetune-tools/steps/knowledge-sources.ts` |
+| pdf_extractor | `/ui/src/lib/distri-finetune-tools/steps/pdf-extractor.ts` |
+| pdf_llm_extractor | `/ui/src/lib/distri-finetune-tools/steps/pdf-llm-extractor.ts` |
 | execution_state_store | `/ui/src/lib/distri-finetune-tools/steps/execution-state-store.ts` |
 | PlanSection | `/ui/src/components/datasets/plan-section/PlanSection.tsx` |
 | SetupPlanEditor | `/ui/src/components/datasets/plan-section/SetupPlanEditor.tsx` |
@@ -669,3 +672,21 @@ const result = resultData ? resultData.result : state.result;
 - If no sources at all: Shows prompt to upload documents
 
 The `sources_processing` flag in the result indicates this state, and the UI shows a distinct amber card with a loading indicator.
+
+### PDF Extraction Quality
+
+**Symptom:** Extracted topics include noise like "Page Break", "Copyright", author names.
+
+**Cause:** Using `basic` extraction mode instead of LLM-assisted extraction.
+
+**Solution:** The `upload_knowledge_source` tool now supports an `extraction_mode` parameter:
+- `llm` (default): Uses LLM to intelligently extract meaningful topics, filter noise, and provide document summary
+- `basic`: Fast regex-based extraction (may include noise)
+
+The LLM mode automatically filters out:
+- Copyright notices, legal disclaimers
+- Preface, foreword, acknowledgments
+- Bibliography, references, index
+- Page numbers, headers, footers
+
+If LLM extraction fails, it automatically falls back to basic mode.

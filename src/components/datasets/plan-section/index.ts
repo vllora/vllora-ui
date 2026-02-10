@@ -8,6 +8,7 @@
  * - ExecutionProgressCard: Real-time execution progress display
  * - PlanEmptyState: Empty state when no plan is active
  * - PlanLoadingState: Loading state when generating a plan
+ * - DocsProcessingState: State when documents are still processing
  */
 
 export { PlanSection } from './PlanSection';
@@ -16,3 +17,4 @@ export { SetupPlanEditor } from './SetupPlanEditor';
 export { ExecutionProgressCard } from './ExecutionProgressCard';
 export { PlanEmptyState } from './PlanEmptyState';
 export { PlanLoadingState } from './PlanLoadingState';
+export { DocsProcessingState } from './DocsProcessingState';

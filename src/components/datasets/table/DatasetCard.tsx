@@ -4,7 +4,7 @@
  * Card component for displaying a dataset in grid view.
  */
 
-import { MoreHorizontal, Pencil, Trash2, Upload, Download } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Upload, Download, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,6 +24,7 @@ interface DatasetCardProps {
   state: DatasetState;
   recordCount: number | string;
   topicCount: number;
+  docsCount: number;
   hasTopicHierarchy: boolean;
   updatedAt: number;
   isEditing: boolean;
@@ -65,6 +66,7 @@ export function DatasetCard({
   state,
   recordCount,
   topicCount,
+  docsCount,
   hasTopicHierarchy,
   updatedAt,
   isEditing,
@@ -167,6 +169,15 @@ export function DatasetCard({
           </p>
           <p className="text-sm font-bold text-foreground">
             {hasTopicHierarchy ? topicCount : "--"}
+          </p>
+        </div>
+        <div className="flex-1 px-2 py-1.5 rounded-lg bg-background/50 border border-border/40 text-center" title="Knowledge sources (PDFs, docs)">
+          <p className="text-[9px] uppercase tracking-wider text-muted-foreground/70 font-medium flex items-center justify-center gap-1">
+            <FileText className="w-2.5 h-2.5" />
+            Docs
+          </p>
+          <p className="text-sm font-bold text-foreground">
+            {docsCount > 0 ? docsCount : "--"}
           </p>
         </div>
       </div>

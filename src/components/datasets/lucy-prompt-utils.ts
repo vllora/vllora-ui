@@ -19,6 +19,7 @@ interface BuildAnalysisPromptParams {
   workflow?: FinetuneWorkflowState | null; // Not used - context injected separately
   recordCount?: number;
   knowledgeSourcesCount?: number;
+  hasEvaluator?: boolean;
 }
 
 /**
@@ -37,11 +38,13 @@ export function buildDatasetAnalysisPrompt({
   dataset,
   recordCount,
   knowledgeSourcesCount = 0,
+  hasEvaluator = false,
 }: BuildAnalysisPromptParams): string {
   const objective = dataset.datasetObjective;
   const hasTopics = !!(dataset.topicHierarchy?.hierarchy?.length);
   const isEmpty = recordCount === 0 || recordCount === undefined;
   const hasKnowledgeSources = knowledgeSourcesCount > 0;
+  const hasRecords = !isEmpty;
 
   // Special prompt for empty datasets - guide through onboarding
   if (isEmpty) {
@@ -55,9 +58,9 @@ export function buildDatasetAnalysisPrompt({
       return `I have uploaded ${knowledgeSourcesCount} document(s) for this dataset. Please use the propose_setup_plan tool to analyze my documents and create a comprehensive setup plan including topic hierarchy, data generation strategy, and evaluation criteria. I'd like to see the full plan before we proceed.`;
     }
 
-    // Has objective but no knowledge sources - prompt to upload
+    // Has objective but no knowledge sources - offer to proceed without docs
     if (!hasKnowledgeSources) {
-      return `This is a new dataset and I want to set it up for fine-tuning. Do you have any reference documents (PDFs, text files) that contain the knowledge you want the model to learn? You can drag & drop them here. If you don't have documents, I can help you get started with a general approach based on the training objective.`;
+      return `This is a new dataset ready for fine-tuning setup. Please use the propose_setup_plan tool to create a setup plan based on the training objective. If I have reference documents to upload, I'll add them to the Docs tab.`;
     }
 
     // Has topics already (rare for empty dataset)
@@ -66,7 +69,15 @@ export function buildDatasetAnalysisPrompt({
     }
   }
 
-  // Standard prompt for datasets with records
+  // Dataset has records - check what's missing
+  if (hasRecords) {
+    // Has records but no evaluator - prompt to configure evaluation
+    if (!hasEvaluator) {
+      return `This dataset has ${recordCount} record(s) but no evaluator configured. Please help me set up an LLM-as-judge evaluator to assess the quality of responses.`;
+    }
+  }
+
+  // Standard prompt for datasets with records and evaluator
   return `What should I do next with this dataset?`;
 }
 

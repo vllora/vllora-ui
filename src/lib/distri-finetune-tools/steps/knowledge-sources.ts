@@ -10,6 +10,7 @@ import * as knowledgeDB from '@/services/knowledge-sources-db';
 import type { ToolHandler } from '../types';
 import type { KnowledgeSourceType, ExtractedContent } from '@/types/dataset-types';
 import { extractPdfContent } from './pdf-extractor';
+import { emitter } from '@/utils/eventEmitter';
 
 // =============================================================================
 // Content Extraction
@@ -18,6 +19,7 @@ import { extractPdfContent } from './pdf-extractor';
 /**
  * Extract content from a knowledge source
  * - PDF: Uses pdfjs-dist for client-side text extraction with section detection
+ *        Supports 'llm' mode (default) for better quality or 'basic' for speed
  * - Text: Parses markdown-style headings and structures content
  * - Image: Placeholder (requires Vision API integration)
  * - URL: Placeholder (would fetch and parse HTML)
@@ -25,7 +27,8 @@ import { extractPdfContent } from './pdf-extractor';
 async function extractContent(
   type: KnowledgeSourceType,
   content: string,
-  _name: string
+  _name: string,
+  extractionMode: 'basic' | 'llm' = 'llm'
 ): Promise<ExtractedContent> {
 
   if (type === 'text') {
@@ -74,7 +77,7 @@ async function extractContent(
   if (type === 'pdf') {
     // Use pdfjs-dist for client-side PDF text extraction
     try {
-      const pdfResult = await extractPdfContent(content);
+      const pdfResult = await extractPdfContent(content, { extractionMode });
       return {
         text: pdfResult.text,
         sections: pdfResult.sections,
@@ -121,11 +124,17 @@ interface UploadKnowledgeSourceParams {
   type: KnowledgeSourceType;
   content: string;
   mime_type?: string;
+  /**
+   * Extraction mode for PDFs:
+   * - 'llm': LLM-assisted extraction for better quality (default)
+   * - 'basic': Fast, regex-based extraction
+   */
+  extraction_mode?: 'basic' | 'llm';
 }
 
 export const uploadKnowledgeSourceHandler: ToolHandler = async (params) => {
   try {
-    const { dataset_id, name, type, content, mime_type } = params as unknown as UploadKnowledgeSourceParams;
+    const { dataset_id, name, type, content, mime_type, extraction_mode = 'llm' } = params as unknown as UploadKnowledgeSourceParams;
 
     if (!dataset_id) {
       return { success: false, error: 'dataset_id is required' };
@@ -145,30 +154,19 @@ export const uploadKnowledgeSourceHandler: ToolHandler = async (params) => {
     // Update status to processing
     await knowledgeDB.updateKnowledgeSourceStatus(source.id, 'processing');
 
-    // Extract content
-    try {
-      const extractedContent = await extractContent(type, content, name);
-      await knowledgeDB.updateKnowledgeSourceStatus(source.id, 'ready', { extractedContent });
+    // Extract content in background (non-blocking)
+    // This allows the UI to proceed immediately while extraction happens async
+    processExtractionInBackground(source.id, dataset_id, type, content, name, extraction_mode);
 
-      return {
-        success: true,
-        source_id: source.id,
-        name: source.name,
-        type: source.type,
-        status: 'ready',
-        extracted_topics: extractedContent.topics || [],
-        section_count: extractedContent.sections?.length || 0,
-      };
-    } catch (error) {
-      await knowledgeDB.updateKnowledgeSourceStatus(source.id, 'failed', {
-        error: error instanceof Error ? error.message : 'Extraction failed',
-      });
-      return {
-        success: false,
-        source_id: source.id,
-        error: 'Failed to extract content from source',
-      };
-    }
+    // Return immediately with 'processing' status
+    return {
+      success: true,
+      source_id: source.id,
+      name: source.name,
+      type: source.type,
+      status: 'processing',
+      message: 'Knowledge source created. Content extraction is processing in the background.',
+    };
   } catch (error) {
     return {
       success: false,
@@ -176,6 +174,35 @@ export const uploadKnowledgeSourceHandler: ToolHandler = async (params) => {
     };
   }
 };
+
+/**
+ * Process content extraction in background (fire-and-forget)
+ * Updates the knowledge source status when complete and emits event for UI refresh
+ */
+async function processExtractionInBackground(
+  sourceId: string,
+  datasetId: string,
+  type: KnowledgeSourceType,
+  content: string,
+  name: string,
+  extractionMode: 'basic' | 'llm'
+): Promise<void> {
+  try {
+    console.log(`[processExtractionInBackground] Starting extraction for ${sourceId}`);
+    const extractedContent = await extractContent(type, content, name, extractionMode);
+    await knowledgeDB.updateKnowledgeSourceStatus(sourceId, 'ready', { extractedContent });
+    console.log(`[processExtractionInBackground] Extraction complete for ${sourceId}`);
+    // Emit event to notify UI of status change
+    emitter.emit('vllora_knowledge_source_updated', { datasetId });
+  } catch (error) {
+    console.error(`[processExtractionInBackground] Extraction failed for ${sourceId}:`, error);
+    await knowledgeDB.updateKnowledgeSourceStatus(sourceId, 'failed', {
+      error: error instanceof Error ? error.message : 'Extraction failed',
+    });
+    // Also emit event on failure so UI can show the failed state
+    emitter.emit('vllora_knowledge_source_updated', { datasetId });
+  }
+}
 
 interface ListKnowledgeSourcesParams {
   dataset_id: string;
@@ -346,6 +373,12 @@ The content will be extracted and indexed for use in data generation.`,
       mime_type: {
         type: 'string',
         description: 'MIME type of the content (optional)',
+      },
+      extraction_mode: {
+        type: 'string',
+        enum: ['llm', 'basic'],
+        default: 'llm',
+        description: 'Extraction mode for PDFs: "llm" for LLM-assisted high-quality extraction (default), "basic" for fast regex-based extraction',
       },
     },
     required: ['dataset_id', 'name', 'type', 'content'],

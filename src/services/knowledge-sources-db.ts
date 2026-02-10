@@ -211,6 +211,14 @@ export async function deleteKnowledgeSourcesByDataset(datasetId: string): Promis
 }
 
 /**
+ * Get the count of knowledge sources for a dataset
+ */
+export async function getKnowledgeSourceCount(datasetId: string): Promise<number> {
+  const sources = await getKnowledgeSourcesByDataset(datasetId);
+  return sources.length;
+}
+
+/**
  * Search knowledge sources by content
  * Simple text search across extracted content
  */

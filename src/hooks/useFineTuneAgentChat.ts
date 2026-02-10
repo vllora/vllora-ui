@@ -29,19 +29,10 @@ type ChatMessage = ReturnType<typeof useChatMessages>['messages'][number];
 // ============================================================================
 
 const FINETUNE_AGENT_NAME = 'vllora_finetune_agent';
-const THREAD_STORAGE_KEY = 'vllora:finetuneAgentThreadId';
 
 // ============================================================================
 // Thread ID Management
 // ============================================================================
-
-function getStoredThreadId(datasetId: string): string | null {
-  return localStorage.getItem(`${THREAD_STORAGE_KEY}:${datasetId}`);
-}
-
-function setStoredThreadId(datasetId: string, threadId: string): void {
-  localStorage.setItem(`${THREAD_STORAGE_KEY}:${datasetId}`, threadId);
-}
 
 function createNewThreadId(): string {
   return uuidv4();
@@ -57,7 +48,9 @@ function buildContextMessage(
   datasetHasEvaluator?: boolean
 ): string {
   const context = workflowToContext(datasetId, workflow, datasetHasEvaluator);
-  return `Context:\n\`\`\`json\n${JSON.stringify(context, null, 2)}\n\`\`\``;
+  // Put dataset_id prominently at the top to help LLM copy it exactly
+  // UUIDs are hard for LLMs to transcribe from JSON - make it explicit
+  return `DATASET_ID: ${datasetId}\n\nContext:\n\`\`\`json\n${JSON.stringify(context, null, 2)}\n\`\`\``;
 }
 
 // ============================================================================
@@ -114,14 +107,8 @@ export function useFineTuneAgentChat(
     agentIdOrDef: FINETUNE_AGENT_NAME,
   });
 
-  // Thread state - per dataset
-  const [threadId, setThreadId] = useState<string>(() => {
-    const stored = getStoredThreadId(datasetId);
-    if (stored) return stored;
-    const newId = createNewThreadId();
-    setStoredThreadId(datasetId, newId);
-    return newId;
-  });
+  // Thread state - always start fresh per dataset visit
+  const [threadId, setThreadId] = useState<string>(() => createNewThreadId());
 
   // Workflow state
   const [workflow, setWorkflow] = useState<FinetuneWorkflowState | null>(null);
@@ -199,24 +186,15 @@ export function useFineTuneAgentChat(
     };
   }, [datasetId, refreshWorkflow]);
 
-  // Update thread ID when dataset changes
+  // Create new thread when dataset changes
   useEffect(() => {
-    const stored = getStoredThreadId(datasetId);
-    if (stored) {
-      setThreadId(stored);
-    } else {
-      const newId = createNewThreadId();
-      setStoredThreadId(datasetId, newId);
-      setThreadId(newId);
-    }
+    setThreadId(createNewThreadId());
   }, [datasetId]);
 
   // Create new chat thread
   const handleNewChat = useCallback(() => {
-    const newThreadId = createNewThreadId();
-    setStoredThreadId(datasetId, newThreadId);
-    setThreadId(newThreadId);
-  }, [datasetId]);
+    setThreadId(createNewThreadId());
+  }, []);
 
   // Prepare message with context injection (supports file parts)
   const prepareMessage = useCallback(
