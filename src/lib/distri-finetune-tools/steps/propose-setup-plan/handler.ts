@@ -52,13 +52,15 @@ export const proposeSetupPlanHandler: ToolHandler = async (
     const knowledgeCtx = await buildKnowledgeContext(dataset_id);
     const { contextString: knowledgeContext, sourcesSummary: knowledgeSourcesSummary, readyCount, processingCount } = knowledgeCtx;
 
-    // If no ready sources but some are still processing, ask user to wait
-    if (readyCount === 0 && processingCount > 0) {
+    // If ANY documents are still processing, wait for ALL to complete
+    // This ensures the plan is generated with full knowledge context
+    if (processingCount > 0) {
+      const totalSources = readyCount + processingCount;
       return {
         success: true,
         requires_knowledge_sources: true,
         sources_processing: true,
-        message: `Your documents are still being processed.\n\nPlease wait a moment for processing to complete, then try again. This usually takes about 30-60 seconds per document.`,
+        message: `${readyCount} of ${totalSources} document(s) are ready. Please wait for all documents to finish processing before generating the plan.\n\nThis usually takes about 30-60 seconds per document.`,
         plan: undefined,
       };
     }

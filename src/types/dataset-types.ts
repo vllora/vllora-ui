@@ -285,7 +285,10 @@ export interface DatasetWithRecords extends Dataset {
 // =============================================================================
 
 /** Type of knowledge source */
-export type KnowledgeSourceType = 'pdf' | 'image' | 'url' | 'text';
+export type KnowledgeSourceType = 'pdf' | 'image' | 'url' | 'text' | 'markdown';
+
+/** Classification of markdown file purpose */
+export type MarkdownPurpose = 'knowledge' | 'process';
 
 /** Processing status for knowledge sources */
 export type KnowledgeSourceStatus = 'pending' | 'processing' | 'ready' | 'failed';

@@ -8,9 +8,110 @@
 import type { DistriFnTool } from '@distri/core';
 import * as knowledgeDB from '@/services/knowledge-sources-db';
 import type { ToolHandler } from '../types';
-import type { KnowledgeSourceType, ExtractedContent } from '@/types/dataset-types';
+import type { KnowledgeSourceType, ExtractedContent, MarkdownPurpose } from '@/types/dataset-types';
 import { extractPdfContent } from './pdf-extractor';
 import { emitter } from '@/utils/eventEmitter';
+
+// =============================================================================
+// Markdown Classification
+// =============================================================================
+
+/**
+ * Detect if markdown content is a process/agent file or a knowledge source.
+ *
+ * Process files typically have TOML/YAML frontmatter with agent-like fields:
+ * - name, description, tools, model_settings, sub_agents, etc.
+ *
+ * Knowledge files are regular markdown content without such frontmatter.
+ */
+export function classifyMarkdownPurpose(content: string): {
+  purpose: MarkdownPurpose;
+  frontmatter?: Record<string, unknown>;
+  markdownContent: string;
+} {
+  // Check for TOML frontmatter (---\n...\n---)
+  const tomlFrontmatterMatch = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+
+  if (tomlFrontmatterMatch) {
+    const frontmatterRaw = tomlFrontmatterMatch[1];
+    const markdownContent = tomlFrontmatterMatch[2];
+
+    // Check for agent/process-like fields in frontmatter
+    const processIndicators = [
+      /^name\s*=/m,           // name = "agent_name"
+      /^tools\s*=/m,          // tools.builtin = [...]
+      /^\[tools\]/m,          // [tools] section
+      /^\[model_settings\]/m, // [model_settings] section
+      /^sub_agents\s*=/m,     // sub_agents = [...]
+      /^max_iterations\s*=/m, // max_iterations = 30
+      /^tool_format\s*=/m,    // tool_format = "provider"
+    ];
+
+    const isProcessFile = processIndicators.some(pattern => pattern.test(frontmatterRaw));
+
+    if (isProcessFile) {
+      // Parse TOML-like frontmatter (simple key-value extraction)
+      const frontmatter: Record<string, unknown> = {};
+      const lines = frontmatterRaw.split('\n');
+
+      for (const line of lines) {
+        const match = line.match(/^(\w+)\s*=\s*(.+)$/);
+        if (match) {
+          const key = match[1];
+          let value: unknown = match[2].trim();
+
+          // Parse simple types
+          if (value === 'true') value = true;
+          else if (value === 'false') value = false;
+          else if (/^\d+$/.test(value as string)) value = parseInt(value as string, 10);
+          else if (/^\d+\.\d+$/.test(value as string)) value = parseFloat(value as string);
+          else if ((value as string).startsWith('"') && (value as string).endsWith('"')) {
+            value = (value as string).slice(1, -1);
+          }
+
+          frontmatter[key] = value;
+        }
+      }
+
+      return {
+        purpose: 'process',
+        frontmatter,
+        markdownContent,
+      };
+    }
+  }
+
+  // Check for YAML frontmatter (also uses --- delimiters but with YAML syntax)
+  const yamlFrontmatterMatch = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+
+  if (yamlFrontmatterMatch) {
+    const frontmatterRaw = yamlFrontmatterMatch[1];
+    const markdownContent = yamlFrontmatterMatch[2];
+
+    // Check for process/workflow YAML indicators
+    const processYamlIndicators = [
+      /^steps:/m,           // workflow steps
+      /^workflow:/m,        // workflow definition
+      /^agent:/m,           // agent definition
+      /^actions:/m,         // action definitions
+      /^execute:/m,         // execution instructions
+    ];
+
+    if (processYamlIndicators.some(pattern => pattern.test(frontmatterRaw))) {
+      return {
+        purpose: 'process',
+        frontmatter: { raw: frontmatterRaw },
+        markdownContent,
+      };
+    }
+  }
+
+  // No process frontmatter detected - treat as knowledge source
+  return {
+    purpose: 'knowledge',
+    markdownContent: content,
+  };
+}
 
 // =============================================================================
 // Content Extraction
@@ -24,12 +125,144 @@ import { emitter } from '@/utils/eventEmitter';
  * - Image: Placeholder (requires Vision API integration)
  * - URL: Placeholder (would fetch and parse HTML)
  */
+/**
+ * Extract sections and topics from markdown content.
+ * Handles headings, lists, and structured content.
+ */
+function extractMarkdownSections(content: string): {
+  sections: Array<{ title: string; content: string; level: number }>;
+  topics: string[];
+} {
+  const lines = content.split('\n');
+  const sections: Array<{ title: string; content: string; level: number }> = [];
+  const topics: string[] = [];
+  let currentSection = { title: 'Content', content: '', level: 1 };
+
+  for (const line of lines) {
+    // Detect headings (# ## ### etc.)
+    if (line.startsWith('#')) {
+      // Save previous section if it has content
+      if (currentSection.content.trim()) {
+        sections.push({ ...currentSection, content: currentSection.content.trim() });
+      }
+      const level = line.match(/^#+/)?.[0].length || 1;
+      const title = line.replace(/^#+\s*/, '').trim();
+      currentSection = {
+        title,
+        content: '',
+        level,
+      };
+
+      // Extract topics from headings (level 1-3 are likely topic-worthy)
+      if (level <= 3 && title && !title.match(/^(table of contents|toc|contents|introduction|conclusion|references|bibliography)$/i)) {
+        topics.push(title.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''));
+      }
+    } else {
+      currentSection.content += line + '\n';
+    }
+  }
+
+  // Save last section
+  if (currentSection.content.trim()) {
+    sections.push({ ...currentSection, content: currentSection.content.trim() });
+  }
+
+  // Deduplicate topics
+  const uniqueTopics = [...new Set(topics)].filter(t => t.length > 0);
+
+  return { sections, topics: uniqueTopics };
+}
+
+/**
+ * Decode base64 content to text.
+ * Handles both raw base64 and data URI format (e.g., "data:text/markdown;base64,...")
+ */
+function decodeBase64ToText(content: string): string {
+  try {
+    // Check if it's a data URI
+    const dataUriMatch = content.match(/^data:[^;]+;base64,(.+)$/);
+    const base64Content = dataUriMatch ? dataUriMatch[1] : content;
+
+    // Try to decode as base64
+    const decoded = atob(base64Content);
+
+    // Check if the decoded content looks like valid text (not binary)
+    // Valid text should not have too many control characters
+    const controlCharCount = (decoded.match(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g) || []).length;
+    if (controlCharCount / decoded.length > 0.1) {
+      // Too many control characters - probably not text, return original
+      return content;
+    }
+
+    return decoded;
+  } catch {
+    // Not valid base64, return as-is (already plain text)
+    return content;
+  }
+}
+
+/**
+ * Check if content appears to be base64-encoded
+ */
+function isLikelyBase64(content: string): boolean {
+  // Data URI format
+  if (content.startsWith('data:')) return true;
+
+  // Check if it looks like base64 (only base64 chars, length divisible by 4)
+  const base64Regex = /^[A-Za-z0-9+/=]+$/;
+  if (content.length > 100 && base64Regex.test(content.slice(0, 100))) {
+    return true;
+  }
+
+  return false;
+}
+
 async function extractContent(
   type: KnowledgeSourceType,
   content: string,
   _name: string,
   extractionMode: 'basic' | 'llm' = 'llm'
 ): Promise<ExtractedContent> {
+
+  // Handle markdown files with dual-purpose detection
+  if (type === 'markdown') {
+    // Decode base64 if needed (files uploaded via file picker are base64-encoded)
+    const textContent = isLikelyBase64(content) ? decodeBase64ToText(content) : content;
+    const classification = classifyMarkdownPurpose(textContent);
+
+    if (classification.purpose === 'process') {
+      // Process/agent file - extract instructions and metadata
+      const { sections, topics } = extractMarkdownSections(classification.markdownContent);
+
+      return {
+        text: classification.markdownContent,
+        sections,
+        topics,
+        metadata: {
+          type: 'markdown',
+          purpose: 'process',
+          frontmatter: classification.frontmatter,
+          isProcessFile: true,
+          agentName: classification.frontmatter?.name as string | undefined,
+          description: classification.frontmatter?.description as string | undefined,
+        },
+      };
+    } else {
+      // Knowledge source markdown - extract sections and topics
+      const { sections, topics } = extractMarkdownSections(classification.markdownContent);
+
+      return {
+        text: textContent,  // Use decoded text, not base64
+        sections,
+        topics,
+        metadata: {
+          type: 'markdown',
+          purpose: 'knowledge',
+          isProcessFile: false,
+        },
+      };
+    }
+  }
 
   if (type === 'text') {
     // For plain text, just structure it
@@ -338,17 +571,21 @@ export const uploadKnowledgeSourceTool: DistriFnTool = {
   description: `Upload a knowledge source to use for grounded data generation.
 
 Use this tool when:
-- User wants to upload a document (PDF, text) for reference
+- User wants to upload a document (PDF, text, markdown) for reference
 - User provides a URL to use as knowledge base
 - User wants to add context for data generation
 
 Supported types:
 - pdf: PDF documents (chess books, manuals, documentation)
+- markdown: Markdown files (.md) - can be either:
+  * Knowledge sources: Regular markdown content for topics/data generation
+  * Process files: Agent definitions or workflow instructions (detected by TOML/YAML frontmatter)
 - image: Images (chess positions, diagrams, screenshots)
 - url: Web URLs (documentation sites, reference pages)
 - text: Plain text content
 
-The content will be extracted and indexed for use in data generation.`,
+The content will be extracted and indexed for use in data generation.
+For markdown files, the system automatically detects whether it's a knowledge source or a process/agent file.`,
   type: 'function',
   parameters: {
     type: 'object',
@@ -363,7 +600,7 @@ The content will be extracted and indexed for use in data generation.`,
       },
       type: {
         type: 'string',
-        enum: ['pdf', 'image', 'url', 'text'],
+        enum: ['pdf', 'image', 'url', 'text', 'markdown'],
         description: 'Type of knowledge source',
       },
       content: {
