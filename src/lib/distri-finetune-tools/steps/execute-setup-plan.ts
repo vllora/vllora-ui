@@ -25,26 +25,36 @@ let pendingApprovedPlan: { datasetId: string; plan: SetupPlan } | null = null;
 emitter.on('vllora_setup_plan_approved', ({ datasetId, plan }) => {
   console.log('[executeSetupPlan] Received plan approval event for dataset:', datasetId);
   pendingApprovedPlan = { datasetId, plan: plan as SetupPlan };
-  // Auto-clear after 60 seconds to avoid stale data
-  setTimeout(() => {
-    if (pendingApprovedPlan?.datasetId === datasetId) {
-      pendingApprovedPlan = null;
-    }
-  }, 60000);
 });
 
 /**
- * Get and consume the pending approved plan for a dataset
+ * Get and consume the pending approved plan for a dataset.
+ * First checks in-memory store, then falls back to IndexedDB persistence.
  */
-export function consumePendingPlan(datasetId: string): SetupPlan | null {
+export async function consumePendingPlan(datasetId: string): Promise<SetupPlan | null> {
   console.log('[executeSetupPlan] Attempting to consume pending plan for:', datasetId);
   console.log('[executeSetupPlan] Current pending plan:', pendingApprovedPlan?.datasetId);
+
+  // Try in-memory store first
   if (pendingApprovedPlan?.datasetId === datasetId) {
     const plan = pendingApprovedPlan.plan;
     pendingApprovedPlan = null;
-    console.log('[executeSetupPlan] Successfully consumed pending plan');
+    console.log('[executeSetupPlan] Successfully consumed pending plan from memory');
     return plan;
   }
+
+  // Fall back to IndexedDB-persisted plan
+  try {
+    const { getProposedPlan } = await import('./proposed-plan-store');
+    const persistedPlan = await getProposedPlan(datasetId);
+    if (persistedPlan) {
+      console.log('[executeSetupPlan] Successfully consumed pending plan from IndexedDB');
+      return persistedPlan;
+    }
+  } catch (error) {
+    console.error('[executeSetupPlan] Failed to fetch persisted plan:', error);
+  }
+
   console.log('[executeSetupPlan] No pending plan found');
   return null;
 }
@@ -161,8 +171,8 @@ export const executeSetupPlanHandler: ToolHandler = async (
       return { success: false, error: 'dataset_id is required' };
     }
 
-    // Try to get plan from params first, otherwise check pending approved plan
-    const plan = planFromParams || consumePendingPlan(dataset_id);
+    // Try to get plan from params first, otherwise check pending approved plan (in-memory then IndexedDB)
+    const plan = planFromParams || await consumePendingPlan(dataset_id);
 
     if (!plan) {
       return { success: false, error: 'No plan provided. Please approve a setup plan first.' };

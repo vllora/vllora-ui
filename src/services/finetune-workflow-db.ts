@@ -477,6 +477,8 @@ export async function rollbackToSnapshot(snapshotId: string): Promise<FinetuneWo
     const snapshotsStore = tx.objectStore('snapshots');
     const workflowsStore = tx.objectStore('workflows');
 
+    let workflowId: string | null = null;
+
     const getRequest = snapshotsStore.get(snapshotId);
     getRequest.onsuccess = () => {
       const snapshot = getRequest.result as WorkflowSnapshotStore | undefined;
@@ -484,6 +486,9 @@ export async function rollbackToSnapshot(snapshotId: string): Promise<FinetuneWo
         resolve(null);
         return;
       }
+
+      // Capture the workflow ID from the snapshot record
+      workflowId = snapshot.workflowId;
 
       // Restore workflow state from snapshot
       const restoredState = {
@@ -495,8 +500,12 @@ export async function rollbackToSnapshot(snapshotId: string): Promise<FinetuneWo
     };
 
     tx.oncomplete = async () => {
-      // Fetch the restored state
-      const restored = await getWorkflow(snapshotId.split('-')[0]);
+      if (!workflowId) {
+        resolve(null);
+        return;
+      }
+      // Fetch the restored state using the full workflow ID from the snapshot
+      const restored = await getWorkflow(workflowId);
       resolve(restored);
     };
     tx.onerror = () => reject(tx.error);

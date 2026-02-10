@@ -378,6 +378,7 @@ export function LucyDatasetAssistant() {
           beforeSendMessage={handleBeforeSendMessage}
           toolRenderers={toolRenderers}
           quickActions={FINETUNE_QUICK_ACTIONS}
+          proactivePrompt="Hi! I'm Lucy, your fine-tuning assistant. I'll help you prepare training data, configure evaluation, and train your model. Let me take a look at your dataset..."
           autoTriggerPrompt={autoTriggerPrompt}
         />
       ) : (
