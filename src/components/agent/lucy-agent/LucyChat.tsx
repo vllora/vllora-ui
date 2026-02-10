@@ -354,7 +354,7 @@ export function LucyChat({
               <LucyToolCalls tools={externalTools} />
 
               {/* Render streaming indicator (typing/thinking) */}
-              <LucyStreamingIndicator />
+              <LucyStreamingIndicator isStreaming={isStreaming} />
 
               {/* Render pending message */}
               <LucyPendingMessage pendingMessage={pendingMessage} />
