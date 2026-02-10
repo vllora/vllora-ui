@@ -95,7 +95,7 @@ export function SectionTabs({
     <div className="flex items-center justify-between">
       {/* Workflow tabs - connected arrow stepper */}
       <TooltipProvider delayDuration={300}>
-        <div className="flex items-center -space-x-1">
+        <div className="grid items-center" style={{ gridTemplateColumns: `repeat(${WORKFLOW_TABS.length}, 1fr)` }}>
           {WORKFLOW_TABS.map((tab, index) => {
             const status = getWorkflowStatus(tab.id);
             const isActive = activeSection === tab.id;
@@ -106,7 +106,7 @@ export function SectionTabs({
             return (
               <Tooltip key={tab.id}>
                 <TooltipTrigger asChild>
-                  <div className="flex-1">
+                  <div className="-mx-px">
                     <ArrowSegment
                       isFirst={isFirst}
                       isLast={isLast}
