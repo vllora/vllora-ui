@@ -9,6 +9,8 @@
  * - PlanEmptyState: Empty state when no plan is active
  * - PlanLoadingState: Loading state when generating a plan
  * - DocsProcessingState: State when documents are still processing
+ * - PlanHeaderActions: Copy/export action buttons for plan header
+ * - PlanModeToggle: Preview/Edit mode toggle buttons
  */
 
 export { PlanSection } from './PlanSection';
@@ -18,3 +20,5 @@ export { ExecutionProgressCard } from './ExecutionProgressCard';
 export { PlanEmptyState } from './PlanEmptyState';
 export { PlanLoadingState } from './PlanLoadingState';
 export { DocsProcessingState } from './DocsProcessingState';
+export { PlanHeaderActions } from './PlanHeaderActions';
+export { PlanModeToggle } from './PlanModeToggle';

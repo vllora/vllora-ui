@@ -6,13 +6,14 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
-import { Check, X, Sparkles, Eye, Edit3 } from 'lucide-react';
+import { Check, X, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { cn } from '@/lib/utils';
 import type { SetupPlan } from '@/lib/distri-finetune-tools/steps/propose-setup-plan';
 import LazyMarkdownRenderer from '@/components/chat/LazyMarkdownRenderer';
 import { planToMarkdown, markdownToPlan } from './plan-markdown-utils';
+import { PlanHeaderActions } from './PlanHeaderActions';
+import { PlanModeToggle } from './PlanModeToggle';
 
 // Re-export for backwards compatibility
 export { planToMarkdown } from './plan-markdown-utils';
@@ -38,34 +39,16 @@ export function SetupPlanEditor({ plan, onApprove, onDismiss }: SetupPlanEditorP
       {/* Minimal header with mode toggle */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border/50">
         <div className="flex items-center gap-2 text-muted-foreground">
-          <Sparkles className="w-4 h-4 text-primary" />
+          <Sparkles className="w-4 h-4 text-[rgb(var(--theme-500))]" />
           <span className="text-xs font-medium">Setup Plan</span>
         </div>
-        <div className="flex items-center gap-1 bg-muted/50 rounded-md p-0.5">
-          <button
-            onClick={() => setIsPreview(true)}
-            className={cn(
-              'px-2 py-1 text-xs rounded transition-colors flex items-center gap-1',
-              isPreview
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <Eye className="w-3 h-3" />
-            Preview
-          </button>
-          <button
-            onClick={() => setIsPreview(false)}
-            className={cn(
-              'px-2 py-1 text-xs rounded transition-colors flex items-center gap-1',
-              !isPreview
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <Edit3 className="w-3 h-3" />
-            Edit
-          </button>
+
+        <div className="flex items-center gap-2">
+          {/* Copy & Export buttons */}
+          <PlanHeaderActions markdown={markdown} filename="setup-plan" />
+
+          {/* Mode toggle */}
+          <PlanModeToggle isPreview={isPreview} onToggle={setIsPreview} />
         </div>
       </div>
 

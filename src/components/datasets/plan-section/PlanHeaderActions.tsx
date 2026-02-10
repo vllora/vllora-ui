@@ -1,11 +1,11 @@
 /**
- * ReadmeHeaderActions
+ * PlanHeaderActions
  *
- * Action buttons for the README header: refresh, copy, and export.
+ * Action buttons for the Plan header: copy and export.
  */
 
 import { useState, useCallback } from 'react';
-import { Download, Copy, Check, RefreshCw } from 'lucide-react';
+import { Download, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Tooltip,
@@ -14,65 +14,42 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 
-interface ReadmeHeaderActionsProps {
-  readme: string;
-  onRegenerate: () => Promise<void>;
-  onExport: () => void;
+interface PlanHeaderActionsProps {
+  markdown: string;
+  filename?: string;
 }
 
-export function ReadmeHeaderActions({
-  readme,
-  onRegenerate,
-  onExport,
-}: ReadmeHeaderActionsProps) {
+export function PlanHeaderActions({
+  markdown,
+  filename = 'setup-plan',
+}: PlanHeaderActionsProps) {
   const [copied, setCopied] = useState(false);
-  const [isRegenerating, setIsRegenerating] = useState(false);
 
   const handleCopy = useCallback(async () => {
-    if (!readme) return;
-
     try {
-      await navigator.clipboard.writeText(readme);
+      await navigator.clipboard.writeText(markdown);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      console.error('Failed to copy README:', error);
+      console.error('Failed to copy plan:', error);
     }
-  }, [readme]);
+  }, [markdown]);
 
-  const handleRegenerate = useCallback(async () => {
-    setIsRegenerating(true);
-    try {
-      await onRegenerate();
-    } finally {
-      setIsRegenerating(false);
-    }
-  }, [onRegenerate]);
+  const handleExport = useCallback(() => {
+    const blob = new Blob([markdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filename}-${new Date().toISOString().split('T')[0]}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [markdown, filename]);
 
   return (
     <TooltipProvider delayDuration={300}>
       <div className="flex items-center gap-1">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleRegenerate}
-              disabled={isRegenerating}
-              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-            >
-              {isRegenerating ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <RefreshCw className="w-3.5 h-3.5" />
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            <p>Regenerate README</p>
-          </TooltipContent>
-        </Tooltip>
-
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -98,7 +75,7 @@ export function ReadmeHeaderActions({
             <Button
               variant="ghost"
               size="sm"
-              onClick={onExport}
+              onClick={handleExport}
               className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
             >
               <Download className="w-3.5 h-3.5" />
