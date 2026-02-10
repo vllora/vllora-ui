@@ -50,8 +50,8 @@ export function TopicGeneratorPanel({
       <div className="p-6 space-y-5">
         {/* Header */}
         <div className="flex items-start gap-3">
-          <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
-            <Sparkles className="w-4 h-4 text-emerald-500" />
+          <div className="w-9 h-9 rounded-lg bg-[rgb(var(--theme-500))]/10 flex items-center justify-center flex-shrink-0">
+            <Sparkles className="w-4 h-4 text-[rgb(var(--theme-500))]" />
           </div>
           <div>
             <h2 className="text-base font-semibold">Smart Topic Generator</h2>
@@ -82,7 +82,7 @@ export function TopicGeneratorPanel({
           <div className="p-4 rounded-lg border border-border bg-card">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm text-muted-foreground">MAX DEPTH</span>
-              <span className="text-xs font-medium px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500">
+              <span className="text-xs font-medium px-2 py-0.5 rounded bg-[rgb(var(--theme-500))]/10 text-[rgb(var(--theme-500))]">
                 Level {depth}
               </span>
             </div>
@@ -92,7 +92,7 @@ export function TopicGeneratorPanel({
               min={1}
               max={5}
               step={1}
-              className="[&_[role=slider]]:bg-emerald-500 [&_[role=slider]]:border-emerald-500 [&_.bg-primary]:bg-emerald-500"
+              className="[&_[role=slider]]:bg-[rgb(var(--theme-500))] [&_[role=slider]]:border-[rgb(var(--theme-500))] [&_.bg-primary]:bg-[rgb(var(--theme-500))]"
             />
             <div className="flex justify-between text-xs text-muted-foreground mt-2">
               <span>1</span>
@@ -108,7 +108,7 @@ export function TopicGeneratorPanel({
         <Button
           onClick={onGenerate}
           disabled={isGenerating}
-          className="w-full h-10 bg-emerald-500 hover:bg-emerald-600 text-white gap-2 text-sm font-medium"
+          className="w-full h-10 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white gap-2 text-sm font-medium"
         >
           {isGenerating ? (
             <>

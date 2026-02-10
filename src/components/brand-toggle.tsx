@@ -39,6 +39,25 @@ function hexToRgb(hex: string): string {
     : "0, 0, 0"
 }
 
+// Convert hex to HSL string (space-separated, for shadcn CSS vars)
+function hexToHsl(hex: string): string {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+  if (!result) return "0 0% 0%"
+  const r = parseInt(result[1], 16) / 255
+  const g = parseInt(result[2], 16) / 255
+  const b = parseInt(result[3], 16) / 255
+  const max = Math.max(r, g, b), min = Math.min(r, g, b)
+  const l = (max + min) / 2
+  if (max === min) return `0 0% ${Math.round(l * 100)}%`
+  const d = max - min
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max - min)
+  let h = 0
+  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6
+  else if (max === g) h = ((b - r) / d + 2) / 6
+  else h = ((r - g) / d + 4) / 6
+  return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`
+}
+
 function applyBrandColor(color: BrandColor) {
   const tailwindColor = colors[color] as Record<string, string>
 
@@ -49,9 +68,12 @@ function applyBrandColor(color: BrandColor) {
         const rgb = hexToRgb(hexValue)
         document.documentElement.style.setProperty(`--theme-${shade}`, rgb)
 
-        // Update --theme-rgb for the 500 shade (used in shadows)
+        // Update --theme-rgb and --primary for the 500 shade
         if (shade === '500') {
           document.documentElement.style.setProperty("--theme-rgb", rgb)
+          // Sync shadcn --primary with theme color
+          document.documentElement.style.setProperty("--primary", hexToHsl(hexValue))
+          document.documentElement.style.setProperty("--primary-foreground", "0 0% 100%")
         }
       }
     })

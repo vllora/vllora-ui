@@ -45,7 +45,7 @@ function ToolStatusBadge({ status }: { status?: string }) {
       );
     case 'completed':
       return (
-        <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+        <span className="inline-flex items-center gap-1 text-xs text-[rgb(var(--theme-600))] dark:text-[rgb(var(--theme-400))]">
           <CheckCircle2 className="h-3 w-3" />
           Completed
         </span>
@@ -152,13 +152,13 @@ export function LucySearchToolRenderer({ toolCall, state }: ToolRendererProps) {
         <div
           className={cn(
             'w-8 h-8 rounded-full flex items-center justify-center',
-            isRunning ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-emerald-100 dark:bg-emerald-900/30'
+            isRunning ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-[rgba(var(--theme-100),1)] dark:bg-[rgb(var(--theme-900))]/30'
           )}
         >
           {isRunning ? (
             <Loader2 className="h-4 w-4 text-blue-600 dark:text-blue-400 animate-spin" />
           ) : (
-            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <CheckCircle2 className="h-4 w-4 text-[rgb(var(--theme-600))] dark:text-[rgb(var(--theme-400))]" />
           )}
         </div>
         <div>

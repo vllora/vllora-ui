@@ -51,14 +51,14 @@ export function LucyToolCallCard({ toolCall, state }: LucyToolCallCardProps) {
   // Pending/Running state
   if (state?.status === 'pending' || state?.status === 'running') {
     return (
-      <div className="my-2 p-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5">
+      <div className="my-2 p-3 rounded-lg border border-[rgb(var(--theme-500))]/20 bg-[rgb(var(--theme-500))]/5">
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/10">
-            <div className="animate-spin rounded-full h-4 w-4 border-2 border-emerald-500 border-t-transparent" />
+          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[rgb(var(--theme-500))]/10">
+            <div className="animate-spin rounded-full h-4 w-4 border-2 border-[rgb(var(--theme-500))] border-t-transparent" />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[rgb(var(--theme-500))]/20 text-[rgb(var(--theme-400))]">
                 {toolCall.tool_name}
               </span>
             </div>
@@ -78,8 +78,8 @@ export function LucyToolCallCard({ toolCall, state }: LucyToolCallCardProps) {
           onClick={() => setIsExpanded(!isExpanded)}
           className="w-full p-2 flex items-center gap-3 hover:bg-muted/50 transition-colors"
         >
-          <div className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500/10">
-            <CheckCircle className="w-3 h-3 text-emerald-500" />
+          <div className="flex items-center justify-center w-5 h-5 rounded-full bg-[rgb(var(--theme-500))]/10">
+            <CheckCircle className="w-3 h-3 text-[rgb(var(--theme-500))]" />
           </div>
           <div className="flex-1 min-w-0 text-left">
             <div className="flex items-center gap-2 flex-wrap">
@@ -116,7 +116,7 @@ export function LucyToolCallCard({ toolCall, state }: LucyToolCallCardProps) {
                   className={cn(
                     'text-xs px-3 py-1.5 rounded-md font-medium transition-colors',
                     activeTab === tab
-                      ? 'bg-emerald-600 text-white shadow-sm'
+                      ? 'bg-[rgb(var(--theme-600))] text-white shadow-sm'
                       : 'bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80'
                   )}
                 >

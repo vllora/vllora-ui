@@ -183,7 +183,7 @@ export function ConfigView({
           <Button
             onClick={onRunDryRun}
             disabled={!hasGraderConfig}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white"
+            className="bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-500))] text-white"
           >
             <Play className="h-4 w-4 mr-1.5" />
             Start Dry Run

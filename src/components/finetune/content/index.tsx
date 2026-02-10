@@ -66,7 +66,7 @@ export function FinetuneJobsContent({ datasetId, canCreateJob = true, trainingCo
           {datasetId && (
             <Button
               size="sm"
-              className="h-7 gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 text-white"
+              className="h-7 gap-1.5 text-xs bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-500))] text-white"
               onClick={() => setShowNewJobDialog(true)}
               disabled={!canStartNewJob}
               title={hasActiveJob ? "A job is already in progress" : undefined}

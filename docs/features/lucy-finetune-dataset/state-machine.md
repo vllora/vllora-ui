@@ -457,17 +457,22 @@ interface WorkflowSnapshot {
 
 ## IndexedDB Storage
 
-The finetune workflow system uses **two separate IndexedDB databases** to persist data:
+The finetune workflow system uses **three separate IndexedDB databases** to persist data:
 
 ### Database 1: `vllora-finetune` (Workflow State)
 
-**Purpose:** Stores workflow progress, step metadata, and snapshots. Does NOT store actual configuration data.
+**Purpose:** Stores workflow progress, step metadata, snapshots, dry run jobs, and proposed plans. Does NOT store actual configuration data.
 
-| Object Store | Key | Indexes | Description |
-|--------------|-----|---------|-------------|
-| `workflows` | `id` | `datasetId`, `currentStep`, `createdAt`, `updatedAt` | Workflow state per dataset |
-| `snapshots` | `id` | `workflowId`, `step`, `createdAt` | State snapshots for rollback |
-| `generationHistory` | `id` | `workflowId`, `createdAt` | Synthetic data generation runs |
+**Version:** 4
+
+| Object Store | Key | Indexes | Added In | Description |
+|--------------|-----|---------|----------|-------------|
+| `workflows` | `id` | `datasetId`, `currentStep`, `createdAt`, `updatedAt` | v1 | Workflow state per dataset |
+| `snapshots` | `id` | `workflowId`, `step`, `createdAt` | v1 | State snapshots for rollback |
+| `generationHistory` | `id` | `workflowId`, `createdAt` | v1 | Synthetic data generation runs |
+| `dryRunJobs` | `id` | `datasetId`, `status`, `createdAt` | v2 | Dry run job tracking |
+| `jobEvaluations` | `id` | `updatedAt` | v3 | Finetune job evaluation results |
+| `proposedPlans` | `datasetId` | (none) | v4 | Persisted proposed plans (survives refresh) |
 
 #### Workflow Store Schema
 
@@ -560,16 +565,34 @@ interface Dataset {
 
 ---
 
+### Database 3: `vllora-knowledge-sources` (Knowledge Sources)
+
+**Purpose:** Stores uploaded knowledge source documents (PDFs, text, etc.) with extracted content and metadata.
+
+**Version:** 1
+
+**File:** `ui/src/services/knowledge-sources-db.ts`
+
+| Object Store | Key | Indexes | Description |
+|--------------|-----|---------|-------------|
+| `knowledge_sources` | `id` | `datasetId`, `status`, `type` | Uploaded documents with extracted content |
+
+---
+
 ### Storage Separation Rationale
 
 | Data Type | Stored In | Why |
 |-----------|-----------|-----|
-| Workflow progress | `vllora-finetune` | Allows multiple workflows per dataset, snapshots, rollback |
+| Workflow progress | `vllora-finetune` (workflows) | Allows multiple workflows per dataset, snapshots, rollback |
 | Topic hierarchy | `vllora-datasets` (Dataset) | Shared across workflows, used by records |
 | Evaluation config | `vllora-datasets` (Dataset) | Shared across workflows, synced to backend |
 | Records | `vllora-datasets` (Records) | Core data, independent of workflow |
-| Training job info | `vllora-finetune` (Workflow) | Workflow-specific, includes job ID and status |
-| Snapshots | `vllora-finetune` | Enables rollback without affecting dataset |
+| Training job info | `vllora-finetune` (workflows) | Workflow-specific, includes job ID and status |
+| Snapshots | `vllora-finetune` (snapshots) | Enables rollback without affecting dataset |
+| Dry run jobs | `vllora-finetune` (dryRunJobs) | Tracks dry run execution per dataset |
+| Job evaluations | `vllora-finetune` (jobEvaluations) | Stores finetune job evaluation results |
+| Proposed plans | `vllora-finetune` (proposedPlans) | Persists plans across page refresh (keyed by datasetId) |
+| Knowledge sources | `vllora-knowledge-sources` | Documents are large, independent lifecycle from workflow |
 
 **Key Design Decision:** The workflow stores **metadata/pointers** to configurations, not the configurations themselves. This prevents data duplication and ensures the dataset remains the source of truth for `topicHierarchy` and `evaluationConfig`.
 
@@ -679,8 +702,12 @@ advance_to_step({ workflow_id: "...", step: "grader_config" })
 
 ## Context Injection
 
-Every user message includes workflow context:
+Every user message is prepended with the dataset ID and workflow context in this format:
 
+```
+DATASET_ID: dataset-123
+
+Context:
 ```json
 {
   "page": "datasets",

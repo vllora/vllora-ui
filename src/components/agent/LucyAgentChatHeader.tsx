@@ -59,7 +59,7 @@ export function LucyAgentChatHeader({
       <div className="flex items-center gap-2">
         <LucyAvatar size="sm" />
         <span className="font-medium text-sm">Lucy</span>
-        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-[rgba(var(--theme-500),0.2)] text-[rgb(var(--theme-400))] border border-[rgba(var(--theme-500),0.3)]">
           Beta
         </span>
       </div>

@@ -32,7 +32,7 @@ export function LucyStepIndicator({ step }: LucyStepIndicatorProps) {
   if (step.status === 'completed') {
     return (
       <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1 opacity-60">
-        <CheckCircle className="h-3 w-3 text-emerald-500" />
+        <CheckCircle className="h-3 w-3 text-[rgb(var(--theme-500))]" />
         <span className="font-medium">{step.title}</span>
         <span>({getDuration()})</span>
       </div>
@@ -42,7 +42,7 @@ export function LucyStepIndicator({ step }: LucyStepIndicatorProps) {
   if (step.status === 'running') {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-emerald-500" />
+        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-[rgb(var(--theme-500))]" />
         <span className="font-medium animate-pulse">{step.title || 'Lucy is thinking...'}</span>
       </div>
     );

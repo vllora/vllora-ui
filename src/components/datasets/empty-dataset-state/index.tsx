@@ -9,6 +9,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { Database, FlaskConical, Sparkles } from "lucide-react";
 import { DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
 import { DatasetsConsumer } from "@/contexts/DatasetsContext";
 import { ProjectEventsConsumer } from "@/contexts/project-events";
@@ -23,6 +24,7 @@ import { tryParseJson } from "@/utils/modelUtils";
 import { emitter } from "@/utils/eventEmitter";
 import { uploadKnowledgeSourceHandler } from "@/lib/distri-finetune-tools/steps/knowledge-sources";
 import type { KnowledgeSourceType } from "@/types/dataset-types";
+import { LucyAvatar } from "@/components/agent/lucy-agent";
 
 type TabType = "objective" | "api";
 
@@ -88,6 +90,7 @@ export function EmptyDatasetsState() {
   const [objective, setObjective] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [isLoadingSample, setIsLoadingSample] = useState(false);
+  const [transition, setTransition] = useState<{ datasetId: string; hasFiles: boolean } | null>(null);
 
   // Update URL when tab changes
   const handleTabChange = useCallback((tab: TabType) => {
@@ -187,15 +190,23 @@ export function EmptyDatasetsState() {
         // Emit update so KnowledgeSourcesPanel refreshes
         emitter.emit("vllora_knowledge_source_updated", { datasetId: dataset.id });
 
-        // Navigate with flag to trigger Lucy plan generation
-        navigate(`/datasets/${dataset.id}?autoGeneratePlan=true`);
+        // Show transition screen before navigating
+        setIsCreating(false);
+        setTransition({ datasetId: dataset.id, hasFiles: true });
+        setTimeout(() => {
+          navigate(`/datasets/${dataset.id}?autoGeneratePlan=true`);
+        }, 2500);
       } else {
-        navigate(`/datasets/${dataset.id}`);
+        // Show transition screen before navigating
+        setIsCreating(false);
+        setTransition({ datasetId: dataset.id, hasFiles: false });
+        setTimeout(() => {
+          navigate(`/datasets/${dataset.id}`);
+        }, 2500);
       }
     } catch (error) {
       console.error("Failed to create dataset:", error);
       toast.error("Failed to create dataset");
-    } finally {
       setIsCreating(false);
     }
   };
@@ -214,6 +225,56 @@ export function EmptyDatasetsState() {
       setIsLoadingSample(false);
     }
   };
+
+  // Show onboarding transition before navigating to dataset detail
+  if (transition) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 animate-in fade-in duration-500">
+        <div className="flex flex-col items-center text-center max-w-md space-y-8">
+          {/* Lucy introduction */}
+          <LucyAvatar size="lg" animated />
+          <div className="space-y-2">
+            <h2 className="text-2xl font-semibold text-foreground">
+              Meet Lucy, your finetune assistant
+            </h2>
+            <p className="text-muted-foreground">
+              Lucy will guide you through preparing data, evaluating quality, and training your model.
+            </p>
+          </div>
+
+          {/* Steps overview */}
+          <div className="flex items-center gap-6 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-[rgba(var(--theme-500),0.15)] flex items-center justify-center">
+                <Database className="w-4 h-4 text-[rgb(var(--theme-500))]" />
+              </div>
+              <span>Data</span>
+            </div>
+            <span className="text-border">→</span>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-[rgba(var(--theme-500),0.15)] flex items-center justify-center">
+                <FlaskConical className="w-4 h-4 text-[rgb(var(--theme-500))]" />
+              </div>
+              <span>Evaluation</span>
+            </div>
+            <span className="text-border">→</span>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-[rgba(var(--theme-500),0.15)] flex items-center justify-center">
+                <Sparkles className="w-4 h-4 text-[rgb(var(--theme-500))]" />
+              </div>
+              <span>Finetune</span>
+            </div>
+          </div>
+
+          {/* Loading indicator */}
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="w-1.5 h-1.5 rounded-full bg-[rgb(var(--theme-500))] animate-pulse" />
+            <span>{transition.hasFiles ? "Processing your documents..." : "Setting up your project..."}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col items-center justify-start pt-16 p-8 relative overflow-auto">

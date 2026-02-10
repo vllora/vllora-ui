@@ -14,7 +14,7 @@ The Lucy Dataset Agent follows a **3-tier architecture** with tools executing lo
 │  ┌────────────────────────┐   ┌─────────────────────────────────────┐  │
 │  │ LucyDatasetAssistant   │   │    distri-finetune-tools/           │  │
 │  │ - Sidebar UI           │   │    - Workflow tools (4)             │  │
-│  │ - Auto-analysis        │   │    - Step tools (20)                │  │
+│  │ - Auto-analysis        │   │    - Step tools (31)                │  │
 │  │ - Quick actions        │   │    - Execute locally in browser     │  │
 │  └────────────────────────┘   └─────────────────────────────────────┘  │
 │           │                              │                              │
@@ -67,7 +67,7 @@ The Lucy Dataset Agent follows a **3-tier architecture** with tools executing lo
 | Tool Format | `provider` |
 | External Tool Timeout | `600s` (10 min for user responses) |
 | Sub-Agents | `finetune_analysis`, `finetune_topics`, `finetune_workflow` |
-| Total Tools | 24 (4 workflow + 20 step) |
+| Total Tools | 35 (4 workflow + 31 step) |
 
 The agent is defined using Distri's markdown-based agent definition format. Key sections:
 - **ROLE**: Process-focused finetune assistant
@@ -209,7 +209,7 @@ Main sidebar component that hosts the Lucy chat interface.
 
 ```typescript
 // Key features
-- Collapsible sidebar (384px expanded, 56px collapsed)
+- Responsive sidebar (340px standard, 384px on >1536px screens, auto-collapses on <1024px)
 - Uses useFineTuneAgentChat hook for agent communication
 - Listens for vllora_lucy_prompt events (external triggers)
 - Auto-triggers proactive analysis when opening a dataset
@@ -219,12 +219,12 @@ Main sidebar component that hosts the Lucy chat interface.
 **Quick Actions:**
 | ID | Icon | Label |
 |----|------|-------|
-| start-finetune | 🚀 | Start finetune workflow |
-| check-status | 📊 | Check workflow status |
-| analyze-coverage | 📈 | Analyze topic coverage |
-| generate-data | ✨ | Generate synthetic data |
-| configure-grader | ⚖️ | Configure evaluation grader |
-| run-dry-run | 🧪 | Run dry run validation |
+| start-finetune | 🚀 | Start training setup |
+| check-status | 📊 | Check progress |
+| analyze-coverage | 📈 | Check data variety |
+| generate-data | ✨ | Create more training examples |
+| configure-grader | ⚖️ | Set up quality scoring |
+| run-dry-run | 🧪 | Test before training |
 
 #### b) useFineTuneAgentChat Hook
 
@@ -256,7 +256,7 @@ const tools = useMemo<DistriAnyTool[]>(
 );
 ```
 
-- `finetuneTools`: All 24 function tools (workflow + step tools)
+- `finetuneTools`: All 35 function tools (4 workflow + 31 step tools)
 - `createAskFollowUpTool()`: UI tool for presenting options to users
 
 **Context Injection Pattern:**
@@ -280,18 +280,24 @@ distri-finetune-tools/
 ├── workflow/
 │   └── index.ts          # 4 workflow control tools
 ├── steps/
-│   ├── index.ts          # Aggregates all step tools
-│   ├── generate-topics/  # Topic generation (frontend + backend)
-│   │   ├── frontend.ts   # LLM-based generation
-│   │   ├── backend.ts    # Template-based generation
+│   ├── index.ts                  # Aggregates all 31 step tools
+│   ├── generate-topics/          # Topic generation (frontend + backend)
+│   │   ├── frontend.ts           # LLM-based generation
+│   │   ├── backend.ts            # Template-based generation
 │   │   └── index.ts
 │   ├── propose-setup-plan/       # Setup plan generation
 │   │   ├── handler.ts
+│   │   ├── tool.ts
 │   │   ├── types.ts
 │   │   ├── prompts.ts
 │   │   ├── llm-service.ts
+│   │   ├── grader-template.ts
+│   │   ├── adjust-plan.ts
 │   │   └── index.ts
-│   ├── knowledge-sources.ts      # Knowledge source upload & extraction tools
+│   ├── shared/                   # Shared utilities
+│   │   ├── index.ts
+│   │   └── knowledge-context.ts  # Knowledge source context builder
+│   ├── knowledge-sources.ts      # 4 knowledge source tools
 │   ├── pdf-extractor.ts          # PDF text extraction with pdfjs-dist
 │   ├── pdf-llm-extractor.ts      # LLM-assisted content analysis
 │   ├── apply-hierarchy.ts
@@ -301,6 +307,8 @@ distri-finetune-tools/
 │   ├── analyze-coverage.ts
 │   ├── generate-synthetic.ts
 │   ├── generate-initial-data.ts  # Generate data for empty datasets
+│   ├── generate-record-variants.ts  # Generate variations of existing records
+│   ├── generate-preview.ts       # Preview generation before committing
 │   ├── configure-grader.ts
 │   ├── test-grader.ts
 │   ├── validate-records.ts
@@ -313,6 +321,12 @@ distri-finetune-tools/
 │   ├── get-dataset-records.ts
 │   ├── get-dataset-stats.ts
 │   ├── update-record.ts
+│   ├── regenerate-readme.ts      # README regeneration tool
+│   ├── execute-setup-plan.ts     # 7-step plan execution
+│   ├── execution-state-store.ts  # In-memory execution progress store
+│   ├── proposed-plan-store.ts    # IndexedDB-persisted proposed plans
+│   ├── stockfish-tools.ts        # Chess-specific tools (conditional)
+│   ├── stockfish-service.ts      # Stockfish engine integration
 │   └── helpers.ts
 ├── todos/
 │   └── index.ts          # Todo list tool definitions
@@ -330,19 +344,22 @@ distri-finetune-tools/
 | `advance_to_step` | Move to next step (with skip support) |
 | `rollback_to_step` | Return to previous step via snapshots |
 
-#### Step Tools (20)
+#### Step Tools (31)
 
 | Category | Tools |
 |----------|-------|
 | **Topics (Step 1)** | `generate_topics`, `apply_topic_hierarchy`, `adjust_topic_hierarchy`, `get_topic_hierarchy` |
 | **Categorize (Step 2)** | `categorize_records` |
-| **Coverage (Step 3)** | `analyze_coverage`, `generate_synthetic_data`, `generate_initial_data` |
+| **Coverage (Step 3)** | `analyze_coverage`, `generate_synthetic_data`, `generate_initial_data`, `generate_record_variants`, `generate_preview` |
+| **Knowledge Sources** | `upload_knowledge_source`, `list_knowledge_sources`, `extract_topics_from_source`, `search_knowledge` |
 | **Grader (Step 4)** | `configure_grader`, `test_grader_sample` |
 | **Upload/Sync** | `upload_dataset`, `sync_evaluator` |
 | **Dry Run (Step 5)** | `run_dry_run` |
 | **Training (Step 6)** | `start_training`, `check_training_status` |
 | **Deploy (Step 7)** | `deploy_model` |
+| **Setup Plan** | `propose_setup_plan`, `adjust_setup_plan`, `execute_setup_plan` |
 | **Data Access** | `get_dataset_records`, `get_dataset_stats`, `update_record`, `validate_records` |
+| **Documentation** | `regenerate_readme` |
 
 ---
 
@@ -375,9 +392,10 @@ interface FinetuneWorkflowState {
 }
 ```
 
-**Storage Separation:**
-- **Workflow DB**: Step progress, metadata, snapshots
-- **Dataset DB**: Actual data (records, topicHierarchy, evaluationConfig)
+**Storage Separation (3 IndexedDB databases):**
+- **`vllora-finetune`** (v4): Step progress, metadata, snapshots, dry run jobs, proposed plans
+- **`vllora-datasets`**: Actual data (records, topicHierarchy, evaluationConfig)
+- **`vllora-knowledge-sources`**: Uploaded documents with extracted content
 
 ---
 
@@ -395,6 +413,7 @@ interface FinetuneWorkflowState {
                 │ - Datasets      │      │  (Frontend JS)  │
                 │ - Workflows     │      └─────────────────┘
                 │ - Snapshots     │
+                │ - Knowledge Src │
                 └─────────────────┘
 ```
 
@@ -415,7 +434,7 @@ interface FinetuneWorkflowState {
 ## Key Design Decisions
 
 ### 1. Frontend Tool Execution
-All 24 tools execute in the browser via JavaScript handlers. This allows:
+All 35 tools execute in the browser via JavaScript handlers. This allows:
 - Direct access to IndexedDB
 - No backend API needed for data operations
 - Real-time UI updates via emitter events
@@ -485,7 +504,7 @@ Workflow snapshots stored in IndexedDB enable:
 
    These must stay in sync manually across 4 agent definition files.
 
-2. **Browser-Only Execution** - All 24 tools execute in browser. For operations like `start_training` or `deploy_model`, consider:
+2. **Browser-Only Execution** - All 35 tools execute in browser. For operations like `start_training` or `deploy_model`, consider:
    - Access to GPU resources
    - Long-running jobs
    - Secure API key handling
@@ -497,6 +516,6 @@ Workflow snapshots stored in IndexedDB enable:
 ## Related Documentation
 
 - [State Machine](./state-machine.md) - Workflow state transitions
-- [Overview](./01-overview.md) - High-level feature overview
+- [Guided Onboarding](./guided-onboarding.md) - Setup plan flow documentation
+- [UX Flow Assessment](./ux-flow-assessment.md) - UX evaluation and recommendations
 - [README](./README.md) - Complete design document
-- [Re-enabling ask_follow_up](./re-enabling-ask-follow-up.md) - Guide to restore the ask_follow_up UI tool

@@ -290,7 +290,7 @@ export function NewJobDialog({ datasetId, onSuccess, disabled, open, onOpenChang
             <Button
               onClick={handleSubmit}
               disabled={isSubmitting || disabled}
-              className="gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white"
+              className="gap-1.5 bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-500))] text-white"
             >
               {isSubmitting ? (
                 <>

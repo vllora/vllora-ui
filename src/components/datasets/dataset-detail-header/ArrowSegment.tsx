@@ -56,7 +56,7 @@ export function ArrowSegment({
   return (
     <button
       onClick={onClick}
-      className="relative flex items-center group focus:outline-none px-2"
+      className="relative flex-1 flex items-center justify-center group focus:outline-none px-2"
       style={{ height }}
     >
       <svg

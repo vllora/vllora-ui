@@ -65,6 +65,8 @@ User uploads documents to empty dataset
                                │  - Step 3: Configure evaluator      │
                                │  - Step 4: Upload to backend        │
                                │  - Step 5: Run dry run validation   │
+                               │  - Step 6: Generate README          │
+                               │  - Step 7: Start finetune job       │
                                │  - Emits progress events            │
                                └─────────────────────────────────────┘
                                               │
@@ -79,13 +81,31 @@ User uploads documents to empty dataset
 
 ## Trigger Conditions
 
-The guided onboarding flow is triggered when ALL of the following are true:
+### Manual Trigger
+The guided onboarding flow can be triggered manually when ALL of the following are true:
 
 1. **Dataset is empty** - No existing training records
 2. **Knowledge sources uploaded** - User has added at least one document
 3. **Training objective defined** - Dataset has a `datasetObjective` set
 
 If the training objective is not set, Lucy will first help the user define it before proposing a setup plan.
+
+### Auto-Trigger via `?autoGeneratePlan=true`
+
+When a user clicks "Start Finetune" in the empty dataset state **with files uploaded**, the app navigates to:
+```
+/datasets/{datasetId}?autoGeneratePlan=true
+```
+
+**File:** `src/components/datasets/empty-dataset-state/index.tsx` (line 197)
+
+`DatasetDetailContentV2.tsx` (lines 246-269) detects this query parameter and:
+1. Removes the query param immediately (to prevent re-triggering on refresh)
+2. Waits 2 seconds for knowledge sources to finish processing
+3. Emits a `vllora_lucy_prompt` event asking Lucy to create a setup plan
+4. Lucy calls `propose_setup_plan` automatically
+
+This creates a seamless flow: upload docs → click Start → transition screen → auto-plan generation.
 
 ## Tools
 
@@ -210,18 +230,18 @@ interface ExecuteSetupPlanResult {
 }
 ```
 
-**Execution Steps:**
+**Execution Steps (7 total):**
 1. **Apply Topic Hierarchy** - Creates topic structure from proposed_topics
 2. **Generate Initial Data** - Creates seed training examples (distributed by topic - records are assigned to topics during generation, no separate categorization needed)
-3. **Configure Evaluator** - Sets up LLM-as-Judge grader
-4. **Upload Dataset** - Syncs to backend
+3. **Configure Evaluator** - Sets up LLM-as-Judge grader using `plan.grader_config.template_preview`
+4. **Upload Dataset** - Syncs to backend via API
 5. **Run Dry Run** - Validates with current model (non-fatal if fails)
 6. **Generate README** - Creates comprehensive documentation including:
    - Data provenance (which knowledge sources were used)
    - Topic hierarchy visualization
    - Record statistics and coverage analysis
    - Setup plan execution summary
-7. **Start Finetune Job** - Automatically creates and submits the training job (non-fatal if fails, user can start manually)
+7. **Start Finetune Job** - Automatically creates and submits the training job using `quickFinetune()` with base model `llama-v3-8b-instruct`. Emits `vllora_finetune_job_created` event and switches UI to Jobs tab. (Non-fatal if fails, user can start manually)
 
 ## Progress Indicators
 
@@ -232,7 +252,7 @@ The `RecordsSectionHeader` component shows overall data generation progress near
 ```typescript
 // Displays: "Generating X/Y" with animated spinner
 {generationProgress && (
-  <div className="flex items-center gap-1.5 text-emerald-400 text-xs px-2 py-1 bg-emerald-500/10 rounded-md">
+  <div className="flex items-center gap-1.5 text-[rgb(var(--theme-400))] text-xs px-2 py-1 bg-[rgba(var(--theme-500),0.1)] rounded-md">
     <Loader2 className="w-3.5 h-3.5 animate-spin" />
     <span>Generating {generationProgress.completed}/{generationProgress.total}</span>
   </div>
@@ -248,7 +268,7 @@ Individual topics show generation progress while records are being created for t
 ```typescript
 // In TopicNodeHeader.tsx
 {isGenerating && (
-  <div className="flex items-center gap-1.5 text-emerald-400">
+  <div className="flex items-center gap-1.5 text-[rgb(var(--theme-400))]">
     <Loader2 className="w-3.5 h-3.5 animate-spin" />
     <span className="text-xs">
       {generatingProgress
@@ -405,7 +425,7 @@ The component subscribes to `vllora_setup_plan_progress` events to receive real-
 
 ### PlanSection
 
-Located at: `/ui/src/components/datasets/PlanSection.tsx`
+Located at: `/ui/src/components/datasets/plan-section/PlanSection.tsx`
 
 Dedicated section for setup plan management in the Plan tab. It:
 - Shows loading state while Lucy is generating a plan
@@ -584,11 +604,14 @@ Also has access to both tools for delegated execution scenarios.
 | pdf_extractor | `/ui/src/lib/distri-finetune-tools/steps/pdf-extractor.ts` |
 | pdf_llm_extractor | `/ui/src/lib/distri-finetune-tools/steps/pdf-llm-extractor.ts` |
 | execution_state_store | `/ui/src/lib/distri-finetune-tools/steps/execution-state-store.ts` |
+| proposed_plan_store | `/ui/src/lib/distri-finetune-tools/steps/proposed-plan-store.ts` |
 | PlanSection | `/ui/src/components/datasets/plan-section/PlanSection.tsx` |
 | SetupPlanEditor | `/ui/src/components/datasets/plan-section/SetupPlanEditor.tsx` |
 | SetupPlanCard | `/ui/src/components/datasets/plan-section/SetupPlanCard.tsx` |
 | ExecutionProgressCard | `/ui/src/components/datasets/plan-section/ExecutionProgressCard.tsx` |
 | PlanExecutedView | `/ui/src/components/datasets/plan-section/PlanExecutedView.tsx` |
+| PlanCompletedState | `/ui/src/components/datasets/plan-section/PlanCompletedState.tsx` |
+| DocsProcessingState | `/ui/src/components/datasets/plan-section/DocsProcessingState.tsx` |
 | ReadmeWithPlan | `/ui/src/components/datasets/ReadmeWithPlan.tsx` |
 | SectionTabs | `/ui/src/components/datasets/dataset-detail-header/SectionTabs.tsx` |
 | Tool Renderers | `/ui/src/components/agent/lucy-agent/LucySetupPlanRenderer.tsx` |

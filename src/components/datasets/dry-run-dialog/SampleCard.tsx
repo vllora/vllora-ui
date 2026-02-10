@@ -28,7 +28,7 @@ export function SampleCard({ sample }: SampleCardProps) {
               ? "bg-red-500/15 text-red-400"
               : sample.score < 0.7
               ? "bg-amber-500/15 text-amber-400"
-              : "bg-emerald-500/15 text-emerald-400"
+              : "bg-[rgb(var(--theme-500))]/15 text-[rgb(var(--theme-400))]"
           )}
         >
           {sample.score.toFixed(2)}
@@ -46,7 +46,7 @@ export function SampleCard({ sample }: SampleCardProps) {
             </div>
           )}
           <button
-            className="text-emerald-500 text-xs mt-1.5 hover:text-emerald-400 transition-colors"
+            className="text-[rgb(var(--theme-500))] text-xs mt-1.5 hover:text-[rgb(var(--theme-400))] transition-colors"
             onClick={() => setExpanded(!expanded)}
           >
             {expanded ? "Hide reasoning" : "Show reasoning"}

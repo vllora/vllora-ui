@@ -8,6 +8,7 @@ import { DistriMessage } from '@distri/core';
 import { extractContent, formatTimestamp } from '../lucy-message-utils';
 import { LucyTextRenderer } from '../LucyTextRenderer';
 import { LucyImageRenderer } from '../LucyImageRenderer';
+import { UserAvatar } from '../UserAvatar';
 
 // ============================================================================
 // Types
@@ -34,13 +35,11 @@ export function LucyUserMessage({ message }: LucyUserMessageProps) {
         <span className="text-xs font-mono text-muted-foreground">
           You {timestamp && <span>• {timestamp}</span>}
         </span>
-        <div className="w-5 h-5 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center text-[10px] font-semibold text-white">
-          Y
-        </div>
+        <UserAvatar size="sm" />
       </div>
 
       {/* Message bubble */}
-      <div className="max-w-[100%] w-full bg-zinc-900/40 border border-zinc-800/50 rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm overflow-hidden">
+      <div className="max-w-[100%] w-full bg-muted/40 border border-border/50 rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm overflow-hidden">
         {content.text && <LucyTextRenderer text={content.text} />}
         <LucyImageRenderer imageParts={content.imageParts} />
       </div>

@@ -44,14 +44,14 @@ interface Milestone {
 const MILESTONES: Milestone[] = [
   {
     id: "data_prep",
-    label: "Data Preparation",
+    label: "Data",
     short: "Data",
     icon: Database,
     steps: DATA_PREP_STEPS,
   },
   {
     id: "eval_config",
-    label: "Evaluation Config",
+    label: "Evaluation",
     short: "Eval",
     icon: FlaskConical,
     steps: EVAL_CONFIG_STEPS,
@@ -221,7 +221,7 @@ export function WorkflowStepIndicator({
             const getStatusColor = (status: ExecutionStepStatus) => {
               switch (status) {
                 case "completed":
-                  return "bg-emerald-500/20 text-emerald-500";
+                  return "bg-[rgb(var(--theme-500))]/20 text-[rgb(var(--theme-500))]";
                 case "running":
                   return "bg-primary/20 text-primary ring-2 ring-primary/30";
                 case "failed":
@@ -234,7 +234,7 @@ export function WorkflowStepIndicator({
             const getTextColor = (status: ExecutionStepStatus) => {
               switch (status) {
                 case "completed":
-                  return "text-emerald-500";
+                  return "text-[rgb(var(--theme-500))]";
                 case "running":
                   return "text-primary";
                 case "failed":
@@ -245,7 +245,7 @@ export function WorkflowStepIndicator({
             };
 
             const getConnectorColor = (status: ExecutionStepStatus) => {
-              return status === "completed" ? "bg-emerald-500/40" : "bg-zinc-700";
+              return status === "completed" ? "bg-[rgb(var(--theme-500))]/40" : "bg-zinc-700";
             };
 
             return (
@@ -401,7 +401,7 @@ export function WorkflowStepIndicator({
                     <div
                       className={cn(
                         "w-6 h-6 rounded-full flex items-center justify-center transition-all",
-                        status === "completed" && "bg-emerald-500/20 text-emerald-500",
+                        status === "completed" && "bg-[rgb(var(--theme-500))]/20 text-[rgb(var(--theme-500))]",
                         status === "in_progress" && "bg-primary/20 text-primary ring-2 ring-primary/30",
                         status === "pending" && "bg-zinc-800 text-zinc-500"
                       )}
@@ -418,7 +418,7 @@ export function WorkflowStepIndicator({
                     <span
                       className={cn(
                         "text-[11px] font-medium hidden sm:inline",
-                        status === "completed" && "text-emerald-500",
+                        status === "completed" && "text-[rgb(var(--theme-500))]",
                         status === "in_progress" && "text-primary",
                         status === "pending" && "text-zinc-500"
                       )}
@@ -433,7 +433,7 @@ export function WorkflowStepIndicator({
                       <span className="font-semibold">{milestone.label}</span>
                       <span className={cn(
                         "text-[10px] px-1.5 py-0.5 rounded capitalize",
-                        status === "completed" && "bg-emerald-500/20 text-emerald-500",
+                        status === "completed" && "bg-[rgb(var(--theme-500))]/20 text-[rgb(var(--theme-500))]",
                         status === "in_progress" && "bg-primary/20 text-primary",
                         status === "pending" && "bg-muted text-muted-foreground"
                       )}>
@@ -451,7 +451,7 @@ export function WorkflowStepIndicator({
                           <span className="font-medium">Includes:</span> Topic configuration, categorization, synthetic data generation
                         </p>
                         {hasRecords ? (
-                          <p className="text-emerald-500 text-[10px]">✓ Dataset has records ready</p>
+                          <p className="text-[rgb(var(--theme-500))] text-[10px]">✓ Dataset has records ready</p>
                         ) : (
                           <p className="text-amber-500 text-[10px]">→ Add records to get started</p>
                         )}
@@ -468,7 +468,7 @@ export function WorkflowStepIndicator({
                           <span className="font-medium">Includes:</span> Grader configuration, validation dry runs
                         </p>
                         {hasEvalFunction ? (
-                          <p className="text-emerald-500 text-[10px]">✓ Evaluation function configured</p>
+                          <p className="text-[rgb(var(--theme-500))] text-[10px]">✓ Evaluation function configured</p>
                         ) : (
                           <p className="text-amber-500 text-[10px]">→ Set up an evaluation function</p>
                         )}
@@ -482,7 +482,7 @@ export function WorkflowStepIndicator({
                           The model learns from your examples to match your use case.
                         </p>
                         {hasCompletedFinetuneJob ? (
-                          <p className="text-emerald-500 text-[10px]">✓ Training completed successfully</p>
+                          <p className="text-[rgb(var(--theme-500))] text-[10px]">✓ Training completed successfully</p>
                         ) : (
                           <p className="text-amber-500 text-[10px]">→ Start a training job</p>
                         )}
@@ -496,7 +496,7 @@ export function WorkflowStepIndicator({
                           Once deployed, you can use it in your applications.
                         </p>
                         {hasDeployedModel ? (
-                          <p className="text-emerald-500 text-[10px]">✓ Model deployed and ready</p>
+                          <p className="text-[rgb(var(--theme-500))] text-[10px]">✓ Model deployed and ready</p>
                         ) : (
                           <p className="text-amber-500 text-[10px]">→ Deploy your trained model</p>
                         )}
@@ -518,7 +518,7 @@ export function WorkflowStepIndicator({
                   className={cn(
                     "flex-1 h-[2px] mx-2 min-w-4",
                     status === "completed"
-                      ? "bg-emerald-500/40"
+                      ? "bg-[rgb(var(--theme-500))]/40"
                       : "bg-zinc-700"
                   )}
                 />

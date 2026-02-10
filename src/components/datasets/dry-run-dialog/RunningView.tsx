@@ -54,7 +54,7 @@ export function RunningView({ job, progress, onCancel }: RunningViewProps) {
             <span className={cn(
               "text-sm font-mono font-medium",
               averageScore >= 0.7
-                ? "text-emerald-400"
+                ? "text-[rgb(var(--theme-400))]"
                 : averageScore >= 0.4
                 ? "text-amber-400"
                 : "text-red-400"
@@ -82,7 +82,7 @@ export function RunningView({ job, progress, onCancel }: RunningViewProps) {
           {hasResults && (
             <div className="flex items-center gap-3">
               {passedCount > 0 && (
-                <span className="text-emerald-400">
+                <span className="text-[rgb(var(--theme-400))]">
                   {passedCount} passed
                 </span>
               )}

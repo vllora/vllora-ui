@@ -17,19 +17,19 @@ interface TabConfig {
   icon: LucideIcon;
 }
 
-// Workflow-related tabs (matching WorkflowStepIndicator milestone names)
+// Workflow-related tabs (plain language for non-technical users)
 const WORKFLOW_TABS: TabConfig[] = [
-  { id: "records", label: "Data Preparation", icon: Database },
-  { id: "evaluator", label: "Evaluation Config", icon: FlaskConical },
+  { id: "records", label: "Data", icon: Database },
+  { id: "evaluator", label: "Evaluation", icon: FlaskConical },
   { id: "jobs", label: "Finetune", icon: Sparkles },
-  { id: "deploy", label: "Deployments", icon: RocketIcon },
+  { id: "deploy", label: "Deploy", icon: RocketIcon },
 ];
 
 // Documentation & setup tabs
 const DOCUMENTATION_TABS: TabConfig[] = [
-  { id: "docs", label: "Docs", icon: FolderOpen },
-  { id: "plan", label: "Plan", icon: Wand2 },
-  { id: "readme", label: "README", icon: FileText },
+  { id: "docs", label: "Reference Docs", icon: FolderOpen },
+  { id: "plan", label: "Setup Plan", icon: Wand2 },
+  { id: "readme", label: "Overview", icon: FileText },
 ];
 
 interface SectionTabsProps {
@@ -141,7 +141,7 @@ export function SectionTabs({
 
               {/* Docs count */}
               {tab.id === "docs" && knowledgeSourcesCount > 0 && (
-                <span className="px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-500 text-[10px] font-medium tabular-nums">
+                <span className="px-1.5 py-0.5 rounded bg-[rgba(var(--theme-500),0.15)] text-[rgb(var(--theme-500))] text-[10px] font-medium tabular-nums">
                   {knowledgeSourcesCount}
                 </span>
               )}

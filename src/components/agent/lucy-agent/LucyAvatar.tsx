@@ -28,9 +28,9 @@ const borderClasses = {
 };
 
 const auraClasses = {
-  sm: 'shadow-[0_0_8px_2px_rgba(16,185,129,0.4)]',
-  md: 'shadow-[0_0_12px_3px_rgba(16,185,129,0.4)]',
-  lg: 'shadow-[0_0_20px_5px_rgba(16,185,129,0.35)]',
+  sm: 'shadow-[0_0_8px_2px_rgba(var(--theme-500),0.4)]',
+  md: 'shadow-[0_0_12px_3px_rgba(var(--theme-500),0.4)]',
+  lg: 'shadow-[0_0_20px_5px_rgba(var(--theme-500),0.35)]',
 };
 
 const badgeSizeClasses = {
@@ -50,7 +50,7 @@ export function LucyAvatar({ size = 'md', className, animated = false, showBadge
     <div className={cn('relative inline-block', className)}>
       <div
         className={cn(
-          'rounded-full overflow-hidden ring-emerald-500 bg-zinc-900',
+          'rounded-full overflow-hidden ring-[rgb(var(--theme-500))] bg-zinc-900',
           sizeClasses[size],
           borderClasses[size],
           auraClasses[size],
@@ -66,11 +66,11 @@ export function LucyAvatar({ size = 'md', className, animated = false, showBadge
       {showBadge && (
         <div
           className={cn(
-            'absolute flex items-center justify-center rounded-full bg-zinc-900 ring-1 ring-emerald-500',
+            'absolute flex items-center justify-center rounded-full bg-zinc-900 ring-1 ring-[rgb(var(--theme-500))]',
             badgeSizeClasses[size]
           )}
         >
-          <Zap className={cn('text-emerald-400 fill-emerald-400', badgeIconClasses[size])} />
+          <Zap className={cn('text-[rgb(var(--theme-400))] fill-[rgb(var(--theme-400))]', badgeIconClasses[size])} />
         </div>
       )}
     </div>

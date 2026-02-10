@@ -10,6 +10,7 @@ import { DistriChatMessage, DistriMessage, isDistriMessage } from '@distri/core'
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { LucyAvatar } from './LucyAvatar';
+import { UserAvatar } from './UserAvatar';
 import { cn } from '@/lib/utils';
 
 // ============================================================================
@@ -46,16 +47,6 @@ function formatTimestamp(timestamp?: string | number): string {
   return date.toLocaleDateString();
 }
 
-function getUserInitials(name?: string): string {
-  if (!name) return 'U';
-  return name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
-}
-
 function extractTextContent(message: DistriChatMessage): { text: string; timestamp?: string | number } {
   if (isDistriMessage(message)) {
     const msg = message as DistriMessage;
@@ -70,30 +61,6 @@ function extractTextContent(message: DistriChatMessage): { text: string; timesta
     };
   }
   return { text: '', timestamp: undefined };
-}
-
-// ============================================================================
-// User Avatar
-// ============================================================================
-
-interface UserAvatarProps {
-  name?: string;
-  className?: string;
-}
-
-function UserAvatar({ name, className }: UserAvatarProps) {
-  const initials = getUserInitials(name);
-
-  return (
-    <div
-      className={cn(
-        'w-6 h-6 rounded-full bg-purple-600 flex items-center justify-center text-white text-xs font-medium',
-        className
-      )}
-    >
-      {initials}
-    </div>
-  );
 }
 
 // ============================================================================
@@ -130,11 +97,11 @@ export function LucyMessage({ message, className }: LucyMessageProps) {
           <span>You</span>
           <span>•</span>
           <span>{timeLabel}</span>
-          <UserAvatar name="User" />
+          <UserAvatar size="sm" />
         </div>
 
         {/* Message bubble */}
-        <div className="max-w-[85%] bg-purple-900/30 border border-purple-800/30 rounded-2xl rounded-tr-sm px-4 py-3">
+        <div className="max-w-[85%] bg-[rgba(var(--theme-900),0.3)] border border-[rgba(var(--theme-800),0.3)] rounded-2xl rounded-tr-sm px-4 py-3">
           <div className="text-sm text-foreground whitespace-pre-wrap">
             {text}
           </div>

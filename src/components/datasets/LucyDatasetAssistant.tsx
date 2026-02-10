@@ -41,42 +41,64 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { buildDatasetAnalysisPrompt } from "./lucy-prompt-utils";
 
-// Finetune-focused quick actions for Lucy
+// Finetune-focused quick actions for Lucy (plain language for non-technical users)
 const FINETUNE_QUICK_ACTIONS: QuickAction[] = [
   {
     id: "start-finetune",
     icon: "🚀",
-    label: "Start finetune workflow",
+    label: "Start training setup",
   },
   {
     id: "check-status",
     icon: "📊",
-    label: "Check workflow status",
+    label: "Check progress",
   },
   {
     id: "analyze-coverage",
     icon: "📈",
-    label: "Analyze topic coverage",
+    label: "Check data variety",
   },
   {
     id: "generate-data",
     icon: "✨",
-    label: "Generate synthetic data",
+    label: "Create more training examples",
   },
   {
     id: "configure-grader",
     icon: "⚖️",
-    label: "Configure evaluation grader",
+    label: "Set up quality scoring",
   },
   {
     id: "run-dry-run",
     icon: "🧪",
-    label: "Run dry run validation",
+    label: "Test before training",
   },
 ];
 
+// Responsive sidebar width: 384px on wide screens, 340px on standard, auto-collapse on narrow
+const SIDEBAR_WIDTH_WIDE = 'w-[384px]';
+const SIDEBAR_WIDTH_STANDARD = 'w-[340px]';
+const BREAKPOINT_COLLAPSE = 1024;
+const BREAKPOINT_WIDE = 1536;
+
 export function LucyDatasetAssistant() {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [sidebarWidthClass, setSidebarWidthClass] = useState(SIDEBAR_WIDTH_WIDE);
+
+  // Auto-collapse on narrow viewports, adjust width on resize
+  useEffect(() => {
+    const handleResize = () => {
+      const width = window.innerWidth;
+      if (width < BREAKPOINT_COLLAPSE) {
+        setIsCollapsed(true);
+      }
+      setSidebarWidthClass(width >= BREAKPOINT_WIDE ? SIDEBAR_WIDTH_WIDE : SIDEBAR_WIDTH_STANDARD);
+    };
+
+    handleResize(); // Set initial state
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Get dataset from context (rendered inside DatasetDetailProvider)
   const { dataset: currentDataset, datasetId: selectedDatasetId, isLoading: datasetLoading, records } = DatasetDetailConsumer();
@@ -398,7 +420,7 @@ export function LucyDatasetAssistant() {
     <div
       className={cn(
         "flex-shrink-0 border-r border-border flex flex-col min-h-0 bg-background transition-all duration-200",
-        isCollapsed ? "w-14" : "w-[384px]"
+        isCollapsed ? "w-14" : sidebarWidthClass
       )}
     >
       {/* Header */}
@@ -444,7 +466,7 @@ export function LucyDatasetAssistant() {
             <div className="flex items-center gap-2.5">
               <LucyAvatar size="sm" />
               <span className="font-semibold text-sm">Lucy Assistant</span>
-              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase tracking-wide">
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[rgba(var(--theme-500),0.2)] text-[rgb(var(--theme-400))] border border-[rgba(var(--theme-500),0.3)] uppercase tracking-wide">
                 Beta
               </span>
             </div>

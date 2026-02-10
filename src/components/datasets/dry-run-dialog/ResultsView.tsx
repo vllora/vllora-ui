@@ -113,7 +113,7 @@ export function ResultsView({
                 </div>
                 <div className="rounded-md border border-zinc-800 bg-zinc-900/50 p-2.5 text-center">
                   <p className="text-[10px] uppercase tracking-wider text-zinc-500">Success</p>
-                  <p className="text-base font-mono font-semibold text-emerald-400 mt-0.5">{successCount}</p>
+                  <p className="text-base font-mono font-semibold text-[rgb(var(--theme-400))] mt-0.5">{successCount}</p>
                 </div>
               </div>
 
@@ -187,7 +187,7 @@ export function ResultsView({
                               ? "bg-red-500"
                               : data.mean < 0.5
                               ? "bg-amber-500"
-                              : "bg-emerald-500"
+                              : "bg-[rgb(var(--theme-500))]"
                           )}
                           style={{ width: `${data.mean * 100}%` }}
                         />
@@ -226,7 +226,7 @@ export function ResultsView({
               <div className="grid grid-cols-2 gap-4 flex-1 min-h-0">
                 {/* High scores */}
                 <div className="flex flex-col min-h-0">
-                  <div className="flex items-center gap-2 text-sm font-medium text-emerald-400 mb-2 shrink-0">
+                  <div className="flex items-center gap-2 text-sm font-medium text-[rgb(var(--theme-400))] mb-2 shrink-0">
                     <CheckCircle2 className="h-4 w-4" />
                     Highest Scores
                     <span className="text-xs text-zinc-500 font-normal">
@@ -292,7 +292,7 @@ export function ResultsView({
             </>
           ) : (
             <>
-              <div className="h-2 w-2 rounded-full bg-emerald-500" />
+              <div className="h-2 w-2 rounded-full bg-[rgb(var(--theme-500))]" />
               <span className="text-sm text-zinc-400">
                 All evaluations passed
               </span>
@@ -316,7 +316,7 @@ export function ResultsView({
           <Button
             onClick={onReset}
             size="sm"
-            className="h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white"
+            className="h-8 gap-1.5 bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-500))] text-white"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             Run Again

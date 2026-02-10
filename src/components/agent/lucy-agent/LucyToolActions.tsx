@@ -221,7 +221,7 @@ export const LucyToolActions: React.FC<LucyToolActionsProps> = ({
         className={cn(
           'border rounded-xl p-4',
           wasSuccessful
-            ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10'
+            ? 'border-[rgba(var(--theme-200),1)] dark:border-[rgba(var(--theme-800),1)] bg-[rgba(var(--theme-50),0.5)] dark:bg-[rgba(var(--theme-900),0.1)]'
             : 'border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/10'
         )}
       >
@@ -229,11 +229,11 @@ export const LucyToolActions: React.FC<LucyToolActionsProps> = ({
           <div
             className={cn(
               'w-10 h-10 rounded-full flex items-center justify-center',
-              wasSuccessful ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-red-100 dark:bg-red-900/30'
+              wasSuccessful ? 'bg-[rgba(var(--theme-100),1)] dark:bg-[rgba(var(--theme-900),0.3)]' : 'bg-red-100 dark:bg-red-900/30'
             )}
           >
             {wasSuccessful ? (
-              <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              <CheckCircle2 className="h-5 w-5 text-[rgb(var(--theme-600))] dark:text-[rgb(var(--theme-400))]" />
             ) : (
               <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
             )}

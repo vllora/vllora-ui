@@ -10,6 +10,7 @@ initializeLucyAskFollowUpStyles();
 
 // Core chat components
 export * from './LucyAvatar';
+export * from './UserAvatar';
 export * from './LucyChat';
 export * from './LucyChatInput';
 export * from './LucyWelcome';

@@ -444,7 +444,7 @@ export function getVerdictDescription(verdict: DryRunVerdict): string {
 export function getQualityRatingClass(rating: QualityRating): string {
   switch (rating) {
     case 'good':
-      return 'text-emerald-600 dark:text-emerald-400';
+      return 'text-[rgb(var(--theme-600))] dark:text-[rgb(var(--theme-400))]';
     case 'warning':
       return 'text-amber-600 dark:text-amber-400';
     case 'problem':
@@ -460,7 +460,7 @@ export function getQualityRatingClass(rating: QualityRating): string {
 export function getVerdictClass(verdict: DryRunVerdict): string {
   switch (verdict) {
     case 'GO':
-      return 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400';
+      return 'bg-[rgba(var(--theme-500),0.15)] text-[rgb(var(--theme-600))] dark:text-[rgb(var(--theme-400))]';
     case 'WARNING':
       return 'bg-amber-500/15 text-amber-600 dark:text-amber-400';
     case 'NO-GO':
