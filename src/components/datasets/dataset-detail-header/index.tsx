@@ -5,112 +5,47 @@
  * Consumes DatasetDetailContext to avoid prop drilling.
  */
 
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Pencil, Check, X } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
-// import { DatasetBreadcrumb } from "./DatasetBreadcrumb";
-import { WorkflowStepIndicator } from "./WorkflowStepIndicator";
+import { EditableTitle } from "./EditableTitle";
+// import { WorkflowStepIndicator } from "./WorkflowStepIndicator";
 
 export function DatasetDetailHeader() {
   const {
     dataset,
-    datasetId,
-    records,
-    // datasets,
-    // datasetRecordCounts,
-    // onBack,
-    // onSelectDataset,
-    // setCreateDatasetDialog,
+    // datasetId,
+    // records,
     handleRenameDataset,
-    setDryRunDialog,
+    // setDryRunDialog,
   } = DatasetDetailConsumer();
-
-  const [isEditing, setIsEditing] = useState(false);
-  const [editingName, setEditingName] = useState("");
-
-  const name = dataset?.name ?? "";
-
-  const handleStartEdit = () => {
-    setEditingName(name);
-    setIsEditing(true);
-  };
-
-  const handleSave = async () => {
-    if (editingName.trim()) {
-      await handleRenameDataset(editingName.trim());
-      setIsEditing(false);
-    }
-  };
-
-  const handleCancel = () => {
-    setIsEditing(false);
-    setEditingName("");
-  };
 
   return (
     <div className="w-full flex flex-col">
-      
-      {/* Title Row with Workflow Indicator */}
-      <div className="mb-4">
-        <div className="flex items-start justify-between gap-4">
-          {/* Left: Title and edit controls */}
-          <div className="flex-1 min-w-0">
-            <div className="flex flex-row items-center gap-4 mb-2">
-              {isEditing ? (
-                <div className="flex items-center gap-2">
-                  <Input
-                    value={editingName}
-                    onChange={(e) => setEditingName(e.target.value)}
-                    className="h-10 w-80 text-2xl font-bold"
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleSave();
-                      if (e.key === "Escape") handleCancel();
-                    }}
-                  />
-                  <Button size="sm" variant="ghost" onClick={handleSave}>
-                    <Check className="w-4 h-4" />
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={handleCancel}>
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <h1 className="text-2xl font-bold truncate">{name}</h1>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 shrink-0"
-                    onClick={handleStartEdit}
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              )}
-              {/* Workflow State Indicator - next to title */}
-              <WorkflowStepIndicator
-                datasetId={datasetId}
-                className="shrink-0"
-                hasRecords={records.length > 0}
-                hasEvalFunction={!!dataset?.evalScript}
-                onEvalConfigClick={() => setDryRunDialog(true)}
-              />
-            </div>
+      {/* Title Row */}
+      <EditableTitle
+        value={dataset?.name ?? ""}
+        onSave={handleRenameDataset}
+        className="mb-3"
+      />
 
-            {/* Training Objective */}
-            {dataset?.datasetObjective && (
-              <p className="text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">Objective:</span>{" "}
-                {dataset.datasetObjective}
-              </p>
-            )}
-          </div>
+      {/* Objective with Workflow Checklist */}
+      <div className="flex items-start gap-6">
+        {/* Objective */}
+        {dataset?.datasetObjective && (
+          <p className="flex-1 text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">Objective:</span>{" "}
+            {dataset.datasetObjective}
+          </p>
+        )}
 
-
-        </div>
+        {/* Workflow Checklist */}
+        {/* <WorkflowStepIndicator
+          datasetId={datasetId}
+          className="shrink-0"
+          variant="checklist"
+          hasRecords={records.length > 0}
+          hasEvalFunction={!!dataset?.evalScript}
+          onEvalConfigClick={() => setDryRunDialog(true)}
+        /> */}
       </div>
     </div>
   );

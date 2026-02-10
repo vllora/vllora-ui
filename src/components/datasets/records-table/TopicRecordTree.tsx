@@ -5,18 +5,21 @@
  * Uses the existing TopicHierarchyNode[] from dataset.topicHierarchy.hierarchy.
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import { RecordRow } from "./RecordRow";
 import { TopicTreeNodeRow } from "./TopicTreeNodeRow";
 import { TopicNodeHeader } from "./TopicNodeHeader";
 import type { AvailableTopic } from "../record-utils";
+import { emitter } from "@/utils/eventEmitter";
 
 interface TopicRecordTreeProps {
   /** The topic hierarchy from dataset */
   hierarchy: TopicHierarchyNode[];
   /** All records to display */
   records: DatasetRecord[];
+  /** Dataset ID for listening to generation events */
+  datasetId: string;
   /** Handler for updating record topic */
   onUpdateTopic: (recordId: string, topic: string, isNew?: boolean) => Promise<void>;
   /** Handler for deleting a record */
@@ -73,6 +76,7 @@ function calculateDescendantCounts(
 export function TopicRecordTree({
   hierarchy,
   records,
+  datasetId,
   onUpdateTopic,
   onDelete,
   onSave,
@@ -88,6 +92,39 @@ export function TopicRecordTree({
   highlightedRecordId,
   setRecordRef,
 }: TopicRecordTreeProps) {
+  // Track which topic is currently being generated and progress
+  const [generatingTopic, setGeneratingTopic] = useState<string | null>(null);
+  const [generatingProgress, setGeneratingProgress] = useState<{ completed: number; total: number } | null>(null);
+
+  // Listen for data generation progress events
+  useEffect(() => {
+    const handleProgress = (event: {
+      datasetId: string;
+      status: string;
+      currentTopic?: string;
+      topicCompleted?: number;
+      topicTotal?: number;
+    }) => {
+      if (event.datasetId !== datasetId) return;
+
+      if ((event.status === 'started' || event.status === 'progress') && event.currentTopic) {
+        setGeneratingTopic(event.currentTopic);
+        // Use topic-specific progress (topicCompleted/topicTotal) for per-topic indicator
+        if (event.topicCompleted !== undefined && event.topicTotal !== undefined) {
+          setGeneratingProgress({ completed: event.topicCompleted, total: event.topicTotal });
+        }
+      } else if (event.status === 'completed' || event.status === 'failed') {
+        setGeneratingTopic(null);
+        setGeneratingProgress(null);
+      }
+    };
+
+    emitter.on('vllora_data_generation_progress', handleProgress);
+    return () => {
+      emitter.off('vllora_data_generation_progress', handleProgress);
+    };
+  }, [datasetId]);
+
   // Group records by topic
   const recordsByTopic = useMemo(() => {
     const map = new Map<string, DatasetRecord[]>();
@@ -155,6 +192,8 @@ export function TopicRecordTree({
           onGenerateSubtopics={onGenerateSubtopics}
           highlightedRecordId={highlightedRecordId}
           setRecordRef={setRecordRef}
+          generatingTopic={generatingTopic}
+          generatingProgress={generatingProgress}
         />
       ))}
     </div>

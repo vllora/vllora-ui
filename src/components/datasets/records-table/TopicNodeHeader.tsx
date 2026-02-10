@@ -5,7 +5,7 @@
  * Shows breadcrumb path, record count, coverage indicator, and action buttons.
  */
 
-import { ChevronRight, Trash2, GitBranch, Grid2X2Plus } from "lucide-react";
+import { ChevronRight, Trash2, GitBranch, Grid2X2Plus, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CoverageIndicator } from "../dataset-canvas/CoverageIndicator";
 import { BreadcrumbPath } from "./BreadcrumbPath";
@@ -19,6 +19,8 @@ import {
 export interface TopicNodeHeaderProps {
   /** Breadcrumb path segments */
   path: string[];
+  /** Optional description shown as tooltip on hover */
+  description?: string;
   /** Whether this node has expandable content */
   hasContent: boolean;
   /** Whether the node is currently expanded */
@@ -39,10 +41,15 @@ export interface TopicNodeHeaderProps {
   onGenerateForTopic?: (topicPath: string) => void;
   /** Handler for generating subtopics (null = root level) */
   onGenerateSubtopics?: (topicPath: string | null) => void;
+  /** Whether this topic is currently being generated */
+  isGenerating?: boolean;
+  /** Progress of data generation (completed/total) */
+  generatingProgress?: { completed: number; total: number } | null;
 }
 
 export function TopicNodeHeader({
   path,
+  description,
   hasContent,
   isExpanded,
   onToggle,
@@ -53,6 +60,8 @@ export function TopicNodeHeader({
   onDeleteTopic,
   onGenerateForTopic,
   onGenerateSubtopics,
+  isGenerating,
+  generatingProgress,
 }: TopicNodeHeaderProps) {
   const isUnassigned = variant === "unassigned";
   const topicPath = path.join("/");
@@ -95,6 +104,17 @@ export function TopicNodeHeader({
           <span className="text-xs font-medium text-amber-400 flex-1">
             Unassigned
           </span>
+        ) : description ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex-1 min-w-0">
+                <BreadcrumbPath path={path} />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" align="start" className="max-w-xs">
+              <p className="text-xs">{description}</p>
+            </TooltipContent>
+          </Tooltip>
         ) : (
           <BreadcrumbPath path={path} />
         )}
@@ -169,7 +189,18 @@ export function TopicNodeHeader({
 
         {/* Record count and coverage indicator - hide when expanded with children */}
         <div className="flex items-center justify-end gap-2 shrink-0 ml-auto">
-          {(!isExpanded || !hasChildren) && (
+          {/* Loading indicator when generating */}
+          {isGenerating && (
+            <div className="flex items-center gap-1.5 text-emerald-400">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span className="text-xs">
+                {generatingProgress
+                  ? `Generating... ${generatingProgress.completed}/${generatingProgress.total}`
+                  : "Generating..."}
+              </span>
+            </div>
+          )}
+          {(!isExpanded || !hasChildren) && !isGenerating && (
             <>
               <span className={cn(
                 "text-xs tabular-nums px-1.5 py-0.5 rounded",

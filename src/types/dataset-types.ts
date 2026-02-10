@@ -36,6 +36,8 @@ export interface DataInfo {
 export interface TopicHierarchyNode {
   id: string;
   name: string;
+  /** Optional description explaining what this topic covers */
+  description?: string;
   children?: TopicHierarchyNode[];
   // Whether this node is selected/checked
   selected?: boolean;
@@ -267,9 +269,65 @@ export interface Dataset {
   stats?: DatasetStats;
   // Training configuration (from sample or user-configured)
   trainingConfig?: SampleTrainingConfig;
+  // Auto-generated README markdown content
+  readme?: string;
+  // Last time README was updated
+  readmeUpdatedAt?: number;
 }
 
 // Combined view for UI (dataset + its records)
 export interface DatasetWithRecords extends Dataset {
   records: DatasetRecord[];
+}
+
+// =============================================================================
+// Knowledge Sources (for data generation)
+// =============================================================================
+
+/** Type of knowledge source */
+export type KnowledgeSourceType = 'pdf' | 'image' | 'url' | 'text';
+
+/** Processing status for knowledge sources */
+export type KnowledgeSourceStatus = 'pending' | 'processing' | 'ready' | 'failed';
+
+/** Extracted content from a knowledge source */
+export interface ExtractedContent {
+  /** Raw text content */
+  text: string;
+  /** Structured sections/chapters if applicable */
+  sections?: Array<{
+    title: string;
+    content: string;
+    level: number;
+  }>;
+  /** Extracted topics/concepts */
+  topics?: string[];
+  /** Metadata about the content */
+  metadata?: Record<string, unknown>;
+}
+
+/** Knowledge source stored in IndexedDB */
+export interface KnowledgeSource {
+  id: string;
+  datasetId: string;
+  /** Original filename or URL */
+  name: string;
+  /** Type of source */
+  type: KnowledgeSourceType;
+  /** Processing status */
+  status: KnowledgeSourceStatus;
+  /** File size in bytes (for files) */
+  size?: number;
+  /** MIME type */
+  mimeType?: string;
+  /** Base64 encoded file content (for small files) or URL */
+  content?: string;
+  /** Extracted and processed content */
+  extractedContent?: ExtractedContent;
+  /** Error message if processing failed */
+  error?: string;
+  /** When the source was uploaded */
+  createdAt: number;
+  /** When processing completed */
+  processedAt?: number;
 }

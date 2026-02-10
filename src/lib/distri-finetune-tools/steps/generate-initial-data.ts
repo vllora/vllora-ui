@@ -1,18 +1,80 @@
 /**
  * Generate Initial Data Tool
  *
- * Generates initial seed records for empty datasets using only the training objective.
- * This enables data generation when no existing records exist to build upon.
+ * Generates initial seed records for empty datasets using the training objective
+ * and optionally uploaded knowledge sources (PDFs, documents) for grounded generation.
  */
 
 import type { DistriFnTool } from "@distri/core";
 import { DistriClient, type DistriMessage } from "@distri/core";
 import * as datasetsDB from "@/services/datasets-db";
+import * as knowledgeDB from "@/services/knowledge-sources-db";
 import { getDistriUrl } from "@/config/api";
 import { fetchLucyConfig, type LucyConfig } from "@/lib/agent-sync";
 import type { ToolHandler } from "../types";
-import type { DataInfo } from "@/types/dataset-types";
+import type { DataInfo, TopicHierarchyNode } from "@/types/dataset-types";
 import * as workflowDB from "@/services/finetune-workflow-db";
+import { emitter } from "@/utils/eventEmitter";
+
+// =============================================================================
+// Topic Hierarchy Helpers
+// =============================================================================
+
+interface LeafTopic {
+  name: string;
+  path: string[]; // Full path from root to leaf
+}
+
+/**
+ * Extract all leaf topics from a hierarchy tree.
+ * A leaf topic is one with no children or empty children array.
+ */
+function getLeafTopics(hierarchy: TopicHierarchyNode[], parentPath: string[] = []): LeafTopic[] {
+  const leaves: LeafTopic[] = [];
+
+  for (const node of hierarchy) {
+    const currentPath = [...parentPath, node.name];
+
+    if (!node.children || node.children.length === 0) {
+      // This is a leaf node
+      leaves.push({ name: node.name, path: currentPath });
+    } else {
+      // Recurse into children
+      leaves.push(...getLeafTopics(node.children, currentPath));
+    }
+  }
+
+  return leaves;
+}
+
+/**
+ * Distribute a count across topics as evenly as possible.
+ * Returns a map of topic name -> count to generate.
+ */
+function distributeCountAcrossTopics(totalCount: number, topics: LeafTopic[]): Map<LeafTopic, number> {
+  const distribution = new Map<LeafTopic, number>();
+
+  if (topics.length === 0) return distribution;
+
+  const baseCount = Math.floor(totalCount / topics.length);
+  let remainder = totalCount % topics.length;
+
+  for (const topic of topics) {
+    const count = baseCount + (remainder > 0 ? 1 : 0);
+    if (count > 0) {
+      distribution.set(topic, count);
+    }
+    if (remainder > 0) remainder--;
+  }
+
+  return distribution;
+}
+
+// Batch size for generation - smaller batches are faster and more reliable
+const BATCH_SIZE = 10;
+
+// Number of parallel requests to make - balance between speed and API rate limits
+const PARALLEL_REQUESTS = 3;
 
 // Cache for Lucy config
 let cachedLucyConfig: LucyConfig | null = null;
@@ -32,6 +94,8 @@ interface GenerateInitialDataParams {
   generation_mode?: "rft" | "sft";
   /** Optional user guidance for how to generate the data (e.g., "focus on beginner concepts", "include edge cases") */
   user_guidance?: string;
+  /** If true, distribute generation across topics in the hierarchy */
+  distribute_by_topic?: boolean;
 }
 
 interface GeneratedExample {
@@ -40,12 +104,100 @@ interface GeneratedExample {
   assistant_response?: string;
 }
 
+interface KnowledgeContext {
+  hasKnowledge: boolean;
+  sourceCount: number;
+  sourceNames: string[];
+  combinedText: string;
+  topics: string[];
+  sections: Array<{ title: string; content: string }>;
+}
+
 interface GenerateInitialDataResult {
   success: boolean;
   error?: string;
   dataset_name?: string;
   records_created?: number;
   training_objective?: string;
+  knowledge_sources_used?: number;
+}
+
+// =============================================================================
+// Knowledge Source Fetching
+// =============================================================================
+
+async function getKnowledgeContext(datasetId: string): Promise<KnowledgeContext> {
+  try {
+    const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
+    const readySources = sources.filter(
+      (s) => s.status === "ready" && s.extractedContent
+    );
+
+    if (readySources.length === 0) {
+      return {
+        hasKnowledge: false,
+        sourceCount: 0,
+        sourceNames: [],
+        combinedText: "",
+        topics: [],
+        sections: [],
+      };
+    }
+
+    const sourceNames: string[] = [];
+    const allTopics: string[] = [];
+    const allSections: Array<{ title: string; content: string }> = [];
+    const textParts: string[] = [];
+
+    for (const source of readySources) {
+      sourceNames.push(source.name);
+      const extracted = source.extractedContent!;
+
+      // Collect topics
+      if (extracted.topics) {
+        allTopics.push(...extracted.topics);
+      }
+
+      // Collect sections (limit content length per section)
+      if (extracted.sections) {
+        for (const section of extracted.sections) {
+          allSections.push({
+            title: section.title,
+            content: section.content.substring(0, 1000),
+          });
+        }
+      }
+
+      // Collect text (limit per source to avoid token overflow)
+      if (extracted.text) {
+        textParts.push(
+          `--- From: ${source.name} ---\n${extracted.text.substring(0, 3000)}`
+        );
+      }
+    }
+
+    // Deduplicate topics
+    const uniqueTopics = [...new Set(allTopics)];
+
+    return {
+      hasKnowledge: true,
+      sourceCount: readySources.length,
+      sourceNames,
+      combinedText: textParts.join("\n\n"),
+      topics: uniqueTopics,
+      sections: allSections.slice(0, 20), // Limit sections
+    };
+  } catch (error) {
+    console.warn("[generateInitialData] Failed to fetch knowledge sources:", error);
+    return {
+      hasKnowledge: false,
+      sourceCount: 0,
+      sourceNames: [],
+      combinedText: "",
+      topics: [],
+      sections: [],
+    };
+  }
 }
 
 // =============================================================================
@@ -63,6 +215,8 @@ Rules:
 - For RFT mode, only generate the user prompt (assistant learns through reinforcement)
 - Vary the complexity, length, and style across examples
 - Include edge cases and challenging scenarios
+- When knowledge sources are provided, GROUND your examples in that material
+- Reference specific concepts, terminology, and scenarios from the knowledge sources
 - Output MUST be valid JSON matching the schema`;
 
 const INITIAL_DATA_GENERATION_USER_RFT = `Generate {{count}} diverse training examples for the following objective:
@@ -70,6 +224,8 @@ const INITIAL_DATA_GENERATION_USER_RFT = `Generate {{count}} diverse training ex
 Training Objective:
 {{objective}}
 {{user_guidance}}
+{{topic_context}}
+{{knowledge_context}}
 Generate a JSON array of examples. Each example should be a realistic user query/prompt that would be sent to an AI assistant being trained for this objective.
 
 For each example, provide:
@@ -100,6 +256,8 @@ const INITIAL_DATA_GENERATION_USER_SFT = `Generate {{count}} diverse training ex
 Training Objective:
 {{objective}}
 {{user_guidance}}
+{{topic_context}}
+{{knowledge_context}}
 Generate a JSON array of complete conversation examples. Each example should demonstrate the ideal assistant behavior for this objective.
 
 For each example, provide:
@@ -186,11 +344,48 @@ const INITIAL_DATA_RESPONSE_SCHEMA_SFT = {
 // LLM Call
 // =============================================================================
 
+function buildKnowledgeContextSection(knowledge: KnowledgeContext): string {
+  if (!knowledge.hasKnowledge) {
+    return "";
+  }
+
+  const parts: string[] = [
+    "\n--- KNOWLEDGE SOURCES (Ground your examples in this material) ---",
+    `Sources: ${knowledge.sourceNames.join(", ")}`,
+  ];
+
+  // Add topics if available
+  if (knowledge.topics.length > 0) {
+    parts.push(`\nKey topics from sources: ${knowledge.topics.slice(0, 15).join(", ")}`);
+  }
+
+  // Add sections if available (most structured)
+  if (knowledge.sections.length > 0) {
+    parts.push("\nKey sections from sources:");
+    for (const section of knowledge.sections.slice(0, 10)) {
+      parts.push(`\n[${section.title}]\n${section.content.substring(0, 500)}...`);
+    }
+  } else if (knowledge.combinedText) {
+    // Fall back to raw text if no sections
+    parts.push("\nContent excerpts:");
+    parts.push(knowledge.combinedText.substring(0, 4000));
+  }
+
+  parts.push("\n--- END KNOWLEDGE SOURCES ---\n");
+  parts.push("IMPORTANT: Generate examples that reference specific concepts, terminology, and scenarios from the knowledge sources above.");
+
+  let result = parts.join("\n");
+  console.log(" ===== [generateInitialData] Knowledge context section:\n", result);
+  return result;
+}
+
 async function callLLMForInitialData(
   objective: string,
   count: number,
   mode: "rft" | "sft",
   userGuidance?: string,
+  knowledgeContext?: KnowledgeContext,
+  topicContext?: LeafTopic,
 ): Promise<GeneratedExample[]> {
   const lucyConfig = await fetchLucyConfigCached();
   const rawUrl = lucyConfig.distri_url || getDistriUrl();
@@ -209,10 +404,22 @@ async function callLLMForInitialData(
     ? `\nUser's specific guidance:\n${userGuidance}\n`
     : "";
 
+  // Build topic context section if provided
+  const topicSection = topicContext
+    ? `\n--- TOPIC FOCUS ---\nGenerate ALL examples specifically about this topic: "${topicContext.name}"\nTopic path: ${topicContext.path.join(" > ")}\nAll examples MUST be directly relevant to this specific topic.\n--- END TOPIC FOCUS ---\n`
+    : "";
+
+  // Build knowledge context section if available
+  const knowledgeSection = knowledgeContext
+    ? buildKnowledgeContextSection(knowledgeContext)
+    : "";
+
   const userPrompt = userPromptTemplate
     .replace(/\{\{count\}\}/g, String(count))
     .replace("{{objective}}", objective)
-    .replace("{{user_guidance}}", guidanceSection);
+    .replace("{{user_guidance}}", guidanceSection)
+    .replace("{{topic_context}}", topicSection)
+    .replace("{{knowledge_context}}", knowledgeSection);
 
   const responseSchema =
     mode === "rft"
@@ -231,6 +438,9 @@ async function callLLMForInitialData(
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
+      console.log(`[generateInitialData] LLM call attempt ${attempt + 1}/3 for ${count} examples...`);
+      const startTime = Date.now();
+
       const response = await distriClient.llm(messages, [], {
         model_settings: {
           ...modelSettingsFromConfig,
@@ -240,21 +450,28 @@ async function callLLMForInitialData(
         },
       });
 
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.log(`[generateInitialData] LLM call completed in ${elapsed}s`);
+
       if (!response.content) {
         throw new Error("LLM returned empty response");
       }
 
       const parsed = JSON.parse(response.content.trim());
+      console.log(`[generateInitialData] Parsed ${parsed.examples?.length || 0} examples from response`);
       return parsed.examples || [];
     } catch (err) {
       lastError = err;
+      console.error(`[generateInitialData] LLM call attempt ${attempt + 1} failed:`, err);
       if (attempt < 2) {
         const backoffMs = 800 * Math.pow(2, attempt);
+        console.log(`[generateInitialData] Retrying in ${backoffMs}ms...`);
         await new Promise((resolve) => setTimeout(resolve, backoffMs));
       }
     }
   }
 
+  console.error("[generateInitialData] All LLM attempts failed:", lastError);
   throw lastError instanceof Error ? lastError : new Error("LLM call failed");
 }
 
@@ -308,7 +525,7 @@ export const generateInitialDataHandler: ToolHandler = async (
 ): Promise<GenerateInitialDataResult> => {
   try {
     console.log(
-      "[generateInitialData] Starting with params:",
+      "=== [generateInitialData] Starting with params:",
       JSON.stringify(params, null, 2),
     );
 
@@ -317,6 +534,7 @@ export const generateInitialDataHandler: ToolHandler = async (
       count = 10,
       generation_mode = "rft",
       user_guidance,
+      distribute_by_topic = false,
     } = params as unknown as GenerateInitialDataParams;
 
     if (!dataset_id) {
@@ -329,7 +547,7 @@ export const generateInitialDataHandler: ToolHandler = async (
       return { success: false, error: `Dataset ${dataset_id} not found` };
     }
     // get workflow
-    const workflow = await workflowDB.getWorkflow(dataset_id);
+    const workflow = await workflowDB.getWorkflowByDataset(dataset_id);
     console.log("======== [generateInitialData] Workflow:", workflow);
     if (workflow) {
       // check if workflow is in topics_config or grader_config
@@ -348,16 +566,6 @@ export const generateInitialDataHandler: ToolHandler = async (
       };
     }
 
-    console.log(
-      "[generateInitialData] Generating data for objective:",
-      objective.substring(0, 100) + "...",
-    );
-    console.log(
-      "[generateInitialData] Count:",
-      count,
-      "Mode:",
-      generation_mode,
-    );
     if (user_guidance) {
       console.log(
         "[generateInitialData] User guidance:",
@@ -365,44 +573,281 @@ export const generateInitialDataHandler: ToolHandler = async (
       );
     }
 
-    // Generate examples using LLM
-    const examples = await callLLMForInitialData(
-      objective,
-      count,
-      generation_mode,
-      user_guidance,
-    );
-    console.log("[generateInitialData] Generated", examples.length, "examples");
+    // Fetch knowledge sources for grounded generation
+    const knowledgeContext = await getKnowledgeContext(dataset_id);
+    if (knowledgeContext.hasKnowledge) {
+      console.log(
+        "[generateInitialData] Using knowledge sources:",
+        knowledgeContext.sourceNames.join(", "),
+      );
+      console.log(
+        "[generateInitialData] Knowledge topics:",
+        knowledgeContext.topics.slice(0, 5).join(", "),
+      );
+    }
 
-    // Convert to dataset records and save (without topics - user can define topics later)
-    const recordsToAdd = examples.map((example) => ({
-      data: exampleToDataInfo(example, generation_mode),
-      is_generated: true,
-      metadata: {
-        generation_source: "initial_data",
-        generation_mode,
-        generated_at_ms: Date.now(),
-      },
-    }));
+    // Check if we should use topic-based generation
+    const topicHierarchy = dataset.topicHierarchy?.hierarchy;
+    const leafTopics = (distribute_by_topic && topicHierarchy && topicHierarchy.length > 0)
+      ? getLeafTopics(topicHierarchy)
+      : [];
+    const useTopicBasedGeneration = leafTopics.length > 0;
 
-    const addedRecords = await datasetsDB.addRecordsToDataset(
-      dataset_id,
-      recordsToAdd,
-    );
-    console.log(
-      "[generateInitialData] Added",
-      addedRecords.length,
-      "records to dataset",
-    );
+    let totalGenerated = 0;
+    let totalBatches = 0;
+
+    if (useTopicBasedGeneration) {
+      // =========================================================================
+      // Topic-based generation: distribute count across leaf topics - PARALLEL
+      // Each topic's count is further batched to avoid timeouts
+      // =========================================================================
+      const topicDistribution = distributeCountAcrossTopics(count, leafTopics);
+
+      // Build a flat list of all batch jobs
+      interface BatchJob {
+        topic: LeafTopic;
+        topicCount: number;
+        batchIndex: number;
+        batchSize: number;
+        globalIndex: number;
+      }
+      const allBatchJobs: BatchJob[] = [];
+      let globalIndex = 0;
+
+      for (const [topic, topicCount] of topicDistribution) {
+        const topicBatches = Math.ceil(topicCount / BATCH_SIZE);
+        let remaining = topicCount;
+        for (let i = 0; i < topicBatches; i++) {
+          const batchSize = Math.min(BATCH_SIZE, remaining);
+          allBatchJobs.push({
+            topic,
+            topicCount,
+            batchIndex: i,
+            batchSize,
+            globalIndex: globalIndex++,
+          });
+          remaining -= batchSize;
+        }
+      }
+
+      totalBatches = allBatchJobs.length;
+      console.log(`[generateInitialData] Using topic-based generation across ${leafTopics.length} leaf topics (${totalBatches} batches, ${PARALLEL_REQUESTS} parallel)`);
+
+      // Emit started event
+      emitter.emit("vllora_data_generation_progress", {
+        datasetId: dataset_id,
+        status: "started",
+        total: count,
+        completed: 0,
+        currentBatch: 0,
+        totalBatches,
+      });
+
+      // Track per-topic progress
+      const topicProgress = new Map<string, number>();
+      let completedBatches = 0;
+
+      // Process batch jobs in parallel chunks
+      for (let chunkStart = 0; chunkStart < allBatchJobs.length; chunkStart += PARALLEL_REQUESTS) {
+        const chunkEnd = Math.min(chunkStart + PARALLEL_REQUESTS, allBatchJobs.length);
+        const chunkJobs = allBatchJobs.slice(chunkStart, chunkEnd);
+
+        console.log(`[generateInitialData] Processing batches ${chunkStart + 1}-${chunkEnd} of ${totalBatches}`);
+
+        // Create parallel requests for this chunk
+        const batchPromises = chunkJobs.map(job =>
+          callLLMForInitialData(
+            objective,
+            job.batchSize,
+            generation_mode,
+            user_guidance,
+            knowledgeContext,
+            job.topic,
+          ).then(examples => ({ job, examples }))
+            .catch(err => {
+              console.error(`[generateInitialData] Topic "${job.topic.name}" batch ${job.batchIndex + 1} failed:`, err);
+              return { job, examples: [] as GeneratedExample[] };
+            })
+        );
+
+        // Wait for all parallel batches to complete
+        const results = await Promise.all(batchPromises);
+
+        // Process results and save to DB
+        for (const { job, examples } of results) {
+          if (examples.length === 0) {
+            completedBatches++;
+            continue;
+          }
+
+          totalGenerated += examples.length;
+
+          // Update per-topic progress
+          const currentTopicProgress = (topicProgress.get(job.topic.name) || 0) + examples.length;
+          topicProgress.set(job.topic.name, currentTopicProgress);
+
+          // Convert to records with topic already assigned
+          const topicRecords = examples.map((example) => ({
+            data: exampleToDataInfo(example, generation_mode),
+            is_generated: true,
+            topic: job.topic.name,
+            metadata: {
+              generation_source: "initial_data",
+              generation_mode,
+              generated_at_ms: Date.now(),
+              topic_path: job.topic.path.join(" > "),
+            },
+          }));
+
+          const addedRecords = await datasetsDB.addRecordsToDataset(
+            dataset_id,
+            topicRecords,
+          );
+
+          console.log(`[generateInitialData] Topic "${job.topic.name}" batch ${job.batchIndex + 1}: added ${addedRecords.length} records (topic: ${currentTopicProgress}, total: ${totalGenerated})`);
+          completedBatches++;
+        }
+
+        // Emit progress event after each parallel chunk
+        emitter.emit("vllora_data_generation_progress", {
+          datasetId: dataset_id,
+          status: "progress",
+          total: count,
+          completed: totalGenerated,
+          currentBatch: completedBatches,
+          totalBatches,
+        });
+      }
+    } else {
+      // =========================================================================
+      // Standard batch generation (no topic hierarchy) - PARALLEL
+      // =========================================================================
+      totalBatches = Math.ceil(count / BATCH_SIZE);
+
+      // Emit started event
+      emitter.emit("vllora_data_generation_progress", {
+        datasetId: dataset_id,
+        status: "started",
+        total: count,
+        completed: 0,
+        currentBatch: 0,
+        totalBatches,
+      });
+
+      console.log(`[generateInitialData] Generating ${count} examples in ${totalBatches} batches of ${BATCH_SIZE} (${PARALLEL_REQUESTS} parallel)`);
+
+      // Process batches in parallel chunks
+      let completedBatches = 0;
+      for (let chunkStart = 0; chunkStart < totalBatches; chunkStart += PARALLEL_REQUESTS) {
+        const chunkEnd = Math.min(chunkStart + PARALLEL_REQUESTS, totalBatches);
+        const batchPromises: Promise<{ batchIndex: number; examples: GeneratedExample[] }>[] = [];
+
+        // Create parallel batch requests
+        for (let batchIndex = chunkStart; batchIndex < chunkEnd; batchIndex++) {
+          const batchStartCount = batchIndex * BATCH_SIZE;
+          const remaining = count - batchStartCount;
+          const batchSize = Math.min(BATCH_SIZE, remaining);
+
+          console.log(`[generateInitialData] Queuing batch ${batchIndex + 1}/${totalBatches} (${batchSize} examples)`);
+
+          batchPromises.push(
+            callLLMForInitialData(
+              objective,
+              batchSize,
+              generation_mode,
+              user_guidance,
+              knowledgeContext,
+            ).then(examples => ({ batchIndex, examples }))
+              .catch(err => {
+                console.error(`[generateInitialData] Batch ${batchIndex + 1} failed:`, err);
+                return { batchIndex, examples: [] as GeneratedExample[] };
+              })
+          );
+        }
+
+        // Wait for all parallel batches to complete
+        const results = await Promise.all(batchPromises);
+
+        // Process results and save to DB
+        for (const { batchIndex, examples } of results) {
+          if (examples.length === 0) continue;
+
+          totalGenerated += examples.length;
+
+          const batchRecords = examples.map((example) => ({
+            data: exampleToDataInfo(example, generation_mode),
+            is_generated: true,
+            metadata: {
+              generation_source: "initial_data",
+              generation_mode,
+              generated_at_ms: Date.now(),
+              batch_index: batchIndex,
+            },
+          }));
+
+          const addedBatchRecords = await datasetsDB.addRecordsToDataset(
+            dataset_id,
+            batchRecords,
+          );
+
+          console.log(`[generateInitialData] Batch ${batchIndex + 1} complete: added ${addedBatchRecords.length} records (total: ${totalGenerated})`);
+        }
+
+        completedBatches = chunkEnd;
+
+        // Emit progress event after each parallel chunk
+        emitter.emit("vllora_data_generation_progress", {
+          datasetId: dataset_id,
+          status: "progress",
+          total: count,
+          completed: totalGenerated,
+          currentBatch: completedBatches,
+          totalBatches,
+        });
+
+        // If no records generated at all after first chunk, throw
+        if (chunkStart === 0 && totalGenerated === 0) {
+          throw new Error("Failed to generate any records in first batch");
+        }
+      }
+    }
+
+    console.log("[generateInitialData] Generation complete:", totalGenerated, "examples total");
+
+    // Emit completed event
+    emitter.emit("vllora_data_generation_progress", {
+      datasetId: dataset_id,
+      status: "completed",
+      total: count,
+      completed: totalGenerated,
+      currentBatch: totalBatches,
+      totalBatches,
+    });
 
     return {
       success: true,
       dataset_name: dataset.name,
-      records_created: addedRecords.length,
+      records_created: totalGenerated,
       training_objective: objective,
+      knowledge_sources_used: knowledgeContext.hasKnowledge
+        ? knowledgeContext.sourceCount
+        : undefined,
     };
   } catch (error) {
     console.error("[generateInitialData] Failed:", error);
+    const { dataset_id } = params as unknown as GenerateInitialDataParams;
+
+    // Emit failed event
+    if (dataset_id) {
+      emitter.emit("vllora_data_generation_progress", {
+        datasetId: dataset_id,
+        status: "failed",
+        total: 0,
+        completed: 0,
+        error: error instanceof Error ? error.message : "Failed to generate initial data",
+      });
+    }
+
     return {
       success: false,
       error:
@@ -425,6 +870,15 @@ Use this tool when:
 This tool generates diverse training examples based on the dataset's training objective.
 You can optionally provide user guidance to focus the generation on specific aspects.
 Generated records can then be used as seeds for further data generation or topic analysis.
+
+**Knowledge Source Integration:**
+If the dataset has uploaded knowledge sources (PDFs, documents), this tool automatically:
+- Fetches all ready knowledge sources for the dataset
+- Extracts topics, sections, and content from the sources
+- Grounds the generated examples in the source material
+- References specific concepts, terminology, and scenarios from the documents
+
+This produces higher quality, more accurate training data that aligns with reference material.
 
 **Generation Modes:**
 - RFT (default): Generates prompts only (empty output for reinforcement learning rollouts)

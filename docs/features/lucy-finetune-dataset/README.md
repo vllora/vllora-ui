@@ -987,7 +987,7 @@ not_started → topics_config → categorize → coverage_generation → grader_
 ```typescript
 {
   name: "generate_topics",
-  description: "Auto-generate topic hierarchy from record content",
+  description: "Auto-generate topic hierarchy from dataset content. If knowledge sources (PDFs, documents) have been uploaded, their extracted topics will be used to seed the hierarchy.",
   parameters: {
     type: "object",
     properties: {
@@ -997,13 +997,23 @@ not_started → topics_config → categorize → coverage_generation → grader_
         enum: ["auto", "template", "manual"],
         default: "auto"
       },
-      max_depth: { type: "number", default: 3 },
-      template_name: { type: "string" }
+      max_depth: { type: "number", default: 2, description: "Maximum hierarchy depth (1-5 levels)" },
+      degree: { type: "number", default: 2, description: "Branching factor (children per topic)" },
+      max_topics: { type: "number", default: 3, description: "Maximum number of root topics" },
+      focus: { type: "string", description: "Optional user guidance for topic generation (e.g., 'focus on error handling', 'organize by difficulty level')" },
+      seed_topics: {
+        type: "array",
+        items: { type: "string" },
+        description: "Optional list of topics to seed the hierarchy. If not provided, topics are auto-extracted from uploaded knowledge sources (PDFs). Examples: ['sicilian_defense', 'endgame_techniques']"
+      }
     },
     required: ["workflow_id"]
   }
 }
+// Returns: { success, hierarchy, topic_count, depth, total_records, uncategorized_count }
 ```
+
+**Knowledge Source Integration:** When PDFs or documents are uploaded as knowledge sources, their extracted topics automatically seed the hierarchy generation (unless explicit `seed_topics` are provided). This ensures the generated topics reflect the actual content from reference materials.
 
 #### `apply_topic_hierarchy`
 ```typescript
@@ -1784,6 +1794,80 @@ AGENT: Makes sense - both are non-urgent interactions.
 
        Simpler and cleaner! Should I proceed with categorization?
 ```
+
+---
+
+## Chess Dataset Support (Stockfish Integration)
+
+When the training objective contains chess-related keywords (e.g., "chess", "opening", "endgame", "tactical"), additional Stockfish analysis tools are **automatically enabled** for data generation.
+
+### Stockfish Tools
+
+These tools run Stockfish WASM in the browser - no backend required:
+
+#### `analyze_chess_position`
+```typescript
+{
+  name: "analyze_chess_position",
+  description: "Analyze a chess position using Stockfish WASM engine",
+  parameters: {
+    type: "object",
+    properties: {
+      fen: { type: "string", description: "Position in FEN notation" },
+      depth: { type: "number", default: 15, description: "Analysis depth" },
+      multi_pv: { type: "number", default: 3, description: "Number of top lines to return" }
+    },
+    required: ["fen"]
+  }
+}
+// Returns: { fen, depth, bestMove, bestMoveSan, evaluation, mateIn, lines }
+```
+
+#### `classify_chess_move`
+```typescript
+{
+  name: "classify_chess_move",
+  description: "Classify a chess move's quality by comparing to Stockfish's best move",
+  parameters: {
+    type: "object",
+    properties: {
+      fen_before: { type: "string", description: "Position before move in FEN notation" },
+      move: { type: "string", description: "Move in UCI notation (e.g., 'e2e4')" },
+      depth: { type: "number", default: 15 }
+    },
+    required: ["fen_before", "move"]
+  }
+}
+// Returns: { move, classification, delta, bestMove, explanation }
+// Classification: 'brilliant' | 'best' | 'excellent' | 'good' | 'inaccuracy' | 'mistake' | 'blunder'
+```
+
+### Detection Logic
+
+Chess datasets are detected via keywords in the training objective:
+```typescript
+const CHESS_KEYWORDS = [
+  'chess', 'opening', 'endgame', 'middlegame', 'tactical', 'positional',
+  'checkmate', 'fen', 'pgn', 'elo', 'grandmaster', 'stockfish'
+];
+
+function isChessDataset(trainingGoals?: string): boolean {
+  if (!trainingGoals) return false;
+  const lower = trainingGoals.toLowerCase();
+  return CHESS_KEYWORDS.some(kw => lower.includes(kw));
+}
+```
+
+### Usage Guidelines
+
+**DO use for data generation:**
+- Creating accurate training prompts about chess positions
+- Generating move analysis examples with correct evaluations
+- Building a corpus of position evaluations
+
+**DO NOT use for evaluation/grading:**
+- Stockfish tools are for DATA GENERATION only
+- Model evaluation uses the configured grader function, not Stockfish
 
 ---
 

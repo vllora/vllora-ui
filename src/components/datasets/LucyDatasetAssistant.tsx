@@ -23,6 +23,9 @@ import {
 } from "@/components/ui/tooltip";
 import { DistriMessage } from "@distri/core";
 import { useDistriConnection } from "@/providers/DistriProvider";
+import { uploadKnowledgeSourceHandler } from "@/lib/distri-finetune-tools/steps/knowledge-sources";
+import * as knowledgeDB from "@/services/knowledge-sources-db";
+import type { KnowledgeSourceType } from "@/types/dataset-types";
 import { ProviderKeysConsumer } from "@/contexts/ProviderKeysContext";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { useFineTuneAgentChat } from "@/hooks/useFineTuneAgentChat";
@@ -31,9 +34,11 @@ import {
   LucyProviderCheck,
   LucyDefaultToolRenderer,
   LucyAvatar,
+  lucyToolRenderers,
 } from "@/components/agent/lucy-agent";
 import type { QuickAction } from "@/components/agent/lucy-agent/LucyWelcome";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { buildDatasetAnalysisPrompt } from "./lucy-prompt-utils";
 
 // Finetune-focused quick actions for Lucy
@@ -74,7 +79,7 @@ export function LucyDatasetAssistant() {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   // Get dataset from context (rendered inside DatasetDetailProvider)
-  const { dataset: currentDataset, datasetId: selectedDatasetId, isLoading: datasetLoading } = DatasetDetailConsumer();
+  const { dataset: currentDataset, datasetId: selectedDatasetId, isLoading: datasetLoading, records } = DatasetDetailConsumer();
 
   // Lucy agent state
   const { isConnected, reconnect } = useDistriConnection();
@@ -109,6 +114,43 @@ export function LucyDatasetAssistant() {
   // Store workflow ref to use in timeout without adding to dependencies
   const workflowRef = useRef(workflow);
   workflowRef.current = workflow;
+
+  // Store records ref to use in timeout without adding to dependencies
+  const recordsRef = useRef(records);
+  recordsRef.current = records;
+
+  // Track knowledge sources count for guided onboarding
+  const [knowledgeSourcesCount, setKnowledgeSourcesCount] = useState(0);
+  const knowledgeSourcesCountRef = useRef(knowledgeSourcesCount);
+  knowledgeSourcesCountRef.current = knowledgeSourcesCount;
+
+  // Fetch knowledge sources count on mount and when updated
+  useEffect(() => {
+    if (!selectedDatasetId) return;
+
+    const fetchCount = async () => {
+      try {
+        const sources = await knowledgeDB.getKnowledgeSourcesByDataset(selectedDatasetId);
+        setKnowledgeSourcesCount(sources.length);
+      } catch (error) {
+        console.error("[LucyDatasetAssistant] Error fetching knowledge sources:", error);
+      }
+    };
+
+    fetchCount();
+
+    // Listen for updates
+    const handleUpdate = ({ datasetId }: { datasetId: string }) => {
+      if (datasetId === selectedDatasetId) {
+        fetchCount();
+      }
+    };
+
+    emitter.on("vllora_knowledge_source_updated", handleUpdate);
+    return () => {
+      emitter.off("vllora_knowledge_source_updated", handleUpdate);
+    };
+  }, [selectedDatasetId]);
 
   // Proactive behavior: auto-analyze dataset when viewing it for the first time
   useEffect(() => {
@@ -147,8 +189,13 @@ export function LucyDatasetAssistant() {
       // Double-check we haven't already triggered and messages are still empty
       if (lastAnalyzedDatasetRef.current !== targetDatasetId && messagesRef.current.length === 0) {
         lastAnalyzedDatasetRef.current = targetDatasetId;
-        // Use ref to get latest workflow value at trigger time
-        setAutoTriggerPrompt(buildDatasetAnalysisPrompt({ dataset: promptDataset, workflow: workflowRef.current }));
+        // Use refs to get latest values at trigger time
+        setAutoTriggerPrompt(buildDatasetAnalysisPrompt({
+          dataset: promptDataset,
+          workflow: workflowRef.current,
+          recordCount: recordsRef.current.length,
+          knowledgeSourcesCount: knowledgeSourcesCountRef.current,
+        }));
       }
     }, 300);
 
@@ -190,18 +237,113 @@ export function LucyDatasetAssistant() {
   const toolRenderers = useMemo(
     () => ({
       default: LucyDefaultToolRenderer,
+      ...lucyToolRenderers,
     }),
     []
   );
 
+  // Helper to determine knowledge source type from mime type
+  const getKnowledgeSourceType = useCallback((mimeType: string, fileName: string): KnowledgeSourceType => {
+    if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) return 'pdf';
+    if (mimeType.startsWith('image/')) return 'image';
+    if (mimeType.startsWith('text/') || fileName.match(/\.(txt|md|json|csv)$/)) return 'text';
+    return 'text'; // Default to text
+  }, []);
+
   // Attach finetune workflow context to messages before sending
+  // Also handles file uploads by creating knowledge sources
   const handleBeforeSendMessage = useCallback(
     async (message: DistriMessage): Promise<DistriMessage> => {
+      // Extract text parts, file parts, and image parts separately
+      const textParts = message.parts.filter(p => p.part_type === 'text');
+      const fileParts = message.parts.filter(p => (p as any).part_type === 'file');
+      const imageParts = message.parts.filter(p => p.part_type === 'image');
+
+      // Combine all text parts into one message
+      let userText = textParts.map(p => p.data).join('\n') || '';
+
+      // Process file uploads as knowledge sources
+      const uploadedFiles: string[] = [];
+      const failedFiles: string[] = [];
+      if (selectedDatasetId && fileParts.length > 0) {
+        // Show processing toast
+        const toastId = toast.loading(`Processing ${fileParts.length} file(s)...`, {
+          description: 'Extracting content from documents',
+        });
+
+        for (const filePart of fileParts) {
+          const fileData = (filePart as any).data;
+          if (fileData && fileData.data && fileData.name) {
+            try {
+              const sourceType = getKnowledgeSourceType(fileData.mime_type || '', fileData.name);
+
+              // Update toast with current file
+              toast.loading(`Processing: ${fileData.name}`, {
+                id: toastId,
+                description: 'Extracting text and topics...',
+              });
+
+              const result = await uploadKnowledgeSourceHandler({
+                dataset_id: selectedDatasetId,
+                name: fileData.name,
+                type: sourceType,
+                content: fileData.data, // base64 content
+                mime_type: fileData.mime_type,
+              });
+
+              if ((result as any).success) {
+                uploadedFiles.push(fileData.name);
+                console.log(`[LucyDatasetAssistant] Uploaded knowledge source: ${fileData.name}`);
+              } else {
+                failedFiles.push(fileData.name);
+                console.error(`[LucyDatasetAssistant] Failed to upload ${fileData.name}:`, (result as any).error);
+              }
+            } catch (error) {
+              failedFiles.push(fileData.name);
+              console.error(`[LucyDatasetAssistant] Error uploading ${fileData.name}:`, error);
+            }
+          }
+        }
+
+        // Show completion toast
+        if (uploadedFiles.length > 0 && failedFiles.length === 0) {
+          toast.success(`Processed ${uploadedFiles.length} file(s)`, {
+            id: toastId,
+            description: uploadedFiles.join(', '),
+          });
+        } else if (uploadedFiles.length > 0 && failedFiles.length > 0) {
+          toast.warning(`Processed ${uploadedFiles.length} file(s), ${failedFiles.length} failed`, {
+            id: toastId,
+            description: `Success: ${uploadedFiles.join(', ')}`,
+          });
+        } else {
+          toast.error('Failed to process files', {
+            id: toastId,
+            description: failedFiles.join(', '),
+          });
+        }
+
+        // Add upload notification and trigger setup plan
+        if (uploadedFiles.length > 0) {
+          // Emit event to refresh knowledge sources count
+          emitter.emit("vllora_knowledge_source_updated", { datasetId: selectedDatasetId });
+
+          // If user didn't type anything, prompt for setup plan
+          if (!userText.trim()) {
+            userText = `I've uploaded ${uploadedFiles.length} document(s): ${uploadedFiles.join(', ')}. Please use the propose_setup_plan tool to analyze these documents and create a comprehensive setup plan for this dataset. Show me the plan with topic hierarchy, data generation strategy, and evaluation criteria.`;
+          } else {
+            // User typed something - append the upload notice with tool suggestion
+            const uploadNotice = `\n\n[Knowledge sources uploaded: ${uploadedFiles.join(', ')}. Use the propose_setup_plan tool to create a setup plan based on these documents.]`;
+            userText += uploadNotice;
+          }
+        }
+      }
+
       // The prepareMessage function handles context injection
-      const userText = message.parts.find(p => p.part_type === 'text')?.data || '';
-      return prepareMessage(userText);
+      // Only pass through image parts (file parts have been processed as knowledge sources)
+      return prepareMessage(userText, imageParts);
     },
-    [prepareMessage]
+    [prepareMessage, selectedDatasetId, getKnowledgeSourceType]
   );
 
   // Render chat content (always mounted to preserve state)

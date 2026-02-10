@@ -84,6 +84,41 @@ type VlloraEvents = {
   vllora_dry_run_job_update: { jobId: string; job: DryRunJob };
   // Lucy assistant prompt trigger (from UI actions like "Generate for topic")
   vllora_lucy_prompt: { prompt: string };
+  // Knowledge source events
+  vllora_knowledge_source_updated: { datasetId: string };
+  // Setup plan execution progress
+  vllora_setup_plan_progress: { progress: unknown };
+  // Setup plan generation started (show loading in right panel and switch to README tab)
+  vllora_setup_plan_generating: { datasetId: string; switchToReadme?: boolean };
+  // Setup plan proposed (for displaying in right panel)
+  vllora_setup_plan_proposed: { datasetId: string; plan: unknown };
+  // Setup plan dismissed (user closed the card without approving)
+  vllora_setup_plan_dismissed: { datasetId: string };
+  // Setup plan approved (user approved, triggers execution)
+  vllora_setup_plan_approved: { datasetId: string; plan: unknown };
+  // Workflow updated (triggers refresh in UI)
+  vllora_workflow_updated: { datasetId: string };
+  // Data generation progress (for showing loading state in Records tab)
+  vllora_data_generation_progress: {
+    datasetId: string;
+    status: 'started' | 'progress' | 'completed' | 'failed';
+    total: number;
+    completed: number;
+    currentBatch?: number;
+    totalBatches?: number;
+    /** Current topic being generated (for showing loading indicator) */
+    currentTopic?: string;
+    /** Records completed for current topic */
+    topicCompleted?: number;
+    /** Total records to generate for current topic */
+    topicTotal?: number;
+    error?: string;
+  };
+  // Switch to a specific tab during execution
+  vllora_switch_tab: {
+    datasetId: string;
+    tab: 'records' | 'evaluator' | 'jobs' | 'readme' | 'docs' | 'plan';
+  };
 };
 
 // ============================================================================

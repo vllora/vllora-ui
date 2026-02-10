@@ -20,12 +20,30 @@ import { ApiInitializeTab } from "./ApiInitializeTab";
 import type { Trace } from "./LiveTraceFeed";
 import { ALL_PROVIDERS } from "../spans-select-table";
 import { tryParseJson } from "@/utils/modelUtils";
+import { emitter } from "@/utils/eventEmitter";
+import { uploadKnowledgeSourceHandler } from "@/lib/distri-finetune-tools/steps/knowledge-sources";
+import type { KnowledgeSourceType } from "@/types/dataset-types";
 
 type TabType = "objective" | "api";
 
 const isValidTab = (tab: string | null): tab is TabType => {
   return tab === "objective" || tab === "api";
 };
+
+// Helper to read file as base64
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Remove data URL prefix (e.g., "data:application/pdf;base64,")
+      const base64 = result.split(",")[1] || result;
+      resolve(base64);
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
 
 // Transform a Span to a Trace for display
 function spanToTrace(span: Span): Trace {
@@ -134,7 +152,7 @@ export function EmptyDatasetsState() {
     return unsubscribe;
   }, [projectId, subscribe, fetchTraces]);
 
-  const handleStartFinetune = async () => {
+  const handleStartFinetune = async (files?: File[]) => {
     if (!objective.trim()) {
       toast.error("Please enter an objective first");
       return;
@@ -147,7 +165,33 @@ export function EmptyDatasetsState() {
       const datasetName = words.length > 30 ? words.slice(0, 30) + "..." : words;
 
       const dataset = await createDataset(datasetName, objective.trim());
-      navigate(`/datasets/${dataset.id}`);
+
+      // If files were uploaded, add them as knowledge sources
+      if (files && files.length > 0) {
+        // Emit generating event immediately so UI shows loading state
+        emitter.emit("vllora_setup_plan_generating", { datasetId: dataset.id });
+
+        // Upload files as knowledge sources (processing happens async)
+        for (const file of files) {
+          const content = await readFileAsBase64(file);
+          const type: KnowledgeSourceType = file.type === "application/pdf" ? "pdf" : "text";
+          await uploadKnowledgeSourceHandler({
+            dataset_id: dataset.id,
+            name: file.name,
+            type,
+            content,
+            mime_type: file.type,
+          });
+        }
+
+        // Emit update so KnowledgeSourcesPanel refreshes
+        emitter.emit("vllora_knowledge_source_updated", { datasetId: dataset.id });
+
+        // Navigate with flag to trigger Lucy plan generation
+        navigate(`/datasets/${dataset.id}?autoGeneratePlan=true`);
+      } else {
+        navigate(`/datasets/${dataset.id}`);
+      }
     } catch (error) {
       console.error("Failed to create dataset:", error);
       toast.error("Failed to create dataset");

@@ -9,7 +9,8 @@
  * - Jobs section: Finetune jobs list
  */
 
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { DatasetUtilityBar } from "./dataset-detail-header/DatasetUtilityBar";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
@@ -35,6 +36,12 @@ import { EvaluationConfigPanel } from "./evaluation-dialog/EvaluationConfigPanel
 import { FinetuneJobsContent } from "@/components/finetune/content";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { DryRunJobsProvider } from "@/contexts/DryRunJobsContext";
+import { ReadmeWithPlan } from "./ReadmeWithPlan";
+import { KnowledgeSourcesPanel } from "./KnowledgeSourcesPanel";
+import { PlanSection } from "./plan-section";
+import { useDatasetReadme } from "@/hooks/useDatasetReadme";
+import * as knowledgeDB from "@/services/knowledge-sources-db";
+import { getProposedPlan } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
 import type { CoverageStats } from "@/types/dataset-types";
 
 export function DatasetDetailContentV2() {
@@ -131,6 +138,142 @@ export function DatasetDetailContentV2() {
 
   // Dialog state for records analytics
   const [analyticsDialogOpen, setAnalyticsDialogOpen] = useState(false);
+
+  // Knowledge sources count for Docs tab badge
+  const [knowledgeSourcesCount, setKnowledgeSourcesCount] = useState(0);
+
+  // Fetch knowledge sources count
+  const fetchKnowledgeSourcesCount = useCallback(async () => {
+    if (!datasetId) return;
+    try {
+      const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
+      setKnowledgeSourcesCount(sources.length);
+    } catch (error) {
+      console.error("[DatasetDetailContentV2] Error fetching knowledge sources:", error);
+    }
+  }, [datasetId]);
+
+  // Initial fetch and listen for updates
+  useEffect(() => {
+    fetchKnowledgeSourcesCount();
+
+    // Listen for knowledge source updates
+    const handleKnowledgeSourceUpdate = ({ datasetId: updatedDatasetId }: { datasetId: string }) => {
+      if (updatedDatasetId === datasetId) {
+        fetchKnowledgeSourcesCount();
+      }
+    };
+
+    emitter.on("vllora_knowledge_source_updated", handleKnowledgeSourceUpdate);
+    return () => {
+      emitter.off("vllora_knowledge_source_updated", handleKnowledgeSourceUpdate);
+    };
+  }, [datasetId, fetchKnowledgeSourcesCount]);
+
+  // Track setup plan generation state and auto-switch to Plan tab
+  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+  const [hasPlanProposed, setHasPlanProposed] = useState(false);
+
+  useEffect(() => {
+    const handlePlanGenerating = ({ datasetId: generatingDatasetId }: { datasetId: string }) => {
+      if (generatingDatasetId === datasetId) {
+        setIsGeneratingPlan(true);
+        setActiveSection("plan");
+      }
+    };
+
+    const handlePlanProposed = ({ datasetId: planDatasetId }: { datasetId: string }) => {
+      if (planDatasetId === datasetId) {
+        setIsGeneratingPlan(false);
+        setHasPlanProposed(true);
+      }
+    };
+
+    const handlePlanDismissed = ({ datasetId: dismissedDatasetId }: { datasetId: string }) => {
+      if (dismissedDatasetId === datasetId) {
+        setIsGeneratingPlan(false);
+        setHasPlanProposed(false);
+      }
+    };
+
+    const handleWorkflowUpdated = ({ datasetId: updatedDatasetId }: { datasetId: string }) => {
+      if (updatedDatasetId === datasetId) {
+        setIsGeneratingPlan(false);
+        setHasPlanProposed(false);
+      }
+    };
+
+    // Handle tab switch events during execution
+    const handleSwitchTab = ({ datasetId: switchDatasetId, tab }: { datasetId: string; tab: string }) => {
+      if (switchDatasetId === datasetId) {
+        setActiveSection(tab as any);
+      }
+    };
+
+    emitter.on("vllora_setup_plan_generating", handlePlanGenerating);
+    emitter.on("vllora_setup_plan_proposed", handlePlanProposed);
+    emitter.on("vllora_setup_plan_dismissed", handlePlanDismissed);
+    emitter.on("vllora_workflow_updated", handleWorkflowUpdated);
+    emitter.on("vllora_switch_tab", handleSwitchTab);
+    return () => {
+      emitter.off("vllora_setup_plan_generating", handlePlanGenerating);
+      emitter.off("vllora_setup_plan_proposed", handlePlanProposed);
+      emitter.off("vllora_setup_plan_dismissed", handlePlanDismissed);
+      emitter.off("vllora_workflow_updated", handleWorkflowUpdated);
+      emitter.off("vllora_switch_tab", handleSwitchTab);
+    };
+  }, [datasetId, setActiveSection]);
+
+  // Check IndexedDB for persisted proposed plan on initial mount only (survives page refresh)
+  // Use a ref to ensure we only auto-switch once, not when user navigates between tabs
+  const hasCheckedPersistedPlan = useRef(false);
+  useEffect(() => {
+    const checkPersistedPlan = async () => {
+      if (!datasetId || hasCheckedPersistedPlan.current) return;
+      hasCheckedPersistedPlan.current = true;
+
+      const persistedPlan = await getProposedPlan(datasetId);
+      if (persistedPlan) {
+        console.log('[DatasetDetailContentV2] Found persisted plan, switching to Plan tab');
+        setHasPlanProposed(true);
+        setActiveSection("plan");
+      }
+    };
+
+    checkPersistedPlan();
+  }, [datasetId, setActiveSection]);
+
+  // Handle autoGeneratePlan query param (from new dataset with uploaded files)
+  const [searchParams, setSearchParams] = useSearchParams();
+  const hasTriggeredAutoGenerate = useRef(false);
+
+  useEffect(() => {
+    const shouldAutoGenerate = searchParams.get("autoGeneratePlan") === "true";
+
+    if (shouldAutoGenerate && datasetId && !hasTriggeredAutoGenerate.current) {
+      hasTriggeredAutoGenerate.current = true;
+
+      // Remove the query param to prevent re-triggering
+      setSearchParams({}, { replace: true });
+
+      // Small delay to let knowledge sources finish processing
+      const timer = setTimeout(() => {
+        // Trigger Lucy to generate the setup plan
+        emitter.emit("vllora_lucy_prompt", {
+          prompt: `Please analyze the uploaded documents and create a setup plan for this dataset using the propose_setup_plan tool.`,
+        });
+      }, 2000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [searchParams, setSearchParams, datasetId]);
+
+  // README auto-generation hook
+  const { readme, readmeUpdatedAt, regenerateReadme, exportReadme } = useDatasetReadme({
+    dataset,
+    records: sortedRecords,
+    autoUpdate: true,
+  });
 
   // Compute insights for stats cards
   const insights = useMemo(() => computeDatasetInsights(sortedRecords), [sortedRecords]);
@@ -246,6 +389,8 @@ export function DatasetDetailContentV2() {
             onSectionChange={setActiveSection}
             recordsCount={sortedRecords.length}
             hasEvaluator={hasEvaluator}
+            knowledgeSourcesCount={knowledgeSourcesCount}
+            hasPlanActivity={isGeneratingPlan || hasPlanProposed}
           />
 
           {/* Main content area - Records, Evaluator, or Jobs based on active section */}
@@ -335,6 +480,31 @@ export function DatasetDetailContentV2() {
                 trainingConfig={dataset.trainingConfig}
               />
             </>
+          )}
+          {activeSection === "plan" && (
+            <PlanSection
+              datasetId={datasetId}
+              isGeneratingPlan={isGeneratingPlan}
+              className="flex-1"
+            />
+          )}
+          {activeSection === "readme" && (
+            <div className="flex-1 overflow-hidden p-4">
+              <ReadmeWithPlan
+                datasetId={datasetId}
+                readme={readme}
+                readmeUpdatedAt={readmeUpdatedAt}
+                onExport={exportReadme}
+                onRegenerate={regenerateReadme}
+                className="h-full"
+              />
+            </div>
+          )}
+          {activeSection === "docs" && (
+            <KnowledgeSourcesPanel
+              datasetId={datasetId}
+              className="flex-1"
+            />
           )}
         </div>
 

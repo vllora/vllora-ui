@@ -5,7 +5,7 @@
  * Shows empty state when no records, filled state when data exists.
  */
 
-import { OverviewEmptyState } from "./OverviewEmptyState";
+// import { OverviewEmptyState } from "./OverviewEmptyState";
 import { OverviewFilledState } from "./OverviewFilledState";
 
 type BalanceRating = "excellent" | "good" | "fair" | "poor" | "critical";
@@ -38,12 +38,12 @@ export function DatasetOverviewCard({
   balanceScore,
   leafTopicCount,
   onClick,
-  onImportClick,
+  // onImportClick,
 }: DatasetOverviewCardProps) {
   // Show empty state when no records
-  if (total === 0) {
-    return <OverviewEmptyState onClick={onImportClick || onClick} />;
-  }
+  // if (total === 0) {
+  //   return <OverviewEmptyState onClick={onImportClick || onClick} />;
+  // }
 
   return (
     <OverviewFilledState

@@ -77,7 +77,7 @@ export function RecordsTable({
   records,
   datasetId,
   isLoading = false,
-  emptyMessage = "No records in this dataset",
+  emptyMessage: _emptyMessage = "No records in this dataset",
   showHeader = false,
   showFooter = false,
   maxRecords = 0,
@@ -285,15 +285,8 @@ export function RecordsTable({
     );
   }
 
-  if (records.length === 0) {
-    return (
-      <div className="px-4 py-6 text-sm text-muted-foreground italic text-center">
-        {emptyMessage}
-      </div>
-    );
-  }
-
   // Hierarchical tree rendering (when topic hierarchy is available)
+  // Show topic structure even with 0 records so users can see their topics
   if (groupByTopic && topicHierarchy && topicHierarchy.length > 0) {
     return (
       <div className="flex flex-col" style={containerStyle}>
@@ -310,6 +303,7 @@ export function RecordsTable({
           <TopicRecordTree
             hierarchy={topicHierarchy}
             records={displayRecords}
+            datasetId={datasetId || ''}
             onUpdateTopic={onUpdateTopic}
             onDelete={onDelete}
             onSave={onSave}

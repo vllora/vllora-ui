@@ -42,6 +42,10 @@ export interface TopicTreeNodeRowProps {
   highlightedRecordId?: string | null;
   /** Callback to set record ref for scrolling */
   setRecordRef?: (recordId: string) => (el: HTMLDivElement | null) => void;
+  /** Topic name currently being generated (for loading indicator) */
+  generatingTopic?: string | null;
+  /** Progress of data generation (completed/total) */
+  generatingProgress?: { completed: number; total: number } | null;
 }
 
 export function TopicTreeNodeRow({
@@ -65,6 +69,8 @@ export function TopicTreeNodeRow({
   onGenerateSubtopics,
   highlightedRecordId,
   setRecordRef,
+  generatingTopic,
+  generatingProgress,
 }: TopicTreeNodeRowProps) {
   const [isExpanded, setIsExpanded] = useState(true); // Expand all by default
 
@@ -85,6 +91,7 @@ export function TopicTreeNodeRow({
     <div className="relative">
       <TopicNodeHeader
         path={currentPath}
+        description={node.description}
         hasContent={hasContent}
         isExpanded={isExpanded}
         onToggle={() => setIsExpanded(!isExpanded)}
@@ -94,6 +101,8 @@ export function TopicTreeNodeRow({
         onDeleteTopic={onDeleteTopic}
         onGenerateForTopic={onGenerateForTopic}
         onGenerateSubtopics={onGenerateSubtopics}
+        isGenerating={node.name === generatingTopic}
+        generatingProgress={node.name === generatingTopic ? generatingProgress : undefined}
       />
 
       {/* Expanded content */}
@@ -124,6 +133,8 @@ export function TopicTreeNodeRow({
                 onGenerateSubtopics={onGenerateSubtopics}
                 highlightedRecordId={highlightedRecordId}
                 setRecordRef={setRecordRef}
+                generatingTopic={generatingTopic}
+                generatingProgress={generatingProgress}
               />
             ))}
 
