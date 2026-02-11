@@ -191,6 +191,8 @@ export function EmptyDatasetsState() {
         emitter.emit("vllora_knowledge_source_updated", { datasetId: dataset.id });
 
         // Show transition screen before navigating
+        // With files: 2.5s to let document processing start in background
+        // Without files: 800ms brief animation, nothing to process
         setIsCreating(false);
         setTransition({ datasetId: dataset.id, hasFiles: true });
         setTimeout(() => {
@@ -202,7 +204,7 @@ export function EmptyDatasetsState() {
         setTransition({ datasetId: dataset.id, hasFiles: false });
         setTimeout(() => {
           navigate(`/datasets/${dataset.id}`);
-        }, 2500);
+        }, 800);
       }
     } catch (error) {
       console.error("Failed to create dataset:", error);

@@ -6,7 +6,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { DatasetsConsumer } from "@/contexts/DatasetsContext";
-import { Loader2 } from "lucide-react";
+import { LoadingIndicator } from "@/components/ui/LoadingIndicator";
 import { toast } from "sonner";
 import { getKnowledgeSourceCount } from "@/services/knowledge-sources-db";
 import {
@@ -272,11 +272,8 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
 
             {/* Loading state */}
             {isLoading && (
-              <div className="flex items-center justify-center py-12">
-                <div className="flex items-center space-x-2">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  <span className="text-muted-foreground">Loading datasets...</span>
-                </div>
+              <div className="py-12">
+                <LoadingIndicator variant="section" message="Loading datasets..." />
               </div>
             )}
 

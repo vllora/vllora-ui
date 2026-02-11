@@ -41,6 +41,7 @@ export interface DatasetMainContentProps {
   leafTopicCount: number;
   onOverviewClick: () => void;
   onImportClick: () => void;
+  onDocsClick?: () => void;
 
   // Canvas state
   selectedTopic: string | null;
@@ -79,6 +80,7 @@ export function DatasetMainContent({
   leafTopicCount,
   onOverviewClick,
   onImportClick,
+  onDocsClick,
   selectedTopic,
   onSelectTopic,
   selectedRecord,
@@ -106,6 +108,8 @@ export function DatasetMainContent({
           datasetId={datasetId}
           datasetObjective={datasetObjective}
           hasTopicHierarchy={false}
+          onImportClick={onImportClick}
+          onDocsClick={onDocsClick}
         />
       </div>
     );

@@ -129,6 +129,20 @@ export function computeTrainingSummary(
 }
 
 /**
+ * Trigger a file download via an invisible anchor element.
+ * Works with pre-signed URLs from cloud storage (S3, GCS, etc.).
+ */
+export function triggerFileDownload(url: string, filename?: string) {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename || "";
+  link.rel = "noopener noreferrer";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+/**
  * Message in a conversation
  */
 export interface Message {

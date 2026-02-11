@@ -4,7 +4,8 @@
  * Reusable loading and error state components for dialogs.
  */
 
-import { Loader2, AlertCircle } from "lucide-react";
+import { AlertCircle } from "lucide-react";
+import { LoadingIndicator } from "@/components/ui/LoadingIndicator";
 
 export interface LoadingStateProps {
   /** Loading message to display */
@@ -13,9 +14,8 @@ export interface LoadingStateProps {
 
 export function LoadingState({ message = "Loading..." }: LoadingStateProps) {
   return (
-    <div className="flex items-center justify-center py-12">
-      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-      <span className="ml-2 text-muted-foreground">{message}</span>
+    <div className="py-12">
+      <LoadingIndicator variant="section" message={message} />
     </div>
   );
 }

@@ -12,7 +12,6 @@ import {
   XCircle,
   AlertCircle,
   Sparkles,
-  ArrowRight,
   Circle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -206,20 +205,33 @@ export function ExecutionProgressCard({
 
       {/* Completion Footer */}
       {progress.is_complete && !progress.has_error && (
-        <div className="px-4 pb-3">
-          <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-md bg-muted/50 border border-border/50">
-            <span className="text-xs text-muted-foreground">
-              Ready for fine-tuning
-            </span>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 px-2 text-xs text-foreground hover:bg-muted"
-              onClick={() => setActiveSection('jobs')}
-            >
-              Go to Jobs
-              <ArrowRight className="w-3.5 h-3.5 ml-1" />
-            </Button>
+        <div className="px-4 pb-4">
+          <div className="flex flex-col items-center gap-3 px-4 py-4 rounded-lg bg-[rgba(var(--theme-500),0.08)] border border-[rgba(var(--theme-500),0.2)]">
+            <div className="w-8 h-8 rounded-full bg-[rgb(var(--theme-500))] flex items-center justify-center">
+              <Check className="w-4 h-4 text-white" strokeWidth={3} />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium text-foreground">Setup Complete</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Your dataset is ready for fine-tuning</p>
+            </div>
+            <div className="flex items-center gap-2 w-full">
+              <Button
+                size="sm"
+                className="flex-1 gap-1.5 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
+                onClick={() => setActiveSection('jobs')}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Start Fine-tuning
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5"
+                onClick={() => setActiveSection('records')}
+              >
+                Review Data
+              </Button>
+            </div>
           </div>
         </div>
       )}
