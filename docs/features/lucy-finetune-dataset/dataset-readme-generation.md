@@ -146,7 +146,7 @@ Records were generated with topics pre-assigned based on the topic hierarchy str
     "criteria": ["accuracy", "teaching_quality", "appropriate_level"]
   },
   "training": {
-    "base_model": "llama-v3-8b-instruct",
+    "base_model": "google/gemma-3-4b-it",
     "epochs": 2,
     "learning_rate": 0.0001
   }
