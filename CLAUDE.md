@@ -117,3 +117,4 @@ Do NOT skip this step. Outdated docs cause compounding errors in future sessions
 - `/team-investigate <issue>` — 5 agents: Deep Code Reviewer, Behavior Validator, UX/UI Reviewer, Fix Agent, Docs Updater. Reviewers run in parallel, Fix Agent waits for findings, Docs Updater syncs docs after fix.
 - `/team-review <what to review>` — 5 agents: Architecture Reviewer, State Machine Reviewer, UX/UI Reviewer, Devil's Advocate, Docs Checker. All run in parallel, Devil's Advocate challenges other findings.
 - `/team-develop <feature>` — 4 agents: Architect (plans), Frontend Implementer (builds), Test & Validate (verifies), Docs Updater (syncs docs). Sequential pipeline with plan approval gate.
+- `/team-ux-redesign <focus area>` — 4 agents: UX Flow Analyst, Visual & Interaction Reviewer, Information Architecture Reviewer (all parallel), then Redesign Proposer synthesizes into a prioritized design spec (P0/P1/P2).
