@@ -13,46 +13,46 @@ $ARGUMENTS
 
 ---
 
-## Prerequisites — App Login & Setup
+## Prerequisites — Automated Setup (before opening browser)
 
-The Playwright browser starts with a fresh session. You MUST complete these setup steps before testing the finetune feature:
+The Playwright browser starts with a fresh session. Complete these setup steps BEFORE interacting with the UI:
 
-### Step 1: Login
-1. Navigate to `http://localhost:5173/login`
-2. The login page shows an email form
-3. Enter a test email (e.g., `test@e2e.local`) into the email input
-4. Submit the form — this POSTs to the backend at `/session/track` and stores the email in localStorage
-5. Verify redirect to home page (`/`)
-6. Take a screenshot to confirm login succeeded
+### Step 1: Configure OpenAI API Key via Backend API (if test requires agent interaction)
+If the test involves triggering the Lucy agent or generating data (not just UI testing):
+1. **Ask the user**: "This test requires an OpenAI API key. Please provide your API key so I can configure it via the backend API."
+2. Once the user provides the key, run this curl command via Bash:
+   ```
+   curl -s -X PUT 'http://localhost:9090/providers/openai' \
+     -H 'Content-Type: application/json' \
+     -H 'x-project-id: default' \
+     --data-raw '{"credentials":{"api_key":"USER_PROVIDED_KEY"}}'
+   ```
+   Replace `USER_PROVIDED_KEY` with the actual key the user gave you.
+3. Verify the curl response indicates success.
+4. NEVER hardcode API keys in files. NEVER use a key without the user explicitly providing it in the chat.
 
-### Step 2: Configure OpenAI API Key (if needed for the test)
-1. Navigate to `http://localhost:5173/settings`
-2. The Settings page defaults to the "Providers" tab
-3. Find "OpenAI" in the provider list and click it to open the credential modal
-4. **STOP and ask the user**: "Please enter your OpenAI API key in the browser, or tell me the key to use." — NEVER hardcode or guess API keys
-5. After the user confirms the key is set, take a screenshot to verify
-6. If the test doesn't need an API key (e.g., testing UI only), skip this step
+### Step 2: Auto-Login via localStorage
+Authentication is localStorage-based (key: `vlora_user_email`). Skip the login UI entirely:
+1. `browser_navigate` to `http://localhost:5173` (must navigate to origin first so localStorage is accessible)
+2. `browser_evaluate` with: `() => localStorage.setItem('vlora_user_email', 'test@e2e.local')`
+3. `browser_navigate` to `http://localhost:5173/datasets` (reload with auth in place)
+4. Take a screenshot to confirm the datasets page loaded (not redirected to /login)
 
-### Step 3: Navigate to Datasets
-1. Navigate to `http://localhost:5173/datasets`
-2. Take a screenshot to confirm the datasets page loaded
-3. The page will either show:
-   - **Empty state** — no datasets exist yet (shows onboarding entry point)
-   - **Dataset grid** — existing datasets are displayed
-4. If testing a specific dataset, click on it or navigate to `http://localhost:5173/datasets/:datasetId`
+If the page redirects to `/login` after these steps, the backend may not be running. Report the error and stop.
 
 ---
 
 ## E2E Testing Instructions
 
 1. Read the documentation above to understand the expected user flow and step progression.
-2. Complete the Prerequisites (login → optional API key → navigate to datasets).
+2. Complete the Prerequisites (API key via curl if needed → localStorage auth → navigate to datasets).
 3. Use Playwright MCP tools to test the requested behavior:
    - `browser_navigate` — go to a URL
    - `browser_snapshot` — get accessibility tree of current page
    - `browser_click` — click an element by ref
    - `browser_type` — type text into an input
    - `browser_screenshot` — capture screenshot
+   - `browser_evaluate` — run JavaScript in page context
    - `browser_tab_list` / `browser_tab_create` — manage tabs
    - `browser_mouse_click_xy` — click at specific coordinates (vision mode)
 4. For each test step:
@@ -67,6 +67,7 @@ The Playwright browser starts with a fresh session. You MUST complete these setu
 6. Report a summary of all findings: what works, what's broken, and screenshots of issues.
 
 ## Important
-- NEVER enter API keys yourself — always ask the user to enter credentials
-- If the backend is not running, report the error and stop — don't retry endlessly
-- If login fails, check that the dev server is running at localhost:5173 and the backend at localhost:8080
+- NEVER hardcode API keys in any file — always ask the user to provide them at runtime
+- If the backend (localhost:9090) is not running, report the error and stop
+- If the dev server (localhost:5173) is not running, report the error and stop
+- If the app redirects to /login despite localStorage being set, check both servers are running
