@@ -1,24 +1,44 @@
 /**
  * EvaluationConfigPanel
  *
- * IDE-style evaluator panel: code editor + inline dry run results.
- * No header — parent tab provides context. Smart status bar footer.
+ * VS Code-style evaluator panel: code editor on top, tabbed bottom panel below.
+ * Editor header bar has: label, template/copy icons, config popover, run button, save.
+ * Bottom panel shows: Results, History, Running (no Config tab).
  */
 
-import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from "react";
-import { Button } from "@/components/ui/button";
+import { useState, useEffect, useRef, useMemo, forwardRef, useImperativeHandle, useCallback } from "react";
 import {
   Loader2,
   CheckCircle2,
   Copy,
-  RotateCcw,
-  FlaskConical,
+  FileCode2,
+  Play,
+  Settings,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
-import { DryRunInlinePanel } from "./DryRunInlinePanel";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { EvaluationBottomPanel } from "./EvaluationBottomPanel";
 import { cn } from "@/lib/utils";
+import type { ImperativePanelHandle } from "react-resizable-panels";
 
 /** Methods exposed via ref for external control */
 export interface EvaluationConfigPanelRef {
@@ -26,8 +46,23 @@ export interface EvaluationConfigPanelRef {
   copy: () => void;
 }
 
-// Default script for the JavaScript evaluator (same as JavaScriptPanel)
-const DEFAULT_SCRIPT = `// Simple example: Call LLM-as-judge evaluator from JavaScript
+// Placeholder shown when no grader is configured yet
+const PLACEHOLDER_SCRIPT = `// Grader Script — Evaluate the quality of each training record
+//
+// Write a function called \`evaluate(input)\` that returns:
+//   { score: number (0-1), reason: string }
+//
+// \`input\` contains the fields from your training data record.
+//
+// Tip: Use the file icon in the toolbar above to load a working example.
+
+function evaluate(input) {
+  return { score: 0, reason: "Not implemented yet" };
+}
+`;
+
+// Full example template loaded via "Load template" button
+const DEFAULT_SCRIPT = `// Example: Call LLM-as-judge evaluator from JavaScript
 // This is a minimal working example
 
 function evaluate(input) {
@@ -110,6 +145,45 @@ const EDITOR_OPTIONS = {
   },
 };
 
+function getDefaultSampleSize(recordCount: number): number {
+  if (recordCount <= 10) return recordCount;
+  if (recordCount <= 50) return Math.min(25, recordCount);
+  if (recordCount <= 200) return 50;
+  return 100;
+}
+
+function getSampleSizeOptions(recordCount: number): Array<{ value: number; label: string }> {
+  if (recordCount <= 10) return [{ value: recordCount, label: "All" }];
+  if (recordCount <= 50) {
+    const opts: Array<{ value: number; label: string }> = [];
+    if (recordCount >= 10) opts.push({ value: 10, label: "10" });
+    if (recordCount >= 25) opts.push({ value: 25, label: "25" });
+    opts.push({ value: recordCount, label: "All" });
+    return opts;
+  }
+  if (recordCount <= 200) {
+    const opts: Array<{ value: number; label: string }> = [];
+    opts.push({ value: 25, label: "25" });
+    opts.push({ value: 50, label: "50" });
+    if (recordCount >= 100) opts.push({ value: 100, label: "100" });
+    opts.push({ value: recordCount, label: "All" });
+    return opts;
+  }
+  const opts: Array<{ value: number; label: string }> = [];
+  opts.push({ value: 100, label: "100" });
+  opts.push({ value: 200, label: "200" });
+  if (recordCount >= 300) opts.push({ value: 300, label: "300" });
+  if (recordCount >= 500) opts.push({ value: 500, label: "500" });
+  return opts;
+}
+
+const ROLLOUT_MODEL_OPTIONS = [
+  { value: "gpt-4o-mini", label: "GPT-4o Mini" },
+  { value: "gpt-4o", label: "GPT-4o" },
+  { value: "gpt-4.1", label: "GPT-4.1" },
+  { value: "gpt-4.1-mini", label: "GPT-4.1 Mini" },
+];
+
 interface EvaluationConfigPanelProps {
   evalScript?: string;
   onSave: (script: string) => Promise<void>;
@@ -121,16 +195,25 @@ interface EvaluationConfigPanelProps {
 
 export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, EvaluationConfigPanelProps>(
   function EvaluationConfigPanel({ evalScript, onSave, hideHeaderActions = false, recordCount }, ref) {
-  const [script, setScript] = useState(DEFAULT_SCRIPT);
+  const [script, setScript] = useState(evalScript || PLACEHOLDER_SCRIPT);
   const [isSaving, setIsSaving] = useState(false);
-  const [showDryRunPanel, setShowDryRunPanel] = useState(false);
+  const [isBottomCollapsed, setIsBottomCollapsed] = useState(false);
+  const [sampleSize, setSampleSize] = useState(() => getDefaultSampleSize(recordCount));
+  const [rolloutModel, setRolloutModel] = useState("gpt-4o-mini");
 
-  const { runningJob, lastCompletedJob } = DryRunJobsConsumer();
+  const bottomPanelRef = useRef<ImperativePanelHandle>(null);
+  const { runningJob, lastCompletedJob, startDryRun } = DryRunJobsConsumer();
 
-  // Auto-show panel when there's a running job or completed results
+  useEffect(() => {
+    setSampleSize(getDefaultSampleSize(recordCount));
+  }, [recordCount]);
+
+  // Auto-expand bottom panel when a job starts or completes
   useEffect(() => {
     if (runningJob || lastCompletedJob) {
-      setShowDryRunPanel(true);
+      if (bottomPanelRef.current?.isCollapsed()) {
+        bottomPanelRef.current.expand();
+      }
     }
   }, [runningJob, lastCompletedJob]);
 
@@ -141,7 +224,7 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
   }, [evalScript]);
 
   const hasChanges = useMemo(() => {
-    if (!evalScript) return script !== DEFAULT_SCRIPT;
+    if (!evalScript) return script !== PLACEHOLDER_SCRIPT && script.trim() !== "";
     return script !== evalScript;
   }, [evalScript, script]);
 
@@ -160,36 +243,190 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
     navigator.clipboard.writeText(script);
   };
 
-  const handleReset = () => {
+  const handleLoadTemplate = () => {
     setScript(DEFAULT_SCRIPT);
   };
 
   useImperativeHandle(ref, () => ({
-    reset: handleReset,
+    reset: handleLoadTemplate,
     copy: handleCopy,
   }), [script]);
 
   const hasGraderConfig = !!evalScript;
 
-  // Contextual label for the dry run toggle button
-  const dryRunButtonLabel = useMemo(() => {
-    if (runningJob) return "View Progress";
-    if (lastCompletedJob?.result) return "Results";
-    return "Test Grader";
-  }, [runningJob, lastCompletedJob]);
+  const handleToggleBottomPanel = useCallback(() => {
+    const panel = bottomPanelRef.current;
+    if (!panel) return;
+    if (panel.isCollapsed()) {
+      panel.expand();
+    } else {
+      panel.collapse();
+    }
+  }, []);
 
-  // Last result data for the status indicator
-  const lastResult = lastCompletedJob?.result;
-  const verdict = lastResult?.diagnosis?.verdict;
-  const meanScore = lastResult?.statistics?.mean;
+  const handleRunDryRun = useCallback(async () => {
+    if (!hasGraderConfig) return;
+    try {
+      await startDryRun(sampleSize, rolloutModel);
+      // Bottom panel auto-expands via the useEffect above
+    } catch (error) {
+      console.error("Failed to start dry run:", error);
+    }
+  }, [hasGraderConfig, sampleSize, rolloutModel, startDryRun]);
+
+  const sampleOptions = getSampleSizeOptions(recordCount);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Editor + Dry Run split view — takes all available space */}
-      <div className="flex-1 overflow-hidden">
-        {showDryRunPanel ? (
-          <ResizablePanelGroup direction="horizontal">
-            <ResizablePanel defaultSize={60} minSize={30}>
+      <ResizablePanelGroup
+        direction="vertical"
+        autoSaveId="eval-panel-layout"
+      >
+        {/* Top: editor header + Monaco editor */}
+        <ResizablePanel defaultSize={65} minSize={20}>
+          <div className="flex flex-col h-full">
+            {/* Editor header bar */}
+            <TooltipProvider delayDuration={300}>
+            <div className="flex items-center gap-1 px-2 py-1 border-b border-zinc-800/60 bg-zinc-900/40 shrink-0">
+              <span className="text-xs font-medium text-zinc-400 px-1">Grader Script</span>
+              {!hideHeaderActions && (
+                <>
+                  <div className="w-px h-3.5 bg-zinc-700/50 mx-1" />
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={handleLoadTemplate}
+                        className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+                      >
+                        <FileCode2 className="w-3.5 h-3.5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">
+                      Load example template
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={handleCopy}
+                        className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">
+                      Copy script
+                    </TooltipContent>
+                  </Tooltip>
+                </>
+              )}
+              <div className="flex-1" />
+
+              {/* Dry run config popover */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors">
+                    <Settings className="w-3.5 h-3.5" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent side="bottom" align="end" className="w-64 p-3">
+                  <div className="space-y-3">
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-medium text-zinc-500 uppercase tracking-wider">
+                        Sample Size
+                      </label>
+                      <div className="flex gap-1">
+                        {sampleOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            onClick={() => setSampleSize(option.value)}
+                            className={cn(
+                              "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+                              sampleSize === option.value
+                                ? "bg-zinc-700 text-zinc-100"
+                                : "bg-zinc-800/50 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+                            )}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-zinc-600">
+                        {recordCount.toLocaleString()} records available
+                      </p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-medium text-zinc-500 uppercase tracking-wider">
+                        Rollout Model
+                      </label>
+                      <Select value={rolloutModel} onValueChange={setRolloutModel}>
+                        <SelectTrigger className="h-8 bg-zinc-800/50 border-zinc-700/50 text-xs text-zinc-300 focus:ring-zinc-600 focus:ring-offset-0">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ROLLOUT_MODEL_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              {/* Run dry run button */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={handleRunDryRun}
+                    disabled={!hasGraderConfig || !!runningJob}
+                    className={cn(
+                      "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors",
+                      hasGraderConfig && !runningJob
+                        ? "text-[rgb(var(--theme-400))] hover:text-[rgb(var(--theme-300))] hover:bg-zinc-800"
+                        : "text-zinc-600 cursor-not-allowed"
+                    )}
+                  >
+                    {runningJob ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Play className="w-3 h-3" />
+                    )}
+                    {runningJob ? "Running..." : "Run"}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  {!hasGraderConfig ? "Save grader script first" : runningJob ? "Dry run in progress" : `Run dry run (${sampleSize} samples)`}
+                </TooltipContent>
+              </Tooltip>
+
+              <div className="w-px h-3.5 bg-zinc-700/50 mx-0.5" />
+
+              {/* Save button */}
+              <button
+                onClick={handleSave}
+                disabled={isSaving || !hasChanges}
+                className={cn(
+                  "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-colors",
+                  hasChanges
+                    ? "text-[rgb(var(--theme-400))] hover:text-[rgb(var(--theme-300))] hover:bg-zinc-800"
+                    : "text-zinc-600 cursor-default"
+                )}
+              >
+                {isSaving ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : !hasChanges ? (
+                  <CheckCircle2 className="w-3 h-3 text-emerald-500/60" />
+                ) : null}
+                {hasChanges ? "Save" : "Saved"}
+              </button>
+            </div>
+            </TooltipProvider>
+
+            {/* Code editor */}
+            <div className="flex-1 min-h-0">
               <Editor
                 height="100%"
                 language="javascript"
@@ -198,117 +435,28 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
                 theme="vs-dark"
                 options={EDITOR_OPTIONS}
               />
-            </ResizablePanel>
-            <ResizableHandle withHandle />
-            <ResizablePanel defaultSize={40} minSize={25}>
-              <DryRunInlinePanel
-                recordCount={recordCount}
-                hasGraderConfig={hasGraderConfig}
-                onClose={() => setShowDryRunPanel(false)}
-              />
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        ) : (
-          <Editor
-            height="100%"
-            language="javascript"
-            value={script}
-            onChange={(v) => setScript(v || "")}
-            theme="vs-dark"
-            options={EDITOR_OPTIONS}
-          />
-        )}
-      </div>
-
-      {/* Status bar — compact, IDE-style */}
-      <div className="flex items-center gap-2 px-3 py-1.5 border-t border-zinc-800/80 shrink-0">
-        {/* Left: editor actions */}
-        {!hideHeaderActions && (
-          <div className="flex items-center gap-0.5">
-            <button
-              onClick={handleReset}
-              className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
-              title="Reset to default"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={handleCopy}
-              className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
-              title="Copy script"
-            >
-              <Copy className="w-3.5 h-3.5" />
-            </button>
+            </div>
           </div>
-        )}
+        </ResizablePanel>
 
-        {/* Center: contextual status — clickable to open panel */}
-        <div className="flex-1 flex items-center justify-center">
-          {!showDryRunPanel && runningJob && (
-            <button
-              onClick={() => setShowDryRunPanel(true)}
-              className="flex items-center gap-2 px-2.5 py-1 rounded-md text-xs hover:bg-zinc-800/80 transition-colors text-blue-400"
-            >
-              <Loader2 className="w-3 h-3 animate-spin" />
-              <span className="font-medium">Evaluating...</span>
-            </button>
-          )}
-          {!showDryRunPanel && !runningJob && verdict && meanScore !== undefined && (
-            <button
-              onClick={() => setShowDryRunPanel(true)}
-              className="flex items-center gap-2 px-2.5 py-1 rounded-md text-xs hover:bg-zinc-800/80 transition-colors"
-            >
-              <span className={cn(
-                "w-2 h-2 rounded-full shrink-0",
-                verdict === "GO" ? "bg-emerald-500" :
-                verdict === "NO-GO" ? "bg-red-500" : "bg-amber-500"
-              )} />
-              <span className="font-mono font-medium text-zinc-300">{meanScore.toFixed(2)}</span>
-              <span className="text-zinc-500">avg</span>
-              <span className={cn(
-                "text-[10px] font-semibold uppercase tracking-wide",
-                verdict === "GO" ? "text-emerald-400" :
-                verdict === "NO-GO" ? "text-red-400" : "text-amber-400"
-              )}>
-                {verdict}
-              </span>
-            </button>
-          )}
-        </div>
+        <ResizableHandle />
 
-        {/* Right: dry run toggle + save */}
-        <div className="flex items-center gap-1.5">
-          {evalScript && !showDryRunPanel && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowDryRunPanel(true)}
-              className="h-7 text-xs gap-1.5 text-zinc-400 hover:text-zinc-200"
-            >
-              <FlaskConical className="w-3.5 h-3.5" />
-              {dryRunButtonLabel}
-            </Button>
-          )}
-          <Button
-            size="sm"
-            onClick={handleSave}
-            disabled={isSaving || !hasChanges}
-            className={cn(
-              "h-7 text-xs gap-1.5",
-              hasChanges
-                ? "bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-500))] text-white"
-                : "bg-transparent text-zinc-500 border-none shadow-none hover:bg-transparent cursor-default"
-            )}
-          >
-            {isSaving ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : !hasChanges ? (
-              <CheckCircle2 className="w-3 h-3 text-emerald-500/60" />
-            ) : null}
-            {hasChanges ? "Save" : "Saved"}
-          </Button>
-        </div>
-      </div>
+        {/* Bottom: tabbed panel (Results, History, Running) */}
+        <ResizablePanel
+          ref={bottomPanelRef}
+          defaultSize={35}
+          minSize={8}
+          collapsible
+          collapsedSize={4}
+          onCollapse={() => setIsBottomCollapsed(true)}
+          onExpand={() => setIsBottomCollapsed(false)}
+        >
+          <EvaluationBottomPanel
+            isCollapsed={isBottomCollapsed}
+            onToggleCollapse={handleToggleBottomPanel}
+          />
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 });

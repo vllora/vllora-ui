@@ -1,13 +1,12 @@
 /**
  * ConfigView
  *
- * Configuration screen for starting a new dry run.
- * Allows selecting sample size and shows what will happen.
+ * Compact single-row configuration for starting a dry run.
+ * Everything inline: sample pills, model select, run button.
  */
 
 import { AlertTriangle, History, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -17,19 +16,12 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-/**
- * Generate sample size options based on record count
- * For small datasets: show smaller increments
- * For large datasets: show larger increments
- */
 function getSampleSizeOptions(recordCount: number): Array<{ value: number; label: string }> {
   if (recordCount <= 10) {
-    // Very small dataset - show "All" option
     return [{ value: recordCount, label: "All" }];
   }
 
   if (recordCount <= 50) {
-    // Small dataset - show 10, 25, and All
     const options: Array<{ value: number; label: string }> = [];
     if (recordCount >= 10) options.push({ value: 10, label: "10" });
     if (recordCount >= 25) options.push({ value: 25, label: "25" });
@@ -38,7 +30,6 @@ function getSampleSizeOptions(recordCount: number): Array<{ value: number; label
   }
 
   if (recordCount <= 200) {
-    // Medium dataset - show 25, 50, 100, and All
     const options: Array<{ value: number; label: string }> = [];
     options.push({ value: 25, label: "25" });
     options.push({ value: 50, label: "50" });
@@ -47,7 +38,6 @@ function getSampleSizeOptions(recordCount: number): Array<{ value: number; label
     return options;
   }
 
-  // Large dataset - show fixed increments
   const options: Array<{ value: number; label: string }> = [];
   options.push({ value: 100, label: "100" });
   options.push({ value: 200, label: "200" });
@@ -87,108 +77,91 @@ export function ConfigView({
   onViewHistory,
   hasHistory,
 }: ConfigViewProps) {
-  return (
-    <div className="flex flex-col h-full">
-      {/* Content area */}
-      <div className="flex-1 overflow-y-auto space-y-4">
-        {/* Warnings */}
-        {!hasGraderConfig && (
-          <div className="rounded-md bg-amber-500/10 border border-amber-500/30 p-3">
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
-              <div className="text-sm">
-                <p className="font-medium text-amber-400">Grader not configured</p>
-                <p className="text-xs text-zinc-400 mt-1">
-                  Please configure a grader before running dry run validation.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
+  const sampleOptions = getSampleSizeOptions(recordCount);
 
-        {/* Sample size and model selection */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="text-sm text-zinc-400 mb-2 block">Sample Size</label>
-            <div className="flex gap-2">
-              {getSampleSizeOptions(recordCount).map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => onSampleSizeChange(option.value)}
-                  className={cn(
-                    "px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                    sampleSize === option.value
-                      ? "bg-zinc-700 text-white"
-                      : "bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300"
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            <p className="text-xs text-zinc-500 mt-2">
-              {recordCount.toLocaleString()} records available
-            </p>
-          </div>
-
-          <div>
-            <label className="text-sm text-zinc-400 mb-2 block">Rollout Model</label>
-            <Select value={rolloutModel} onValueChange={onRolloutModelChange}>
-              <SelectTrigger className="w-full bg-zinc-800/50 border-zinc-700 text-zinc-300 focus:ring-zinc-600 focus:ring-offset-0">
-                <SelectValue placeholder="Select model" />
-              </SelectTrigger>
-              <SelectContent>
-                {ROLLOUT_MODEL_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-zinc-500 mt-2">
-              Model for generating responses
-            </p>
-          </div>
-        </div>
-
-        {/* Simple description */}
-        <div className="text-sm text-zinc-500">
-          <p>
-            This will sample <span className="text-zinc-300">{sampleSize} prompts</span>,
-            generate responses using the base model, and score them with your configured grader.
-          </p>
-          <p className="mt-2 text-xs">
-            Runs in background — you can continue editing.
-          </p>
+  if (!hasGraderConfig) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="flex items-center gap-2 text-xs text-amber-400/80">
+          <AlertTriangle className="h-3.5 w-3.5" />
+          <span>Save your grader script to enable dry run</span>
         </div>
       </div>
+    );
+  }
 
-      {/* Footer */}
-      <div className="shrink-0 pt-4">
-        <Separator className="bg-zinc-800 mb-4" />
-        <div className="flex items-center justify-between">
-          {hasHistory ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onViewHistory}
-              className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
-            >
-              <History className="h-4 w-4 mr-1.5" />
-              History
-            </Button>
-          ) : (
-            <div />
-          )}
-          <Button
-            onClick={onRunDryRun}
-            disabled={!hasGraderConfig}
-            className="bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-500))] text-white"
-          >
-            <Play className="h-4 w-4 mr-1.5" />
-            Start Dry Run
-          </Button>
+  return (
+    <div className="flex flex-col justify-center h-full gap-2">
+      {/* Main config row */}
+      <div className="flex items-center gap-3 flex-wrap">
+        {/* Sample size */}
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-zinc-500">Sample</span>
+          <div className="flex gap-0.5">
+            {sampleOptions.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => onSampleSizeChange(option.value)}
+                className={cn(
+                  "px-2 py-0.5 rounded text-xs font-medium transition-colors",
+                  sampleSize === option.value
+                    ? "bg-zinc-700 text-zinc-100"
+                    : "bg-zinc-800/50 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <span className="text-[10px] text-zinc-600">
+            of {recordCount.toLocaleString()}
+          </span>
         </div>
+
+        <div className="w-px h-4 bg-zinc-800" />
+
+        {/* Rollout model */}
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-zinc-500">Model</span>
+          <Select value={rolloutModel} onValueChange={onRolloutModelChange}>
+            <SelectTrigger className="h-7 w-[140px] bg-zinc-800/50 border-zinc-700/50 text-xs text-zinc-300 focus:ring-zinc-600 focus:ring-offset-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ROLLOUT_MODEL_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="w-px h-4 bg-zinc-800" />
+
+        {/* Run button */}
+        <Button
+          size="sm"
+          onClick={onRunDryRun}
+          className="h-7 px-3 text-xs gap-1.5 bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-500))] text-white"
+        >
+          <Play className="h-3 w-3" />
+          Run
+        </Button>
+
+        {/* History link */}
+        {hasHistory && (
+          <>
+            <div className="w-px h-4 bg-zinc-800" />
+            <button
+              onClick={onViewHistory}
+              className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
+              <History className="h-3 w-3" />
+              <span>History</span>
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
