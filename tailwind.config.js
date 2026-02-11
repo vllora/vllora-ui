@@ -143,6 +143,11 @@ export default {
   				'50%': {
   					transform: 'scaleY(1)'
   				}
+  			},
+  			'loading-progress': {
+  				'0%': { width: '0%' },
+  				'50%': { width: '100%' },
+  				'100%': { width: '0%' }
   			}
   		},
   		animation: {
@@ -152,7 +157,8 @@ export default {
   			'glow-pulse': 'glow-pulse 2s ease-in-out infinite',
   			'progress-slide': 'progress-slide 1.5s ease-in-out infinite',
   			'highlight-flash': 'highlight-flash 1s ease-out',
-  			'audio-wave': 'audio-wave 0.6s ease-in-out infinite'
+  			'audio-wave': 'audio-wave 0.6s ease-in-out infinite',
+  			'loading-progress': 'loading-progress 2s ease-in-out infinite'
   		}
   	}
   },

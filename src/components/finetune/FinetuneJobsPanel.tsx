@@ -16,9 +16,12 @@ import {
   Loader2,
   AlertCircle,
   Sparkles,
+  Download,
 } from "lucide-react";
-import { useState } from "react";
-import { FinetuneJob } from "@/services/finetune-api";
+import { useState, useCallback } from "react";
+import { FinetuneJob, getWeightsDownloadUrl } from "@/services/finetune-api";
+import { triggerFileDownload } from "./content/utils";
+import { toast } from "sonner";
 
 interface FinetuneJobsPanelProps {
   className?: string;
@@ -26,6 +29,20 @@ interface FinetuneJobsPanelProps {
 
 function JobItem({ job }: { job: FinetuneJob }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownloadWeights = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsDownloading(true);
+    try {
+      const { download_url } = await getWeightsDownloadUrl(job.provider_job_id);
+      triggerFileDownload(download_url, `weights-${job.provider_job_id}.tar.gz`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to get download URL');
+    } finally {
+      setIsDownloading(false);
+    }
+  }, [job.provider_job_id]);
 
   return (
     <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
@@ -68,7 +85,7 @@ function JobItem({ job }: { job: FinetuneJob }) {
                 {job.fine_tuned_model && (
                   <>
                     <span className="text-muted-foreground">Output Model:</span>
-                    <span className="font-mono truncate text-green-600" title={job.fine_tuned_model}>
+                    <span className="font-mono truncate text-green-500" title={job.fine_tuned_model}>
                       {job.fine_tuned_model}
                     </span>
                   </>
@@ -97,10 +114,27 @@ function JobItem({ job }: { job: FinetuneJob }) {
             </div>
 
             {job.error_message && (
-              <div className="flex items-start gap-2 p-2 bg-red-50 text-red-800 rounded text-xs">
+              <div className="flex items-start gap-2 p-2 bg-red-500/15 text-red-500 rounded text-xs">
                 <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
                 <span>{job.error_message}</span>
               </div>
+            )}
+
+            {job.status === 'succeeded' && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full gap-2 text-xs"
+                onClick={handleDownloadWeights}
+                disabled={isDownloading}
+              >
+                {isDownloading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                Download Weights
+              </Button>
             )}
           </div>
         </CollapsibleContent>
@@ -172,7 +206,7 @@ export function FinetuneJobsPanel({ className }: FinetuneJobsPanelProps) {
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : error ? (
-            <div className="flex items-center gap-2 p-3 text-sm text-red-600 bg-red-50 rounded">
+            <div className="flex items-center gap-2 p-3 text-sm text-red-500 bg-red-500/15 rounded">
               <AlertCircle className="h-4 w-4" />
               <span>{error}</span>
             </div>

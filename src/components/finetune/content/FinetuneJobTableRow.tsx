@@ -14,16 +14,18 @@ import {
   StopCircle,
   Play,
   Clock,
+  Download,
 } from "lucide-react";
 import {
   FinetuneJob,
   cancelReinforcementJob,
   resumeReinforcementJob,
+  getWeightsDownloadUrl,
 } from "@/services/finetune-api";
 import { toast } from "sonner";
 import { FinetuneJobStatusBadge } from "../FinetuneJobStatusBadge";
 import { JobExpandedContent } from "./JobExpandedContent";
-import { formatFinetuneJobDate, formatDuration, getModelDisplayName } from "./utils";
+import { formatFinetuneJobDate, formatDuration, getModelDisplayName, triggerFileDownload } from "./utils";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 
 interface FinetuneJobTableRowProps {
@@ -38,6 +40,7 @@ export function FinetuneJobTableRow({ job, onJobAction }: FinetuneJobTableRowPro
 
   const canCancel = job.status === 'pending' || job.status === 'running';
   const canResume = job.status === 'cancelled';
+  const canDownloadWeights = job.status === 'succeeded';
   const isActive = job.status === 'pending' || job.status === 'running';
 
   // Get evaluations from context (single polling instance)
@@ -102,6 +105,21 @@ export function FinetuneJobTableRow({ job, onJobAction }: FinetuneJobTableRowPro
     }
   }, [job.provider_job_id, isActionLoading, onJobAction]);
 
+  const handleDownloadWeights = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isActionLoading) return;
+
+    setIsActionLoading(true);
+    try {
+      const { download_url } = await getWeightsDownloadUrl(job.provider_job_id);
+      triggerFileDownload(download_url, `weights-${job.provider_job_id}.tar.gz`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to get download URL');
+    } finally {
+      setIsActionLoading(false);
+    }
+  }, [job.provider_job_id, isActionLoading]);
+
   const toggleExpand = useCallback(() => {
     setIsExpanded(prev => !prev);
   }, []);
@@ -154,13 +172,29 @@ export function FinetuneJobTableRow({ job, onJobAction }: FinetuneJobTableRowPro
         </TableCell>
 
         {/* Actions */}
-        <TableCell className="w-[100px]">
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <TableCell className="w-[140px]">
+          <div className="flex items-center gap-1">
+            {canDownloadWeights && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs gap-1.5"
+                onClick={handleDownloadWeights}
+                disabled={isActionLoading}
+              >
+                {isActionLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                Download Weights
+              </Button>
+            )}
             {canCancel && (
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 px-2 text-xs gap-1 text-red-600 hover:text-red-700 hover:bg-red-100"
+                className="h-7 px-2 text-xs gap-1 text-red-500 hover:text-red-600 hover:bg-red-500/10"
                 onClick={handleCancel}
                 disabled={isActionLoading}
               >

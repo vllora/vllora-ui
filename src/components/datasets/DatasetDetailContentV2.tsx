@@ -11,7 +11,7 @@
 
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Loader2 } from "lucide-react";
+import { LoadingIndicator } from "@/components/ui/LoadingIndicator";
 import { toast } from "sonner";
 import { DatasetUtilityBar } from "./dataset-detail-header/DatasetUtilityBar";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
@@ -359,12 +359,7 @@ export function DatasetDetailContentV2() {
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="flex items-center space-x-2">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          <span className="text-muted-foreground">Loading dataset...</span>
-        </div>
-      </div>
+      <LoadingIndicator variant="section" message="Loading dataset..." />
     );
   }
 
@@ -418,6 +413,7 @@ export function DatasetDetailContentV2() {
               leafTopicCount={availableTopics.length}
               onOverviewClick={() => setAnalyticsDialogOpen(true)}
               onImportClick={() => setImportDialog(true)}
+              onDocsClick={() => setActiveSection("docs")}
               selectedTopic={selectedTopic}
               onSelectTopic={setSelectedTopic}
               selectedRecord={selectedRecord}
@@ -489,14 +485,6 @@ export function DatasetDetailContentV2() {
                 onRegenerate={regenerateReadme}
                 className="h-full"
               />
-            </div>
-          )}
-          {activeSection === "deploy" && (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center space-y-2">
-                <p className="text-muted-foreground text-sm">Deploy is coming soon.</p>
-                <p className="text-muted-foreground text-xs">You will be able to deploy your fine-tuned models here.</p>
-              </div>
             </div>
           )}
           {activeSection === "docs" && (

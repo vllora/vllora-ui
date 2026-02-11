@@ -2,12 +2,12 @@
  * EmptyRecordsState
  *
  * Empty state component shown when a dataset has no records.
- * Shows loading state when data is being generated.
- * Minimal design - Lucy handles guidance via context injection.
+ * Shows workflow overview with getting-started guidance.
+ * Also handles data generation progress display.
  */
 
 import { useEffect, useState } from "react";
-import { Sparkles, Loader2 } from "lucide-react";
+import { Database, FlaskConical, Sparkles, Loader2, Upload, FileUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { emitter } from "@/utils/eventEmitter";
 
@@ -24,9 +24,16 @@ interface EmptyRecordsStateProps {
   datasetId: string;
   datasetObjective?: string;
   hasTopicHierarchy?: boolean;
+  onImportClick?: () => void;
+  onDocsClick?: () => void;
 }
 
-export function EmptyRecordsState({ datasetId, datasetObjective }: EmptyRecordsStateProps) {
+export function EmptyRecordsState({
+  datasetId,
+  datasetObjective,
+  onImportClick,
+  onDocsClick,
+}: EmptyRecordsStateProps) {
   const [generationProgress, setGenerationProgress] = useState<GenerationProgress | null>(null);
 
   // Listen for generation progress events
@@ -65,8 +72,7 @@ export function EmptyRecordsState({ datasetId, datasetObjective }: EmptyRecordsS
     };
   }, [datasetId]);
 
-  const handleGetStarted = () => {
-    // Simple prompt - Lucy already has full context via workflowToContext
+  const handleAskLucy = () => {
     const prompt = datasetObjective
       ? "Help me generate training data for this dataset."
       : "Help me get started with this dataset.";
@@ -82,12 +88,9 @@ export function EmptyRecordsState({ datasetId, datasetObjective }: EmptyRecordsS
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8">
         <div className="flex flex-col items-center gap-6 max-w-sm text-center">
-          {/* Loading spinner */}
           <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[rgba(var(--theme-500),0.2)] to-[rgba(var(--theme-500),0.1)] flex items-center justify-center">
             <Loader2 className="w-5 h-5 text-[rgb(var(--theme-500))] animate-spin" />
           </div>
-
-          {/* Progress info */}
           <div className="space-y-2">
             <h3 className="text-base font-medium text-foreground">
               Generating training data...
@@ -103,8 +106,6 @@ export function EmptyRecordsState({ datasetId, datasetObjective }: EmptyRecordsS
               </p>
             )}
           </div>
-
-          {/* Progress bar */}
           <div className="w-48 h-1.5 bg-muted rounded-full overflow-hidden">
             <div
               className="h-full bg-[rgb(var(--theme-500))] rounded-full transition-all duration-500 ease-out"
@@ -118,33 +119,76 @@ export function EmptyRecordsState({ datasetId, datasetObjective }: EmptyRecordsS
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-8">
-      <div className="flex flex-col items-center gap-6 max-w-sm text-center">
-        {/* Subtle decorative element */}
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[rgba(var(--theme-500),0.1)] to-[rgba(var(--theme-500),0.05)] flex items-center justify-center">
-          <Sparkles className="w-5 h-5 text-[rgb(var(--theme-500))]" />
-        </div>
-
-        {/* Copy */}
+      <div className="flex flex-col items-center gap-6 max-w-md text-center">
+        {/* Title */}
         <div className="space-y-2">
-          <h3 className="text-base font-medium text-foreground">
-            {datasetObjective ? "Ready to generate data" : "Get started"}
+          <h3 className="text-lg font-semibold text-foreground">
+            Get started with your dataset
           </h3>
           <p className="text-sm text-muted-foreground leading-relaxed">
             {datasetObjective
-              ? "Chat with Lucy to create training examples, upload reference docs, or import existing data."
-              : "Define your training objective and Lucy will help you build your dataset."}
+              ? "Your dataset is ready. Follow these three stages to fine-tune your model."
+              : "Define your training goal and follow three stages to fine-tune your model."}
           </p>
         </div>
 
-        {/* CTA */}
-        <Button
-          onClick={handleGetStarted}
-          size="sm"
-          className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
-        >
-          <Sparkles className="w-3.5 h-3.5" />
-          {datasetObjective ? "Generate with Lucy" : "Get Started"}
-        </Button>
+        {/* 3-stage pipeline overview */}
+        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <div className="flex flex-col items-center gap-1.5">
+            <div className="w-10 h-10 rounded-full bg-[rgba(var(--theme-500),0.12)] flex items-center justify-center">
+              <Database className="w-4.5 h-4.5 text-[rgb(var(--theme-500))]" />
+            </div>
+            <span className="text-xs font-medium">Data</span>
+          </div>
+          <span className="text-border mt-[-16px]">→</span>
+          <div className="flex flex-col items-center gap-1.5">
+            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+              <FlaskConical className="w-4.5 h-4.5 text-muted-foreground" />
+            </div>
+            <span className="text-xs font-medium">Evaluation</span>
+          </div>
+          <span className="text-border mt-[-16px]">→</span>
+          <div className="flex flex-col items-center gap-1.5">
+            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+              <Sparkles className="w-4.5 h-4.5 text-muted-foreground" />
+            </div>
+            <span className="text-xs font-medium">Fine-tune</span>
+          </div>
+        </div>
+
+        {/* Primary CTAs */}
+        <div className="flex items-center gap-2">
+          {onDocsClick && (
+            <Button
+              onClick={onDocsClick}
+              size="sm"
+              variant="outline"
+              className="gap-2"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              Upload Documents
+            </Button>
+          )}
+          <Button
+            onClick={handleAskLucy}
+            size="sm"
+            className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            Ask Lucy to Get Started
+          </Button>
+        </div>
+
+        {/* Secondary link */}
+        {onImportClick && (
+          <button
+            onClick={onImportClick}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <FileUp className="w-3 h-3" />
+            Or import existing data
+          </button>
+        )}
       </div>
     </div>
   );

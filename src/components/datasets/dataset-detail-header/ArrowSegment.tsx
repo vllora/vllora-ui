@@ -8,7 +8,7 @@
 
 import { cn } from "@/lib/utils";
 
-export type ArrowSegmentStatus = "completed" | "active" | "pending" | "locked";
+export type ArrowSegmentStatus = "completed" | "active" | "pending" | "locked" | "comingSoon";
 
 interface ArrowSegmentProps {
   children: React.ReactNode;
@@ -17,6 +17,8 @@ interface ArrowSegmentProps {
   status: ArrowSegmentStatus;
   isActive: boolean;
   isProcessing?: boolean;
+  /** Whether this step is optional (shows dashed border) */
+  isOptional?: boolean;
   onClick: () => void;
 }
 
@@ -27,6 +29,7 @@ export function ArrowSegment({
   status,
   isActive,
   isProcessing = false,
+  isOptional = false,
   onClick,
 }: ArrowSegmentProps) {
   const height = 36;
@@ -34,6 +37,7 @@ export function ArrowSegment({
   const getBgColor = () => {
     if (isActive) return "rgb(var(--theme-500))";
     if (status === "completed") return "rgba(var(--theme-500), 0.12)";
+    if (status === "comingSoon") return "hsl(var(--muted) / 0.3)";
     if (status === "locked") return "hsl(var(--muted) / 0.5)";
     return "hsl(var(--muted))";
   };
@@ -41,6 +45,7 @@ export function ArrowSegment({
   const getTextColor = () => {
     if (isActive) return "white";
     if (status === "completed") return "rgb(var(--theme-600))";
+    if (status === "comingSoon") return "hsl(var(--muted-foreground) / 0.35)";
     if (status === "locked") return "hsl(var(--muted-foreground) / 0.4)";
     return "hsl(var(--muted-foreground))";
   };
@@ -62,8 +67,11 @@ export function ArrowSegment({
 
   return (
     <button
-      onClick={onClick}
-      className="relative w-full flex items-center justify-center group focus:outline-none px-2"
+      onClick={status === "comingSoon" ? undefined : onClick}
+      className={cn(
+        "relative w-full flex items-center justify-center group focus:outline-none px-2",
+        status === "comingSoon" && "cursor-default"
+      )}
       style={{ height }}
     >
       <svg
@@ -77,12 +85,13 @@ export function ArrowSegment({
           fill={getBgColor()}
           className="transition-all duration-200"
         />
-        {/* Subtle border */}
+        {/* Subtle border — dashed for optional steps */}
         <path
           d={path}
           fill="none"
-          stroke={isActive ? "rgb(var(--theme-600))" : status === "locked" ? "hsl(var(--border) / 0.5)" : "hsl(var(--border))"}
+          stroke={isActive ? "rgb(var(--theme-600))" : (status === "locked" || status === "comingSoon") ? "hsl(var(--border) / 0.5)" : "hsl(var(--border))"}
           strokeWidth="0.5"
+          strokeDasharray={(isOptional && !isActive && status !== "completed") || status === "comingSoon" ? "3 2" : undefined}
           className="transition-all duration-200"
         />
       </svg>

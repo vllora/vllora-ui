@@ -398,6 +398,22 @@ export async function resumeReinforcementJob(jobId: string): Promise<void> {
   }
 }
 
+export interface WeightsDownloadUrlResponse {
+  download_url: string;
+  expires_at?: string;
+}
+
+/**
+ * Get a signed URL to download trained weights for a completed reinforcement fine-tuning job
+ * @param jobId - The provider job ID
+ */
+export async function getWeightsDownloadUrl(jobId: string): Promise<WeightsDownloadUrlResponse> {
+  const response = await apiClient(`/finetune/reinforcement-jobs/${jobId}/weights/url`, {
+    method: 'GET',
+  });
+  return handleApiResponse<WeightsDownloadUrlResponse>(response);
+}
+
 /**
  * Upload a dataset to the backend for finetuning
  * This is step 1 of the finetune process - should be called first so the

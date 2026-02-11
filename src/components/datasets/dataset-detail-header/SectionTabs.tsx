@@ -6,7 +6,7 @@
  * Documentation tabs (Docs, Plan, README) on the right.
  */
 
-import { Database, FlaskConical, Sparkles, FileText, FolderOpen, Check, Wand2, Lock, Loader2, type LucideIcon, RocketIcon } from "lucide-react";
+import { Database, FlaskConical, Sparkles, FileText, FolderOpen, Check, Wand2, Lock, Loader2, Circle, ChevronRight, Clock, type LucideIcon, RocketIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -14,6 +14,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
 import type { DatasetSection } from "./DatasetUtilityBar";
 import { ArrowSegment } from "./ArrowSegment";
 
@@ -21,14 +26,17 @@ interface TabConfig {
   id: DatasetSection;
   label: string;
   icon: LucideIcon;
+  comingSoon?: boolean;
+  /** Whether this step is required (true) or can be configured later (false) */
+  required?: boolean;
 }
 
 // Workflow-related tabs (plain language for non-technical users)
 const WORKFLOW_TABS: TabConfig[] = [
-  { id: "records", label: "Data", icon: Database },
-  { id: "evaluator", label: "Evaluation", icon: FlaskConical },
-  { id: "jobs", label: "Finetune", icon: Sparkles },
-  { id: "deploy", label: "Deploy", icon: RocketIcon },
+  { id: "records", label: "Data", icon: Database, required: true },
+  { id: "evaluator", label: "Evaluation", icon: FlaskConical, required: false },
+  { id: "jobs", label: "Finetune", icon: Sparkles, required: true },
+  { id: "deploy", label: "Deploy", icon: RocketIcon, comingSoon: true },
 ];
 
 // Documentation & setup tabs
@@ -90,7 +98,7 @@ export function SectionTabs({
   };
 
   // Tooltip text — shows completion info or what's blocking
-  const getTooltipText = (tabId: DatasetSection, status: "completed" | "active" | "pending" | "locked"): string => {
+  const getTooltipText = (tabId: DatasetSection, status: "completed" | "active" | "pending" | "locked" | "comingSoon"): string => {
     const complete = isStepComplete(tabId);
 
     if (complete || (status === "active" && isStepComplete(tabId))) {
@@ -109,11 +117,27 @@ export function SectionTabs({
       if (tabId === "deploy") return "Complete a fine-tuning job first to unlock deploy";
     }
 
-    if (tabId === "records") return "Add training data for your model";
-    if (tabId === "evaluator") return "Set up a quality grader to score outputs";
-    if (tabId === "jobs") return "Start a fine-tuning job";
+    if (tabId === "records") return "Required · Add training data for your model";
+    if (tabId === "evaluator") return "Optional · Set up a quality grader to score outputs";
+    if (tabId === "jobs") return "Required · Start a fine-tuning job";
     if (tabId === "deploy") return "Deploy your fine-tuned model";
     return "";
+  };
+
+  // Prerequisites for locked tabs — shown in an actionable popover
+  const getPrerequisites = (tabId: DatasetSection): { label: string; completed: boolean; targetTab: DatasetSection }[] => {
+    if (tabId === "jobs") {
+      return [
+        { label: "Add training data", completed: hasData, targetTab: "records" },
+        { label: "Set up evaluation", completed: hasEvaluator, targetTab: "evaluator" },
+      ];
+    }
+    if (tabId === "deploy") {
+      return [
+        { label: "Complete a finetune job", completed: jobsCount > 0, targetTab: "jobs" },
+      ];
+    }
+    return [];
   };
 
   return (
@@ -122,63 +146,114 @@ export function SectionTabs({
       <TooltipProvider delayDuration={300}>
         <div className="grid items-center" style={{ gridTemplateColumns: `repeat(${WORKFLOW_TABS.length}, 1fr)` }}>
           {WORKFLOW_TABS.map((tab, index) => {
-            const status = getWorkflowStatus(tab.id);
-            const isActive = activeSection === tab.id;
+            const status = tab.comingSoon ? "comingSoon" as const : getWorkflowStatus(tab.id);
+            const isActive = tab.comingSoon ? false : activeSection === tab.id;
             const isFirst = index === 0;
             const isLast = index === WORKFLOW_TABS.length - 1;
             const Icon = tab.icon;
+            const isLockedWithPrereqs = status === "locked" && !tab.comingSoon;
 
+            const segmentContent = (
+              <ArrowSegment
+                isFirst={isFirst}
+                isLast={isLast}
+                status={status}
+                isActive={isActive}
+                isProcessing={!tab.comingSoon && processingTabs.has(tab.id)}
+                isOptional={tab.required === false}
+                onClick={tab.comingSoon ? () => {} : isLockedWithPrereqs ? () => {} : () => onSectionChange(tab.id)}
+              >
+                {processingTabs.has(tab.id) ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : status === "completed" && !isActive ? (
+                  <Check className="w-3.5 h-3.5" />
+                ) : status === "comingSoon" ? (
+                  <Clock className="w-3 h-3" />
+                ) : status === "locked" ? (
+                  <Lock className="w-3 h-3" />
+                ) : (
+                  <Icon className="w-3.5 h-3.5" />
+                )}
+                <span>{tab.label}</span>
+
+                {/* Records count */}
+                {tab.id === "records" && recordsCount > 0 && (
+                  <span
+                    className={cn(
+                      "ml-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium tabular-nums",
+                      isActive ? "bg-white/20" : "bg-background/50"
+                    )}
+                  >
+                    {recordsCount > 999 ? `${(recordsCount / 1000).toFixed(1)}k` : recordsCount}
+                  </span>
+                )}
+
+                {/* Jobs count */}
+                {tab.id === "jobs" && jobsCount > 0 && (
+                  <span
+                    className={cn(
+                      "ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold tabular-nums",
+                      isActive ? "bg-white/20" : "bg-background/50"
+                    )}
+                  >
+                    {jobsCount}
+                  </span>
+                )}
+              </ArrowSegment>
+            );
+
+            // Locked tabs with prerequisites → actionable popover
+            if (isLockedWithPrereqs) {
+              const prereqs = getPrerequisites(tab.id);
+              return (
+                <Popover key={tab.id}>
+                  <PopoverTrigger asChild>
+                    <div>{segmentContent}</div>
+                  </PopoverTrigger>
+                  <PopoverContent side="bottom" align="center" className="w-56 p-3">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">
+                      Complete to unlock {tab.label}:
+                    </p>
+                    <div className="space-y-1">
+                      {prereqs.map((prereq) => (
+                        <button
+                          key={prereq.targetTab}
+                          onClick={() => onSectionChange(prereq.targetTab)}
+                          className={cn(
+                            "w-full flex items-center gap-2 text-xs px-2 py-1.5 rounded-md transition-colors text-left",
+                            prereq.completed
+                              ? "text-muted-foreground"
+                              : "text-foreground hover:bg-accent"
+                          )}
+                          disabled={prereq.completed}
+                        >
+                          {prereq.completed ? (
+                            <Check className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+                          ) : (
+                            <Circle className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                          )}
+                          <span className={prereq.completed ? "line-through" : ""}>
+                            {prereq.label}
+                          </span>
+                          {!prereq.completed && (
+                            <ChevronRight className="w-3 h-3 ml-auto text-muted-foreground" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              );
+            }
+
+            // All other tabs → simple tooltip
             return (
               <Tooltip key={tab.id}>
                 <TooltipTrigger asChild>
-                  <div>
-                    <ArrowSegment
-                      isFirst={isFirst}
-                      isLast={isLast}
-                      status={status}
-                      isActive={isActive}
-                      isProcessing={processingTabs.has(tab.id)}
-                      onClick={() => onSectionChange(tab.id)}
-                    >
-                      {processingTabs.has(tab.id) ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : status === "completed" && !isActive ? (
-                        <Check className="w-3.5 h-3.5" />
-                      ) : status === "locked" ? (
-                        <Lock className="w-3 h-3" />
-                      ) : (
-                        <Icon className="w-3.5 h-3.5" />
-                      )}
-                      <span>{tab.label}</span>
-
-                      {/* Records count */}
-                      {tab.id === "records" && recordsCount > 0 && (
-                        <span
-                          className={cn(
-                            "ml-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium tabular-nums",
-                            isActive ? "bg-white/20" : "bg-background/50"
-                          )}
-                        >
-                          {recordsCount > 999 ? `${(recordsCount / 1000).toFixed(1)}k` : recordsCount}
-                        </span>
-                      )}
-
-                      {/* Jobs count */}
-                      {tab.id === "jobs" && jobsCount > 0 && (
-                        <span
-                          className={cn(
-                            "ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold tabular-nums",
-                            isActive ? "bg-white/20" : "bg-background/50"
-                          )}
-                        >
-                          {jobsCount}
-                        </span>
-                      )}
-                    </ArrowSegment>
-                  </div>
+                  <div>{segmentContent}</div>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="text-xs max-w-[240px]">
-                  {getTooltipText(tab.id, status)}
+                  {tab.comingSoon ? "Deploy is coming soon. Download trained weights from the Finetune tab." : getTooltipText(tab.id, status)}
                 </TooltipContent>
               </Tooltip>
             );

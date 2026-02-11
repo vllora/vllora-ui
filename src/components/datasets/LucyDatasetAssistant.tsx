@@ -12,8 +12,9 @@
  */
 
 import { useMemo, useCallback, useState, useEffect, useRef } from "react";
-import { Plus, Loader2, PanelLeftClose, PanelLeft } from "lucide-react";
+import { Plus, PanelLeftClose, PanelLeft, Settings2, Plug } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { LoadingIndicator } from "@/components/ui/LoadingIndicator";
 import { emitter } from "@/utils/eventEmitter";
 import {
   Tooltip,
@@ -41,39 +42,52 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { buildDatasetAnalysisPrompt } from "./lucy-prompt-utils";
 
-// Finetune-focused quick actions for Lucy (plain language for non-technical users)
-const FINETUNE_QUICK_ACTIONS: QuickAction[] = [
-  {
-    id: "start-finetune",
-    icon: "🚀",
-    label: "Start training setup",
-  },
-  {
-    id: "check-status",
-    icon: "📊",
-    label: "Check progress",
-  },
-  {
-    id: "analyze-coverage",
-    icon: "📈",
-    label: "Check data variety",
-  },
-  {
-    id: "generate-data",
-    icon: "✨",
-    label: "Create more training examples",
-  },
-  {
-    id: "configure-grader",
-    icon: "⚖️",
-    label: "Set up quality scoring",
-  },
-  {
-    id: "run-dry-run",
-    icon: "🧪",
-    label: "Test before training",
-  },
-];
+// All available quick actions (plain language for non-technical users)
+const ALL_QUICK_ACTIONS: Record<string, QuickAction> = {
+  "start-finetune": { id: "start-finetune", icon: "🚀", label: "Start training setup" },
+  "check-status": { id: "check-status", icon: "📊", label: "Check progress" },
+  "analyze-coverage": { id: "analyze-coverage", icon: "📈", label: "Check data variety" },
+  "generate-data": { id: "generate-data", icon: "✨", label: "Create more training examples" },
+  "configure-grader": { id: "configure-grader", icon: "⚖️", label: "Set up quality scoring" },
+  "run-dry-run": { id: "run-dry-run", icon: "🧪", label: "Test before training" },
+  "start-training": { id: "start-training", icon: "🚀", label: "Start training" },
+};
+
+/** Return context-appropriate quick actions based on workflow state */
+function getContextualQuickActions(recordCount: number, hasEvaluator: boolean, jobsCount: number): QuickAction[] {
+  // No records yet: suggest setup and data creation
+  if (recordCount === 0) {
+    return [
+      ALL_QUICK_ACTIONS["start-finetune"],
+      ALL_QUICK_ACTIONS["generate-data"],
+    ];
+  }
+
+  // Has records but no evaluator: suggest data analysis and evaluation setup
+  if (!hasEvaluator) {
+    return [
+      ALL_QUICK_ACTIONS["analyze-coverage"],
+      ALL_QUICK_ACTIONS["configure-grader"],
+      ALL_QUICK_ACTIONS["generate-data"],
+    ];
+  }
+
+  // Has records + evaluator but no jobs: ready to test and train
+  if (jobsCount === 0) {
+    return [
+      ALL_QUICK_ACTIONS["run-dry-run"],
+      ALL_QUICK_ACTIONS["start-training"],
+      ALL_QUICK_ACTIONS["analyze-coverage"],
+    ];
+  }
+
+  // Has jobs: check progress, generate more data
+  return [
+    ALL_QUICK_ACTIONS["check-status"],
+    ALL_QUICK_ACTIONS["generate-data"],
+    ALL_QUICK_ACTIONS["analyze-coverage"],
+  ];
+}
 
 // Responsive sidebar width: 384px on wide screens, 340px on standard, auto-collapse on narrow
 const SIDEBAR_WIDTH_WIDE = 'w-[384px]';
@@ -264,6 +278,16 @@ export function LucyDatasetAssistant() {
     []
   );
 
+  // Context-aware quick actions based on current workflow state
+  const contextualQuickActions = useMemo(
+    () => getContextualQuickActions(
+      records.length,
+      !!currentDataset?.evalScript,
+      0, // Jobs count not directly available here; defaults to "no jobs" view
+    ),
+    [records.length, currentDataset?.evalScript]
+  );
+
   // Helper to determine knowledge source type from mime type
   const getKnowledgeSourceType = useCallback((mimeType: string, fileName: string): KnowledgeSourceType => {
     if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) return 'pdf';
@@ -372,25 +396,23 @@ export function LucyDatasetAssistant() {
   const chatContent = (
     <>
       {providersLoading ? (
-        <div className="flex items-center justify-center h-full">
-          <div className="flex items-center space-x-2">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span className="text-sm text-muted-foreground">
-              Checking configuration...
-            </span>
-          </div>
-        </div>
+        <LoadingIndicator
+          variant="section"
+          icon={<Settings2 className="h-6 w-6 text-muted-foreground animate-spin" style={{ animationDuration: '2s' }} />}
+          message="Checking configuration..."
+          submessage="Verifying API keys and providers"
+          className="h-full"
+        />
       ) : !isOpenAIConfigured ? (
         <LucyProviderCheck onReady={reconnect} />
       ) : agentLoading ? (
-        <div className="flex items-center justify-center h-full">
-          <div className="flex items-center space-x-2">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span className="text-sm text-muted-foreground">
-              Loading assistant...
-            </span>
-          </div>
-        </div>
+        <LoadingIndicator
+          variant="section"
+          icon={<div className="opacity-50"><LucyAvatar size="md" /></div>}
+          message="Loading Lucy..."
+          submessage="Preparing the assistant agent"
+          className="h-full"
+        />
       ) : isConnected && agent ? (
         <LucyChat
           threadId={threadId}
@@ -399,19 +421,19 @@ export function LucyDatasetAssistant() {
           initialMessages={messages}
           beforeSendMessage={handleBeforeSendMessage}
           toolRenderers={toolRenderers}
-          quickActions={FINETUNE_QUICK_ACTIONS}
+          quickActions={contextualQuickActions}
           proactivePrompt="Hi! I'm Lucy, your fine-tuning assistant. I'll help you prepare training data, configure evaluation, and train your model. Let me take a look at your dataset..."
           autoTriggerPrompt={autoTriggerPrompt}
           activeSection={activeSection}
         />
       ) : (
-        <div className="flex items-center justify-center h-full">
-          <div className="flex items-center space-x-2">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span className="text-sm text-muted-foreground">
-              Connecting to assistant...
-            </span>
-          </div>
+        <div className="flex flex-col items-center justify-center h-full gap-3">
+          <Plug className="h-6 w-6 text-muted-foreground animate-pulse" />
+          <LoadingIndicator
+            variant="progress"
+            message="Connecting..."
+            submessage="Establishing connection to the assistant"
+          />
         </div>
       )}
     </>
@@ -437,9 +459,12 @@ export function LucyDatasetAssistant() {
                 <TooltipTrigger asChild>
                   <button
                     onClick={() => setIsCollapsed(false)}
-                    className="flex items-center justify-center hover:bg-muted/50 rounded-lg p-1.5 transition-colors"
+                    className="relative flex items-center justify-center hover:bg-muted/50 rounded-lg p-1.5 transition-colors"
                   >
                     <LucyAvatar size="sm" />
+                    {!providersLoading && !isOpenAIConfigured && (
+                      <span className="absolute top-0.5 right-0.5 w-2.5 h-2.5 bg-destructive rounded-full border-2 border-background" />
+                    )}
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="right">Expand Lucy Assistant</TooltipContent>
@@ -467,9 +492,18 @@ export function LucyDatasetAssistant() {
             <div className="flex items-center gap-2.5">
               <LucyAvatar size="sm" />
               <span className="font-semibold text-sm">Lucy Assistant</span>
-              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[rgba(var(--theme-500),0.2)] text-[rgb(var(--theme-400))] border border-[rgba(var(--theme-500),0.3)] uppercase tracking-wide">
-                Beta
-              </span>
+              <TooltipProvider delayDuration={300}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[rgba(var(--theme-500),0.2)] text-[rgb(var(--theme-400))] border border-[rgba(var(--theme-500),0.3)] uppercase tracking-wide cursor-help">
+                      Beta
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs max-w-[220px]">
+                    Lucy is in beta. AI-generated content should be reviewed for accuracy.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
             <div className="flex items-center gap-1">
               <TooltipProvider delayDuration={300}>
