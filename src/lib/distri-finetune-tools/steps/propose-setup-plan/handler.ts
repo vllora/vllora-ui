@@ -56,6 +56,8 @@ export const proposeSetupPlanHandler: ToolHandler = async (
     // This ensures the plan is generated with full knowledge context
     if (processingCount > 0) {
       const totalSources = readyCount + processingCount;
+      // Clear the "generating plan" loading state since we're not actually generating
+      emitter.emit('vllora_setup_plan_dismissed', { datasetId: dataset_id });
       // Build a clearer message based on how many are ready vs processing
       let statusMessage: string;
       if (readyCount === 0) {

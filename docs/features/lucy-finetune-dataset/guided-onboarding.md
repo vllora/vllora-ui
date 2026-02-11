@@ -427,13 +427,14 @@ The component subscribes to `vllora_setup_plan_progress` events to receive real-
 
 Located at: `/ui/src/components/datasets/plan-section/PlanSection.tsx`
 
-Dedicated section for setup plan management in the Plan tab. It:
-- Shows loading state while Lucy is generating a plan
-- Listens for `vllora_setup_plan_proposed` events
-- Displays SetupPlanEditor when a plan is proposed
-- Shows ExecutionProgressCard during plan execution
-- Shows empty state with "Generate Setup Plan" button when no plan is active
-- Handles plan approval and dismissal
+Dedicated section for setup plan management in the Plan tab. Render priority (highest first):
+1. **Docs processing** — Shows `DocsProcessingState` with "Processing documents — X of Y remaining" when knowledge sources are still being processed
+2. **Generating plan** — Shows loading state while Lucy is generating a plan
+3. **Plan proposed** — Displays `SetupPlanEditor` when a plan is proposed (listens for `vllora_setup_plan_proposed` events)
+4. **Execution in progress** — Shows `ExecutionProgressCard` during plan execution
+5. **Empty state** — Shows "Generate Setup Plan" button when no plan is active
+
+Also handles plan approval and dismissal.
 
 **Props:**
 ```typescript
@@ -505,7 +506,9 @@ The `PlanSection` component listens for this event and displays the `SetupPlanEd
 
 ### Plan Dismissed Event
 
-When the user dismisses the plan without approving:
+Emitted in two scenarios:
+1. When the user dismisses the plan without approving
+2. When `propose_setup_plan` returns early because documents are still processing (clears the "generating plan" loading state)
 
 ```typescript
 emitter.emit('vllora_setup_plan_dismissed', { datasetId: string });
@@ -695,6 +698,8 @@ const result = resultData ? resultData.result : state.result;
 - If no sources at all: Shows prompt to upload documents
 
 The `sources_processing` flag in the result indicates this state, and the UI shows a distinct amber card with a loading indicator.
+
+Before returning early, the handler emits `vllora_setup_plan_dismissed` to clear the "generating plan" loading state in `PlanSection`, preventing a misleading spinner.
 
 ### PDF Extraction Quality
 

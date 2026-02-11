@@ -65,6 +65,11 @@ export interface DatasetMainContentProps {
 
   // Empty state
   datasetObjective?: string;
+
+  // Docs processing state
+  docsProcessing?: boolean;
+  docsProcessingCount?: number;
+  docsTotal?: number;
 }
 
 export function DatasetMainContent({
@@ -96,6 +101,9 @@ export function DatasetMainContent({
   onGenerateForTopic,
   onGenerateSubtopics,
   datasetObjective,
+  docsProcessing,
+  docsProcessingCount,
+  docsTotal,
 }: DatasetMainContentProps) {
   const hasTopics = topicHierarchy && topicHierarchy.length > 0;
 
@@ -110,6 +118,9 @@ export function DatasetMainContent({
           hasTopicHierarchy={false}
           onImportClick={onImportClick}
           onDocsClick={onDocsClick}
+          docsProcessing={docsProcessing}
+          docsProcessingCount={docsProcessingCount}
+          docsTotal={docsTotal}
         />
       </div>
     );

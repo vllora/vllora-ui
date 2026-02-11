@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { Database, FlaskConical, Sparkles, Loader2, Upload, FileUp } from "lucide-react";
+import { Database, FlaskConical, Sparkles, Loader2, Upload, FileUp, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { emitter } from "@/utils/eventEmitter";
 
@@ -26,6 +26,9 @@ interface EmptyRecordsStateProps {
   hasTopicHierarchy?: boolean;
   onImportClick?: () => void;
   onDocsClick?: () => void;
+  docsProcessing?: boolean;
+  docsProcessingCount?: number;
+  docsTotal?: number;
 }
 
 export function EmptyRecordsState({
@@ -33,6 +36,9 @@ export function EmptyRecordsState({
   datasetObjective,
   onImportClick,
   onDocsClick,
+  docsProcessing,
+  docsProcessingCount = 0,
+  docsTotal = 0,
 }: EmptyRecordsStateProps) {
   const [generationProgress, setGenerationProgress] = useState<GenerationProgress | null>(null);
 
@@ -112,6 +118,39 @@ export function EmptyRecordsState({
               style={{ width: `${progressPercent}%` }}
             />
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // When docs are processing, show a dedicated processing state
+  // instead of the default "Get started" empty state
+  if (docsProcessing) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8">
+        <div className="flex flex-col items-center gap-6 max-w-sm text-center">
+          <div className="w-16 h-16 rounded-2xl bg-[rgba(var(--theme-500),0.1)] flex items-center justify-center">
+            <FileText className="w-8 h-8 text-[rgb(var(--theme-500))]" />
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-base font-medium text-foreground">
+              Processing reference documents
+            </h3>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              {docsProcessingCount} of {docsTotal} document{docsTotal !== 1 ? "s" : ""} still processing.
+              Training data will be generated from these documents once extraction is complete.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-[rgb(var(--theme-500))]">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span className="text-sm">Extracting content...</span>
+          </div>
+          {onDocsClick && (
+            <Button variant="outline" size="sm" onClick={onDocsClick} className="gap-2">
+              <FileText className="w-4 h-4" />
+              View Documents
+            </Button>
+          )}
         </div>
       </div>
     );

@@ -136,13 +136,19 @@ export function DatasetDetailContentV2() {
 
   // Knowledge sources count for Docs tab badge
   const [knowledgeSourcesCount, setKnowledgeSourcesCount] = useState(0);
+  // Track whether any knowledge sources are still processing
+  const [docsProcessing, setDocsProcessing] = useState(false);
+  const [docsProcessingCount, setDocsProcessingCount] = useState(0);
 
-  // Fetch knowledge sources count
+  // Fetch knowledge sources count and processing state
   const fetchKnowledgeSourcesCount = useCallback(async () => {
     if (!datasetId) return;
     try {
       const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
       setKnowledgeSourcesCount(sources.length);
+      const processingCount = sources.filter((s) => s.status === "processing").length;
+      setDocsProcessing(processingCount > 0);
+      setDocsProcessingCount(processingCount);
     } catch (error) {
       console.error("[DatasetDetailContentV2] Error fetching knowledge sources:", error);
     }
@@ -388,6 +394,8 @@ export function DatasetDetailContentV2() {
             hasEvaluator={hasEvaluator}
             knowledgeSourcesCount={knowledgeSourcesCount}
             hasPlanActivity={isGeneratingPlan || hasPlanProposed}
+            docsProcessing={docsProcessing}
+            isGeneratingPlan={isGeneratingPlan}
           />
 
           {/* Main content area - Records, Evaluator, or Jobs based on active section */}
@@ -431,6 +439,9 @@ export function DatasetDetailContentV2() {
               onGenerateForTopic={handleGenerateForTopic}
               onGenerateSubtopics={handleGenerateSubtopics}
               datasetObjective={dataset.datasetObjective}
+              docsProcessing={docsProcessing}
+              docsProcessingCount={docsProcessingCount}
+              docsTotal={knowledgeSourcesCount}
             />
           )}
           {activeSection === "evaluator" && (

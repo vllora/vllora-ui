@@ -141,9 +141,9 @@ export function SectionTabs({
   };
 
   return (
+    <TooltipProvider delayDuration={300}>
     <div className="flex items-center justify-between">
       {/* Workflow tabs - connected arrow stepper */}
-      <TooltipProvider delayDuration={300}>
         <div className="grid items-center" style={{ gridTemplateColumns: `repeat(${WORKFLOW_TABS.length}, 1fr)` }}>
           {WORKFLOW_TABS.map((tab, index) => {
             const status = tab.comingSoon ? "comingSoon" as const : getWorkflowStatus(tab.id);
@@ -259,15 +259,15 @@ export function SectionTabs({
             );
           })}
         </div>
-      </TooltipProvider>
 
       {/* Documentation tabs */}
       <div className="flex items-center gap-1 pl-4 border-l border-border ml-4">
         {DOCUMENTATION_TABS.map((tab) => {
           const isActive = activeSection === tab.id;
           const Icon = tab.icon;
+          const isTabProcessing = processingTabs.has(tab.id);
 
-          return (
+          const tabButton = (
             <button
               key={tab.id}
               onClick={() => onSectionChange(tab.id)}
@@ -279,7 +279,11 @@ export function SectionTabs({
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
               )}
             >
-              <Icon className="w-4 h-4" />
+              {isTabProcessing ? (
+                <Loader2 className="w-4 h-4 animate-spin text-[rgb(var(--theme-500))]" />
+              ) : (
+                <Icon className="w-4 h-4" />
+              )}
               <span>{tab.label}</span>
 
               {/* Docs count */}
@@ -298,8 +302,26 @@ export function SectionTabs({
               )}
             </button>
           );
+
+          if (isTabProcessing) {
+            return (
+              <Tooltip key={tab.id}>
+                <TooltipTrigger asChild>
+                  {tabButton}
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  {tab.id === "plan"
+                    ? (processingTabs.has("docs") ? "Waiting for document processing..." : "Generating setup plan...")
+                    : "Processing documents..."}
+                </TooltipContent>
+              </Tooltip>
+            );
+          }
+
+          return tabButton;
         })}
       </div>
     </div>
+    </TooltipProvider>
   );
 }

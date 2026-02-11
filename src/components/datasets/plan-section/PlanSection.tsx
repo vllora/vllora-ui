@@ -232,6 +232,19 @@ export function PlanSection({
     setExecutionProgress(null);
   };
 
+  // Show docs processing state FIRST — if documents are still being processed,
+  // we can't generate a plan yet, so this takes priority over isGeneratingPlan
+  if (docsProcessing) {
+    return (
+      <DocsProcessingState
+        datasetId={datasetId}
+        processingCount={docsProcessing.processing}
+        totalCount={docsProcessing.total}
+        className={className}
+      />
+    );
+  }
+
   // Show loading state while generating (controlled by parent)
   if (isGeneratingPlan) {
     return <PlanLoadingState className={className} />;
@@ -290,18 +303,6 @@ export function PlanSection({
           setShowExecutedPlan(false);
           setExecutedPlan(null);
         }}
-        className={className}
-      />
-    );
-  }
-
-  // Show docs processing state if documents are still being processed
-  if (docsProcessing) {
-    return (
-      <DocsProcessingState
-        datasetId={datasetId}
-        processingCount={docsProcessing.processing}
-        totalCount={docsProcessing.total}
         className={className}
       />
     );

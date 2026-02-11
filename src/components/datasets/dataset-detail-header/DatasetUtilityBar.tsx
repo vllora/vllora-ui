@@ -28,6 +28,10 @@ export interface DatasetUtilityBarProps {
   knowledgeSourcesCount?: number;
   /** Whether a plan is being generated or proposed */
   hasPlanActivity?: boolean;
+  /** Whether any knowledge sources are currently processing */
+  docsProcessing?: boolean;
+  /** Whether a plan is currently being generated */
+  isGeneratingPlan?: boolean;
 }
 
 export function DatasetUtilityBar({
@@ -37,6 +41,8 @@ export function DatasetUtilityBar({
   hasEvaluator,
   knowledgeSourcesCount = 0,
   hasPlanActivity = false,
+  docsProcessing = false,
+  isGeneratingPlan = false,
 }: DatasetUtilityBarProps) {
   const { filteredJobs } = FinetuneJobsConsumer();
   const { isGeneratingTopics, isGeneratingTraces, generationProgress } = DatasetDetailConsumer();
@@ -67,8 +73,18 @@ export function DatasetUtilityBar({
       tabs.add("evaluator");
     }
 
+    // Docs tab: knowledge sources are being processed
+    if (docsProcessing) {
+      tabs.add("docs");
+    }
+
+    // Plan tab: plan is being generated or docs are processing (plan blocked)
+    if (isGeneratingPlan || docsProcessing) {
+      tabs.add("plan");
+    }
+
     return tabs;
-  }, [isGeneratingTopics, isGeneratingTraces, generationProgress, filteredJobs, dryRunRunningJob]);
+  }, [isGeneratingTopics, isGeneratingTraces, generationProgress, filteredJobs, dryRunRunningJob, docsProcessing, isGeneratingPlan]);
 
   return (
     <div className="px-4 py-1.5 border-b border-border">
