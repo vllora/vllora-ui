@@ -41,9 +41,9 @@ const WORKFLOW_TABS: TabConfig[] = [
 
 // Documentation & setup tabs
 const DOCUMENTATION_TABS: TabConfig[] = [
-  { id: "docs", label: "Reference Docs", icon: FolderOpen },
-  { id: "plan", label: "Setup Plan", icon: Wand2 },
-  { id: "readme", label: "Overview", icon: FileText },
+  { id: "docs", label: "Docs", icon: FolderOpen },
+  { id: "plan", label: "Plan", icon: Wand2 },
+  { id: "readme", label: "Readme", icon: FileText },
 ];
 
 interface SectionTabsProps {
@@ -260,65 +260,60 @@ export function SectionTabs({
           })}
         </div>
 
-      {/* Documentation tabs */}
-      <div className="flex items-center gap-1 pl-4 border-l border-border ml-4">
+      {/* Documentation tabs — icon-only with tooltips */}
+      <div className="flex items-center gap-1.5 ml-6">
         {DOCUMENTATION_TABS.map((tab) => {
           const isActive = activeSection === tab.id;
           const Icon = tab.icon;
           const isTabProcessing = processingTabs.has(tab.id);
 
-          const tabButton = (
-            <button
-              key={tab.id}
-              onClick={() => onSectionChange(tab.id)}
-              data-section={tab.id}
-              className={cn(
-                "relative flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-all",
-                isActive
-                  ? "text-foreground bg-muted"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-              )}
-            >
-              {isTabProcessing ? (
-                <Loader2 className="w-4 h-4 animate-spin text-[rgb(var(--theme-500))]" />
-              ) : (
-                <Icon className="w-4 h-4" />
-              )}
-              <span>{tab.label}</span>
+          const tooltipText = isTabProcessing
+            ? (tab.id === "plan"
+              ? (processingTabs.has("docs") ? "Waiting for document processing..." : "Generating setup plan...")
+              : `Processing ${knowledgeSourcesCount} document${knowledgeSourcesCount !== 1 ? "s" : ""}...`)
+            : tab.label;
 
-              {/* Docs count */}
-              {tab.id === "docs" && knowledgeSourcesCount > 0 && (
-                <span className="px-1.5 py-0.5 rounded bg-[rgba(var(--theme-500),0.15)] text-[rgb(var(--theme-500))] text-[10px] font-medium tabular-nums">
-                  {knowledgeSourcesCount}
-                </span>
-              )}
+          return (
+            <Tooltip key={tab.id}>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => onSectionChange(tab.id)}
+                  data-section={tab.id}
+                  className={cn(
+                    "relative flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-all text-xs",
+                    isActive
+                      ? "text-foreground bg-muted"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                    isTabProcessing && "text-[rgb(var(--theme-500))]"
+                  )}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  <span>{tab.label}</span>
+                  {isTabProcessing && (
+                    <Loader2 className="w-3 h-3 animate-spin text-[rgb(var(--theme-500))]" />
+                  )}
 
-              {/* Plan activity */}
-              {tab.id === "plan" && hasPlanActivity && (
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[rgb(var(--theme-500))] opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[rgb(var(--theme-500))]" />
-                </span>
-              )}
-            </button>
+                  {/* Docs count badge — hidden during processing to avoid overlap with spinner */}
+                  {tab.id === "docs" && knowledgeSourcesCount > 0 && !isTabProcessing && (
+                    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-[rgb(var(--theme-500))] text-white text-[9px] font-semibold tabular-nums">
+                      {knowledgeSourcesCount}
+                    </span>
+                  )}
+
+                  {/* Plan activity dot */}
+                  {tab.id === "plan" && hasPlanActivity && (
+                    <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[rgb(var(--theme-500))] opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[rgb(var(--theme-500))]" />
+                    </span>
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                {tooltipText}
+              </TooltipContent>
+            </Tooltip>
           );
-
-          if (isTabProcessing) {
-            return (
-              <Tooltip key={tab.id}>
-                <TooltipTrigger asChild>
-                  {tabButton}
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">
-                  {tab.id === "plan"
-                    ? (processingTabs.has("docs") ? "Waiting for document processing..." : "Generating setup plan...")
-                    : "Processing documents..."}
-                </TooltipContent>
-              </Tooltip>
-            );
-          }
-
-          return tabButton;
         })}
       </div>
     </div>

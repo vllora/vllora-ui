@@ -666,3 +666,531 @@ These issues require changes in the distri repo, NOT in this repo. Listed here f
 - P1: 8 → 6 (10.1, 10.3 resolved)
 - P2: 4 → 2 (10.2, 10.4 resolved)
 - Resolved: 17 → 21
+
+### Comprehensive UX Redesign Review (2026-02-11)
+
+Full 4-agent team review: UX Flow Analyst, Visual & Interaction Reviewer, Information Architecture Reviewer, Redesign Proposer. Reviewed all source files across frontend and upstream @distri/react.
+
+**New proposals added (16):**
+
+---
+
+## 11. Documentation Tabs Redesign (USER PRIORITY)
+
+### Proposal 11.1 — Convert Documentation Tabs to Icon-Only Buttons (P0)
+
+**Problem:** The documentation tabs in `SectionTabs.tsx` (lines 263-323) show "Reference Docs" (`FolderOpen`), "Setup Plan" (`Wand2`), "Overview" (`FileText`) with full text labels + badges. Issues:
+- **Too much text:** "Reference Docs" (14 chars), "Setup Plan" (10 chars), "Overview" (8 chars) — verbose for secondary navigation
+- **~350px horizontal footprint** for 3 secondary tabs, consuming ~40% of available bar while the 4-tab workflow stepper gets ~60%
+- **Same `text-sm font-medium`** as workflow arrow labels — no visual subordination
+- **Weak `border-l border-border` separator** (line 264) — 1px line insufficient to communicate categorical difference
+- **Docs count badge** (`lines 289-294`) uses vivid `bg-[rgba(var(--theme-500),0.15)]` — more prominent than workflow tabs' own `bg-background/50` badges
+- **Plan activity dot** (lines 297-302) is 8x8 — simultaneously too small to notice and too animated to ignore
+
+**Space Analysis:**
+
+| Element | Width |
+|---------|-------|
+| "Reference Docs" (icon + text + count) | ~110px |
+| "Setup Plan" (icon + text + dot) | ~100px |
+| "Overview" (icon + text) | ~80px |
+| Container overhead (gap, padding, border) | ~40px |
+| **Total** | **~330-350px** |
+
+**Solution:** Convert to icon-only buttons with tooltips. Reduces footprint from ~350px to ~120px:
+
+```
+Current:  [Data →] [Eval →] [Finetune →] [Deploy]  |  [Reference Docs 3] [Setup Plan ●] [Overview]
+Proposed: [Data →] [Eval →] [Finetune →] [Deploy]     [📁] [✨] [📄]
+                                                         ↑ tooltips on hover
+```
+
+Implementation:
+- Remove `<span>{tab.label}</span>` from documentation tabs (line 287)
+- Change button sizing from `px-3 py-1.5` to `p-2` with `w-8 h-8`
+- Wrap ALL doc tabs in `<Tooltip>` (currently only processing tabs have tooltips, lines 306-318)
+- Badge becomes corner overlay: `absolute -top-0.5 -right-0.5` dot
+- Active state: `bg-muted text-foreground` on icon button
+- Strengthen separator: replace `border-l border-border ml-4 pl-4` with wider gap `ml-6 pl-6` or `border-l-2 border-muted-foreground/20`
+
+**Reviewer consensus:** 2/3 prefer all icon-only (Option A), 1/3 prefers hybrid keeping Plan text visible (Option C). Recommendation: Option A for consistency.
+
+**Components to modify:**
+- `src/components/datasets/dataset-detail-header/SectionTabs.tsx` (lines 263-323)
+
+**Priority:** P0 | **Effort:** S
+
+---
+
+## 12. Additional Onboarding & Flow Proposals
+
+### Proposal 12.1 — Empty Dataset Without Files Has No Clear Path (P0)
+
+**Problem:** `empty-dataset-state/index.tsx:201-208` — When a user enters an objective but does NOT upload files, they land on dataset detail with empty records, no docs, no plan. No actionable guidance beyond waiting for Lucy. If Lucy is slow to connect, user stares at empty screen.
+
+**Solution:** Add explicit guided empty state in records tab with clear CTAs: "Upload documents", "Import records", "Let Lucy generate sample data". Reduce dependency on Lucy chat being immediately available.
+
+**Components to modify:**
+- `src/components/datasets/empty-dataset-state/index.tsx`
+- `src/components/datasets/DatasetMainContent.tsx` (empty records state)
+
+**Priority:** P0 | **Effort:** M
+
+---
+
+### Proposal 12.2 — Auto-Plan Generation Fragile 2-Second Timing (P0)
+
+**Problem:** `DatasetDetailContentV2.tsx:263` — The `autoGeneratePlan` flow waits a hardcoded 2 seconds before triggering Lucy. If documents take longer to process (large PDFs), plan generates without proper knowledge source data.
+
+**Solution:** Replace fixed delay with event-driven trigger: poll knowledge sources processing status, trigger plan only when all sources are done. Show progress indicator in Plan tab during wait.
+
+**Components to modify:**
+- `src/components/datasets/DatasetDetailContentV2.tsx`
+
+**Priority:** P0 | **Effort:** M
+
+---
+
+### Proposal 12.3 — Plan Tab Empty State Is a Dead End (P0)
+
+**Problem:** `plan-section/PlanSection.tsx:312` — PlanEmptyState shows "Generate Setup Plan" button. If Lucy is loading/not connected, clicking does nothing visible. No error feedback, no loading state.
+
+**Solution:** Disable button with tooltip ("Lucy is connecting...") when agent not connected. Show loading spinner after click. Add plan explainer text: "A Setup Plan analyzes your documents and creates a step-by-step training configuration."
+
+**Components to modify:**
+- `src/components/datasets/plan-section/PlanEmptyState.tsx`
+- `src/components/datasets/plan-section/PlanLoadingState.tsx`
+- `src/components/datasets/plan-section/PlanSection.tsx`
+
+**Priority:** P0 | **Effort:** S
+
+---
+
+### Proposal 12.4 — Transition Screen Has No Escape Route (P0)
+
+**Problem:** `empty-dataset-state/index.tsx:232-278` — Full-screen "Meet Lucy" animation with no back/cancel button. If the `setTimeout` navigation fails, user is permanently stuck.
+
+**Solution:** Add cancel/back button. Add timeout fallback: if navigation doesn't happen within 5s, show manual "Continue" button.
+
+**Components to modify:**
+- `src/components/datasets/empty-dataset-state/index.tsx` (lines 232-278)
+
+**Priority:** P0 | **Effort:** S
+
+---
+
+## 13. Chat Error & Recovery Proposals
+
+### Proposal 13.1 — LucyChat Error State Has No Recovery Path (P0)
+
+**Problem:** `LucyChat.tsx:417` — Connection/streaming errors show bare red div with error text only. No retry button, no dismiss, no suggestion. Users must refresh the page.
+
+**Solution:** Add Retry button, Dismiss button, and actionable text: "Connection lost. [Retry] or [Start new chat]". For specific errors, show targeted messages.
+
+**Components to modify:**
+- `src/components/agent/lucy-agent/LucyChat.tsx`
+
+**Priority:** P0 | **Effort:** S
+
+---
+
+### Proposal 13.2 — ExecutionProgressCard Completion Biases Fine-tuning Over Review (P0)
+
+**Problem:** `ExecutionProgressCard.tsx:217-234` — "Start Fine-tuning" is full theme-colored button with Sparkles icon. "Review Data" is secondary outline button. Encourages skipping data review.
+
+**Solution:** Give both buttons equal visual weight, or make "Review Data" the primary CTA. Add note: "We recommend reviewing your generated data before training."
+
+**Components to modify:**
+- `src/components/datasets/plan-section/ExecutionProgressCard.tsx`
+
+**Priority:** P0 | **Effort:** S
+
+---
+
+## 14. Workflow Stepper Improvements
+
+### Proposal 14.1 — Arrow Stepper Responsiveness (P1)
+
+**Problem:** `SectionTabs.tsx:147` uses `gridTemplateColumns: repeat(4, 1fr)` giving equal width regardless of label length. On narrow screens (<1200px), labels truncate. Locked tabs look disabled and many users don't try clicking them.
+
+**Solution:** Auto-width arrows with `min-width`. Below 1200px collapse to icon-only with tooltip. Add hover tooltip on locked tabs (in addition to popover). Use distinct "Coming Soon" visual vs "locked."
+
+**Components to modify:**
+- `src/components/datasets/dataset-detail-header/ArrowSegment.tsx`
+- `src/components/datasets/dataset-detail-header/SectionTabs.tsx` (lines 143-261)
+
+**Priority:** P1 | **Effort:** M
+
+---
+
+### Proposal 14.2 — Step Dependency Visibility (P1)
+
+**Problem:** Step dependencies (`SectionTabs.tsx:78-98`) only surfaced through lock icon and popover. Users don't see the dependency chain.
+
+**Solution:** Subtle pulse/glow on next recommended step. When "Data" is complete, pulse "Evaluation" arrow. Add "Next step" indicator.
+
+**Components to modify:**
+- `src/components/datasets/dataset-detail-header/SectionTabs.tsx`
+- `src/components/datasets/dataset-detail-header/ArrowSegment.tsx`
+
+**Priority:** P1 | **Effort:** S
+
+---
+
+## 15. Sidebar Improvements
+
+### Proposal 15.1 — Sidebar Collapse Notification Badge (P1)
+
+**Problem:** `LucyDatasetAssistant.tsx:99-115` — Collapsed sidebar (w-14) shows only Lucy avatar. No indication of activity, pending responses, or processing state.
+
+**Solution:** Add notification badge on collapsed avatar when Lucy has pending response or is running a tool. Add pulsing indicator during processing.
+
+**Components to modify:**
+- `src/components/datasets/LucyDatasetAssistant.tsx`
+
+**Priority:** P1 | **Effort:** S
+
+---
+
+### Proposal 15.2 — Quick Actions Persistence After First Message (P1)
+
+**Problem:** `LucyDatasetAssistant.tsx:46-90` — Quick actions only visible in welcome/empty state. Once user sends first message, they disappear permanently.
+
+**Solution:** Persist as compact action bar above chat input. Show as small pill buttons updating dynamically with workflow state.
+
+**Components to modify:**
+- `src/components/datasets/LucyDatasetAssistant.tsx`
+- `src/components/agent/lucy-agent/LucyChat.tsx`
+- **Upstream:** `@distri/react/components/Chat.tsx` — needs `persistentActions` prop or slot
+
+**Priority:** P1 | **Effort:** M (upstream change)
+
+---
+
+### Proposal 15.3 — Proactive Analysis Intent Card (P1)
+
+**Problem:** `LucyDatasetAssistant.tsx:191-240` — Auto-triggers analysis after 300ms without user consent. If user starts typing before 300ms, they get unexpected auto-message. `lastAnalyzedDatasetRef` resets on refresh.
+
+**Solution:** Show intent card instead of auto-sending: "Lucy can analyze your dataset. [Analyze now] [Dismiss]". Persist state in localStorage.
+
+**Components to modify:**
+- `src/components/datasets/LucyDatasetAssistant.tsx`
+- `src/components/agent/lucy-agent/LucyChat.tsx`
+
+**Priority:** P1 | **Effort:** M
+
+---
+
+### Proposal 15.4 — New Chat Confirmation Dialog (P1)
+
+**Problem:** `LucyDatasetAssistant.tsx:517` — "New Chat" button clears conversation with no confirmation.
+
+**Solution:** Add confirmation dialog: "Start a new conversation? Your current chat will be cleared."
+
+**Components to modify:**
+- `src/components/datasets/LucyDatasetAssistant.tsx`
+
+**Priority:** P1 | **Effort:** S
+
+---
+
+### Proposal 15.5 — Stop Button Color Mismatch (P1)
+
+**Problem:** `LucyChatInput.tsx:418-422` — Stop button uses `bg-destructive` (red). Upstream uses `bg-amber-500`. Red = danger; amber = interrupt (semantically correct).
+
+**Solution:** Change from `bg-destructive` to `bg-amber-500`.
+
+**Components to modify:**
+- `src/components/agent/lucy-agent/LucyChatInput.tsx`
+
+**Priority:** P1 | **Effort:** S
+
+---
+
+## 16. Error Handling Improvements
+
+### Proposal 16.1 — Tool Execution Error Recovery (P1)
+
+**Problem:** `@distri/react` `ToolExecutionRenderer.tsx:132-150` shows tool errors with no retry. Error messages like "Executing generate_topics failed" are meaningless to non-technical users. `run_error` retry button in `MessageRenderer.tsx:194-205` doesn't work.
+
+**Solution:** Add functional Retry button. Map common errors to user-friendly messages. Wire `run_error` retry to `sendMessage`.
+
+**Components to modify:**
+- **Upstream:** `@distri/react/renderers/ToolExecutionRenderer.tsx`, `MessageRenderer.tsx`
+- This repo: Custom tool renderers in `src/components/agent/lucy-agent/`
+
+**Priority:** P1 | **Effort:** M (upstream change)
+
+---
+
+### Proposal 16.2 — Plan Execution Error Handling (P1)
+
+**Problem:** `PlanSection.tsx:167-197` — When execution step fails: no recovery option, plan becomes read-only, no partial success acknowledgment.
+
+**Solution:** Add "Retry from failed step" button. Show partial success: "3/7 steps completed. Failed at: Configure Evaluator. [Retry step] [Edit plan]"
+
+**Components to modify:**
+- `src/components/datasets/plan-section/ExecutionProgressCard.tsx`
+- `src/components/datasets/plan-section/PlanSection.tsx`
+
+**Priority:** P1 | **Effort:** M
+
+---
+
+### Proposal 16.3 — Plan Dismiss Confirmation (P1)
+
+**Problem:** `SetupPlanEditor.tsx:84-86` — "Dismiss" button immediately clears plan (30+ seconds to generate). No confirmation, no undo.
+
+**Solution:** Add undo toast: "Plan dismissed. [Undo]" with 5s window. Or confirmation dialog.
+
+**Components to modify:**
+- `src/components/datasets/plan-section/SetupPlanEditor.tsx`
+
+**Priority:** P1 | **Effort:** S
+
+---
+
+### Proposal 16.4 — Execution Cancel Mechanism (P1)
+
+**Problem:** `PlanSection.tsx:255-281` — No way to cancel/pause/abort plan execution once started.
+
+**Solution:** Add "Cancel Execution" button. Gracefully stop after current step completes.
+
+**Components to modify:**
+- `src/components/datasets/plan-section/ExecutionProgressCard.tsx`
+- `src/lib/distri-finetune-tools/steps/execute-setup-plan.ts`
+
+**Priority:** P1 | **Effort:** M
+
+---
+
+## 17. Cross-Component Inconsistencies (NEW)
+
+### Proposal 17.1 — Visual Consistency Audit (P2)
+
+Issues found across the feature:
+
+| Issue | Current State | Fix |
+|-------|--------------|-----|
+| **Border radius** | `rounded-2xl` (chat), `rounded-xl` (input), `rounded-lg` (cards), `rounded-md` (buttons) | Standardize: `rounded-lg` cards, `rounded-md` buttons, `rounded-xl` chat |
+| **Button sizing** | `h-8` (plan), `h-7` (sidebar), `h-8` (chat send), `h-10` (upstream) | Standardize: `h-8` actions, `h-7` icon-only |
+| **Icon sizing** | Emojis (quick actions), `h-3.5`-`h-8` (various) | Scale: `h-3.5` small, `h-4` standard, `h-5` emphasis |
+| **Success color** | `theme-500` (plan) vs `emerald-500` (dataset config) | Standardize on `emerald-500` |
+| **Heading hierarchy** | `text-4xl` (onboarding) to `text-sm` (chat) | Define scale: `text-2xl` page, `text-lg` section, `text-base` card |
+| **Focus ring** | `--theme-rgb` (possibly undefined) in `LucyChatInput.tsx:367` | Use `ring-ring` from shadcn/ui tokens |
+
+**Components to modify:** Multiple files across `src/components/datasets/` and `src/components/agent/lucy-agent/`
+
+**Priority:** P2 | **Effort:** M
+
+---
+
+### Proposal 17.2 — Quick Action Emojis to Lucide Icons (P2)
+
+**Problem:** `LucyDatasetAssistant.tsx:47-54` — Quick actions use emoji strings instead of Lucide icons. Emojis render differently across platforms.
+
+**Solution:** Replace with Lucide icons for consistency.
+
+**Priority:** P2 | **Effort:** S
+
+---
+
+### Proposal 17.3 — Dataset Loading Skeleton (P2)
+
+**Problem:** `DatasetDetailContentV2.tsx:366-369` — Basic `LoadingIndicator` with "Loading dataset..." and no skeleton preview.
+
+**Solution:** Skeleton layout mirroring final page structure: sidebar skeleton + header + tabs + content area.
+
+**Priority:** P2 | **Effort:** S
+
+---
+
+### Proposal 17.4 — Plan Execution Success Celebration (P2)
+
+**Problem:** `PlanExecutedView.tsx:32-49` — Success indicator is a tiny `w-2 h-2` dot. Anticlimactic after multi-step process.
+
+**Solution:** Prominent success banner with green checkmark, execution summary ("7/7 steps completed").
+
+**Priority:** P2 | **Effort:** S
+
+---
+
+### Proposal 17.5 — Knowledge Sources Processing Per-Document Status (P2)
+
+**Problem:** `DocsProcessingState` shows "X of Y remaining" with no per-document status. If processing fails silently, state stays stuck.
+
+**Solution:** Show per-document filename + spinner/checkmark. Add timeout detection: if no progress for 30s, show "Having trouble? [Retry] [Skip]"
+
+**Priority:** P2 | **Effort:** S
+
+---
+
+## 18. Evaluation Panel Redesign (VS Code-Style Layout)
+
+### Proposal 18.1 — Redesign EvaluationConfigPanel as VS Code-Style Editor + Bottom Panel (P1)
+
+**Problem:** The current `EvaluationConfigPanel` (`src/components/datasets/evaluation-dialog/EvaluationConfigPanel.tsx`, 315 lines) has an IDE-style code editor (Monaco) for the grader script with a resizable inline dry run panel (`DryRunInlinePanel`). However the layout has several issues:
+
+- **Single-purpose bottom panel:** `DryRunInlinePanel.tsx` (217 lines) only handles dry run views (config/running/results/history). There's no way to see dry run history while viewing current results, or to check logs while editing.
+- **No multi-tab bottom panel:** Unlike VS Code where the bottom area has tabs (Terminal, Problems, Output, Debug Console), the current panel only shows one context at a time with internal state switching (`activeView: "config" | "running" | "results" | "history"`).
+- **Dry run results are ephemeral:** The `ResultsView` shows a single scrollable page with scores, histogram, recommendations, and full results table all stacked vertically. Switching to HistoryView loses the current results view.
+- **No persistent status bar integration:** The status bar footer in `EvaluationConfigPanel` (lines ~250-315) shows a contextual button and mean score, but this duplicates information that should be in the bottom panel tabs.
+- **Modal fallback:** `DryRunDialog.tsx` (248 lines) exists as a separate modal dialog with the same views — this creates two parallel implementations (inline panel vs modal) for the same functionality.
+
+**Current Component Structure:**
+```
+EvaluationConfigPanel (315 lines)
+├── Monaco Editor (top) — grader script
+├── DryRunInlinePanel (bottom, resizable) — single-view switcher
+│   ├── ConfigView — sample size + model selection
+│   ├── RunningView — progress during evaluation
+│   ├── ResultsView — scores, histogram, recommendations, table
+│   └── HistoryView — past dry run jobs
+└── Status Bar Footer — save button, contextual action, mean score
+```
+
+**Proposed Solution — VS Code-Style Layout:**
+
+Restructure into a true VS Code-style layout with code editor on top and a tabbed bottom panel:
+
+```
+┌─────────────────────────────────────────────┐
+│  Editor Toolbar  [JS ▾] [LLM Judge ▾] [Save]│
+├─────────────────────────────────────────────┤
+│                                             │
+│           Monaco Code Editor                │
+│         (grader script / judge prompt)      │
+│                                             │
+├──┬──────────┬──────────┬──────────┬─────────┤
+│  │ Results  │ History  │ Running  │  Logs   │  ← tab bar
+├──┴──────────┴──────────┴──────────┴─────────┤
+│                                             │
+│         Tab Content Area                    │
+│   (results table / history list / progress  │
+│    / execution logs)                        │
+│                                             │
+├─────────────────────────────────────────────┤
+│ Status: Mean 0.82 | Verdict: GO | 42 samples│  ← status bar
+└─────────────────────────────────────────────┘
+```
+
+**Bottom Panel Tabs:**
+
+| Tab | Content | Badge |
+|-----|---------|-------|
+| **Results** | Latest dry run results: score summary cards, histogram, recommendations, results table. Shows most recent completed job. | Score badge (e.g., "0.82") |
+| **History** | List of all past dry run jobs with date, sample count, mean score, verdict. Click to load into Results tab. | Job count (e.g., "5") |
+| **Running** | Live progress of current dry run: progress bar, completed/total rows, live score updates. Only visible when a job is active. | Spinner when active |
+| **Logs** | Execution logs, errors, and warnings from dry run jobs. Useful for debugging grader script issues. | Error count if > 0 |
+
+**Key Design Decisions:**
+
+1. **Resizable splitter:** The divider between editor and bottom panel is draggable (like VS Code). Default split: 60% editor / 40% panel. User's preferred split persisted in localStorage.
+
+2. **Editor modes:** The editor toolbar has a mode switcher:
+   - **JavaScript** — Monaco with JS syntax, for custom grader scripts
+   - **LLM Judge** — Split view with judge prompt template (left) + output schema (right), reusing existing `JudgeInstructionsPanel` and `OutputSchemaPanel`
+
+3. **Bottom panel collapsible:** Double-click the splitter bar or click a "collapse" chevron to hide the bottom panel entirely, giving full space to the editor. Click any tab to re-expand.
+
+4. **Status bar:** Persistent single-line footer showing: save status (saved/unsaved dot), last dry run score + verdict, quick "Run Test" button. This replaces the current contextual footer.
+
+5. **Eliminate DryRunDialog modal:** The bottom panel replaces the need for a separate modal. All dry run functionality lives in the tabs. Remove `DryRunDialog.tsx` and its sub-components, or refactor them as tab content components.
+
+6. **Tab persistence:** Active tab and panel height are persisted per dataset in localStorage so the user's workspace setup is remembered.
+
+**Implementation Approach:**
+
+Phase 1 — Bottom panel shell:
+- Create `EvaluationBottomPanel.tsx` with tab bar + content area
+- Migrate `DryRunInlinePanel` views into tab components: `ResultsTab`, `HistoryTab`, `RunningTab`, `LogsTab`
+- Replace inline panel toggle with always-visible bottom panel (collapsible)
+
+Phase 2 — Editor toolbar:
+- Add mode switcher (JS / LLM Judge) to editor toolbar
+- In LLM Judge mode, render `JudgeInstructionsPanel` + `OutputSchemaPanel` side-by-side in the editor area
+- In JS mode, render Monaco editor (current behavior)
+
+Phase 3 — Status bar:
+- Consolidate footer into a VS Code-style status bar
+- Show: save indicator, grader type, last score/verdict, "Run Test" button
+- Remove redundant contextual button logic from current footer
+
+Phase 4 — Cleanup:
+- Remove or deprecate `DryRunDialog.tsx` (modal) — all functionality now in bottom panel
+- Remove `DryRunInlinePanel.tsx` — replaced by `EvaluationBottomPanel`
+- Update `DatasetDetailContentV2.tsx` integration
+
+**Components to modify:**
+- `src/components/datasets/evaluation-dialog/EvaluationConfigPanel.tsx` — major restructure into VS Code layout
+- `src/components/datasets/evaluation-dialog/DryRunInlinePanel.tsx` — refactor into tab components or remove
+- `src/components/datasets/dry-run-dialog/` — migrate views to bottom panel tabs
+- New: `src/components/datasets/evaluation-dialog/EvaluationBottomPanel.tsx` — tabbed bottom panel
+- New: `src/components/datasets/evaluation-dialog/EvaluationStatusBar.tsx` — persistent status bar
+- `src/components/datasets/DatasetDetailContentV2.tsx` — update integration (lines 447-454)
+
+**Priority:** P1 (significant UX improvement — makes evaluation workflow feel professional and integrated) | **Effort:** L
+
+---
+
+## Updated Implementation Roadmap
+
+### P0 — Fix Immediately (7 items)
+
+| # | Proposal | Components | Effort |
+|---|----------|------------|--------|
+| 1 | **11.1 — Documentation Tabs → Icon-only** | `SectionTabs.tsx` | S |
+| 2 | **12.1 — Empty dataset without files guidance** | `empty-dataset-state/index.tsx`, `DatasetMainContent.tsx` | M |
+| 3 | **12.2 — Auto-plan timing → event-driven** | `DatasetDetailContentV2.tsx` | M |
+| 4 | **12.3 — Plan empty state dead end** | `PlanEmptyState.tsx`, `PlanSection.tsx` | S |
+| 5 | **12.4 — Transition screen escape route** | `empty-dataset-state/index.tsx` | S |
+| 6 | **13.1 — Chat error recovery** | `LucyChat.tsx` | S |
+| 7 | **13.2 — Execution CTA balance** | `ExecutionProgressCard.tsx` | S |
+
+### P1 — Next Sprint (13 items)
+
+| # | Proposal | Components | Effort | Upstream? |
+|---|----------|------------|--------|-----------|
+| 8 | 14.1 — Arrow stepper responsiveness | `ArrowSegment.tsx`, `SectionTabs.tsx` | M | No |
+| 9 | 14.2 — Step dependency visibility | `SectionTabs.tsx`, `ArrowSegment.tsx` | S | No |
+| 10 | 15.1 — Sidebar collapse badge | `LucyDatasetAssistant.tsx` | S | No |
+| 11 | 15.2 — Quick actions persistence | `LucyDatasetAssistant.tsx`, `LucyChat.tsx` | M | Yes |
+| 12 | 15.3 — Proactive analysis intent card | `LucyDatasetAssistant.tsx` | M | No |
+| 13 | 15.4 — New Chat confirmation | `LucyDatasetAssistant.tsx` | S | No |
+| 14 | 15.5 — Stop button color fix | `LucyChatInput.tsx` | S | No |
+| 15 | 16.1 — Tool error recovery | Custom renderers + upstream | M | Yes |
+| 16 | 16.2 — Plan execution error handling | `ExecutionProgressCard.tsx`, `PlanSection.tsx` | M | No |
+| 17 | 16.3 — Plan dismiss confirmation | `SetupPlanEditor.tsx` | S | No |
+| 18 | 16.4 — Execution cancel mechanism | `ExecutionProgressCard.tsx` | M | No |
+| 19 | 4.1 — Structured tool result renderers | `lucy-agent/` renderers | M | No |
+| 20 | 8.1 — Stop auto-switching tabs | `DatasetDetailContentV2.tsx` | S | No |
+| 21 | **18.1 — EvaluationConfigPanel VS Code-style layout** | `EvaluationConfigPanel.tsx`, `DryRunInlinePanel.tsx`, new components | L | No |
+
+### P2 — Future Polish (5 items)
+
+| # | Proposal | Components | Effort |
+|---|----------|------------|--------|
+| 21 | 17.1 — Visual consistency audit | Multiple files | M |
+| 22 | 17.2 — Quick action emojis → Lucide | `LucyDatasetAssistant.tsx` | S |
+| 23 | 17.3 — Dataset loading skeleton | `DatasetDetailContentV2.tsx` | S |
+| 24 | 17.4 — Plan execution success celebration | `PlanExecutedView.tsx` | S |
+| 25 | 17.5 — Docs processing per-document status | `DocsProcessingState.tsx` | S |
+
+### Upstream Changes (@distri/react)
+
+| Proposal | File | Change |
+|----------|------|--------|
+| 15.2 | `Chat.tsx` | New `persistentActions` prop/slot above footer |
+| 16.1 | `ToolExecutionRenderer.tsx` | `onRetry` callback for failed tools |
+| 16.1 | `MessageRenderer.tsx` | Wire `run_error` retry to `sendMessage` |
+| 3.4 | `ChatInput.tsx` | Expand `accept` attribute for document uploads |
+
+Sync via `scripts/sync-distrijs.sh` after upstream changes.
+
+---
+
+**Priority summary (cumulative with all prior proposals):**
+- P0: 7 new (11.1, 12.1-12.4, 13.1-13.2)
+- P1: 14 new (14.1-14.2, 15.1-15.5, 16.1-16.4, 18.1, plus existing 4.1, 8.1)
+- P2: 5 new (17.1-17.5)
+- Resolved: 21 (from prior rounds)
