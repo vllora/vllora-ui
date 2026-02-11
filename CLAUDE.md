@@ -118,3 +118,7 @@ Do NOT skip this step. Outdated docs cause compounding errors in future sessions
 - `/team-review <what to review>` — 5 agents: Architecture Reviewer, State Machine Reviewer, UX/UI Reviewer, Devil's Advocate, Docs Checker. All run in parallel, Devil's Advocate challenges other findings.
 - `/team-develop <feature>` — 4 agents: Architect (plans), Frontend Implementer (builds), Test & Validate (verifies), Docs Updater (syncs docs). Sequential pipeline with plan approval gate.
 - `/team-ux-redesign <focus area>` — 4 agents: UX Flow Analyst, Visual & Interaction Reviewer, Information Architecture Reviewer (all parallel), then Redesign Proposer synthesizes into a prioritized design spec (P0/P1/P2).
+- `/team-refactor <target>` — 4 agents: Dependency Mapper, Migration Planner, Refactor Implementer, Regression Validator. Sequential pipeline with plan approval gate. Behavior-preserving only.
+- `/team-perf-audit <focus>` — 4 agents: Bundle Analyzer, Render Profiler, Network & Data Analyzer (all parallel), then Optimization Implementer applies highest-impact fixes.
+- `/team-e2e-test <focus>` — 4 agents: Test Planner, Happy Path Runner, Edge Case Runner (parallel after plan), Bug Reporter. Uses Playwright MCP for browser automation.
+- `/team-security <focus>` — 4 agents: Frontend Security Auditor, API & Network Auditor, Dependency & Supply Chain Auditor, Secrets & Data Exposure Auditor. All parallel, OWASP-aligned findings.
