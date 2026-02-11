@@ -265,6 +265,32 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     };
   }, [refreshDataset]);
 
+  // Listen for data generation progress from Lucy agent tools (generate_initial_data)
+  // This keeps isGeneratingTraces/generationProgress in sync so tab spinners work
+  useEffect(() => {
+    const handleGenerationProgress = (event: {
+      datasetId: string;
+      status: "started" | "progress" | "completed" | "failed";
+      completed: number;
+      total: number;
+    }) => {
+      if (event.datasetId !== datasetId) return;
+
+      if (event.status === "started" || event.status === "progress") {
+        setIsGeneratingTraces(true);
+        setGenerationProgress(event.completed);
+      } else if (event.status === "completed" || event.status === "failed") {
+        setIsGeneratingTraces(false);
+        setGenerationProgress(null);
+      }
+    };
+
+    emitter.on("vllora_data_generation_progress", handleGenerationProgress);
+    return () => {
+      emitter.off("vllora_data_generation_progress", handleGenerationProgress);
+    };
+  }, [datasetId]);
+
   // Listen for records deleted events
   useEffect(() => {
     const handleRecordsDeleted = (data: { datasetId: string; recordIds: string[] }) => {

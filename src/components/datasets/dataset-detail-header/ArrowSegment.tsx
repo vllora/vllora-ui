@@ -97,8 +97,7 @@ export function ArrowSegment({
       </svg>
       <div
         className={cn(
-          "relative z-10 flex items-center gap-1.5 px-4 text-sm font-medium transition-colors duration-200",
-          isProcessing && "[&>svg:first-child]:animate-pulse"
+          "relative z-10 flex items-center gap-1.5 px-4 text-sm font-medium transition-colors duration-200"
         )}
         style={{
           color: getTextColor(),

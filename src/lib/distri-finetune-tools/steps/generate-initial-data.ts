@@ -706,6 +706,9 @@ export const generateInitialDataHandler: ToolHandler = async (
 
           console.log(`[generateInitialData] Topic "${job.topic.name}" batch ${job.batchIndex + 1}: added ${addedRecords.length} records (topic: ${currentTopicProgress}, total: ${totalGenerated})`);
           completedBatches++;
+
+          // Refresh UI so new records appear in the Data tab
+          emitter.emit("vllora_dataset_refresh" as any);
         }
 
         // Emit progress event after each parallel chunk
@@ -791,6 +794,9 @@ export const generateInitialDataHandler: ToolHandler = async (
           );
 
           console.log(`[generateInitialData] Batch ${batchIndex + 1} complete: added ${addedBatchRecords.length} records (total: ${totalGenerated})`);
+
+          // Refresh UI so new records appear in the Data tab
+          emitter.emit("vllora_dataset_refresh" as any);
         }
 
         completedBatches = chunkEnd;
