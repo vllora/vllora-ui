@@ -25,14 +25,13 @@ import { GenerateSyntheticDataDialog } from "./GenerateSyntheticDataDialog";
 import { SanitizeDataDialog } from "./SanitizeDataDialog";
 import { getLeafTopicsFromHierarchy, computeCoverageStats, computeDatasetInsights } from "./record-utils";
 import { getTopicCounts } from "./topic-hierarchy-utils";
-import { FinetuneJobCard } from "./dataset-detail-header/finetune-job-card";
 import { RecordsAnalyticsDialog } from "./dataset-detail-header/detail-records-analytics-dialog";
 import { DatasetDetailHeader } from "./dataset-detail-header";
 import { DatasetMainContent } from "./DatasetMainContent";
 import { DatasetNotFound } from "./DatasetNotFound";
 import { LucyDatasetAssistant } from "./LucyDatasetAssistant";
 import { EvaluationConfigPanel } from "./evaluation-dialog/EvaluationConfigPanel";
-import { FinetuneJobsContent } from "@/components/finetune/content";
+import { FinetuneConfigPanel } from "@/components/finetune/content/FinetuneConfigPanel";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { DryRunJobsProvider } from "@/contexts/DryRunJobsContext";
 import { ReadmeWithPlan } from "./ReadmeWithPlan";
@@ -454,30 +453,13 @@ export function DatasetDetailContentV2() {
             </div>
           )}
           {activeSection === "jobs" && (
-            <>
-              {/* Finetune Job Card */}
-              <div className="px-4">
-                <FinetuneJobCard
-                  onStartClick={() => {/* Already on jobs tab */ }}
-                  onJobClick={(jobId) => {
-                    // Dispatch event to expand the specific job
-                    if (jobId) {
-                      window.dispatchEvent(
-                        new CustomEvent("finetune-expand-job", {
-                          detail: { jobId },
-                        })
-                      );
-                    }
-                  }}
-                  canStartJob={hasRecords && hasEvaluator}
-                />
-              </div>
-              <FinetuneJobsContent
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <FinetuneConfigPanel
                 datasetId={datasetId}
-                canCreateJob={hasRecords && hasEvaluator}
-                trainingConfig={dataset.trainingConfig}
+                canStartJob={hasRecords && hasEvaluator}
+                initialConfig={dataset.trainingConfig}
               />
-            </>
+            </div>
           )}
           {activeSection === "plan" && (
             <PlanSection
