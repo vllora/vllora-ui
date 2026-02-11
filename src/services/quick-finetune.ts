@@ -92,7 +92,7 @@ export async function startFinetuneTraining(
     backendDatasetId,
     datasetName,
     workflowId,
-    baseModel = 'llama-v3-8b-instruct',
+    baseModel = 'google/gemma-3-4b-it',
     trainingConfig,
     inferenceParameters,
     chunkSize,
@@ -165,7 +165,7 @@ export async function startFinetuneTraining(
 export async function quickFinetune(options: QuickFinetuneOptions): Promise<QuickFinetuneResult> {
   const {
     datasetId,
-    baseModel = 'llama-v3-8b-instruct',
+    baseModel = 'google/gemma-3-4b-it',
     trainingConfig,
     inferenceParameters,
     chunkSize,

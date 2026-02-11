@@ -6,8 +6,6 @@
  */
 
 import { StopCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import type { DryRunJob } from "@/types/dry-run-job";
 import {
@@ -103,22 +101,14 @@ export function RunningView({ job, progress, onCancel }: RunningViewProps) {
       </div>
 
       {/* Footer */}
-      <div className="shrink-0 pt-4 space-y-4">
-        <Separator className="bg-zinc-800" />
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-zinc-500">
-            Dry run continues in the background.
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onCancel}
-            className="h-8 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-          >
-            <StopCircle className="h-4 w-4 mr-1.5" />
-            Cancel
-          </Button>
-        </div>
+      <div className="shrink-0 flex items-center justify-end pt-3 border-t border-zinc-800/60 mt-3">
+        <button
+          onClick={onCancel}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-colors"
+        >
+          <StopCircle className="h-3.5 w-3.5" />
+          Cancel
+        </button>
       </div>
     </div>
   );

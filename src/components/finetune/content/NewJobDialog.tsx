@@ -59,7 +59,7 @@ interface NewJobDialogProps {
 
 export function NewJobDialog({ datasetId, onSuccess, disabled, open, onOpenChange, initialConfig }: NewJobDialogProps) {
   // Use initial config from sample dataset if available, otherwise use defaults
-  const defaultBaseModel = initialConfig?.base_model || "llama-v3-8b-instruct";
+  const defaultBaseModel = initialConfig?.base_model || "google/gemma-3-4b-it";
   const defaultLearningRate = initialConfig?.training_config?.learning_rate ?? DEFAULT_TRAINING_CONFIG.learning_rate;
   const defaultEpochs = initialConfig?.training_config?.epochs ?? DEFAULT_TRAINING_CONFIG.epochs;
   const defaultBatchSize = initialConfig?.training_config?.batch_size ?? DEFAULT_TRAINING_CONFIG.batch_size;

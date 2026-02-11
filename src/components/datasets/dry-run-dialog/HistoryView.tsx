@@ -12,6 +12,7 @@ import { Loader2, CheckCircle2, XCircle, Clock, AlertTriangle, ArrowDown } from 
 import { VerdictBadge } from "./VerdictBadge";
 import { ScoreHistogram } from "./ScoreHistogram";
 import { ResultsTable } from "./ResultsTable";
+import { RunningView } from "./RunningView";
 import { flattenEvaluationResults } from "@/services/finetune-api";
 import { cn } from "@/lib/utils";
 import type { DryRunJob } from "@/types/dry-run-job";
@@ -23,6 +24,8 @@ interface HistoryViewProps {
   onBack: () => void;
   /** When true, renders VS Code terminal-style split layout (left: details, right: job list) */
   splitView?: boolean;
+  /** Cancel handler for running jobs (used in split view) */
+  onCancelJob?: () => void;
 }
 
 function StatusIcon({ status }: { status: DryRunJob["status"] }) {
@@ -45,7 +48,7 @@ function formatTime(ts: number): string {
 }
 
 /** Inline detail panel for a selected job (left side of split) */
-function JobDetail({ job }: { job: DryRunJob }) {
+function JobDetail({ job, onCancel }: { job: DryRunJob; onCancel?: () => void }) {
   const result = job.result;
 
   const scores = useMemo(() => {
@@ -78,9 +81,12 @@ function JobDetail({ job }: { job: DryRunJob }) {
     const completed = getJobCompletedRows(job);
     const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-2 text-xs text-zinc-500">
-        <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
-        <span>Running... {completed}/{total} ({pct}%)</span>
+      <div className="flex flex-col h-full min-h-0 p-3">
+        <RunningView
+          job={job}
+          progress={pct}
+          onCancel={onCancel || (() => {})}
+        />
       </div>
     );
   }
@@ -184,7 +190,7 @@ function JobDetail({ job }: { job: DryRunJob }) {
   );
 }
 
-export function HistoryView({ jobs, onSelectJob, onBack, splitView = false }: HistoryViewProps) {
+export function HistoryView({ jobs, onSelectJob, onBack, splitView = false, onCancelJob }: HistoryViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     // Default to most recent completed job
     const completed = jobs.find((j) => j.status === "completed");
@@ -202,7 +208,7 @@ export function HistoryView({ jobs, onSelectJob, onBack, splitView = false }: Hi
         {/* Left: selected job detail */}
         <div className="flex-1 min-w-0 min-h-0 border-r border-zinc-800/60">
           {selectedJob ? (
-            <JobDetail job={selectedJob} />
+            <JobDetail job={selectedJob} onCancel={onCancelJob} />
           ) : (
             <div className="flex items-center justify-center h-full text-xs text-zinc-600">
               Select a job from the list

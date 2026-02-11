@@ -501,7 +501,7 @@ export const executeSetupPlanHandler: ToolHandler = async (
       // Start the finetune training job
       const finetuneResult = await quickFinetune({
         datasetId: dataset_id,
-        baseModel: 'llama-v3-8b-instruct',
+        baseModel: 'google/gemma-3-4b-it',
       });
 
       if (!finetuneResult.success) {

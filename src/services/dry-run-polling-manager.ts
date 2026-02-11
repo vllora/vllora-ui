@@ -203,7 +203,7 @@ class DryRunPollingManager {
       console.error(`[DryRunPollingManager] Failed to resume polling for ${jobId}:`, error);
       await updateDryRunJob(jobId, {
         status: 'failed',
-        error: 'Failed to recover job state',
+        error: error instanceof Error ? error.message : 'Failed to recover job state',
         completedAt: Date.now(),
       });
     }

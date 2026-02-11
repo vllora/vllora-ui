@@ -1,8 +1,12 @@
 import { apiClient, handleApiResponse, getAuthToken } from "@/lib/api-client";
 import { getBackendUrl } from "@/config/api";
-import { DatasetWithRecords, DatasetRecord, DataInfo } from "@/types/dataset-types";
-import * as datasetsDB from './datasets-db';
-import { toast } from 'sonner';
+import {
+  DatasetWithRecords,
+  DatasetRecord,
+  DataInfo,
+} from "@/types/dataset-types";
+import * as datasetsDB from "./datasets-db";
+import { toast } from "sonner";
 
 // ============================================================================
 // Types
@@ -70,7 +74,12 @@ export interface CreateReinforcementJobRequest {
 }
 
 // Finetune job status enum
-export type FinetuneJobStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+export type FinetuneJobStatus =
+  | "pending"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancelled";
 
 // FinetuneJob - matches backend FinetuningJobResponse
 export interface FinetuneJob {
@@ -179,17 +188,19 @@ export interface FlatEvaluationResult {
 
 /** Flatten epoch-based results into a flat array for UI consumption.
  *  Takes the first epoch entry per row (epoch "0" for dry runs). */
-export function flattenEvaluationResults(results: RowEpochResult[]): FlatEvaluationResult[] {
+export function flattenEvaluationResults(
+  results: RowEpochResult[],
+): FlatEvaluationResult[] {
   const flat: FlatEvaluationResult[] = [];
   for (const row of results) {
     if (!row.epochs) continue;
     for (const entries of Object.values(row.epochs)) {
       for (const entry of entries) {
         flat.push({
-          dataset_row_id: entry.dataset_row_id ?? '',
+          dataset_row_id: entry.dataset_row_id ?? "",
           row_index: row.row_index,
           row: row.row,
-          status: entry.status ?? 'pending',
+          status: entry.status ?? "pending",
           score: entry.score ?? undefined,
           reason: entry.reason ?? undefined,
           error_message: entry.error_message ?? undefined,
@@ -209,17 +220,19 @@ export function flattenEvaluationResults(results: RowEpochResult[]): FlatEvaluat
  * Convert a DatasetRecord to OpenAI training format
  * Returns null if the record cannot be converted
  */
-function recordToTrainingFormat(record: DatasetRecord): { messages: any[], id: string } | null {
+function recordToTrainingFormat(
+  record: DatasetRecord,
+): { messages: any[]; id: string } | null {
   const data = record.data as DataInfo | { messages?: any[] } | null;
   if (!data) return null;
 
   // If data already has messages at top level (OpenAI format)
-  if ('messages' in data && Array.isArray(data.messages)) {
+  if ("messages" in data && Array.isArray(data.messages)) {
     return { messages: data.messages, id: record.id };
   }
 
   // If data has input/output structure (vllora format)
-  if ('input' in data && 'output' in data) {
+  if ("input" in data && "output" in data) {
     const dataInfo = data as DataInfo;
     const inputMessages = dataInfo.input?.messages || [];
     const outputMessage = dataInfo.output?.messages;
@@ -256,7 +269,7 @@ export function datasetToJsonl(records: DatasetRecord[]): string {
     }
   }
 
-  return lines.join('\n');
+  return lines.join("\n");
 }
 
 // ============================================================================
@@ -269,53 +282,56 @@ export function datasetToJsonl(records: DatasetRecord[]): string {
  * @param topicHierarchy - Optional topic hierarchy JSON string
  * @param evalScript - Optional JavaScript evaluator script
  */
-export async function uploadDataset(
-  jsonlContent: string,
-  topicHierarchy?: string,
-  evalScript?: string
-): Promise<DatasetUploadResponse> {
+export async function uploadDataset(props: {
+  jsonlContent: string;
+  topicHierarchy?: string;
+  evalScript?: string;
+  datasetId: string;
+}): Promise<DatasetUploadResponse> {
+  const { jsonlContent, topicHierarchy, evalScript, datasetId } = props;
   const apiUrl = getBackendUrl();
   const formData = new FormData();
 
   // Create a Blob from the JSONL content
-  const blob = new Blob([jsonlContent], { type: 'application/x-ndjson' });
-  formData.append('file', blob, 'training.jsonl');
+  const blob = new Blob([jsonlContent], { type: "application/x-ndjson" });
+  formData.append("file", blob, "training.jsonl");
+  formData.append("dataset_id", datasetId);
 
   // Add topic hierarchy if provided
   if (topicHierarchy) {
-    formData.append('topic_hierarchy', topicHierarchy);
+    formData.append("topic_hierarchy", topicHierarchy);
   }
 
   // Add eval_script and evaluator config if provided
   // Backend requires BOTH: evaluator config (with type: "js") AND eval_script
   // The backend merges eval_script content into evaluator.config.script
   if (evalScript) {
-    formData.append('eval_script', evalScript);
+    formData.append("eval_script", evalScript);
     // Must also send evaluator config for backend to merge the script into
     const evaluatorConfig = {
-      type: 'js',
+      type: "js",
       config: {
-        script: '', // Will be replaced by eval_script content on backend
+        script: "", // Will be replaced by eval_script content on backend
         completion_params: {
-          model: 'gpt-4o-mini',
-          model_name: 'gpt-4o-mini',
+          model: "gpt-4o-mini",
+          model_name: "gpt-4o-mini",
           temperature: 0.0,
           max_tokens: 300,
         },
       },
     };
-    formData.append('evaluator', JSON.stringify(evaluatorConfig));
+    formData.append("evaluator", JSON.stringify(evaluatorConfig));
   }
 
   // Build headers
   const headers: Record<string, string> = {};
   const token = await getAuthToken();
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+    headers["Authorization"] = `Bearer ${token}`;
   }
 
   const response = await fetch(`${apiUrl}/finetune/datasets`, {
-    method: 'POST',
+    method: "POST",
     headers,
     body: formData,
   });
@@ -327,10 +343,10 @@ export async function uploadDataset(
  * Create a reinforcement fine-tuning job
  */
 export async function createReinforcementJob(
-  request: CreateReinforcementJobRequest
+  request: CreateReinforcementJobRequest,
 ): Promise<ReinforcementJob> {
-  const response = await apiClient('/finetune/reinforcement-jobs', {
-    method: 'POST',
+  const response = await apiClient("/finetune/reinforcement-jobs", {
+    method: "POST",
     body: JSON.stringify(request),
   });
   return handleApiResponse<ReinforcementJob>(response);
@@ -345,29 +361,34 @@ export async function createReinforcementJob(
 export async function listReinforcementJobs(
   limit?: number,
   after?: string,
-  datasetId?: string
+  datasetId?: string,
 ): Promise<ReinforcementJob[]> {
   const params = new URLSearchParams();
-  if (limit) params.set('limit', String(limit));
-  if (after) params.set('after', after);
-  if (datasetId) params.set('dataset_id', datasetId);
+  if (limit) params.set("limit", String(limit));
+  if (after) params.set("after", after);
+  if (datasetId) params.set("dataset_id", datasetId);
 
   const queryString = params.toString();
   const endpoint = queryString
     ? `/finetune/reinforcement-jobs?${queryString}`
-    : '/finetune/reinforcement-jobs';
+    : "/finetune/reinforcement-jobs";
 
-  const response = await apiClient(endpoint, { method: 'GET' });
+  const response = await apiClient(endpoint, { method: "GET" });
   return handleApiResponse<ReinforcementJob[]>(response);
 }
 
 /**
  * Get reinforcement job status
  */
-export async function getReinforcementJobStatus(jobId: string): Promise<ReinforcementJob> {
-  const response = await apiClient(`/finetune/reinforcement-jobs/${jobId}/status`, {
-    method: 'GET',
-  });
+export async function getReinforcementJobStatus(
+  jobId: string,
+): Promise<ReinforcementJob> {
+  const response = await apiClient(
+    `/finetune/reinforcement-jobs/${jobId}/status`,
+    {
+      method: "GET",
+    },
+  );
   return handleApiResponse<ReinforcementJob>(response);
 }
 
@@ -376,12 +397,17 @@ export async function getReinforcementJobStatus(jobId: string): Promise<Reinforc
  * @param jobId - The provider job ID to cancel
  */
 export async function cancelReinforcementJob(jobId: string): Promise<void> {
-  const response = await apiClient(`/finetune/reinforcement-jobs/${jobId}/cancel`, {
-    method: 'POST',
-  });
+  const response = await apiClient(
+    `/finetune/reinforcement-jobs/${jobId}/cancel`,
+    {
+      method: "POST",
+    },
+  );
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Failed to cancel job' }));
-    throw new Error(error.message || 'Failed to cancel job');
+    const error = await response
+      .json()
+      .catch(() => ({ message: "Failed to cancel job" }));
+    throw new Error(error.message || "Failed to cancel job");
   }
 }
 
@@ -390,12 +416,17 @@ export async function cancelReinforcementJob(jobId: string): Promise<void> {
  * @param jobId - The provider job ID to resume
  */
 export async function resumeReinforcementJob(jobId: string): Promise<void> {
-  const response = await apiClient(`/finetune/reinforcement-jobs/${jobId}/resume`, {
-    method: 'POST',
-  });
+  const response = await apiClient(
+    `/finetune/reinforcement-jobs/${jobId}/resume`,
+    {
+      method: "POST",
+    },
+  );
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Failed to resume job' }));
-    throw new Error(error.message || 'Failed to resume job');
+    const error = await response
+      .json()
+      .catch(() => ({ message: "Failed to resume job" }));
+    throw new Error(error.message || "Failed to resume job");
   }
 }
 
@@ -408,10 +439,15 @@ export interface WeightsDownloadUrlResponse {
  * Get a signed URL to download trained weights for a completed reinforcement fine-tuning job
  * @param jobId - The provider job ID
  */
-export async function getWeightsDownloadUrl(jobId: string): Promise<WeightsDownloadUrlResponse> {
-  const response = await apiClient(`/finetune/reinforcement-jobs/${jobId}/weights/url`, {
-    method: 'GET',
-  });
+export async function getWeightsDownloadUrl(
+  jobId: string,
+): Promise<WeightsDownloadUrlResponse> {
+  const response = await apiClient(
+    `/finetune/reinforcement-jobs/${jobId}/weights/url`,
+    {
+      method: "GET",
+    },
+  );
   return handleApiResponse<WeightsDownloadUrlResponse>(response);
 }
 
@@ -421,13 +457,13 @@ export async function getWeightsDownloadUrl(jobId: string): Promise<WeightsDownl
  * backendDatasetId can be saved before attempting to create the job
  */
 export async function uploadDatasetForFinetune(
-  dataset: DatasetWithRecords
+  dataset: DatasetWithRecords,
 ): Promise<DatasetUploadResult> {
   // Convert dataset to JSONL
   const jsonlContent = datasetToJsonl(dataset.records);
 
   if (!jsonlContent.trim()) {
-    throw new Error('No valid training records found in dataset');
+    throw new Error("No valid training records found in dataset");
   }
 
   // Extract topic hierarchy if available
@@ -436,7 +472,12 @@ export async function uploadDatasetForFinetune(
     : undefined;
 
   // Upload dataset with topic hierarchy and eval script
-  const uploadResult = await uploadDataset(jsonlContent, topicHierarchy, dataset.evalScript);
+  const uploadResult = await uploadDataset({
+    jsonlContent,
+    topicHierarchy,
+    evalScript: dataset.evalScript,
+    datasetId: dataset.id,
+  });
 
   return {
     backendDatasetId: uploadResult.dataset_id,
@@ -453,10 +494,12 @@ export async function uploadDatasetForFinetune(
  * @returns backendDatasetId
  * @throws Error if dataset not found, has no records, or upload fails
  */
-export async function ensureDatasetUploaded(datasetId: string): Promise<string> {
+export async function ensureDatasetUploaded(
+  datasetId: string,
+): Promise<string> {
   const dataset = await datasetsDB.getDatasetById(datasetId);
   if (!dataset) {
-    throw new Error('Dataset not found');
+    throw new Error("Dataset not found");
   }
 
   // Already uploaded
@@ -467,20 +510,23 @@ export async function ensureDatasetUploaded(datasetId: string): Promise<string> 
   // Need to upload
   const records = await datasetsDB.getRecordsByDatasetId(datasetId);
   if (records.length === 0) {
-    throw new Error('Dataset has no records');
+    throw new Error("Dataset has no records");
   }
 
-  toast.info('Uploading dataset to backend...');
+  toast.info("Uploading dataset to backend...");
   try {
     const uploadResult = await uploadDatasetForFinetune({
       ...dataset,
       records,
     });
-    await datasetsDB.updateDatasetBackendId(datasetId, uploadResult.backendDatasetId);
-    toast.success('Dataset uploaded successfully');
+    await datasetsDB.updateDatasetBackendId(
+      datasetId,
+      uploadResult.backendDatasetId,
+    );
+    toast.success("Dataset uploaded successfully");
     return uploadResult.backendDatasetId;
   } catch (uploadError) {
-    toast.error('Failed to upload dataset');
+    toast.error("Failed to upload dataset");
     throw uploadError;
   }
 }
@@ -519,11 +565,14 @@ export interface CreateFinetuneJobOptions {
 export async function createFinetuneJobFromUpload(
   backendDatasetId: string,
   datasetName: string,
-  options?: CreateFinetuneJobOptions
+  options?: CreateFinetuneJobOptions,
 ): Promise<ReinforcementJob> {
   // Generate output model name from dataset name
   const timestamp = Date.now();
-  const safeName = datasetName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30);
+  const safeName = datasetName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .slice(0, 30);
   const defaultOutputModel = `${safeName}-${timestamp}`;
 
   // Merge user config with defaults
@@ -540,7 +589,7 @@ export async function createFinetuneJobFromUpload(
   // Create reinforcement job request
   const request: CreateReinforcementJobRequest = {
     dataset: backendDatasetId,
-    base_model: options?.baseModel || 'llama-v3-8b-instruct',
+    base_model: options?.baseModel || "google/gemma-3-4b-it",
     output_model: options?.outputModel || defaultOutputModel,
     display_name: options?.displayName || `${datasetName} Fine-tune`,
     training_config: trainingConfig,
@@ -572,10 +621,14 @@ export async function startFinetuneJob(
     baseModel?: string;
     outputModel?: string;
     displayName?: string;
-  }
+  },
 ): Promise<StartFinetuneResult> {
   const { backendDatasetId } = await uploadDatasetForFinetune(dataset);
-  const job = await createFinetuneJobFromUpload(backendDatasetId, dataset.name, options);
+  const job = await createFinetuneJobFromUpload(
+    backendDatasetId,
+    dataset.name,
+    options,
+  );
   return { job, backendDatasetId };
 }
 
@@ -585,10 +638,10 @@ export async function startFinetuneJob(
  * @deprecated Use startFinetuneJob instead
  */
 export async function createFinetuningJob(
-  request: CreateFinetuningJobRequest
+  request: CreateFinetuningJobRequest,
 ): Promise<FinetuningJob> {
-  const response = await apiClient('/finetune/jobs', {
-    method: 'POST',
+  const response = await apiClient("/finetune/jobs", {
+    method: "POST",
     body: JSON.stringify(request),
   });
   return handleApiResponse<FinetuningJob>(response);
@@ -604,10 +657,10 @@ export async function createFinetuningJob(
  * @param request - Evaluation request with dataset_id and model params
  */
 export async function createEvaluation(
-  request: CreateEvaluationRequest
+  request: CreateEvaluationRequest,
 ): Promise<CreateEvaluationResponse> {
-  const response = await apiClient('/finetune/evaluations', {
-    method: 'POST',
+  const response = await apiClient("/finetune/evaluations", {
+    method: "POST",
     body: JSON.stringify(request),
   });
   return handleApiResponse<CreateEvaluationResponse>(response);
@@ -618,10 +671,10 @@ export async function createEvaluation(
  * @param evaluationRunId - The evaluation run ID
  */
 export async function getEvaluationResult(
-  evaluationRunId: string
+  evaluationRunId: string,
 ): Promise<EvaluationResultResponse> {
   const response = await apiClient(`/finetune/evaluations/${evaluationRunId}`, {
-    method: 'GET',
+    method: "GET",
   });
   return handleApiResponse<EvaluationResultResponse>(response);
 }
@@ -635,13 +688,13 @@ export async function getEvaluationResult(
 export async function waitForEvaluationComplete(
   evaluationRunId: string,
   maxAttempts: number = 60,
-  intervalMs: number = 2000
+  intervalMs: number = 2000,
 ): Promise<EvaluationResultResponse> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const result = await getEvaluationResult(evaluationRunId);
 
     // Check if evaluation is complete
-    if (result.status === 'completed' || result.status === 'failed') {
+    if (result.status === "completed" || result.status === "failed") {
       return result;
     }
 
@@ -649,7 +702,9 @@ export async function waitForEvaluationComplete(
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
 
-  throw new Error(`Evaluation ${evaluationRunId} did not complete within timeout`);
+  throw new Error(
+    `Evaluation ${evaluationRunId} did not complete within timeout`,
+  );
 }
 
 // ============================================================================
@@ -690,19 +745,19 @@ export async function getFinetuneEvaluations(
   datasetId: string,
   finetuneJobId?: string,
   rowIndex?: number,
-  epoch?: number
+  epoch?: number,
 ): Promise<FinetuneEvalResultsResponse> {
   const params = new URLSearchParams();
-  if (finetuneJobId) params.set('finetune_job_id', finetuneJobId);
-  if (rowIndex !== undefined) params.set('row_index', String(rowIndex));
-  if (epoch !== undefined) params.set('epoch', String(epoch));
+  if (finetuneJobId) params.set("finetune_job_id", finetuneJobId);
+  if (rowIndex !== undefined) params.set("row_index", String(rowIndex));
+  if (epoch !== undefined) params.set("epoch", String(epoch));
 
   const queryString = params.toString();
   const endpoint = queryString
     ? `/finetune/datasets/${datasetId}/finetune-evaluations?${queryString}`
     : `/finetune/datasets/${datasetId}/finetune-evaluations`;
 
-  const response = await apiClient(endpoint, { method: 'GET' });
+  const response = await apiClient(endpoint, { method: "GET" });
   return handleApiResponse<FinetuneEvalResultsResponse>(response);
 }
 
@@ -735,7 +790,7 @@ export interface DryRunAnalyticsResponse {
  */
 export async function updateDatasetEvalScript(
   datasetId: string,
-  script: string
+  script: string,
 ): Promise<UpdateEvaluatorResponse> {
   // const evaluator = {
   //   type: 'js',
@@ -746,10 +801,13 @@ export async function updateDatasetEvalScript(
   //     },
   //   },
   // };
-  const response = await apiClient(`/finetune/datasets/${datasetId}/evaluator`, {
-    method: 'PATCH',
-    body: JSON.stringify({ evaluator: { type: 'js', script } }),
-  });
+  const response = await apiClient(
+    `/finetune/datasets/${datasetId}/evaluator`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ evaluator: { type: "js", script } }),
+    },
+  );
   return handleApiResponse<UpdateEvaluatorResponse>(response);
 }
 
@@ -763,10 +821,10 @@ export async function updateDatasetEvalScript(
  * @param rows - Array of dataset rows to analyze
  */
 export async function getDryRunAnalytics(
-  rows: unknown[]
+  rows: unknown[],
 ): Promise<DryRunAnalyticsResponse> {
-  const response = await apiClient('/finetune/datasets/analytics/dry-run', {
-    method: 'POST',
+  const response = await apiClient("/finetune/datasets/analytics/dry-run", {
+    method: "POST",
     body: JSON.stringify({ rows }),
   });
   return handleApiResponse<DryRunAnalyticsResponse>(response);
