@@ -35,7 +35,7 @@ export function DocsProcessingState({
         </div>
         <div className="space-y-2">
           <h3 className="text-base font-medium text-foreground">
-            Processing documents
+            Processing Reference documents
           </h3>
           <p className="text-sm text-muted-foreground leading-relaxed">
             {processingCount} of {totalCount} document{totalCount !== 1 ? "s" : ""} still processing.
@@ -48,7 +48,7 @@ export function DocsProcessingState({
         </div>
         <Button variant="outline" size="sm" onClick={handleViewDocs}>
           <FileText className="w-4 h-4 mr-2" />
-          View Documents
+          View Reference Docs
         </Button>
       </div>
     </div>

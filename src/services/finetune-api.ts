@@ -209,13 +209,13 @@ export function flattenEvaluationResults(results: RowEpochResult[]): FlatEvaluat
  * Convert a DatasetRecord to OpenAI training format
  * Returns null if the record cannot be converted
  */
-function recordToTrainingFormat(record: DatasetRecord): { messages: any[] } | null {
+function recordToTrainingFormat(record: DatasetRecord): { messages: any[], id: string } | null {
   const data = record.data as DataInfo | { messages?: any[] } | null;
   if (!data) return null;
 
   // If data already has messages at top level (OpenAI format)
   if ('messages' in data && Array.isArray(data.messages)) {
-    return { messages: data.messages };
+    return { messages: data.messages, id: record.id };
   }
 
   // If data has input/output structure (vllora format)
@@ -236,7 +236,8 @@ function recordToTrainingFormat(record: DatasetRecord): { messages: any[] } | nu
     }
 
     if (messages.length === 0) return null;
-    return { messages };
+
+    return { messages, id: record.id };
   }
 
   return null;
