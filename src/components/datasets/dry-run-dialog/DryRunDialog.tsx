@@ -105,6 +105,13 @@ export function DryRunDialog({
     }
   }, [view, runningJob, lastCompletedJob]);
 
+  // Fallback: if running view has no job to display, go back to config
+  useEffect(() => {
+    if (view === "running" && !runningJob && !lastCompletedJob) {
+      setView("config");
+    }
+  }, [view, runningJob, lastCompletedJob]);
+
   const handleRunDryRun = useCallback(async () => {
     if (!hasGraderConfig) return;
 

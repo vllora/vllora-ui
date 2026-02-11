@@ -5,7 +5,7 @@
  * Displays progress bar, completion stats, and pass/fail counts.
  */
 
-import { Loader2, Check, X } from "lucide-react";
+import { Loader2, Check, X, StopCircle } from "lucide-react";
 import type { DryRunJob } from "@/types/dry-run-job";
 import {
   getJobTotalRows,
@@ -21,11 +21,14 @@ interface EvaluationRunningStateProps {
   runningJob: DryRunJob;
   /** Callback when clicking to open dry run dialog */
   onDryRunClick?: () => void;
+  /** Callback when clicking to cancel the dry run */
+  onCancel?: () => void;
 }
 
 export function EvaluationRunningState({
   runningJob,
   onDryRunClick,
+  onCancel,
 }: EvaluationRunningStateProps) {
   const totalRows = getJobTotalRows(runningJob);
   const completedRows = getJobCompletedRows(runningJob);
@@ -54,11 +57,25 @@ export function EvaluationRunningState({
             Dry run in progress...
           </span>
         </div>
-        {hasAvgScore && (
-          <span className="text-xs font-medium text-foreground">
-            {(averageScore * 100).toFixed(0)}% avg
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {hasAvgScore && (
+            <span className="text-xs font-medium text-foreground">
+              {(averageScore * 100).toFixed(0)}% avg
+            </span>
+          )}
+          {onCancel && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onCancel();
+              }}
+              className="text-muted-foreground hover:text-red-400 transition-colors"
+              title="Cancel dry run"
+            >
+              <StopCircle className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Progress bar */}

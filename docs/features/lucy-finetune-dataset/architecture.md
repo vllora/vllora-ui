@@ -552,6 +552,32 @@ DatasetsGrid
 | `datasets/table/DatasetsEmptyState.tsx` | Empty state when no datasets exist |
 | `datasets/table/DatasetsNoResultsState.tsx` | Empty state when search/filter returns no results |
 
+### Dry Run Polling & Recovery
+
+The `dry-run-polling-manager.ts` singleton manages background polling for dry run evaluation jobs with built-in failure detection and workflow state synchronization.
+
+**Polling Configuration:**
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `POLL_INTERVAL_MS` | 6000ms | Interval between backend status checks |
+| `MAX_POLL_ATTEMPTS` | 120 | Maximum polls before timeout (~12 min) |
+| `MAX_CONSECUTIVE_ERRORS` | 5 | Consecutive failures before marking job failed |
+
+**Failure Detection:**
+- **Timeout**: After 120 poll attempts (~12 minutes), the job is marked failed and `markStepFailed()` is called on the workflow
+- **Consecutive errors**: After 5 consecutive poll failures (network issues, server down), the job is marked failed with workflow step sync
+- **Backend failure**: If the backend reports `status: 'failed'`, the job is immediately marked failed
+
+**Workflow State Sync:**
+- **On success**: The polling manager populates `workflow.dryRun` with summary stats (mean, std, percentAboveZero, percentPerfect, verdict, sampleResults, recommendations) via `updateStepData()`
+- **On failure**: The polling manager calls `markStepFailed()` which sets `stepStatus.dry_run = 'failed'` in the workflow state, ensuring the UI reflects the failure
+
+**Cancel Support:**
+The `EvaluationRunningState` card displays a cancel button (StopCircle icon) that calls `cancelDryRun()` on the polling manager, which stops polling and marks the job as `cancelled`.
+
+**DryRunDialog Fallback:**
+If the dialog is in "running" view but the running job disappears without a completed job being available (e.g., job cancelled or failed externally), the dialog falls back to the "config" view so the user can start a new dry run.
+
 ### Quality Indicators
 
 Per-record quality scores displayed in the records table.
@@ -575,7 +601,7 @@ RecordRow
 | `datasets/records-table/RecordRow.tsx` | Renders QualityIndicator between Stats and Actions columns |
 | `datasets/records-table/RecordsTableHeader.tsx` | "Quality" column header |
 | `datasets/table-columns.ts` | Column width: `quality: "w-14 shrink-0"` |
-| `services/dry-run-polling-manager.ts` | Persists per-row scores via `updateRecordEvaluation()` |
+| `services/dry-run-polling-manager.ts` | Persists per-row scores via `updateRecordEvaluation()`, syncs workflow state on completion/failure |
 | `types/dataset-types.ts` | `DatasetEvaluation` type (`score`, `feedback`, `evaluatedAt`) |
 
 ### Dataset State System

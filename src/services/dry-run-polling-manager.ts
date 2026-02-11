@@ -20,6 +20,7 @@ import {
 } from './finetune-api';
 import { analyzeDryRunResults } from '@/lib/distri-dataset-tools/analysis/analyze-dry-run';
 import * as datasetsDB from './datasets-db';
+import { getWorkflowByDataset, updateStepData, markStepFailed } from './finetune-workflow-db';
 import { toast } from 'sonner';
 
 // =============================================================================
@@ -27,7 +28,8 @@ import { toast } from 'sonner';
 // =============================================================================
 
 const POLL_INTERVAL_MS = 6000; // 3 seconds
-// const MAX_POLL_ATTEMPTS = 120; // 6 minutes max (120 * 3 seconds)
+const MAX_POLL_ATTEMPTS = 120; // ~12 minutes max (120 * 6 seconds)
+const MAX_CONSECUTIVE_ERRORS = 5;
 
 // =============================================================================
 // Singleton Class
@@ -37,6 +39,7 @@ class DryRunPollingManager {
   private static instance: DryRunPollingManager;
   private pollingIntervals: Map<string, ReturnType<typeof setInterval>> = new Map();
   private pollAttempts: Map<string, number> = new Map();
+  private consecutiveErrors: Map<string, number> = new Map();
   private initialized = false;
 
   private constructor() {}
@@ -215,6 +218,7 @@ class DryRunPollingManager {
       this.pollingIntervals.delete(jobId);
     }
     this.pollAttempts.delete(jobId);
+    this.consecutiveErrors.delete(jobId);
   }
 
   /**
@@ -269,20 +273,24 @@ class DryRunPollingManager {
     const attempts = (this.pollAttempts.get(jobId) || 0) + 1;
     this.pollAttempts.set(jobId, attempts);
 
-    // // Check for timeout
-    // if (attempts > MAX_POLL_ATTEMPTS) {
-    //   this.stopPolling(jobId);
-    //   await updateDryRunJob(jobId, {
-    //     status: 'failed',
-    //     error: 'Dry run timed out',
-    //     completedAt: Date.now(),
-    //   });
-    //   toast.error('Dry run timed out');
-    //   return;
-    // }
+    // Check for timeout
+    if (attempts > MAX_POLL_ATTEMPTS) {
+      this.stopPolling(jobId);
+      await updateDryRunJob(jobId, {
+        status: 'failed',
+        error: 'Dry run timed out',
+        completedAt: Date.now(),
+      });
+      await this.markWorkflowStepFailed(job.datasetId);
+      toast.error('Dry run timed out');
+      return;
+    }
 
     try {
       const result = await getEvaluationResult(job.evaluationRunId);
+
+      // Reset consecutive errors on success
+      this.consecutiveErrors.set(jobId, 0);
 
       // Update progress with polling snapshot (full result for investigation)
       await updateDryRunJob(jobId, {
@@ -295,7 +303,21 @@ class DryRunPollingManager {
       }
     } catch (error) {
       console.error(`[DryRunPollingManager] Poll failed for ${jobId}:`, error);
-      // Don't fail immediately on a single poll error, let it retry
+
+      // Track consecutive errors
+      const errorCount = (this.consecutiveErrors.get(jobId) || 0) + 1;
+      this.consecutiveErrors.set(jobId, errorCount);
+
+      if (errorCount >= MAX_CONSECUTIVE_ERRORS) {
+        this.stopPolling(jobId);
+        await updateDryRunJob(jobId, {
+          status: 'failed',
+          error: 'Dry run failed: unable to reach evaluation server after multiple attempts',
+          completedAt: Date.now(),
+        });
+        await this.markWorkflowStepFailed(job.datasetId);
+        toast.error('Dry run failed: unable to reach evaluation server');
+      }
     }
   }
 
@@ -315,6 +337,7 @@ class DryRunPollingManager {
           error: 'Evaluation failed on backend',
           completedAt: Date.now(),
         });
+        await this.markWorkflowStepFailed(job.datasetId);
         toast.error('Dry run failed');
         return;
       }
@@ -361,6 +384,35 @@ class DryRunPollingManager {
         result: dryRunStats,
       });
 
+      // Update workflow step data on success
+      try {
+        const workflow = await getWorkflowByDataset(job.datasetId);
+        if (workflow && workflow.currentStep === 'dry_run') {
+          const allSamples = [
+            ...(dryRunStats.sampleResults.highest || []),
+            ...(dryRunStats.sampleResults.lowest || []),
+            ...(dryRunStats.sampleResults.aroundMean || []),
+          ];
+          await updateStepData(workflow.id, 'dryRun', {
+            mean: dryRunStats.statistics.mean,
+            std: dryRunStats.statistics.std,
+            percentAboveZero: dryRunStats.statistics.percentAboveZero,
+            percentPerfect: dryRunStats.statistics.percentPerfect,
+            verdict: dryRunStats.diagnosis.verdict,
+            sampleResults: allSamples.map((s) => ({
+              recordId: s.recordId,
+              prompt: '',
+              response: '',
+              score: s.score,
+              reasoning: s.reason || '',
+            })),
+            recommendations: dryRunStats.diagnosis.recommendations || [],
+          });
+        }
+      } catch (wfError) {
+        console.error('[DryRunPollingManager] Failed to update workflow:', wfError);
+      }
+
       // Show verdict toast
       const verdict = dryRunStats.diagnosis.verdict;
       if (verdict === 'GO') {
@@ -377,7 +429,19 @@ class DryRunPollingManager {
         error: error instanceof Error ? error.message : 'Failed to process results',
         completedAt: Date.now(),
       });
+      await this.markWorkflowStepFailed(job.datasetId);
       toast.error('Failed to process dry run results');
+    }
+  }
+
+  private async markWorkflowStepFailed(datasetId: string): Promise<void> {
+    try {
+      const workflow = await getWorkflowByDataset(datasetId);
+      if (workflow && workflow.currentStep === 'dry_run') {
+        await markStepFailed(workflow.id);
+      }
+    } catch (error) {
+      console.error('[DryRunPollingManager] Failed to mark workflow step failed:', error);
     }
   }
 }

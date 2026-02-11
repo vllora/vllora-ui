@@ -29,7 +29,7 @@ export interface DryRunEvaluationCardProps {
 }
 
 export function DryRunEvaluationCard({ evalScript, onDryRunClick }: DryRunEvaluationCardProps) {
-  const { jobs, isLoading, runningJob, lastCompletedJob } = DryRunJobsConsumer();
+  const { jobs, isLoading, runningJob, lastCompletedJob, cancelDryRun } = DryRunJobsConsumer();
 
   // No eval script - show setup prompt (clickable)
   if (!evalScript) {
@@ -39,7 +39,13 @@ export function DryRunEvaluationCard({ evalScript, onDryRunClick }: DryRunEvalua
 
   // Dry run is currently running - show progress with summary stats
   if (runningJob && (runningJob.status === 'running' || runningJob.status === 'pending')) {
-    return <EvaluationRunningState runningJob={runningJob} onDryRunClick={onDryRunClick} />;
+    return (
+      <EvaluationRunningState
+        runningJob={runningJob}
+        onDryRunClick={onDryRunClick}
+        onCancel={() => cancelDryRun(runningJob.id)}
+      />
+    );
   }
 
   // Check for failed jobs (most recent first)

@@ -299,6 +299,43 @@ interface GraderConfig {
 - Must call `upload_dataset` before `run_dry_run`
 - Use `sync_evaluator` to update grader after upload
 
+**State Transitions:**
+- `pending` -> `in_progress`: When dry run is started via `run_dry_run` tool or UI
+- `in_progress` -> `completed`: When polling detects successful backend evaluation
+- `in_progress` -> `failed`: When polling times out (~12 min), consecutive errors occur (5 failures), or backend reports failure
+- `pending` -> `skipped`: When user skips dry run via `advance_to_step` to `training`
+
+**Failure Detection (Polling Manager):**
+
+The `dry-run-polling-manager.ts` singleton manages background polling and detects failures:
+
+| Failure Mode | Threshold | Behavior |
+|-------------|-----------|----------|
+| Polling timeout | 120 attempts (~12 min at 6s interval) | Job marked failed, workflow step marked failed |
+| Consecutive errors | 5 consecutive poll failures | Job marked failed, workflow step marked failed |
+| Backend failure | Backend reports `status: 'failed'` | Job marked failed, workflow step marked failed |
+
+On failure, the polling manager calls `markStepFailed()` which sets `stepStatus.dry_run = 'failed'` in the workflow state.
+
+**Workflow State Sync:**
+
+On successful completion, the polling manager populates `workflow.dryRun` via `updateStepData()`:
+```typescript
+{
+  mean: number,
+  std: number,
+  percentAboveZero: number,
+  percentPerfect: number,
+  verdict: 'GO' | 'NO-GO' | 'WARNING',
+  sampleResults: Array<{ recordId, prompt, response, score, reasoning }>,
+  recommendations: string[],
+}
+```
+
+**Cancel Support:**
+
+Users can cancel a running dry run via the cancel button on the `EvaluationRunningState` card (StopCircle icon). Cancellation stops polling and marks the job as `cancelled`.
+
 **Dry Run Metrics:**
 | Metric | Healthy Range | Description |
 |--------|---------------|-------------|
