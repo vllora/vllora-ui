@@ -327,6 +327,10 @@ interface DryRunResult {
 }
 ```
 
+**Per-Record Score Persistence:**
+
+During dry run polling, individual row scores from the backend are persisted to each record's `evaluation` field via `updateRecordEvaluation()` in `dry-run-polling-manager.ts`. This enables the `QualityIndicator` component to display per-record scores in the records table (green >= 0.8, amber >= 0.6, red < 0.6). Scores are stored as `DatasetEvaluation` on `DatasetRecord.evaluation`.
+
 ---
 
 ### Step 6: Training (`training`)
@@ -540,7 +544,7 @@ interface GenerationHistoryStore {
 | Object Store | Key | Indexes | Description |
 |--------------|-----|---------|-------------|
 | `datasets` | `id` | `name`, `createdAt` | Dataset metadata and configurations |
-| `records` | `id` | `datasetId`, `createdAt` | Training records (input/output pairs) |
+| `records` | `id` | `datasetId`, `createdAt` | Training records (input/output pairs, with optional `evaluation` field for per-record quality scores) |
 
 #### What's Stored in Dataset (NOT in Workflow)
 
@@ -548,20 +552,33 @@ interface GenerationHistoryStore {
 interface Dataset {
   id: string;
   name: string;
-  description?: string;
+  createdAt: number;
+  updatedAt: number;
+
+  // Dataset state for tracking finetune progress
+  state?: DatasetState;              // 'draft' | 'in_finetune' | 'completed'
+
+  // Training objective
   datasetObjective?: string;
 
   // Actual configuration data (workflow only stores metadata)
-  topicHierarchy?: TopicNode[];      // Full topic tree (Step 1 output)
-  evaluationConfig?: EvaluationConfig;  // Grader config (Step 4 output)
+  topicHierarchy?: TopicHierarchyConfig;  // Full topic tree (Step 1 output)
+  evalScript?: string;                     // JavaScript evaluation script (Step 4 output)
 
   // Backend sync
   backendDatasetId?: string;  // ID from backend after upload
 
-  createdAt: number;
-  updatedAt: number;
+  // Statistics for UI display
+  coverageStats?: CoverageStats;
+  dryRunStats?: DryRunStats;
+  stats?: DatasetStats;
+
+  // Auto-generated README
+  readme?: string;
 }
 ```
+
+**DatasetState** tracks the finetune lifecycle. The shared `DATASET_STATE_CONFIG` array in `dataset-types.ts` provides display labels and CSS classes for each state, consumed by the `DatasetCard` state badge and `DatasetsListHeader` filter tabs.
 
 ---
 

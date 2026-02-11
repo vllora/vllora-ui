@@ -425,10 +425,15 @@ interface DryRunStats {
 }
 ```
 
+**Per-Record Evaluation Scores:**
+
+In addition to aggregate `DryRunStats` on the dataset, individual evaluation scores are persisted to each record's `evaluation` field during dry run polling. The `dry-run-polling-manager.ts` iterates over evaluation results and calls `updateRecordEvaluation(datasetId, rowId, score)` for each row that has a numeric score. This enables the `QualityIndicator` component to display per-record scores in the records table.
+
 This ensures:
 1. **Consistency** - Lucy agent and UI components read from the same source
 2. **Persistence** - Stats survive across sessions without workflow context
 3. **Decoupling** - UI can display stats without needing workflow state
+4. **Per-Record Granularity** - Individual record scores available via `DatasetRecord.evaluation`
 
 ---
 
@@ -1868,6 +1873,74 @@ function isChessDataset(trainingGoals?: string): boolean {
 **DO NOT use for evaluation/grading:**
 - Stockfish tools are for DATA GENERATION only
 - Model evaluation uses the configured grader function, not Stockfish
+
+---
+
+## Datasets UI
+
+### Dataset States
+
+Each dataset has a `state` field tracked via the `DatasetState` type (`draft | in_finetune | completed`). State display is managed through a shared `DATASET_STATE_CONFIG` array in `dataset-types.ts`, which provides label and CSS class for each state. This config is consumed by both the `DatasetCard` badge and the `DatasetsListHeader` filter tabs.
+
+### Datasets Grid Page (`DatasetsGrid.tsx`)
+
+The datasets listing page uses a responsive card grid layout (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4`). Features:
+
+- **Search** — filters datasets by name or ID
+- **Segmented filter tabs** — "All" plus one tab per `DatasetState` (Draft, Processing, Completed), built dynamically from `DATASET_STATE_CONFIG`
+- **Sort** — 8 options via `DatasetSortDropdown`: last/oldest updated, newest/oldest created, name A–Z/Z–A, most/fewest records
+- **Record counts**, **topic counts**, and **docs counts** are loaded asynchronously for each dataset card
+- **Add Dataset card** — links to `/datasets/new` with a dashed-border "+" card
+
+### DatasetCard (`DatasetCard.tsx`)
+
+Redesigned card component with:
+
+- **Top accent bar** — gradient color based on state: emerald for `completed`, amber for `in_finetune`, subtle border for `draft`
+- **Gradient background** — `bg-gradient-to-b from-card to-card/80`
+- **Hover effect** — soft theme-colored glow: `hover:shadow-[0_4px_24px_-4px_rgba(var(--theme-500),0.15)]` with subtle lift (`hover:-translate-y-0.5`)
+- **Stat chips** — compact pills showing record count (MessageSquare icon), topic count (Tags icon), and docs count (FileText icon)
+- **Tooltips** — on name, objective, each stat chip, state badge, and timestamp
+- **Action dropdown** — compact context menu (Rename, Import Data, Download, Delete) with `opacity-40` resting state
+
+### DatasetSortDropdown (`DatasetSortDropdown.tsx`)
+
+Standalone sort control extracted from the header for readability. Exports `DatasetSortKey`, `DatasetSortDir`, and `DatasetSort` types. Sort options:
+
+| Key | Direction | Label |
+|-----|-----------|-------|
+| `updated` | desc | Last updated |
+| `updated` | asc | Oldest updated |
+| `created` | desc | Newest created |
+| `created` | asc | Oldest created |
+| `name` | asc | Name A–Z |
+| `name` | desc | Name Z–A |
+| `records` | desc | Most records |
+| `records` | asc | Fewest records |
+
+### Quality Indicators (`QualityIndicator.tsx`)
+
+Per-record quality score badge displayed in the records table. Shows evaluation scores (0–1) from dry run or finetune evaluations with color coding:
+
+| Score Range | Color |
+|-------------|-------|
+| >= 0.8 | Emerald (green) |
+| >= 0.6 | Amber (yellow) |
+| < 0.6 | Red |
+
+Scores are stored on `DatasetRecord.evaluation` (`DatasetEvaluation` type with `score`, `feedback`, `evaluatedAt` fields). During dry run polling, the `dry-run-polling-manager.ts` calls `updateRecordEvaluation()` to persist individual row scores from the backend evaluation results back to each record in IndexedDB.
+
+### CSS Theme Variables
+
+The codebase uses CSS custom properties for theming (`--theme-500`, `--theme-600`, etc.) as space-separated RGB values. The Tailwind opacity modifier syntax (`[rgb(var(--theme-500))]/50`) does **not** work with arbitrary `rgb()` values. Instead, use `rgba()` directly:
+
+```css
+/* WRONG — opacity modifier ignored */
+bg-[rgb(var(--theme-500))]/50
+
+/* CORRECT — explicit alpha channel */
+bg-[rgba(var(--theme-500),0.5)]
+```
 
 ---
 

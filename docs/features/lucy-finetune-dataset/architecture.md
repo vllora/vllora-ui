@@ -513,6 +513,92 @@ Workflow snapshots stored in IndexedDB enable:
 
 ---
 
+## Datasets UI Components
+
+### Dataset Grid Page
+
+The datasets listing page uses a responsive card grid layout with search, filter, and sort capabilities.
+
+**Component Tree:**
+```
+DatasetsGrid
+├── DatasetsListHeader
+│   ├── Search Input (with lucide Search icon)
+│   ├── Segmented Filter Tabs (All | Draft | Processing | Completed)
+│   ├── DatasetSortDropdown (8 sort options)
+│   └── Count label (e.g. "12 datasets")
+├── DatasetCard (per dataset)
+│   ├── Top accent bar (color by state)
+│   ├── Name (with tooltip, click to select)
+│   ├── Objective excerpt (with tooltip)
+│   ├── Stat chips (records, topics, docs)
+│   ├── State badge + timestamp
+│   └── Action dropdown (Rename, Import, Download, Delete)
+├── AddDatasetCard (link to /datasets/new)
+├── DatasetsEmptyState
+├── DatasetsNoResultsState
+├── DeleteConfirmationDialog
+└── IngestDataDialog
+```
+
+**Key Files:**
+| File | Purpose |
+|------|---------|
+| `datasets/table/DatasetsGrid.tsx` | Main grid container, state management, filter/sort logic |
+| `datasets/table/DatasetsListHeader.tsx` | Search bar, segmented filter tabs, sort dropdown, count |
+| `datasets/table/DatasetSortDropdown.tsx` | Standalone sort dropdown (8 options), exports `DatasetSort` types |
+| `datasets/table/DatasetCard.tsx` | Card with gradient bg, accent bar, stat chips, tooltips, action menu |
+| `datasets/table/AddDatasetCard.tsx` | Dashed-border "New Dataset" card |
+| `datasets/table/DatasetsEmptyState.tsx` | Empty state when no datasets exist |
+| `datasets/table/DatasetsNoResultsState.tsx` | Empty state when search/filter returns no results |
+
+### Quality Indicators
+
+Per-record quality scores displayed in the records table.
+
+**Component Tree:**
+```
+RecordsTableHeader
+├── ... (existing columns)
+└── "Quality" column header
+
+RecordRow
+├── ... (existing cells)
+└── QualityIndicator
+    └── Score badge (colored dot + number with tooltip)
+```
+
+**Key Files:**
+| File | Purpose |
+|------|---------|
+| `datasets/records-table/cells/QualityIndicator.tsx` | Score badge (emerald/amber/red based on 0-1 score) |
+| `datasets/records-table/RecordRow.tsx` | Renders QualityIndicator between Stats and Actions columns |
+| `datasets/records-table/RecordsTableHeader.tsx` | "Quality" column header |
+| `datasets/table-columns.ts` | Column width: `quality: "w-14 shrink-0"` |
+| `services/dry-run-polling-manager.ts` | Persists per-row scores via `updateRecordEvaluation()` |
+| `types/dataset-types.ts` | `DatasetEvaluation` type (`score`, `feedback`, `evaluatedAt`) |
+
+### Dataset State System
+
+Datasets have a `state` field (`DatasetState = 'draft' | 'in_finetune' | 'completed'`) with shared display config:
+
+```typescript
+// In dataset-types.ts
+export const DATASET_STATE_CONFIG: DatasetStateConfig[] = [
+  { value: 'draft', label: 'Draft', className: 'bg-muted text-muted-foreground' },
+  { value: 'in_finetune', label: 'Processing', className: 'bg-amber-500/15 text-amber-600 ...' },
+  { value: 'completed', label: 'Completed', className: 'bg-emerald-500/15 text-emerald-600 ...' },
+];
+```
+
+This config is consumed by `DatasetCard` (state badge), `DatasetsListHeader` (filter tabs), and `DatasetCard` (top accent bar color).
+
+### CSS Theme Variables Note
+
+Theme colors use CSS custom properties as space-separated RGB values (e.g., `--theme-500: 99 102 241`). The Tailwind opacity modifier `[rgb(var(--theme-500))]/50` does **not** work with these values. Use `rgba()` instead: `[rgba(var(--theme-500),0.5)]`.
+
+---
+
 ## Related Documentation
 
 - [State Machine](./state-machine.md) - Workflow state transitions
