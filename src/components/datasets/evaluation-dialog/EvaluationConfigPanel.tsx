@@ -1,9 +1,8 @@
 /**
  * EvaluationConfigPanel
  *
- * Inline panel for configuring JavaScript evaluation settings.
- * Displayed as a tab in the dataset main content area.
- * Uses a resizable split view: code editor (left) + dry run panel (right).
+ * IDE-style evaluator panel: code editor + inline dry run results.
+ * No header — parent tab provides context. Smart status bar footer.
  */
 
 import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from "react";
@@ -11,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import {
   Loader2,
   CheckCircle2,
-  Code2,
   Copy,
   RotateCcw,
   FlaskConical,
@@ -20,6 +18,7 @@ import Editor from "@monaco-editor/react";
 import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { DryRunInlinePanel } from "./DryRunInlinePanel";
+import { cn } from "@/lib/utils";
 
 /** Methods exposed via ref for external control */
 export interface EvaluationConfigPanelRef {
@@ -95,10 +94,26 @@ function evaluate(input) {
 }
 `;
 
+const EDITOR_OPTIONS = {
+  minimap: { enabled: false },
+  fontSize: 13,
+  lineNumbers: "on" as const,
+  scrollBeyondLastLine: false,
+  wordWrap: "on" as const,
+  automaticLayout: true,
+  tabSize: 2,
+  padding: { top: 16, bottom: 16 },
+  scrollbar: {
+    vertical: "auto" as const,
+    horizontal: "hidden" as const,
+    verticalScrollbarSize: 8,
+  },
+};
+
 interface EvaluationConfigPanelProps {
   evalScript?: string;
   onSave: (script: string) => Promise<void>;
-  /** Hide header action buttons (Reset/Copy) when they're shown externally */
+  /** Hide editor action buttons (Reset/Copy) when they're shown externally */
   hideHeaderActions?: boolean;
   /** Number of records in the dataset (for dry run config) */
   recordCount: number;
@@ -106,30 +121,25 @@ interface EvaluationConfigPanelProps {
 
 export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, EvaluationConfigPanelProps>(
   function EvaluationConfigPanel({ evalScript, onSave, hideHeaderActions = false, recordCount }, ref) {
-  // JavaScript evaluator state
   const [script, setScript] = useState(DEFAULT_SCRIPT);
-
-  // UI state
   const [isSaving, setIsSaving] = useState(false);
   const [showDryRunPanel, setShowDryRunPanel] = useState(false);
 
-  // Auto-show panel when there's a running job or completed results
   const { runningJob, lastCompletedJob } = DryRunJobsConsumer();
 
+  // Auto-show panel when there's a running job or completed results
   useEffect(() => {
     if (runningJob || lastCompletedJob) {
       setShowDryRunPanel(true);
     }
   }, [runningJob, lastCompletedJob]);
 
-  // Initialize from evalScript
   useEffect(() => {
     if (evalScript) {
       setScript(evalScript);
     }
   }, [evalScript]);
 
-  // Track if there are unsaved changes
   const hasChanges = useMemo(() => {
     if (!evalScript) return script !== DEFAULT_SCRIPT;
     return script !== evalScript;
@@ -154,7 +164,6 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
     setScript(DEFAULT_SCRIPT);
   };
 
-  // Expose reset and copy methods to parent via ref
   useImperativeHandle(ref, () => ({
     reset: handleReset,
     copy: handleCopy,
@@ -162,44 +171,21 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
 
   const hasGraderConfig = !!evalScript;
 
+  // Contextual label for the dry run toggle button
+  const dryRunButtonLabel = useMemo(() => {
+    if (runningJob) return "View Progress";
+    if (lastCompletedJob?.result) return "Results";
+    return "Test Grader";
+  }, [runningJob, lastCompletedJob]);
+
+  // Last result data for the status indicator
+  const lastResult = lastCompletedJob?.result;
+  const verdict = lastResult?.diagnosis?.verdict;
+  const meanScore = lastResult?.statistics?.mean;
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-muted/30 shrink-0">
-        <div className="flex items-center gap-2">
-          <Code2 className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-medium">JavaScript Evaluator</span>
-          <span className="text-xs text-muted-foreground ml-2">
-            Define how training samples are scored using JavaScript
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          {!hideHeaderActions && (
-            <>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs gap-1.5"
-                onClick={handleReset}
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Reset
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs gap-1.5"
-                onClick={handleCopy}
-              >
-                <Copy className="w-3.5 h-3.5" />
-                Copy
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Editor + Dry Run split view */}
+      {/* Editor + Dry Run split view — takes all available space */}
       <div className="flex-1 overflow-hidden">
         {showDryRunPanel ? (
           <ResizablePanelGroup direction="horizontal">
@@ -210,21 +196,7 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
                 value={script}
                 onChange={(v) => setScript(v || "")}
                 theme="vs-dark"
-                options={{
-                  minimap: { enabled: false },
-                  fontSize: 13,
-                  lineNumbers: "on",
-                  scrollBeyondLastLine: false,
-                  wordWrap: "on",
-                  automaticLayout: true,
-                  tabSize: 2,
-                  padding: { top: 16, bottom: 16 },
-                  scrollbar: {
-                    vertical: "auto",
-                    horizontal: "hidden",
-                    verticalScrollbarSize: 8,
-                  },
-                }}
+                options={EDITOR_OPTIONS}
               />
             </ResizablePanel>
             <ResizableHandle withHandle />
@@ -243,57 +215,99 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
             value={script}
             onChange={(v) => setScript(v || "")}
             theme="vs-dark"
-            options={{
-              minimap: { enabled: false },
-              fontSize: 13,
-              lineNumbers: "on",
-              scrollBeyondLastLine: false,
-              wordWrap: "on",
-              automaticLayout: true,
-              tabSize: 2,
-              padding: { top: 16, bottom: 16 },
-              scrollbar: {
-                vertical: "auto",
-                horizontal: "hidden",
-                verticalScrollbarSize: 8,
-              },
-            }}
+            options={EDITOR_OPTIONS}
           />
         )}
       </div>
 
-      {/* Footer */}
-      <div className="flex items-center justify-between px-5 py-3 border-t border-border bg-muted/20 shrink-0">
-        {/* Run Dry Run button */}
-        <div>
-          {evalScript && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowDryRunPanel(true)}
-              disabled={showDryRunPanel}
-              className="gap-2 h-7"
+      {/* Status bar — compact, IDE-style */}
+      <div className="flex items-center gap-2 px-3 py-1.5 border-t border-zinc-800/80 shrink-0">
+        {/* Left: editor actions */}
+        {!hideHeaderActions && (
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={handleReset}
+              className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+              title="Reset to default"
             >
-              <FlaskConical className="w-3.5 h-3.5" />
-              {showDryRunPanel ? "Dry Run Open" : "Run Dry Run"}
-            </Button>
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={handleCopy}
+              className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+              title="Copy script"
+            >
+              <Copy className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Center: contextual status — clickable to open panel */}
+        <div className="flex-1 flex items-center justify-center">
+          {!showDryRunPanel && runningJob && (
+            <button
+              onClick={() => setShowDryRunPanel(true)}
+              className="flex items-center gap-2 px-2.5 py-1 rounded-md text-xs hover:bg-zinc-800/80 transition-colors text-blue-400"
+            >
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <span className="font-medium">Evaluating...</span>
+            </button>
+          )}
+          {!showDryRunPanel && !runningJob && verdict && meanScore !== undefined && (
+            <button
+              onClick={() => setShowDryRunPanel(true)}
+              className="flex items-center gap-2 px-2.5 py-1 rounded-md text-xs hover:bg-zinc-800/80 transition-colors"
+            >
+              <span className={cn(
+                "w-2 h-2 rounded-full shrink-0",
+                verdict === "GO" ? "bg-emerald-500" :
+                verdict === "NO-GO" ? "bg-red-500" : "bg-amber-500"
+              )} />
+              <span className="font-mono font-medium text-zinc-300">{meanScore.toFixed(2)}</span>
+              <span className="text-zinc-500">avg</span>
+              <span className={cn(
+                "text-[10px] font-semibold uppercase tracking-wide",
+                verdict === "GO" ? "text-emerald-400" :
+                verdict === "NO-GO" ? "text-red-400" : "text-amber-400"
+              )}>
+                {verdict}
+              </span>
+            </button>
           )}
         </div>
 
-        {/* Save button */}
-        <Button
-          size="sm"
-          onClick={handleSave}
-          disabled={isSaving || !hasChanges}
-          className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white h-7"
-        >
-          {isSaving ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <CheckCircle2 className="w-3.5 h-3.5" />
+        {/* Right: dry run toggle + save */}
+        <div className="flex items-center gap-1.5">
+          {evalScript && !showDryRunPanel && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowDryRunPanel(true)}
+              className="h-7 text-xs gap-1.5 text-zinc-400 hover:text-zinc-200"
+            >
+              <FlaskConical className="w-3.5 h-3.5" />
+              {dryRunButtonLabel}
+            </Button>
           )}
-          {hasChanges ? "Save Changes" : "Saved"}
-        </Button>
+          <Button
+            size="sm"
+            onClick={handleSave}
+            disabled={isSaving || !hasChanges}
+            className={cn(
+              "h-7 text-xs gap-1.5",
+              hasChanges
+                ? "bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-500))] text-white"
+                : "bg-transparent text-zinc-500 border-none shadow-none hover:bg-transparent cursor-default"
+            )}
+          >
+            {isSaving ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : !hasChanges ? (
+              <CheckCircle2 className="w-3 h-3 text-emerald-500/60" />
+            ) : null}
+            {hasChanges ? "Save" : "Saved"}
+          </Button>
+        </div>
       </div>
     </div>
   );

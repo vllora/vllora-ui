@@ -21,7 +21,7 @@ import { FlaskConical } from "lucide-react";
 import { flattenEvaluationResults } from "@/services/finetune-api";
 import { ConfigView } from "./ConfigView";
 import { HistoryView } from "./HistoryView";
-import { ResultsView, type ResultsViewTab } from "./ResultsView";
+import { ResultsView } from "./ResultsView";
 import { RunningView } from "./RunningView";
 import { VerdictBadge } from "./VerdictBadge";
 import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
@@ -67,7 +67,6 @@ export function DryRunDialog({
   const [view, setView] = useState<DialogView>("config");
   const [sampleSize, setSampleSize] = useState(() => getDefaultSampleSize(recordCount));
   const [rolloutModel, setRolloutModel] = useState("gpt-4o-mini");
-  const [activeTab, setActiveTab] = useState<ResultsViewTab>("overview");
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
   // Update sampleSize when recordCount changes (e.g., when switching datasets)
@@ -94,7 +93,6 @@ export function DryRunDialog({
       } else {
         setView("config");
       }
-      setActiveTab("overview");
     }
   }, [open, runningJob, lastCompletedJob]);
 
@@ -134,7 +132,6 @@ export function DryRunDialog({
   const handleReset = useCallback(() => {
     setView("config");
     setSelectedJobId(null);
-    setActiveTab("overview");
   }, []);
 
   const handleViewHistory = useCallback(() => {
@@ -227,8 +224,6 @@ export function DryRunDialog({
             <ResultsView
               result={result}
               scores={scores}
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
               onReset={handleReset}
               onViewHistory={handleViewHistory}
               onClose={() => onOpenChange(false)}

@@ -8,11 +8,10 @@
 
 import { useEffect, useCallback, useMemo, useState } from "react";
 import { FlaskConical, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { flattenEvaluationResults } from "@/services/finetune-api";
 import { ConfigView } from "../dry-run-dialog/ConfigView";
 import { HistoryView } from "../dry-run-dialog/HistoryView";
-import { ResultsView, type ResultsViewTab } from "../dry-run-dialog/ResultsView";
+import { ResultsView } from "../dry-run-dialog/ResultsView";
 import { RunningView } from "../dry-run-dialog/RunningView";
 import { VerdictBadge } from "../dry-run-dialog/VerdictBadge";
 import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
@@ -51,15 +50,12 @@ export function DryRunInlinePanel({
   const [view, setView] = useState<PanelView>("config");
   const [sampleSize, setSampleSize] = useState(() => getDefaultSampleSize(recordCount));
   const [rolloutModel, setRolloutModel] = useState("gpt-4o-mini");
-  const [activeTab, setActiveTab] = useState<ResultsViewTab>("overview");
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
-  // Update sampleSize when recordCount changes
   useEffect(() => {
     setSampleSize(getDefaultSampleSize(recordCount));
   }, [recordCount]);
 
-  // Determine which job to display results for
   const displayJob = useMemo(() => {
     if (selectedJobId) {
       return jobs.find((j) => j.id === selectedJobId) || null;
@@ -85,7 +81,7 @@ export function DryRunInlinePanel({
     }
   }, [view, runningJob, lastCompletedJob]);
 
-  // Fallback: if running view has no job to display, go back to config
+  // Fallback: if running view has no job, go back to config
   useEffect(() => {
     if (view === "running" && !runningJob && !lastCompletedJob) {
       setView("config");
@@ -112,7 +108,6 @@ export function DryRunInlinePanel({
   const handleReset = useCallback(() => {
     setView("config");
     setSelectedJobId(null);
-    setActiveTab("overview");
   }, []);
 
   const handleViewHistory = useCallback(() => {
@@ -147,29 +142,27 @@ export function DryRunInlinePanel({
   }, [result]);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-background">
-      {/* Panel header */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-muted/30 shrink-0">
-        <div className="flex items-center gap-2">
-          <FlaskConical className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Dry Run</span>
+    <div className="flex flex-col h-full overflow-hidden bg-background border-l border-zinc-800/60">
+      {/* Panel header — compact */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800/60 bg-zinc-900/40 shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <FlaskConical className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
+          <span className="text-xs font-medium text-zinc-300">Dry Run</span>
           {view === "results" && result && (
             <VerdictBadge verdict={result.diagnosis.verdict} />
           )}
           {view === "running" && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-900/30 text-blue-400">
-              Running...
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/15 text-blue-400">
+              {progress}%
             </span>
           )}
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 w-6 p-0"
+        <button
           onClick={onClose}
+          className="p-1 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors shrink-0"
         >
           <X className="h-3.5 w-3.5" />
-        </Button>
+        </button>
       </div>
 
       {/* Panel content */}
@@ -203,8 +196,6 @@ export function DryRunInlinePanel({
           <ResultsView
             result={result}
             scores={scores}
-            activeTab={activeTab}
-            onTabChange={setActiveTab}
             onReset={handleReset}
             onViewHistory={handleViewHistory}
             onClose={onClose}

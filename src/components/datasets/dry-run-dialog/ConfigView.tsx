@@ -158,7 +158,7 @@ export function ConfigView({
             generate responses using the base model, and score them with your configured grader.
           </p>
           <p className="mt-2 text-xs">
-            Runs in background — you can close this dialog.
+            Runs in background — you can continue editing.
           </p>
         </div>
       </div>
