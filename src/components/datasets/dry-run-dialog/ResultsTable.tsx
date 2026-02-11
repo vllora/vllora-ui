@@ -19,10 +19,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Search, Filter, ArrowUpDown } from "lucide-react";
-import type { EvaluationResultResponse } from "@/services/finetune-api";
+import type { FlatEvaluationResult } from "@/services/finetune-api";
 import { DryrunEvaluationResultRow } from "./DryrunEvaluationResultRow";
 
-type EvaluationResult = EvaluationResultResponse["results"][number];
+type EvaluationResult = FlatEvaluationResult;
 
 type SortOption = "index" | "score-asc" | "score-desc" | "status";
 

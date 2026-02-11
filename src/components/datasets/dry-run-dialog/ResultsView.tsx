@@ -14,7 +14,7 @@ import { SampleCard } from "./SampleCard";
 import { ResultsTable } from "./ResultsTable";
 import { cn } from "@/lib/utils";
 import type { DryRunStats } from "@/types/dataset-types";
-import type { EvaluationResultResponse } from "@/services/finetune-api";
+import type { FlatEvaluationResult } from "@/services/finetune-api";
 
 export type ResultsViewTab = "overview" | "samples" | "topics" | "details";
 
@@ -27,8 +27,8 @@ interface ResultsViewProps {
   onViewHistory: () => void;
   onClose: () => void;
   hasHistory: boolean;
-  /** Full evaluation results for details tab */
-  evaluationResults?: EvaluationResultResponse["results"];
+  /** Full evaluation results for details tab (flattened from epoch-based) */
+  evaluationResults?: FlatEvaluationResult[];
 }
 
 export function ResultsView({

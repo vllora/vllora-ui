@@ -7,11 +7,11 @@
 
 import { cn } from "@/lib/utils";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
-import type { EvaluationResultResponse } from "@/services/finetune-api";
+import type { FlatEvaluationResult } from "@/services/finetune-api";
 import { getScoreColorClass, formatScore } from "@/utils/parse-score-breakdown";
 import { LogsPopover } from "./LogsPopover";
 
-type EvaluationResult = EvaluationResultResponse["results"][number];
+type EvaluationResult = FlatEvaluationResult;
 
 interface DryrunEvaluationResultRowProps {
   result: EvaluationResult;

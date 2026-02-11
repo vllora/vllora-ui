@@ -132,18 +132,25 @@ export interface CreateEvaluationResponse {
   total_rows: number;
 }
 
-export interface RowEvaluationResult {
-  dataset_row_id: string;
+/** Individual evaluation entry within an epoch */
+export interface EpochEntry {
+  dataset_row_id?: string;
+  status?: string;
+  score?: number | null;
+  reason?: string | null;
+  error_message?: string | null;
+  logs?: string[] | null;
+}
+
+/** Row-level result with epoch-based evaluation data (matches cloud API) */
+export interface RowEpochResult {
   row_index: number;
-  status: string;
-  logs?: string[];
-  score?: number;
-  reason?: string;
-  error_message?: string;
+  row?: Record<string, unknown>;
+  epochs: Record<string, EpochEntry[]>;
 }
 
 export interface EvaluationSummary {
-  average_score?: number;
+  average_score?: number | null;
   passed_count: number;
   failed_count: number;
 }
@@ -154,8 +161,44 @@ export interface EvaluationResultResponse {
   total_rows: number;
   completed_rows: number;
   failed_rows: number;
-  results: RowEvaluationResult[];
-  summary: EvaluationSummary;
+  results: RowEpochResult[];
+  summary: EvaluationSummary | null;
+}
+
+/** Flattened evaluation result for UI consumption (one entry per row) */
+export interface FlatEvaluationResult {
+  dataset_row_id: string;
+  row_index: number;
+  row?: Record<string, unknown>;
+  status: string;
+  score?: number;
+  reason?: string;
+  error_message?: string;
+  logs?: string[];
+}
+
+/** Flatten epoch-based results into a flat array for UI consumption.
+ *  Takes the first epoch entry per row (epoch "0" for dry runs). */
+export function flattenEvaluationResults(results: RowEpochResult[]): FlatEvaluationResult[] {
+  const flat: FlatEvaluationResult[] = [];
+  for (const row of results) {
+    if (!row.epochs) continue;
+    for (const entries of Object.values(row.epochs)) {
+      for (const entry of entries) {
+        flat.push({
+          dataset_row_id: entry.dataset_row_id ?? '',
+          row_index: row.row_index,
+          row: row.row,
+          status: entry.status ?? 'pending',
+          score: entry.score ?? undefined,
+          reason: entry.reason ?? undefined,
+          error_message: entry.error_message ?? undefined,
+          logs: entry.logs ?? undefined,
+        });
+      }
+    }
+  }
+  return flat;
 }
 
 // ============================================================================

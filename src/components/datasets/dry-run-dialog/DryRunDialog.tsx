@@ -18,6 +18,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { FlaskConical } from "lucide-react";
+import { flattenEvaluationResults } from "@/services/finetune-api";
 import { ConfigView } from "./ConfigView";
 import { HistoryView } from "./HistoryView";
 import { ResultsView, type ResultsViewTab } from "./ResultsView";
@@ -232,7 +233,7 @@ export function DryRunDialog({
               onViewHistory={handleViewHistory}
               onClose={() => onOpenChange(false)}
               hasHistory={jobs.length > 1}
-              evaluationResults={displayJob?.pollingSnapshot?.results}
+              evaluationResults={displayJob?.pollingSnapshot?.results ? flattenEvaluationResults(displayJob.pollingSnapshot.results) : undefined}
             />
           )}
 

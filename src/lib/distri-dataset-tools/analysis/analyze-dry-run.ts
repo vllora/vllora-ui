@@ -23,7 +23,8 @@ import {
   TopicDryRunStats,
 } from '@/types/dataset-types';
 import { updateDatasetDryRunStats } from '@/services/datasets-db';
-import type { EvaluationResultResponse } from '@/services/finetune-api';
+import type { EvaluationResultResponse, FlatEvaluationResult } from '@/services/finetune-api';
+import { flattenEvaluationResults } from '@/services/finetune-api';
 
 // =============================================================================
 // Configuration - Thresholds from documentation
@@ -299,7 +300,7 @@ export function analyzeDryRunResults(
   samplePercentage: number,
   recordTopics?: Record<number, string> // row_index -> topic mapping
 ): DryRunStats {
-  const results = evaluationResult.results;
+  const results: FlatEvaluationResult[] = flattenEvaluationResults(evaluationResult.results);
 
   // Only include results that have actual scores (filter out failed/pending)
   const scoredResults = results.filter((r) => r.score != null);
