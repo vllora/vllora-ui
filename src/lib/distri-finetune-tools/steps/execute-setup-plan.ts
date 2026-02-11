@@ -456,6 +456,10 @@ export const executeSetupPlanHandler: ToolHandler = async (
         records_generated: summary.records_generated,
         grader_configured: summary.grader_configured,
         dry_run_completed: summary.dry_run_completed,
+        system_prompt_template: plan.output_format?.system_prompt_template || undefined,
+        output_schema: plan.output_format?.schema || undefined,
+        strategy: plan.data_generation?.strategy || undefined,
+        grader_criteria: plan.grader_config?.criteria || undefined,
       };
 
       // Generate README with full context

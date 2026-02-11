@@ -31,6 +31,14 @@ export interface SetupPlanSummary {
   records_generated: number;
   grader_configured: boolean;
   dry_run_completed: boolean;
+  /** System prompt template from the setup plan output format */
+  system_prompt_template?: string;
+  /** Output schema from the setup plan output format */
+  output_schema?: Record<string, unknown>;
+  /** Strategy notes from the plan */
+  strategy?: string;
+  /** Grader evaluation criteria */
+  grader_criteria?: { name: string; description: string }[];
 }
 
 export interface ReadmeGeneratorOptions {
@@ -480,34 +488,134 @@ function generateSetupPlanSection(
 | Evaluator Configured | ${summary.grader_configured ? '✓ Yes' : '○ No'} |
 | Dry Run | ${summary.dry_run_completed ? '✓ Completed' : '○ Not run'} |
 
-Records were generated with topics pre-assigned based on the topic hierarchy structure. Each topic received a proportional distribution of training examples.`;
+Records were generated with topics pre-assigned based on the topic hierarchy structure. Each topic received a proportional distribution of training examples.${summary.strategy ? `\n\n**Strategy:** ${summary.strategy}` : ''}`;
+}
+
+function generateOutputFormatSection(
+  summary?: SetupPlanSummary
+): string | null {
+  if (!summary?.system_prompt_template && !summary?.output_schema) {
+    return null;
+  }
+
+  let section = '## Output Format\n\nThe training data follows this structure:';
+
+  if (summary.system_prompt_template) {
+    section += `
+
+### System Message
+
+\`\`\`json
+${JSON.stringify({ role: 'system', content: summary.system_prompt_template }, null, 2)}
+\`\`\``;
+  }
+
+  if (summary.output_schema) {
+    section += `
+
+### Output Schema
+
+\`\`\`json
+${JSON.stringify(summary.output_schema, null, 2)}
+\`\`\``;
+  }
+
+  return section;
+}
+
+function generateSampleRecordsSection(
+  records: DatasetRecord[]
+): string | null {
+  if (records.length === 0) {
+    return null;
+  }
+
+  // Pick up to 2 sample records from different topics
+  const seen = new Set<string>();
+  const samples: DatasetRecord[] = [];
+  for (const record of records) {
+    const topic = record.topic || '__none__';
+    if (!seen.has(topic) && samples.length < 2) {
+      seen.add(topic);
+      samples.push(record);
+    }
+    if (samples.length >= 2) break;
+  }
+
+  const formatted = samples.map((record, i) => {
+    const data = record.data as { input?: { messages?: unknown[] }; output?: { messages?: unknown } } | undefined;
+    const messages = data?.input?.messages;
+    const output = data?.output?.messages;
+
+    if (!messages && !output) {
+      return `**Example ${i + 1}**${record.topic ? ` — Topic: \`${record.topic}\`` : ''}
+
+\`\`\`json
+${JSON.stringify(record.data, null, 2).slice(0, 1500)}
+\`\`\``;
+    }
+
+    // Build a condensed chat view — skip system messages (shown in Output Format section)
+    const allMessages = [...(messages || [])];
+    if (output) {
+      const outputMsgs = Array.isArray(output) ? output : [output];
+      allMessages.push(...outputMsgs);
+    }
+
+    const chatPreview = allMessages
+      .filter((msg: any) => msg.role !== 'system')
+      .slice(0, 4)
+      .map((msg: any) => {
+        const role = msg.role || 'unknown';
+        const content = typeof msg.content === 'string'
+          ? msg.content
+          : JSON.stringify(msg.content, null, 2);
+        const truncated = content && content.length > 500
+          ? content.slice(0, 500) + '...'
+          : content;
+        return `**${role}:**\n${truncated}`;
+      }).join('\n\n');
+
+    return `**Example ${i + 1}**${record.topic ? ` — Topic: \`${record.topic}\`` : ''}
+
+${chatPreview}`;
+  }).join('\n\n---\n\n');
+
+  return `## Sample Records
+
+${formatted}`;
+}
+
+function generateEvaluationCriteriaSection(
+  summary?: SetupPlanSummary
+): string | null {
+  if (!summary?.grader_criteria || summary.grader_criteria.length === 0) {
+    return null;
+  }
+
+  const rows = summary.grader_criteria.map(c =>
+    `| ${c.name} | ${c.description} |`
+  ).join('\n');
+
+  return `## Evaluation Criteria
+
+| Criterion | Description |
+|-----------|-------------|
+${rows}`;
 }
 
 function generateConfigSection(
   dataset: Dataset,
   _workflow: FinetuneWorkflowState | null | undefined
 ): string {
-  const config: Record<string, unknown> = {};
-
-  if (dataset.evalScript) {
-    config.grader = {
-      configured: true,
-      scriptLength: dataset.evalScript.length,
-    };
-  }
-
-  if (dataset.trainingConfig) {
-    config.training = dataset.trainingConfig;
-  }
-
-  if (Object.keys(config).length === 0) {
+  if (!dataset.trainingConfig) {
     return '';
   }
 
   return `## Configuration
 
 \`\`\`json
-${JSON.stringify(config, null, 2)}
+${JSON.stringify({ training: dataset.trainingConfig }, null, 2)}
 \`\`\``;
 }
 
@@ -534,9 +642,15 @@ export function generateDatasetReadme(options: ReadmeGeneratorOptions): string {
     generateKnowledgeSourcesSection(knowledgeSources),
     // Setup plan execution summary (if applicable)
     generateSetupPlanSection(setupPlanSummary),
+    // Output format: system prompt + schema
+    generateOutputFormatSection(setupPlanSummary),
+    // Sample training records
+    generateSampleRecordsSection(records),
     // Dataset structure
     generateTopicHierarchySection(dataset, records),
     generateCoverageSection(dataset, records),
+    // Evaluation criteria
+    generateEvaluationCriteriaSection(setupPlanSummary),
     // Quality metrics
     dataset.dryRunStats ? generateQualitySection(dataset.dryRunStats) : null,
     // Workflow status

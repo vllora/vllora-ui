@@ -8,7 +8,8 @@
 import type { DistriFnTool } from '@distri/core';
 import * as datasetsDB from '@/services/datasets-db';
 import * as workflowDB from '@/services/finetune-workflow-db';
-import { generateDatasetReadme } from '@/services/dataset-readme-generator';
+import * as knowledgeDB from '@/services/knowledge-sources-db';
+import { generateDatasetReadme, type KnowledgeSourceInfo, type SetupPlanSummary } from '@/services/dataset-readme-generator';
 import type { ToolHandler } from '../types';
 
 // =============================================================================
@@ -53,11 +54,46 @@ export const regenerateReadmeHandler: ToolHandler = async (
     // Get workflow if available
     const workflow = await workflowDB.getWorkflow(dataset_id);
 
+    // Get knowledge sources
+    const sources = await knowledgeDB.getKnowledgeSourcesByDataset(dataset_id);
+    const knowledgeSources: KnowledgeSourceInfo[] = sources
+      .filter(s => s.status === 'ready')
+      .map(s => ({
+        name: s.name,
+        type: s.type,
+        topics_extracted: s.extractedContent?.topics || [],
+        size: s.size,
+      }));
+
+    // Reconstruct setup plan summary from existing data
+    let setupPlanSummary: SetupPlanSummary | undefined;
+    const generatedRecords = records.filter(r => r.is_generated);
+    if (generatedRecords.length > 0) {
+      // Extract system prompt template from first record's system message
+      const firstData = generatedRecords[0]?.data as { input?: { messages?: { role: string; content: string }[] } } | undefined;
+      const systemMsg = firstData?.input?.messages?.find(m => m.role === 'system');
+
+      const topicCount = dataset.topicHierarchy?.hierarchy
+        ? new Set(records.map(r => r.topic).filter(Boolean)).size
+        : 0;
+
+      setupPlanSummary = {
+        executed_at: generatedRecords[0]?.createdAt || Date.now(),
+        topics_created: topicCount,
+        records_generated: generatedRecords.length,
+        grader_configured: !!dataset.evalScript,
+        dry_run_completed: !!dataset.dryRunStats,
+        system_prompt_template: systemMsg?.content || undefined,
+      };
+    }
+
     // Generate the README
     const readme = generateDatasetReadme({
       dataset,
       records,
       workflow,
+      knowledgeSources,
+      setupPlanSummary,
     });
 
     // Save to IndexedDB
