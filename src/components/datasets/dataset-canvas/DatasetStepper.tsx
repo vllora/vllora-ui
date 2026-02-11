@@ -132,8 +132,8 @@ export function DatasetStepper({
                     disabled={!isEnabled}
                     className={cn(
                       "group relative flex items-center gap-2.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200",
-                      isCompleted && "bg-[rgb(var(--theme-500))]/10 text-[rgb(var(--theme-600))] dark:text-[rgb(var(--theme-400))] hover:bg-[rgb(var(--theme-500))]/15",
-                      isActive && !isCompleted && "bg-[rgb(var(--theme-500))]/10 text-[rgb(var(--theme-500))] shadow-sm",
+                      isCompleted && "bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-600))] dark:text-[rgb(var(--theme-400))] hover:bg-[rgba(var(--theme-500),0.15)]",
+                      isActive && !isCompleted && "bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))] shadow-sm",
                       !isCompleted && !isActive && isEnabled && "text-muted-foreground hover:text-foreground hover:bg-muted/60",
                       !isEnabled && "text-muted-foreground/40 cursor-not-allowed"
                     )}
@@ -142,8 +142,8 @@ export function DatasetStepper({
                     <div
                       className={cn(
                         "relative w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold transition-all duration-200",
-                        isCompleted && "bg-[rgb(var(--theme-500))] text-white shadow-sm shadow-[rgb(var(--theme-500))]/30",
-                        isActive && !isCompleted && "bg-[rgb(var(--theme-500))] text-white shadow-sm shadow-[rgb(var(--theme-500))]/30",
+                        isCompleted && "bg-[rgb(var(--theme-500))] text-white shadow-sm shadow-[rgba(var(--theme-500),0.3)]",
+                        isActive && !isCompleted && "bg-[rgb(var(--theme-500))] text-white shadow-sm shadow-[rgba(var(--theme-500),0.3)]",
                         !isCompleted && !isActive && isEnabled && "bg-muted text-muted-foreground group-hover:bg-muted/80",
                         !isEnabled && "bg-muted/50 text-muted-foreground/40"
                       )}
@@ -182,19 +182,19 @@ export function DatasetStepper({
                   <div
                     className={cn(
                       "w-6 h-px transition-colors duration-200",
-                      isCompleted ? "bg-[rgb(var(--theme-500))]/60" : "bg-border"
+                      isCompleted ? "bg-[rgba(var(--theme-500),0.6)]" : "bg-border"
                     )}
                   />
                   <div
                     className={cn(
                       "w-1.5 h-1.5 rounded-full transition-colors duration-200",
-                      isCompleted ? "bg-[rgb(var(--theme-500))]/60" : "bg-border"
+                      isCompleted ? "bg-[rgba(var(--theme-500),0.6)]" : "bg-border"
                     )}
                   />
                   <div
                     className={cn(
                       "w-6 h-px transition-colors duration-200",
-                      completedSteps.has(STEPS[index + 1].id) ? "bg-[rgb(var(--theme-500))]/60" : "bg-border"
+                      completedSteps.has(STEPS[index + 1].id) ? "bg-[rgba(var(--theme-500),0.6)]" : "bg-border"
                     )}
                   />
                 </div>

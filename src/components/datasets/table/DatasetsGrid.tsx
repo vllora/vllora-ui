@@ -244,6 +244,7 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
               activeFilter={activeFilter}
               onSearchChange={setSearchQuery}
               onFilterChange={setActiveFilter}
+              totalCount={filteredDatasets.length}
             />
 
             {/* Loading state */}
@@ -273,7 +274,7 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
 
             {/* Dataset grid */}
             {!isLoading && !error && filteredDatasets.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {filteredDatasets.map((dataset) => {
                   const isEditing = editingDatasetId === dataset.id;
                   const stats = topicStats[dataset.id];
@@ -288,6 +289,8 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
                       docsCount={docsCounts[dataset.id] ?? 0}
                       hasTopicHierarchy={!!dataset.topicHierarchy?.hierarchy}
                       updatedAt={dataset.updatedAt}
+                      objective={dataset.datasetObjective}
+                      hasEvalScript={!!dataset.evalScript}
                       isEditing={isEditing}
                       editingName={editingDatasetName}
                       onSelect={() => onSelectDataset(dataset.id)}
@@ -315,14 +318,6 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
           </div>
         </div>
 
-        {/* Footer - fixed at bottom */}
-        {!isLoading && !error && datasets.length > 0 && (
-          <div className="border-t border-border px-6 py-3 text-center flex-shrink-0">
-            <p className="text-sm text-muted-foreground">
-              Showing {filteredDatasets.length} of {datasets.length} datasets
-            </p>
-          </div>
-        )}
       </div>
 
       {/* Delete confirmation dialog */}

@@ -283,7 +283,7 @@ export function LucyChatInput({
     >
       {/* Drag overlay */}
       {isDragging && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[rgb(var(--theme-500))]/10 border-2 border-dashed border-[rgb(var(--theme-500))] rounded-lg backdrop-blur-sm">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[rgba(var(--theme-500),0.1)] border-2 border-dashed border-[rgb(var(--theme-500))] rounded-lg backdrop-blur-sm">
           <div className="flex flex-col items-center gap-2 text-[rgb(var(--theme-600))]">
             <Upload className="w-8 h-8" />
             <span className="text-sm font-medium">Drop files here</span>

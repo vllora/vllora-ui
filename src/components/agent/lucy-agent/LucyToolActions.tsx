@@ -271,9 +271,9 @@ export const LucyToolActions: React.FC<LucyToolActionsProps> = ({
 
   // Pending state with action buttons
   return (
-    <div className="border border-[rgb(var(--theme-200))] dark:border-[rgb(var(--theme-800))] rounded-xl p-4 bg-[rgb(var(--theme-50))]/50 dark:bg-[rgb(var(--theme-900))]/10">
+    <div className="border border-[rgb(var(--theme-200))] dark:border-[rgb(var(--theme-800))] rounded-xl p-4 bg-[rgba(var(--theme-50),0.5)] dark:bg-[rgba(var(--theme-900),0.1)]">
       <div className="flex items-center gap-3 mb-4">
-        <div className="w-10 h-10 rounded-full bg-[rgb(var(--theme-100))] dark:bg-[rgb(var(--theme-900))]/30 flex items-center justify-center">
+        <div className="w-10 h-10 rounded-full bg-[rgb(var(--theme-100))] dark:bg-[rgba(var(--theme-900),0.3)] flex items-center justify-center">
           <Wrench className="h-5 w-5 text-[rgb(var(--theme-600))] dark:text-[rgb(var(--theme-400))]" />
         </div>
         <div>

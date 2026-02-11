@@ -285,7 +285,7 @@ export const GroupCard: React.FC<GroupCardProps> = ({ group, index = 0 }) => {
     <motion.div
       className={cn(
         "rounded-lg   bg-[#0a0a0a] overflow-hidden transition-all",
-        isOpen ? "shadow-lg ring-2 ring-[rgb(var(--theme-500))]/20" : "hover:shadow-md hover:bg-[#171717]"
+        isOpen ? "shadow-lg ring-2 ring-[rgba(var(--theme-500),0.2)]" : "hover:shadow-md hover:bg-[#171717]"
       )}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}

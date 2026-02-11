@@ -1,7 +1,7 @@
 /**
  * DatasetsListHeader
  *
- * Header for the datasets grid view with search bar and filter tabs.
+ * Header for the datasets grid view with search bar and segmented filter tabs.
  */
 
 import { cn } from "@/lib/utils";
@@ -17,6 +17,7 @@ interface DatasetsListHeaderProps {
   activeFilter: DatasetFilter;
   onSearchChange: (query: string) => void;
   onFilterChange: (filter: DatasetFilter) => void;
+  totalCount?: number;
 }
 
 // Build filters from shared config, with "All" prepended
@@ -33,37 +34,45 @@ export function DatasetsListHeader({
   activeFilter,
   onSearchChange,
   onFilterChange,
+  totalCount,
 }: DatasetsListHeaderProps) {
   return (
-    <div className="flex items-center justify-between mb-6 border border-border rounded-lg bg-card px-4 py-3">
+    <div className="flex items-center gap-4 mb-6">
       {/* Search input */}
-      <div className="relative flex-1 max-w-md">
+      <div className="relative flex-1 max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search datasets by name or ID..."
-          className="pl-9 bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+          placeholder="Search datasets..."
+          className="pl-9 bg-transparent border-border/50 focus-visible:ring-1 focus-visible:ring-[rgb(var(--theme-500))]"
         />
       </div>
 
-      {/* Filter tabs */}
-      <div className="flex items-center gap-1">
+      {/* Segmented filter tabs */}
+      <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/30">
         {FILTERS.map((filter) => (
           <button
             key={filter.value}
             onClick={() => onFilterChange(filter.value)}
             className={cn(
-              "px-4 py-1.5 rounded-full text-sm font-medium transition-colors",
+              "px-3 py-1.5 rounded-md text-xs font-medium transition-all",
               activeFilter === filter.value
-                ? "bg-[rgb(var(--theme-500))] text-white"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
             )}
           >
             {filter.label}
           </button>
         ))}
       </div>
+
+      {/* Count */}
+      {totalCount !== undefined && (
+        <span className="text-xs text-muted-foreground/50 ml-auto tabular-nums">
+          {totalCount} dataset{totalCount !== 1 ? "s" : ""}
+        </span>
+      )}
     </div>
   );
 }

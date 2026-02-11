@@ -50,7 +50,7 @@ export function TopicGeneratorPanel({
       <div className="p-6 space-y-5">
         {/* Header */}
         <div className="flex items-start gap-3">
-          <div className="w-9 h-9 rounded-lg bg-[rgb(var(--theme-500))]/10 flex items-center justify-center flex-shrink-0">
+          <div className="w-9 h-9 rounded-lg bg-[rgba(var(--theme-500),0.1)] flex items-center justify-center flex-shrink-0">
             <Sparkles className="w-4 h-4 text-[rgb(var(--theme-500))]" />
           </div>
           <div>
@@ -82,7 +82,7 @@ export function TopicGeneratorPanel({
           <div className="p-4 rounded-lg border border-border bg-card">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm text-muted-foreground">MAX DEPTH</span>
-              <span className="text-xs font-medium px-2 py-0.5 rounded bg-[rgb(var(--theme-500))]/10 text-[rgb(var(--theme-500))]">
+              <span className="text-xs font-medium px-2 py-0.5 rounded bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]">
                 Level {depth}
               </span>
             </div>

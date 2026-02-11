@@ -82,7 +82,7 @@ export const TopicInputNodeComponent = memo(function TopicInputNodeComponent({
         {/* Icon and input row */}
         <div className="flex items-start gap-3">
           {/* Icon */}
-          <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-[rgb(var(--theme-500))]/15 text-[rgb(var(--theme-500))]">
+          <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-[rgba(var(--theme-500),0.15)] text-[rgb(var(--theme-500))]">
             <Pencil className="w-4 h-4" />
           </div>
 
@@ -97,7 +97,7 @@ export const TopicInputNodeComponent = memo(function TopicInputNodeComponent({
               placeholder="Name your topic..."
               className="w-full bg-transparent border-none outline-none text-sm text-foreground placeholder:text-muted-foreground pb-2 nodrag"
             />
-            <div className="h-px bg-[rgb(var(--theme-500))]/50" />
+            <div className="h-px bg-[rgba(var(--theme-500),0.5)]" />
           </div>
         </div>
 

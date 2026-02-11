@@ -57,7 +57,7 @@ export function RecordsTableHeader({
                 allSelected
                   ? "bg-[rgb(var(--theme-500))] border-[rgb(var(--theme-500))]"
                   : someSelected
-                    ? "bg-[rgb(var(--theme-500))]/50 border-[rgb(var(--theme-500))]"
+                    ? "bg-[rgba(var(--theme-500),0.5)] border-[rgb(var(--theme-500))]"
                     : "bg-transparent border-muted-foreground/50 hover:border-muted-foreground"
               )}
             >

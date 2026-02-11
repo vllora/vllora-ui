@@ -24,7 +24,7 @@ export function ExperimentHeader() {
         <div className="w-px h-6 bg-border" />
 
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-[rgb(var(--theme-500))]/10 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg bg-[rgba(var(--theme-500),0.1)] flex items-center justify-center">
             <FlaskConical className="w-4 h-4 text-[rgb(var(--theme-500))]" />
           </div>
           <div className="flex flex-col">

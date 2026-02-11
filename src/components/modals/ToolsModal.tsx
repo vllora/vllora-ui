@@ -371,12 +371,12 @@ export const ToolsModal: React.FC<ToolsModalProps> = ({
                               onClick={() => handleToggleTool(tool.name, serverName)}
                               className={`flex items-center gap-3 p-3 border rounded-lg transition-all cursor-pointer ${
                                 isSelected
-                                  ? 'border-[rgb(var(--theme-500))] bg-[rgb(var(--theme-500))]/5'
+                                  ? 'border-[rgb(var(--theme-500))] bg-[rgba(var(--theme-500),0.05)]'
                                   : 'border-border hover:bg-accent/50'
                               }`}
                             >
                               <div className={`p-2 rounded-lg ${
-                                isSelected ? 'bg-[rgb(var(--theme-500))]/10' : 'bg-muted'
+                                isSelected ? 'bg-[rgba(var(--theme-500),0.1)]' : 'bg-muted'
                               }`}>
                                 <Plug className={`w-4 h-4 ${
                                   isSelected ? 'text-[rgb(var(--theme-600))]' : 'text-muted-foreground'

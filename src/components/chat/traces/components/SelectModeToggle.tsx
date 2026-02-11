@@ -26,7 +26,7 @@ export const SelectModeToggle = ({
           "flex items-center gap-1.5 px-2 py-1 rounded-md border transition-all duration-200",
           "text-xs font-medium",
           isEnabled
-            ? "bg-[rgb(var(--theme-500))]/10 border-[rgb(var(--theme-500))]/50 text-[rgb(var(--theme-500))]"
+            ? "bg-[rgba(var(--theme-500),0.1)] border-[rgba(var(--theme-500),0.5)] text-[rgb(var(--theme-500))]"
             : "bg-transparent border-border/50 text-muted-foreground hover:text-foreground hover:border-border"
         )}
       >

@@ -303,7 +303,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   openModal('tools');
                 }}
                 className={`flex items-center justify-center h-8 w-8 rounded-md transition-colors disabled:opacity-50 ${hasToolsConfigured
-                    ? 'bg-[rgb(var(--theme-500))]/10 hover:bg-[rgb(var(--theme-500))]/20'
+                    ? 'bg-[rgba(var(--theme-500),0.1)] hover:bg-[rgba(var(--theme-500),0.2)]'
                     : 'hover:bg-accent'
                   }`}
                 title={hasToolsConfigured ? "MCP Tools Active" : "MCP Choices Menu"}

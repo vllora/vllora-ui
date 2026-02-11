@@ -190,7 +190,7 @@ export function AddToDatasetDialog({
                     type="button"
                     onClick={handleCreateNewDataset}
                     disabled={isCreatingNew}
-                    className="w-full flex items-center gap-2 px-3 py-2.5 text-sm rounded-md transition-colors text-left hover:bg-[rgb(var(--theme-500))]/15 text-[rgb(var(--theme-500))] border-b border-border/50 mb-1"
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-sm rounded-md transition-colors text-left hover:bg-[rgba(var(--theme-500),0.15)] text-[rgb(var(--theme-500))] border-b border-border/50 mb-1"
                   >
                     <Plus className="w-4 h-4" />
                     Create "{datasetSearch}"
@@ -211,7 +211,7 @@ export function AddToDatasetDialog({
                       className={cn(
                         "w-full flex items-center gap-2 px-3 py-2.5 text-sm rounded-md transition-colors text-left",
                         selectedDataset?.id === ds.id
-                          ? "bg-[rgb(var(--theme-500))]/15 text-foreground"
+                          ? "bg-[rgba(var(--theme-500),0.15)] text-foreground"
                           : "hover:bg-muted/50 text-foreground"
                       )}
                     >
@@ -256,7 +256,7 @@ export function AddToDatasetDialog({
                     className={cn(
                       "w-full flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors text-left",
                       topic === t
-                        ? "bg-[rgb(var(--theme-500))]/15 text-foreground"
+                        ? "bg-[rgba(var(--theme-500),0.15)] text-foreground"
                         : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"
                     )}
                   >

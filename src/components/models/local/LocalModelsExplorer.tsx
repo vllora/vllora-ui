@@ -640,7 +640,7 @@ export const LocalModelsExplorer: React.FC<LocalModelsExplorerProps> = ({
       {showScrollTop && (
         <button
           onClick={scrollToTop}
-          className="fixed bottom-8 right-8 z-50 p-3 rounded-full bg-[rgb(var(--theme-500))]/30 backdrop-blur-md hover:bg-[rgb(var(--theme-500))]/50 text-white shadow-lg transition-all duration-300 hover:scale-110 animate-in fade-in slide-in-from-bottom-4"
+          className="fixed bottom-8 right-8 z-50 p-3 rounded-full bg-[rgba(var(--theme-500),0.3)] backdrop-blur-md hover:bg-[rgba(var(--theme-500),0.5)] text-white shadow-lg transition-all duration-300 hover:scale-110 animate-in fade-in slide-in-from-bottom-4"
           aria-label="Scroll to top"
         >
           <ArrowUp className="w-5 h-5" />

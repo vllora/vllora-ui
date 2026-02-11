@@ -254,7 +254,7 @@ export function RecordsToolbar({
                   size="icon"
                   className={cn(
                     "h-8 w-8",
-                    groupByTopic && "bg-[rgb(var(--theme-500))]/10 text-[rgb(var(--theme-500))]"
+                    groupByTopic && "bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]"
                   )}
                   onClick={() => onGroupByTopicChange?.(!groupByTopic)}
                 >

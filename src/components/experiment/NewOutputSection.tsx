@@ -52,7 +52,7 @@ export function NewOutputSection({ result, running, isStreaming, info }: NewOutp
 
   return (
     <div className="rounded-lg border border-border overflow-hidden h-full flex flex-col">
-      <div className="px-3 py-2 bg-[rgb(var(--theme-500))]/10 border-b border-border flex items-center justify-between flex-shrink-0">
+      <div className="px-3 py-2 bg-[rgba(var(--theme-500),0.1)] border-b border-border flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
           {running ? (
             <div className="w-2 h-2 rounded-full bg-[rgb(var(--theme-500))] animate-pulse" />

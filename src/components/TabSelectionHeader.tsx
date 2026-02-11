@@ -56,7 +56,7 @@ export function TabSelectionHeader({
             className={`
               relative flex items-center gap-2 h-10 px-4 py-1.5 rounded-md text-xs font-medium transition-all duration-200
               ${currentTab === "threads"
-                ? 'bg-[rgb(var(--theme-500))] text-white shadow-md shadow-[rgb(var(--theme-500))]/20'
+                ? 'bg-[rgb(var(--theme-500))] text-white shadow-md shadow-[rgba(var(--theme-500),0.2)]'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/20'
               }
             `}
@@ -68,7 +68,7 @@ export function TabSelectionHeader({
             className={`
               relative flex items-center gap-2 h-10 px-4 py-1.5 rounded-md text-xs font-medium transition-all duration-200
               ${currentTab === "traces"
-                ? 'bg-[rgb(var(--theme-500))] text-white shadow-md shadow-[rgb(var(--theme-500))]/20'
+                ? 'bg-[rgb(var(--theme-500))] text-white shadow-md shadow-[rgba(var(--theme-500),0.2)]'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/20'
               }
             `}

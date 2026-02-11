@@ -67,7 +67,7 @@ export function DatasetSelector({
               onClick={() => onSelect(dataset.id)}
               className={cn(
                 "gap-2 cursor-pointer",
-                isSelected && "bg-[rgb(var(--theme-500))]/10"
+                isSelected && "bg-[rgba(var(--theme-500),0.1)]"
               )}
             >
               <Database

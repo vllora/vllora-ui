@@ -39,7 +39,7 @@ export const LucyTextRenderer = memo(({ text, isStreaming, className }: LucyText
             aria-label="View full content"
             className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px]
               text-muted-foreground/70 hover:text-[rgb(var(--theme-600))]
-              hover:bg-[rgb(var(--theme-500))]/10
+              hover:bg-[rgba(var(--theme-500),0.1)]
               transition-colors"
           >
             <Expand className="h-2.5 w-2.5" />

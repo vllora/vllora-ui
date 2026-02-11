@@ -24,7 +24,7 @@ export function PlanExecutedView({
   return (
     <div className={cn("flex-1 flex flex-col overflow-hidden", className)}>
       {/* Header with completed badge */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border/50 bg-[rgb(var(--theme-500))]/5">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border/50 bg-[rgba(var(--theme-500),0.05)]">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-[rgb(var(--theme-500))]" />
           <span className="text-xs font-medium text-[rgb(var(--theme-600))] dark:text-[rgb(var(--theme-400))]">

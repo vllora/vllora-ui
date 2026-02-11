@@ -83,7 +83,7 @@ export function EmptyRecordsState({ datasetId, datasetObjective }: EmptyRecordsS
       <div className="flex-1 flex flex-col items-center justify-center p-8">
         <div className="flex flex-col items-center gap-6 max-w-sm text-center">
           {/* Loading spinner */}
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[rgb(var(--theme-500))]/20 to-[rgb(var(--theme-500))]/10 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[rgba(var(--theme-500),0.2)] to-[rgba(var(--theme-500),0.1)] flex items-center justify-center">
             <Loader2 className="w-5 h-5 text-[rgb(var(--theme-500))] animate-spin" />
           </div>
 
@@ -120,7 +120,7 @@ export function EmptyRecordsState({ datasetId, datasetObjective }: EmptyRecordsS
     <div className="flex-1 flex flex-col items-center justify-center p-8">
       <div className="flex flex-col items-center gap-6 max-w-sm text-center">
         {/* Subtle decorative element */}
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[rgb(var(--theme-500))]/10 to-[rgb(var(--theme-500))]/5 flex items-center justify-center">
+        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[rgba(var(--theme-500),0.1)] to-[rgba(var(--theme-500),0.05)] flex items-center justify-center">
           <Sparkles className="w-5 h-5 text-[rgb(var(--theme-500))]" />
         </div>
 

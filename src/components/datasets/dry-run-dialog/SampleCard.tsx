@@ -28,7 +28,7 @@ export function SampleCard({ sample }: SampleCardProps) {
               ? "bg-red-500/15 text-red-400"
               : sample.score < 0.7
               ? "bg-amber-500/15 text-amber-400"
-              : "bg-[rgb(var(--theme-500))]/15 text-[rgb(var(--theme-400))]"
+              : "bg-[rgba(var(--theme-500),0.15)] text-[rgb(var(--theme-400))]"
           )}
         >
           {sample.score.toFixed(2)}

@@ -74,7 +74,7 @@ export function initializeLucyAskFollowUpStyles() {
 
     // Completed state - compact
     completedContainer:
-      "rounded-lg border border-[rgb(var(--theme-500))]/20 p-3 bg-[rgb(var(--theme-500))]/5",
+      "rounded-lg border border-[rgba(var(--theme-500),0.2)] p-3 bg-[rgba(var(--theme-500),0.05)]",
     completedIcon: "w-4 h-4 text-[rgb(var(--theme-500))]",
     completedText: "flex items-center gap-2 text-sm text-foreground/90",
     answerItem: "text-xs py-1 border-b border-border/10 last:border-0",

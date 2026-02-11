@@ -546,8 +546,8 @@ const DATASET_QUICK_ACTIONS = [
 ```typescript
 // Theme colors
 className="text-[rgb(var(--theme-500))]"
-className="bg-[rgb(var(--theme-500))]/10"
-className="border-[rgb(var(--theme-500))]/30"
+className="bg-[rgba(var(--theme-500),0.1)]"
+className="border-[rgba(var(--theme-500),0.3)]"
 
 // Hover states
 className="hover:bg-muted/50"

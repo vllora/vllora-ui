@@ -95,7 +95,7 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
       className={cn(
         "group flex flex-col rounded-md overflow-hidden transition-colors bg-zinc-800/30",
         isExpanded ? "ring-1 ring-zinc-700/50" : "hover:bg-zinc-800/50",
-        selected && "bg-[rgb(var(--theme-500))]/10 ring-1 ring-[rgb(var(--theme-500))]/30",
+        selected && "bg-[rgba(var(--theme-500),0.1)] ring-1 ring-[rgba(var(--theme-500),0.3)]",
         isHighlighted && "ring-2 ring-violet-500 bg-violet-500/20 animate-pulse"
       )}
     >

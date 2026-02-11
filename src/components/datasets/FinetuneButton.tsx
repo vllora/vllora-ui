@@ -74,9 +74,9 @@ export function FinetuneButton({
           ? "text-muted-foreground border-muted"
           : [
               "text-[rgb(var(--theme-500))]",
-              "border-[rgb(var(--theme-500))]/40",
-              "hover:bg-[rgb(var(--theme-500))]/10",
-              "hover:border-[rgb(var(--theme-500))]/60",
+              "border-[rgba(var(--theme-500),0.4)]",
+              "hover:bg-[rgba(var(--theme-500),0.1)]",
+              "hover:border-[rgba(var(--theme-500),0.6)]",
             ]
       );
     }
@@ -85,7 +85,7 @@ export function FinetuneButton({
       baseStyles,
       isDisabled
         ? "text-muted-foreground/50"
-        : "text-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-500))]/10"
+        : "text-[rgb(var(--theme-500))] hover:bg-[rgba(var(--theme-500),0.1)]"
     );
   };
 

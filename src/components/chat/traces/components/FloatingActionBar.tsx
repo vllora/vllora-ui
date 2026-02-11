@@ -35,7 +35,7 @@ export const FloatingActionBar = ({
         >
           {/* Count badge and text */}
           <div className="flex items-center gap-2">
-            <span className="flex items-center justify-center h-6 w-6 rounded-full bg-[rgb(var(--theme-500))]/20 text-[rgb(var(--theme-500))] text-xs font-medium">
+            <span className="flex items-center justify-center h-6 w-6 rounded-full bg-[rgba(var(--theme-500),0.2)] text-[rgb(var(--theme-500))] text-xs font-medium">
               {selectedCount}
             </span>
             <span className="text-sm text-muted-foreground whitespace-nowrap">

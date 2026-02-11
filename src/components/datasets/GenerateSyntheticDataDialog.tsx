@@ -223,7 +223,7 @@ export function GenerateSyntheticDataDialog({
                               #{idx + 1}
                             </span>
                             {record.topic && (
-                              <span className="text-xs px-1.5 py-0.5 rounded bg-[rgb(var(--theme-500))]/10 text-[rgb(var(--theme-500))]">
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]">
                                 {record.topic}
                               </span>
                             )}
@@ -379,7 +379,7 @@ export function GenerateSyntheticDataDialog({
                   </Tooltip>
                 </TooltipProvider>
               </div>
-              <span className="text-sm font-medium px-2.5 py-0.5 rounded-full bg-[rgb(var(--theme-500))]/10 text-[rgb(var(--theme-500))]">
+              <span className="text-sm font-medium px-2.5 py-0.5 rounded-full bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]">
                 {getDiversityLabel(diversityLevel)}
               </span>
             </div>

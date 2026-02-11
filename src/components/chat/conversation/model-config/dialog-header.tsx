@@ -14,7 +14,7 @@ export function ModelConfigDialogHeader({ title, description, hideToggle = false
   return (
     <DialogHeader className="space-y-4 pb-4 border-b border-border">
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[rgb(var(--theme-500))]/10 border border-border">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[rgba(var(--theme-500),0.1)] border border-border">
           <Settings2 className="h-5 w-5 text-[rgb(var(--theme-500))]" />
         </div>
         <div className="flex-1 space-y-2 pr-8">

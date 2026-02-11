@@ -76,7 +76,7 @@ export function EmailForm() {
       <Button
         type="submit"
         variant="default"
-        className="w-full h-12 bg-gradient-to-r from-[rgb(var(--theme-500))] to-[rgb(var(--theme-600))] hover:from-[rgb(var(--theme-600))] hover:to-[rgb(var(--theme-700))] text-white font-medium transition-all duration-200 shadow-lg shadow-[rgb(var(--theme-500))]/20"
+        className="w-full h-12 bg-gradient-to-r from-[rgb(var(--theme-500))] to-[rgb(var(--theme-600))] hover:from-[rgb(var(--theme-600))] hover:to-[rgb(var(--theme-700))] text-white font-medium transition-all duration-200 shadow-lg shadow-[rgba(var(--theme-500),0.2)]"
         disabled={loading || !isValidEmail(email)}
       >
         <LogIn className="w-4 h-4 mr-2" />

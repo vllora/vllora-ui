@@ -152,7 +152,7 @@ export function LucySearchToolRenderer({ toolCall, state }: ToolRendererProps) {
         <div
           className={cn(
             'w-8 h-8 rounded-full flex items-center justify-center',
-            isRunning ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-[rgba(var(--theme-100),1)] dark:bg-[rgb(var(--theme-900))]/30'
+            isRunning ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-[rgba(var(--theme-100),1)] dark:bg-[rgba(var(--theme-900),0.3)]'
           )}
         >
           {isRunning ? (

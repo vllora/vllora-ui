@@ -27,7 +27,7 @@ export function SelectionBanner({
   }
 
   return (
-    <div className="px-4 py-2 bg-[rgb(var(--theme-500))]/10 border-b border-border text-sm flex-shrink-0">
+    <div className="px-4 py-2 bg-[rgba(var(--theme-500),0.1)] border-b border-border text-sm flex-shrink-0">
       {isAllMatchingSelected ? (
         <span>
           All <strong>{totalCount}</strong> spans matching this filter are selected.{" "}

@@ -29,7 +29,7 @@ export function ViewRecordsButton({ onViewRecords }: ViewRecordsButtonProps) {
               e.preventDefault();
               onViewRecords();
             }}
-            className="flex-shrink-0 p-1.5 rounded-lg hover:bg-[rgb(var(--theme-500))]/15 transition-all cursor-pointer nodrag text-muted-foreground hover:text-[rgb(var(--theme-500))] border-transparent"
+            className="flex-shrink-0 p-1.5 rounded-lg hover:bg-[rgba(var(--theme-500),0.15)] transition-all cursor-pointer nodrag text-muted-foreground hover:text-[rgb(var(--theme-500))] border-transparent"
             style={{ pointerEvents: 'auto' }}
           >
             <Eye className="w-3 h-3" />

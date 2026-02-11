@@ -122,7 +122,7 @@ export function TopicNodeHeader({
         className={cn(
           "w-5 h-5 rounded flex items-center justify-center flex-shrink-0",
           isRoot
-            ? "bg-[rgb(var(--theme-500))]/15 text-[rgb(var(--theme-500))]"
+            ? "bg-[rgba(var(--theme-500),0.15)] text-[rgb(var(--theme-500))]"
             : "bg-muted text-muted-foreground"
         )}
       >

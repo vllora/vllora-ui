@@ -118,7 +118,7 @@ export function HomePage() {
             }}
           >
             <CardContent className="flex items-center gap-4 p-6">
-              <div className="p-3 rounded-lg bg-[rgb(var(--theme-500))]/10">
+              <div className="p-3 rounded-lg bg-[rgba(var(--theme-500),0.1)]">
                 <MessageSquare className="w-6 h-6 text-[rgb(var(--theme-500))]" />
               </div>
               <div>
@@ -143,7 +143,7 @@ export function HomePage() {
             }}
           >
             <CardContent className="flex items-center gap-4 p-6">
-              <div className="p-3 rounded-lg bg-[rgb(var(--theme-500))]/10">
+              <div className="p-3 rounded-lg bg-[rgba(var(--theme-500),0.1)]">
                 <Activity className="w-6 h-6 text-[rgb(var(--theme-500))]" />
               </div>
               <div>
@@ -159,7 +159,7 @@ export function HomePage() {
             onClick={() => window.open(app_mode === 'vllora' ? 'https://vllora.dev/docs' : 'https://docs.langdb.ai/', '_blank')}
           >
             <CardContent className="flex items-center gap-4 p-6">
-              <div className="p-3 rounded-lg bg-[rgb(var(--theme-500))]/10">
+              <div className="p-3 rounded-lg bg-[rgba(var(--theme-500),0.1)]">
                 <BookOpen className="w-6 h-6 text-[rgb(var(--theme-500))]" />
               </div>
               <div>

@@ -130,7 +130,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
             e.stopPropagation();
             startAddingTopic(isRoot ? null : name);
           }}
-          className="absolute -right-3 top-1/2 -translate-y-1/2 translate-x-full w-6 h-6 rounded-md border border-border bg-background text-muted-foreground flex items-center justify-center hover:border-[rgb(var(--theme-500))] hover:text-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-500))]/10 transition-colors nodrag nopan z-10"
+          className="absolute -right-3 top-1/2 -translate-y-1/2 translate-x-full w-6 h-6 rounded-md border border-border bg-background text-muted-foreground flex items-center justify-center hover:border-[rgb(var(--theme-500))] hover:text-[rgb(var(--theme-500))] hover:bg-[rgba(var(--theme-500),0.1)] transition-colors nodrag nopan z-10"
           title="Add child topic"
         >
           <Plus className="w-3.5 h-3.5" />

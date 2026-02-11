@@ -367,7 +367,7 @@ export function RecordsTable({
                             allGroupSelected
                               ? "bg-[rgb(var(--theme-500))] border-[rgb(var(--theme-500))]"
                               : someGroupSelected
-                                ? "bg-[rgb(var(--theme-500))]/50 border-[rgb(var(--theme-500))]"
+                                ? "bg-[rgba(var(--theme-500),0.5)] border-[rgb(var(--theme-500))]"
                                 : "bg-transparent border-muted-foreground/50 hover:border-muted-foreground"
                           )}
                         >

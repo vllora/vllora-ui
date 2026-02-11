@@ -35,7 +35,7 @@ export function PlanCompletedState({
     <div className={cn("flex-1 flex flex-col items-center justify-center p-8", className)}>
       <div className="flex flex-col items-center gap-6 max-w-md text-center">
         {/* Success Icon */}
-        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[rgb(var(--theme-500))]/15 to-[rgb(var(--theme-500))]/5 flex items-center justify-center">
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[rgba(var(--theme-500),0.15)] to-[rgba(var(--theme-500),0.05)] flex items-center justify-center">
           <CheckCircle2 className="w-7 h-7 text-[rgb(var(--theme-500))]" />
         </div>
 

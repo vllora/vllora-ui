@@ -76,7 +76,7 @@ function ActionButton({
         "gap-2",
         isDisabled
           ? "text-muted-foreground"
-          : "text-[rgb(var(--theme-500))] border-[rgb(var(--theme-500))]/30 hover:bg-[rgb(var(--theme-500))]/10"
+          : "text-[rgb(var(--theme-500))] border-[rgba(var(--theme-500),0.3)] hover:bg-[rgba(var(--theme-500),0.1)]"
       );
     }
     // primary
@@ -84,7 +84,7 @@ function ActionButton({
       "gap-1.5 h-8 px-3",
       isDisabled
         ? "text-muted-foreground/50"
-        : "text-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-500))]/10"
+        : "text-[rgb(var(--theme-500))] hover:bg-[rgba(var(--theme-500),0.1)]"
     );
   };
 

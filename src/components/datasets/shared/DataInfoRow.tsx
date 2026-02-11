@@ -36,7 +36,7 @@ export function DataInfoRow({
       className={cn(
         "flex items-center px-3 py-2 cursor-pointer transition-colors",
         !isExpanded && "hover:bg-muted/20",
-        isSelected && "bg-[rgb(var(--theme-500))]/5",
+        isSelected && "bg-[rgba(var(--theme-500),0.05)]",
         isExpanded && "bg-zinc-800/50"
       )}
       onClick={onToggleSelection}
