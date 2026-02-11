@@ -16,7 +16,7 @@ import {
 import { DatasetCard } from "./DatasetCard";
 import { AddDatasetCard } from "./AddDatasetCard";
 import { DatasetsEmptyState } from "./DatasetsEmptyState";
-import { DatasetsListHeader, type DatasetFilter } from "./DatasetsListHeader";
+import { DatasetsListHeader, type DatasetFilter, type DatasetSort } from "./DatasetsListHeader";
 import { DatasetsNoResultsState } from "./DatasetsNoResultsState";
 import { IngestDataDialog, type ImportResult } from "../IngestDataDialog";
 
@@ -50,10 +50,11 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmation | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<DatasetFilter>("all");
+  const [activeSort, setActiveSort] = useState<DatasetSort>({ key: "updated", dir: "desc" });
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [importTargetDatasetId, setImportTargetDatasetId] = useState<string | null>(null);
 
-  // Filter datasets by search query and active filter
+  // Filter and sort datasets
   const filteredDatasets = useMemo(() => {
     let result = datasets;
 
@@ -70,13 +71,33 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
     // State filter
     if (activeFilter !== "all") {
       result = result.filter((ds) => {
-        const state = ds.state ?? "draft"; // Default to draft if no state
+        const state = ds.state ?? "draft";
         return state === activeFilter;
       });
     }
 
-    return result;
-  }, [datasets, searchQuery, activeFilter]);
+    // Sort
+    const sorted = [...result].sort((a, b) => {
+      const dir = activeSort.dir === "asc" ? 1 : -1;
+      switch (activeSort.key) {
+        case "updated":
+          return (a.updatedAt - b.updatedAt) * dir;
+        case "created":
+          return (a.createdAt - b.createdAt) * dir;
+        case "name":
+          return a.name.localeCompare(b.name) * dir;
+        case "records": {
+          const aCount = recordCounts[a.id] ?? 0;
+          const bCount = recordCounts[b.id] ?? 0;
+          return (aCount - bCount) * dir;
+        }
+        default:
+          return 0;
+      }
+    });
+
+    return sorted;
+  }, [datasets, searchQuery, activeFilter, activeSort, recordCounts]);
 
   // Load record counts, docs counts, and topic stats for all datasets
   useEffect(() => {
@@ -242,8 +263,10 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
             <DatasetsListHeader
               searchQuery={searchQuery}
               activeFilter={activeFilter}
+              activeSort={activeSort}
               onSearchChange={setSearchQuery}
               onFilterChange={setActiveFilter}
+              onSortChange={setActiveSort}
               totalCount={filteredDatasets.length}
             />
 

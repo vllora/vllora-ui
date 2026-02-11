@@ -11,7 +11,7 @@ export function AddDatasetCard() {
   return (
     <Link
       to="/datasets/new"
-      className="group relative rounded-xl transition-all duration-200 overflow-hidden border border-dashed border-border/50 hover:border-[rgb(var(--theme-500))] bg-gradient-to-b from-card/50 to-transparent hover:shadow-lg hover:shadow-black/10 hover:-translate-y-0.5"
+      className="group relative rounded-xl transition-all duration-200 overflow-hidden border border-dashed border-border/40 hover:border-border bg-gradient-to-b from-card/50 to-transparent hover:shadow-[0_4px_24px_-4px_rgba(var(--theme-500),0.15)] hover:-translate-y-0.5"
     >
       <div className="h-0.5 w-full bg-transparent" />
       <div className="p-4 flex flex-col items-center justify-center min-h-[160px]">

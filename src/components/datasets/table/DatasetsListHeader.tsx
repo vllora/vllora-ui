@@ -1,7 +1,7 @@
 /**
  * DatasetsListHeader
  *
- * Header for the datasets grid view with search bar and segmented filter tabs.
+ * Header for the datasets grid view with search bar, segmented filter tabs, and sort.
  */
 
 import { cn } from "@/lib/utils";
@@ -9,14 +9,19 @@ import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 import { DATASET_STATE_CONFIG } from "@/types/dataset-types";
 import type { DatasetState } from "@/types/dataset-types";
+import { DatasetSortDropdown } from "./DatasetSortDropdown";
+import type { DatasetSort } from "./DatasetSortDropdown";
 
 export type DatasetFilter = "all" | DatasetState;
+export type { DatasetSort };
 
 interface DatasetsListHeaderProps {
   searchQuery: string;
   activeFilter: DatasetFilter;
+  activeSort: DatasetSort;
   onSearchChange: (query: string) => void;
   onFilterChange: (filter: DatasetFilter) => void;
+  onSortChange: (sort: DatasetSort) => void;
   totalCount?: number;
 }
 
@@ -32,8 +37,10 @@ const FILTERS: { value: DatasetFilter; label: string }[] = [
 export function DatasetsListHeader({
   searchQuery,
   activeFilter,
+  activeSort,
   onSearchChange,
   onFilterChange,
+  onSortChange,
   totalCount,
 }: DatasetsListHeaderProps) {
   return (
@@ -66,6 +73,9 @@ export function DatasetsListHeader({
           </button>
         ))}
       </div>
+
+      {/* Sort dropdown */}
+      <DatasetSortDropdown activeSort={activeSort} onSortChange={onSortChange} />
 
       {/* Count */}
       {totalCount !== undefined && (
