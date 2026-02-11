@@ -3,9 +3,12 @@
  *
  * SVG-based arrow/chevron segment for stepper navigation.
  * Used in SectionTabs for workflow step visualization.
+ * Arrows represent dependency flow: Data → Evaluation → Finetune → Deploy.
  */
 
-export type ArrowSegmentStatus = "completed" | "active" | "pending";
+import { cn } from "@/lib/utils";
+
+export type ArrowSegmentStatus = "completed" | "active" | "pending" | "locked";
 
 interface ArrowSegmentProps {
   children: React.ReactNode;
@@ -13,6 +16,7 @@ interface ArrowSegmentProps {
   isLast: boolean;
   status: ArrowSegmentStatus;
   isActive: boolean;
+  isProcessing?: boolean;
   onClick: () => void;
 }
 
@@ -22,6 +26,7 @@ export function ArrowSegment({
   isLast,
   status,
   isActive,
+  isProcessing = false,
   onClick,
 }: ArrowSegmentProps) {
   const height = 36;
@@ -29,12 +34,14 @@ export function ArrowSegment({
   const getBgColor = () => {
     if (isActive) return "rgb(var(--theme-500))";
     if (status === "completed") return "rgba(var(--theme-500), 0.12)";
+    if (status === "locked") return "hsl(var(--muted) / 0.5)";
     return "hsl(var(--muted))";
   };
 
   const getTextColor = () => {
     if (isActive) return "white";
     if (status === "completed") return "rgb(var(--theme-600))";
+    if (status === "locked") return "hsl(var(--muted-foreground) / 0.4)";
     return "hsl(var(--muted-foreground))";
   };
 
@@ -74,13 +81,16 @@ export function ArrowSegment({
         <path
           d={path}
           fill="none"
-          stroke={isActive ? "rgb(var(--theme-600))" : "hsl(var(--border))"}
+          stroke={isActive ? "rgb(var(--theme-600))" : status === "locked" ? "hsl(var(--border) / 0.5)" : "hsl(var(--border))"}
           strokeWidth="0.5"
           className="transition-all duration-200"
         />
       </svg>
       <div
-        className="relative z-10 flex items-center gap-1.5 px-4 text-sm font-medium transition-colors duration-200"
+        className={cn(
+          "relative z-10 flex items-center gap-1.5 px-4 text-sm font-medium transition-colors duration-200",
+          isProcessing && "[&>svg:first-child]:animate-pulse"
+        )}
         style={{
           color: getTextColor(),
           paddingLeft: isFirst ? "12px" : "16px",

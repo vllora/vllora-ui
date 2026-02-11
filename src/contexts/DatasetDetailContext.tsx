@@ -252,6 +252,19 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     };
   }, [refreshDataset]);
 
+  // Refresh records when dry run completes (scores are persisted to individual records)
+  useEffect(() => {
+    const handleDryRunUpdate = (data: { jobId: string; job: { status: string } }) => {
+      if (data.job.status === "completed") {
+        refreshDataset();
+      }
+    };
+    emitter.on("vllora_dry_run_job_update", handleDryRunUpdate);
+    return () => {
+      emitter.off("vllora_dry_run_job_update", handleDryRunUpdate);
+    };
+  }, [refreshDataset]);
+
   // Listen for records deleted events
   useEffect(() => {
     const handleRecordsDeleted = (data: { datasetId: string; recordIds: string[] }) => {

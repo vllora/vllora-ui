@@ -85,6 +85,7 @@ export function RecordsTableHeader({
           </span>
         )}
         <span className={cn(COLUMN_WIDTHS.stats, "text-center")}>Stats</span>
+        <span className={cn(COLUMN_WIDTHS.quality, "text-center")}>Quality</span>
         <span className={COLUMN_WIDTHS.deepDiveActions}>Actions</span>
       </div>
 

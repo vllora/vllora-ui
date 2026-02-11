@@ -338,6 +338,19 @@ class DryRunPollingManager {
         Object.keys(recordTopics).length > 0 ? recordTopics : undefined
       );
 
+      // Persist per-row scores to individual records
+      if (result.results && result.results.length > 0) {
+        for (const row of result.results) {
+          if (typeof row.score === 'number' && row.dataset_row_id) {
+            await datasetsDB.updateRecordEvaluation(
+              job.datasetId,
+              row.dataset_row_id,
+              row.score
+            );
+          }
+        }
+      }
+
       // Save results to dataset
       await datasetsDB.updateDatasetDryRunStats(job.datasetId, dryRunStats);
 

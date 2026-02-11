@@ -290,15 +290,7 @@ export function RecordsTable({
   if (groupByTopic && topicHierarchy && topicHierarchy.length > 0) {
     return (
       <div className="flex flex-col" style={containerStyle}>
-        {showHeader && (
-          <RecordsTableHeader
-            selectable={selectable}
-            allSelected={allSelected}
-            someSelected={someSelected}
-            onSelectAll={handleSelectAll}
-            hideTopic
-          />
-        )}
+        {/* No column header in tree mode — the tree has its own visual structure */}
         <div className="flex-1 overflow-auto min-h-0">
           <TopicRecordTree
             hierarchy={topicHierarchy}

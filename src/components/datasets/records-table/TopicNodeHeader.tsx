@@ -202,18 +202,21 @@ export function TopicNodeHeader({
           )}
           {(!isExpanded || !hasChildren) && !isGenerating && (
             <>
-              <span className={cn(
-                "text-xs tabular-nums px-1.5 py-0.5 rounded",
-                totalCount > 0 ? "bg-zinc-700/50 text-muted-foreground" : "bg-zinc-800 text-zinc-600"
-              )}>
-                {totalCount}
-              </span>
-              {totalCount > 0 && (
-                <CoverageIndicator
-                  coveragePercentage={percentage}
-                  recordCount={totalCount}
-                />
-              )}
+              {totalCount > 0 ? (
+                <>
+                  <span className="text-xs tabular-nums px-1.5 py-0.5 rounded bg-zinc-700/50 text-muted-foreground">
+                    {totalCount}
+                  </span>
+                  <CoverageIndicator
+                    coveragePercentage={percentage}
+                    recordCount={totalCount}
+                  />
+                </>
+              ) : !isUnassigned ? (
+                <span className="text-xs text-zinc-600 italic">
+                  No records yet
+                </span>
+              ) : null}
             </>
           )}
         </div>

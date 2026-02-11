@@ -9,7 +9,7 @@ import { useState, forwardRef, useCallback } from "react";
 import { DatasetRecord } from "@/types/dataset-types";
 import { cn } from "@/lib/utils";
 import { emitter } from "@/utils/eventEmitter";
-import { ConversationThreadCell, ToolsBadge, StatsBadge, TopicCell, RecordExpandedDetail, RecordActions, SelectionCheckbox } from "./cells";
+import { ConversationThreadCell, ToolsBadge, StatsBadge, TopicCell, RecordExpandedDetail, RecordActions, SelectionCheckbox, QualityIndicator } from "./cells";
 import { RecordDataDialog } from "./RecordDataDialog";
 import { COLUMN_WIDTHS } from "../table-columns";
 import type { AvailableTopic } from "../record-utils";
@@ -145,6 +145,12 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
         <div className={cn("flex items-center", COLUMN_WIDTHS.stats)}>
           <StatsBadge data={record.data} />
         </div>
+
+        {/* Quality score */}
+        <QualityIndicator
+          evaluation={record.evaluation}
+          className={COLUMN_WIDTHS.quality}
+        />
 
         {/* Actions - shown on hover */}
         <div className={cn(

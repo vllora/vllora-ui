@@ -28,7 +28,8 @@
       "Bash(source:*)",
       "Bash(cargo add:*)",
       "Bash(node --version)",
-      "Bash(node -e:*)"
+      "Bash(node -e:*)",
+      "Bash(git status:*)"
     ],
     "deny": [],
     "ask": []

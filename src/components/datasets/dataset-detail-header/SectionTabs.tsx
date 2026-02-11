@@ -6,7 +6,7 @@
  * Documentation tabs (Docs, Plan, README) on the right.
  */
 
-import { Database, FlaskConical, Sparkles, FileText, FolderOpen, Check, Wand2, type LucideIcon, RocketIcon } from "lucide-react";
+import { Database, FlaskConical, Sparkles, FileText, FolderOpen, Check, Wand2, Lock, Loader2, type LucideIcon, RocketIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -46,6 +46,8 @@ interface SectionTabsProps {
   jobsCount?: number;
   knowledgeSourcesCount?: number;
   hasPlanActivity?: boolean;
+  /** Set of tab IDs that currently have background activity */
+  processingTabs?: Set<DatasetSection>;
 }
 
 export function SectionTabs({
@@ -56,38 +58,61 @@ export function SectionTabs({
   jobsCount = 0,
   knowledgeSourcesCount = 0,
   hasPlanActivity = false,
+  processingTabs = new Set(),
 }: SectionTabsProps) {
-  // Each tab is independent - completed based on its own criteria
-  const getWorkflowStatus = (tabId: DatasetSection): "completed" | "active" | "pending" => {
+  // Dependencies:
+  //   Data       → no dependencies
+  //   Evaluation → no dependencies (can configure, but dry-run needs data)
+  //   Finetune   → needs Data + Evaluation
+  //   Deploy     → needs Finetune (at least one job)
+  const hasData = recordsCount > 0;
+
+  const depsMetFor = (tabId: DatasetSection): boolean => {
+    if (tabId === "records") return true;
+    if (tabId === "evaluator") return true;
+    if (tabId === "jobs") return hasData && hasEvaluator;
+    if (tabId === "deploy") return jobsCount > 0;
+    return true;
+  };
+
+  const isStepComplete = (tabId: DatasetSection): boolean => {
+    if (tabId === "records") return hasData;
+    if (tabId === "evaluator") return hasEvaluator;
+    if (tabId === "jobs") return jobsCount > 0;
+    return false;
+  };
+
+  const getWorkflowStatus = (tabId: DatasetSection): "completed" | "active" | "pending" | "locked" => {
     if (tabId === activeSection) return "active";
-
-    // Independent completion criteria for each tab
-    if (tabId === "records" && recordsCount > 0) return "completed";
-    if (tabId === "evaluator" && hasEvaluator) return "completed";
-    if (tabId === "jobs" && jobsCount > 0) return "completed";
-
+    if (isStepComplete(tabId)) return "completed";
+    if (!depsMetFor(tabId)) return "locked";
     return "pending";
   };
 
-  // Tooltip text for each workflow tab based on completion status
-  const getTooltipText = (tabId: DatasetSection, status: "completed" | "active" | "pending"): string => {
-    const isComplete = status === "completed" || (status === "active" && (
-      (tabId === "records" && recordsCount > 0) ||
-      (tabId === "evaluator" && hasEvaluator) ||
-      (tabId === "jobs" && jobsCount > 0)
-    ));
+  // Tooltip text — shows completion info or what's blocking
+  const getTooltipText = (tabId: DatasetSection, status: "completed" | "active" | "pending" | "locked"): string => {
+    const complete = isStepComplete(tabId);
 
-    if (isComplete) {
-      if (tabId === "records") return `✓ Complete — ${recordsCount} record${recordsCount !== 1 ? "s" : ""} added`;
-      if (tabId === "evaluator") return "✓ Complete — Quality grader configured";
-      if (tabId === "jobs") return `✓ Complete — ${jobsCount} job${jobsCount !== 1 ? "s" : ""} created`;
-      if (tabId === "deploy") return "✓ Complete — Model deployed";
+    if (complete || (status === "active" && isStepComplete(tabId))) {
+      if (tabId === "records") return `✓ ${recordsCount} record${recordsCount !== 1 ? "s" : ""} added`;
+      if (tabId === "evaluator") return "✓ Quality grader configured";
+      if (tabId === "jobs") return `✓ ${jobsCount} job${jobsCount !== 1 ? "s" : ""} created`;
+      if (tabId === "deploy") return "✓ Model deployed";
     }
 
-    if (tabId === "records") return "Add training data records to complete this step";
-    if (tabId === "evaluator") return "Configure a quality grader to complete this step";
-    if (tabId === "jobs") return "Start a training job to complete this step";
-    if (tabId === "deploy") return "Deploy a trained model to complete this step";
+    if (status === "locked") {
+      if (tabId === "jobs") {
+        if (!hasData && !hasEvaluator) return "Add training data and set up evaluation first";
+        if (!hasData) return "Add training data first";
+        return "Set up evaluation first to unlock fine-tuning";
+      }
+      if (tabId === "deploy") return "Complete a fine-tuning job first to unlock deploy";
+    }
+
+    if (tabId === "records") return "Add training data for your model";
+    if (tabId === "evaluator") return "Set up a quality grader to score outputs";
+    if (tabId === "jobs") return "Start a fine-tuning job";
+    if (tabId === "deploy") return "Deploy your fine-tuned model";
     return "";
   };
 
@@ -106,16 +131,21 @@ export function SectionTabs({
             return (
               <Tooltip key={tab.id}>
                 <TooltipTrigger asChild>
-                  <div className="-mx-px">
+                  <div>
                     <ArrowSegment
                       isFirst={isFirst}
                       isLast={isLast}
                       status={status}
                       isActive={isActive}
+                      isProcessing={processingTabs.has(tab.id)}
                       onClick={() => onSectionChange(tab.id)}
                     >
-                      {status === "completed" && !isActive ? (
+                      {processingTabs.has(tab.id) ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : status === "completed" && !isActive ? (
                         <Check className="w-3.5 h-3.5" />
+                      ) : status === "locked" ? (
+                        <Lock className="w-3 h-3" />
                       ) : (
                         <Icon className="w-3.5 h-3.5" />
                       )}
