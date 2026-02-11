@@ -8,6 +8,7 @@
 import { useMemo } from "react";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
+import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
 import type { ViewMode } from "./ViewModeToggle";
 import { SectionTabs } from "./SectionTabs";
 
@@ -39,6 +40,7 @@ export function DatasetUtilityBar({
 }: DatasetUtilityBarProps) {
   const { filteredJobs } = FinetuneJobsConsumer();
   const { isGeneratingTopics, isGeneratingTraces, generationProgress } = DatasetDetailConsumer();
+  const { runningJob: dryRunRunningJob } = DryRunJobsConsumer();
 
   // Total jobs count (for completion status)
   const jobsCount = filteredJobs.length;
@@ -60,8 +62,13 @@ export function DatasetUtilityBar({
       tabs.add("jobs");
     }
 
+    // Evaluator tab: a dry run is currently running
+    if (dryRunRunningJob) {
+      tabs.add("evaluator");
+    }
+
     return tabs;
-  }, [isGeneratingTopics, isGeneratingTraces, generationProgress, filteredJobs]);
+  }, [isGeneratingTopics, isGeneratingTraces, generationProgress, filteredJobs, dryRunRunningJob]);
 
   return (
     <div className="px-4 py-1.5 border-b border-border">

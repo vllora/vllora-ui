@@ -3,6 +3,7 @@
  *
  * Inline panel for configuring JavaScript evaluation settings.
  * Displayed as a tab in the dataset main content area.
+ * Uses a resizable split view: code editor (left) + dry run panel (right).
  */
 
 import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from "react";
@@ -13,9 +14,12 @@ import {
   Code2,
   Copy,
   RotateCcw,
-  Play,
+  FlaskConical,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
+import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
+import { DryRunInlinePanel } from "./DryRunInlinePanel";
 
 /** Methods exposed via ref for external control */
 export interface EvaluationConfigPanelRef {
@@ -96,17 +100,27 @@ interface EvaluationConfigPanelProps {
   onSave: (script: string) => Promise<void>;
   /** Hide header action buttons (Reset/Copy) when they're shown externally */
   hideHeaderActions?: boolean;
-  /** Callback to open the dry run dialog */
-  onOpenDryRun?: () => void;
+  /** Number of records in the dataset (for dry run config) */
+  recordCount: number;
 }
 
 export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, EvaluationConfigPanelProps>(
-  function EvaluationConfigPanel({ evalScript, onSave, hideHeaderActions = false, onOpenDryRun }, ref) {
+  function EvaluationConfigPanel({ evalScript, onSave, hideHeaderActions = false, recordCount }, ref) {
   // JavaScript evaluator state
   const [script, setScript] = useState(DEFAULT_SCRIPT);
 
   // UI state
   const [isSaving, setIsSaving] = useState(false);
+  const [showDryRunPanel, setShowDryRunPanel] = useState(false);
+
+  // Auto-show panel when there's a running job or completed results
+  const { runningJob, lastCompletedJob } = DryRunJobsConsumer();
+
+  useEffect(() => {
+    if (runningJob || lastCompletedJob) {
+      setShowDryRunPanel(true);
+    }
+  }, [runningJob, lastCompletedJob]);
 
   // Initialize from evalScript
   useEffect(() => {
@@ -146,6 +160,8 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
     copy: handleCopy,
   }), [script]);
 
+  const hasGraderConfig = !!evalScript;
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
@@ -157,69 +173,109 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
             Define how training samples are scored using JavaScript
           </span>
         </div>
-        {!hideHeaderActions && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs gap-1.5"
-              onClick={handleReset}
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              Reset
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs gap-1.5"
-              onClick={handleCopy}
-            >
-              <Copy className="w-3.5 h-3.5" />
-              Copy
-            </Button>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {!hideHeaderActions && (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs gap-1.5"
+                onClick={handleReset}
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Reset
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs gap-1.5"
+                onClick={handleCopy}
+              >
+                <Copy className="w-3.5 h-3.5" />
+                Copy
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Editor */}
+      {/* Editor + Dry Run split view */}
       <div className="flex-1 overflow-hidden">
-        <Editor
-          height="100%"
-          language="javascript"
-          value={script}
-          onChange={(v) => setScript(v || "")}
-          theme="vs-dark"
-          options={{
-            minimap: { enabled: false },
-            fontSize: 13,
-            lineNumbers: "on",
-            scrollBeyondLastLine: false,
-            wordWrap: "on",
-            automaticLayout: true,
-            tabSize: 2,
-            padding: { top: 16, bottom: 16 },
-            scrollbar: {
-              vertical: "auto",
-              horizontal: "hidden",
-              verticalScrollbarSize: 8,
-            },
-          }}
-        />
+        {showDryRunPanel ? (
+          <ResizablePanelGroup direction="horizontal">
+            <ResizablePanel defaultSize={60} minSize={30}>
+              <Editor
+                height="100%"
+                language="javascript"
+                value={script}
+                onChange={(v) => setScript(v || "")}
+                theme="vs-dark"
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 13,
+                  lineNumbers: "on",
+                  scrollBeyondLastLine: false,
+                  wordWrap: "on",
+                  automaticLayout: true,
+                  tabSize: 2,
+                  padding: { top: 16, bottom: 16 },
+                  scrollbar: {
+                    vertical: "auto",
+                    horizontal: "hidden",
+                    verticalScrollbarSize: 8,
+                  },
+                }}
+              />
+            </ResizablePanel>
+            <ResizableHandle withHandle />
+            <ResizablePanel defaultSize={40} minSize={25}>
+              <DryRunInlinePanel
+                recordCount={recordCount}
+                hasGraderConfig={hasGraderConfig}
+                onClose={() => setShowDryRunPanel(false)}
+              />
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        ) : (
+          <Editor
+            height="100%"
+            language="javascript"
+            value={script}
+            onChange={(v) => setScript(v || "")}
+            theme="vs-dark"
+            options={{
+              minimap: { enabled: false },
+              fontSize: 13,
+              lineNumbers: "on",
+              scrollBeyondLastLine: false,
+              wordWrap: "on",
+              automaticLayout: true,
+              tabSize: 2,
+              padding: { top: 16, bottom: 16 },
+              scrollbar: {
+                vertical: "auto",
+                horizontal: "hidden",
+                verticalScrollbarSize: 8,
+              },
+            }}
+          />
+        )}
       </div>
 
       {/* Footer */}
       <div className="flex items-center justify-between px-5 py-3 border-t border-border bg-muted/20 shrink-0">
-        {/* Run Dry Run button - show when script is saved */}
+        {/* Run Dry Run button */}
         <div>
-          {onOpenDryRun && evalScript && !hasChanges && (
+          {evalScript && (
             <Button
               variant="outline"
               size="sm"
-              onClick={onOpenDryRun}
+              onClick={() => setShowDryRunPanel(true)}
+              disabled={showDryRunPanel}
               className="gap-2 h-7"
             >
-              <Play className="w-3.5 h-3.5" />
-              Run Dry Run
+              <FlaskConical className="w-3.5 h-3.5" />
+              {showDryRunPanel ? "Dry Run Open" : "Run Dry Run"}
             </Button>
           )}
         </div>

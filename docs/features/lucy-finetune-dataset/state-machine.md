@@ -334,7 +334,7 @@ On successful completion, the polling manager populates `workflow.dryRun` via `u
 
 **Cancel Support:**
 
-Users can cancel a running dry run via the cancel button on the `EvaluationRunningState` card (StopCircle icon). Cancellation stops polling and marks the job as `cancelled`.
+Users can cancel a running dry run via the cancel button in the dry run dialog. Cancellation stops polling and marks the job as `cancelled`.
 
 **Dry Run Metrics:**
 | Metric | Healthy Range | Description |

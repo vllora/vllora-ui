@@ -573,7 +573,7 @@ The `dry-run-polling-manager.ts` singleton manages background polling for dry ru
 - **On failure**: The polling manager calls `markStepFailed()` which sets `stepStatus.dry_run = 'failed'` in the workflow state, ensuring the UI reflects the failure
 
 **Cancel Support:**
-The `EvaluationRunningState` card displays a cancel button (StopCircle icon) that calls `cancelDryRun()` on the polling manager, which stops polling and marks the job as `cancelled`.
+The dry run dialog's running view displays a cancel button that calls `cancelDryRun()` on the polling manager, which stops polling and marks the job as `cancelled`. A compact status indicator in the `EvaluationConfigPanel` header also shows running progress and links to the dialog.
 
 **DryRunDialog Fallback:**
 If the dialog is in "running" view but the running job disappears without a completed job being available (e.g., job cancelled or failed externally), the dialog falls back to the "config" view so the user can start a new dry run.

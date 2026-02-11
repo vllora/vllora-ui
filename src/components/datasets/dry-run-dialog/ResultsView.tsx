@@ -25,7 +25,7 @@ interface ResultsViewProps {
   onTabChange: (tab: ResultsViewTab) => void;
   onReset: () => void;
   onViewHistory: () => void;
-  onClose: () => void;
+  onClose?: () => void;
   hasHistory: boolean;
   /** Full evaluation results for details tab (flattened from epoch-based) */
   evaluationResults?: FlatEvaluationResult[];
@@ -38,7 +38,6 @@ export function ResultsView({
   onTabChange,
   onReset,
   onViewHistory,
-  onClose,
   hasHistory,
   evaluationResults,
 }: ResultsViewProps) {
@@ -320,14 +319,6 @@ export function ResultsView({
           >
             <RefreshCw className="h-3.5 w-3.5" />
             Run Again
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onClose}
-            className="h-8 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-          >
-            Close
           </Button>
         </div>
       </div>

@@ -17,6 +17,7 @@ import {
   createEvaluation,
   getEvaluationResult,
   ensureDatasetUploaded,
+  flattenEvaluationResults,
 } from './finetune-api';
 import { analyzeDryRunResults } from '@/lib/distri-dataset-tools/analysis/analyze-dry-run';
 import * as datasetsDB from './datasets-db';
@@ -363,7 +364,8 @@ class DryRunPollingManager {
 
       // Persist per-row scores to individual records
       if (result.results && result.results.length > 0) {
-        for (const row of result.results) {
+        const flatResults = flattenEvaluationResults(result.results);
+        for (const row of flatResults) {
           if (typeof row.score === 'number' && row.dataset_row_id) {
             await datasetsDB.updateRecordEvaluation(
               job.datasetId,

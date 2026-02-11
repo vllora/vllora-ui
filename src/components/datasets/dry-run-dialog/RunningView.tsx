@@ -17,6 +17,7 @@ import {
   getJobAverageScore,
   getJobPassedCount,
 } from "@/types/dry-run-job";
+import { flattenEvaluationResults } from "@/services/finetune-api";
 import { ResultsTable } from "./ResultsTable";
 
 interface RunningViewProps {
@@ -35,8 +36,8 @@ export function RunningView({ job, progress, onCancel }: RunningViewProps) {
   const hasAvgScore = averageScore !== undefined;
   const hasResults = completedRows > 0 || failedRows > 0;
 
-  // Get results from polling snapshot
-  const results = job.pollingSnapshot?.results ?? [];
+  // Get results from polling snapshot, flattened for the table
+  const results = job.pollingSnapshot?.results ? flattenEvaluationResults(job.pollingSnapshot.results) : [];
 
   return (
     <div className="flex flex-col h-full">
@@ -106,7 +107,7 @@ export function RunningView({ job, progress, onCancel }: RunningViewProps) {
         <Separator className="bg-zinc-800" />
         <div className="flex items-center justify-between">
           <p className="text-xs text-zinc-500">
-            You can close this dialog — the dry run will continue in the background.
+            Dry run continues in the background.
           </p>
           <Button
             variant="outline"

@@ -23,10 +23,8 @@ import { CreateDatasetDialog } from "./CreateDatasetDialog";
 import { TopicHierarchyDialog } from "./topics-dialog";
 import { GenerateSyntheticDataDialog } from "./GenerateSyntheticDataDialog";
 import { SanitizeDataDialog } from "./SanitizeDataDialog";
-import { DryRunDialog } from "./dry-run-dialog";
 import { getLeafTopicsFromHierarchy, computeCoverageStats, computeDatasetInsights } from "./record-utils";
 import { getTopicCounts } from "./topic-hierarchy-utils";
-import { DryRunEvaluationCard } from "./dataset-detail-header/evaluation-card";
 import { FinetuneJobCard } from "./dataset-detail-header/finetune-job-card";
 import { RecordsAnalyticsDialog } from "./dataset-detail-header/detail-records-analytics-dialog";
 import { DatasetDetailHeader } from "./dataset-detail-header";
@@ -95,10 +93,6 @@ export function DatasetDetailContentV2() {
     // Sanitize data dialog
     sanitizeDataDialog,
     setSanitizeDataDialog,
-
-    // Dry run dialog
-    dryRunDialog,
-    setDryRunDialog,
 
     // Handlers
     handleUpdateRecordTopic,
@@ -444,24 +438,13 @@ export function DatasetDetailContentV2() {
             />
           )}
           {activeSection === "evaluator" && (
-            <>
-              {/* Dry Run Evaluation Card */}
-
-              <div className="flex-1 flex flex-col overflow-hidden">
-                {dataset?.evalScript && <div className="px-2 py-2">
-                  <DryRunEvaluationCard
-                    evalScript={dataset?.evalScript}
-                    onConfigureClick={() => {/* Already on evaluator tab */ }}
-                    onDryRunClick={() => setDryRunDialog(true)}
-                  />
-                </div>}
-                <EvaluationConfigPanel
-                  evalScript={dataset.evalScript}
-                  onSave={handleSaveEvaluationConfig}
-                  onOpenDryRun={() => setDryRunDialog(true)}
-                />
-              </div>
-            </>
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <EvaluationConfigPanel
+                evalScript={dataset.evalScript}
+                onSave={handleSaveEvaluationConfig}
+                recordCount={sortedRecords.length}
+              />
+            </div>
           )}
           {activeSection === "jobs" && (
             <>
@@ -592,13 +575,6 @@ export function DatasetDetailContentV2() {
           records={sortedRecords}
         />
 
-        {/* Dry run validation dialog */}
-        <DryRunDialog
-          open={dryRunDialog}
-          onOpenChange={setDryRunDialog}
-          recordCount={sortedRecords.length}
-          hasGraderConfig={!!dataset?.evalScript}
-        />
 
         {/* Records Analytics Dialog */}
         <RecordsAnalyticsDialog

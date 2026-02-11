@@ -882,7 +882,7 @@ not_started → topics_config → categorize → coverage_generation → grader_
   - **Option A (Recommended)**: Fix the issues (add data, adjust grader, etc.)
   - **Option B (Bypass)**: Rollback to grader_config and skip directly to training
 - **Failure handling**: Dry run can fail due to polling timeout (~12 min), consecutive errors (5 failures), or backend failure. On failure, the workflow step is automatically marked as `failed` and the user can retry from the config view
-- **Cancel support**: Users can cancel a running dry run via the cancel button on the evaluation card. Cancelled jobs stop polling and are marked as `cancelled`
+- **Cancel support**: Users can cancel a running dry run via the cancel button in the dry run dialog. Cancelled jobs stop polling and are marked as `cancelled`
 - **Skip option**: If user is confident and wants to skip dry run, advance directly to training
 
 ## Step 6: Training
