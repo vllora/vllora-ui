@@ -6,15 +6,19 @@
  */
 
 import type { DistriFnTool } from "@distri/core";
-import { DistriClient, type DistriMessage } from "@distri/core";
 import * as datasetsDB from "@/services/datasets-db";
 import * as knowledgeDB from "@/services/knowledge-sources-db";
-import { getDistriUrl } from "@/config/api";
-import { fetchLucyConfig, type LucyConfig } from "@/lib/agent-sync";
 import type { ToolHandler } from "../types";
 import type { DataInfo, TopicHierarchyNode } from "@/types/dataset-types";
 import * as workflowDB from "@/services/finetune-workflow-db";
 import { emitter } from "@/utils/eventEmitter";
+import {
+  callLucy,
+  type LucyMessage,
+  type ContentBlock,
+  type FileContentBlock,
+} from "./shared/lucy-client";
+import { buildKnowledgeContentBlocks } from "./shared/knowledge-context";
 
 // =============================================================================
 // Topic Hierarchy Helpers
@@ -76,17 +80,15 @@ const BATCH_SIZE = 10;
 // Number of parallel requests to make - balance between speed and API rate limits
 const PARALLEL_REQUESTS = 3;
 
-// Cache for Lucy config
-let cachedLucyConfig: LucyConfig | null = null;
-const fetchLucyConfigCached = async (): Promise<LucyConfig> => {
-  if (cachedLucyConfig) return cachedLucyConfig;
-  cachedLucyConfig = await fetchLucyConfig();
-  return cachedLucyConfig;
-};
 
 // =============================================================================
 // Types
 // =============================================================================
+
+interface OutputFormatParam {
+  schema: Record<string, unknown>;
+  system_prompt_template: string;
+}
 
 interface GenerateInitialDataParams {
   dataset_id: string;
@@ -96,6 +98,8 @@ interface GenerateInitialDataParams {
   user_guidance?: string;
   /** If true, distribute generation across topics in the hierarchy */
   distribute_by_topic?: boolean;
+  /** Response schema for structured output tasks */
+  output_format?: OutputFormatParam | null;
 }
 
 interface GeneratedExample {
@@ -285,6 +289,53 @@ Output Format:
 
 Generate exactly {{count}} examples.`;
 
+const INITIAL_DATA_GENERATION_USER_STRUCTURED_RFT = `Generate {{count}} diverse training examples for a structured output task.
+
+Training Objective:
+{{objective}}
+{{user_guidance}}
+{{topic_context}}
+{{knowledge_context}}
+
+## STRUCTURED OUTPUT DETAILS
+
+The model must produce structured JSON output. Use the EXACT fixed system prompt below for ALL examples.
+
+**Fixed System Prompt (use this EXACTLY for all examples):**
+{{system_prompt_template}}
+
+**Expected Output Schema:**
+{{output_schema}}
+
+## YOUR TASK
+
+Generate realistic input texts as user_message. The system_prompt must be the EXACT fixed system prompt above for ALL examples.
+
+Rules for generating inputs:
+- Vary names, amounts, dates, details across examples
+- Include different formats: formal, informal, messy, well-structured
+- Include edge cases: missing fields, unusual formatting, multiple items
+- Make inputs realistic - they should look like real-world data
+- Each input should contain enough information to produce the fields in the schema
+- Some inputs should have partial information (missing optional fields)
+
+For each example, provide:
+- system_prompt: The EXACT fixed system prompt above (copy it verbatim)
+- user_message: A realistic input text
+
+Output Format:
+{
+  "examples": [
+    {
+      "system_prompt": "<the exact fixed system prompt>",
+      "user_message": "Input text..."
+    },
+    ...
+  ]
+}
+
+Generate exactly {{count}} examples.`;
+
 const INITIAL_DATA_RESPONSE_SCHEMA_RFT = {
   type: "json_schema",
   json_schema: {
@@ -386,18 +437,18 @@ async function callLLMForInitialData(
   userGuidance?: string,
   knowledgeContext?: KnowledgeContext,
   topicContext?: LeafTopic,
+  outputFormatConfig?: OutputFormatParam | null,
+  fileContentBlocks?: FileContentBlock[],
 ): Promise<GeneratedExample[]> {
-  const lucyConfig = await fetchLucyConfigCached();
-  const rawUrl = lucyConfig.distri_url || getDistriUrl();
-  const baseUrl = `${rawUrl.replace(/\/$/, "")}/v1`;
-  const distriClient = DistriClient.create({ baseUrl });
-
-  const modelSettingsFromConfig = lucyConfig.model_settings || {};
-
-  const userPromptTemplate =
-    mode === "rft"
-      ? INITIAL_DATA_GENERATION_USER_RFT
-      : INITIAL_DATA_GENERATION_USER_SFT;
+  // Select prompt template: structured output RFT when response schema is present
+  let userPromptTemplate: string;
+  if (outputFormatConfig && mode === "rft") {
+    userPromptTemplate = INITIAL_DATA_GENERATION_USER_STRUCTURED_RFT;
+  } else if (mode === "rft") {
+    userPromptTemplate = INITIAL_DATA_GENERATION_USER_RFT;
+  } else {
+    userPromptTemplate = INITIAL_DATA_GENERATION_USER_SFT;
+  }
 
   // Build user guidance section if provided
   const guidanceSection = userGuidance
@@ -414,65 +465,59 @@ async function callLLMForInitialData(
     ? buildKnowledgeContextSection(knowledgeContext)
     : "";
 
+  // Build structured output placeholders
+  const systemPromptTemplatePlaceholder = outputFormatConfig?.system_prompt_template || "";
+  const outputSchemaPlaceholder = outputFormatConfig?.schema
+    ? JSON.stringify(outputFormatConfig.schema, null, 2)
+    : "";
+
   const userPrompt = userPromptTemplate
     .replace(/\{\{count\}\}/g, String(count))
     .replace("{{objective}}", objective)
     .replace("{{user_guidance}}", guidanceSection)
     .replace("{{topic_context}}", topicSection)
-    .replace("{{knowledge_context}}", knowledgeSection);
+    .replace("{{knowledge_context}}", knowledgeSection)
+    .replace("{{system_prompt_template}}", systemPromptTemplatePlaceholder)
+    .replace("{{output_schema}}", outputSchemaPlaceholder);
 
   const responseSchema =
     mode === "rft"
       ? INITIAL_DATA_RESPONSE_SCHEMA_RFT
       : INITIAL_DATA_RESPONSE_SCHEMA_SFT;
 
-  const messages: DistriMessage[] = [
-    DistriClient.initDistriMessage("system", [
-      { part_type: "text", data: INITIAL_DATA_GENERATION_SYSTEM },
-    ]),
-    DistriClient.initDistriMessage("user", [
-      { part_type: "text", data: userPrompt },
-    ]),
-  ];
-
-  let lastError: unknown;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      console.log(`[generateInitialData] LLM call attempt ${attempt + 1}/3 for ${count} examples...`);
-      const startTime = Date.now();
-
-      const response = await distriClient.llm(messages, [], {
-        model_settings: {
-          ...modelSettingsFromConfig,
-          model: modelSettingsFromConfig.model || "openai/gpt-4.1",
-          temperature: modelSettingsFromConfig.temperature ?? 0.7,
-          response_format: responseSchema,
-        },
-      });
-
-      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      console.log(`[generateInitialData] LLM call completed in ${elapsed}s`);
-
-      if (!response.content) {
-        throw new Error("LLM returned empty response");
-      }
-
-      const parsed = JSON.parse(response.content.trim());
-      console.log(`[generateInitialData] Parsed ${parsed.examples?.length || 0} examples from response`);
-      return parsed.examples || [];
-    } catch (err) {
-      lastError = err;
-      console.error(`[generateInitialData] LLM call attempt ${attempt + 1} failed:`, err);
-      if (attempt < 2) {
-        const backoffMs = 800 * Math.pow(2, attempt);
-        console.log(`[generateInitialData] Retrying in ${backoffMs}ms...`);
-        await new Promise((resolve) => setTimeout(resolve, backoffMs));
-      }
-    }
+  // Build user message content: file blocks (if any) + text instruction
+  let userContent: string | ContentBlock[];
+  if (fileContentBlocks && fileContentBlocks.length > 0) {
+    userContent = [
+      ...fileContentBlocks,
+      { type: "text" as const, text: userPrompt },
+    ];
+    console.log(`[generateInitialData] Sending ${fileContentBlocks.length} file content block(s) with data generation request`);
+  } else {
+    userContent = userPrompt;
   }
 
-  console.error("[generateInitialData] All LLM attempts failed:", lastError);
-  throw lastError instanceof Error ? lastError : new Error("LLM call failed");
+  const messages: LucyMessage[] = [
+    { role: "system", content: INITIAL_DATA_GENERATION_SYSTEM },
+    { role: "user", content: userContent },
+  ];
+
+  console.log(`[generateInitialData] LLM call for ${count} examples...`);
+  const startTime = Date.now();
+
+  const responseText = await callLucy(messages, {
+    temperature: 0.7,
+    max_tokens: outputFormatConfig ? 16000 : undefined,
+    response_format: responseSchema,
+    label: "generate_initial_data",
+  });
+
+  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`[generateInitialData] LLM call completed in ${elapsed}s`);
+
+  const parsed = JSON.parse(responseText.trim());
+  console.log(`[generateInitialData] Parsed ${parsed.examples?.length || 0} examples from response`);
+  return parsed.examples || [];
 }
 
 // =============================================================================
@@ -535,6 +580,7 @@ export const generateInitialDataHandler: ToolHandler = async (
       generation_mode = "rft",
       user_guidance,
       distribute_by_topic = false,
+      output_format,
     } = params as unknown as GenerateInitialDataParams;
 
     if (!dataset_id) {
@@ -584,6 +630,13 @@ export const generateInitialDataHandler: ToolHandler = async (
         "[generateInitialData] Knowledge topics:",
         knowledgeContext.topics.slice(0, 5).join(", "),
       );
+    }
+
+    // Fetch native file content blocks (sent only with first batch)
+    const knowledgeBlocks = await buildKnowledgeContentBlocks(dataset_id);
+    const firstBatchFileBlocks = knowledgeBlocks.hasFileBlocks ? knowledgeBlocks.fileBlocks : undefined;
+    if (firstBatchFileBlocks) {
+      console.log(`[generateInitialData] ${firstBatchFileBlocks.length} file content block(s) available — will send with first batch only`);
     }
 
     // Check if we should use topic-based generation
@@ -654,6 +707,9 @@ export const generateInitialDataHandler: ToolHandler = async (
 
         console.log(`[generateInitialData] Processing batches ${chunkStart + 1}-${chunkEnd} of ${totalBatches}`);
 
+        // Send file content blocks only with the first chunk
+        const chunkFileBlocks = chunkStart === 0 ? firstBatchFileBlocks : undefined;
+
         // Create parallel requests for this chunk
         const batchPromises = chunkJobs.map(job =>
           callLLMForInitialData(
@@ -663,6 +719,8 @@ export const generateInitialDataHandler: ToolHandler = async (
             user_guidance,
             knowledgeContext,
             job.topic,
+            output_format,
+            chunkFileBlocks,
           ).then(examples => ({ job, examples }))
             .catch(err => {
               console.error(`[generateInitialData] Topic "${job.topic.name}" batch ${job.batchIndex + 1} failed:`, err);
@@ -745,6 +803,9 @@ export const generateInitialDataHandler: ToolHandler = async (
         const chunkEnd = Math.min(chunkStart + PARALLEL_REQUESTS, totalBatches);
         const batchPromises: Promise<{ batchIndex: number; examples: GeneratedExample[] }>[] = [];
 
+        // Send file content blocks only with the first chunk
+        const chunkFileBlocks = chunkStart === 0 ? firstBatchFileBlocks : undefined;
+
         // Create parallel batch requests
         for (let batchIndex = chunkStart; batchIndex < chunkEnd; batchIndex++) {
           const batchStartCount = batchIndex * BATCH_SIZE;
@@ -760,6 +821,9 @@ export const generateInitialDataHandler: ToolHandler = async (
               generation_mode,
               user_guidance,
               knowledgeContext,
+              undefined,
+              output_format,
+              chunkFileBlocks,
             ).then(examples => ({ batchIndex, examples }))
               .catch(err => {
                 console.error(`[generateInitialData] Batch ${batchIndex + 1} failed:`, err);

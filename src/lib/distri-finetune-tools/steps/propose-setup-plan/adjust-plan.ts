@@ -6,12 +6,10 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import { DistriClient, type DistriMessage } from '@distri/core';
-import { getDistriUrl } from '@/config/api';
 import { emitter } from '@/utils/eventEmitter';
 import type { ToolHandler } from '../../types';
 import type { SetupPlan, ProposedTopic, GraderCriterion } from './types';
-import { fetchLucyConfigCached } from './llm-service';
+import { callLucy, type LucyMessage } from '../shared/lucy-client';
 import { generateGraderTemplate } from './grader-template';
 
 interface AdjustSetupPlanParams {
@@ -119,13 +117,6 @@ async function callLLMToAdjustPlan(
   grader_criteria: GraderCriterion[];
   changes_made: string;
 }> {
-  const lucyConfig = await fetchLucyConfigCached();
-  const rawUrl = lucyConfig.distri_url || getDistriUrl();
-  const baseUrl = `${rawUrl.replace(/\/$/, '')}/v1`;
-  const distriClient = DistriClient.create({ baseUrl });
-
-  const modelSettingsFromConfig = lucyConfig.model_settings || {};
-
   // Format current criteria for context (topics are regenerated from scratch based on user feedback)
   const currentCriteriaJson = JSON.stringify(currentPlan.grader_config.criteria, null, 2);
 
@@ -177,52 +168,28 @@ Generate exactly what the user asked for. Output JSON with:
 
 Remember: "X topics" means X LEAF topics. Default is 2-level hierarchy with parent categories (target_count=0) and leaf subtopics.`;
 
-  const messages: DistriMessage[] = [
-    DistriClient.initDistriMessage('system', [
-      { part_type: 'text', data: ADJUST_PLAN_SYSTEM },
-    ]),
-    DistriClient.initDistriMessage('user', [
-      { part_type: 'text', data: userPrompt },
-    ]),
+  const messages: LucyMessage[] = [
+    { role: 'system', content: ADJUST_PLAN_SYSTEM },
+    { role: 'user', content: userPrompt },
   ];
 
-  let lastError: unknown;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const response = await distriClient.llm(messages, [], {
-        model_settings: {
-          ...modelSettingsFromConfig,
-          model: modelSettingsFromConfig.model || 'openai/gpt-4.1',
-          temperature: 0, // Force deterministic output for exact number following
-          response_format: ADJUST_PLAN_RESPONSE_SCHEMA,
-        },
-      });
+  const responseText = await callLucy(messages, {
+    temperature: 0, // Force deterministic output for exact number following
+    response_format: ADJUST_PLAN_RESPONSE_SCHEMA,
+    label: 'adjust_setup_plan',
+  });
 
-      if (!response.content) {
-        throw new Error('LLM returned empty response');
-      }
+  const parsed = JSON.parse(responseText.trim());
 
-      const parsed = JSON.parse(response.content.trim());
+  // Validate and fix the response if user specified exact numbers
+  const validated = validateAndFixResponse(
+    parsed,
+    extractedTopicCount,
+    extractedRecordCount,
+    wantsFlat
+  );
 
-      // Validate and fix the response if user specified exact numbers
-      const validated = validateAndFixResponse(
-        parsed,
-        extractedTopicCount,
-        extractedRecordCount,
-        wantsFlat
-      );
-
-      return validated;
-    } catch (err) {
-      lastError = err;
-      if (attempt < 2) {
-        const backoffMs = 800 * Math.pow(2, attempt);
-        await new Promise((resolve) => setTimeout(resolve, backoffMs));
-      }
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error('LLM call failed');
+  return validated;
 }
 
 /**

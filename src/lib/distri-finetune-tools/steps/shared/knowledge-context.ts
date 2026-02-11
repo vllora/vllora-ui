@@ -10,6 +10,8 @@
  */
 
 import * as knowledgeDB from '@/services/knowledge-sources-db';
+import type { FileContentBlock } from './lucy-client';
+import type { KnowledgeSource } from '@/types/dataset-types';
 
 export interface KnowledgeSourceContext {
   /** Formatted context string for LLM prompts */
@@ -123,6 +125,105 @@ When knowledge sources are provided:
  * Wrap knowledge context with appropriate instructions for topic generation.
  * Handles both cases: with documents and without documents.
  */
+// =============================================================================
+// Native File Content Blocks
+// =============================================================================
+
+/** Max base64 size for a single file content block (20 MB) */
+const MAX_FILE_BASE64_SIZE = 20 * 1024 * 1024;
+
+export interface KnowledgeContentBlocks {
+  /** Native file content blocks for LLM multipart messages */
+  fileBlocks: FileContentBlock[];
+  /** Text excerpt context (fallback for subsequent batches) */
+  textExcerptContext: string;
+  /** Whether any file blocks were produced */
+  hasFileBlocks: boolean;
+  /** Summary of sources for plan display */
+  sourcesSummary: Array<{ name: string; topics_extracted: string[] }>;
+  /** Number of ready sources */
+  readyCount: number;
+  /** Number of processing sources */
+  processingCount: number;
+}
+
+/**
+ * Infer MIME type from a KnowledgeSource.
+ * Uses mimeType if available, otherwise infers from source type.
+ */
+function inferMimeType(source: KnowledgeSource): string {
+  if (source.mimeType) return source.mimeType;
+
+  switch (source.type) {
+    case 'pdf':
+      return 'application/pdf';
+    case 'text':
+      return 'text/plain';
+    case 'markdown':
+      return 'text/markdown';
+    case 'image':
+      return 'image/png'; // default; mimeType field should have the real type
+    default:
+      return 'application/octet-stream';
+  }
+}
+
+/**
+ * Build native file content blocks from all knowledge sources for a dataset.
+ *
+ * For every source that has raw base64 content (stored in `source.content`),
+ * a file content block is produced so the LLM can see the actual document.
+ *
+ * Also returns the text excerpt context (from `buildKnowledgeContext`) so
+ * callers can fall back to excerpts for subsequent batches.
+ */
+export async function buildKnowledgeContentBlocks(
+  datasetId: string,
+): Promise<KnowledgeContentBlocks> {
+  const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
+  const readySources = sources.filter((s) => s.status === 'ready');
+  const processingSources = sources.filter((s) => s.status === 'processing');
+
+  const fileBlocks: FileContentBlock[] = [];
+  const sourcesSummary: Array<{ name: string; topics_extracted: string[] }> = [];
+
+  for (const source of readySources) {
+    const topics = source.extractedContent?.topics || [];
+    sourcesSummary.push({ name: source.name, topics_extracted: topics });
+
+    // Build file content block if raw base64 content is available
+    if (source.content && source.content.length <= MAX_FILE_BASE64_SIZE) {
+      const mimeType = inferMimeType(source);
+      fileBlocks.push({
+        type: 'file',
+        file: {
+          filename: source.name,
+          file_data: `data:${mimeType};base64,${source.content}`,
+        },
+      });
+      console.log(
+        `[knowledge-context] File block for "${source.name}" (${mimeType}, ${(source.content.length / 1024).toFixed(0)} KB base64)`,
+      );
+    } else if (source.content && source.content.length > MAX_FILE_BASE64_SIZE) {
+      console.warn(
+        `[knowledge-context] Skipping file block for "${source.name}": base64 size ${(source.content.length / (1024 * 1024)).toFixed(1)} MB exceeds 20 MB limit`,
+      );
+    }
+  }
+
+  // Also build the text excerpt context for fallback / subsequent batches
+  const textCtx = await buildKnowledgeContext(datasetId);
+
+  return {
+    fileBlocks,
+    textExcerptContext: textCtx.contextString,
+    hasFileBlocks: fileBlocks.length > 0,
+    sourcesSummary,
+    readyCount: readySources.length,
+    processingCount: processingSources.length,
+  };
+}
+
 export function wrapKnowledgeContextForPrompt(
   knowledgeContext: string,
   hasKnowledgeSources: boolean

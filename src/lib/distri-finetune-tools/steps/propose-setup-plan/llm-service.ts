@@ -1,10 +1,10 @@
 /**
  * LLM service for generating setup plans
+ *
+ * Uses the shared Lucy client for direct API calls with support
+ * for native file content blocks (PDF, text, images).
  */
 
-import { DistriClient, type DistriMessage } from '@distri/core';
-import { getDistriUrl } from '@/config/api';
-import { fetchLucyConfig, type LucyConfig } from '@/lib/agent-sync';
 import type { ProposedTopic, GraderCriterion } from './types';
 import {
   PLAN_GENERATION_SYSTEM,
@@ -12,33 +12,29 @@ import {
   PLAN_RESPONSE_SCHEMA,
 } from './prompts';
 import { wrapKnowledgeContextForPrompt } from '../shared/knowledge-context';
+import {
+  callLucy,
+  type LucyMessage,
+  type ContentBlock,
+  type FileContentBlock,
+} from '../shared/lucy-client';
 
-// Cache for Lucy config
-let cachedLucyConfig: LucyConfig | null = null;
-
-export async function fetchLucyConfigCached(): Promise<LucyConfig> {
-  if (cachedLucyConfig) return cachedLucyConfig;
-  cachedLucyConfig = await fetchLucyConfig();
-  return cachedLucyConfig;
-}
+// Re-export for backward compatibility (used by adjust-plan.ts and others)
+export { fetchLucyConfigCached } from '../shared/lucy-client';
 
 export interface LLMPlanResult {
   proposed_topics: ProposedTopic[];
   grader_criteria: GraderCriterion[];
   strategy_notes: string;
+  output_schema: string;
+  system_prompt_template: string;
 }
 
 export async function callLLMForPlan(
   objective: string,
-  knowledgeContext?: string
+  knowledgeContext?: string,
+  fileContentBlocks?: FileContentBlock[],
 ): Promise<LLMPlanResult> {
-  const lucyConfig = await fetchLucyConfigCached();
-  const rawUrl = lucyConfig.distri_url || getDistriUrl();
-  const baseUrl = `${rawUrl.replace(/\/$/, '')}/v1`;
-  const distriClient = DistriClient.create({ baseUrl });
-
-  const modelSettingsFromConfig = lucyConfig.model_settings || {};
-
   const knowledgeSection = wrapKnowledgeContextForPrompt(
     knowledgeContext || '',
     !!knowledgeContext
@@ -48,45 +44,62 @@ export async function callLLMForPlan(
     .replace('{{objective}}', objective)
     .replace('{{knowledge_section}}', knowledgeSection);
 
-  const messages: DistriMessage[] = [
-    DistriClient.initDistriMessage('system', [
-      { part_type: 'text', data: PLAN_GENERATION_SYSTEM },
-    ]),
-    DistriClient.initDistriMessage('user', [
-      { part_type: 'text', data: userPrompt },
-    ]),
-  ];
-
-  let lastError: unknown;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const response = await distriClient.llm(messages, [], {
-        model_settings: {
-          ...modelSettingsFromConfig,
-          model: modelSettingsFromConfig.model || 'openai/gpt-4.1',
-          temperature: modelSettingsFromConfig.temperature ?? 0.7,
-          response_format: PLAN_RESPONSE_SCHEMA,
-        },
-      });
-
-      if (!response.content) {
-        throw new Error('LLM returned empty response');
-      }
-
-      const parsed = JSON.parse(response.content.trim()) as LLMPlanResult;
-
-      // Validate and fix to ensure exactly 5 leaf topics with 30 records each
-      return validateAndFixInitialPlan(parsed);
-    } catch (err) {
-      lastError = err;
-      if (attempt < 2) {
-        const backoffMs = 800 * Math.pow(2, attempt);
-        await new Promise((resolve) => setTimeout(resolve, backoffMs));
-      }
-    }
+  // Build user message content: file blocks (if any) + text instruction
+  let userContent: string | ContentBlock[];
+  if (fileContentBlocks && fileContentBlocks.length > 0) {
+    userContent = [
+      ...fileContentBlocks,
+      { type: 'text' as const, text: userPrompt },
+    ];
+    console.log(`[llm-service] Sending ${fileContentBlocks.length} file content block(s) with plan generation request`);
+  } else {
+    userContent = userPrompt;
   }
 
-  throw lastError instanceof Error ? lastError : new Error('LLM call failed');
+  const messages: LucyMessage[] = [
+    { role: 'system', content: PLAN_GENERATION_SYSTEM },
+    { role: 'user', content: userContent },
+  ];
+
+  const responseText = await callLucy(messages, {
+    temperature: 0.7,
+    max_tokens: 16000,
+    response_format: PLAN_RESPONSE_SCHEMA,
+    label: 'propose_setup_plan',
+  });
+
+  const parsed = JSON.parse(responseText.trim()) as LLMPlanResult;
+
+  // Validate and fix to ensure exactly 5 leaf topics with 30 records each
+  const fixedPlan = validateAndFixInitialPlan(parsed);
+
+  // Validate response schema fields
+  return validateOutputFormat(fixedPlan);
+}
+
+/**
+ * Validate response schema fields. If output_schema is provided but invalid,
+ * clear it so the plan falls back to free-form mode.
+ */
+function validateOutputFormat(result: LLMPlanResult): LLMPlanResult {
+  if (!result.output_schema || result.output_schema.trim() === '') {
+    // No structured output — clear both fields
+    return { ...result, output_schema: '', system_prompt_template: '' };
+  }
+
+  try {
+    JSON.parse(result.output_schema);
+  } catch {
+    console.log('[llm-service] output_schema is not valid JSON, clearing');
+    return { ...result, output_schema: '', system_prompt_template: '' };
+  }
+
+  if (!result.system_prompt_template || result.system_prompt_template.trim() === '') {
+    console.log('[llm-service] output_schema present but system_prompt_template missing, clearing');
+    return { ...result, output_schema: '', system_prompt_template: '' };
+  }
+
+  return result;
 }
 
 /**

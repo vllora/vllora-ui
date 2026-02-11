@@ -11,11 +11,12 @@ import type {
   ProposeSetupPlanParams,
   SetupPlan,
   ProposeSetupPlanResult,
+  OutputFormat,
 } from './types';
 import { callLLMForPlan } from './llm-service';
 import { generateGraderTemplate } from './grader-template';
 import { saveProposedPlan } from '../proposed-plan-store';
-import { buildKnowledgeContext } from '../shared/knowledge-context';
+import { buildKnowledgeContentBlocks } from '../shared/knowledge-context';
 
 export const proposeSetupPlanHandler: ToolHandler = async (
   params
@@ -48,9 +49,9 @@ export const proposeSetupPlanHandler: ToolHandler = async (
       };
     }
 
-    // Build knowledge context using shared module
-    const knowledgeCtx = await buildKnowledgeContext(dataset_id);
-    const { contextString: knowledgeContext, sourcesSummary: knowledgeSourcesSummary, readyCount, processingCount } = knowledgeCtx;
+    // Build knowledge content blocks (native file blocks + text excerpt fallback)
+    const knowledgeCtx = await buildKnowledgeContentBlocks(dataset_id);
+    const { textExcerptContext: knowledgeContext, sourcesSummary: knowledgeSourcesSummary, readyCount, processingCount, fileBlocks, hasFileBlocks } = knowledgeCtx;
 
     // If ANY documents are still processing, wait for ALL to complete
     // This ensures the plan is generated with full knowledge context
@@ -77,8 +78,11 @@ export const proposeSetupPlanHandler: ToolHandler = async (
     // Proceed with or without knowledge sources
     console.log('[proposeSetupPlan] Generating plan with', readyCount, 'knowledge sources');
 
-    // Call LLM to generate plan
-    const llmResult = await callLLMForPlan(objective, knowledgeContext);
+    // Call LLM to generate plan (with native file blocks when available)
+    if (hasFileBlocks) {
+      console.log(`[proposeSetupPlan] Sending ${fileBlocks.length} native file content block(s) to LLM`);
+    }
+    const llmResult = await callLLMForPlan(objective, knowledgeContext, hasFileBlocks ? fileBlocks : undefined);
 
     // Count leaf topics only (topics that will have records assigned)
     // If a topic has subtopics, count only the subtopics (not the parent)
@@ -103,11 +107,27 @@ export const proposeSetupPlanHandler: ToolHandler = async (
       }
     }
 
+    // Parse response schema if present
+    let outputFormat: OutputFormat | null = null;
+
+    if (llmResult.output_schema && llmResult.output_schema.trim() !== '') {
+      try {
+        const parsedSchema = JSON.parse(llmResult.output_schema);
+        outputFormat = {
+          schema: parsedSchema,
+          system_prompt_template: llmResult.system_prompt_template,
+        };
+      } catch {
+        console.warn('[proposeSetupPlan] Failed to parse output_schema, ignoring');
+      }
+    }
+
     // Build the complete plan
     const plan: SetupPlan = {
       dataset_id,
       dataset_name: dataset.name,
       objective,
+      output_format: outputFormat,
       knowledge_sources: knowledgeSourcesSummary,
       proposed_topics: llmResult.proposed_topics,
       total_topic_count: totalTopicCount,
@@ -117,7 +137,7 @@ export const proposeSetupPlanHandler: ToolHandler = async (
       },
       grader_config: {
         criteria: llmResult.grader_criteria,
-        template_preview: generateGraderTemplate(llmResult.grader_criteria, objective),
+        template_preview: generateGraderTemplate(llmResult.grader_criteria, objective, outputFormat),
       },
       execution_steps: [
         {

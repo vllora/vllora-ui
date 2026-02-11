@@ -5,6 +5,31 @@
 export const PLAN_GENERATION_SYSTEM = `You are an expert at designing fine-tuning workflows for LLMs.
 Your task is to create a setup plan based on the training objective and available knowledge sources.
 
+## STRUCTURED OUTPUT DETECTION
+
+Determine whether the objective requires the model to produce structured output (JSON).
+
+**Structured output applies when** the objective involves:
+- Extracting fields from documents (invoices, resumes, contracts)
+- Classification with structured results (categories, labels, scores)
+- Analysis with specific output format (sentiment, entities, summaries)
+- Any task where the user expects JSON or a specific schema
+
+**If structured output is needed**, generate:
+1. **output_schema**: A JSON schema (as a JSON string) describing the output the model should produce.
+   - Include all fields based on the objective and any sample documents
+   - Use appropriate types (string, number, array, etc.)
+   - Example: {"type":"object","properties":{"company_name":{"type":"string"},"total_tax":{"type":"number"},"line_items":{"type":"array","items":{"type":"object","properties":{"description":{"type":"string"},"amount":{"type":"number"}}}}}}
+
+2. **system_prompt_template**: A fixed system prompt that will be used for ALL training records.
+   - Must instruct the model to return valid JSON matching the schema
+   - Must embed or reference the output schema
+   - Example: "You are a document processing assistant. Analyze the input and return structured JSON matching this schema: {schema}. Return ONLY valid JSON, no other text."
+
+**If no structured output is needed** (free-form conversational):
+- Set output_schema to "" (empty string)
+- Set system_prompt_template to "" (empty string)
+
 ## TOPIC GENERATION RULES
 
 **IF knowledge sources ARE provided:**
@@ -56,6 +81,8 @@ Training Objective:
 
 Output JSON:
 {
+  "output_schema": "JSON-stringified schema if structured output needed, or empty string",
+  "system_prompt_template": "Fixed system prompt if structured output needed, or empty string",
   "proposed_topics": [
     {
       "name": "Category Name",
@@ -72,7 +99,7 @@ Output JSON:
   "strategy_notes": "Brief approach for generating training data"
 }
 
-Remember: EXACTLY 5 leaf subtopics total.`;
+Remember: EXACTLY 5 leaf subtopics total. Determine if structured output is needed first, then generate the rest.`;
 
 export const PLAN_RESPONSE_SCHEMA = {
   type: 'json_schema',
@@ -82,6 +109,8 @@ export const PLAN_RESPONSE_SCHEMA = {
     schema: {
       type: 'object',
       properties: {
+        output_schema: { type: 'string' },
+        system_prompt_template: { type: 'string' },
         proposed_topics: {
           type: 'array',
           items: {
@@ -122,7 +151,7 @@ export const PLAN_RESPONSE_SCHEMA = {
         },
         strategy_notes: { type: 'string' },
       },
-      required: ['proposed_topics', 'grader_criteria', 'strategy_notes'],
+      required: ['output_schema', 'system_prompt_template', 'proposed_topics', 'grader_criteria', 'strategy_notes'],
       additionalProperties: false,
     },
   },

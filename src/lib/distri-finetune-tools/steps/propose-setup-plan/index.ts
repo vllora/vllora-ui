@@ -15,6 +15,7 @@ export type {
   GraderCriterion,
   SetupPlan,
   ProposeSetupPlanResult,
+  OutputFormat,
 } from './types';
 
 // Re-export handler

@@ -292,6 +292,7 @@ export const executeSetupPlanHandler: ToolHandler = async (
         count: targetRecordCount,
         use_knowledge: plan.data_generation.grounded_in_knowledge,
         distribute_by_topic: true,
+        output_format: plan.output_format || undefined,
       });
 
       if (!(generateResult as any).success) {

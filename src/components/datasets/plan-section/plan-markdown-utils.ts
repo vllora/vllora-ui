@@ -52,6 +52,25 @@ ${plan.grader_config.criteria.map((c) =>
     `| ${i + 1} | ${s.step} | ${s.estimated_time} |`
   ).join('\n');
 
+  // Build response schema section if applicable
+  const outputFormatSection = plan.output_format
+    ? `## 🔍 Response Schema
+
+**System Prompt Template:**
+\`\`\`
+${plan.output_format.system_prompt_template}
+\`\`\`
+
+**Output Schema:**
+\`\`\`json
+${JSON.stringify(plan.output_format.schema, null, 2)}
+\`\`\`
+
+---
+
+`
+    : '';
+
   const md = `# 📋 ${plan.dataset_name}
 
 > ${plan.objective}
@@ -66,7 +85,7 @@ ${plan.knowledge_sources.length > 0
 
 ---
 
-## 🎯 Training Topics
+${outputFormatSection}## 🎯 Training Topics
 
 **Total:** ${leafTopicCount} topics · ${totalExamples} examples
 

@@ -18,6 +18,7 @@ import {
   BookOpen,
   Play,
   Edit3,
+  FileJson,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -133,6 +134,38 @@ export function SetupPlanCard({
                   )}
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Response Schema */}
+      {plan.output_format && (
+        <div className="border-b border-border">
+          <SectionHeader
+            id="output_format"
+            icon={FileJson}
+            title="Response Schema"
+            subtitle="Structured output format"
+          />
+          {expandedSections.has('output_format') && (
+            <div className="px-4 pb-3 space-y-3">
+              <div>
+                <div className="text-xs font-medium text-muted-foreground mb-1">
+                  System Prompt Template
+                </div>
+                <div className="text-xs bg-muted/50 rounded-lg p-2 font-mono whitespace-pre-wrap">
+                  {plan.output_format.system_prompt_template}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground mb-1">
+                  Output Schema
+                </div>
+                <pre className="text-xs bg-muted/50 rounded-lg p-2 font-mono overflow-x-auto">
+                  {JSON.stringify(plan.output_format.schema, null, 2)}
+                </pre>
+              </div>
             </div>
           )}
         </div>

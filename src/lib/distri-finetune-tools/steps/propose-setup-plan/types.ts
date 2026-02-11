@@ -2,6 +2,11 @@
  * Types for Propose Setup Plan
  */
 
+export interface OutputFormat {
+  schema: Record<string, unknown>;
+  system_prompt_template: string;
+}
+
 export interface ProposeSetupPlanParams {
   dataset_id: string;
 }
@@ -22,6 +27,9 @@ export interface SetupPlan {
   dataset_id: string;
   dataset_name: string;
   objective: string;
+
+  // Structured output schema (null for free-form/conversational responses)
+  output_format: OutputFormat | null;
 
   // Knowledge sources analysis
   knowledge_sources: {
