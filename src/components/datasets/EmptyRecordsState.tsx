@@ -148,7 +148,7 @@ export function EmptyRecordsState({
           {onDocsClick && (
             <Button variant="outline" size="sm" onClick={onDocsClick} className="gap-2">
               <FileText className="w-4 h-4" />
-              View Documents
+              View Reference Docs
             </Button>
           )}
         </div>
