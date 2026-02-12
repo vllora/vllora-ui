@@ -125,7 +125,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
     <div className="flex flex-col h-full min-h-0">
       {/* Header: status + summary stats + actions (single compact row) */}
       <div className="shrink-0 border-b border-zinc-800/60">
-        <TooltipProvider delayDuration={300}>
+        <TooltipProvider delayDuration={200}>
         <div className="flex items-center gap-2 px-3 py-1.5">
           <Tooltip>
             <TooltipTrigger asChild>

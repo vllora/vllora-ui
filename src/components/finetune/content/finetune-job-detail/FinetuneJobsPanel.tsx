@@ -81,13 +81,14 @@ export function FinetuneJobsPanel() {
                 >
                   <StatusIcon status={job.status} />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1">
-                      <span className="font-medium truncate">
-                        {getModelDisplayName(job.base_model)}
-                      </span>
+                    <div className="font-medium truncate">
+                      {getModelDisplayName(job.base_model)}
                     </div>
-                    <div className="text-[10px] text-zinc-600 truncate">
-                      {formatFinetuneJobDate(job.created_at)}
+                    <div className="flex items-center gap-1 text-[10px] text-zinc-500">
+                      {job.training_config?.epochs && (
+                        <span>{job.training_config.epochs}ep</span>
+                      )}
+                      <span className="text-zinc-600">{formatFinetuneJobDate(job.created_at)}</span>
                     </div>
                   </div>
                 </button>
