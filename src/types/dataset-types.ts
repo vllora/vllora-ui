@@ -242,9 +242,9 @@ export interface DatasetFilterGroupConfig {
 }
 
 export const DATASET_FILTER_CONFIG: DatasetFilterGroupConfig[] = [
-  { value: 'draft', label: 'Draft', className: 'bg-muted text-muted-foreground', tooltip: 'Dataset is being prepared' },
-  { value: 'in_finetune', label: 'Processing', className: 'bg-blue-500/15 text-blue-600 dark:text-blue-400', tooltip: 'Evaluation or finetuning in progress' },
-  { value: 'completed', label: 'Completed', className: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400', tooltip: 'Finetuning completed' },
+  { value: 'draft', label: 'Draft', className: 'bg-muted text-muted-foreground', tooltip: 'Dataset is being set up — no active jobs running' },
+  { value: 'in_finetune', label: 'Running', className: 'bg-blue-500/15 text-blue-600 dark:text-blue-400', tooltip: 'A finetune or evaluation job is actively running' },
+  { value: 'completed', label: 'Completed', className: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400', tooltip: 'Finetuning completed successfully' },
 ];
 
 /** Get filter config by group value */
@@ -272,19 +272,16 @@ export function computeFilterGroup(
       return 'completed';
     }
 
-    // Active training
+    // Active training — something is actually running right now
     if (training && ['pending', 'queued', 'running'].includes(training.status)) {
       return 'in_finetune';
     }
   }
 
-  // Active evaluations
+  // Active evaluations — something is actually running right now
   if (activeDryRunCount > 0) return 'in_finetune';
 
-  // Has eval results or workflow in progress
-  if (dataset.dryRunStats) return 'in_finetune';
-  if (workflow && workflow.currentStep !== 'not_started') return 'in_finetune';
-
+  // Everything else (has eval history, workflow in progress but idle, etc.) is draft
   return 'draft';
 }
 

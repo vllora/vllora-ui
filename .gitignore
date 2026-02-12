@@ -9,3 +9,4 @@
 CLAUDE.md
 .claude/*
 .claude/settings.local.json
+.playwright-mcp/download.html
