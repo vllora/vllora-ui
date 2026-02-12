@@ -49,7 +49,8 @@ let cachedLucyConfig: LucyConfig | null = null;
 
 export async function fetchLucyConfigCached(): Promise<LucyConfig> {
   if (cachedLucyConfig) return cachedLucyConfig;
-  cachedLucyConfig = await fetchLucyConfig();
+  const config = await fetchLucyConfig();
+  cachedLucyConfig = config || {};
   return cachedLucyConfig;
 }
 
