@@ -19,7 +19,7 @@ import type { DryRunJob } from '@/types/dry-run-job';
 import type { Dataset } from '@/types/dataset-types';
 import { getDryRunJobsByDataset } from '@/services/dry-run-jobs-db';
 import { dryRunPollingManager } from '@/services/dry-run-polling-manager';
-import { backfillDryRunScoresFromJobs } from '@/services/datasets-db';
+import { backfillDryRunScoresFromJobs, backfillDryRunModel } from '@/services/datasets-db';
 import { emitter } from '@/utils/eventEmitter';
 
 // =============================================================================
@@ -66,6 +66,21 @@ function useDryRunJobs(props: {
             }
           }).catch((err) => {
             console.warn('[DryRunJobsContext] Backfill failed:', err);
+          });
+        }
+
+        // Backfill dryRunModel from the most recent completed job
+        const latestCompleted = fetchedJobs.find(
+          (j) => j.status === 'completed' && j.rolloutModel
+        );
+        if (latestCompleted?.rolloutModel) {
+          backfillDryRunModel(datasetId, latestCompleted.rolloutModel).then((n) => {
+            if (n > 0) {
+              console.log(`[DryRunJobsContext] Backfilled ${n} records with dryRunModel`);
+              emitter.emit('vllora_dataset_refresh' as any, { datasetId });
+            }
+          }).catch((err) => {
+            console.warn('[DryRunJobsContext] dryRunModel backfill failed:', err);
           });
         }
       }

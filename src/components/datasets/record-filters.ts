@@ -5,6 +5,7 @@
 
 import { DatasetRecord } from "@/types/dataset-types";
 import { getLabel, getDataAsObject } from "./record-utils";
+import { extractMessages } from "./records-table/cells/ConversationThreadCell.utilities";
 
 export type SortField = "timestamp" | "topic" | "evaluation";
 export type SortDirection = "asc" | "desc";
@@ -48,7 +49,7 @@ export interface RecordSortOptions {
 
 /**
  * Filter records by search query and/or topic.
- * Searches in: label (from data.attribute.label), topic, and spanId.
+ * Searches in: label, topic, spanId, and conversation message content.
  */
 export function filterRecords(
   records: DatasetRecord[],
@@ -85,7 +86,7 @@ export function filterRecords(
     filtered = filtered.filter(r => r.evaluation?.score !== undefined);
   }
 
-  // Filter by search query (searches in label, topic, and spanId)
+  // Filter by search query (searches in label, topic, spanId, and message content)
   if (options.search?.trim()) {
     const query = options.search.toLowerCase();
     filtered = filtered.filter(r => {
@@ -101,6 +102,12 @@ export function filterRecords(
       const data = getDataAsObject(r);
       const spanId = ((data.span_id as string) || r.id).toLowerCase();
       if (spanId.includes(query)) return true;
+
+      // Search in conversation message content
+      const messages = extractMessages(data);
+      for (const msg of messages) {
+        if (msg.content.toLowerCase().includes(query)) return true;
+      }
 
       return false;
     });

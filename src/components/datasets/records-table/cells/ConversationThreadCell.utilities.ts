@@ -123,30 +123,30 @@ export function getRoleStyle(role: string): { badgeClass: string; contentClass: 
   switch (normalizedRole) {
     case "system":
       return {
-        badgeClass: "bg-amber-500/20 text-amber-400 border border-amber-500/30",
+        badgeClass: "bg-amber-500/20 text-amber-400",
         contentClass: "text-muted-foreground italic",
       };
     case "user":
     case "human":
       return {
-        badgeClass: "bg-blue-500/20 text-blue-400 border border-blue-500/30",
+        badgeClass: "bg-blue-500/20 text-blue-400",
         contentClass: "text-foreground",
       };
     case "assistant":
     case "ai":
     case "model":
       return {
-        badgeClass: "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30",
+        badgeClass: "bg-emerald-500/20 text-emerald-400",
         contentClass: "text-foreground",
       };
     case "tool":
       return {
-        badgeClass: "bg-green-500/20 text-green-400 border border-green-500/30",
+        badgeClass: "bg-green-500/20 text-green-400",
         contentClass: "text-muted-foreground",
       };
     default:
       return {
-        badgeClass: "bg-zinc-500/20 text-zinc-400 border border-zinc-500/30",
+        badgeClass: "bg-zinc-500/20 text-zinc-400",
         contentClass: "text-muted-foreground",
       };
   }

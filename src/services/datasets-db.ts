@@ -703,6 +703,45 @@ export async function backfillDryRunScoresFromJobs(
 }
 
 /**
+ * Backfill dryRunModel for records that have dryRunScore but no dryRunModel.
+ * Uses the most recent completed dry run job's rolloutModel for the dataset.
+ *
+ * Idempotent: skips records that already have dryRunModel set.
+ */
+export async function backfillDryRunModel(
+  datasetId: string,
+  rolloutModel: string,
+): Promise<number> {
+  const db = await getDB();
+  let backfilled = 0;
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(['records'], 'readwrite');
+    const store = tx.objectStore('records');
+    const index = store.index('datasetId');
+    const request = index.openCursor(IDBKeyRange.only(datasetId));
+
+    request.onsuccess = (event) => {
+      const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+      if (!cursor) return;
+
+      const record = cursor.value as DatasetRecord;
+
+      if (record.evaluation?.dryRunScore != null && !record.evaluation.dryRunModel) {
+        record.evaluation.dryRunModel = rolloutModel;
+        cursor.update(record);
+        backfilled++;
+      }
+
+      cursor.continue();
+    };
+
+    tx.oncomplete = () => resolve(backfilled);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/**
  * Persist finetune evaluation scores to records.
  *
  * For each row result, computes the average score across all epochs and
