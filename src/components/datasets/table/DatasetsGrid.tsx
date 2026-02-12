@@ -9,6 +9,11 @@ import { DatasetsConsumer } from "@/contexts/DatasetsContext";
 import { LoadingIndicator } from "@/components/ui/LoadingIndicator";
 import { toast } from "sonner";
 import { getKnowledgeSourceCount } from "@/services/knowledge-sources-db";
+import { getWorkflowByDataset } from "@/services/finetune-workflow-db";
+import type { FinetuneWorkflowState } from "@/services/finetune-workflow-db";
+import { getDryRunJobsByDataset } from "@/services/dry-run-jobs-db";
+import { computeFilterGroup } from "@/types/dataset-types";
+import type { DatasetFilterGroup } from "@/types/dataset-types";
 import {
   DeleteConfirmationDialog,
   type DeleteConfirmation,
@@ -45,6 +50,9 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
   const [topicStats, setTopicStats] = useState<
     Record<string, { total: number; withTopic: number; topicCount: number }>
   >({});
+  const [workflows, setWorkflows] = useState<Record<string, FinetuneWorkflowState>>({});
+  const [activeDryRunCounts, setActiveDryRunCounts] = useState<Record<string, number>>({});
+  const [completedDryRunCounts, setCompletedDryRunCounts] = useState<Record<string, number>>({});
   const [editingDatasetId, setEditingDatasetId] = useState<string | null>(null);
   const [editingDatasetName, setEditingDatasetName] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmation | null>(null);
@@ -53,6 +61,15 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
   const [activeSort, setActiveSort] = useState<DatasetSort>({ key: "updated", dir: "desc" });
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [importTargetDatasetId, setImportTargetDatasetId] = useState<string | null>(null);
+
+  // Compute filter group for a dataset (used for badge + filtering)
+  const getFilterGroup = (dataset: typeof datasets[number]): DatasetFilterGroup => {
+    return computeFilterGroup(
+      dataset,
+      workflows[dataset.id] ?? null,
+      activeDryRunCounts[dataset.id] ?? 0,
+    );
+  };
 
   // Filter and sort datasets
   const filteredDatasets = useMemo(() => {
@@ -68,11 +85,14 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
       );
     }
 
-    // State filter
+    // State filter — match against filter group
     if (activeFilter !== "all") {
       result = result.filter((ds) => {
-        const state = ds.state ?? "draft";
-        return state === activeFilter;
+        return computeFilterGroup(
+          ds,
+          workflows[ds.id] ?? null,
+          activeDryRunCounts[ds.id] ?? 0,
+        ) === activeFilter;
       });
     }
 
@@ -97,29 +117,42 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
     });
 
     return sorted;
-  }, [datasets, searchQuery, activeFilter, activeSort, recordCounts]);
+  }, [datasets, searchQuery, activeFilter, activeSort, recordCounts, workflows, activeDryRunCounts]);
 
-  // Load record counts, docs counts, and topic stats for all datasets
+  // Load record counts, docs counts, topic stats, and workflow/job states for all datasets.
+  // Re-runs when `datasets` changes — DatasetsContext already listens for
+  // vllora_dataset_refresh events (emitted by DryRunJobsContext, FinetuneJobsContext, etc.)
+  // and reloads datasets, which triggers this effect.
   useEffect(() => {
     const loadStats = async () => {
       const counts: Record<string, number> = {};
       const docs: Record<string, number> = {};
       const stats: Record<string, { total: number; withTopic: number; topicCount: number }> = {};
+      const wfs: Record<string, FinetuneWorkflowState> = {};
+      const dryRuns: Record<string, number> = {};
+      const completedRuns: Record<string, number> = {};
       await Promise.all(
         datasets.map(async (ds) => {
           counts[ds.id] = await getRecordCount(ds.id);
           docs[ds.id] = await getKnowledgeSourceCount(ds.id);
           const coverage = await getTopicCoverageStats(ds.id);
-          // Count unique topics from the hierarchy
           const topicCount = ds.topicHierarchy?.hierarchy
             ? countTopics(ds.topicHierarchy.hierarchy)
             : 0;
           stats[ds.id] = { ...coverage, topicCount };
+          const wf = await getWorkflowByDataset(ds.id);
+          if (wf) wfs[ds.id] = wf;
+          const jobs = await getDryRunJobsByDataset(ds.id);
+          dryRuns[ds.id] = jobs.filter(j => j.status === 'running' || j.status === 'pending').length;
+          completedRuns[ds.id] = jobs.filter(j => j.status === 'completed').length;
         })
       );
       setRecordCounts(counts);
       setDocsCounts(docs);
       setTopicStats(stats);
+      setWorkflows(wfs);
+      setActiveDryRunCounts(dryRuns);
+      setCompletedDryRunCounts(completedRuns);
     };
     if (datasets.length > 0) {
       loadStats();
@@ -303,7 +336,13 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
                     <DatasetCard
                       key={dataset.id}
                       name={dataset.name}
-                      state={dataset.state ?? "draft"}
+                      filterGroup={getFilterGroup(dataset)}
+                      activeEvalJobs={activeDryRunCounts[dataset.id] ?? 0}
+                      completedEvalJobs={completedDryRunCounts[dataset.id] ?? 0}
+                      activeFinetuneJob={
+                        !!workflows[dataset.id]?.training &&
+                        ['pending', 'queued', 'running'].includes(workflows[dataset.id].training!.status)
+                      }
                       recordCount={recordCounts[dataset.id] ?? "..."}
                       topicCount={stats?.topicCount ?? 0}
                       docsCount={docsCounts[dataset.id] ?? 0}

@@ -224,37 +224,68 @@ export interface SampleTrainingConfig {
   };
 }
 
-// Dataset state for tracking finetune progress
+// Dataset state for tracking finetune progress (persisted on Dataset)
 export type DatasetState = 'draft' | 'in_finetune' | 'completed';
 
-// Consolidated state configuration for UI display
-export interface DatasetStateConfig {
-  value: DatasetState;
+// =============================================================================
+// Filter Group — 3 states for badge display and filtering
+// =============================================================================
+
+/** Filter group for header tabs and badge display */
+export type DatasetFilterGroup = 'draft' | 'in_finetune' | 'completed';
+
+export interface DatasetFilterGroupConfig {
+  value: DatasetFilterGroup;
   label: string;
   className: string;
+  tooltip: string;
 }
 
-export const DATASET_STATE_CONFIG: DatasetStateConfig[] = [
-  {
-    value: 'draft',
-    label: 'Draft',
-    className: 'bg-muted text-muted-foreground',
-  },
-  {
-    value: 'in_finetune',
-    label: 'Processing',
-    className: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
-  },
-  {
-    value: 'completed',
-    label: 'Completed',
-    className: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
-  },
+export const DATASET_FILTER_CONFIG: DatasetFilterGroupConfig[] = [
+  { value: 'draft', label: 'Draft', className: 'bg-muted text-muted-foreground', tooltip: 'Dataset is being prepared' },
+  { value: 'in_finetune', label: 'Processing', className: 'bg-blue-500/15 text-blue-600 dark:text-blue-400', tooltip: 'Evaluation or finetuning in progress' },
+  { value: 'completed', label: 'Completed', className: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400', tooltip: 'Finetuning completed' },
 ];
 
-// Helper to get config by state value
-export function getDatasetStateConfig(state: DatasetState): DatasetStateConfig {
-  return DATASET_STATE_CONFIG.find((c) => c.value === state) ?? DATASET_STATE_CONFIG[0];
+/** Get filter config by group value */
+export function getFilterGroupConfig(group: DatasetFilterGroup): DatasetFilterGroupConfig {
+  return DATASET_FILTER_CONFIG.find((c) => c.value === group) ?? DATASET_FILTER_CONFIG[0];
+}
+
+/**
+ * Compute the filter group for a dataset from its workflow + dry run jobs.
+ * Used for both badge display and tab filtering.
+ */
+export function computeFilterGroup(
+  dataset: { state?: DatasetState; dryRunStats?: DryRunStats },
+  workflow: { currentStep: string; training?: { status: string } | null } | null,
+  activeDryRunCount: number,
+): DatasetFilterGroup {
+  // If explicitly set, honor it
+  if (dataset.state === 'completed') return 'completed';
+
+  if (workflow) {
+    const { currentStep, training } = workflow;
+
+    // Completed / deployed / training succeeded
+    if (currentStep === 'completed' || currentStep === 'deployment' || training?.status === 'completed') {
+      return 'completed';
+    }
+
+    // Active training
+    if (training && ['pending', 'queued', 'running'].includes(training.status)) {
+      return 'in_finetune';
+    }
+  }
+
+  // Active evaluations
+  if (activeDryRunCount > 0) return 'in_finetune';
+
+  // Has eval results or workflow in progress
+  if (dataset.dryRunStats) return 'in_finetune';
+  if (workflow && workflow.currentStep !== 'not_started') return 'in_finetune';
+
+  return 'draft';
 }
 
 // Stored in 'datasets' object store (metadata only, no records array)

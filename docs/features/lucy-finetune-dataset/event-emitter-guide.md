@@ -1,6 +1,6 @@
 # Lucy Finetune Dataset — Event Emitter Guide
 
-> Last updated: 2026-02-11
+> Last updated: 2026-02-12
 
 ## Why Events?
 
@@ -9,32 +9,52 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 ## Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  React Component Tree                                    │
-│                                                          │
-│  DatasetDetailContentV2 ←─ listens ── events ──┐        │
-│  PlanSection            ←─ listens ── events ──┤        │
-│  LucyDatasetAssistant   ←─ listens ── events ──┤        │
-│  KnowledgeSourcesPanel  ←─ listens ── events ──┤        │
-│  EmptyRecordsState      ←─ listens ── events ──┤        │
-│  ExecutionProgressCard  ←─ listens ── events ──┤        │
-│                                                 │        │
-│  PlanEmptyState         ── emits ──► events ───┤        │
-│  RecordRow              ── emits ──► events ───┤        │
-│  DocsProcessingState    ── emits ──► events ───┤        │
-│                                                 │        │
-└─────────────────────────────────────────────────┤────────┘
-                                                  │
-┌─────────────────────────────────────────────────┤────────┐
-│  Tool Handlers (outside React)                  │        │
-│                                                 │        │
-│  propose-setup-plan     ── emits ──► events ───┤        │
-│  execute-setup-plan     ── emits ──► events ───┤        │
-│  generate-initial-data  ── emits ──► events ───┤        │
-│  knowledge-sources      ── emits ──► events ───┘        │
-│  execution-state-store  ←─ listens ── events            │
-│                                                          │
-└──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  React Contexts (centralized state)                          │
+│                                                              │
+│  DatasetsContext          ←─ listens ── events ──┐           │
+│  DatasetsUIContext        ←─ listens ── events ──┤           │
+│  DatasetDetailContext     ←─ listens ── events ──┤           │
+│  KnowledgeSourcesContext  ←─ listens ── events ──┤           │
+│  SetupPlanContext         ←─ listens ── events ──┤           │
+│  DryRunJobsContext        ←─ listens ── events ──┤           │
+│  FinetuneJobsContext      ←─ listens ── events ──┤           │
+│                                                  │           │
+├──────────────────────────────────────────────────┤───────────┤
+│  React Components                                │           │
+│                                                  │           │
+│  DatasetDetailContentV2   ←─ listens ── events ──┤           │
+│  PlanSection              ←─ listens ── events ──┤           │
+│  LucyDatasetAssistant     ←─ listens ── events ──┤           │
+│  KnowledgeSourcesPanel    ←─ listens ── events ──┤           │
+│  EmptyRecordsState        ←─ listens ── events ──┤           │
+│  ExecutionProgressCard    ←─ listens ── events ──┤           │
+│  TopicRecordTree          ←─ listens ── events ──┤           │
+│  TopicCanvasContext       ←─ listens ── events ──┤           │
+│                                                  │           │
+│  PlanEmptyState           ── emits ──► events ───┤           │
+│  PlanSection              ── emits ──► events ───┤           │
+│  RecordRow                ── emits ──► events ───┤           │
+│  DocsProcessingState      ── emits ──► events ───┤           │
+│  DryRunActivityView       ── emits ──► events ───┤           │
+│  PerRowDetailsSection     ── emits ──► events ───┤           │
+│                                                  │           │
+└──────────────────────────────────────────────────┤───────────┘
+                                                   │
+┌──────────────────────────────────────────────────┤───────────┐
+│  Tool Handlers & Services (outside React)        │           │
+│                                                  │           │
+│  propose-setup-plan       ── emits ──► events ───┤           │
+│  execute-setup-plan       ── emits ──► events ───┤           │
+│  generate-initial-data    ── emits ──► events ───┤           │
+│  knowledge-sources        ── emits ──► events ───┤           │
+│  categorize-records       ── emits ──► events ───┤           │
+│  datasets-db (service)    ── emits ──► events ───┘           │
+│  dry-run-jobs-db          ── emits ──► events                │
+│  execution-state-store    ←─ listens ── events               │
+│  execute-setup-plan       ←─ listens ── events               │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -51,18 +71,18 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 | **Direction** | React → React (many-to-one) |
 | **Listener** | `LucyDatasetAssistant.tsx` — expands sidebar, injects prompt into chat |
 
-**Emitters (10 locations):**
+**Emitters (~10 emit sites across 7 files):**
 | File | When |
 |------|------|
 | `PlanEmptyState.tsx` | User clicks "Generate Setup Plan" |
 | `PlanSection.tsx` | User approves plan → sends execute prompt |
 | `PlanCompletedState.tsx` | User clicks "Generate New Plan" |
 | `DatasetDetailContentV2.tsx` | Auto-plan trigger after docs finish processing |
+| `DatasetDetailContentV2.tsx` | Timeout fallback if docs processing takes >60s |
 | `DatasetDetailContentV2.tsx` | "Generate for topic" / "Generate subtopics" |
 | `EmptyRecordsState.tsx` | User clicks "Ask Lucy" |
 | `RecordRow.tsx` | User clicks "Generate variants" on a record |
 | `SourcesProcessingMessage.tsx` | Docs finish processing in chat → auto-trigger plan |
-| `DocsProcessingState.tsx` | (removed — now handled by event-driven auto-plan) |
 
 ---
 
@@ -86,12 +106,11 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 **Listeners:**
 | File | What it does |
 |------|-------------|
-| `DatasetDetailContentV2.tsx` | Updates knowledge sources count + docs processing state |
-| `DatasetDetailContentV2.tsx` | Checks if all docs finished → triggers auto-plan |
-| `PlanSection.tsx` | Checks if docs still processing → shows DocsProcessingState |
-| `LucyDatasetAssistant.tsx` | Updates knowledge sources count |
+| `KnowledgeSourcesContext.tsx` | Centralized listener — refreshes sources list, updates count/processing state |
 | `KnowledgeSourcesPanel.tsx` | Refreshes sources list or updates progress inline |
 | `SourcesProcessingMessage.tsx` | Checks if processing complete → triggers plan |
+
+> **Note:** Previously `DatasetDetailContentV2`, `PlanSection`, and `LucyDatasetAssistant` each listened directly. These were consolidated into `KnowledgeSourcesContext` (see Contexts section below).
 
 ---
 
@@ -114,7 +133,8 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 **Listeners:**
 | File | What it does |
 |------|-------------|
-| `DatasetDetailContentV2.tsx` | Sets `isGeneratingPlan=true`, auto-switches to Plan tab |
+| `SetupPlanContext.tsx` | Sets `isGeneratingPlan=true` |
+| `DatasetDetailContentV2.tsx` | Auto-switches to Plan tab |
 | `PlanEmptyState.tsx` | Clears "Waiting for Lucy..." loading state |
 
 ---
@@ -137,7 +157,7 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 **Listeners:**
 | File | What it does |
 |------|-------------|
-| `DatasetDetailContentV2.tsx` | Clears loading state, sets `hasPlanProposed=true` |
+| `SetupPlanContext.tsx` | Clears loading state, sets `hasPlanProposed=true` |
 | `PlanSection.tsx` | Displays SetupPlanEditor with the plan |
 
 ---
@@ -160,7 +180,7 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 **Listeners:**
 | File | What it does |
 |------|-------------|
-| `DatasetDetailContentV2.tsx` | Clears generating/proposed state |
+| `SetupPlanContext.tsx` | Clears generating/proposed state |
 | `PlanSection.tsx` | Clears proposed plan, resets UI |
 
 ---
@@ -225,6 +245,9 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 | `execute-setup-plan.ts` (tool) | After generating data → records, after grader → evaluator, after job → jobs |
 | `DocsProcessingState.tsx` | User clicks "View Reference Docs" |
 | `SourcesProcessingMessage.tsx` | Auto-switch to docs/plan during processing |
+| `RecordRow.tsx` | User clicks evaluation/finetune link on a record |
+| `DryRunActivityView.tsx` | User clicks "View Record" from dry run results |
+| `PerRowDetailsSection.tsx` | User clicks "View in Dataset" from finetune job details |
 
 **Listener:**
 | File | What it does |
@@ -250,7 +273,7 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 **Listeners:**
 | File | What it does |
 |------|-------------|
-| `DatasetDetailContentV2.tsx` | Resets plan generation state |
+| `SetupPlanContext.tsx` | Resets plan generation state |
 | `PlanSection.tsx` | Clears execution if complete |
 | `useFineTuneAgentChat.ts` | Refreshes workflow data |
 | `execution-state-store.ts` (tool) | Handles state cleanup |
@@ -276,6 +299,7 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 |------|-------------|
 | `EmptyRecordsState.tsx` | Shows generation loading state |
 | `TopicRecordTree.tsx` | Highlights generating topic |
+| `TopicCanvasContext.tsx` | Highlights generating topic in canvas view |
 | `RecordsSectionHeader.tsx` | Shows progress bar in header |
 | `DatasetDetailContext.tsx` | Tracks generation state for UI indicators |
 
@@ -290,7 +314,12 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 | **Data** | `{ jobId?: string; backendDatasetId: string }` |
 | **Direction** | Tool handler → React |
 
-**Emitter:** `execute-setup-plan.ts` — after creating finetune job
+**Emitters:**
+| File | When |
+|------|------|
+| `execute-setup-plan.ts` (tool) | After creating finetune job via plan execution |
+| `quick-finetune.ts` (service) | After creating finetune job via quick-finetune flow |
+
 **Listener:** `FinetuneJobsContext.tsx` — refreshes jobs list
 
 ---
@@ -302,16 +331,50 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 | | Details |
 |---|---|
 | **Data** | `{ jobId: string; job: DryRunJob }` |
-| **Direction** | External → React |
+| **Direction** | Service → React |
 
-**Listener:** `DryRunJobsContext.tsx` — updates job in list, refreshes dataset on completion
-**Listener:** `DatasetDetailContext.tsx` — refreshes records when scores update
+**Emitter:** `dry-run-jobs-db.ts` — after polling backend and updating job in IndexedDB
+
+**Listeners:**
+| File | What it does |
+|------|-------------|
+| `DryRunJobsContext.tsx` | Updates job in list, refreshes dataset on completion |
+| `DatasetDetailContext.tsx` | Refreshes records when scores update |
+
+---
+
+### 13. `vllora_dataset_refresh`
+
+**Purpose:** Signal that a dataset's data changed in IndexedDB (records added/updated/deleted, metadata changed). This is the **primary refresh mechanism** that keeps React contexts in sync with IndexedDB.
+
+| | Details |
+|---|---|
+| **Data** | `{ datasetId?: string }` |
+| **Direction** | Service/Tool → React |
+
+**Emitters:**
+| File | When |
+|------|------|
+| `datasets-db.ts` (service) | After any record CRUD operation (add, update, delete, bulk import, clear) |
+| `generate-initial-data.ts` (tool) | After each batch of generated records is saved |
+| `categorize-records.ts` (tool) | After records are assigned topics |
+| `DryRunJobsContext.tsx` | When a dry run job completes (triggers dataset reload) |
+| `FinetuneJobsContext.tsx` | When a finetune job status changes (triggers dataset reload) |
+
+**Listeners:**
+| File | What it does |
+|------|-------------|
+| `DatasetsContext.tsx` | Reloads the full datasets list from IndexedDB |
+| `DatasetsUIContext.tsx` | Refreshes UI state (e.g., selected dataset metadata) |
+| `DatasetDetailContext.tsx` | Reloads records and stats for the current dataset |
+
+> **Why this matters for DatasetsGrid:** `DatasetsGrid` does NOT need its own event listeners. It re-renders when `DatasetsContext` reloads datasets (triggered by this event), and its `useEffect` recomputes stats (record counts, workflows, dry run jobs) whenever `datasets` changes.
 
 ---
 
 ## Contexts (Single Source of Truth)
 
-Two contexts consolidate duplicated state that was previously tracked independently by multiple components:
+Contexts consolidate duplicated state that was previously tracked independently by multiple components:
 
 ### `KnowledgeSourcesContext` (`src/contexts/KnowledgeSourcesContext.tsx`)
 
@@ -324,12 +387,35 @@ Previously 3 components independently called `knowledgeDB.getKnowledgeSourcesByD
 
 ### `SetupPlanContext` (`src/contexts/SetupPlanContext.tsx`)
 
-**Listens to:** `vllora_setup_plan_generating`, `proposed`, `dismissed`, `workflow_updated`
+**Listens to:** `vllora_setup_plan_generating`, `vllora_setup_plan_proposed`, `vllora_setup_plan_dismissed`, `vllora_workflow_updated`
 **Provides:** `isGeneratingPlan`, `hasPlanProposed`
 **Consumers:** `DatasetDetailContentV2`
 **Provider:** `SetupPlanProvider` wraps `DatasetDetailContentV2` in `DatasetDetailView.tsx`
 
 Previously `DatasetDetailContentV2` tracked `isGeneratingPlan`/`hasPlanProposed` from events. Now the context owns this state. `PlanSection` still manages its own internal state (`proposedPlan`, `isExecuting`, `executionProgress`) since those are UI-specific.
+
+> **Note:** `DatasetDetailContentV2` still listens to `vllora_setup_plan_generating` directly (for auto-switching to the Plan tab), but no longer tracks plan state — that's in `SetupPlanContext`.
+
+### `DatasetsContext` (`src/contexts/DatasetsContext.tsx`)
+
+**Listens to:** `vllora_dataset_created`, `vllora_dataset_deleted`, `vllora_dataset_renamed`, `vllora_dataset_refresh`
+**Provides:** `datasets[]`, `isLoading`, `error`, CRUD operations, record operations
+**Consumers:** `DatasetsGrid`, `DatasetDetailView`, `IngestDataDialog`, many others
+**Provider:** `DatasetsProvider` wraps the datasets page
+
+This is the **top-level context** for all dataset data. When `vllora_dataset_refresh` fires (from `datasets-db.ts`, job contexts, tool handlers), this context reloads from IndexedDB. Components consuming this context automatically re-render with fresh data — they do NOT need their own event listeners.
+
+### `DryRunJobsContext` (`src/contexts/DryRunJobsContext.tsx`)
+
+**Listens to:** `vllora_dry_run_job_update`
+**Provides:** Per-dataset dry run job lists, active/completed counts
+**Emits:** `vllora_dataset_refresh` when a job completes (triggers DatasetsContext reload)
+
+### `FinetuneJobsContext` (`src/contexts/FinetuneJobsContext.tsx`)
+
+**Listens to:** `vllora_finetune_job_created`
+**Provides:** Per-dataset finetune job lists
+**Emits:** `vllora_dataset_refresh` when a job status changes (triggers DatasetsContext reload)
 
 ---
 
@@ -340,15 +426,16 @@ Events are the **correct pattern** when:
 - **Many-to-one fire-and-forget** (e.g., `vllora_lucy_prompt` from 10+ places → 1 listener)
 
 These should remain events:
-- `vllora_lucy_prompt` — 10 emitters, 1 listener, fire-and-forget
+- `vllora_lucy_prompt` — ~10 emitters, 1 listener, fire-and-forget
 - `vllora_setup_plan_generating/proposed/dismissed/progress` — tool handlers emit these (contexts listen to them)
 - `vllora_data_generation_progress` — tool handler → multiple React listeners
 - `vllora_workflow_updated` — tool handler notification
 - `vllora_finetune_job_created` / `vllora_dry_run_job_update` — external sources
 - `vllora_setup_plan_approved` — React → tool handler (reverse direction)
+- `vllora_dataset_refresh` — service layer → contexts (bridges IndexedDB writes to React state)
 
 ## What to Leave Alone (Low ROI)
 
-- `vllora_data_generation_progress` — listened by 4 scattered components, each needs different slices. Context would over-centralize.
+- `vllora_data_generation_progress` — listened by 5 scattered components, each needs different slices. Context would over-centralize.
 - `vllora_dry_run_job_update` — already handled properly in `DryRunJobsContext`.
 - `vllora_finetune_job_created` — already handled in `FinetuneJobsContext`.

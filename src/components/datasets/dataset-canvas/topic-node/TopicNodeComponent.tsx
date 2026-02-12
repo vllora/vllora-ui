@@ -89,7 +89,6 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
           fullPath={fullPath}
           nodeId={nodeId}
           isRoot={isRoot}
-          isExpanded={false}
           onDeleteTopic={onDeleteTopic}
           onViewRecords={handleSelect}
           onGenerateForTopic={onGenerateForTopic}

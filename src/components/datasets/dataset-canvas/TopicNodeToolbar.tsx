@@ -22,8 +22,6 @@ interface TopicNodeToolbarProps {
   nodeId: string;
   /** Whether this is the root node */
   isRoot: boolean;
-  /** Whether the node is currently expanded */
-  isExpanded: boolean;
   /** Handler for deleting the topic */
   onDeleteTopic?: (topicName: string) => void;
   /** Handler for toggling node expansion */
@@ -39,7 +37,6 @@ export function TopicNodeToolbar({
   fullPath,
   nodeId,
   isRoot,
-  // isExpanded,
   onDeleteTopic,
   onViewRecords,
   onGenerateForTopic,
@@ -135,27 +132,6 @@ export function TopicNodeToolbar({
           </Tooltip>
         )}
 
-        {/* Future: More options dropdown */}
-        {/* <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-              title="More options"
-            >
-              <MoreHorizontal className="w-4 h-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-[160px]">
-            <DropdownMenuItem onClick={() => onViewRecords(nodeId)}>
-              {isExpanded ? "Collapse" : "Expand"} node
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem disabled>
-              Export records...
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu> */}
         </div>
       </div>
     </TooltipProvider>

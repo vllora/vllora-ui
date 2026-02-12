@@ -14,6 +14,8 @@ import {
   FileText,
   MessageSquare,
   Tags,
+  FlaskConical,
+  CircleCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,12 +34,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getDatasetStateConfig } from "@/types/dataset-types";
-import type { DatasetState } from "@/types/dataset-types";
+import { getFilterGroupConfig } from "@/types/dataset-types";
+import type { DatasetFilterGroup } from "@/types/dataset-types";
 
 interface DatasetCardProps {
   name: string;
-  state: DatasetState;
+  filterGroup: DatasetFilterGroup;
+  activeEvalJobs: number;
+  completedEvalJobs: number;
+  activeFinetuneJob: boolean;
   recordCount: number | string;
   topicCount: number;
   docsCount: number;
@@ -83,25 +88,17 @@ function formatFullDate(timestamp: number): string {
   return new Date(timestamp).toLocaleString();
 }
 
-function getStateTooltip(state: DatasetState): string {
-  switch (state) {
-    case "completed":
-      return "Training completed successfully";
-    case "in_finetune":
-      return "Dataset is being used in fine-tuning";
-    case "draft":
-    default:
-      return "Dataset is being prepared for training";
-  }
-}
-
 export function DatasetCard({
   name,
-  state,
+  filterGroup,
+  activeEvalJobs,
+  completedEvalJobs,
+  activeFinetuneJob,
   recordCount,
   topicCount,
   docsCount,
   hasTopicHierarchy,
+  hasEvalScript,
   updatedAt,
   isEditing,
   editingName,
@@ -115,7 +112,7 @@ export function DatasetCard({
   onDownload,
   onDelete,
 }: DatasetCardProps) {
-  const stateConfig = getDatasetStateConfig(state);
+  const statusConfig = getFilterGroupConfig(filterGroup);
 
   return (
     <TooltipProvider delayDuration={400}>
@@ -126,18 +123,6 @@ export function DatasetCard({
           "hover:border-border hover:shadow-[0_4px_24px_-4px_rgba(var(--theme-500),0.15)] hover:-translate-y-0.5"
         )}
       >
-        {/* Top accent bar */}
-        <div
-          className={cn(
-            "h-0.5 w-full",
-            state === "completed"
-              ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
-              : state === "in_finetune"
-                ? "bg-gradient-to-r from-amber-500 to-amber-400"
-                : "bg-border/30"
-          )}
-        />
-
         <div className="p-4">
           {/* Header with name and menu */}
           <div className="flex items-start justify-between gap-2 mb-1">
@@ -286,25 +271,59 @@ export function DatasetCard({
                 </TooltipContent>
               </Tooltip>
             )}
-          </div>
 
-          {/* Footer with state badge and timestamp */}
-          <div className="flex items-center justify-between">
             <Tooltip>
               <TooltipTrigger asChild>
-                <span
-                  className={cn(
-                    "text-[10px] font-medium px-2 py-0.5 rounded-full",
-                    stateConfig.className
-                  )}
-                >
-                  {stateConfig.label}
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted/50 text-[10px] text-muted-foreground font-medium">
+                  <FlaskConical className="w-2.5 h-2.5" />
+                  {completedEvalJobs > 0
+                    ? `${completedEvalJobs} eval${completedEvalJobs > 1 ? "s" : ""} completed`
+                    : hasEvalScript ? "Eval fn configured" : "No eval fn"
+                  }
+                  {hasEvalScript && <CircleCheck className="w-2.5 h-2.5 text-emerald-500" />}
                 </span>
               </TooltipTrigger>
               <TooltipContent side="bottom" sideOffset={4}>
-                <p className="text-xs">{getStateTooltip(state)}</p>
+                <p className="text-xs">
+                  {completedEvalJobs > 0
+                    ? `${completedEvalJobs} evaluation${completedEvalJobs > 1 ? "s" : ""} completed`
+                    : hasEvalScript ? "Evaluation function configured" : "No evaluation function configured"
+                  }
+                </p>
               </TooltipContent>
             </Tooltip>
+          </div>
+
+          {/* Footer with status badge, active job info, and timestamp */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className={cn(
+                      "text-[10px] font-medium px-2 py-0.5 rounded-full",
+                      statusConfig.className
+                    )}
+                  >
+                    {statusConfig.label}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" sideOffset={4}>
+                  <p className="text-xs">{statusConfig.tooltip}</p>
+                </TooltipContent>
+              </Tooltip>
+
+              {activeFinetuneJob && (
+                <span className="text-[10px] text-muted-foreground animate-pulse">
+                  Finetuning...
+                </span>
+              )}
+              {activeEvalJobs > 0 && (
+                <span className="text-[10px] text-muted-foreground animate-pulse">
+                  {activeEvalJobs} eval running...
+                </span>
+              )}
+            </div>
 
             <Tooltip>
               <TooltipTrigger asChild>

@@ -7,12 +7,12 @@
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
-import { DATASET_STATE_CONFIG } from "@/types/dataset-types";
-import type { DatasetState } from "@/types/dataset-types";
+import { DATASET_FILTER_CONFIG } from "@/types/dataset-types";
+import type { DatasetFilterGroup } from "@/types/dataset-types";
 import { DatasetSortDropdown } from "./DatasetSortDropdown";
 import type { DatasetSort } from "./DatasetSortDropdown";
 
-export type DatasetFilter = "all" | DatasetState;
+export type DatasetFilter = "all" | DatasetFilterGroup;
 export type { DatasetSort };
 
 interface DatasetsListHeaderProps {
@@ -28,7 +28,7 @@ interface DatasetsListHeaderProps {
 // Build filters from shared config, with "All" prepended
 const FILTERS: { value: DatasetFilter; label: string }[] = [
   { value: "all", label: "All" },
-  ...DATASET_STATE_CONFIG.map((config) => ({
+  ...DATASET_FILTER_CONFIG.map((config) => ({
     value: config.value as DatasetFilter,
     label: config.label,
   })),
