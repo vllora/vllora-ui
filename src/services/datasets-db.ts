@@ -560,7 +560,10 @@ export async function updateRecordEvaluationScores(
     const getRequest = recordsStore.get(recordId);
     getRequest.onsuccess = () => {
       const record = getRequest.result;
-      if (!record || record.datasetId !== datasetId) return;
+      if (!record || record.datasetId !== datasetId) {
+        console.warn('[updateRecordEvaluationScores] Record not found or dataset mismatch:', { recordId, datasetId, found: !!record });
+        return;
+      }
 
       const existing = record.evaluation || {};
 
@@ -701,6 +704,7 @@ export async function backfillDryRunScoresFromJobs(
  *
  * @param backendDatasetId - Backend dataset ID (to look up local dataset)
  * @param results - Finetune evaluation results (RowEpochResults[])
+ * @returns Object with number of records persisted and the local dataset ID
  */
 export async function persistFinetuneScoresToRecords(
   backendDatasetId: string,
@@ -708,11 +712,16 @@ export async function persistFinetuneScoresToRecords(
     row_index: number;
     row: { id: string; [key: string]: unknown };
     epochs: Record<number, Array<{ score?: number; [key: string]: unknown }>>;
-  }>
-): Promise<number> {
+  }>,
+  /** When true, only updates the score without incrementing finetuneCount (for in-progress jobs) */
+  previewOnly = false,
+): Promise<{ persisted: number; localDatasetId?: string }> {
   // Look up local dataset
   const dataset = await getDatasetByBackendId(backendDatasetId);
-  if (!dataset) return 0;
+  if (!dataset) {
+    console.warn('[persistFinetuneScores] No local dataset found for backend ID:', backendDatasetId);
+    return { persisted: 0 };
+  }
 
   let persisted = 0;
 
@@ -736,12 +745,13 @@ export async function persistFinetuneScoresToRecords(
 
     await updateRecordEvaluationScores(dataset.id, recordId, {
       finetuneScore: avgScore,
-      incrementFinetuneCount: true,
+      incrementFinetuneCount: !previewOnly,
     });
     persisted++;
   }
 
-  return persisted;
+  console.log(`[persistFinetuneScores] Persisted ${persisted}/${results.length} scores (preview=${previewOnly}) for dataset ${dataset.id}`);
+  return { persisted, localDatasetId: dataset.id };
 }
 
 // Clear all record topics for a dataset

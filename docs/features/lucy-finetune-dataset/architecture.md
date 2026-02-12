@@ -393,7 +393,7 @@ interface FinetuneWorkflowState {
 ```
 
 **Storage Separation (3 IndexedDB databases):**
-- **`vllora-finetune`** (v4): Step progress, metadata, snapshots, dry run jobs, proposed plans
+- **`vllora-finetune`** (v4): Step progress, metadata, snapshots, dry run jobs, job evaluation cache (with `scoresPersisted` tracking), proposed plans
 - **`vllora-datasets`**: Actual data (records, topicHierarchy, evaluationConfig)
 - **`vllora-knowledge-sources`**: Uploaded documents with extracted content
 
@@ -578,9 +578,32 @@ The dry run dialog's running view displays a cancel button that calls `cancelDry
 **DryRunDialog Fallback:**
 If the dialog is in "running" view but the running job disappears without a completed job being available (e.g., job cancelled or failed externally), the dialog falls back to the "config" view so the user can start a new dry run.
 
+### Finetune Score Persistence
+
+The `FinetuneJobsContext` manages persisting finetune evaluation scores to individual records after training jobs complete.
+
+**Flow:**
+1. On mount, the context fetches evaluations for ALL completed finetune jobs (not just the latest)
+2. For each completed job with results, it checks the `scoresPersisted` flag on the `CachedJobEvaluation` entry in IndexedDB
+3. If not yet persisted, it calls `persistFinetuneScoresToRecords()` which computes average scores across epochs and writes them to each record's `evaluation` field
+4. Only after records are actually updated (`persisted > 0`), the `scoresPersisted` flag is set to `true` via `markJobScoresPersisted()`
+5. A `vllora_dataset_refresh` event (with `datasetId`) is emitted to refresh the UI
+
+**Key design decisions:**
+- The `scoresPersisted` flag is stored in IndexedDB (on the `CachedJobEvaluation` entry), not in volatile React state. This ensures persistence tracking survives page refreshes.
+- Scores are persisted for ALL completed jobs, not just the latest, ensuring no evaluation data is lost.
+- The flag is only set after confirming records were actually updated, preventing false-positive persistence tracking.
+
+**Key Files:**
+| File | Purpose |
+|------|---------|
+| `contexts/FinetuneJobsContext.tsx` | Orchestrates score persistence on mount for all completed jobs |
+| `services/datasets-db.ts` | `persistFinetuneScoresToRecords()` writes avg scores to records |
+| `services/finetune-workflow-db.ts` | `isJobScoresPersisted()` / `markJobScoresPersisted()` track persistence state |
+
 ### Quality Indicators
 
-Per-record quality scores displayed in the records table.
+Per-record quality scores displayed in the records table. Scores come from two sources: dry run evaluations and finetune job evaluations.
 
 **Component Tree:**
 ```
@@ -601,7 +624,8 @@ RecordRow
 | `datasets/records-table/RecordRow.tsx` | Renders QualityIndicator between Stats and Actions columns |
 | `datasets/records-table/RecordsTableHeader.tsx` | "Quality" column header |
 | `datasets/table-columns.ts` | Column width: `quality: "w-14 shrink-0"` |
-| `services/dry-run-polling-manager.ts` | Persists per-row scores via `updateRecordEvaluation()`, syncs workflow state on completion/failure |
+| `services/dry-run-polling-manager.ts` | Persists dry run per-row scores via `updateRecordEvaluation()`, syncs workflow state on completion/failure |
+| `contexts/FinetuneJobsContext.tsx` | Persists finetune job scores via `persistFinetuneScoresToRecords()` |
 | `types/dataset-types.ts` | `DatasetEvaluation` type (`score`, `feedback`, `evaluatedAt`) |
 
 ### Dataset State System

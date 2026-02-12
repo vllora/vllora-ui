@@ -27,6 +27,8 @@ import {
 import {
   getCachedJobEvaluations,
   saveJobEvaluationsCache,
+  isJobScoresPersisted,
+  markJobScoresPersisted,
 } from "@/services/finetune-workflow-db";
 import { persistFinetuneScoresToRecords } from "@/services/datasets-db";
 import { ProjectEventsConsumer } from "@/contexts/project-events";
@@ -64,8 +66,6 @@ function useFinetuneJobsLogic() {
 
   // Job evaluations state - keyed by job ID
   const [jobEvaluations, setJobEvaluations] = useState<Record<string, JobEvaluationState>>({});
-  // Track which jobs have had finetune scores persisted to records (avoid double-counting)
-  const finetuneScoresPersistedRef = useRef<Set<string>>(new Set());
   const evalPollIntervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
   // Get project events for SSE subscription
@@ -160,17 +160,36 @@ function useFinetuneJobsLogic() {
         console.warn('Failed to cache job evaluations:', err);
       });
 
-      // Persist finetune scores to records (once per completed job)
-      const isComplete = job.status !== 'pending' && job.status !== 'running';
-      if (isComplete && results.results.length > 0 && !finetuneScoresPersistedRef.current.has(jobId)) {
-        finetuneScoresPersistedRef.current.add(jobId);
-        persistFinetuneScoresToRecords(job.dataset_id!, results.results).then((n) => {
-          if (n > 0) {
-            emitter.emit('vllora_dataset_refresh' as any);
+      // Persist finetune scores to records
+      if (results.results.length > 0) {
+        const isComplete = job.status !== 'pending' && job.status !== 'running';
+        try {
+          if (isComplete) {
+            // Final persistence: increment count, mark as done (once per job)
+            const alreadyPersisted = await isJobScoresPersisted(jobId);
+            if (!alreadyPersisted) {
+              const { persisted, localDatasetId } = await persistFinetuneScoresToRecords(
+                job.dataset_id!, results.results
+              );
+              if (persisted > 0) {
+                await markJobScoresPersisted(jobId);
+                emitter.emit('vllora_dataset_refresh' as any,
+                  localDatasetId ? { datasetId: localDatasetId } : undefined);
+              }
+            }
+          } else {
+            // Live preview: update scores without incrementing count (overwritten each poll)
+            const { persisted, localDatasetId } = await persistFinetuneScoresToRecords(
+              job.dataset_id!, results.results, true
+            );
+            if (persisted > 0) {
+              emitter.emit('vllora_dataset_refresh' as any,
+                localDatasetId ? { datasetId: localDatasetId } : undefined);
+            }
           }
-        }).catch((err) => {
+        } catch (err) {
           console.warn('[FinetuneJobs] Failed to persist finetune scores:', err);
-        });
+        }
       }
     } catch (err) {
       setJobEvaluations((prev) => ({
@@ -340,18 +359,18 @@ function useFinetuneJobsLogic() {
   // Track if we've already fetched evaluations for completed jobs (by job ID)
   const completedJobsFetchedRef = useRef<Set<string>>(new Set());
 
-  // Fetch evaluations once for completed latestJob on mount/change
+  // Fetch evaluations once for ALL completed jobs on mount/change
   useEffect(() => {
-    if (!latestJob) return;
+    for (const job of filteredJobs) {
+      const isCompleted = job.status !== 'pending' && job.status !== 'running';
+      const alreadyFetched = completedJobsFetchedRef.current.has(job.id);
 
-    const isCompleted = latestJob.status !== 'pending' && latestJob.status !== 'running';
-    const alreadyFetched = completedJobsFetchedRef.current.has(latestJob.id);
-
-    if (isCompleted && latestJob.dataset_id && !alreadyFetched) {
-      completedJobsFetchedRef.current.add(latestJob.id);
-      fetchJobEvaluations(latestJob, true);
+      if (isCompleted && job.dataset_id && !alreadyFetched) {
+        completedJobsFetchedRef.current.add(job.id);
+        fetchJobEvaluations(job, true);
+      }
     }
-  }, [latestJob, fetchJobEvaluations]);
+  }, [filteredJobs, fetchJobEvaluations]);
 
   return {
     jobs,

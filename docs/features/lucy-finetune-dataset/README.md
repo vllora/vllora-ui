@@ -427,11 +427,17 @@ interface DryRunStats {
 
 **Per-Record Evaluation Scores:**
 
-In addition to aggregate `DryRunStats` on the dataset, individual evaluation scores are persisted to each record's `evaluation` field during dry run polling. The `dry-run-polling-manager.ts` iterates over evaluation results and calls `updateRecordEvaluation(datasetId, rowId, score)` for each row that has a numeric score. This enables the `QualityIndicator` component to display per-record scores in the records table.
+Individual evaluation scores are persisted to each record's `evaluation` field from two sources:
+
+1. **Dry run scores** - During dry run polling, `dry-run-polling-manager.ts` iterates over evaluation results and calls `updateRecordEvaluation(datasetId, rowId, score)` for each row that has a numeric score.
+
+2. **Finetune job scores** - After a finetune training job completes, `FinetuneJobsContext` fetches evaluation results for ALL completed jobs and calls `persistFinetuneScoresToRecords()` to write average scores (across epochs) to each record. A `scoresPersisted` flag on the `CachedJobEvaluation` entry in IndexedDB tracks whether scores have already been written, preventing duplicate persistence and surviving page refreshes.
+
+This enables the `QualityIndicator` component to display per-record scores in the records table.
 
 This ensures:
 1. **Consistency** - Lucy agent and UI components read from the same source
-2. **Persistence** - Stats survive across sessions without workflow context
+2. **Persistence** - Stats survive across sessions without workflow context (both dry run and finetune scores use IndexedDB-backed tracking)
 3. **Decoupling** - UI can display stats without needing workflow state
 4. **Per-Record Granularity** - Individual record scores available via `DatasetRecord.evaluation`
 

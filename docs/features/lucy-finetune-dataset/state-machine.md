@@ -512,7 +512,7 @@ The finetune workflow system uses **three separate IndexedDB databases** to pers
 | `snapshots` | `id` | `workflowId`, `step`, `createdAt` | v1 | State snapshots for rollback |
 | `generationHistory` | `id` | `workflowId`, `createdAt` | v1 | Synthetic data generation runs |
 | `dryRunJobs` | `id` | `datasetId`, `status`, `createdAt` | v2 | Dry run job tracking |
-| `jobEvaluations` | `id` | `updatedAt` | v3 | Finetune job evaluation results |
+| `jobEvaluations` | `id` | `updatedAt` | v3 | Finetune job evaluation results (includes `scoresPersisted` flag) |
 | `proposedPlans` | `datasetId` | (none) | v4 | Persisted proposed plans (survives refresh) |
 
 #### Workflow Store Schema
@@ -571,6 +571,19 @@ interface GenerationHistoryStore {
   createdAt: number;
 }
 ```
+
+#### Job Evaluations Store Schema
+
+```typescript
+interface CachedJobEvaluation {
+  jobId: string;                     // Primary key (finetune job ID)
+  data: FinetuneEvalResultsResponse; // Cached evaluation results from backend
+  updatedAt: number;
+  scoresPersisted?: boolean;         // Whether scores have been written to records
+}
+```
+
+The `scoresPersisted` flag tracks whether finetune evaluation scores from a completed job have been persisted to individual `DatasetRecord.evaluation` fields in the `vllora-datasets` database. This flag is backed by IndexedDB (not volatile in-memory state), so it survives page refreshes. Scores are only marked as persisted after `persistFinetuneScoresToRecords()` confirms that records were actually updated (`persisted > 0`).
 
 ---
 
@@ -644,7 +657,7 @@ interface Dataset {
 | Training job info | `vllora-finetune` (workflows) | Workflow-specific, includes job ID and status |
 | Snapshots | `vllora-finetune` (snapshots) | Enables rollback without affecting dataset |
 | Dry run jobs | `vllora-finetune` (dryRunJobs) | Tracks dry run execution per dataset |
-| Job evaluations | `vllora-finetune` (jobEvaluations) | Stores finetune job evaluation results |
+| Job evaluations | `vllora-finetune` (jobEvaluations) | Stores finetune job evaluation cache + `scoresPersisted` flag for persistence tracking |
 | Proposed plans | `vllora-finetune` (proposedPlans) | Persists plans across page refresh (keyed by datasetId) |
 | Knowledge sources | `vllora-knowledge-sources` | Documents are large, independent lifecycle from workflow |
 

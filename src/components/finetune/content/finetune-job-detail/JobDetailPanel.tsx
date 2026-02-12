@@ -5,7 +5,7 @@
  * Layout: Header → Quick Summary Bar → [Collapsible Details] → [Error] → Tabs (Metrics | Per-Row)
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { StopCircle, Play, Download, Loader2, ChevronRight } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
@@ -37,6 +37,31 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [showDetails, setShowDetails] = useState(true);
+  const [activeTab, setActiveTab] = useState("metrics");
+
+  // Listen for highlight events from QualityIndicator finetune score clicks.
+  // Switch to Per-Row tab, then re-dispatch so ResultsTable can scroll & highlight.
+  useEffect(() => {
+    const handleHighlight = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      const recordId = detail?.recordId;
+      // Skip re-dispatched events (prevent infinite loop)
+      if (!recordId || detail?._fromJobPanel) return;
+      // Switch to per-row tab
+      setActiveTab("per-row");
+      // Re-dispatch after Per-Row tab mounts so ResultsTable can catch it
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('vllora_highlight_eval_result', {
+          detail: { recordId, _fromJobPanel: true }
+        }));
+      }, 200);
+    };
+
+    window.addEventListener('vllora_highlight_eval_result', handleHighlight);
+    return () => {
+      window.removeEventListener('vllora_highlight_eval_result', handleHighlight);
+    };
+  }, []);
 
   const summary = useMemo(() => {
     if (!evalResults?.results) return null;
@@ -181,7 +206,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
       )}
 
       {/* Tabbed content: Metrics | Per-Row */}
-      <Tabs defaultValue="metrics" className="flex-1 min-h-0 flex flex-col">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col">
         <div className="shrink-0 px-3 pt-2">
           <TabsList className="h-7">
             <TabsTrigger value="metrics" className="text-[11px] px-3 h-5">

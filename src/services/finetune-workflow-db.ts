@@ -657,6 +657,8 @@ export interface CachedJobEvaluation {
   jobId: string;
   data: FinetuneEvalResultsResponse;
   updatedAt: number;
+  /** Whether finetune scores from this job have been persisted to records */
+  scoresPersisted?: boolean;
 }
 
 /**
@@ -684,19 +686,25 @@ export async function saveJobEvaluationsCache(
 ): Promise<void> {
   const db = await getDB();
 
-  const cached: CachedJobEvaluation = {
-    jobId,
-    data,
-    updatedAt: Date.now(),
-  };
-
   return new Promise((resolve, reject) => {
     const tx = db.transaction('jobEvaluations', 'readwrite');
     const store = tx.objectStore('jobEvaluations');
-    const request = store.put(cached);
 
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
+    // Read existing entry to preserve scoresPersisted flag
+    const getReq = store.get(jobId);
+    getReq.onsuccess = () => {
+      const existing = getReq.result;
+      const cached: CachedJobEvaluation = {
+        jobId,
+        data,
+        updatedAt: Date.now(),
+        ...(existing?.scoresPersisted && { scoresPersisted: true }),
+      };
+      store.put(cached);
+    };
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
   });
 }
 
@@ -745,6 +753,40 @@ export async function clearOldEvaluationsCache(maxAgeMs: number = 7 * 24 * 60 * 
   });
 }
 
+/**
+ * Check if finetune scores have been persisted for a job.
+ * Uses the `scoresPersisted` flag on the cached evaluation entry.
+ */
+export async function isJobScoresPersisted(jobId: string): Promise<boolean> {
+  const cached = await getCachedJobEvaluations(jobId);
+  return cached?.scoresPersisted === true;
+}
+
+/**
+ * Mark a job's finetune scores as persisted to records.
+ * Sets `scoresPersisted = true` on the cached evaluation entry.
+ */
+export async function markJobScoresPersisted(jobId: string): Promise<void> {
+  const db = await getDB();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('jobEvaluations', 'readwrite');
+    const store = tx.objectStore('jobEvaluations');
+    const getReq = store.get(jobId);
+
+    getReq.onsuccess = () => {
+      const entry = getReq.result;
+      if (entry) {
+        entry.scoresPersisted = true;
+        store.put(entry);
+      }
+    };
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 // =============================================================================
 // Export Service Object
 // =============================================================================
@@ -777,4 +819,6 @@ export const finetuneWorkflowService = {
   saveJobEvaluationsCache,
   deleteCachedJobEvaluations,
   clearOldEvaluationsCache,
+  isJobScoresPersisted,
+  markJobScoresPersisted,
 };

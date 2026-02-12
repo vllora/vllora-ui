@@ -6,7 +6,7 @@
  * reveals the EpochScoresTable showing score progression across epochs.
  */
 
-import { useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import type { FinetuneEvalResultsResponse, FlatEvaluationResult } from "@/services/finetune-api";
 import {
   parseScoreBreakdown,
@@ -29,6 +29,16 @@ interface RowEpochData {
 
 export function PerRowDetailsSection({ results, datasetId }: PerRowDetailsSectionProps) {
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+
+  // Auto-expand row when navigating from QualityIndicator finetune score click
+  useEffect(() => {
+    const handleHighlight = (e: Event) => {
+      const recordId = (e as CustomEvent).detail?.recordId;
+      if (recordId) setExpandedRowId(recordId);
+    };
+    window.addEventListener('vllora_highlight_eval_result', handleHighlight);
+    return () => window.removeEventListener('vllora_highlight_eval_result', handleHighlight);
+  }, []);
 
   // Flatten latest epoch per row for the table, keep all epochs for expand
   const { flatResults, epochDataMap } = useMemo(() => {
