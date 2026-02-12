@@ -1,5 +1,5 @@
 /**
- * FinetuneBottomPanel
+ * FinetuneJobsPanel
  *
  * Split view for finetune jobs: job detail on left, job list sidebar on right.
  */
@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { JobDetailPanel } from "./JobDetailPanel";
 import { StatusIcon } from "./StatusIcon";
 
-export function FinetuneBottomPanel() {
+export function FinetuneJobsPanel() {
   const { filteredJobs, isLoading } = FinetuneJobsConsumer();
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 

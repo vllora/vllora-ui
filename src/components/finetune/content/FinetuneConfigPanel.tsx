@@ -43,7 +43,7 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
-import { FinetuneBottomPanel } from "./finetune-job-detail";
+import { FinetuneJobsPanel } from "./finetune-job-detail";
 import { BASE_MODELS } from "./constants";
 import {
   DEFAULT_TRAINING_CONFIG,
@@ -316,7 +316,7 @@ export function FinetuneConfigPanel({ datasetId, canStartJob, initialConfig }: F
 
       {/* Full-height jobs view */}
       <div className="flex-1 min-h-0">
-        <FinetuneBottomPanel />
+        <FinetuneJobsPanel />
       </div>
     </div>
   );

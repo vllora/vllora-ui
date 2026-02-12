@@ -1,1 +1,1 @@
-export { FinetuneBottomPanel } from "./FinetuneBottomPanel";
+export { FinetuneJobsPanel } from "./FinetuneJobsPanel";
