@@ -39,14 +39,14 @@ export function MetadataPanel({ record, topicPath }: MetadataPanelProps) {
   }, [dataInfo?.input?.tools]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Assigned Topic */}
       {topicPath && topicPath.length > 0 && (
         <div>
           <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
             Assigned Topic
           </h4>
-          <div className="text-sm font-medium text-[rgb(var(--theme-500))]">
+          <div className="text-xs font-medium text-[rgb(var(--theme-500))]">
             {topicPath[topicPath.length - 1]}
           </div>
           {topicPath.length > 1 && (
@@ -76,8 +76,8 @@ export function MetadataPanel({ record, topicPath }: MetadataPanelProps) {
           <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
             Variant Source
           </h4>
-          <div className="flex items-center gap-2 text-sm">
-            <GitBranch className="w-3.5 h-3.5 text-violet-400" />
+          <div className="flex items-center gap-2 text-xs">
+            <GitBranch className="w-3 h-3 text-violet-400" />
             <span className="text-violet-400 font-medium">
               Generated from record
             </span>
@@ -133,9 +133,9 @@ interface MetadataRowProps {
 
 function MetadataRow({ label, value, valueColor = "text-foreground" }: MetadataRowProps) {
   return (
-    <div className="flex items-center justify-between py-2.5">
-      <span className="text-sm text-zinc-500">{label}</span>
-      <span className={cn("text-sm font-medium", valueColor)}>{value}</span>
+    <div className="flex items-center justify-between py-2">
+      <span className="text-xs text-zinc-500">{label}</span>
+      <span className={cn("text-xs font-medium", valueColor)}>{value}</span>
     </div>
   );
 }
@@ -150,18 +150,18 @@ function ConversationStats({ data }: { data: unknown }) {
       <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
         Statistics
       </h4>
-      <div className="flex items-center gap-4 text-sm">
+      <div className="flex items-center gap-4 text-xs">
         <span className="flex items-center gap-1.5 text-muted-foreground">
-          <Coins className="w-3.5 h-3.5" />
+          <Coins className="w-3 h-3" />
           <span className="font-medium text-foreground">{tokens.toLocaleString()}</span> tokens
         </span>
         <span className="flex items-center gap-1.5 text-muted-foreground">
-          <MessageSquare className="w-3.5 h-3.5" />
+          <MessageSquare className="w-3 h-3" />
           <span className="font-medium text-foreground">{turns}</span> turns
         </span>
         {tools > 0 && (
           <span className="flex items-center gap-1.5 text-muted-foreground">
-            <span className="italic font-serif text-xs">fx</span>
+            <span className="italic font-serif text-[10px]">fx</span>
             <span className="font-medium text-foreground">{tools}</span> tools
           </span>
         )}

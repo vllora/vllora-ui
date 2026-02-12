@@ -46,8 +46,8 @@ function ScoreLine({
         onClick && "hover:underline cursor-pointer"
       )}
     >
-      <span className="text-[9px] text-zinc-500 whitespace-nowrap">{label}:</span>
-      <span className={cn("text-[10px] font-semibold tabular-nums", color)}>
+      <span className="text-[11px] text-zinc-500 whitespace-nowrap">{label}:</span>
+      <span className={cn("text-[11px] font-semibold tabular-nums", color)}>
         {score.toFixed(2)}
       </span>
     </button>

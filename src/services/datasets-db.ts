@@ -576,6 +576,7 @@ export async function updateRecordEvaluationScores(
           ? (oldAvg * oldCount + update.dryRunScore) / (oldCount + 1)
           : update.dryRunScore;
         existing.score = update.dryRunScore;
+        existing.dryRunEvaluatedAt = now;
       }
       if (update.finetuneScore !== undefined) {
         existing.finetuneScore = update.finetuneScore;
@@ -585,6 +586,7 @@ export async function updateRecordEvaluationScores(
           ? (oldAvg * oldCount + update.finetuneScore) / (oldCount + 1)
           : update.finetuneScore;
         existing.score = update.finetuneScore; // Finetune takes precedence
+        existing.finetuneEvaluatedAt = now;
       }
       if (update.incrementDryRunCount) {
         existing.dryRunCount = (existing.dryRunCount || 0) + 1;
