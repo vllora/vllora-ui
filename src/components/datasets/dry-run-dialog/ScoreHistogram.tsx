@@ -37,6 +37,8 @@ interface ScoreHistogramProps {
   showMean?: boolean;
   /** Show statistics below chart */
   showStats?: boolean;
+  /** Show diagnosis banner below stats (default: true) */
+  showDiagnosis?: boolean;
   /** Actual diagnosis from result (if provided, uses this instead of recalculating) */
   resultDiagnosis?: DryRunDiagnosis;
 }
@@ -174,6 +176,7 @@ export function ScoreHistogram({
   height = 200,
   showMean = true,
   showStats = true,
+  showDiagnosis = true,
   resultDiagnosis,
 }: ScoreHistogramProps) {
   const histogramData = useMemo(
@@ -326,40 +329,42 @@ export function ScoreHistogram({
       )}
 
       {/* Diagnosis */}
-      <div
-        className={cn(
-          "rounded-md p-3 border",
-          diagnosis.bgColor,
-          diagnosis.color
-        )}
-      >
-        <div className="flex items-center gap-2">
-          <span
-            className={cn(
-              "px-2 py-0.5 rounded-full text-xs font-bold",
-              diagnosis.verdict === "GO"
-                ? "bg-green-600 text-white"
-                : diagnosis.verdict === "NO-GO"
-                ? "bg-red-600 text-white"
-                : "bg-amber-600 text-white"
-            )}
-          >
-            {diagnosis.verdict === "GO" ? "🟢 GO" : diagnosis.verdict === "NO-GO" ? "🔴 NO-GO" : "🟡 WARNING"}
-          </span>
-          <span className="text-sm font-medium">
-            {diagnosis.verdict === "GO"
-              ? "Dataset and grader quality look good"
-              : diagnosis.issues[0]}
-          </span>
+      {showDiagnosis && (
+        <div
+          className={cn(
+            "rounded-md p-3 border",
+            diagnosis.bgColor,
+            diagnosis.color
+          )}
+        >
+          <div className="flex items-center gap-2">
+            <span
+              className={cn(
+                "px-2 py-0.5 rounded-full text-xs font-bold",
+                diagnosis.verdict === "GO"
+                  ? "bg-green-600 text-white"
+                  : diagnosis.verdict === "NO-GO"
+                  ? "bg-red-600 text-white"
+                  : "bg-amber-600 text-white"
+              )}
+            >
+              {diagnosis.verdict === "GO" ? "🟢 GO" : diagnosis.verdict === "NO-GO" ? "🔴 NO-GO" : "🟡 WARNING"}
+            </span>
+            <span className="text-sm font-medium">
+              {diagnosis.verdict === "GO"
+                ? "Dataset and grader quality look good"
+                : diagnosis.issues[0]}
+            </span>
+          </div>
+          {diagnosis.issues.length > 1 && (
+            <ul className="mt-2 text-xs space-y-1 ml-6">
+              {diagnosis.issues.slice(1).map((issue, i) => (
+                <li key={i}>• {issue}</li>
+              ))}
+            </ul>
+          )}
         </div>
-        {diagnosis.issues.length > 1 && (
-          <ul className="mt-2 text-xs space-y-1 ml-6">
-            {diagnosis.issues.slice(1).map((issue, i) => (
-              <li key={i}>• {issue}</li>
-            ))}
-          </ul>
-        )}
-      </div>
+      )}
     </div>
   );
 }

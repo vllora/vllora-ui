@@ -8,7 +8,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, CheckCircle2, XCircle, Clock, AlertTriangle, ArrowDown, RefreshCw } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Clock, AlertTriangle, RefreshCw, ChevronRight } from "lucide-react";
 import { VerdictBadge } from "./VerdictBadge";
 import { ScoreHistogram } from "./ScoreHistogram";
 import { ResultsTable } from "./ResultsTable";
@@ -121,6 +121,8 @@ function JobDetail({ job, onCancel, onRunAgain }: { job: DryRunJob; onCancel?: (
 
   const showErrorView = totalCount > 0 && (errorCount / totalCount) > 0.5;
   const recommendations = result?.diagnosis?.recommendations || [];
+  const stats = result?.statistics;
+  const [showRecs, setShowRecs] = useState(false);
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -135,87 +137,111 @@ function JobDetail({ job, onCancel, onRunAgain }: { job: DryRunJob; onCancel?: (
             Failed
           </span>
         )}
-        {result?.statistics?.mean !== undefined && (
+        {stats?.mean !== undefined && (
           <span className="text-xs font-mono text-zinc-400">
-            avg {result.statistics.mean.toFixed(2)}
+            avg {stats.mean.toFixed(2)}
           </span>
         )}
         <span className="text-[10px] text-zinc-600 ml-auto">
           {formatTime(job.createdAt)}
         </span>
-      </div>
-
-      {/* Scrollable content */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
-        {/* Error banner for failed jobs */}
-        {job.status === "failed" && job.error && (
-          <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3">
-            <div className="flex items-start gap-2">
-              <XCircle className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
-              <p className="text-xs text-red-400">{job.error}</p>
-            </div>
-          </div>
-        )}
-
-        {showErrorView ? (
-          <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3">
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-red-400">
-                  {errorCount === totalCount ? "All" : "Most"} evaluations failed
-                </p>
-                <p className="text-[11px] text-zinc-400">
-                  {errorCount} of {totalCount} encountered errors.
-                </p>
-              </div>
-            </div>
-          </div>
-        ) : result ? (
-          <>
-            {scores.length > 0 && (
-              <ScoreHistogram scores={scores} showMean showStats resultDiagnosis={result.diagnosis} />
-            )}
-            {recommendations.length > 0 && (
-              <div className="rounded-md bg-zinc-900/50 border border-zinc-800 p-2.5 space-y-1.5">
-                <p className="text-xs font-medium text-zinc-400">Recommendations</p>
-                <ul className="text-xs text-zinc-500 space-y-1">
-                  {recommendations.map((rec, i) => (
-                    <li key={i} className="flex items-start gap-1.5">
-                      <span className="text-zinc-600">-</span>
-                      <span>{rec}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </>
-        ) : null}
-
-        {evaluationResults && evaluationResults.length > 0 && (
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-              <ArrowDown className="w-3 h-3" />
-              <span>{evaluationResults.length} evaluation{evaluationResults.length !== 1 ? "s" : ""}</span>
-            </div>
-            <div className="h-[200px]">
-              <ResultsTable results={evaluationResults} fillHeight />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Footer with Run Again */}
-      {onRunAgain && (
-        <div className="shrink-0 flex items-center justify-end px-3 py-2 border-t border-zinc-800/60">
+        {onRunAgain && (
           <Button
             onClick={onRunAgain}
+            variant="ghost"
             size="sm"
-            className="h-7 text-xs gap-1.5 bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-500))] text-white"
+            className="h-6 px-2 text-[11px] gap-1 text-zinc-400 hover:text-zinc-200"
           >
             <RefreshCw className="h-3 w-3" />
-            Run Again
+            Re-run
           </Button>
+        )}
+      </div>
+
+      {/* Error banner for failed jobs */}
+      {job.status === "failed" && job.error && (
+        <div className="shrink-0 mx-3 mt-2 rounded-md border border-red-500/30 bg-red-500/10 px-2.5 py-1.5">
+          <div className="flex items-start gap-2">
+            <XCircle className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />
+            <p className="text-[11px] text-red-400 line-clamp-2">{job.error}</p>
+          </div>
+        </div>
+      )}
+
+      {showErrorView ? (
+        <div className="shrink-0 mx-3 mt-2 rounded-md border border-red-500/30 bg-red-500/10 px-2.5 py-1.5">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />
+            <p className="text-[11px] text-red-400">
+              {errorCount === totalCount ? "All" : "Most"} evaluations failed ({errorCount}/{totalCount})
+            </p>
+          </div>
+        </div>
+      ) : result ? (
+        <div className="shrink-0 px-3 pt-2 space-y-2">
+          {/* Compact chart + inline stats */}
+          {scores.length > 0 && (
+            <ScoreHistogram
+              scores={scores}
+              showMean
+              height={120}
+              showStats={false}
+              showDiagnosis={false}
+            />
+          )}
+          {/* Inline stats row */}
+          {stats && (
+            <div className="flex items-center gap-3 text-[11px] font-mono text-zinc-400">
+              <span>
+                Mean <span className="text-zinc-200 font-semibold">{stats.mean.toFixed(2)}</span>
+              </span>
+              <span className="text-zinc-700">·</span>
+              <span>
+                Std <span className="text-zinc-300">{stats.std.toFixed(2)}</span>
+              </span>
+              <span className="text-zinc-700">·</span>
+              <span>
+                Min <span className="text-zinc-300">{stats.min.toFixed(2)}</span>
+              </span>
+              <span className="text-zinc-700">·</span>
+              <span>
+                Max <span className="text-zinc-300">{stats.max.toFixed(2)}</span>
+              </span>
+              <span className="text-zinc-700">·</span>
+              <span>
+                Med <span className="text-zinc-300">{stats.median.toFixed(2)}</span>
+              </span>
+            </div>
+          )}
+          {/* Collapsible recommendations */}
+          {recommendations.length > 0 && (
+            <button
+              onClick={() => setShowRecs((v) => !v)}
+              className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
+              <ChevronRight className={cn("h-3 w-3 transition-transform", showRecs && "rotate-90")} />
+              <span>{recommendations.length} recommendation{recommendations.length !== 1 ? "s" : ""}</span>
+            </button>
+          )}
+          {showRecs && recommendations.length > 0 && (
+            <ul className="text-[11px] text-zinc-500 space-y-0.5 pl-4">
+              {recommendations.map((rec, i) => (
+                <li key={i}>- {rec}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+
+      {/* Results table fills remaining space */}
+      {evaluationResults && evaluationResults.length > 0 && (
+        <div className="flex-1 min-h-0 flex flex-col px-3 pb-1 pt-2">
+          <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 mb-1 shrink-0">
+            <span>{evaluationResults.length} evaluation{evaluationResults.length !== 1 ? "s" : ""}</span>
+          </div>
+          <div className="flex-1 min-h-0">
+            <ResultsTable results={evaluationResults} fillHeight />
+          </div>
         </div>
       )}
     </div>
