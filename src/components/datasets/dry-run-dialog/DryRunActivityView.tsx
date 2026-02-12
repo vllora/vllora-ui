@@ -1,5 +1,5 @@
 /**
- * HistoryView
+ * DryRunActivityView
  *
  * VS Code terminal-style split layout: job details on the left, job list on the right.
  * Also supports a compact list-only mode for the DryRunDialog.
@@ -8,17 +8,24 @@
 import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import {
+  Tooltip as UITooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Loader2, CheckCircle2, XCircle, Clock, AlertTriangle, RefreshCw, ChevronRight } from "lucide-react";
 import { VerdictBadge } from "./VerdictBadge";
-import { ScoreHistogram } from "./ScoreHistogram";
+import { ScoreStrip } from "./ScoreStrip";
 import { ResultsTable } from "./ResultsTable";
 import { RunningView } from "./RunningView";
+import { RunsSidebar } from "./RunsSidebar";
 import { flattenEvaluationResults } from "@/services/finetune-api";
 import { cn } from "@/lib/utils";
 import type { DryRunJob } from "@/types/dry-run-job";
 import { getJobTotalRows, getJobCompletedRows } from "@/types/dry-run-job";
 
-interface HistoryViewProps {
+interface DryRunActivityViewProps {
   jobs: DryRunJob[];
   onSelectJob: (job: DryRunJob) => void;
   onBack: () => void;
@@ -49,6 +56,35 @@ function formatTime(ts: number): string {
   }
   return d.toLocaleDateString([], { month: "short", day: "numeric" }) +
     " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+/** Generate a short human-readable insight from score statistics */
+function getScoreInsight(stats: { mean: number; std: number; min: number; max: number }): string {
+  const { mean, std, min, max } = stats;
+  const range = max - min;
+
+  if (mean < 0.1) {
+    return "Nearly all scores are near zero — the dataset may be too hard or the grader too strict.";
+  }
+  if (mean > 0.95) {
+    return "Almost perfect scores across the board — the grader may be too lenient or the task too easy.";
+  }
+  if (mean > 0.85 && std < 0.1) {
+    return `Scores are tightly clustered around ${mean.toFixed(2)} with little variance — quality is consistent but the grader may not differentiate well.`;
+  }
+  if (mean > 0.7 && std < 0.1) {
+    return `Scores cluster around ${mean.toFixed(2)} with low spread — decent quality, but limited differentiation between samples.`;
+  }
+  if (std > 0.25) {
+    return `Wide spread of scores (${min.toFixed(2)}–${max.toFixed(2)}) — the grader is strongly differentiating between samples.`;
+  }
+  if (mean < 0.4) {
+    return `Low average score (${mean.toFixed(2)}) — most samples score poorly. Consider revising the dataset or adjusting grader criteria.`;
+  }
+  if (range > 0.5 && std > 0.15) {
+    return `Scores range from ${min.toFixed(2)} to ${max.toFixed(2)} with moderate spread — good differentiation across sample quality.`;
+  }
+  return `Average score is ${mean.toFixed(2)} with ${std < 0.15 ? "low" : "moderate"} variance across samples.`;
 }
 
 /** Inline detail panel for a selected job (left side of split) */
@@ -122,133 +158,127 @@ function JobDetail({ job, onCancel, onRunAgain }: { job: DryRunJob; onCancel?: (
   const showErrorView = totalCount > 0 && (errorCount / totalCount) > 0.5;
   const recommendations = result?.diagnosis?.recommendations || [];
   const stats = result?.statistics;
-  const [showRecs, setShowRecs] = useState(false);
+  const verdict = result?.diagnosis?.verdict;
+  // Auto-expand recommendations for WARNING/NO-GO, collapsed for GO
+  const [showRecs, setShowRecs] = useState(verdict !== "GO" && recommendations.length > 0);
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-      {/* Header summary */}
-      <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-zinc-800/60">
-        <span className="text-xs font-medium text-zinc-300">
-          {job.sampleSize} samples
-        </span>
-        {result && <VerdictBadge verdict={result.diagnosis.verdict} />}
-        {job.status === "failed" && !result && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 font-medium">
-            Failed
-          </span>
+    <TooltipProvider delayDuration={200}>
+      <div className="flex flex-col h-full min-h-0">
+        {/* Header */}
+        <div className="shrink-0 border-b border-zinc-800/60">
+          {/* Row 1: main info */}
+          <div className="flex items-center gap-2 px-3 py-1.5">
+            <span className="text-xs font-medium text-zinc-300">
+              {job.sampleSize} samples
+            </span>
+            {result && <VerdictBadge verdict={result.diagnosis.verdict} />}
+            {job.status === "failed" && !result && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 font-medium">
+                Failed
+              </span>
+            )}
+            {stats && (
+              <UITooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-xs font-mono text-zinc-400 cursor-help">
+                    avg{" "}
+                    <span className="text-zinc-200 font-semibold">{stats.mean.toFixed(2)}</span>
+                    <span className="text-zinc-600 mx-0.5">&plusmn;</span>
+                    <span className="text-zinc-500">{stats.std.toFixed(2)}</span>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs font-mono">
+                  <div className="space-y-0.5">
+                    <div>Min: {stats.min.toFixed(2)}</div>
+                    <div>Max: {stats.max.toFixed(2)}</div>
+                    <div>Median: {stats.median.toFixed(2)}</div>
+                  </div>
+                </TooltipContent>
+              </UITooltip>
+            )}
+            <span className="text-[10px] text-zinc-600 ml-auto">
+              {formatTime(job.createdAt)}
+            </span>
+            {onRunAgain && (
+              <Button
+                onClick={onRunAgain}
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-[11px] gap-1 text-zinc-400 hover:text-zinc-200"
+              >
+                <RefreshCw className="h-3 w-3" />
+                Re-run
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Error banner for failed jobs */}
+        {job.status === "failed" && job.error && (
+          <div className="shrink-0 mx-3 mt-2 rounded-md border border-red-500/30 bg-red-500/10 px-2.5 py-1.5">
+            <div className="flex items-start gap-2">
+              <XCircle className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />
+              <p className="text-[11px] text-red-400 line-clamp-2">{job.error}</p>
+            </div>
+          </div>
         )}
-        {stats?.mean !== undefined && (
-          <span className="text-xs font-mono text-zinc-400">
-            avg {stats.mean.toFixed(2)}
-          </span>
-        )}
-        <span className="text-[10px] text-zinc-600 ml-auto">
-          {formatTime(job.createdAt)}
-        </span>
-        {onRunAgain && (
-          <Button
-            onClick={onRunAgain}
-            variant="ghost"
-            size="sm"
-            className="h-6 px-2 text-[11px] gap-1 text-zinc-400 hover:text-zinc-200"
-          >
-            <RefreshCw className="h-3 w-3" />
-            Re-run
-          </Button>
+
+        {showErrorView ? (
+          <div className="shrink-0 mx-3 mt-2 rounded-md border border-red-500/30 bg-red-500/10 px-2.5 py-1.5">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />
+              <p className="text-[11px] text-red-400">
+                {errorCount === totalCount ? "All" : "Most"} evaluations failed ({errorCount}/{totalCount})
+              </p>
+            </div>
+          </div>
+        ) : result && scores.length > 0 ? (
+          /* Score strip + recommendations */
+          <div className="shrink-0 px-3 pt-2 space-y-1">
+            <ScoreStrip scores={scores} mean={stats?.mean} />
+            {stats && (
+              <p className="text-[11px] text-zinc-300 leading-snug">
+                {getScoreInsight(stats)}
+              </p>
+            )}
+            {recommendations.length > 0 && (
+              <div>
+                <button
+                  onClick={() => setShowRecs((v) => !v)}
+                  className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
+                >
+                  <ChevronRight className={cn("h-3 w-3 transition-transform", showRecs && "rotate-90")} />
+                  <span>{recommendations.length} recommendation{recommendations.length !== 1 ? "s" : ""}</span>
+                </button>
+                {showRecs && (
+                  <ul className="grid grid-cols-3 gap-x-4 gap-y-0 mt-1 text-[11px] text-zinc-300">
+                    {recommendations.map((rec, i) => (
+                      <li key={i} className="truncate" title={rec}>
+                        <span className="text-zinc-600 mr-1">&#8226;</span>{rec}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {/* Results table fills remaining space */}
+        {evaluationResults && evaluationResults.length > 0 && (
+          <div className="flex-1 min-h-0 flex flex-col px-3 pb-1 pt-2">
+            <div className="flex-1 min-h-0">
+              <ResultsTable results={evaluationResults} fillHeight />
+            </div>
+          </div>
         )}
       </div>
-
-      {/* Error banner for failed jobs */}
-      {job.status === "failed" && job.error && (
-        <div className="shrink-0 mx-3 mt-2 rounded-md border border-red-500/30 bg-red-500/10 px-2.5 py-1.5">
-          <div className="flex items-start gap-2">
-            <XCircle className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />
-            <p className="text-[11px] text-red-400 line-clamp-2">{job.error}</p>
-          </div>
-        </div>
-      )}
-
-      {showErrorView ? (
-        <div className="shrink-0 mx-3 mt-2 rounded-md border border-red-500/30 bg-red-500/10 px-2.5 py-1.5">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />
-            <p className="text-[11px] text-red-400">
-              {errorCount === totalCount ? "All" : "Most"} evaluations failed ({errorCount}/{totalCount})
-            </p>
-          </div>
-        </div>
-      ) : result ? (
-        <div className="shrink-0 px-3 pt-2 space-y-2">
-          {/* Compact chart + inline stats */}
-          {scores.length > 0 && (
-            <ScoreHistogram
-              scores={scores}
-              showMean
-              height={120}
-              showStats={false}
-              showDiagnosis={false}
-            />
-          )}
-          {/* Inline stats row */}
-          {stats && (
-            <div className="flex items-center gap-3 text-[11px] font-mono text-zinc-400">
-              <span>
-                Mean <span className="text-zinc-200 font-semibold">{stats.mean.toFixed(2)}</span>
-              </span>
-              <span className="text-zinc-700">·</span>
-              <span>
-                Std <span className="text-zinc-300">{stats.std.toFixed(2)}</span>
-              </span>
-              <span className="text-zinc-700">·</span>
-              <span>
-                Min <span className="text-zinc-300">{stats.min.toFixed(2)}</span>
-              </span>
-              <span className="text-zinc-700">·</span>
-              <span>
-                Max <span className="text-zinc-300">{stats.max.toFixed(2)}</span>
-              </span>
-              <span className="text-zinc-700">·</span>
-              <span>
-                Med <span className="text-zinc-300">{stats.median.toFixed(2)}</span>
-              </span>
-            </div>
-          )}
-          {/* Collapsible recommendations */}
-          {recommendations.length > 0 && (
-            <button
-              onClick={() => setShowRecs((v) => !v)}
-              className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
-            >
-              <ChevronRight className={cn("h-3 w-3 transition-transform", showRecs && "rotate-90")} />
-              <span>{recommendations.length} recommendation{recommendations.length !== 1 ? "s" : ""}</span>
-            </button>
-          )}
-          {showRecs && recommendations.length > 0 && (
-            <ul className="text-[11px] text-zinc-500 space-y-0.5 pl-4">
-              {recommendations.map((rec, i) => (
-                <li key={i}>- {rec}</li>
-              ))}
-            </ul>
-          )}
-        </div>
-      ) : null}
-
-      {/* Results table fills remaining space */}
-      {evaluationResults && evaluationResults.length > 0 && (
-        <div className="flex-1 min-h-0 flex flex-col px-3 pb-1 pt-2">
-          <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 mb-1 shrink-0">
-            <span>{evaluationResults.length} evaluation{evaluationResults.length !== 1 ? "s" : ""}</span>
-          </div>
-          <div className="flex-1 min-h-0">
-            <ResultsTable results={evaluationResults} fillHeight />
-          </div>
-        </div>
-      )}
-    </div>
+    </TooltipProvider>
   );
 }
 
-export function HistoryView({ jobs, onSelectJob, onBack, splitView = false, onCancelJob, initialSelectedId, onRunAgain }: HistoryViewProps) {
+export function DryRunActivityView({ jobs, onSelectJob, onBack, splitView = false, onCancelJob, initialSelectedId, onRunAgain }: DryRunActivityViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     if (initialSelectedId) return initialSelectedId;
     // Default to most recent completed job
@@ -282,52 +312,8 @@ export function HistoryView({ jobs, onSelectJob, onBack, splitView = false, onCa
           )}
         </div>
 
-        {/* Right: job list (narrow sidebar) */}
-        <div className="w-48 shrink-0 flex flex-col min-h-0 bg-zinc-900/30">
-          <div className="shrink-0 px-2 py-1.5 border-b border-zinc-800/60">
-            <span className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">
-              Runs
-            </span>
-          </div>
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            {jobs.map((job) => {
-              const isSelected = job.id === selectedId;
-              const meanScore = job.result?.statistics?.mean;
-              return (
-                <button
-                  key={job.id}
-                  onClick={() => setSelectedId(job.id)}
-                  className={cn(
-                    "w-full text-left px-2 py-1.5 flex items-center gap-2 text-xs transition-colors border-l-2",
-                    isSelected
-                      ? "bg-zinc-800/60 border-l-[rgb(var(--theme-500))] text-zinc-200"
-                      : "border-l-transparent text-zinc-500 hover:bg-zinc-800/30 hover:text-zinc-300"
-                  )}
-                >
-                  <StatusIcon status={job.status} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1">
-                      <span className="font-medium truncate">{job.sampleSize}s</span>
-                      {meanScore !== undefined && (
-                        <span className="font-mono text-[10px] text-zinc-500">{meanScore.toFixed(2)}</span>
-                      )}
-                    </div>
-                    <div className="text-[10px] text-zinc-600 truncate">
-                      {formatTime(job.createdAt)}
-                    </div>
-                  </div>
-                  {job.result && (
-                    <span className={cn(
-                      "w-1.5 h-1.5 rounded-full shrink-0",
-                      job.result.diagnosis.verdict === "GO" ? "bg-emerald-500" :
-                      job.result.diagnosis.verdict === "NO-GO" ? "bg-red-500" : "bg-amber-500"
-                    )} />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        {/* Right: job list sidebar */}
+        <RunsSidebar jobs={jobs} selectedId={selectedId} onSelectJob={setSelectedId} />
       </div>
     );
   }

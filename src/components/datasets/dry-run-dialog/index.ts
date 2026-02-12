@@ -1,6 +1,6 @@
 export { ConfigView } from './ConfigView';
 export { DryRunDialog } from './DryRunDialog';
-export { HistoryView } from './HistoryView';
+export { DryRunActivityView } from './DryRunActivityView';
 export { ResultsTable } from './ResultsTable';
 export { RunningView } from './RunningView';
 export { SampleCard } from './SampleCard';

@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { FlaskConical } from "lucide-react";
 import { ConfigView } from "./ConfigView";
-import { HistoryView } from "./HistoryView";
+import { DryRunActivityView } from "./DryRunActivityView";
 import { RunningView } from "./RunningView";
 import { VerdictBadge } from "./VerdictBadge";
 import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
@@ -196,7 +196,7 @@ export function DryRunDialog({
 
           {/* History/Results split view */}
           {view === "history" && (
-            <HistoryView
+            <DryRunActivityView
               jobs={jobs}
               onSelectJob={(job: DryRunJob) => setSelectedJobId(job.id)}
               onBack={() => setView("config")}

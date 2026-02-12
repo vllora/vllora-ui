@@ -2,19 +2,18 @@
  * EvaluationBottomPanel
  *
  * VS Code-style bottom panel for dry run results.
- * Shows the HistoryView split layout with job details on left and job list on right.
+ * Shows the DryRunActivityView split layout with job details on left and job list on right.
  * Running jobs are shown inline in the split view.
  */
 
-import { useEffect, useCallback, useMemo, useState } from "react";
+import { useEffect, useCallback, useState } from "react";
 import {
   Activity,
   Loader2,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
-import { HistoryView } from "../dry-run-dialog/HistoryView";
-import { VerdictBadge } from "../dry-run-dialog/VerdictBadge";
+import { DryRunActivityView } from "../dry-run-dialog/DryRunActivityView";
 import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
 import { cn } from "@/lib/utils";
 
@@ -50,21 +49,11 @@ export function EvaluationBottomPanel({
     }
   }, [runningJob, lastCompletedJob]);
 
-  const selectedJob = useMemo(() => {
-    if (selectedJobId) {
-      return jobs.find((j) => j.id === selectedJobId) || null;
-    }
-    return lastCompletedJob;
-  }, [selectedJobId, jobs, lastCompletedJob]);
-
   const handleCancel = useCallback(async () => {
     if (runningJob) {
       await cancelDryRun(runningJob.id);
     }
   }, [runningJob, cancelDryRun]);
-
-  const result = selectedJob?.result;
-  const meanScore = result?.statistics?.mean;
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background">
@@ -90,19 +79,7 @@ export function EvaluationBottomPanel({
               {jobs.length}
             </span>
           ) : null}
-          {meanScore !== undefined && (
-            <span className="px-1 py-0.5 rounded text-[10px] font-mono font-medium bg-zinc-800 text-zinc-300">
-              {meanScore.toFixed(2)}
-            </span>
-          )}
         </button>
-
-        {/* Verdict badge */}
-        {result && !isCollapsed && (
-          <div className="ml-1">
-            <VerdictBadge verdict={result.diagnosis.verdict} />
-          </div>
-        )}
 
         <div className="flex-1" />
 
@@ -123,7 +100,7 @@ export function EvaluationBottomPanel({
       {/* Content area */}
       {!isCollapsed && (
         <div className="flex-1 min-h-0 flex flex-col">
-          <HistoryView
+          <DryRunActivityView
             jobs={jobs}
             onSelectJob={(job) => setSelectedJobId(job.id)}
             onBack={() => {}}
