@@ -43,7 +43,7 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
-import { FinetuneBottomPanel } from "./FinetuneBottomPanel";
+import { FinetuneBottomPanel } from "./finetune-job-detail";
 import { BASE_MODELS } from "./constants";
 import {
   DEFAULT_TRAINING_CONFIG,
