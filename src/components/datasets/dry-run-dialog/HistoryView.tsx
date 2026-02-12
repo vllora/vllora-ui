@@ -5,10 +5,10 @@
  * Also supports a compact list-only mode for the DryRunDialog.
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, CheckCircle2, XCircle, Clock, AlertTriangle, ArrowDown } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Clock, AlertTriangle, ArrowDown, RefreshCw } from "lucide-react";
 import { VerdictBadge } from "./VerdictBadge";
 import { ScoreHistogram } from "./ScoreHistogram";
 import { ResultsTable } from "./ResultsTable";
@@ -26,6 +26,10 @@ interface HistoryViewProps {
   splitView?: boolean;
   /** Cancel handler for running jobs (used in split view) */
   onCancelJob?: () => void;
+  /** Pre-select a specific job when opening */
+  initialSelectedId?: string | null;
+  /** "Run Again" handler — shown in JobDetail footer when provided */
+  onRunAgain?: () => void;
 }
 
 function StatusIcon({ status }: { status: DryRunJob["status"] }) {
@@ -48,7 +52,7 @@ function formatTime(ts: number): string {
 }
 
 /** Inline detail panel for a selected job (left side of split) */
-function JobDetail({ job, onCancel }: { job: DryRunJob; onCancel?: () => void }) {
+function JobDetail({ job, onCancel, onRunAgain }: { job: DryRunJob; onCancel?: () => void; onRunAgain?: () => void }) {
   const result = job.result;
 
   const scores = useMemo(() => {
@@ -91,24 +95,23 @@ function JobDetail({ job, onCancel }: { job: DryRunJob; onCancel?: () => void })
     );
   }
 
-  if (job.status === "failed") {
-    return (
-      <div className="flex flex-col items-center justify-center h-full gap-2 px-4">
-        <XCircle className="h-5 w-5 text-red-400" />
-        <span className="text-xs text-red-400 text-center">{job.error || "Job failed"}</span>
-      </div>
-    );
-  }
-
-  if (job.status === "cancelled") {
-    return (
-      <div className="flex items-center justify-center h-full text-xs text-zinc-500">
-        Job was cancelled
-      </div>
-    );
-  }
-
-  if (!result) {
+  // For non-running jobs without results or evaluation data
+  if (!result && !evaluationResults) {
+    if (job.status === "failed") {
+      return (
+        <div className="flex flex-col items-center justify-center h-full gap-2 px-4">
+          <XCircle className="h-5 w-5 text-red-400" />
+          <span className="text-xs text-red-400 text-center">{job.error || "Job failed"}</span>
+        </div>
+      );
+    }
+    if (job.status === "cancelled") {
+      return (
+        <div className="flex items-center justify-center h-full text-xs text-zinc-500">
+          Job was cancelled
+        </div>
+      );
+    }
     return (
       <div className="flex items-center justify-center h-full text-xs text-zinc-600">
         No results available
@@ -117,7 +120,7 @@ function JobDetail({ job, onCancel }: { job: DryRunJob; onCancel?: () => void })
   }
 
   const showErrorView = totalCount > 0 && (errorCount / totalCount) > 0.5;
-  const recommendations = result.diagnosis.recommendations || [];
+  const recommendations = result?.diagnosis?.recommendations || [];
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -126,8 +129,13 @@ function JobDetail({ job, onCancel }: { job: DryRunJob; onCancel?: () => void })
         <span className="text-xs font-medium text-zinc-300">
           {job.sampleSize} samples
         </span>
-        <VerdictBadge verdict={result.diagnosis.verdict} />
-        {result.statistics?.mean !== undefined && (
+        {result && <VerdictBadge verdict={result.diagnosis.verdict} />}
+        {job.status === "failed" && !result && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 font-medium">
+            Failed
+          </span>
+        )}
+        {result?.statistics?.mean !== undefined && (
           <span className="text-xs font-mono text-zinc-400">
             avg {result.statistics.mean.toFixed(2)}
           </span>
@@ -139,6 +147,16 @@ function JobDetail({ job, onCancel }: { job: DryRunJob; onCancel?: () => void })
 
       {/* Scrollable content */}
       <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
+        {/* Error banner for failed jobs */}
+        {job.status === "failed" && job.error && (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+            <div className="flex items-start gap-2">
+              <XCircle className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
+              <p className="text-xs text-red-400">{job.error}</p>
+            </div>
+          </div>
+        )}
+
         {showErrorView ? (
           <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3">
             <div className="flex items-start gap-2">
@@ -153,7 +171,7 @@ function JobDetail({ job, onCancel }: { job: DryRunJob; onCancel?: () => void })
               </div>
             </div>
           </div>
-        ) : (
+        ) : result ? (
           <>
             {scores.length > 0 && (
               <ScoreHistogram scores={scores} showMean showStats resultDiagnosis={result.diagnosis} />
@@ -172,7 +190,7 @@ function JobDetail({ job, onCancel }: { job: DryRunJob; onCancel?: () => void })
               </div>
             )}
           </>
-        )}
+        ) : null}
 
         {evaluationResults && evaluationResults.length > 0 && (
           <div className="space-y-1.5">
@@ -186,16 +204,38 @@ function JobDetail({ job, onCancel }: { job: DryRunJob; onCancel?: () => void })
           </div>
         )}
       </div>
+
+      {/* Footer with Run Again */}
+      {onRunAgain && (
+        <div className="shrink-0 flex items-center justify-end px-3 py-2 border-t border-zinc-800/60">
+          <Button
+            onClick={onRunAgain}
+            size="sm"
+            className="h-7 text-xs gap-1.5 bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-500))] text-white"
+          >
+            <RefreshCw className="h-3 w-3" />
+            Run Again
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
 
-export function HistoryView({ jobs, onSelectJob, onBack, splitView = false, onCancelJob }: HistoryViewProps) {
+export function HistoryView({ jobs, onSelectJob, onBack, splitView = false, onCancelJob, initialSelectedId, onRunAgain }: HistoryViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(() => {
+    if (initialSelectedId) return initialSelectedId;
     // Default to most recent completed job
     const completed = jobs.find((j) => j.status === "completed");
     return completed?.id ?? jobs[0]?.id ?? null;
   });
+
+  // Sync when initialSelectedId changes externally
+  useEffect(() => {
+    if (initialSelectedId) {
+      setSelectedId(initialSelectedId);
+    }
+  }, [initialSelectedId]);
 
   const selectedJob = useMemo(() => {
     return jobs.find((j) => j.id === selectedId) ?? null;
@@ -208,7 +248,7 @@ export function HistoryView({ jobs, onSelectJob, onBack, splitView = false, onCa
         {/* Left: selected job detail */}
         <div className="flex-1 min-w-0 min-h-0 border-r border-zinc-800/60">
           {selectedJob ? (
-            <JobDetail job={selectedJob} onCancel={onCancelJob} />
+            <JobDetail job={selectedJob} onCancel={onCancelJob} onRunAgain={onRunAgain} />
           ) : (
             <div className="flex items-center justify-center h-full text-xs text-zinc-600">
               Select a job from the list

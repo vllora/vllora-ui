@@ -18,10 +18,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { FlaskConical } from "lucide-react";
-import { flattenEvaluationResults } from "@/services/finetune-api";
 import { ConfigView } from "./ConfigView";
 import { HistoryView } from "./HistoryView";
-import { ResultsView } from "./ResultsView";
 import { RunningView } from "./RunningView";
 import { VerdictBadge } from "./VerdictBadge";
 import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
@@ -48,7 +46,7 @@ function getDefaultSampleSize(recordCount: number): number {
   return 100;
 }
 
-type DialogView = "config" | "running" | "results" | "history";
+type DialogView = "config" | "running" | "history";
 
 export function DryRunDialog({
   open,
@@ -74,8 +72,8 @@ export function DryRunDialog({
     setSampleSize(getDefaultSampleSize(recordCount));
   }, [recordCount]);
 
-  // Determine which job to display results for
-  const displayJob = useMemo(() => {
+  // The selected job for showing verdict badge in title
+  const selectedJob = useMemo(() => {
     if (selectedJobId) {
       return jobs.find((j) => j.id === selectedJobId) || null;
     }
@@ -88,19 +86,19 @@ export function DryRunDialog({
       if (runningJob) {
         setView("running");
       } else if (lastCompletedJob) {
-        setView("results");
         setSelectedJobId(lastCompletedJob.id);
+        setView("history");
       } else {
         setView("config");
       }
     }
   }, [open, runningJob, lastCompletedJob]);
 
-  // Auto-switch to results when running job completes
+  // Auto-switch to history when running job completes
   useEffect(() => {
     if (view === "running" && !runningJob && lastCompletedJob) {
-      setView("results");
       setSelectedJobId(lastCompletedJob.id);
+      setView("history");
     }
   }, [view, runningJob, lastCompletedJob]);
 
@@ -129,7 +127,7 @@ export function DryRunDialog({
     }
   }, [runningJob, cancelDryRun]);
 
-  const handleReset = useCallback(() => {
+  const handleRunAgain = useCallback(() => {
     setView("config");
     setSelectedJobId(null);
   }, []);
@@ -137,14 +135,6 @@ export function DryRunDialog({
   const handleViewHistory = useCallback(() => {
     setView("history");
   }, []);
-
-  const handleSelectJob = useCallback((job: DryRunJob) => {
-    setSelectedJobId(job.id);
-    setView("results");
-  }, []);
-
-  // Get result from display job
-  const result = displayJob?.result;
 
   // Calculate progress for running job
   const progress = useMemo(() => {
@@ -155,20 +145,6 @@ export function DryRunDialog({
     return Math.round((completedRows / totalRows) * 100);
   }, [runningJob]);
 
-  // Extract scores for histogram
-  const scores = useMemo(() => {
-    if (!result) return [];
-    // Get scores from the full distribution if available
-    const allScores: number[] = [];
-    if (result.sampleResults) {
-      const { highest, lowest, aroundMean } = result.sampleResults;
-      [...(highest || []), ...(lowest || []), ...(aroundMean || [])].forEach((s) => {
-        allScores.push(s.score);
-      });
-    }
-    return allScores;
-  }, [result]);
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[70vw] h-[90vh] overflow-hidden flex flex-col">
@@ -176,9 +152,8 @@ export function DryRunDialog({
           <DialogTitle className="flex items-center gap-2">
             <FlaskConical className="h-5 w-5" />
             Dry Run Validation
-            {/* Only show verdict when viewing results, not during running */}
-            {view === "results" && result && (
-              <VerdictBadge verdict={result.diagnosis.verdict} />
+            {view === "history" && selectedJob?.result && (
+              <VerdictBadge verdict={selectedJob.result.diagnosis.verdict} />
             )}
             {view === "running" && (
               <span className="ml-2 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
@@ -193,7 +168,7 @@ export function DryRunDialog({
 
         <div className={cn(
           "flex-1 min-h-0 py-2",
-          (view === "results" || view === "config" || view === "running") ? "flex flex-col" : "overflow-y-auto space-y-4"
+          (view === "config" || view === "running") ? "flex flex-col" : ""
         )}>
           {/* Config view */}
           {view === "config" && (
@@ -219,25 +194,16 @@ export function DryRunDialog({
             />
           )}
 
-          {/* Results view */}
-          {view === "results" && result && (
-            <ResultsView
-              result={result}
-              scores={scores}
-              onReset={handleReset}
-              onViewHistory={handleViewHistory}
-              onClose={() => onOpenChange(false)}
-              hasHistory={jobs.length > 1}
-              evaluationResults={displayJob?.pollingSnapshot?.results ? flattenEvaluationResults(displayJob.pollingSnapshot.results) : undefined}
-            />
-          )}
-
-          {/* History view */}
+          {/* History/Results split view */}
           {view === "history" && (
             <HistoryView
               jobs={jobs}
-              onSelectJob={handleSelectJob}
-              onBack={() => setView(lastCompletedJob ? "results" : "config")}
+              onSelectJob={(job: DryRunJob) => setSelectedJobId(job.id)}
+              onBack={() => setView("config")}
+              splitView
+              onCancelJob={handleCancel}
+              initialSelectedId={selectedJobId}
+              onRunAgain={handleRunAgain}
             />
           )}
         </div>

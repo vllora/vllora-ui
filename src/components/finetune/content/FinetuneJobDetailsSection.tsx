@@ -13,9 +13,10 @@ import { toast } from "sonner";
 
 interface FinetuneJobDetailsSectionProps {
   job: FinetuneJob;
+  hideDownload?: boolean;
 }
 
-export function FinetuneJobDetailsSection({ job }: FinetuneJobDetailsSectionProps) {
+export function FinetuneJobDetailsSection({ job, hideDownload }: FinetuneJobDetailsSectionProps) {
   const [isDownloading, setIsDownloading] = useState(false);
 
   const handleDownloadWeights = useCallback(async () => {
@@ -87,7 +88,7 @@ export function FinetuneJobDetailsSection({ job }: FinetuneJobDetailsSectionProp
       )}
 
       {/* Download Weights - spans both columns for succeeded jobs */}
-      {job.status === 'succeeded' && (
+      {!hideDownload && job.status === 'succeeded' && (
         <div className="col-span-2 pt-2 border-t">
           <Button
             variant="outline"

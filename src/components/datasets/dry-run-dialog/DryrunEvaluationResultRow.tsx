@@ -6,7 +6,7 @@
  */
 
 import { cn } from "@/lib/utils";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronRight, ChevronDown } from "lucide-react";
 import type { FlatEvaluationResult } from "@/services/finetune-api";
 import { getScoreColorClass, formatScore } from "@/utils/parse-score-breakdown";
 import { LogsPopover } from "./LogsPopover";
@@ -16,6 +16,9 @@ type EvaluationResult = FlatEvaluationResult;
 interface DryrunEvaluationResultRowProps {
   result: EvaluationResult;
   index: number;
+  isExpandable?: boolean;
+  isExpanded?: boolean;
+  onClick?: () => void;
 }
 
 /**
@@ -86,6 +89,9 @@ function HighlightedText({ text }: { text: string }) {
 export function DryrunEvaluationResultRow({
   result,
   index,
+  isExpandable,
+  isExpanded,
+  onClick,
 }: DryrunEvaluationResultRowProps) {
   const isSuccess = result.status === "completed" && !result.error_message;
   const isFailed = result.status === "failed" || !!result.error_message;
@@ -98,9 +104,24 @@ export function DryrunEvaluationResultRow({
     : result.error_message || result.reason || "Evaluation completed";
 
   return (
-    <div className="flex items-center h-full border-t border-border/50 first:border-t-0">
-      {/* Empty column to align with header */}
-      <div className="w-6 shrink-0" />
+    <div
+      className={cn(
+        "flex items-center border-t border-border/50 first:border-t-0",
+        isExpandable ? "cursor-pointer hover:bg-muted/30" : "h-full"
+      )}
+      style={{ minHeight: 32 }}
+      onClick={onClick}
+    >
+      {/* Expand chevron / empty column */}
+      <div className="w-6 shrink-0 flex items-center justify-center">
+        {isExpandable ? (
+          isExpanded ? (
+            <ChevronDown className="h-3 w-3 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="h-3 w-3 text-muted-foreground" />
+          )
+        ) : null}
+      </div>
 
       {/* Row index column */}
       <div className="w-16 shrink-0 py-1 pr-2 font-mono text-xs">

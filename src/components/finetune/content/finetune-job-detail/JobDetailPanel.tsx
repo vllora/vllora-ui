@@ -2,30 +2,46 @@
  * JobDetailPanel
  *
  * Displays job detail for the selected finetune job (left side of split view).
- * Shows status header, error log, and stacked Details → Metrics → Per-Row sections.
+ * Layout: Header → Quick Summary Bar → [Collapsible Details] → [Error] → Tabs (Metrics | Per-Row)
  */
 
-import { useCallback, useState } from "react";
-import { StopCircle, Play } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import { StopCircle, Play, Download, Loader2, ChevronRight } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { FinetuneJobStatusBadge } from "../../FinetuneJobStatusBadge";
 import { FinetuneJobDetailsSection } from "../FinetuneJobDetailsSection";
 import { TrainingMetricsSection } from "../TrainingMetricsSection";
 import { PerRowDetailsSection } from "../PerRowDetailsSection";
 import { ErrorLogSection } from "../ErrorLogSection";
-import { formatFinetuneJobDate, getModelDisplayName } from "../utils";
+import {
+  formatFinetuneJobDate,
+  getModelDisplayName,
+  computeTrainingSummary,
+  triggerFileDownload,
+} from "../utils";
 import {
   cancelReinforcementJob,
   resumeReinforcementJob,
+  getWeightsDownloadUrl,
 } from "@/services/finetune-api";
 import type { FinetuneJob } from "@/services/finetune-api";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { getScoreColorClass, formatScore } from "@/utils/parse-score-breakdown";
 
 export function JobDetailPanel({ job }: { job: FinetuneJob }) {
   const { getJobEvaluations, refreshJobEvaluations } = FinetuneJobsConsumer();
   const { data: evalResults, isLoading: isLoadingEvals, error: evalsError } = getJobEvaluations(job.id);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+
+  const summary = useMemo(() => {
+    if (!evalResults?.results) return null;
+    return computeTrainingSummary(evalResults.results);
+  }, [evalResults]);
 
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
@@ -58,6 +74,18 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
       setIsActionLoading(false);
     }
   }, [job.provider_job_id, isActionLoading]);
+
+  const handleDownloadWeights = useCallback(async () => {
+    setIsDownloading(true);
+    try {
+      const { download_url } = await getWeightsDownloadUrl(job.provider_job_id);
+      triggerFileDownload(download_url, `weights-${job.provider_job_id}.tar.gz`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to get download URL");
+    } finally {
+      setIsDownloading(false);
+    }
+  }, [job.provider_job_id]);
 
   const canCancel = job.status === "pending" || job.status === "running";
   const canResume = job.status === "cancelled";
@@ -93,6 +121,67 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
         )}
       </div>
 
+      {/* Quick Summary Bar */}
+      <div className="shrink-0 flex items-center gap-3 px-3 py-1.5 border-b border-zinc-800/60 bg-zinc-900/20">
+        {summary ? (
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-muted-foreground">
+              Epoch <span className="font-mono text-zinc-300">{summary.latestEpoch ?? "-"}</span>
+            </span>
+            <span className="text-zinc-700">&middot;</span>
+            {summary.latestAvgScore !== null && (
+              <>
+                <span className="text-muted-foreground">
+                  Avg{" "}
+                  <span className={cn("font-mono", getScoreColorClass(summary.latestAvgScore))}>
+                    {formatScore(summary.latestAvgScore)}
+                  </span>
+                </span>
+                <span className="text-zinc-700">&middot;</span>
+              </>
+            )}
+            <span className="text-muted-foreground">
+              <span className="font-mono text-zinc-300">{summary.totalRows}</span> rows
+            </span>
+          </div>
+        ) : (
+          <span className="text-[10px] text-zinc-600">
+            {isLoadingEvals ? "Loading metrics..." : "No metrics yet"}
+          </span>
+        )}
+        <div className="flex-1" />
+        {job.status === "succeeded" && (
+          <button
+            onClick={handleDownloadWeights}
+            disabled={isDownloading}
+            className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-emerald-400 transition-colors"
+          >
+            {isDownloading ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Download className="h-3 w-3" />
+            )}
+            Weights
+          </button>
+        )}
+        <button
+          onClick={() => setShowDetails(!showDetails)}
+          className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
+        >
+          <ChevronRight
+            className={cn("h-3 w-3 transition-transform", showDetails && "rotate-90")}
+          />
+          Details
+        </button>
+      </div>
+
+      {/* Collapsible Job Details */}
+      {showDetails && (
+        <div className="shrink-0 px-3 py-2 border-b border-zinc-800/60 bg-zinc-900/10">
+          <FinetuneJobDetailsSection job={job} hideDownload />
+        </div>
+      )}
+
       {/* Error */}
       {job.error_message && (
         <div className="shrink-0 px-3 pt-2">
@@ -100,24 +189,43 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
         </div>
       )}
 
-      {/* Stacked content: Details → Metrics → Per-Row */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-4">
-        <FinetuneJobDetailsSection job={job} />
-
-        {job.dataset_id && (
-          <TrainingMetricsSection
-            evalResults={evalResults}
-            isLoading={isLoadingEvals}
-            isRefreshing={isRefreshing}
-            error={evalsError}
-            onRefresh={handleRefresh}
-          />
-        )}
-
-        {job.dataset_id && evalResults && evalResults.results.length > 0 && (
-          <PerRowDetailsSection results={evalResults.results} />
-        )}
-      </div>
+      {/* Tabbed content: Metrics | Per-Row */}
+      <Tabs defaultValue="metrics" className="flex-1 min-h-0 flex flex-col">
+        <div className="shrink-0 px-3 pt-2">
+          <TabsList className="h-7">
+            <TabsTrigger value="metrics" className="text-[11px] px-3 h-5">
+              Metrics
+            </TabsTrigger>
+            <TabsTrigger value="per-row" className="text-[11px] px-3 h-5">
+              Per-Row
+            </TabsTrigger>
+          </TabsList>
+        </div>
+        <TabsContent value="metrics" className="flex-1 min-h-0 overflow-y-auto p-3 mt-0">
+          {job.dataset_id ? (
+            <TrainingMetricsSection
+              evalResults={evalResults}
+              isLoading={isLoadingEvals}
+              isRefreshing={isRefreshing}
+              error={evalsError}
+              onRefresh={handleRefresh}
+            />
+          ) : (
+            <div className="text-xs text-muted-foreground py-2">
+              No dataset linked to this job
+            </div>
+          )}
+        </TabsContent>
+        <TabsContent value="per-row" className="flex-1 min-h-0 p-3 mt-0">
+          {job.dataset_id && evalResults && evalResults.results.length > 0 ? (
+            <PerRowDetailsSection results={evalResults.results} />
+          ) : (
+            <div className="text-xs text-muted-foreground py-2">
+              {isLoadingEvals ? "Loading..." : "No per-row data available"}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

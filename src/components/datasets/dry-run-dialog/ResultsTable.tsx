@@ -7,7 +7,7 @@
  * Uses @tanstack/react-virtual for efficient rendering of large result sets.
  */
 
-import { useRef, useState, useMemo } from "react";
+import { useRef, useState, useMemo, useEffect, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -34,9 +34,22 @@ interface ResultsTableProps {
   maxHeight?: number;
   /** Whether to fill available height (use flex-1) */
   fillHeight?: boolean;
+  /** ID of the currently expanded row (enables expand behavior when onRowClick is set) */
+  expandedRowId?: string | null;
+  /** Callback when a row is clicked — controls expand toggle from parent */
+  onRowClick?: (result: EvaluationResult) => void;
+  /** Render function for the content shown below an expanded row */
+  renderExpandedContent?: (result: EvaluationResult) => ReactNode;
 }
 
-export function ResultsTable({ results, maxHeight = 400, fillHeight = false }: ResultsTableProps) {
+export function ResultsTable({
+  results,
+  maxHeight = 400,
+  fillHeight = false,
+  expandedRowId,
+  onRowClick,
+  renderExpandedContent,
+}: ResultsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showOnlyFailed, setShowOnlyFailed] = useState(false);
@@ -89,13 +102,25 @@ export function ResultsTable({ results, maxHeight = 400, fillHeight = false }: R
     return filtered;
   }, [results, searchQuery, showOnlyFailed, sortOption]);
 
+  const isExpandable = !!onRowClick;
+
   // Virtualizer for efficient rendering of large lists
   const virtualizer = useVirtualizer({
     count: processedResults.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: (index) => {
+      if (expandedRowId && processedResults[index]?.dataset_row_id === expandedRowId) {
+        return ROW_HEIGHT + 150;
+      }
+      return ROW_HEIGHT;
+    },
     overscan: 5,
   });
+
+  // Remeasure when expanded row changes
+  useEffect(() => {
+    virtualizer.measure();
+  }, [expandedRowId, virtualizer]);
 
   if (results.length === 0) {
     return (
@@ -190,20 +215,33 @@ export function ResultsTable({ results, maxHeight = 400, fillHeight = false }: R
             >
               {virtualizer.getVirtualItems().map((virtualRow) => {
                 const result = processedResults[virtualRow.index];
+                const isExpanded = expandedRowId === result.dataset_row_id;
                 return (
                   <div
                     key={result.dataset_row_id}
+                    ref={virtualizer.measureElement}
+                    data-index={virtualRow.index}
                     style={{
                       position: "absolute",
                       top: 0,
                       left: 0,
                       right: 0,
                       width: "100%",
-                      height: `${ROW_HEIGHT}px`,
                       transform: `translateY(${virtualRow.start}px)`,
                     }}
                   >
-                    <DryrunEvaluationResultRow result={result} index={result.row_index} />
+                    <DryrunEvaluationResultRow
+                      result={result}
+                      index={result.row_index}
+                      isExpandable={isExpandable}
+                      isExpanded={isExpanded}
+                      onClick={onRowClick ? () => onRowClick(result) : undefined}
+                    />
+                    {isExpanded && renderExpandedContent && (
+                      <div className="border-t border-border/30 bg-muted/20 px-6 py-2">
+                        {renderExpandedContent(result)}
+                      </div>
+                    )}
                   </div>
                 );
               })}
