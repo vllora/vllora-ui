@@ -59,14 +59,15 @@ export function RunsSidebar({ jobs, selectedId, onSelectJob }: RunsSidebarProps)
             >
               <StatusIcon status={job.status} />
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1">
-                  <span className="font-medium truncate">{job.sampleSize}s</span>
-                  {meanScore !== undefined && (
-                    <span className="font-mono text-[10px] text-zinc-500">{meanScore.toFixed(2)}</span>
-                  )}
+                <div className="font-medium truncate">
+                  {job.rolloutModel || `${job.sampleSize} samples`}
                 </div>
-                <div className="text-[10px] text-zinc-600 truncate">
-                  {formatTime(job.createdAt)}
+                <div className="flex items-center gap-1 text-[10px] text-zinc-500">
+                  <span>{job.sampleSize}s</span>
+                  {meanScore !== undefined && (
+                    <span className="font-mono">{meanScore.toFixed(2)}</span>
+                  )}
+                  <span className="text-zinc-600">{formatTime(job.createdAt)}</span>
                 </div>
               </div>
             </button>

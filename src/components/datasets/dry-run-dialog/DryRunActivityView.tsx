@@ -13,7 +13,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { XCircle, AlertTriangle, RefreshCw, RotateCw, ChevronRight } from "lucide-react";
+import { XCircle, AlertTriangle, RefreshCw, RotateCw, ChevronRight, StopCircle } from "lucide-react";
 import { VerdictBadge } from "./VerdictBadge";
 import { ScoreStrip } from "./ScoreStrip";
 import { ResultsTable } from "./ResultsTable";
@@ -114,23 +114,8 @@ function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: D
   // All hooks must be called before any early returns
   const [showRecs, setShowRecs] = useState(verdict !== "GO" && recommendations.length > 0);
 
-  if (job.status === "running") {
-    const total = getJobTotalRows(job);
-    const completed = getJobCompletedRows(job);
-    const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-    return (
-      <div className="flex flex-col h-full min-h-0 p-3">
-        <RunningView
-          job={job}
-          progress={pct}
-          onCancel={onCancel || (() => {})}
-        />
-      </div>
-    );
-  }
-
   // For non-running jobs without results or evaluation data
-  if (!result && !evaluationResults) {
+  if (job.status !== "running" && !result && !evaluationResults) {
     if (job.status === "failed") {
       return (
         <div className="flex flex-col items-center justify-center h-full gap-2 px-4">
@@ -153,6 +138,7 @@ function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: D
     );
   }
 
+  const isRunning = job.status === "running";
   const showErrorView = totalCount > 0 && (errorCount / totalCount) > 0.5;
 
   return (
@@ -160,7 +146,6 @@ function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: D
       <div className="flex flex-col h-full min-h-0">
         {/* Header */}
         <div className="shrink-0 border-b border-zinc-800/60">
-          {/* Row 1: main info */}
           <div className="flex items-center gap-2 px-3 py-1.5">
             <UITooltip>
               <TooltipTrigger asChild>
@@ -173,6 +158,11 @@ function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: D
                   <span className="text-xs font-medium text-zinc-300">
                     {job.sampleSize} samples
                   </span>
+                  {isRunning && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-medium animate-pulse">
+                      Running
+                    </span>
+                  )}
                   {result && <VerdictBadge verdict={result.diagnosis.verdict} />}
                   {job.status === "failed" && !result && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 font-medium">
@@ -195,6 +185,9 @@ function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: D
                     <p><span className="text-zinc-400">Model:</span> {job.rolloutModel} — used to generate responses for evaluation</p>
                   )}
                   <p><span className="text-zinc-400">Samples:</span> {job.sampleSize} records evaluated in this dry run</p>
+                  {isRunning && (
+                    <p><span className="text-zinc-400">Status:</span> Evaluation in progress</p>
+                  )}
                   {result && (
                     <p><span className="text-zinc-400">Verdict:</span> {result.diagnosis.verdict} — overall quality assessment</p>
                   )}
@@ -211,7 +204,16 @@ function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: D
             <span className="text-[10px] text-zinc-600 ml-auto">
               {formatTime(job.createdAt)}
             </span>
-            {onRefresh && (
+            {isRunning && onCancel && (
+              <button
+                onClick={onCancel}
+                className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-red-400 transition-colors"
+              >
+                <StopCircle className="h-3 w-3" />
+                Cancel
+              </button>
+            )}
+            {onRefresh && !isRunning && (
               <button
                 onClick={() => onRefresh(job.id)}
                 className="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
@@ -220,7 +222,7 @@ function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: D
                 <RotateCw className="h-3 w-3" />
               </button>
             )}
-            {onRunAgain && (
+            {onRunAgain && !isRunning && (
               <Button
                 onClick={onRunAgain}
                 variant="ghost"
@@ -234,8 +236,31 @@ function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: D
           </div>
         </div>
 
+        {/* Running: progress view */}
+        {isRunning && (() => {
+          const total = getJobTotalRows(job);
+          const completed = getJobCompletedRows(job);
+          const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+          return (
+            <div className="flex-1 min-h-0 p-3">
+              <RunningView
+                job={job}
+                progress={pct}
+                onRecordIdClick={(recordId) => {
+                  emitter.emit('vllora_switch_tab', { datasetId, tab: 'records' });
+                  setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('vllora_highlight_record', {
+                      detail: { recordId }
+                    }));
+                  }, 150);
+                }}
+              />
+            </div>
+          );
+        })()}
+
         {/* Error banner for failed jobs */}
-        {job.status === "failed" && job.error && (
+        {!isRunning && job.status === "failed" && job.error && (
           <div className="shrink-0 mx-3 mt-2 rounded-md border border-red-500/30 bg-red-500/10 px-2.5 py-1.5">
             <div className="flex items-start gap-2">
               <XCircle className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />
@@ -244,7 +269,7 @@ function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: D
           </div>
         )}
 
-        {showErrorView ? (
+        {!isRunning && showErrorView ? (
           <div className="shrink-0 mx-3 mt-2 rounded-md border border-red-500/30 bg-red-500/10 px-2.5 py-1.5">
             <div className="flex items-start gap-2">
               <AlertTriangle className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />
@@ -253,7 +278,7 @@ function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: D
               </p>
             </div>
           </div>
-        ) : result && scores.length > 0 ? (
+        ) : !isRunning && result && scores.length > 0 ? (
           /* Score strip + recommendations */
           <div className="shrink-0 px-3 pt-2 space-y-1">
             <ScoreStrip scores={scores} mean={stats?.mean} />
@@ -286,7 +311,7 @@ function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: D
         ) : null}
 
         {/* Results table fills remaining space */}
-        {evaluationResults && evaluationResults.length > 0 && (
+        {!isRunning && evaluationResults && evaluationResults.length > 0 && (
           <div className="flex-1 min-h-0 flex flex-col px-3 pb-1 pt-2">
             <div className="flex-1 min-h-0">
               <ResultsTable
