@@ -5,8 +5,9 @@
  * Shows logs in a popover when available.
  */
 
+import { useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { AlertCircle, CheckCircle2, ChevronRight, ChevronDown } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronRight, ChevronDown, Copy, Check } from "lucide-react";
 import type { FlatEvaluationResult } from "@/services/finetune-api";
 import { getScoreColorClass, formatScore } from "@/utils/parse-score-breakdown";
 import { LogsPopover } from "./LogsPopover";
@@ -88,6 +89,43 @@ function HighlightedText({ text }: { text: string }) {
   );
 }
 
+function RecordIdCell({ recordId, onNavigate }: { recordId: string; onNavigate: (e: React.MouseEvent) => void }) {
+  const [copied, setCopied] = useState(false);
+  const shortId = recordId.length > 8 ? recordId.slice(0, 8) : recordId;
+
+  const handleCopy = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(recordId);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }, [recordId]);
+
+  return (
+    <div className="w-24 shrink-0 py-1 pr-2 group/id">
+      <div className="flex items-center gap-0.5">
+        <button
+          className="font-mono text-[11px] text-zinc-400 hover:text-blue-400 transition-colors truncate"
+          onClick={onNavigate}
+          title={`Go to record ${recordId}`}
+        >
+          {shortId}
+        </button>
+        <button
+          onClick={handleCopy}
+          className="opacity-0 group-hover/id:opacity-100 p-0.5 text-zinc-600 hover:text-zinc-300 transition-all"
+          title="Copy full ID"
+        >
+          {copied ? (
+            <Check className="h-2.5 w-2.5 text-emerald-400" />
+          ) : (
+            <Copy className="h-2.5 w-2.5" />
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function DryrunEvaluationResultRow({
   result,
   index,
@@ -135,20 +173,13 @@ export function DryrunEvaluationResultRow({
 
       {/* Record ID column — only shown when onRecordIdClick is provided */}
       {onRecordIdClick && (
-        <div className="w-24 shrink-0 py-1 pr-2">
-          <button
-            className="font-mono text-xs text-blue-400 hover:text-blue-300 hover:underline truncate max-w-full text-left"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRecordIdClick(result.dataset_row_id);
-            }}
-            title={result.dataset_row_id}
-          >
-            {result.dataset_row_id.length > 8
-              ? `${result.dataset_row_id.slice(0, 8)}...`
-              : result.dataset_row_id}
-          </button>
-        </div>
+        <RecordIdCell
+          recordId={result.dataset_row_id}
+          onNavigate={(e) => {
+            e.stopPropagation();
+            onRecordIdClick(result.dataset_row_id);
+          }}
+        />
       )}
 
       {/* Score column */}

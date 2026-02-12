@@ -62,12 +62,12 @@ export function RunsSidebar({ jobs, selectedId, onSelectJob }: RunsSidebarProps)
                 <div className="font-medium truncate">
                   {job.rolloutModel || `${job.sampleSize} samples`}
                 </div>
-                <div className="flex items-center gap-1 text-[10px] text-zinc-500">
+                <div className="text-[10px] text-zinc-500 truncate">
                   <span>{job.sampleSize}s</span>
                   {meanScore !== undefined && (
-                    <span className="font-mono">{meanScore.toFixed(2)}</span>
+                    <span className="font-mono ml-1">{meanScore.toFixed(2)}</span>
                   )}
-                  <span className="text-zinc-600">{formatTime(job.createdAt)}</span>
+                  <span className="text-zinc-600 ml-1">{formatTime(job.createdAt)}</span>
                 </div>
               </div>
             </button>

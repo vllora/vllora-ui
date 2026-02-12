@@ -6,6 +6,7 @@
  */
 
 import { useState, forwardRef, useCallback } from "react";
+import { Copy, Check } from "lucide-react";
 import { DatasetRecord } from "@/types/dataset-types";
 import { cn } from "@/lib/utils";
 import { emitter } from "@/utils/eventEmitter";
@@ -44,6 +45,35 @@ interface RecordRowProps {
   onToggleExpand?: () => void;
   /** Whether this record is temporarily highlighted (e.g., when navigating to source) */
   isHighlighted?: boolean;
+}
+
+function RecordIdBadge({ recordId }: { recordId: string }) {
+  const [copied, setCopied] = useState(false);
+  const shortId = recordId.length > 6 ? recordId.slice(0, 6) : recordId;
+
+  const handleCopy = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(recordId);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }, [recordId]);
+
+  return (
+    <button
+      onClick={handleCopy}
+      title={copied ? "Copied!" : `Copy ID: ${recordId}`}
+      className="w-16 shrink-0 flex items-center gap-1 group/id"
+    >
+      <span className="font-mono text-[10px] text-zinc-600 group-hover/id:text-zinc-400 transition-colors">
+        {shortId}
+      </span>
+      {copied ? (
+        <Check className="h-2.5 w-2.5 text-emerald-400" />
+      ) : (
+        <Copy className="h-2.5 w-2.5 text-zinc-700 opacity-0 group-hover/id:opacity-100 transition-opacity" />
+      )}
+    </button>
+  );
 }
 
 export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function RecordRow({
@@ -127,6 +157,9 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
             className={COLUMN_WIDTHS.checkbox}
           />
         )}
+
+        {/* Record ID */}
+        <RecordIdBadge recordId={record.id} />
 
         {/* Conversational Thread */}
         <ConversationThreadCell
