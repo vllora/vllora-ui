@@ -15,7 +15,7 @@ export function AppHeader({ onProjectChange }: HeaderProps) {
   const isChatPage = location.pathname.includes('/chat');
   const isSettingsPage = location.pathname === '/settings';
   const isExperimentPage = location.pathname.includes('/experiment');
-  const isDatasetPage = location.pathname.includes('/datasets/');
+  const isDatasetPage = location.pathname.includes('/datasets');
   const { app_mode } = CurrentAppConsumer()
 
   // Hide header on projects page and chat page
