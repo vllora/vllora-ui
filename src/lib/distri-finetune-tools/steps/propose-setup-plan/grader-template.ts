@@ -4,6 +4,11 @@
 
 import type { GraderCriterion, OutputFormat } from './types';
 
+/** Escape a string for safe embedding inside a JS double-quoted string literal */
+function escapeForJSString(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+}
+
 export function generateGraderTemplate(
   criteria: GraderCriterion[],
   objective: string,
@@ -74,7 +79,7 @@ function evaluate(input) {
         prompt_template: [
             {
                 role: "system",
-                content: "You are an expert evaluator. Your job is to assess the quality of AI responses for: ${objective}"
+                content: "You are an expert evaluator. Your job is to assess the quality of AI responses for: ${escapeForJSString(objective)}"
             },
             {
                 role: "user",
@@ -249,7 +254,7 @@ function evaluate(input) {
         prompt_template: [
             {
                 role: "system",
-                content: "You are an expert evaluator for structured extraction tasks. Your job is to assess the quality and accuracy of extracted JSON data for: ${objective}"
+                content: "You are an expert evaluator for structured extraction tasks. Your job is to assess the quality and accuracy of extracted JSON data for: ${escapeForJSString(objective)}"
             },
             {
                 role: "user",
