@@ -4,6 +4,21 @@
 
 import type { GraderCriterion, OutputFormat } from './types';
 
+/** Escape a string for safe embedding inside a JS double-quoted string literal */
+function escapeForJSString(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+}
+
+/** Convert a criterion name to a valid JS identifier (snake_case, alphanumeric + underscore only) */
+function toSafeKey(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')  // strip non-alphanumeric (removes /, -, etc.)
+    .replace(/\s+/g, '_')          // spaces to underscores
+    .replace(/_+/g, '_')           // collapse multiple underscores
+    .replace(/^_|_$/g, '');        // trim leading/trailing underscores
+}
+
 export function generateGraderTemplate(
   criteria: GraderCriterion[],
   objective: string,
@@ -22,10 +37,10 @@ function generateConversationalGraderTemplate(criteria: GraderCriterion[], objec
     .join('\n');
 
   // Generate snake_case keys for each criterion
-  const criteriaKeys = criteria.map(c => c.name.toLowerCase().replace(/\s+/g, '_'));
+  const criteriaKeys = criteria.map(c => toSafeKey(c.name));
 
   const outputSchemaProperties = criteria.map(c => {
-    const key = c.name.toLowerCase().replace(/\s+/g, '_');
+    const key = toSafeKey(c.name);
     return `                ${key}: { type: "number", minimum: 0, maximum: 5 }`;
   }).join(',\n');
 
@@ -74,7 +89,7 @@ function evaluate(input) {
         prompt_template: [
             {
                 role: "system",
-                content: "You are an expert evaluator. Your job is to assess the quality of AI responses for: ${objective}"
+                content: "You are an expert evaluator. Your job is to assess the quality of AI responses for: ${escapeForJSString(objective)}"
             },
             {
                 role: "user",
@@ -93,7 +108,7 @@ Provide a DETAILED explanation for your evaluation, then assign scores (0-5) for
 Answer in JSON format:
 {
   "reasoning": string (Full detailed explanation),
-${criteria.map(c => `  "${c.name.toLowerCase().replace(/\s+/g, '_')}": number (0-5)`).join(',\n')}
+${criteria.map(c => `  "${toSafeKey(c.name)}": number (0-5)`).join(',\n')}
 }\`
             }
         ],
@@ -171,10 +186,10 @@ function generateStructuredOutputGraderTemplate(
     .map((c, i) => `${i + 1}. **${c.name}**: ${c.description}`)
     .join('\n');
 
-  const criteriaKeys = criteria.map(c => c.name.toLowerCase().replace(/\s+/g, '_'));
+  const criteriaKeys = criteria.map(c => toSafeKey(c.name));
 
   const outputSchemaProperties = criteria.map(c => {
-    const key = c.name.toLowerCase().replace(/\s+/g, '_');
+    const key = toSafeKey(c.name);
     return `                ${key}: { type: "number", minimum: 0, maximum: 5 }`;
   }).join(',\n');
 
@@ -249,7 +264,7 @@ function evaluate(input) {
         prompt_template: [
             {
                 role: "system",
-                content: "You are an expert evaluator for structured extraction tasks. Your job is to assess the quality and accuracy of extracted JSON data for: ${objective}"
+                content: "You are an expert evaluator for structured extraction tasks. Your job is to assess the quality and accuracy of extracted JSON data for: ${escapeForJSString(objective)}"
             },
             {
                 role: "user",
@@ -277,7 +292,7 @@ Provide a DETAILED explanation for your evaluation, then assign scores (0-5) for
 Answer in JSON format:
 {
   "reasoning": string (Full detailed explanation),
-${criteria.map(c => `  "${c.name.toLowerCase().replace(/\s+/g, '_')}": number (0-5)`).join(',\n')}
+${criteria.map(c => `  "${toSafeKey(c.name)}": number (0-5)`).join(',\n')}
 }\`
             }
         ],

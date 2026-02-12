@@ -94,8 +94,10 @@ Output JSON:
     }
   ],
   "grader_criteria": [
-    { "name": "Criterion", "description": "What it evaluates for this specific domain" }
+    { "name": "Criterion Name", "description": "What it evaluates for this specific domain" }
   ],
+  // NOTE: Criterion names must be short (2-3 words), use only letters and spaces (no slashes, hyphens, or special characters).
+  // Good: "Chess Accuracy", "Teaching Quality"   Bad: "Correct Application of Draw/Win/Loss Rules"
   "strategy_notes": "Brief approach for generating training data"
 }
 

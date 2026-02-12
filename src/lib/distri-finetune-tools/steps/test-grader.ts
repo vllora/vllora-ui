@@ -22,7 +22,7 @@ export const testGraderSampleHandler: ToolHandler = async (params) => {
       return { success: false, error: 'Workflow not found' };
     }
 
-    if (workflow.currentStep !== 'grader_config' && workflow.currentStep !== 'dry_run') {
+    if (workflow.currentStep !== 'grader_config' && workflow.currentStep !== 'dry_run' && workflow.currentStep !== 'training') {
       return { success: false, error: `Cannot test grader in step ${workflow.currentStep}` };
     }
 
