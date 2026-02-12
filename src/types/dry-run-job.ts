@@ -40,6 +40,9 @@ export interface DryRunJob {
   /** Number of samples to evaluate */
   sampleSize: number;
 
+  /** Rollout model used for generating responses */
+  rolloutModel?: string;
+
   /** Job creation timestamp */
   createdAt: number;
 

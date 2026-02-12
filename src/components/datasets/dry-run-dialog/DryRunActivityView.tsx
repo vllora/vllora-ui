@@ -162,34 +162,52 @@ function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: D
         <div className="shrink-0 border-b border-zinc-800/60">
           {/* Row 1: main info */}
           <div className="flex items-center gap-2 px-3 py-1.5">
-            <span className="text-xs font-medium text-zinc-300">
-              {job.sampleSize} samples
-            </span>
-            {result && <VerdictBadge verdict={result.diagnosis.verdict} />}
-            {job.status === "failed" && !result && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 font-medium">
-                Failed
-              </span>
-            )}
-            {stats && (
-              <UITooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-xs font-mono text-zinc-400 cursor-help">
-                    avg{" "}
-                    <span className="text-zinc-200 font-semibold">{stats.mean.toFixed(2)}</span>
-                    <span className="text-zinc-600 mx-0.5">&plusmn;</span>
-                    <span className="text-zinc-500">{stats.std.toFixed(2)}</span>
+            <UITooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2 min-w-0">
+                  {job.rolloutModel && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-zinc-700/50 text-[10px] font-medium text-zinc-300 border border-zinc-600/40">
+                      {job.rolloutModel}
+                    </span>
+                  )}
+                  <span className="text-xs font-medium text-zinc-300">
+                    {job.sampleSize} samples
                   </span>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs font-mono">
-                  <div className="space-y-0.5">
-                    <div>Min: {stats.min.toFixed(2)}</div>
-                    <div>Max: {stats.max.toFixed(2)}</div>
-                    <div>Median: {stats.median.toFixed(2)}</div>
-                  </div>
-                </TooltipContent>
-              </UITooltip>
-            )}
+                  {result && <VerdictBadge verdict={result.diagnosis.verdict} />}
+                  {job.status === "failed" && !result && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 font-medium">
+                      Failed
+                    </span>
+                  )}
+                  {stats && (
+                    <span className="text-xs font-mono text-zinc-400">
+                      Avg Score{" "}
+                      <span className="text-zinc-200 font-semibold">{stats.mean.toFixed(2)}</span>
+                      <span className="text-zinc-600 mx-0.5">&plusmn;</span>
+                      <span className="text-zinc-500">{stats.std.toFixed(2)}</span>
+                    </span>
+                  )}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                <div className="space-y-0.5">
+                  {job.rolloutModel && (
+                    <p><span className="text-zinc-400">Model:</span> {job.rolloutModel} — used to generate responses for evaluation</p>
+                  )}
+                  <p><span className="text-zinc-400">Samples:</span> {job.sampleSize} records evaluated in this dry run</p>
+                  {result && (
+                    <p><span className="text-zinc-400">Verdict:</span> {result.diagnosis.verdict} — overall quality assessment</p>
+                  )}
+                  {stats && (
+                    <>
+                      <p><span className="text-zinc-400">Avg Score:</span> {stats.mean.toFixed(2)} — mean score across all samples</p>
+                      <p><span className="text-zinc-400">Std Dev:</span> {stats.std.toFixed(2)} — score variation between samples</p>
+                      <p><span className="text-zinc-400">Range:</span> {stats.min.toFixed(2)} – {stats.max.toFixed(2)} (median {stats.median.toFixed(2)})</p>
+                    </>
+                  )}
+                </div>
+              </TooltipContent>
+            </UITooltip>
             <span className="text-[10px] text-zinc-600 ml-auto">
               {formatTime(job.createdAt)}
             </span>

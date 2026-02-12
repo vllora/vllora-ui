@@ -141,6 +141,7 @@ class DryRunPollingManager {
       evaluationRunId: '',
       status: 'pending',
       sampleSize,
+      rolloutModel,
       createdAt: Date.now(),
     });
 
