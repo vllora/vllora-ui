@@ -25,10 +25,10 @@ import {
 import { DistriMessage } from "@distri/core";
 import { useDistriConnection } from "@/providers/DistriProvider";
 import { uploadKnowledgeSourceHandler } from "@/lib/distri-finetune-tools/steps/knowledge-sources";
-import * as knowledgeDB from "@/services/knowledge-sources-db";
 import type { KnowledgeSourceType } from "@/types/dataset-types";
 import { ProviderKeysConsumer } from "@/contexts/ProviderKeysContext";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
+import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { useFineTuneAgentChat } from "@/hooks/useFineTuneAgentChat";
 import {
   LucyChat,
@@ -158,38 +158,10 @@ export function LucyDatasetAssistant() {
   const recordsRef = useRef(records);
   recordsRef.current = records;
 
-  // Track knowledge sources count for guided onboarding
-  const [knowledgeSourcesCount, setKnowledgeSourcesCount] = useState(0);
+  // Knowledge sources from context (single source of truth)
+  const { count: knowledgeSourcesCount } = KnowledgeSourcesConsumer();
   const knowledgeSourcesCountRef = useRef(knowledgeSourcesCount);
   knowledgeSourcesCountRef.current = knowledgeSourcesCount;
-
-  // Fetch knowledge sources count on mount and when updated
-  useEffect(() => {
-    if (!selectedDatasetId) return;
-
-    const fetchCount = async () => {
-      try {
-        const sources = await knowledgeDB.getKnowledgeSourcesByDataset(selectedDatasetId);
-        setKnowledgeSourcesCount(sources.length);
-      } catch (error) {
-        console.error("[LucyDatasetAssistant] Error fetching knowledge sources:", error);
-      }
-    };
-
-    fetchCount();
-
-    // Listen for updates
-    const handleUpdate = ({ datasetId }: { datasetId: string }) => {
-      if (datasetId === selectedDatasetId) {
-        fetchCount();
-      }
-    };
-
-    emitter.on("vllora_knowledge_source_updated", handleUpdate);
-    return () => {
-      emitter.off("vllora_knowledge_source_updated", handleUpdate);
-    };
-  }, [selectedDatasetId]);
 
   // Proactive behavior: auto-analyze dataset when viewing it for the first time
   useEffect(() => {

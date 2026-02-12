@@ -225,6 +225,48 @@ const {
 
 **Note**: This context depends on `DatasetsContext` and must be nested inside `DatasetsProvider`.
 
+### KnowledgeSourcesContext
+
+Single source of truth for knowledge sources within a dataset. Eliminates duplicate fetching across components.
+
+**Location**: `src/contexts/KnowledgeSourcesContext.tsx`
+
+**Usage**:
+```typescript
+import { KnowledgeSourcesConsumer } from '@/contexts/KnowledgeSourcesContext';
+
+const { sources, count, processingCount, isProcessing, processingSources, refreshSources } = KnowledgeSourcesConsumer();
+```
+
+**Features**:
+- Listens to `vllora_knowledge_source_updated` events
+- Fetches from `knowledgeDB.getKnowledgeSourcesByDataset()` once per event
+- Previously 3 components (`DatasetDetailContentV2`, `PlanSection`, `LucyDatasetAssistant`) each independently fetched on every event
+- Dataset-scoped: `KnowledgeSourcesProvider` takes `datasetId` prop
+
+**Note**: Must be nested inside `DatasetDetailProvider`. Currently placed in `DatasetDetailView.tsx`.
+
+### SetupPlanContext
+
+Single source of truth for setup plan generation state. Eliminates duplicate event listeners across components.
+
+**Location**: `src/contexts/SetupPlanContext.tsx`
+
+**Usage**:
+```typescript
+import { SetupPlanConsumer } from '@/contexts/SetupPlanContext';
+
+const { isGeneratingPlan, hasPlanProposed } = SetupPlanConsumer();
+```
+
+**Features**:
+- Listens to plan lifecycle events (`generating`, `proposed`, `dismissed`, `workflow_updated`)
+- Checks IndexedDB for persisted proposed plan on mount (survives page refresh)
+- Previously `DatasetDetailContentV2` independently tracked this state from the same events
+- Dataset-scoped: `SetupPlanProvider` takes `datasetId` prop
+
+**Note**: Must be nested inside `DatasetDetailProvider`. Currently placed in `DatasetDetailView.tsx`.
+
 ## Best Practices
 
 ### 1. When to Use Context

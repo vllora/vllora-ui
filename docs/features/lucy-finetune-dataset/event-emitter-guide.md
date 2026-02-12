@@ -309,32 +309,31 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 
 ---
 
-## Duplicated State Problem
+## Contexts (Single Source of Truth)
 
-Several components independently listen to the same events and maintain their own copies of derived state:
+Two contexts consolidate duplicated state that was previously tracked independently by multiple components:
 
-### Knowledge Sources Count + Processing State
-**Duplicated in 3 places:**
-| Component | State | Event Listened |
-|-----------|-------|---------------|
-| `DatasetDetailContentV2.tsx` | `knowledgeSourcesCount`, `docsProcessing`, `docsProcessingCount` | `vllora_knowledge_source_updated` |
-| `PlanSection.tsx` | `docsProcessingSources` | `vllora_knowledge_source_updated` |
-| `LucyDatasetAssistant.tsx` | `knowledgeSourcesCount` | `vllora_knowledge_source_updated` |
+### `KnowledgeSourcesContext` (`src/contexts/KnowledgeSourcesContext.tsx`)
 
-All three fetch from `knowledgeDB.getKnowledgeSourcesByDataset()` independently on every update.
+**Listens to:** `vllora_knowledge_source_updated`
+**Provides:** `sources[]`, `count`, `processingCount`, `isProcessing`, `processingSources[]`, `refreshSources()`
+**Consumers:** `DatasetDetailContentV2`, `PlanSection`, `LucyDatasetAssistant`
+**Provider:** `KnowledgeSourcesProvider` wraps `DatasetDetailContentV2` in `DatasetDetailView.tsx`
 
-### Plan Generation State
-**Duplicated in 2 places:**
-| Component | State | Events Listened |
-|-----------|-------|----------------|
-| `DatasetDetailContentV2.tsx` | `isGeneratingPlan`, `hasPlanProposed` | `generating`, `proposed`, `dismissed`, `workflow_updated` |
-| `PlanSection.tsx` | `proposedPlan`, `isExecuting`, `executionProgress` | `proposed`, `dismissed`, `workflow_updated`, `progress` |
+Previously 3 components independently called `knowledgeDB.getKnowledgeSourcesByDataset()` on every event. Now the context fetches once and shares the result.
+
+### `SetupPlanContext` (`src/contexts/SetupPlanContext.tsx`)
+
+**Listens to:** `vllora_setup_plan_generating`, `proposed`, `dismissed`, `workflow_updated`
+**Provides:** `isGeneratingPlan`, `hasPlanProposed`
+**Consumers:** `DatasetDetailContentV2`
+**Provider:** `SetupPlanProvider` wraps `DatasetDetailContentV2` in `DatasetDetailView.tsx`
+
+Previously `DatasetDetailContentV2` tracked `isGeneratingPlan`/`hasPlanProposed` from events. Now the context owns this state. `PlanSection` still manages its own internal state (`proposedPlan`, `isExecuting`, `executionProgress`) since those are UI-specific.
 
 ---
 
-## Recommendations
-
-### What Should Stay as Events
+## What Should Stay as Events
 
 Events are the **correct pattern** when:
 - **Emitter is a tool handler** (outside React tree) → can't use Context
@@ -342,38 +341,13 @@ Events are the **correct pattern** when:
 
 These should remain events:
 - `vllora_lucy_prompt` — 10 emitters, 1 listener, fire-and-forget
-- `vllora_setup_plan_generating/proposed/dismissed/progress` — tool handlers emit these
+- `vllora_setup_plan_generating/proposed/dismissed/progress` — tool handlers emit these (contexts listen to them)
 - `vllora_data_generation_progress` — tool handler → multiple React listeners
 - `vllora_workflow_updated` — tool handler notification
 - `vllora_finetune_job_created` / `vllora_dry_run_job_update` — external sources
 - `vllora_setup_plan_approved` — React → tool handler (reverse direction)
 
-### What Could Move to Context (Single Source of Truth)
-
-Create **two new contexts** that listen to events once and share state:
-
-#### 1. `KnowledgeSourcesContext` (eliminates 3x duplicate fetching)
-```
-Listens to: vllora_knowledge_source_updated
-Provides:   sources[], count, processingCount, isProcessing, fetchSources()
-Consumers:  DatasetDetailContentV2, PlanSection, LucyDatasetAssistant, KnowledgeSourcesPanel
-```
-
-Currently each component independently calls `knowledgeDB.getKnowledgeSourcesByDataset()` on every event. A context would fetch once and share.
-
-#### 2. `SetupPlanContext` (eliminates duplicated plan state)
-```
-Listens to: vllora_setup_plan_generating, proposed, dismissed, approved, progress, workflow_updated
-Provides:   isGenerating, proposedPlan, isExecuting, executionProgress, hasPlanProposed
-Consumers:  DatasetDetailContentV2, PlanSection, DatasetUtilityBar
-```
-
-Currently both `DatasetDetailContentV2` and `PlanSection` independently track plan state from the same events.
-
-#### 3. `vllora_switch_tab` → Context method call
-The React-side emitters (`DocsProcessingState`, `SourcesProcessingMessage`) could call a context method directly instead of emitting an event. The tool handler emitters would still use events.
-
-### What to Leave Alone (Low ROI)
+## What to Leave Alone (Low ROI)
 
 - `vllora_data_generation_progress` — listened by 4 scattered components, each needs different slices. Context would over-centralize.
 - `vllora_dry_run_job_update` — already handled properly in `DryRunJobsContext`.

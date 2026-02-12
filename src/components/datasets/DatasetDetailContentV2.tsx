@@ -37,8 +37,8 @@ import { ReadmeWithPlan } from "./ReadmeWithPlan";
 import { KnowledgeSourcesPanel } from "./KnowledgeSourcesPanel";
 import { PlanSection } from "./plan-section";
 import { useDatasetReadme } from "@/hooks/useDatasetReadme";
-import * as knowledgeDB from "@/services/knowledge-sources-db";
-import { getProposedPlan } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
+import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
+import { SetupPlanConsumer } from "@/contexts/SetupPlanContext";
 import type { CoverageStats } from "@/types/dataset-types";
 
 export function DatasetDetailContentV2() {
@@ -132,73 +132,21 @@ export function DatasetDetailContentV2() {
   // Dialog state for records analytics
   const [analyticsDialogOpen, setAnalyticsDialogOpen] = useState(false);
 
-  // Knowledge sources count for Docs tab badge
-  const [knowledgeSourcesCount, setKnowledgeSourcesCount] = useState(0);
-  // Track whether any knowledge sources are still processing
-  const [docsProcessing, setDocsProcessing] = useState(false);
-  const [docsProcessingCount, setDocsProcessingCount] = useState(0);
+  // Knowledge sources from context (single source of truth)
+  const {
+    count: knowledgeSourcesCount,
+    isProcessing: docsProcessing,
+    processingCount: docsProcessingCount,
+  } = KnowledgeSourcesConsumer();
 
-  // Fetch knowledge sources count and processing state
-  const fetchKnowledgeSourcesCount = useCallback(async () => {
-    if (!datasetId) return;
-    try {
-      const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
-      setKnowledgeSourcesCount(sources.length);
-      const processingCount = sources.filter((s) => s.status === "processing").length;
-      setDocsProcessing(processingCount > 0);
-      setDocsProcessingCount(processingCount);
-    } catch (error) {
-      console.error("[DatasetDetailContentV2] Error fetching knowledge sources:", error);
-    }
-  }, [datasetId]);
+  // Setup plan state from context (single source of truth)
+  const { isGeneratingPlan, hasPlanProposed } = SetupPlanConsumer();
 
-  // Initial fetch and listen for updates
+  // Auto-switch to Plan tab when plan generation starts
   useEffect(() => {
-    fetchKnowledgeSourcesCount();
-
-    // Listen for knowledge source updates
-    const handleKnowledgeSourceUpdate = ({ datasetId: updatedDatasetId }: { datasetId: string }) => {
-      if (updatedDatasetId === datasetId) {
-        fetchKnowledgeSourcesCount();
-      }
-    };
-
-    emitter.on("vllora_knowledge_source_updated", handleKnowledgeSourceUpdate);
-    return () => {
-      emitter.off("vllora_knowledge_source_updated", handleKnowledgeSourceUpdate);
-    };
-  }, [datasetId, fetchKnowledgeSourcesCount]);
-
-  // Track setup plan generation state and auto-switch to Plan tab
-  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
-  const [hasPlanProposed, setHasPlanProposed] = useState(false);
-
-  useEffect(() => {
-    const handlePlanGenerating = ({ datasetId: generatingDatasetId }: { datasetId: string }) => {
-      if (generatingDatasetId === datasetId) {
-        setIsGeneratingPlan(true);
+    const handlePlanGenerating = ({ datasetId: id }: { datasetId: string }) => {
+      if (id === datasetId) {
         setActiveSection("plan");
-      }
-    };
-
-    const handlePlanProposed = ({ datasetId: planDatasetId }: { datasetId: string }) => {
-      if (planDatasetId === datasetId) {
-        setIsGeneratingPlan(false);
-        setHasPlanProposed(true);
-      }
-    };
-
-    const handlePlanDismissed = ({ datasetId: dismissedDatasetId }: { datasetId: string }) => {
-      if (dismissedDatasetId === datasetId) {
-        setIsGeneratingPlan(false);
-        setHasPlanProposed(false);
-      }
-    };
-
-    const handleWorkflowUpdated = ({ datasetId: updatedDatasetId }: { datasetId: string }) => {
-      if (updatedDatasetId === datasetId) {
-        setIsGeneratingPlan(false);
-        setHasPlanProposed(false);
       }
     };
 
@@ -210,116 +158,63 @@ export function DatasetDetailContentV2() {
     };
 
     emitter.on("vllora_setup_plan_generating", handlePlanGenerating);
-    emitter.on("vllora_setup_plan_proposed", handlePlanProposed);
-    emitter.on("vllora_setup_plan_dismissed", handlePlanDismissed);
-    emitter.on("vllora_workflow_updated", handleWorkflowUpdated);
     emitter.on("vllora_switch_tab", handleSwitchTab);
     return () => {
       emitter.off("vllora_setup_plan_generating", handlePlanGenerating);
-      emitter.off("vllora_setup_plan_proposed", handlePlanProposed);
-      emitter.off("vllora_setup_plan_dismissed", handlePlanDismissed);
-      emitter.off("vllora_workflow_updated", handleWorkflowUpdated);
       emitter.off("vllora_switch_tab", handleSwitchTab);
     };
   }, [datasetId, setActiveSection]);
 
-  // Check IndexedDB for persisted proposed plan on initial mount only (survives page refresh)
-  // Use a ref to ensure we only auto-switch once, not when user navigates between tabs
+  // Auto-switch to Plan tab if a persisted plan is found on mount
   const hasCheckedPersistedPlan = useRef(false);
   useEffect(() => {
-    const checkPersistedPlan = async () => {
-      if (!datasetId || hasCheckedPersistedPlan.current) return;
+    if (!hasCheckedPersistedPlan.current && hasPlanProposed) {
       hasCheckedPersistedPlan.current = true;
-
-      const persistedPlan = await getProposedPlan(datasetId);
-      if (persistedPlan) {
-        console.log('[DatasetDetailContentV2] Found persisted plan, switching to Plan tab');
-        setHasPlanProposed(true);
-        setActiveSection("plan");
-      }
-    };
-
-    checkPersistedPlan();
-  }, [datasetId, setActiveSection]);
+      setActiveSection("plan");
+    }
+  }, [hasPlanProposed, setActiveSection]);
 
   // Handle autoGeneratePlan query param (from new dataset with uploaded files)
-  // Event-driven: waits for all docs to finish processing before triggering plan generation
+  // Uses docsProcessing from KnowledgeSourcesContext — triggers when all docs finish
   const [searchParams, setSearchParams] = useSearchParams();
   const hasTriggeredAutoGenerate = useRef(false);
+  const shouldAutoGenerate = searchParams.get("autoGeneratePlan") === "true";
 
+  // When docs finish processing (or were never processing), trigger plan generation
   useEffect(() => {
-    const shouldAutoGenerate = searchParams.get("autoGeneratePlan") === "true";
-
     if (!shouldAutoGenerate || !datasetId || hasTriggeredAutoGenerate.current) return;
+    if (docsProcessing) return; // Still processing — wait
 
     hasTriggeredAutoGenerate.current = true;
-
-    // Remove the param to prevent re-triggering
     const newParams = new URLSearchParams(searchParams);
     newParams.delete("autoGeneratePlan");
     setSearchParams(newParams, { replace: true });
 
-    let cancelled = false;
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    toast.info("Lucy is creating a setup plan from your documents...", { duration: 4000 });
+    emitter.emit("vllora_lucy_prompt", {
+      prompt: `Please analyze the uploaded documents and create a setup plan for this dataset using the propose_setup_plan tool.`,
+    });
+  }, [docsProcessing, shouldAutoGenerate, searchParams, setSearchParams, datasetId]);
 
-    const triggerPlanGeneration = () => {
-      if (cancelled) return;
-      toast.info("Lucy is creating a setup plan from your documents...", {
-        duration: 4000,
-      });
+  // Timeout fallback: if docs are still processing after 60s, generate plan anyway
+  useEffect(() => {
+    if (!shouldAutoGenerate || !datasetId || hasTriggeredAutoGenerate.current || !docsProcessing) return;
+
+    const timeoutId = setTimeout(() => {
+      if (hasTriggeredAutoGenerate.current) return;
+      hasTriggeredAutoGenerate.current = true;
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete("autoGeneratePlan");
+      setSearchParams(newParams, { replace: true });
+
+      toast.warning("Document processing is taking longer than expected. Generating plan with available content...", { duration: 5000 });
       emitter.emit("vllora_lucy_prompt", {
         prompt: `Please analyze the uploaded documents and create a setup plan for this dataset using the propose_setup_plan tool.`,
       });
-    };
+    }, 60000);
 
-    const checkAndTrigger = async (): Promise<boolean> => {
-      if (cancelled) return true;
-      try {
-        const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
-        const processingCount = sources.filter((s) => s.status === "processing").length;
-        if (processingCount === 0) {
-          triggerPlanGeneration();
-          return true;
-        }
-      } catch (error) {
-        console.error("[DatasetDetailContentV2] Error checking docs status:", error);
-      }
-      return false;
-    };
-
-    const handleKnowledgeUpdate = async ({ datasetId: updatedId }: { datasetId: string }) => {
-      if (updatedId !== datasetId || cancelled) return;
-      const allDone = await checkAndTrigger();
-      if (allDone) {
-        emitter.off("vllora_knowledge_source_updated", handleKnowledgeUpdate);
-        if (timeoutId) clearTimeout(timeoutId);
-      }
-    };
-
-    // Check immediately — if all docs are already processed, trigger right away
-    checkAndTrigger().then((triggered) => {
-      if (triggered || cancelled) return;
-
-      // Docs still processing — listen for updates
-      emitter.on("vllora_knowledge_source_updated", handleKnowledgeUpdate);
-
-      // Timeout fallback: generate plan with whatever content is available after 60s
-      timeoutId = setTimeout(() => {
-        if (cancelled) return;
-        emitter.off("vllora_knowledge_source_updated", handleKnowledgeUpdate);
-        toast.warning("Document processing is taking longer than expected. Generating plan with available content...", {
-          duration: 5000,
-        });
-        triggerPlanGeneration();
-      }, 60000);
-    });
-
-    return () => {
-      cancelled = true;
-      emitter.off("vllora_knowledge_source_updated", handleKnowledgeUpdate);
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-  }, [searchParams, setSearchParams, datasetId]);
+    return () => clearTimeout(timeoutId);
+  }, [docsProcessing, shouldAutoGenerate, searchParams, setSearchParams, datasetId]);
 
   // README auto-generation hook
   const { readme, readmeUpdatedAt, regenerateReadme, exportReadme } = useDatasetReadme({

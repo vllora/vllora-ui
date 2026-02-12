@@ -8,7 +8,7 @@
  * - Empty state when no plan is active
  */
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { emitter } from "@/utils/eventEmitter";
 import { SetupPlanEditor, planToMarkdown } from "./SetupPlanEditor";
@@ -26,8 +26,8 @@ import "@/lib/distri-finetune-tools/steps/execute-setup-plan";
 import { getCurrentExecution, getExecutingPlan } from "@/lib/distri-finetune-tools/steps/execution-state-store";
 // Import proposed plan store for persistence across page refresh
 import { getProposedPlan, clearProposedPlan } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
-// Import knowledge sources DB for checking processing status
-import * as knowledgeDB from "@/services/knowledge-sources-db";
+// Knowledge sources from context (single source of truth)
+import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 
 interface PlanSectionProps {
   datasetId: string;
@@ -46,41 +46,9 @@ export function PlanSection({
   // Track the last executed plan to show as read-only after completion
   const [executedPlan, setExecutedPlan] = useState<SetupPlan | null>(null);
   const [showExecutedPlan, setShowExecutedPlan] = useState(false);
-  // Track document processing state — stores the full sources list for per-doc status
-  const [docsProcessingSources, setDocsProcessingSources] = useState<import("@/types/dataset-types").KnowledgeSource[] | null>(null);
 
-  // Check document processing status
-  const checkDocsProcessing = useCallback(async () => {
-    if (!datasetId) return;
-    try {
-      const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
-      const processingCount = sources.filter((s) => s.status === "processing").length;
-      if (processingCount > 0) {
-        setDocsProcessingSources(sources);
-      } else {
-        setDocsProcessingSources(null);
-      }
-    } catch (error) {
-      console.error("[PlanSection] Error checking docs processing:", error);
-    }
-  }, [datasetId]);
-
-  // Listen for knowledge source updates to track processing
-  useEffect(() => {
-    const handleKnowledgeSourceUpdate = ({ datasetId: updatedId }: { datasetId: string }) => {
-      if (updatedId === datasetId) {
-        checkDocsProcessing();
-      }
-    };
-
-    emitter.on("vllora_knowledge_source_updated", handleKnowledgeSourceUpdate);
-    // Initial check
-    checkDocsProcessing();
-
-    return () => {
-      emitter.off("vllora_knowledge_source_updated", handleKnowledgeSourceUpdate);
-    };
-  }, [datasetId, checkDocsProcessing]);
+  // Knowledge sources from context (single source of truth — no duplicate fetching)
+  const { sources: knowledgeSources, isProcessing: docsStillProcessing } = KnowledgeSourcesConsumer();
 
   // On mount, check for:
   // 1. Active execution in progress (handles tab switching during execution)
@@ -234,11 +202,11 @@ export function PlanSection({
 
   // Show docs processing state FIRST — if documents are still being processed,
   // we can't generate a plan yet, so this takes priority over isGeneratingPlan
-  if (docsProcessingSources) {
+  if (docsStillProcessing) {
     return (
       <DocsProcessingState
         datasetId={datasetId}
-        sources={docsProcessingSources}
+        sources={knowledgeSources}
         className={className}
       />
     );
