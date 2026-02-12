@@ -19,6 +19,7 @@ interface DryrunEvaluationResultRowProps {
   isExpandable?: boolean;
   isExpanded?: boolean;
   onClick?: () => void;
+  onRecordIdClick?: (recordId: string) => void;
 }
 
 /**
@@ -92,6 +93,7 @@ export function DryrunEvaluationResultRow({
   isExpandable,
   isExpanded,
   onClick,
+  onRecordIdClick,
 }: DryrunEvaluationResultRowProps) {
   const isSuccess = result.status === "completed" && !result.error_message;
   const isFailed = result.status === "failed" || !!result.error_message;
@@ -124,9 +126,27 @@ export function DryrunEvaluationResultRow({
       </div>
 
       {/* Row index column */}
-      <div className="w-16 shrink-0 py-1 pr-2 font-mono text-xs">
+      <div className="w-12 shrink-0 py-1 pr-2 font-mono text-xs">
         {index + 1}
       </div>
+
+      {/* Record ID column — only shown when onRecordIdClick is provided */}
+      {onRecordIdClick && (
+        <div className="w-24 shrink-0 py-1 pr-2">
+          <button
+            className="font-mono text-xs text-blue-400 hover:text-blue-300 hover:underline truncate max-w-full text-left"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRecordIdClick(result.dataset_row_id);
+            }}
+            title={result.dataset_row_id}
+          >
+            {result.dataset_row_id.length > 8
+              ? `${result.dataset_row_id.slice(0, 8)}...`
+              : result.dataset_row_id}
+          </button>
+        </div>
+      )}
 
       {/* Score column */}
       <div className="w-16 shrink-0 py-1 pr-2">

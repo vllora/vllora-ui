@@ -21,10 +21,13 @@ import { RunningView } from "./RunningView";
 import { RunsSidebar } from "./RunsSidebar";
 import { flattenEvaluationResults } from "@/services/finetune-api";
 import { cn } from "@/lib/utils";
+import { emitter } from "@/utils/eventEmitter";
 import type { DryRunJob } from "@/types/dry-run-job";
 import { getJobTotalRows, getJobCompletedRows } from "@/types/dry-run-job";
 
 interface DryRunActivityViewProps {
+  /** Dataset ID for navigation (click record ID → switch to Records tab) */
+  datasetId: string;
   jobs: DryRunJob[];
   /** Cancel handler for running jobs */
   onCancelJob?: () => void;
@@ -77,7 +80,7 @@ function getScoreInsight(stats: { mean: number; std: number; min: number; max: n
 }
 
 /** Inline detail panel for a selected job (left side of split) */
-function JobDetail({ job, onCancel, onRunAgain, onRefresh }: { job: DryRunJob; onCancel?: () => void; onRunAgain?: () => void; onRefresh?: (jobId: string) => void }) {
+function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: DryRunJob; datasetId: string; onCancel?: () => void; onRunAgain?: () => void; onRefresh?: (jobId: string) => void }) {
   const result = job.result;
 
   const scores = useMemo(() => {
@@ -268,7 +271,18 @@ function JobDetail({ job, onCancel, onRunAgain, onRefresh }: { job: DryRunJob; o
         {evaluationResults && evaluationResults.length > 0 && (
           <div className="flex-1 min-h-0 flex flex-col px-3 pb-1 pt-2">
             <div className="flex-1 min-h-0">
-              <ResultsTable results={evaluationResults} fillHeight />
+              <ResultsTable
+                results={evaluationResults}
+                fillHeight
+                onRecordIdClick={(recordId) => {
+                  emitter.emit('vllora_switch_tab', { datasetId, tab: 'records' });
+                  setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('vllora_highlight_record', {
+                      detail: { recordId }
+                    }));
+                  }, 150);
+                }}
+              />
             </div>
           </div>
         )}
@@ -277,7 +291,7 @@ function JobDetail({ job, onCancel, onRunAgain, onRefresh }: { job: DryRunJob; o
   );
 }
 
-export function DryRunActivityView({ jobs, onCancelJob, initialSelectedId, onRunAgain, onRefresh }: DryRunActivityViewProps) {
+export function DryRunActivityView({ datasetId, jobs, onCancelJob, initialSelectedId, onRunAgain, onRefresh }: DryRunActivityViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     if (initialSelectedId) return initialSelectedId;
     // Default to most recent completed job
@@ -301,7 +315,7 @@ export function DryRunActivityView({ jobs, onCancelJob, initialSelectedId, onRun
       {/* Left: selected job detail */}
       <div className="flex-1 min-w-0 min-h-0 border-r border-zinc-800/60">
         {selectedJob ? (
-          <JobDetail job={selectedJob} onCancel={onCancelJob} onRunAgain={onRunAgain} onRefresh={onRefresh} />
+          <JobDetail job={selectedJob} datasetId={datasetId} onCancel={onCancelJob} onRunAgain={onRunAgain} onRefresh={onRefresh} />
         ) : (
           <div className="flex items-center justify-center h-full text-xs text-zinc-600">
             Select a job from the list

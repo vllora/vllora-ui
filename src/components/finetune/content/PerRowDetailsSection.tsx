@@ -14,9 +14,12 @@ import {
 } from "@/utils/parse-score-breakdown";
 import { ResultsTable } from "@/components/datasets/dry-run-dialog/ResultsTable";
 import { EpochScoresTable, type EpochScore } from "./EpochScoresTable";
+import { emitter } from "@/utils/eventEmitter";
 
 interface PerRowDetailsSectionProps {
   results: FinetuneEvalResultsResponse["results"];
+  /** Dataset ID for navigation (click record ID → switch to Records tab) */
+  datasetId?: string;
 }
 
 interface RowEpochData {
@@ -24,7 +27,7 @@ interface RowEpochData {
   criteriaNames: string[];
 }
 
-export function PerRowDetailsSection({ results }: PerRowDetailsSectionProps) {
+export function PerRowDetailsSection({ results, datasetId }: PerRowDetailsSectionProps) {
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
 
   // Flatten latest epoch per row for the table, keep all epochs for expand
@@ -87,6 +90,16 @@ export function PerRowDetailsSection({ results }: PerRowDetailsSectionProps) {
     return <EpochScoresTable epochs={data.epochs} criteriaNames={data.criteriaNames} />;
   }, [epochDataMap]);
 
+  const handleRecordIdClick = useCallback((recordId: string) => {
+    if (!datasetId) return;
+    emitter.emit('vllora_switch_tab', { datasetId, tab: 'records' });
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('vllora_highlight_record', {
+        detail: { recordId }
+      }));
+    }, 150);
+  }, [datasetId]);
+
   if (flatResults.length === 0) {
     return (
       <div className="text-xs text-muted-foreground py-2">
@@ -102,6 +115,7 @@ export function PerRowDetailsSection({ results }: PerRowDetailsSectionProps) {
       expandedRowId={expandedRowId}
       onRowClick={handleRowClick}
       renderExpandedContent={renderExpandedContent}
+      onRecordIdClick={datasetId ? handleRecordIdClick : undefined}
     />
   );
 }

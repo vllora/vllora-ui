@@ -73,6 +73,11 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
     ? () => onExpand(record)
     : (onToggleExpand ?? (() => setInternalExpanded(!internalExpanded)));
 
+  // Handler for QualityIndicator click — navigate to evaluator or jobs tab
+  const handleScoreNavigate = useCallback((target: "evaluator" | "jobs") => {
+    emitter.emit("vllora_switch_tab", { datasetId: record.datasetId, tab: target });
+  }, [record.datasetId]);
+
   // Handler to trigger Lucy for variant generation
   const handleGenerateVariants = useCallback(() => {
     // Extract a brief summary from the record for context
@@ -146,15 +151,16 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
           <StatsBadge data={record.data} />
         </div>
 
-        {/* Quality score */}
+        {/* Quality score — click navigates to evaluator/jobs tab */}
         <QualityIndicator
           evaluation={record.evaluation}
           className={COLUMN_WIDTHS.quality}
+          onNavigate={handleScoreNavigate}
         />
 
         {/* Actions - shown on hover */}
         <div className={cn(
-          "flex items-center justify-end pr-2 opacity-0 group-hover:opacity-100 transition-opacity",
+          "flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity",
           COLUMN_WIDTHS.deepDiveActions
         )}>
           <RecordActions

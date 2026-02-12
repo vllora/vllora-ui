@@ -40,6 +40,8 @@ interface ResultsTableProps {
   onRowClick?: (result: EvaluationResult) => void;
   /** Render function for the content shown below an expanded row */
   renderExpandedContent?: (result: EvaluationResult) => ReactNode;
+  /** Callback when record ID is clicked — enables navigation to record. Shows ID column when set. */
+  onRecordIdClick?: (recordId: string) => void;
 }
 
 export function ResultsTable({
@@ -49,6 +51,7 @@ export function ResultsTable({
   expandedRowId,
   onRowClick,
   renderExpandedContent,
+  onRecordIdClick,
 }: ResultsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -64,6 +67,7 @@ export function ResultsTable({
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
         (r) =>
+          r.dataset_row_id?.toLowerCase().includes(query) ||
           r.error_message?.toLowerCase().includes(query) ||
           r.reason?.toLowerCase().includes(query) ||
           r.status.toLowerCase().includes(query)
@@ -137,7 +141,7 @@ export function ResultsTable({
         <div className="relative flex-1">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
-            placeholder="Search errors..."
+            placeholder="Search by ID, errors..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="h-8 pl-8 text-sm bg-muted/30 border-border placeholder:text-muted-foreground/60 focus-visible:ring-ring"
@@ -192,7 +196,8 @@ export function ResultsTable({
         {/* Table header */}
         <div className="flex items-center text-muted-foreground shrink-0">
           <div className="w-6 shrink-0 py-1" />
-          <div className="w-16 shrink-0 py-1 pr-2">Row</div>
+          <div className="w-12 shrink-0 py-1 pr-2">Row</div>
+          {onRecordIdClick && <div className="w-24 shrink-0 py-1 pr-2">Record</div>}
           <div className="w-16 shrink-0 py-1 pr-2">Score</div>
           <div className="w-16 shrink-0 py-1 pr-2">Status</div>
           <div className="flex-1 py-1 pr-2">Reasoning</div>
@@ -236,6 +241,7 @@ export function ResultsTable({
                       isExpandable={isExpandable}
                       isExpanded={isExpanded}
                       onClick={onRowClick ? () => onRowClick(result) : undefined}
+                      onRecordIdClick={onRecordIdClick}
                     />
                     {isExpanded && renderExpandedContent && (
                       <div className="border-t border-border/30 bg-muted/20 px-6 py-2">

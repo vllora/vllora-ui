@@ -209,7 +209,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
         </TabsContent>
         <TabsContent value="per-row" className="flex-1 min-h-0 p-3 mt-0">
           {job.dataset_id && evalResults && evalResults.results.length > 0 ? (
-            <PerRowDetailsSection results={evalResults.results} />
+            <PerRowDetailsSection results={evalResults.results} datasetId={job.dataset_id} />
           ) : (
             <div className="text-xs text-muted-foreground py-2">
               {isLoadingEvals ? "Loading..." : "No per-row data available"}

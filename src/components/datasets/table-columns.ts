@@ -29,10 +29,10 @@ export const COLUMN_WIDTHS = {
   strategy: "flex-[1.2] min-w-0",
   /** Stats column (new layout) - flex based */
   stats: "flex-[1] min-w-0",
-  /** Quality score column (new layout) - compact fixed width */
-  quality: "w-14 shrink-0",
-  /** Actions dropdown column (new layout) - fixed for small icon */
-  deepDiveActions: "w-10 shrink-0 mr-2",
+  /** Quality score column (new layout) - fits "Avg Dryrun: 0.85" */
+  quality: "w-32 shrink-0",
+  /** Actions column (new layout) - fits edit + variants + delete buttons */
+  deepDiveActions: "w-24 shrink-0",
 } as const;
 
 /** Columns that can be toggled by the user */

@@ -392,10 +392,13 @@ class DryRunPollingManager {
         const flatResults = flattenEvaluationResults(result.results);
         for (const row of flatResults) {
           if (typeof row.score === 'number' && row.dataset_row_id) {
-            await datasetsDB.updateRecordEvaluation(
+            await datasetsDB.updateRecordEvaluationScores(
               job.datasetId,
               row.dataset_row_id,
-              row.score
+              {
+                dryRunScore: row.score,
+                incrementDryRunCount: true,
+              }
             );
           }
         }

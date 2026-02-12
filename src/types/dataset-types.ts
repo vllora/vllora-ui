@@ -2,6 +2,18 @@ export interface DatasetEvaluation {
   score?: number;
   feedback?: string;
   evaluatedAt?: number;
+  /** Latest dry-run evaluation score */
+  dryRunScore?: number;
+  /** Running average across all dry runs */
+  dryRunAvg?: number;
+  /** Number of dry runs that included this record */
+  dryRunCount?: number;
+  /** Latest finetune average score across epochs */
+  finetuneScore?: number;
+  /** Running average across all finetune jobs */
+  finetuneAvg?: number;
+  /** Number of finetune jobs that included this record */
+  finetuneCount?: number;
 }
 
 // Stored in 'records' object store

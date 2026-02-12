@@ -12,12 +12,14 @@ import {
   useState,
   useCallback,
   useMemo,
+  useRef,
   type ReactNode,
 } from 'react';
 import type { DryRunJob } from '@/types/dry-run-job';
 import type { Dataset } from '@/types/dataset-types';
 import { getDryRunJobsByDataset } from '@/services/dry-run-jobs-db';
 import { dryRunPollingManager } from '@/services/dry-run-polling-manager';
+import { backfillDryRunScoresFromJobs } from '@/services/datasets-db';
 import { emitter } from '@/utils/eventEmitter';
 
 // =============================================================================
@@ -39,6 +41,7 @@ function useDryRunJobs(props: {
 
   const [jobs, setJobs] = useState<DryRunJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const backfillRanRef = useRef(false);
 
   const datasetId = dataset.id;
 
@@ -47,6 +50,25 @@ function useDryRunJobs(props: {
     try {
       const fetchedJobs = await getDryRunJobsByDataset(datasetId);
       setJobs(fetchedJobs);
+
+      // One-time backfill: migrate records that were evaluated by old code
+      // (only set evaluation.score, missing dryRunCount/dryRunAvg)
+      if (!backfillRanRef.current) {
+        backfillRanRef.current = true;
+        const completedWithSnapshot = fetchedJobs.filter(
+          (j) => j.status === 'completed' && j.pollingSnapshot?.results?.length
+        );
+        if (completedWithSnapshot.length > 0) {
+          backfillDryRunScoresFromJobs(datasetId, completedWithSnapshot).then((n) => {
+            if (n > 0) {
+              console.log(`[DryRunJobsContext] Backfilled ${n} records with dry-run scores`);
+              emitter.emit('vllora_dataset_refresh' as any, { datasetId });
+            }
+          }).catch((err) => {
+            console.warn('[DryRunJobsContext] Backfill failed:', err);
+          });
+        }
+      }
     } catch (error) {
       console.error('[DryRunJobsContext] Failed to load jobs:', error);
     } finally {
@@ -122,6 +144,7 @@ function useDryRunJobs(props: {
   );
 
   return {
+    datasetId,
     jobs,
     isLoading,
     runningJob,

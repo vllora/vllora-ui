@@ -27,6 +27,7 @@ export function EvaluationBottomPanel({
   onToggleCollapse,
 }: EvaluationBottomPanelProps) {
   const {
+    datasetId,
     jobs,
     runningJob,
     lastCompletedJob,
@@ -102,6 +103,7 @@ export function EvaluationBottomPanel({
       {!isCollapsed && (
         <div className="flex-1 min-h-0 flex flex-col">
           <DryRunActivityView
+            datasetId={datasetId}
             jobs={jobs}
             onCancelJob={handleCancel}
             initialSelectedId={selectedJobId}

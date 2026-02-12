@@ -521,6 +521,160 @@ export async function updateRecordEvaluation(
   });
 }
 
+// Update a record's evaluation with specific dry-run or finetune scores
+export async function updateRecordEvaluationScores(
+  datasetId: string,
+  recordId: string,
+  update: {
+    dryRunScore?: number;
+    finetuneScore?: number;
+    incrementDryRunCount?: boolean;
+    incrementFinetuneCount?: boolean;
+  }
+): Promise<void> {
+  const db = await getDB();
+  const now = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(['records'], 'readwrite');
+    const recordsStore = tx.objectStore('records');
+
+    const getRequest = recordsStore.get(recordId);
+    getRequest.onsuccess = () => {
+      const record = getRequest.result;
+      if (!record || record.datasetId !== datasetId) return;
+
+      const existing = record.evaluation || {};
+
+      if (update.dryRunScore !== undefined) {
+        existing.dryRunScore = update.dryRunScore;
+        // Compute running average: new_avg = (old_avg * old_count + new) / (old_count + 1)
+        const oldCount = existing.dryRunCount || 0;
+        const oldAvg = existing.dryRunAvg ?? existing.dryRunScore ?? update.dryRunScore;
+        existing.dryRunAvg = oldCount > 0
+          ? (oldAvg * oldCount + update.dryRunScore) / (oldCount + 1)
+          : update.dryRunScore;
+        existing.score = update.dryRunScore;
+      }
+      if (update.finetuneScore !== undefined) {
+        existing.finetuneScore = update.finetuneScore;
+        const oldCount = existing.finetuneCount || 0;
+        const oldAvg = existing.finetuneAvg ?? existing.finetuneScore ?? update.finetuneScore;
+        existing.finetuneAvg = oldCount > 0
+          ? (oldAvg * oldCount + update.finetuneScore) / (oldCount + 1)
+          : update.finetuneScore;
+        existing.score = update.finetuneScore; // Finetune takes precedence
+      }
+      if (update.incrementDryRunCount) {
+        existing.dryRunCount = (existing.dryRunCount || 0) + 1;
+      }
+      if (update.incrementFinetuneCount) {
+        existing.finetuneCount = (existing.finetuneCount || 0) + 1;
+      }
+      existing.evaluatedAt = now;
+
+      record.evaluation = existing;
+      record.updatedAt = now;
+      recordsStore.put(record);
+    };
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/**
+ * Backfill dryRunCount/dryRunAvg for records that were evaluated by old dry-run
+ * code which only set `evaluation.score` but not the newer typed fields.
+ *
+ * Scans completed jobs' pollingSnapshot results, groups scores per record,
+ * and writes count + average + latest score for records missing `dryRunCount`.
+ *
+ * Idempotent: skips records that already have `dryRunCount` set.
+ */
+export async function backfillDryRunScoresFromJobs(
+  datasetId: string,
+  completedJobs: Array<{
+    pollingSnapshot?: { results: Array<{
+      row_index: number;
+      epochs?: Record<string, Array<{
+        dataset_row_id?: string;
+        score?: number | null;
+        status?: string;
+      }>>;
+    }> };
+  }>
+): Promise<number> {
+  // 1. Collect per-record scores from all completed jobs
+  const scoresByRecordId = new Map<string, number[]>();
+
+  for (const job of completedJobs) {
+    const results = job.pollingSnapshot?.results;
+    if (!results || results.length === 0) continue;
+
+    for (const row of results) {
+      if (!row.epochs) continue;
+      for (const entries of Object.values(row.epochs)) {
+        for (const entry of entries) {
+          const rid = entry.dataset_row_id;
+          const score = entry.score;
+          if (rid && typeof score === 'number') {
+            const existing = scoresByRecordId.get(rid) || [];
+            existing.push(score);
+            scoresByRecordId.set(rid, existing);
+          }
+        }
+      }
+    }
+  }
+
+  if (scoresByRecordId.size === 0) return 0;
+
+  // 2. Update records that are missing dryRunCount
+  const db = await getDB();
+  const now = Date.now();
+  let backfilled = 0;
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(['records'], 'readwrite');
+    const store = tx.objectStore('records');
+    const index = store.index('datasetId');
+    const request = index.openCursor(IDBKeyRange.only(datasetId));
+
+    request.onsuccess = (event) => {
+      const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+      if (!cursor) return; // done
+
+      const record = cursor.value as DatasetRecord;
+      const scores = scoresByRecordId.get(record.id);
+
+      // Only backfill records that have job scores but are missing dryRunCount
+      if (scores && scores.length > 0 && !record.evaluation?.dryRunCount) {
+        const count = scores.length;
+        const avg = scores.reduce((sum, s) => sum + s, 0) / count;
+        const latest = scores[scores.length - 1]; // last job = most recent
+
+        record.evaluation = {
+          ...(record.evaluation || {}),
+          dryRunScore: latest,
+          dryRunAvg: avg,
+          dryRunCount: count,
+          score: record.evaluation?.finetuneScore ?? latest,
+          evaluatedAt: now,
+        };
+        record.updatedAt = now;
+        cursor.update(record);
+        backfilled++;
+      }
+
+      cursor.continue();
+    };
+
+    tx.oncomplete = () => resolve(backfilled);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 // Clear all record topics for a dataset
 export async function clearAllRecordTopics(datasetId: string): Promise<number> {
   const db = await getDB();
