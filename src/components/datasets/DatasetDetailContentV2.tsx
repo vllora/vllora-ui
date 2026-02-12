@@ -11,7 +11,6 @@
 
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { LoadingIndicator } from "@/components/ui/LoadingIndicator";
 import { toast } from "sonner";
 import { DatasetUtilityBar } from "./dataset-detail-header/DatasetUtilityBar";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
@@ -244,35 +243,82 @@ export function DatasetDetailContentV2() {
   }, [datasetId, setActiveSection]);
 
   // Handle autoGeneratePlan query param (from new dataset with uploaded files)
+  // Event-driven: waits for all docs to finish processing before triggering plan generation
   const [searchParams, setSearchParams] = useSearchParams();
   const hasTriggeredAutoGenerate = useRef(false);
 
   useEffect(() => {
     const shouldAutoGenerate = searchParams.get("autoGeneratePlan") === "true";
 
-    if (shouldAutoGenerate && datasetId && !hasTriggeredAutoGenerate.current) {
-      hasTriggeredAutoGenerate.current = true;
+    if (!shouldAutoGenerate || !datasetId || hasTriggeredAutoGenerate.current) return;
 
-      // Remove only the autoGeneratePlan param to prevent re-triggering
-      const newParams = new URLSearchParams(searchParams);
-      newParams.delete("autoGeneratePlan");
-      setSearchParams(newParams, { replace: true });
+    hasTriggeredAutoGenerate.current = true;
 
-      // Small delay to let knowledge sources finish processing
-      const timer = setTimeout(() => {
-        // Notify user that plan generation is starting
-        toast.info("Lucy is creating a setup plan from your documents...", {
-          duration: 4000,
+    // Remove the param to prevent re-triggering
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete("autoGeneratePlan");
+    setSearchParams(newParams, { replace: true });
+
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    const triggerPlanGeneration = () => {
+      if (cancelled) return;
+      toast.info("Lucy is creating a setup plan from your documents...", {
+        duration: 4000,
+      });
+      emitter.emit("vllora_lucy_prompt", {
+        prompt: `Please analyze the uploaded documents and create a setup plan for this dataset using the propose_setup_plan tool.`,
+      });
+    };
+
+    const checkAndTrigger = async (): Promise<boolean> => {
+      if (cancelled) return true;
+      try {
+        const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
+        const processingCount = sources.filter((s) => s.status === "processing").length;
+        if (processingCount === 0) {
+          triggerPlanGeneration();
+          return true;
+        }
+      } catch (error) {
+        console.error("[DatasetDetailContentV2] Error checking docs status:", error);
+      }
+      return false;
+    };
+
+    const handleKnowledgeUpdate = async ({ datasetId: updatedId }: { datasetId: string }) => {
+      if (updatedId !== datasetId || cancelled) return;
+      const allDone = await checkAndTrigger();
+      if (allDone) {
+        emitter.off("vllora_knowledge_source_updated", handleKnowledgeUpdate);
+        if (timeoutId) clearTimeout(timeoutId);
+      }
+    };
+
+    // Check immediately — if all docs are already processed, trigger right away
+    checkAndTrigger().then((triggered) => {
+      if (triggered || cancelled) return;
+
+      // Docs still processing — listen for updates
+      emitter.on("vllora_knowledge_source_updated", handleKnowledgeUpdate);
+
+      // Timeout fallback: generate plan with whatever content is available after 60s
+      timeoutId = setTimeout(() => {
+        if (cancelled) return;
+        emitter.off("vllora_knowledge_source_updated", handleKnowledgeUpdate);
+        toast.warning("Document processing is taking longer than expected. Generating plan with available content...", {
+          duration: 5000,
         });
+        triggerPlanGeneration();
+      }, 60000);
+    });
 
-        // Trigger Lucy to generate the setup plan
-        emitter.emit("vllora_lucy_prompt", {
-          prompt: `Please analyze the uploaded documents and create a setup plan for this dataset using the propose_setup_plan tool.`,
-        });
-      }, 2000);
-
-      return () => clearTimeout(timer);
-    }
+    return () => {
+      cancelled = true;
+      emitter.off("vllora_knowledge_source_updated", handleKnowledgeUpdate);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [searchParams, setSearchParams, datasetId]);
 
   // README auto-generation hook
@@ -364,7 +410,50 @@ export function DatasetDetailContentV2() {
 
   if (isLoading) {
     return (
-      <LoadingIndicator variant="section" message="Loading dataset..." />
+      <div className="flex-1 flex overflow-hidden">
+        {/* Sidebar skeleton */}
+        <div className="w-[340px] border-r border-border flex flex-col shrink-0">
+          <div className="flex items-center gap-2.5 px-4 py-3 border-b">
+            <div className="w-8 h-8 rounded-full bg-muted animate-pulse" />
+            <div className="h-4 w-28 bg-muted animate-pulse rounded" />
+          </div>
+          <div className="flex-1 p-4 space-y-4">
+            <div className="space-y-2">
+              <div className="h-3 w-3/4 bg-muted animate-pulse rounded" />
+              <div className="h-3 w-full bg-muted animate-pulse rounded" />
+              <div className="h-3 w-2/3 bg-muted animate-pulse rounded" />
+            </div>
+          </div>
+        </div>
+        {/* Main content skeleton */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Header skeleton */}
+          <div className="px-4 py-3 border-b border-border space-y-2">
+            <div className="h-5 w-48 bg-muted animate-pulse rounded" />
+            <div className="h-3 w-80 bg-muted animate-pulse rounded" />
+          </div>
+          {/* Tabs skeleton */}
+          <div className="flex items-center gap-1 px-4 py-2 border-b border-border">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-8 w-24 bg-muted animate-pulse rounded-md" />
+            ))}
+          </div>
+          {/* Content skeleton */}
+          <div className="flex-1 p-6 space-y-4">
+            <div className="h-4 w-32 bg-muted animate-pulse rounded" />
+            <div className="grid grid-cols-3 gap-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-20 bg-muted animate-pulse rounded-lg" />
+              ))}
+            </div>
+            <div className="space-y-2 mt-6">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-12 bg-muted animate-pulse rounded-lg" />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
     );
   }
 

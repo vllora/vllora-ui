@@ -233,7 +233,7 @@ export function ImportFileCard() {
   return (
     <div
       className={cn(
-        "group p-6 rounded-xl border transition-all duration-300 flex flex-col",
+        "group p-6 rounded-lg border transition-all duration-300 flex flex-col",
         isDragging
           ? "border-[rgb(var(--theme-500))] bg-[rgba(var(--theme-500),0.08)] border-dashed"
           : hasValidFile
@@ -256,7 +256,7 @@ export function ImportFileCard() {
       {!selectedFile ? (
         /* Initial state - no file selected */
         <>
-          <div className="h-12 w-12 rounded-xl bg-muted border border-border flex items-center justify-center mb-4 group-hover:bg-muted/80 group-hover:scale-105 transition-all">
+          <div className="h-12 w-12 rounded-md bg-muted border border-border flex items-center justify-center mb-4 group-hover:bg-muted/80 group-hover:scale-105 transition-all">
             <Upload className="h-6 w-6 text-muted-foreground group-hover:text-foreground transition-colors" />
           </div>
           <h3 className="font-semibold mb-2 text-left text-foreground/80 group-hover:text-foreground transition-colors">

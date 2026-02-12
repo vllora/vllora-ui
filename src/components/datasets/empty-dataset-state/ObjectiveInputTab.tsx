@@ -20,6 +20,8 @@ import { useKnowledgeSourcesUpload, DragOverlay, FileList, AddDocsButton } from 
 interface ObjectiveInputTabProps {
   objective: string;
   onObjectiveChange: (value: string) => void;
+  datasetName?: string;
+  onDatasetNameChange?: (value: string) => void;
   onStartFinetune: (files?: File[]) => void;
   onLoadSample?: () => void;
   isLoading?: boolean;
@@ -29,6 +31,8 @@ interface ObjectiveInputTabProps {
 export function ObjectiveInputTab({
   objective,
   onObjectiveChange,
+  datasetName = "",
+  onDatasetNameChange,
   onStartFinetune,
   onLoadSample,
   isLoading = false,
@@ -110,23 +114,39 @@ export function ObjectiveInputTab({
               </span>
             </div>
 
-            <Button
-              onClick={handleStart}
-              disabled={!hasContent || isLoading}
-              className="group/btn relative bg-[rgba(var(--theme-500),1)] hover:bg-[rgba(var(--theme-400),1)] text-white gap-2 px-5 h-10 rounded-lg font-medium shadow-lg shadow-[rgba(var(--theme-500),0.25)] hover:shadow-[rgba(var(--theme-500),0.35)] hover:shadow-xl transition-all duration-200 disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                <>
-                  Start Finetune
-                  <ArrowRight className="w-4 h-4 transition-transform duration-200 group-hover/btn:translate-x-0.5" />
-                </>
+            <div className="flex items-center gap-3">
+              {/* Dataset name input — visible once objective has content */}
+              {hasContent && onDatasetNameChange && (
+                <div className="flex items-center gap-1.5">
+                  <label className="text-xs text-muted-foreground/60 whitespace-nowrap">Name:</label>
+                  <input
+                    type="text"
+                    value={datasetName}
+                    onChange={(e) => onDatasetNameChange(e.target.value)}
+                    placeholder="Dataset name"
+                    className="h-8 w-40 px-2 text-sm bg-background/50 border border-border/50 rounded-md outline-none focus:border-[rgba(var(--theme-500),0.5)] transition-colors placeholder:text-muted-foreground/40"
+                  />
+                </div>
               )}
-            </Button>
+
+              <Button
+                onClick={handleStart}
+                disabled={!hasContent || isLoading}
+                className="group/btn relative bg-[rgba(var(--theme-500),1)] hover:bg-[rgba(var(--theme-400),1)] text-white gap-2 px-5 h-10 rounded-lg font-medium shadow-lg shadow-[rgba(var(--theme-500),0.25)] hover:shadow-[rgba(var(--theme-500),0.35)] hover:shadow-xl transition-all duration-200 disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    Start Finetune
+                    <ArrowRight className="w-4 h-4 transition-transform duration-200 group-hover/btn:translate-x-0.5" />
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       </div>

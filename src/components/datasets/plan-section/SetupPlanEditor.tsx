@@ -6,9 +6,20 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
-import { Check, X, Sparkles, AlertTriangle } from 'lucide-react';
+import { Check, Trash2, Sparkles, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import type { SetupPlan } from '@/lib/distri-finetune-tools/steps/propose-setup-plan';
 import LazyMarkdownRenderer from '@/components/chat/LazyMarkdownRenderer';
 import { planToMarkdown, markdownToPlan } from './plan-markdown-utils';
@@ -81,10 +92,31 @@ export function SetupPlanEditor({ plan, onApprove, onDismiss }: SetupPlanEditorP
       {/* Footer - sticky at bottom */}
       <div className="px-4 py-3 border-t border-border/50 bg-muted/20 flex items-center justify-end gap-2">
         {onDismiss && (
-          <Button variant="ghost" size="sm" onClick={onDismiss} className="h-8">
-            <X className="w-4 h-4 mr-1" />
-            Dismiss
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 text-destructive hover:text-destructive">
+                <Trash2 className="w-4 h-4 mr-1" />
+                Discard Plan
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Discard setup plan?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This plan took time to generate. Discarding it will permanently remove it and you'll need to regenerate from scratch.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Keep Plan</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={onDismiss}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Discard
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         )}
         <Button
           size="sm"

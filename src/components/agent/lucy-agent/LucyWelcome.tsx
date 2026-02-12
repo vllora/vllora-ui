@@ -5,6 +5,7 @@
  * Shows greeting and quick action buttons.
  */
 
+import type { ReactNode } from 'react';
 import { LucyAvatar } from './LucyAvatar';
 import { cn } from '@/lib/utils';
 
@@ -15,8 +16,8 @@ import { cn } from '@/lib/utils';
 export interface QuickAction {
   /** Unique ID for the action */
   id: string;
-  /** Icon emoji or component */
-  icon: string;
+  /** Icon: Lucide component or ReactNode */
+  icon: ReactNode;
   /** Label text */
   label: string;
 }
@@ -84,7 +85,7 @@ export function LucyWelcome({
                     'hover:border-primary/50'
                   )}
                 >
-                  <span className="text-base">{action.icon}</span>
+                  <span className="text-muted-foreground shrink-0">{action.icon}</span>
                   <span>{action.label}</span>
                 </button>
               ))}

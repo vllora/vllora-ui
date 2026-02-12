@@ -46,8 +46,8 @@ export function PlanSection({
   // Track the last executed plan to show as read-only after completion
   const [executedPlan, setExecutedPlan] = useState<SetupPlan | null>(null);
   const [showExecutedPlan, setShowExecutedPlan] = useState(false);
-  // Track document processing state
-  const [docsProcessing, setDocsProcessing] = useState<{ processing: number; total: number } | null>(null);
+  // Track document processing state — stores the full sources list for per-doc status
+  const [docsProcessingSources, setDocsProcessingSources] = useState<import("@/types/dataset-types").KnowledgeSource[] | null>(null);
 
   // Check document processing status
   const checkDocsProcessing = useCallback(async () => {
@@ -56,9 +56,9 @@ export function PlanSection({
       const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
       const processingCount = sources.filter((s) => s.status === "processing").length;
       if (processingCount > 0) {
-        setDocsProcessing({ processing: processingCount, total: sources.length });
+        setDocsProcessingSources(sources);
       } else {
-        setDocsProcessing(null);
+        setDocsProcessingSources(null);
       }
     } catch (error) {
       console.error("[PlanSection] Error checking docs processing:", error);
@@ -234,12 +234,11 @@ export function PlanSection({
 
   // Show docs processing state FIRST — if documents are still being processed,
   // we can't generate a plan yet, so this takes priority over isGeneratingPlan
-  if (docsProcessing) {
+  if (docsProcessingSources) {
     return (
       <DocsProcessingState
         datasetId={datasetId}
-        processingCount={docsProcessing.processing}
-        totalCount={docsProcessing.total}
+        sources={docsProcessingSources}
         className={className}
       />
     );

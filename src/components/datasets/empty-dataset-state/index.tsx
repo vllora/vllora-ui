@@ -88,9 +88,25 @@ export function EmptyDatasetsState() {
   const activeTab: TabType = isValidTab(tabParam) ? tabParam : "objective";
 
   const [objective, setObjective] = useState("");
+  const [datasetName, setDatasetName] = useState("");
+  const [hasEditedName, setHasEditedName] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isLoadingSample, setIsLoadingSample] = useState(false);
   const [transition, setTransition] = useState<{ datasetId: string; hasFiles: boolean } | null>(null);
+
+  // Auto-generate dataset name suggestion from objective (unless user manually edited)
+  const handleObjectiveChange = useCallback((value: string) => {
+    setObjective(value);
+    if (!hasEditedName) {
+      const words = value.trim().split(/\s+/).slice(0, 5).join(" ");
+      setDatasetName(words.length > 40 ? words.slice(0, 40) : words);
+    }
+  }, [hasEditedName]);
+
+  const handleDatasetNameChange = useCallback((value: string) => {
+    setDatasetName(value);
+    setHasEditedName(true);
+  }, []);
 
   // Update URL when tab changes
   const handleTabChange = useCallback((tab: TabType) => {
@@ -163,11 +179,10 @@ export function EmptyDatasetsState() {
 
     setIsCreating(true);
     try {
-      // Generate a dataset name from the objective (first few words)
-      const words = objective.trim().split(/\s+/).slice(0, 4).join(" ");
-      const datasetName = words.length > 30 ? words.slice(0, 30) + "..." : words;
+      // Use user-edited name or fall back to auto-generated from objective
+      const finalName = datasetName.trim() || objective.trim().split(/\s+/).slice(0, 5).join(" ");
 
-      const dataset = await createDataset(datasetName, objective.trim());
+      const dataset = await createDataset(finalName, objective.trim());
 
       // If files were uploaded, add them as knowledge sources
       if (files && files.length > 0) {
@@ -228,6 +243,22 @@ export function EmptyDatasetsState() {
     }
   };
 
+  // Show fallback "Continue" button if transition navigation hasn't happened after 5s
+  const [showContinue, setShowContinue] = useState(false);
+  useEffect(() => {
+    if (!transition) return;
+    const timer = setTimeout(() => setShowContinue(true), 5000);
+    return () => clearTimeout(timer);
+  }, [transition]);
+
+  const handleSkipTransition = useCallback(() => {
+    if (!transition) return;
+    const url = transition.hasFiles
+      ? `/datasets/${transition.datasetId}?autoGeneratePlan=true`
+      : `/datasets/${transition.datasetId}`;
+    navigate(url);
+  }, [transition, navigate]);
+
   // Show onboarding transition before navigating to dataset detail
   if (transition) {
     return (
@@ -273,6 +304,23 @@ export function EmptyDatasetsState() {
             <div className="w-1.5 h-1.5 rounded-full bg-[rgb(var(--theme-500))] animate-pulse" />
             <span>{transition.hasFiles ? "Processing your documents..." : "Setting up your project..."}</span>
           </div>
+
+          {/* Skip / Continue fallback */}
+          {showContinue ? (
+            <button
+              onClick={handleSkipTransition}
+              className="text-sm font-medium text-[rgb(var(--theme-500))] hover:underline"
+            >
+              Continue to dataset →
+            </button>
+          ) : (
+            <button
+              onClick={handleSkipTransition}
+              className="text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+            >
+              Skip
+            </button>
+          )}
         </div>
       </div>
     );
@@ -329,7 +377,9 @@ export function EmptyDatasetsState() {
         {activeTab === "objective" ? (
           <ObjectiveInputTab
             objective={objective}
-            onObjectiveChange={setObjective}
+            onObjectiveChange={handleObjectiveChange}
+            datasetName={datasetName}
+            onDatasetNameChange={handleDatasetNameChange}
             onStartFinetune={handleStartFinetune}
             onLoadSample={handleLoadSample}
             isLoading={isCreating}

@@ -125,7 +125,7 @@ export function KnowledgeSourcesPanel({ datasetId, className }: KnowledgeSources
       <div className="flex-1 overflow-y-auto p-4">
         {sources.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="w-12 h-12 rounded-xl bg-muted/50 flex items-center justify-center mb-4">
+            <div className="w-12 h-12 rounded-lg bg-muted/50 flex items-center justify-center mb-4">
               <Upload className="w-6 h-6 text-muted-foreground" />
             </div>
             <h4 className="text-sm font-medium text-foreground mb-1">No reference documents yet</h4>

@@ -12,7 +12,7 @@
  */
 
 import { useMemo, useCallback, useState, useEffect, useRef } from "react";
-import { Plus, PanelLeftClose, PanelLeft, Settings2, Plug } from "lucide-react";
+import { Plus, PanelLeftClose, PanelLeft, Settings2, Plug, Rocket, BarChart3, TrendingUp, Sparkles, Scale, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LoadingIndicator } from "@/components/ui/LoadingIndicator";
 import { emitter } from "@/utils/eventEmitter";
@@ -42,15 +42,18 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { buildDatasetAnalysisPrompt } from "./lucy-prompt-utils";
 
+// Icon size for quick actions
+const QA_ICON = "w-4 h-4";
+
 // All available quick actions (plain language for non-technical users)
 const ALL_QUICK_ACTIONS: Record<string, QuickAction> = {
-  "start-finetune": { id: "start-finetune", icon: "🚀", label: "Start training setup" },
-  "check-status": { id: "check-status", icon: "📊", label: "Check progress" },
-  "analyze-coverage": { id: "analyze-coverage", icon: "📈", label: "Check data variety" },
-  "generate-data": { id: "generate-data", icon: "✨", label: "Create more training examples" },
-  "configure-grader": { id: "configure-grader", icon: "⚖️", label: "Set up quality scoring" },
-  "run-dry-run": { id: "run-dry-run", icon: "🧪", label: "Test before training" },
-  "start-training": { id: "start-training", icon: "🚀", label: "Start training" },
+  "start-finetune": { id: "start-finetune", icon: <Rocket className={QA_ICON} />, label: "Start training setup" },
+  "check-status": { id: "check-status", icon: <BarChart3 className={QA_ICON} />, label: "Check progress" },
+  "analyze-coverage": { id: "analyze-coverage", icon: <TrendingUp className={QA_ICON} />, label: "Check data variety" },
+  "generate-data": { id: "generate-data", icon: <Sparkles className={QA_ICON} />, label: "Create more training examples" },
+  "configure-grader": { id: "configure-grader", icon: <Scale className={QA_ICON} />, label: "Set up quality scoring" },
+  "run-dry-run": { id: "run-dry-run", icon: <FlaskConical className={QA_ICON} />, label: "Test before training" },
+  "start-training": { id: "start-training", icon: <Rocket className={QA_ICON} />, label: "Start training" },
 };
 
 /** Return context-appropriate quick actions based on workflow state */
