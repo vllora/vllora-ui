@@ -57,8 +57,8 @@ ${plan.grader_config.criteria.map((c) =>
     ? `## 🔍 Response Schema
 
 **System Prompt Template:**
-\`\`\`
-${plan.output_format.system_prompt_template}
+\`\`\`json
+${JSON.stringify({ role: 'system', content: plan.output_format.system_prompt_template }, null, 2)}
 \`\`\`
 
 **Output Schema:**
