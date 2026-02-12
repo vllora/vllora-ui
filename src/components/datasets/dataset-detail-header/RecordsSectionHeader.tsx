@@ -5,8 +5,8 @@
  * Shows record stats on left as clickable filter chips (P0-19), Export button and ViewModeToggle on right.
  */
 
-import { useState, useEffect } from "react";
-import { Download, Loader2, X } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Download, Loader2, X, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ViewModeToggle, type ViewMode } from "./ViewModeToggle";
 import type { DatasetRecord } from "@/types/dataset-types";
@@ -24,6 +24,10 @@ export interface RecordsSectionHeaderProps {
   activeStatFilter?: StatFilter;
   /** Called when a stat chip is clicked to filter (P0-19) */
   onStatFilterChange?: (filter: StatFilter) => void;
+  /** Search query for filtering records */
+  searchQuery?: string;
+  /** Called when search query changes */
+  onSearchChange?: (query: string) => void;
 }
 
 export function RecordsSectionHeader({
@@ -34,7 +38,10 @@ export function RecordsSectionHeader({
   datasetId,
   activeStatFilter = "all",
   onStatFilterChange,
+  searchQuery = "",
+  onSearchChange,
 }: RecordsSectionHeaderProps) {
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [generationProgress, setGenerationProgress] = useState<{
     completed: number;
     total: number;
@@ -162,6 +169,34 @@ export function RecordsSectionHeader({
                 ? `Generating for ${generationProgress.topicName}: ${generationProgress.completed}/${generationProgress.total}`
                 : `Generating ${generationProgress.completed}/${generationProgress.total}`}
             </span>
+          </div>
+        )}
+        {/* Search */}
+        {onSearchChange && (
+          <div className="flex items-center gap-1 bg-muted/50 border border-border rounded-md px-2 h-7">
+            <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Search records..."
+              className="bg-transparent text-xs text-foreground placeholder:text-muted-foreground/50 outline-none w-36"
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  onSearchChange("");
+                  searchInputRef.current?.blur();
+                }
+              }}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => onSearchChange("")}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
           </div>
         )}
         <Button

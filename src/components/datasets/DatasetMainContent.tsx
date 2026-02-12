@@ -111,15 +111,21 @@ export function DatasetMainContent({
   const [activeStatFilter, setActiveStatFilter] = useState<StatFilter>("all");
   // P0-9: Role filter state for RecordsTableHeader
   const [roleFilter, setRoleFilter] = useState<RecordRole>("all");
+  // Search query state
+  const [searchQuery, setSearchQuery] = useState("");
 
-  // Apply stat filter and role filter to records for the table view
+  // Apply stat filter, role filter, and search to records
   const filteredRecords = useMemo(() => {
-    if (activeStatFilter === "all" && roleFilter === "all") return records;
+    const hasStatFilter = activeStatFilter !== "all";
+    const hasRoleFilter = roleFilter !== "all";
+    const hasSearch = searchQuery.trim().length > 0;
+    if (!hasStatFilter && !hasRoleFilter && !hasSearch) return records;
     return filterRecords(records, {
-      statFilter: activeStatFilter !== "all" ? activeStatFilter : undefined,
-      role: roleFilter !== "all" ? roleFilter : undefined,
+      statFilter: hasStatFilter ? activeStatFilter : undefined,
+      role: hasRoleFilter ? roleFilter : undefined,
+      search: hasSearch ? searchQuery : undefined,
     });
-  }, [records, activeStatFilter, roleFilter]);
+  }, [records, activeStatFilter, roleFilter, searchQuery]);
 
   // Handle "View in Table" from canvas panel — switch to table view and focus the topic
   const handleViewInTable = useCallback((topicId: string) => {
@@ -179,6 +185,8 @@ export function DatasetMainContent({
           datasetId={datasetId}
           activeStatFilter={activeStatFilter}
           onStatFilterChange={setActiveStatFilter}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
         />
       </div>
 
