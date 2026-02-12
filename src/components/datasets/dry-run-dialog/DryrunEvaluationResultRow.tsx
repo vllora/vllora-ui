@@ -18,6 +18,7 @@ interface DryrunEvaluationResultRowProps {
   index: number;
   isExpandable?: boolean;
   isExpanded?: boolean;
+  isHighlighted?: boolean;
   onClick?: () => void;
   onRecordIdClick?: (recordId: string) => void;
 }
@@ -92,6 +93,7 @@ export function DryrunEvaluationResultRow({
   index,
   isExpandable,
   isExpanded,
+  isHighlighted,
   onClick,
   onRecordIdClick,
 }: DryrunEvaluationResultRowProps) {
@@ -108,8 +110,9 @@ export function DryrunEvaluationResultRow({
   return (
     <div
       className={cn(
-        "flex items-center border-t border-border/50 first:border-t-0",
-        isExpandable ? "cursor-pointer hover:bg-muted/30" : "h-full"
+        "flex items-center border-t border-border/50 first:border-t-0 rounded-sm",
+        isExpandable ? "cursor-pointer hover:bg-muted/30" : "h-full",
+        isHighlighted && "animate-record-highlight"
       )}
       style={{ minHeight: 32 }}
       onClick={onClick}

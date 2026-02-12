@@ -74,6 +74,24 @@ export async function getDatasetById(datasetId: string): Promise<Dataset | null>
   });
 }
 
+// Find a local dataset by its backend dataset ID
+export async function getDatasetByBackendId(backendDatasetId: string): Promise<Dataset | null> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('datasets', 'readonly');
+    const store = tx.objectStore('datasets');
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+      const match = request.result.find(
+        (d: Dataset) => d.backendDatasetId === backendDatasetId
+      );
+      resolve(match || null);
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
 // Get all datasets (metadata only)
 export async function getAllDatasets(): Promise<Dataset[]> {
   const db = await getDB();
@@ -673,6 +691,57 @@ export async function backfillDryRunScoresFromJobs(
     tx.oncomplete = () => resolve(backfilled);
     tx.onerror = () => reject(tx.error);
   });
+}
+
+/**
+ * Persist finetune evaluation scores to records.
+ *
+ * For each row result, computes the average score across all epochs and
+ * calls updateRecordEvaluationScores with finetuneScore + incrementFinetuneCount.
+ *
+ * @param backendDatasetId - Backend dataset ID (to look up local dataset)
+ * @param results - Finetune evaluation results (RowEpochResults[])
+ */
+export async function persistFinetuneScoresToRecords(
+  backendDatasetId: string,
+  results: Array<{
+    row_index: number;
+    row: { id: string; [key: string]: unknown };
+    epochs: Record<number, Array<{ score?: number; [key: string]: unknown }>>;
+  }>
+): Promise<number> {
+  // Look up local dataset
+  const dataset = await getDatasetByBackendId(backendDatasetId);
+  if (!dataset) return 0;
+
+  let persisted = 0;
+
+  for (const row of results) {
+    const recordId = row.row?.id;
+    if (!recordId) continue;
+
+    // Compute average score across all epochs
+    const allScores: number[] = [];
+    for (const epochEntries of Object.values(row.epochs)) {
+      for (const entry of epochEntries) {
+        if (typeof entry.score === 'number') {
+          allScores.push(entry.score);
+        }
+      }
+    }
+
+    if (allScores.length === 0) continue;
+
+    const avgScore = allScores.reduce((sum, s) => sum + s, 0) / allScores.length;
+
+    await updateRecordEvaluationScores(dataset.id, recordId, {
+      finetuneScore: avgScore,
+      incrementFinetuneCount: true,
+    });
+    persisted++;
+  }
+
+  return persisted;
 }
 
 // Clear all record topics for a dataset

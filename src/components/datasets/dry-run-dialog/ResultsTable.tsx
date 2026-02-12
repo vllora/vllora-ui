@@ -57,6 +57,7 @@ export function ResultsTable({
   const [searchQuery, setSearchQuery] = useState("");
   const [showOnlyFailed, setShowOnlyFailed] = useState(false);
   const [sortOption, setSortOption] = useState<SortOption>("index");
+  const [highlightedRowId, setHighlightedRowId] = useState<string | null>(null);
 
   // Filter and sort results
   const processedResults = useMemo(() => {
@@ -125,6 +126,31 @@ export function ResultsTable({
   useEffect(() => {
     virtualizer.measure();
   }, [expandedRowId, virtualizer]);
+
+  // Listen for highlight events from QualityIndicator clicks
+  useEffect(() => {
+    const handleHighlight = (e: Event) => {
+      const recordId = (e as CustomEvent).detail?.recordId;
+      if (!recordId) return;
+
+      // Find the row index in processedResults
+      const index = processedResults.findIndex(
+        (r) => r.dataset_row_id === recordId
+      );
+      if (index >= 0) {
+        // Scroll to the row
+        virtualizer.scrollToIndex(index, { align: 'center' });
+        // Highlight it
+        setHighlightedRowId(recordId);
+        setTimeout(() => setHighlightedRowId(null), 2000);
+      }
+    };
+
+    window.addEventListener('vllora_highlight_eval_result', handleHighlight);
+    return () => {
+      window.removeEventListener('vllora_highlight_eval_result', handleHighlight);
+    };
+  }, [processedResults, virtualizer]);
 
   if (results.length === 0) {
     return (
@@ -240,6 +266,7 @@ export function ResultsTable({
                       index={result.row_index}
                       isExpandable={isExpandable}
                       isExpanded={isExpanded}
+                      isHighlighted={highlightedRowId === result.dataset_row_id}
                       onClick={onRowClick ? () => onRowClick(result) : undefined}
                       onRecordIdClick={onRecordIdClick}
                     />

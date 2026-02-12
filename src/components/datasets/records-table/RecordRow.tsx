@@ -73,10 +73,16 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
     ? () => onExpand(record)
     : (onToggleExpand ?? (() => setInternalExpanded(!internalExpanded)));
 
-  // Handler for QualityIndicator click — navigate to evaluator or jobs tab
+  // Handler for QualityIndicator click — navigate to evaluator or jobs tab and highlight record
   const handleScoreNavigate = useCallback((target: "evaluator" | "jobs") => {
     emitter.emit("vllora_switch_tab", { datasetId: record.datasetId, tab: target });
-  }, [record.datasetId]);
+    // After tab switch, highlight the record in the results table
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('vllora_highlight_eval_result', {
+        detail: { recordId: record.id }
+      }));
+    }, 300);
+  }, [record.datasetId, record.id]);
 
   // Handler to trigger Lucy for variant generation
   const handleGenerateVariants = useCallback(() => {
@@ -101,7 +107,7 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
         "group flex flex-col rounded-md overflow-hidden transition-colors bg-zinc-800/30",
         isExpanded ? "ring-1 ring-zinc-700/50" : "hover:bg-zinc-800/50",
         selected && "bg-[rgba(var(--theme-500),0.1)] ring-1 ring-[rgba(var(--theme-500),0.3)]",
-        isHighlighted && "ring-2 ring-violet-500 bg-violet-500/20 animate-pulse"
+        isHighlighted && "animate-record-highlight"
       )}
     >
       {/* Main row */}

@@ -28,6 +28,7 @@ import {
   getCachedJobEvaluations,
   saveJobEvaluationsCache,
 } from "@/services/finetune-workflow-db";
+import { persistFinetuneScoresToRecords } from "@/services/datasets-db";
 import { ProjectEventsConsumer } from "@/contexts/project-events";
 import {
   CustomEvent,
@@ -63,6 +64,8 @@ function useFinetuneJobsLogic() {
 
   // Job evaluations state - keyed by job ID
   const [jobEvaluations, setJobEvaluations] = useState<Record<string, JobEvaluationState>>({});
+  // Track which jobs have had finetune scores persisted to records (avoid double-counting)
+  const finetuneScoresPersistedRef = useRef<Set<string>>(new Set());
   const evalPollIntervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
   // Get project events for SSE subscription
@@ -156,6 +159,19 @@ function useFinetuneJobsLogic() {
       saveJobEvaluationsCache(jobId, results).catch((err) => {
         console.warn('Failed to cache job evaluations:', err);
       });
+
+      // Persist finetune scores to records (once per completed job)
+      const isComplete = job.status !== 'pending' && job.status !== 'running';
+      if (isComplete && results.results.length > 0 && !finetuneScoresPersistedRef.current.has(jobId)) {
+        finetuneScoresPersistedRef.current.add(jobId);
+        persistFinetuneScoresToRecords(job.dataset_id!, results.results).then((n) => {
+          if (n > 0) {
+            emitter.emit('vllora_dataset_refresh' as any);
+          }
+        }).catch((err) => {
+          console.warn('[FinetuneJobs] Failed to persist finetune scores:', err);
+        });
+      }
     } catch (err) {
       setJobEvaluations((prev) => ({
         ...prev,
