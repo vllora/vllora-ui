@@ -9,6 +9,23 @@ import { getLabel, getDataAsObject } from "./record-utils";
 export type SortField = "timestamp" | "topic" | "evaluation";
 export type SortDirection = "asc" | "desc";
 
+/** Record role relative to evaluation/training pipeline */
+export type RecordRole = "all" | "training" | "evaluated";
+
+/** Stat filter type for clickable stats in RecordsSectionHeader (P0-19) */
+export type StatFilter = "all" | "from_spans" | "labeled" | "evaluated";
+
+/** P0-9: Role configuration for visual display */
+export const ROLE_CONFIG = {
+  training: { label: "Training", className: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
+  evaluated: { label: "Evaluated", className: "bg-violet-500/15 text-violet-400 border-violet-500/30" },
+} as const;
+
+/** P0-9: Determine the role of a record based on evaluation state */
+export function getRecordRole(record: DatasetRecord): "training" | "evaluated" {
+  return record.evaluation?.score !== undefined ? "evaluated" : "training";
+}
+
 export interface RecordFilterOptions {
   /** Search query to filter by content, topic, or span ID */
   search?: string;
@@ -16,6 +33,10 @@ export interface RecordFilterOptions {
   topic?: string;
   /** Filter by generated traces */
   generated?: "all" | "generated" | "not_generated";
+  /** Filter by record role (P0-9: eval vs training clarity) */
+  role?: RecordRole;
+  /** Filter by stat category (P0-19: clickable stats navigation) */
+  statFilter?: StatFilter;
 }
 
 export interface RecordSortOptions {
@@ -46,6 +67,22 @@ export function filterRecords(
     filtered = filtered.filter(r => !!r.is_generated);
   } else if (options.generated === "not_generated") {
     filtered = filtered.filter(r => !r.is_generated);
+  }
+
+  // Filter by record role (P0-9)
+  if (options.role === "evaluated") {
+    filtered = filtered.filter(r => r.evaluation?.score !== undefined);
+  } else if (options.role === "training") {
+    filtered = filtered.filter(r => r.evaluation?.score === undefined);
+  }
+
+  // Filter by stat category (P0-19)
+  if (options.statFilter === "from_spans") {
+    filtered = filtered.filter(r => !!r.spanId);
+  } else if (options.statFilter === "labeled") {
+    filtered = filtered.filter(r => !!r.topic);
+  } else if (options.statFilter === "evaluated") {
+    filtered = filtered.filter(r => r.evaluation?.score !== undefined);
   }
 
   // Filter by search query (searches in label, topic, and spanId)

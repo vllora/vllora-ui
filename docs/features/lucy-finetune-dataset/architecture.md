@@ -628,6 +628,103 @@ RecordRow
 | `contexts/FinetuneJobsContext.tsx` | Persists finetune job scores via `persistFinetuneScoresToRecords()` |
 | `types/dataset-types.ts` | `DatasetEvaluation` type (`score`, `feedback`, `evaluatedAt`) |
 
+### Canvas View Enhancements (P0 Implementation)
+
+The Canvas view was enhanced with search/filter, conversation previews, loading states, and semantic theming:
+
+**Canvas Search & Filter (P0-2)**
+
+`TopicCanvasContext` manages canvas-level filter state:
+- `searchQuery` / `setSearchQuery` — text search across records
+- `scoreFilter` / `setScoreFilter` — filter by evaluation score (`ScoreFilter = "all" | "high" | "low" | "unevaluated"`)
+- `filteredRecordsByTopic` — computed filtered records per topic (null when no filter active)
+- `isFilterActive` — boolean indicating whether any filter is active
+- `getMatchingCount(topicId)` — returns matching count for a topic when filter is active
+
+`CanvasToolbar` (relocated from bottom-right to top-right) includes:
+- Search input (with clear button)
+- Score filter dropdown (All scores, High >= 0.8, Low < 0.5, Unevaluated)
+- Preview toggle (P0-6)
+- Relayout button (existing)
+- Active filter indicator with clear-all button
+
+When filters are active, `CollapsedTopicNode` shows "X/Y matching" count and non-matching nodes are dimmed (opacity-50).
+
+**Conversation Previews (P0-6)**
+
+`CollapsedTopicNode` shows 1-2 truncated user message snippets when preview mode is on:
+- Toggle via `showPreviews` / `togglePreviews` in `TopicCanvasContext`
+- Uses `extractMessages` and `cleanText` from `ConversationThreadCell.utilities`
+- Node width increases from `COLLAPSED_WIDTH` (300px) to `COLLAPSED_WIDTH_WITH_PREVIEW` (380px)
+
+**Loading States (P0-15)**
+
+`TopicHierarchyCanvas` shows an operation progress banner (top-left) during data generation/import/evaluation:
+- `TopicCanvasContext` tracks `operationProgress` (`CanvasOperationProgress` type) and `generatingTopicName`
+- Subscribes to `vllora_data_generation_progress` events via `emitter.on()`
+- `CollapsedTopicNode` shows a pulsing border (`animate-pulse border-emerald-500/60`) when data is being generated for that specific topic
+
+**Key Files:**
+| File | Purpose |
+|------|---------|
+| `datasets/dataset-canvas/TopicCanvasContext.tsx` | Canvas state: search/filter, previews, operation progress |
+| `datasets/dataset-canvas/CanvasToolbar.tsx` | Search input, score filter dropdown, preview toggle |
+| `datasets/dataset-canvas/TopicHierarchyCanvas.tsx` | Operation progress banner |
+| `datasets/dataset-canvas/topic-node/CollapsedTopicNode.tsx` | Matching count, previews, pulsing border |
+
+### Record Filters & Role Types
+
+`record-filters.ts` was enhanced with new filter types for evaluation/training clarity (P0-9) and clickable stat navigation (P0-19):
+
+```typescript
+/** Record role relative to evaluation/training pipeline (P0-9) */
+export type RecordRole = "all" | "training" | "evaluated";
+
+/** Stat filter type for clickable stats in RecordsSectionHeader (P0-19) */
+export type StatFilter = "all" | "from_spans" | "labeled" | "evaluated";
+
+export interface RecordFilterOptions {
+  search?: string;
+  topic?: string;
+  generated?: "all" | "generated" | "not_generated";
+  role?: RecordRole;        // P0-9: Filter by evaluation status
+  statFilter?: StatFilter;  // P0-19: Filter by stat category
+}
+```
+
+### Clickable Stats Navigation (P0-19)
+
+`RecordsSectionHeader` stats are now clickable filter chips via the `StatChip` component:
+- New props: `activeStatFilter` (`StatFilter`) and `onStatFilterChange` callback
+- Clicking a stat toggles that filter; clicking the same stat again clears it
+- Active filter shown with theme-colored highlight; "Clear" (X) button appears when filter is active
+- Topics stat is non-clickable (it opens a dialog instead)
+
+### Evaluation/Training Visual Distinction (P0-9)
+
+`RecordRow` now shows a violet left border for evaluated records:
+- `border-l-2 border-l-violet-500/60` applied when `record.evaluation?.score !== undefined`
+- Hardcoded zinc colors replaced with semantic CSS variable classes (`bg-card/30`, `border-border`, `hover:bg-muted/50`)
+
+### Canvas Records Dialog (P0-1)
+
+`TopicRecordsDialog` now includes full record management capabilities:
+- `selectable={true}` and `showHeader={true}` passed to `RecordsTable`
+- Search bar with `filterRecords()` from `record-filters.ts`
+- Bulk actions bar (delete selected) visible when records are selected
+- Selection state and search query cleared on dialog close
+
+### Semantic Theming
+
+Hardcoded dark-theme colors were replaced with semantic CSS variable classes across Canvas components:
+- `bg-[#111113]` → `bg-card`
+- `border-emerald-500/40` → `border-border`
+- `hover:border-emerald-500/50` → `hover:border-muted-foreground/50`
+- `text-zinc-600` → `text-muted-foreground/60`
+- `text-zinc-700` → `text-border`
+- `bg-zinc-800/30` → `bg-card/30`
+- Box shadow `rgba(16, 185, 129, ...)` → `rgba(var(--theme-500), ...)`
+
 ### Dataset State System
 
 Datasets have a `state` field (`DatasetState = 'draft' | 'in_finetune' | 'completed'`) with shared display config:
@@ -654,4 +751,5 @@ Theme colors use CSS custom properties as space-separated RGB values (e.g., `--t
 - [State Machine](./state-machine.md) - Workflow state transitions
 - [Guided Onboarding](./guided-onboarding.md) - Setup plan flow documentation
 - [UX Flow Assessment](./ux-flow-assessment.md) - UX evaluation and recommendations
+- [Data Tab Redesign Spec](./data-tab-redesign-spec.md) - UX redesign proposals (P0-P2) with implementation status
 - [README](./README.md) - Complete design document

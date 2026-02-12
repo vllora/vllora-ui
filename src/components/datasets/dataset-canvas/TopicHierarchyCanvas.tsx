@@ -9,7 +9,7 @@
  * - Uses TopicCanvasContext for state management
  */
 
-import { useMemo, useEffect, useRef } from "react";
+import { useMemo, useEffect, useRef, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -20,12 +20,14 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { Loader2 } from "lucide-react";
 import { TopicNodeComponent } from "./topic-node/TopicNodeComponent";
 import { TopicInputNodeComponent } from "./TopicInputNode";
 import { RootNodeComponent } from "./RootNodeComponent";
 import { CanvasToolbar } from "./CanvasToolbar";
 import { TopicCanvasProvider, TopicCanvasConsumer } from "./TopicCanvasContext";
 import { TopicRecordsDialogWrapper } from "./TopicRecordsDialogWrapper";
+import { RecordsPanel } from "./RecordsPanel";
 import type { CanvasNode } from "./useDagreLayout";
 import {
   useDagreLayout,
@@ -81,7 +83,7 @@ function TopicHierarchyCanvasInner({
 }: {
   hierarchy?: TopicHierarchyNode[];
 }) {
-  const { records, expandedNodes, nodeSizes, selectedTopic, setSelectedTopic, pendingAddParentId, layoutVersion } = TopicCanvasConsumer();
+  const { records, expandedNodes, nodeSizes, selectedTopic, setSelectedTopic, pendingAddParentId, layoutVersion, operationProgress, viewingTopicId, isFullDialogMode } = TopicCanvasConsumer();
 
   // Compute record counts by topic
   const recordCountsByTopic = useMemo(() => {
@@ -108,7 +110,7 @@ function TopicHierarchyCanvasInner({
     { direction: "LR" },
     pendingAddParentId,
     nodeSizes,
-    layoutVersion
+    layoutVersion,
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
@@ -209,6 +211,25 @@ function TopicHierarchyCanvasInner({
     }
   };
 
+  // Track panel open/close to trigger fitView
+  const panelOpen = viewingTopicId !== null && !isFullDialogMode;
+  const [prevPanelOpen, setPrevPanelOpen] = useState(panelOpen);
+
+  useEffect(() => {
+    if (prevPanelOpen !== panelOpen) {
+      setPrevPanelOpen(panelOpen);
+      // Give flex layout time to settle, then fit view
+      if (reactFlowInstance.current) {
+        setTimeout(() => {
+          reactFlowInstance.current?.fitView({
+            padding: 0.2,
+            duration: 300,
+          });
+        }, 50);
+      }
+    }
+  }, [panelOpen, prevPanelOpen]);
+
   // Fit view callback for toolbar
   const handleFitView = () => {
     reactFlowInstance.current?.fitView({
@@ -218,7 +239,28 @@ function TopicHierarchyCanvasInner({
   };
 
   return (
-    <div className="flex-1 w-full h-full relative">
+    <div className="flex-1 relative min-w-0">
+      {/* P0-15: Operation progress banner */}
+      {operationProgress && (
+        <div className="absolute top-3 left-3 z-10 flex items-center gap-2 px-3 py-2 bg-background/95 backdrop-blur-sm border border-border rounded-lg shadow-lg">
+          <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+          <span className="text-sm text-foreground">
+            {operationProgress.type === "generation" && "Generating data"}
+            {operationProgress.type === "import" && "Importing records"}
+            {operationProgress.type === "evaluation" && "Running evaluation"}
+          </span>
+          {operationProgress.completed !== undefined && operationProgress.total !== undefined && (
+            <span className="text-xs text-muted-foreground">
+              {operationProgress.completed}/{operationProgress.total}
+            </span>
+          )}
+          {operationProgress.topicName && (
+            <span className="text-xs text-muted-foreground">
+              for &ldquo;{operationProgress.topicName}&rdquo;
+            </span>
+          )}
+        </div>
+      )}
       <CanvasToolbar onFitView={handleFitView} />
       <ReactFlow
         nodes={nodes}
@@ -247,6 +289,19 @@ function TopicHierarchyCanvasInner({
           className="!bg-background/95 !border-border !shadow-lg [&>button]:!bg-background [&>button]:!border-border [&>button]:!text-foreground [&>button:hover]:!bg-muted"
         />
       </ReactFlow>
+    </div>
+  );
+}
+
+// Flex layout wrapper: canvas + optional records panel
+function CanvasWithPanel({ hierarchy }: { hierarchy?: TopicHierarchyNode[] }) {
+  const { viewingTopicId, isFullDialogMode } = TopicCanvasConsumer();
+  const showPanel = viewingTopicId !== null && !isFullDialogMode;
+
+  return (
+    <div className="flex h-full w-full">
+      <TopicHierarchyCanvasInner hierarchy={hierarchy} />
+      {showPanel && <RecordsPanel />}
     </div>
   );
 }
@@ -287,7 +342,7 @@ export function TopicHierarchyCanvas({
       onGenerateForTopic={onGenerateForTopic}
       onGenerateSubtopics={onGenerateSubtopics}
     >
-      <TopicHierarchyCanvasInner hierarchy={hierarchy} />
+      <CanvasWithPanel hierarchy={hierarchy} />
       <TopicRecordsDialogWrapper />
     </TopicCanvasProvider>
   );

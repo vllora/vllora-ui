@@ -6,7 +6,7 @@
  */
 
 import { useState, useRef, useEffect } from "react";
-import { Table2, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -15,7 +15,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { CoverageIndicator } from "./CoverageIndicator";
-import { ViewRecordsButton } from "./ViewRecordsButton";
 
 interface TopicNodeHeaderProps {
   name: string;
@@ -26,7 +25,6 @@ interface TopicNodeHeaderProps {
   isExpanded: boolean;
   /** Coverage percentage from coverageStats (0-100) */
   coveragePercentage?: number;
-  onViewRecords: () => void;
   /** Called when the topic is renamed. Only available for non-root nodes. */
   onRename?: (newName: string) => void;
 }
@@ -40,7 +38,6 @@ export function TopicNodeHeader({
   isRoot,
   isExpanded,
   coveragePercentage,
-  onViewRecords,
   onRename,
 }: TopicNodeHeaderProps) {
   const [isEditing, setIsEditing] = useState(false);
@@ -117,18 +114,6 @@ export function TopicNodeHeader({
       )}
       style={{ height: HEADER_HEIGHT }}
     >
-      {/* Icon */}
-      <div
-        className={cn(
-          "w-5 h-5 rounded flex items-center justify-center flex-shrink-0",
-          isRoot
-            ? "bg-[rgba(var(--theme-500),0.15)] text-[rgb(var(--theme-500))]"
-            : "bg-muted text-muted-foreground"
-        )}
-      >
-        <Table2 className="w-3 h-3" />
-      </div>
-
       {/* Title - with inline editing */}
       <div
         className="flex-1 min-w-0"
@@ -220,10 +205,6 @@ export function TopicNodeHeader({
         />
       )}
 
-      {/* View records button - show when there are records (direct or aggregated) */}
-      {(recordCount > 0 || (aggregatedRecordCount ?? 0) > 0) && (
-        <ViewRecordsButton onViewRecords={onViewRecords} />
-      )}
     </div>
   );
 }

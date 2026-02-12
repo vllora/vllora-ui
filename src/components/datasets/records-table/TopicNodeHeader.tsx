@@ -45,6 +45,8 @@ export interface TopicNodeHeaderProps {
   isGenerating?: boolean;
   /** Progress of data generation (completed/total) */
   generatingProgress?: { completed: number; total: number } | null;
+  /** Whether this header is temporarily highlighted (e.g., from canvas "View in Table") */
+  highlighted?: boolean;
 }
 
 export function TopicNodeHeader({
@@ -62,6 +64,7 @@ export function TopicNodeHeader({
   onGenerateSubtopics,
   isGenerating,
   generatingProgress,
+  highlighted,
 }: TopicNodeHeaderProps) {
   const isUnassigned = variant === "unassigned";
   const topicPath = path.join("/");
@@ -74,7 +77,8 @@ export function TopicNodeHeader({
         className={cn(
           "group w-full flex items-center gap-2 py-2 px-3 text-left transition-colors",
           "bg-zinc-900/60 hover:bg-zinc-800/60 border-l-2",
-          isUnassigned ? "border-l-amber-500/40" : "border-l-emerald-500/40"
+          isUnassigned ? "border-l-amber-500/40" : "border-l-emerald-500/40",
+          highlighted && "animate-record-highlight rounded-sm"
         )}
       >
         {/* Expand/collapse button */}

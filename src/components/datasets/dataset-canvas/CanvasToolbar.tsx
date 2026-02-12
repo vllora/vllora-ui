@@ -2,7 +2,7 @@
  * CanvasToolbar
  *
  * Floating toolbar for the topic hierarchy canvas.
- * Provides controls like manual relayout, zoom, etc.
+ * Relayout button to re-run dagre layout.
  */
 
 import { RefreshCw } from "lucide-react";
@@ -26,7 +26,6 @@ export function CanvasToolbar({ className, onFitView }: CanvasToolbarProps) {
 
   const handleRelayout = () => {
     triggerRelayout();
-    // Also fit view after relayout
     if (onFitView) {
       setTimeout(onFitView, 100);
     }
@@ -35,10 +34,7 @@ export function CanvasToolbar({ className, onFitView }: CanvasToolbarProps) {
   return (
     <div
       className={cn(
-        "absolute bottom-4 right-4 z-10",
-        "flex items-center gap-1 px-1.5 py-1",
-        "bg-background/95 backdrop-blur-sm",
-        "border border-border rounded-full shadow-lg",
+        "absolute top-3 right-3 z-10",
         className
       )}
     >
@@ -46,10 +42,10 @@ export function CanvasToolbar({ className, onFitView }: CanvasToolbarProps) {
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              variant="ghost"
+              variant="outline"
               size="icon"
               onClick={handleRelayout}
-              className="h-8 w-8 rounded-full"
+              className="h-8 w-8 bg-background/95 backdrop-blur-sm shadow-lg"
             >
               <RefreshCw className="h-4 w-4" />
             </Button>

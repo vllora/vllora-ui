@@ -16,6 +16,7 @@ import { RecordsTableHeader } from "./RecordsTableHeader";
 import { RecordsTableFooter } from "./RecordsTableFooter";
 import { SeeAllLink } from "./SeeAllLink";
 import { getTopicColor, type AvailableTopic } from "../record-utils";
+import type { RecordRole } from "../record-filters";
 
 interface RecordsTableProps {
   records: DatasetRecord[];
@@ -61,6 +62,10 @@ interface RecordsTableProps {
   onGenerateForTopic?: (topicPath: string) => void;
   /** Handler for generating subtopics (null = root level) */
   onGenerateSubtopics?: (topicPath: string | null) => void;
+  /** P0-9: Active role filter */
+  roleFilter?: RecordRole;
+  /** P0-9: Called when role filter changes */
+  onRoleFilterChange?: (role: RecordRole) => void;
 }
 
 /** Represents a group of records by topic */
@@ -97,6 +102,8 @@ export function RecordsTable({
   onDeleteTopic,
   onGenerateForTopic,
   onGenerateSubtopics,
+  roleFilter,
+  onRoleFilterChange,
 }: RecordsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -329,6 +336,8 @@ export function RecordsTable({
             someSelected={someSelected}
             onSelectAll={handleSelectAll}
             hideTopic
+            roleFilter={roleFilter}
+            onRoleFilterChange={onRoleFilterChange}
           />
         )}
         <div className="flex-1 overflow-auto">
@@ -444,6 +453,8 @@ export function RecordsTable({
             totalRecords={displayRecords.length}
             hasTopicHierarchy={hasTopicHierarchy}
             topicHierarchy={topicHierarchy}
+            roleFilter={roleFilter}
+            onRoleFilterChange={onRoleFilterChange}
           />
         )}
         <div className="flex-1 overflow-auto p-2 space-y-2">
@@ -483,6 +494,8 @@ export function RecordsTable({
           totalRecords={displayRecords.length}
           hasTopicHierarchy={hasTopicHierarchy}
           topicHierarchy={topicHierarchy}
+          roleFilter={roleFilter}
+          onRoleFilterChange={onRoleFilterChange}
         />
       )}
       <div

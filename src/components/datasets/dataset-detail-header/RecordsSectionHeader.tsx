@@ -2,15 +2,17 @@
  * RecordsSectionHeader
  *
  * View controls bar below the overview card.
- * Shows record stats on left (like footer), Export button and ViewModeToggle on right.
+ * Shows record stats on left as clickable filter chips (P0-19), Export button and ViewModeToggle on right.
  */
 
 import { useState, useEffect } from "react";
-import { Download, Copy, CheckCheck, Loader2 } from "lucide-react";
+import { Download, Copy, CheckCheck, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ViewModeToggle, type ViewMode } from "./ViewModeToggle";
 import type { DatasetRecord } from "@/types/dataset-types";
+import type { StatFilter } from "../record-filters";
 import { emitter } from "@/utils/eventEmitter";
+import { cn } from "@/lib/utils";
 
 export interface RecordsSectionHeaderProps {
   viewMode: ViewMode;
@@ -18,6 +20,10 @@ export interface RecordsSectionHeaderProps {
   onExport: () => void;
   records: DatasetRecord[];
   datasetId?: string;
+  /** Active stat filter (P0-19) */
+  activeStatFilter?: StatFilter;
+  /** Called when a stat chip is clicked to filter (P0-19) */
+  onStatFilterChange?: (filter: StatFilter) => void;
 }
 
 export function RecordsSectionHeader({
@@ -26,6 +32,8 @@ export function RecordsSectionHeader({
   onExport,
   records,
   datasetId,
+  activeStatFilter = "all",
+  onStatFilterChange,
 }: RecordsSectionHeaderProps) {
   const [copied, setCopied] = useState(false);
   const [generationProgress, setGenerationProgress] = useState<{
@@ -81,34 +89,78 @@ export function RecordsSectionHeader({
     }
   };
 
+  // P0-19: Clicking a stat toggles filter; clicking same filter clears it
+  const handleStatClick = (filter: StatFilter) => {
+    if (!onStatFilterChange) return;
+    if (activeStatFilter === filter) {
+      onStatFilterChange("all");
+    } else {
+      onStatFilterChange(filter);
+    }
+  };
+
   return (
     <div className="flex items-center justify-between">
-      <div className="flex items-center gap-3 text-xs text-zinc-500">
-        <span>
-          <span className="font-medium text-zinc-300">{totalRecords}</span> records
-        </span>
-        <span className="text-zinc-700">·</span>
-        <span>
-          <span className="font-medium text-zinc-300">{fromSpans}</span> from spans
-        </span>
-        <span className="text-zinc-700">·</span>
-        <span>
-          <span className="font-medium text-zinc-300">{topicCount}</span> topics
-        </span>
-        <span className="text-zinc-700">·</span>
-        <span>
-          <span className="font-medium text-zinc-300">{withTopic}</span> labeled
-        </span>
-        <span className="text-zinc-700">·</span>
-        <span>
-          <span className="font-medium text-zinc-300">{withEvaluation}</span> evaluated
-        </span>
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        {/* P0-19: Clickable stat chips */}
+        <StatChip
+          count={totalRecords}
+          label="records"
+          isActive={activeStatFilter === "all"}
+          onClick={() => handleStatClick("all")}
+          clickable={!!onStatFilterChange}
+        />
+        <span className="text-border">·</span>
+        <StatChip
+          count={fromSpans}
+          label="from spans"
+          isActive={activeStatFilter === "from_spans"}
+          onClick={() => handleStatClick("from_spans")}
+          clickable={!!onStatFilterChange}
+        />
+        <span className="text-border">·</span>
+        <StatChip
+          count={topicCount}
+          label="topics"
+          isActive={false}
+          onClick={() => {}}
+          clickable={false}
+        />
+        <span className="text-border">·</span>
+        <StatChip
+          count={withTopic}
+          label="labeled"
+          isActive={activeStatFilter === "labeled"}
+          onClick={() => handleStatClick("labeled")}
+          clickable={!!onStatFilterChange}
+        />
+        <span className="text-border">·</span>
+        <StatChip
+          count={withEvaluation}
+          label="evaluated"
+          isActive={activeStatFilter === "evaluated"}
+          onClick={() => handleStatClick("evaluated")}
+          clickable={!!onStatFilterChange}
+        />
+        {/* Show clear filter indicator when a filter is active */}
+        {activeStatFilter !== "all" && onStatFilterChange && (
+          <>
+            <span className="text-border">·</span>
+            <button
+              onClick={() => onStatFilterChange("all")}
+              className="inline-flex items-center gap-1 text-[rgb(var(--theme-500))] hover:text-foreground transition-colors"
+            >
+              <X className="w-3 h-3" />
+              <span className="text-xs">Clear</span>
+            </button>
+          </>
+        )}
         {datasetId && (
           <>
-            <span className="text-zinc-700">·</span>
+            <span className="text-border">·</span>
             <button
               onClick={handleCopyId}
-              className="flex items-center gap-1 hover:text-zinc-300 transition-colors"
+              className="flex items-center gap-1 hover:text-foreground transition-colors"
               title={`Copy dataset ID: ${datasetId}`}
             >
               <span>ID:</span>
@@ -148,5 +200,48 @@ export function RecordsSectionHeader({
         <ViewModeToggle viewMode={viewMode} onViewModeChange={onViewModeChange} />
       </div>
     </div>
+  );
+}
+
+/** P0-19: Clickable stat chip component */
+function StatChip({
+  count,
+  label,
+  isActive,
+  onClick,
+  clickable,
+}: {
+  count: number;
+  label: string;
+  isActive: boolean;
+  onClick: () => void;
+  clickable: boolean;
+}) {
+  if (!clickable) {
+    return (
+      <span>
+        <span className="font-medium text-foreground">{count}</span> {label}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors",
+        isActive
+          ? "bg-[rgba(var(--theme-500),0.15)] text-[rgb(var(--theme-500))]"
+          : "hover:bg-muted hover:text-foreground"
+      )}
+    >
+      <span className={cn(
+        "font-medium",
+        isActive ? "text-[rgb(var(--theme-500))]" : "text-foreground"
+      )}>
+        {count}
+      </span>
+      {label}
+    </button>
   );
 }

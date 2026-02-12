@@ -47,7 +47,10 @@ function computeAggregatedCounts(
 
   function traverse(node: TopicHierarchyNode): number {
     const nodeTopicId = node.id || node.name;
-    const directCount = recordCountsByTopic[nodeTopicId] || 0;
+    // Records can be stored by either node.id or node.name, try both
+    const idCount = recordCountsByTopic[node.id] || 0;
+    const nameCount = node.id !== node.name ? (recordCountsByTopic[node.name] || 0) : 0;
+    const directCount = idCount + nameCount;
 
     if (!node.children || node.children.length === 0) {
       // Leaf node: aggregated = direct count
@@ -93,7 +96,7 @@ function getLayoutedElements(
   topicNameToNodeId: Record<string, string>,
   nodeIdToParentId: Record<string, string>,
   options: DagreLayoutOptions = {},
-  nodeSizes?: Record<string, { width: number; height: number }>
+  nodeSizes?: Record<string, { width: number; height: number }>,
 ): DagreLayoutResult {
   const { direction = "TB", nodeSpacing = NODE_SPACING, rankSpacing = RANK_SPACING } = options;
   const isHorizontal = direction === "LR";
@@ -135,7 +138,7 @@ function getLayoutedElements(
         width = NODE_WIDTH_EXPANDED;
         height = NODE_HEIGHT_EXPANDED;
       } else {
-        // Collapsed dimensions
+        // Collapsed dimensions (P0-6: wider when previews are on)
         width = COLLAPSED_WIDTH;
         height = NODE_HEIGHT_COLLAPSED;
       }
@@ -272,7 +275,7 @@ export function useDagreLayout(
   options?: DagreLayoutOptions,
   pendingAddParentId?: string | null,
   nodeSizes?: Record<string, { width: number; height: number }>,
-  layoutVersion?: number
+  layoutVersion?: number,
 ): DagreLayoutResult {
   return useMemo(() => {
     const nodes: CanvasNode[] = [];
@@ -336,9 +339,11 @@ export function useDagreLayout(
         }
         const nodeId = `topic-${node.id || node.name}`;
         const hasChildren = node.children && node.children.length > 0;
-        // Look up by node.id (records store topic as ID, not name)
+        // Records can be stored by either node.id or node.name, try both
         const nodeTopicId = node.id || node.name;
-        const recordCount = nodeTopicId ? (recordCountsByTopic[nodeTopicId] || 0) : 0;
+        const idCount = node.id ? (recordCountsByTopic[node.id] || 0) : 0;
+        const nameCount = node.id !== node.name ? (recordCountsByTopic[node.name] || 0) : 0;
+        const recordCount = idCount + nameCount;
         // Aggregated count includes all descendants (for non-leaf coverage display)
         const aggregatedRecordCount = nodeTopicId ? (aggregatedCounts[nodeTopicId] || 0) : 0;
 

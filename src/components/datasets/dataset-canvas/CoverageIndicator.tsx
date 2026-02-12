@@ -118,7 +118,7 @@ export function CoverageIndicator({ coveragePercentage, recordCount }: CoverageI
                   "h-full rounded-full transition-all",
                   getCoverageColorClass(coverageColor, 'bg')
                 )}
-                style={{ width: `${Math.min(coveragePercentage * 5, 100)}%` }}
+                style={{ width: `${Math.min(coveragePercentage, 100)}%` }}
               />
             </div>
             {/* Percentage text */}

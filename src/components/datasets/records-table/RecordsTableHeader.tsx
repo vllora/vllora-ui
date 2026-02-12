@@ -5,11 +5,18 @@
  */
 
 import { useState } from "react";
-import { Check, Minus, BarChart3 } from "lucide-react";
+import { Check, Minus, BarChart3, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { COLUMN_WIDTHS } from "../table-columns";
 import { CoverageDistributionDialog } from "../CoverageDistributionDialog";
 import { TopicHierarchyNode } from "@/types/dataset-types";
+import { type RecordRole } from "../record-filters";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export interface RecordsTableHeaderProps {
   selectable?: boolean;
@@ -26,7 +33,17 @@ export interface RecordsTableHeaderProps {
   hasTopicHierarchy?: boolean;
   /** Topic hierarchy tree structure */
   topicHierarchy?: TopicHierarchyNode[];
+  /** P0-9: Active role filter */
+  roleFilter?: RecordRole;
+  /** P0-9: Called when role filter changes */
+  onRoleFilterChange?: (role: RecordRole) => void;
 }
+
+const ROLE_FILTER_OPTIONS: { value: RecordRole; label: string }[] = [
+  { value: "all", label: "All roles" },
+  { value: "training", label: "Training" },
+  { value: "evaluated", label: "Evaluated" },
+];
 
 export function RecordsTableHeader({
   selectable,
@@ -38,6 +55,8 @@ export function RecordsTableHeader({
   totalRecords = 0,
   hasTopicHierarchy,
   topicHierarchy,
+  roleFilter = "all",
+  onRoleFilterChange,
 }: RecordsTableHeaderProps) {
   const [distributionDialogOpen, setDistributionDialogOpen] = useState(false);
   const showDistributionIcon = hasTopicHierarchy && topicCounts && Object.keys(topicCounts).length > 0;
@@ -86,6 +105,44 @@ export function RecordsTableHeader({
         )}
         <span className={cn(COLUMN_WIDTHS.stats, "text-center")}>Stats</span>
         <span className={cn(COLUMN_WIDTHS.quality, "text-center")}>Quality</span>
+        {/* P0-9: Role filter dropdown */}
+        {onRoleFilterChange ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className={cn(
+                "flex items-center gap-1 text-xs uppercase tracking-wide font-medium transition-colors",
+                roleFilter !== "all"
+                  ? "text-[rgb(var(--theme-500))]"
+                  : "text-muted-foreground hover:text-foreground"
+              )}>
+                Role
+                <ChevronDown className="h-3 w-3" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {ROLE_FILTER_OPTIONS.map((option) => (
+                <DropdownMenuItem
+                  key={option.value}
+                  onClick={() => onRoleFilterChange(option.value)}
+                  className={cn(
+                    "text-xs",
+                    roleFilter === option.value && "bg-muted font-medium"
+                  )}
+                >
+                  {option.value !== "all" && (
+                    <span className={cn(
+                      "w-2 h-2 rounded-full mr-1.5",
+                      option.value === "training" ? "bg-blue-400" : "bg-violet-400"
+                    )} />
+                  )}
+                  {option.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <span className="text-xs uppercase tracking-wide font-medium text-muted-foreground">Role</span>
+        )}
         <span className={COLUMN_WIDTHS.deepDiveActions}>Actions</span>
       </div>
 

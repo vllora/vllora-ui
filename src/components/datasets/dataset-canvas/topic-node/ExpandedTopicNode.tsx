@@ -24,7 +24,6 @@ interface ExpandedTopicNodeProps {
   records: DatasetRecord[];
   datasetId?: string;
   availableTopics: AvailableTopic[];
-  onViewRecords: () => void;
   onResize: (width: number, height: number) => void;
   onRename?: (newName: string) => void;
   onUpdateRecordTopic?: (recordId: string, topic: string, isNew?: boolean) => Promise<void>;
@@ -48,7 +47,6 @@ export function ExpandedTopicNode({
   records,
   datasetId,
   availableTopics,
-  onViewRecords,
   onResize,
   onRename,
   onUpdateRecordTopic,
@@ -77,13 +75,13 @@ export function ExpandedTopicNode({
         "rounded-xl border-[0.5px] transition-all bg-background",
         isSelected
           ? "border-[rgb(var(--theme-500))]"
-          : "border-emerald-500/40 hover:border-emerald-500/50"
+          : "border-border hover:border-muted-foreground/50"
       )}
       style={{
         width: expandedSize.width,
         height: expandedSize.height,
         boxShadow: isSelected
-          ? '0 0 15px rgba(16, 185, 129, 0.2), 0 0 30px rgba(16, 185, 129, 0.1)'
+          ? '0 0 15px rgba(var(--theme-500), 0.15), 0 0 30px rgba(var(--theme-500), 0.08)'
           : undefined,
       }}
     >
@@ -104,7 +102,6 @@ export function ExpandedTopicNode({
         isRoot={isRoot}
         isExpanded={true}
         coveragePercentage={coveragePercentage}
-        onViewRecords={onViewRecords}
         onRename={onRename}
       />
 

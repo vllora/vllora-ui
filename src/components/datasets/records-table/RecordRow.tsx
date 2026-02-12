@@ -64,13 +64,13 @@ function RecordIdBadge({ recordId }: { recordId: string }) {
       title={copied ? "Copied!" : `Copy ID: ${recordId}`}
       className="w-16 shrink-0 flex items-center gap-1 group/id"
     >
-      <span className="font-mono text-[10px] text-zinc-600 group-hover/id:text-zinc-400 transition-colors">
+      <span className="font-mono text-[10px] text-muted-foreground/60 group-hover/id:text-muted-foreground transition-colors">
         {shortId}
       </span>
       {copied ? (
         <Check className="h-2.5 w-2.5 text-emerald-400" />
       ) : (
-        <Copy className="h-2.5 w-2.5 text-zinc-700 opacity-0 group-hover/id:opacity-100 transition-opacity" />
+        <Copy className="h-2.5 w-2.5 text-muted-foreground/30 opacity-0 group-hover/id:opacity-100 transition-opacity" />
       )}
     </button>
   );
@@ -134,8 +134,8 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
       ref={ref}
       onClick={handleToggleExpand}
       className={cn(
-        "group flex flex-col rounded-md overflow-hidden transition-colors bg-zinc-800/30",
-        isExpanded ? "ring-1 ring-zinc-700/50" : "hover:bg-zinc-800/50",
+        "group flex flex-col rounded-md overflow-hidden transition-colors bg-card/30 cursor-pointer",
+        isExpanded ? "ring-1 ring-border" : "hover:bg-muted/50",
         selected && "bg-[rgba(var(--theme-500),0.1)] ring-1 ring-[rgba(var(--theme-500),0.3)]",
         isHighlighted && "animate-record-highlight"
       )}
@@ -144,7 +144,7 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
       <div
         className={cn(
           "px-2 py-1.5 flex items-center gap-3 transition-colors",
-          isExpanded && "border-b border-zinc-700/50"
+          isExpanded && "border-b border-border"
         )}
       >
       

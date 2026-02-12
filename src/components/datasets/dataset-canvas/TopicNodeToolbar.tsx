@@ -5,7 +5,7 @@
  * Provides actions: Generate (dropdown), Delete.
  */
 
-import { Trash2, GitBranch, Grid2X2Plus } from "lucide-react";
+import { Trash2, GitBranch, Grid2X2Plus, Eye } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -37,11 +37,11 @@ interface TopicNodeToolbarProps {
 export function TopicNodeToolbar({
   name,
   fullPath,
-  // nodeId,
+  nodeId,
   isRoot,
   // isExpanded,
   onDeleteTopic,
-  // onViewRecords,
+  onViewRecords,
   onGenerateForTopic,
   onGenerateSubtopics,
 }: TopicNodeToolbarProps) {
@@ -55,6 +55,27 @@ export function TopicNodeToolbar({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-1 px-1.5 py-1 rounded-lg bg-popover border border-border shadow-lg">
+        {/* View Records button */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => onViewRecords(nodeId)}
+              className="flex items-center justify-center w-7 h-7 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+            >
+              <Eye className="w-3.5 h-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={4}>
+            View records
+          </TooltipContent>
+        </Tooltip>
+
+        {/* Separator after view records */}
+        {((!isRoot && onGenerateForTopic) || onGenerateSubtopics || (!isRoot && onDeleteTopic)) && (
+          <div className="w-px h-5 bg-border" />
+        )}
+
         {/* Generate Records button (not for root) */}
         {!isRoot && onGenerateForTopic && (
           <Tooltip>

@@ -43,7 +43,6 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
 
   // Get state and handlers from context
   const {
-    recordsByTopic,
     totalRecordCount,
     selectedTopic,
     setSelectedTopic,
@@ -58,24 +57,19 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
 
   // Use "__root__" as special value for root selection, null means nothing selected
   const isSelected = isRoot ? selectedTopic === "__root__" : selectedTopic === name;
-  const records = recordsByTopic[topicKey] || [];
 
   // Compute coverage percentage:
   // - For leaf topics: use direct record count (records assigned to this topic)
   // - For non-leaf topics: use aggregated count (sum of all descendant leaves)
   // This ensures non-leaf topics show meaningful coverage instead of always 0%
   const coveragePercentage = totalRecordCount > 0 && !isRoot
-    ? ((hasChildren ? (aggregatedRecordCount ?? 0) : records.length) / totalRecordCount) * 100
+    ? ((hasChildren ? (aggregatedRecordCount ?? 0) : recordCount) / totalRecordCount) * 100
     : undefined;
 
   // Handlers
   const handleSelect = () => {
     setSelectedTopic(isRoot ? "__root__" : name);
-  };
-
-  const handleOpenModal = () => {
-    // Open the modal dialog with records for this topic
-    // Use topicKey for looking up records (name for leaf topics, "__unassigned__" for root)
+    // Always open the records panel when selecting a node
     openTopicModal(topicKey);
   };
 
@@ -97,7 +91,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
           isRoot={isRoot}
           isExpanded={false}
           onDeleteTopic={onDeleteTopic}
-          onViewRecords={handleOpenModal}
+          onViewRecords={handleSelect}
           onGenerateForTopic={onGenerateForTopic}
           onGenerateSubtopics={onGenerateSubtopics}
         />
@@ -140,12 +134,12 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
       {/* Render collapsed node - clicking expand opens modal dialog */}
       <CollapsedTopicNode
         name={name}
+        topicKey={topicKey}
         recordCount={recordCount}
         aggregatedRecordCount={hasChildren ? aggregatedRecordCount : undefined}
         isRoot={isRoot}
         isSelected={isSelected}
         coveragePercentage={coveragePercentage}
-        onViewRecords={handleOpenModal}
         onRename={handleRename}
       />
     </div>

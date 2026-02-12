@@ -6,6 +6,7 @@
  * Note: Evaluator is now a separate section, not handled here.
  */
 
+import { useState, useMemo } from "react";
 import type { ViewMode } from "./dataset-detail-header/DatasetUtilityBar";
 import type { CoverageStats, DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import type { AvailableTopic } from "./record-utils";
@@ -15,6 +16,7 @@ import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
 import { RecordsTable } from "./records-table/RecordsTable";
 import { RecordDetailSidebar } from "./records-table/RecordDetailSidebar";
 import { EmptyRecordsState } from "./EmptyRecordsState";
+import { filterRecords, type StatFilter, type RecordRole } from "./record-filters";
 
 type BalanceRating = "excellent" | "good" | "fair" | "poor" | "critical";
 
@@ -105,6 +107,20 @@ export function DatasetMainContent({
   docsProcessingCount,
   docsTotal,
 }: DatasetMainContentProps) {
+  // P0-19: Stat filter state for RecordsSectionHeader clickable chips
+  const [activeStatFilter, setActiveStatFilter] = useState<StatFilter>("all");
+  // P0-9: Role filter state for RecordsTableHeader
+  const [roleFilter, setRoleFilter] = useState<RecordRole>("all");
+
+  // Apply stat filter and role filter to records for the table view
+  const filteredRecords = useMemo(() => {
+    if (activeStatFilter === "all" && roleFilter === "all") return records;
+    return filterRecords(records, {
+      statFilter: activeStatFilter !== "all" ? activeStatFilter : undefined,
+      role: roleFilter !== "all" ? roleFilter : undefined,
+    });
+  }, [records, activeStatFilter, roleFilter]);
+
   const hasTopics = topicHierarchy && topicHierarchy.length > 0;
 
   // Show empty state only when no records AND no topic hierarchy
@@ -150,6 +166,8 @@ export function DatasetMainContent({
           onExport={onExport}
           records={records}
           datasetId={datasetId}
+          activeStatFilter={activeStatFilter}
+          onStatFilterChange={setActiveStatFilter}
         />
       </div>
 
@@ -177,7 +195,7 @@ export function DatasetMainContent({
         <>
           {/* Records Table */}
           <RecordsTable
-            records={records}
+            records={filteredRecords}
             datasetId={datasetId}
             showHeader={true}
             showFooter={false}
@@ -193,6 +211,8 @@ export function DatasetMainContent({
             onDeleteTopic={onDeleteTopic}
             onGenerateForTopic={onGenerateForTopic}
             onGenerateSubtopics={onGenerateSubtopics}
+            roleFilter={roleFilter}
+            onRoleFilterChange={setRoleFilter}
           />
 
           {/* Record Detail Sidebar (Sheet - renders via portal) */}
