@@ -186,7 +186,6 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
   const [topicHierarchyDialog, setTopicHierarchyDialog] = useState(false);
   const [generateDataDialog, setGenerateDataDialog] = useState(false);
   const [sanitizeDataDialog, setSanitizeDataDialog] = useState(false);
-  const [dryRunDialog, setDryRunDialog] = useState(false);
 
   // Loading states
   const [isGeneratingTopics, setIsGeneratingTopics] = useState(false);
@@ -1294,8 +1293,6 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     setGenerateDataDialog,
     sanitizeDataDialog,
     setSanitizeDataDialog,
-    dryRunDialog,
-    setDryRunDialog,
 
     // Loading states
     isGeneratingTopics,

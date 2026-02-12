@@ -54,7 +54,7 @@ export function FinetuneJobsPanel() {
       </div>
 
       {/* Right: job list sidebar */}
-      <div className="w-48 shrink-0 flex flex-col min-h-0 bg-zinc-900/30">
+      <div className="w-40 shrink-0 flex flex-col min-h-0 bg-zinc-900/30">
         <div className="shrink-0 px-2 py-1.5 border-b border-zinc-800/60">
           <span className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">
             Runs
@@ -90,18 +90,6 @@ export function FinetuneJobsPanel() {
                       {formatFinetuneJobDate(job.created_at)}
                     </div>
                   </div>
-                  <span
-                    className={cn(
-                      "w-1.5 h-1.5 rounded-full shrink-0",
-                      job.status === "succeeded"
-                        ? "bg-emerald-500"
-                        : job.status === "failed"
-                        ? "bg-red-500"
-                        : job.status === "running" || job.status === "pending"
-                        ? "bg-blue-500"
-                        : "bg-zinc-500"
-                    )}
-                  />
                 </button>
               );
             })

@@ -9,7 +9,6 @@ import { cn } from "@/lib/utils";
 import { RefreshCw, Loader2 } from "lucide-react";
 import { FinetuneEvalResultsResponse } from "@/services/finetune-api";
 import { TrainingMetricsChart } from "../TrainingMetricsChart";
-import { EpochSummary } from "./EpochSummary";
 
 interface TrainingMetricsSectionProps {
   evalResults: FinetuneEvalResultsResponse | null;
@@ -50,13 +49,7 @@ export function TrainingMetricsSection({
           {error.includes('404') ? 'No evaluation metrics available yet' : error}
         </div>
       ) : evalResults && evalResults.results.length > 0 ? (
-        <div className="space-y-4">
-          {/* Quick Summary */}
-          <EpochSummary results={evalResults.results} />
-
-          {/* Detailed Charts & Breakdown */}
-          <TrainingMetricsChart results={evalResults.results} />
-        </div>
+        <TrainingMetricsChart results={evalResults.results} />
       ) : (
         <div className="text-xs text-muted-foreground py-2">
           No evaluation metrics available yet

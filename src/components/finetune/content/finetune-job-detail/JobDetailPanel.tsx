@@ -36,7 +36,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
+  const [showDetails, setShowDetails] = useState(true);
 
   const summary = useMemo(() => {
     if (!evalResults?.results) return null;
@@ -92,87 +92,78 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Header with status + actions */}
-      <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-zinc-800/60">
-        <FinetuneJobStatusBadge status={job.status} className="text-[10px] px-1.5 py-0.5" />
-        <span className="text-xs text-zinc-400">{getModelDisplayName(job.base_model)}</span>
-        <span className="text-[10px] text-zinc-600 ml-auto">
-          {formatFinetuneJobDate(job.created_at)}
-        </span>
-        {canCancel && (
-          <button
-            onClick={handleCancel}
-            disabled={isActionLoading}
-            className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-red-400 transition-colors"
-          >
-            <StopCircle className="h-3 w-3" />
-            Cancel
-          </button>
-        )}
-        {canResume && (
-          <button
-            onClick={handleResume}
-            disabled={isActionLoading}
-            className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-emerald-400 transition-colors"
-          >
-            <Play className="h-3 w-3" />
-            Resume
-          </button>
-        )}
-      </div>
-
-      {/* Quick Summary Bar */}
-      <div className="shrink-0 flex items-center gap-3 px-3 py-1.5 border-b border-zinc-800/60 bg-zinc-900/20">
-        {summary ? (
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-muted-foreground">
-              Epoch <span className="font-mono text-zinc-300">{summary.latestEpoch ?? "-"}</span>
-            </span>
-            <span className="text-zinc-700">&middot;</span>
-            {summary.latestAvgScore !== null && (
-              <>
-                <span className="text-muted-foreground">
-                  Avg{" "}
-                  <span className={cn("font-mono", getScoreColorClass(summary.latestAvgScore))}>
+      {/* Header: status + summary stats + actions (single compact row) */}
+      <div className="shrink-0 border-b border-zinc-800/60">
+        <div className="flex items-center gap-2 px-3 py-1.5">
+          <FinetuneJobStatusBadge status={job.status} className="text-[10px] px-1.5 py-0.5" />
+          <span className="text-xs text-zinc-400">{getModelDisplayName(job.base_model)}</span>
+          {summary && (
+            <>
+              <span className="text-zinc-700">&middot;</span>
+              <span className="text-xs font-mono text-zinc-400">
+                E<span className="text-zinc-300">{summary.latestEpoch ?? "-"}</span>
+              </span>
+              {summary.latestAvgScore !== null && (
+                <>
+                  <span className="text-zinc-700">&middot;</span>
+                  <span className={cn("text-xs font-mono", getScoreColorClass(summary.latestAvgScore))}>
                     {formatScore(summary.latestAvgScore)}
                   </span>
-                </span>
-                <span className="text-zinc-700">&middot;</span>
-              </>
-            )}
-            <span className="text-muted-foreground">
-              <span className="font-mono text-zinc-300">{summary.totalRows}</span> rows
-            </span>
-          </div>
-        ) : (
-          <span className="text-[10px] text-zinc-600">
-            {isLoadingEvals ? "Loading metrics..." : "No metrics yet"}
+                </>
+              )}
+              <span className="text-zinc-700">&middot;</span>
+              <span className="text-xs font-mono text-zinc-500">
+                {summary.totalRows}r
+              </span>
+            </>
+          )}
+          <span className="text-[10px] text-zinc-600 ml-auto">
+            {formatFinetuneJobDate(job.created_at)}
           </span>
-        )}
-        <div className="flex-1" />
-        {job.status === "succeeded" && (
+          {canCancel && (
+            <button
+              onClick={handleCancel}
+              disabled={isActionLoading}
+              className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-red-400 transition-colors"
+            >
+              <StopCircle className="h-3 w-3" />
+              Cancel
+            </button>
+          )}
+          {canResume && (
+            <button
+              onClick={handleResume}
+              disabled={isActionLoading}
+              className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-emerald-400 transition-colors"
+            >
+              <Play className="h-3 w-3" />
+              Resume
+            </button>
+          )}
+          {job.status === "succeeded" && (
+            <button
+              onClick={handleDownloadWeights}
+              disabled={isDownloading}
+              className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-emerald-400 transition-colors"
+            >
+              {isDownloading ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Download className="h-3 w-3" />
+              )}
+              Weights
+            </button>
+          )}
           <button
-            onClick={handleDownloadWeights}
-            disabled={isDownloading}
-            className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-emerald-400 transition-colors"
+            onClick={() => setShowDetails(!showDetails)}
+            className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
           >
-            {isDownloading ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <Download className="h-3 w-3" />
-            )}
-            Weights
+            <ChevronRight
+              className={cn("h-3 w-3 transition-transform", showDetails && "rotate-90")}
+            />
+            Details
           </button>
-        )}
-        <button
-          onClick={() => setShowDetails(!showDetails)}
-          className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
-        >
-          <ChevronRight
-            className={cn("h-3 w-3 transition-transform", showDetails && "rotate-90")}
-          />
-          Details
-        </button>
+        </div>
       </div>
 
       {/* Collapsible Job Details */}

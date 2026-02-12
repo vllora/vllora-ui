@@ -7,14 +7,13 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import {
   Tooltip as UITooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Loader2, CheckCircle2, XCircle, Clock, AlertTriangle, RefreshCw, RotateCw, ChevronRight } from "lucide-react";
+import { XCircle, AlertTriangle, RefreshCw, RotateCw, ChevronRight } from "lucide-react";
 import { VerdictBadge } from "./VerdictBadge";
 import { ScoreStrip } from "./ScoreStrip";
 import { ResultsTable } from "./ResultsTable";
@@ -27,11 +26,7 @@ import { getJobTotalRows, getJobCompletedRows } from "@/types/dry-run-job";
 
 interface DryRunActivityViewProps {
   jobs: DryRunJob[];
-  onSelectJob: (job: DryRunJob) => void;
-  onBack: () => void;
-  /** When true, renders VS Code terminal-style split layout (left: details, right: job list) */
-  splitView?: boolean;
-  /** Cancel handler for running jobs (used in split view) */
+  /** Cancel handler for running jobs */
   onCancelJob?: () => void;
   /** Pre-select a specific job when opening */
   initialSelectedId?: string | null;
@@ -39,14 +34,6 @@ interface DryRunActivityViewProps {
   onRunAgain?: () => void;
   /** Refresh a job's data from the backend API */
   onRefresh?: (jobId: string) => void;
-}
-
-function StatusIcon({ status }: { status: DryRunJob["status"] }) {
-  if (status === "running") return <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-400" />;
-  if (status === "completed") return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />;
-  if (status === "failed") return <XCircle className="h-3.5 w-3.5 text-red-400" />;
-  if (status === "cancelled") return <XCircle className="h-3.5 w-3.5 text-zinc-500" />;
-  return <Clock className="h-3.5 w-3.5 text-zinc-500" />;
 }
 
 function formatTime(ts: number): string {
@@ -290,7 +277,7 @@ function JobDetail({ job, onCancel, onRunAgain, onRefresh }: { job: DryRunJob; o
   );
 }
 
-export function DryRunActivityView({ jobs, onSelectJob, onBack, splitView = false, onCancelJob, initialSelectedId, onRunAgain, onRefresh }: DryRunActivityViewProps) {
+export function DryRunActivityView({ jobs, onCancelJob, initialSelectedId, onRunAgain, onRefresh }: DryRunActivityViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     if (initialSelectedId) return initialSelectedId;
     // Default to most recent completed job
@@ -309,72 +296,21 @@ export function DryRunActivityView({ jobs, onSelectJob, onBack, splitView = fals
     return jobs.find((j) => j.id === selectedId) ?? null;
   }, [jobs, selectedId]);
 
-  // ── Split view (VS Code terminal-style) ──────────────────────────────
-  if (splitView) {
-    return (
-      <div className="flex h-full min-h-0">
-        {/* Left: selected job detail */}
-        <div className="flex-1 min-w-0 min-h-0 border-r border-zinc-800/60">
-          {selectedJob ? (
-            <JobDetail job={selectedJob} onCancel={onCancelJob} onRunAgain={onRunAgain} onRefresh={onRefresh} />
-          ) : (
-            <div className="flex items-center justify-center h-full text-xs text-zinc-600">
-              Select a job from the list
-            </div>
-          )}
-        </div>
-
-        {/* Right: job list sidebar */}
-        <RunsSidebar jobs={jobs} selectedId={selectedId} onSelectJob={setSelectedId} />
-      </div>
-    );
-  }
-
-  // ── Classic list view (DryRunDialog) ──────────────────────────────────
   return (
-    <div className="space-y-4">
-      <div className="space-y-2 max-h-[400px] overflow-y-auto">
-        {jobs.map((job) => (
-          <button
-            key={job.id}
-            className={cn(
-              "w-full text-left p-3 rounded-md border bg-card hover:bg-muted/50 transition-colors",
-              job.status === "running" && "border-blue-500/50"
-            )}
-            onClick={() => job.status === "completed" && onSelectJob(job)}
-            disabled={job.status !== "completed"}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <StatusIcon status={job.status} />
-                <span className="text-sm font-medium">
-                  {job.sampleSize} samples
-                </span>
-              </div>
-              {job.result && (
-                <VerdictBadge verdict={job.result.diagnosis.verdict} />
-              )}
-            </div>
-            <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-              <span>{new Date(job.createdAt).toLocaleString()}</span>
-              {job.status === "running" && (
-                <span>{getJobCompletedRows(job)} / {getJobTotalRows(job)}</span>
-              )}
-              {job.status === "failed" && job.error && (
-                <span className="text-red-500 truncate max-w-[200px]">{job.error}</span>
-              )}
-            </div>
-          </button>
-        ))}
+    <div className="flex h-full min-h-0">
+      {/* Left: selected job detail */}
+      <div className="flex-1 min-w-0 min-h-0 border-r border-zinc-800/60">
+        {selectedJob ? (
+          <JobDetail job={selectedJob} onCancel={onCancelJob} onRunAgain={onRunAgain} onRefresh={onRefresh} />
+        ) : (
+          <div className="flex items-center justify-center h-full text-xs text-zinc-600">
+            Select a job from the list
+          </div>
+        )}
       </div>
 
-      <Separator />
-
-      <div className="flex justify-start">
-        <Button variant="outline" size="sm" onClick={onBack}>
-          Back
-        </Button>
-      </div>
+      {/* Right: job list sidebar */}
+      <RunsSidebar jobs={jobs} selectedId={selectedId} onSelectJob={setSelectedId} />
     </div>
   );
 }

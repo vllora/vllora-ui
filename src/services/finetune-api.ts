@@ -151,10 +151,18 @@ export interface EpochEntry {
   logs?: string[] | null;
 }
 
+/** The row data object returned by the evaluation API.
+ *  `id` is the record's IndexedDB id, allowing mapping back to local records. */
+export interface EvaluationRowData {
+  id: string;
+  messages: unknown[];
+  [key: string]: unknown;
+}
+
 /** Row-level result with epoch-based evaluation data (matches cloud API) */
 export interface RowEpochResult {
   row_index: number;
-  row?: Record<string, unknown>;
+  row?: EvaluationRowData;
   epochs: Record<string, EpochEntry[]>;
 }
 
@@ -178,13 +186,14 @@ export interface EvaluationResultResponse {
 export interface FlatEvaluationResult {
   dataset_row_id: string;
   row_index: number;
-  row?: Record<string, unknown>;
+  row?: EvaluationRowData;
   status: string;
   score?: number;
   reason?: string;
   error_message?: string;
   logs?: string[];
 }
+
 
 /** Flatten epoch-based results into a flat array for UI consumption.
  *  Takes the first epoch entry per row (epoch "0" for dry runs). */
@@ -723,7 +732,7 @@ export interface EpochEvalResult {
 /** Results for a single dataset row across epochs */
 export interface RowEpochResults {
   row_index: number;
-  row: Record<string, unknown>;
+  row: EvaluationRowData;
   /** Map of epoch number to array of evaluation results */
   epochs: Record<number, EpochEvalResult[]>;
 }

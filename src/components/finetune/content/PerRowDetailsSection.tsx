@@ -58,12 +58,12 @@ export function PerRowDetailsSection({ results }: PerRowDetailsSectionProps) {
       const latestResults = row.epochs[latestEpoch];
       const latestResult = latestResults?.[0];
 
-      const rowId = `finetune-row-${row.row_index}`;
+      const rowId = row.row?.id ?? `finetune-row-${row.row_index}`;
 
       flat.push({
         dataset_row_id: rowId,
         row_index: row.row_index,
-        row: row.row,
+        row: row.row ?? undefined,
         status: latestResult?.status ?? "completed",
         score: latestResult?.score ?? undefined,
         reason: latestResult?.reason ?? undefined,

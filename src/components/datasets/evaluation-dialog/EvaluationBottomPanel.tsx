@@ -103,9 +103,6 @@ export function EvaluationBottomPanel({
         <div className="flex-1 min-h-0 flex flex-col">
           <DryRunActivityView
             jobs={jobs}
-            onSelectJob={(job) => setSelectedJobId(job.id)}
-            onBack={() => {}}
-            splitView
             onCancelJob={handleCancel}
             initialSelectedId={selectedJobId}
             onRefresh={refreshJob}
