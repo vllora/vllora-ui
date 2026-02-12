@@ -1194,3 +1194,351 @@ Sync via `scripts/sync-distrijs.sh` after upstream changes.
 - P1: 14 new (14.1-14.2, 15.1-15.5, 16.1-16.4, 18.1, plus existing 4.1, 8.1)
 - P2: 5 new (17.1-17.5)
 - Resolved: 21 (from prior rounds)
+
+---
+
+## Comprehensive 4-Agent UX Redesign Review (2026-02-11)
+
+Full-team review with 4 specialized agents: UX Flow Analyst, Visual & Interaction Reviewer, Information Architecture Reviewer, Redesign Proposer. 63 findings synthesized into 25 redesign proposals.
+
+### Review Methodology
+
+Each reviewer read all documentation (CLAUDE.md, guided-onboarding.md, state-machine.md, architecture.md, state-management-pattern.md) and traced through all key UI source files across this repo and upstream @distri/react.
+
+---
+
+### Reviewer 1: UX Flow Analysis (15 findings)
+
+#### Complete Flow Map
+
+**Screen 1: Empty Datasets State** (`src/components/datasets/empty-dataset-state/index.tsx`)
+- Heading: "What is the objective of your dataset?"
+- Tab switcher: "Enter Objective" | "Initialize via API"
+- Textarea with suggestion pills, file upload (drag-and-drop), "Start Finetune" button
+- Chess tutor sample link at bottom
+
+**Screen 2: Onboarding Transition** (lines 232-278)
+- Lucy avatar animated, "Meet Lucy" text
+- Auto-redirect: 2.5s with files, 800ms without
+- No user actions available, no escape route
+
+**Screen 3: Dataset Detail View** (`DatasetDetailContentV2.tsx`)
+- Two-panel: Lucy sidebar (340-384px) + Main content
+- Section tabs: Data → Evaluation → Finetune → Deploy + Docs, Plan, Readme
+- Locked tabs show prerequisite popover
+
+**Screen 3a: Data Section** — Records with Canvas/Table toggle, topic hierarchy, coverage indicators
+**Screen 3b: Evaluation Section** — Monaco editor, dry run bottom panel, results/history tabs
+**Screen 3c: Finetune Section** — Jobs list, settings popover, prerequisites warning
+**Screen 3d: Plan Section** — Priority-based rendering (docs processing → generating → proposed → executing → executed → empty)
+**Screen 3e: Docs Section** — Knowledge source cards with status
+**Screen 3f: Readme Section** — Auto-generated markdown
+
+**Lucy Sidebar States**: Checking config → Provider check → Loading agent → Connected → Connecting
+**Quick Actions**: Context-sensitive (no records → has records → has evaluator → has jobs)
+
+#### Pain Points
+
+| ID | Severity | Finding | Component |
+|----|----------|---------|-----------|
+| PP-01 | P0 | No "back to datasets list" navigation | `DatasetDetailContentV2.tsx` |
+| PP-02 | P0 | Finetune tab lock-out with no inline guidance for partial plan failure | `SectionTabs.tsx:81` |
+| PP-03 | P0 | `autoGeneratePlan` 2-second race condition with no retry | `DatasetDetailContentV2.tsx:262` |
+| PP-04 | P1 | Quick actions don't map to actual tool names/tab locations | `LucyDatasetAssistant.tsx:46-54` |
+| PP-05 | P1 | Plan tab only discoverable by accident (icon-only, grouped with docs) | `PlanEmptyState.tsx`, `SectionTabs.tsx:46` |
+| PP-06 | P1 | Dismissing plan has no confirmation, loses all content | `PlanSection.tsx:226-233` |
+| PP-07 | P1 | Deploy tab "Coming Soon" dead end with no alternative | `SectionTabs.tsx:39` |
+| PP-08 | P1 | Lucy auto-collapses on <1024px with no pin option | `LucyDatasetAssistant.tsx:105-106` |
+| PP-09 | P1 | No progress persistence for plan execution across page reloads | `execution-state-store.ts` |
+| PP-10 | P1 | Evaluation script requires JavaScript with no guided setup | `EvaluationConfigPanel.tsx:50-62` |
+| PP-11 | P2 | Tab counts inconsistent (numbers vs dots) | `SectionTabs.tsx:180-200, 304-309` |
+| PP-12 | P2 | Quick actions `jobsCount` hardcoded to 0 | `LucyDatasetAssistant.tsx:282-289` |
+| PP-13 | P2 | Dataset names auto-generated from first 4 words | `empty-dataset-state/index.tsx:167-168` |
+| PP-14 | P2 | No visual distinction between human and AI-generated records | Records table/canvas |
+| PP-15 | P2 | Beta badge has no link to feedback or docs | `LucyDatasetAssistant.tsx:498-506` |
+
+---
+
+### Reviewer 2: Visual & Interaction Review (29 findings)
+
+#### Loading/Error/Empty States
+
+| ID | Severity | Finding | Component |
+|----|----------|---------|-----------|
+| VI-1.1 | P0 | No error recovery for Lucy connection failure | `LucyDatasetAssistant.tsx:430-438` |
+| VI-1.2 | P0 | Chat error display has no retry/dismiss | `LucyChat.tsx:416-419` |
+| VI-1.3 | P1 | No error state for failed plan generation (stuck loading) | `PlanSection.tsx:237-313` |
+| VI-1.4 | P1 | Finetune empty state is generic, config hidden behind gear | `FinetuneBottomPanel.tsx:196-199` |
+| VI-1.5 | P1 | ExecutionProgressCard has bare initial state | `ExecutionProgressCard.tsx:63-71` |
+| VI-1.6 | P2 | LucyWelcome default text inconsistent with finetune context | `LucyWelcome.tsx:63-68` |
+| VI-1.7 | P2 | PlanEmptyState no visual differentiation | `PlanEmptyState.tsx:17-42` |
+
+#### Visual Hierarchy
+
+| ID | Severity | Finding | Component |
+|----|----------|---------|-----------|
+| VI-2.1 | P0 | Arrow stepper vs icon tabs creates dual-navigation confusion | `SectionTabs.tsx:143-319` |
+| VI-2.2 | P1 | Beta badge competes with primary header actions | `LucyDatasetAssistant.tsx:496-506` |
+| VI-2.3 | P1 | FinetuneConfigPanel hardcoded dark theme colors (zinc-*) | `FinetuneConfigPanel.tsx:137-314` |
+| VI-2.4 | P1 | FinetuneBottomPanel same hardcoded dark theme issue | `FinetuneBottomPanel.tsx:77-263` |
+| VI-2.5 | P1 | Assistant message bubble `ml-8` misalignment | `LucyMessage.tsx:125` |
+| VI-2.6 | P2 | SetupPlanEditor thin header doesn't anchor panel | `SetupPlanEditor.tsx:40-53` |
+| VI-2.7 | P2 | LucyChatInput uses undefined `--theme-rgb` CSS variable | `LucyChatInput.tsx:367` |
+
+#### Interaction Quality
+
+| ID | Severity | Finding | Component |
+|----|----------|---------|-----------|
+| VI-3.1 | P0 | Textarea disabled during streaming (contradicts "Message will be queued...") | `LucyChatInput.tsx:375-376` |
+| VI-3.2 | P1 | Locked tabs lack clickability affordance | `SectionTabs.tsx:206-246` |
+| VI-3.3 | P1 | "Dismiss" vs "Clear" naming confusion in plan views | `PlanExecutedView.tsx:43-46, 63-66` |
+| VI-3.4 | P1 | Tool call card expand target unclear (only chevron suggests it) | `LucyToolCallCard.tsx:77-106` |
+| VI-3.5 | P1 | Quick actions send label text as user message | `LucyChat.tsx:315-318` |
+| VI-3.6 | P2 | Attachment button tooltip overly long | `LucyChatInput.tsx:391` |
+| VI-3.7 | P2 | Voice input has no stop/cancel mechanism | `LucyChatInput.tsx:344-354` |
+
+#### Cross-Component Consistency
+
+| ID | Severity | Finding | Component |
+|----|----------|---------|-----------|
+| VI-4.1 | P1 | Theme color inconsistency (finetune panels vs rest) | Multiple finetune components |
+| VI-4.2 | P1 | Message bubble styling differs across components | `LucyMessage.tsx`, `LucyAssistantMessage.tsx`, `LucyWelcome.tsx` |
+| VI-4.3 | P1 | Timestamp formatting inconsistent | Multiple Lucy components |
+| VI-4.4 | P1 | Icon size inconsistency in action buttons | Multiple components |
+| VI-4.5 | P2 | Border radius inconsistency across cards | Multiple components |
+| VI-4.6 | P2 | LucyAvatar image path typo "avarta" | `LucyAvatar.tsx:61` |
+
+#### Chat/Tool Result Display
+
+| ID | Severity | Finding | Component |
+|----|----------|---------|-----------|
+| VI-5.1 | P1 | Two parallel tool rendering paths create duplication | `LucyToolCallCard.tsx`, `LucyToolExecutionRenderer.tsx` |
+| VI-5.2 | P1 | Excessive console.log in LucySetupPlanRenderer | `LucySetupPlanRenderer.tsx:43-114` |
+| VI-5.3 | P1 | ExecutionProgressCard shown in BOTH chat AND Plan tab | `LucyExecutePlanRenderer.tsx:53-61` |
+| VI-5.5 | P2 | Tool card defaults to output tab even when empty | `LucyToolCallCard.tsx:31` |
+| VI-5.6 | P2 | Agent handover renders as confusing plain box | `LucyMessageRenderer.tsx:89-95` |
+
+---
+
+### Reviewer 3: Information Architecture Review (19 findings)
+
+| ID | Severity | Area | Finding | Component |
+|----|----------|------|---------|-----------|
+| IA-01 | P0 | Pipeline | 7-step pipeline vs 4-tab stepper mismatch | `SectionTabs.tsx:35-47` |
+| IA-02 | P0 | Sidebar/Canvas | Ambiguous ownership of actions between panels | `LucyDatasetAssistant.tsx`, `DatasetDetailContentV2.tsx` |
+| IA-03 | P0 | Cognitive Load | 9 navigation tabs is excessive | `SectionTabs.tsx:35-47` |
+| IA-04 | P0 | Errors | "Prerequisites missing" not actionable (10px AlertCircle) | `FinetuneConfigPanel.tsx:146-158` |
+| IA-05 | P1 | Pipeline | Step names are developer-facing (topics_config, grader_config) | `state-machine.md:71-80` |
+| IA-06 | P1 | Pipeline | Required vs optional not visually differentiated | `ArrowSegment.tsx:88-95` |
+| IA-07 | P1 | Sidebar/Canvas | Plan appears in BOTH chat and Plan tab | `PlanSection.tsx`, `LucySetupPlanRenderer.tsx` |
+| IA-08 | P1 | Data | Records header stats too dense | `RecordsSectionHeader.tsx:60-72` |
+| IA-09 | P1 | Data | Topic tree coverage lacks legend | `TopicNodeHeader.tsx`, `CoverageIndicator.tsx` |
+| IA-10 | P1 | Errors | Dry run failures are technical | `ExecutionProgressCard.tsx:239-251` |
+| IA-11 | P1 | Tool Results | Tool results not summarized for non-tech users | Tool renderers |
+| IA-12 | P1 | Config | Training config hidden in gear icon | `FinetuneConfigPanel.tsx:162-265` |
+| IA-13 | P1 | Config | Dry run config hidden in gear icon | `EvaluationConfigPanel.tsx:326-377` |
+| IA-14 | P1 | Cognitive Load | Empty states don't guide to right starting point | `PlanEmptyState.tsx` |
+| IA-15 | P2 | Data | Setup plan markdown not scannable | `SetupPlanEditor.tsx:56-60` |
+| IA-16 | P2 | Tool Results | Execution step names generic | `ExecutionProgressCard.tsx:166-203` |
+| IA-17 | P2 | Errors | Knowledge source processing errors silent | `KnowledgeSourcesPanel.tsx:28-38` |
+| IA-18 | P2 | Config | No centralized settings page | N/A |
+| IA-19 | P2 | Cognitive Load | Quick actions change without explanation | `LucyDatasetAssistant.tsx:57-90` |
+
+---
+
+### Synthesized Redesign Proposals (25 total)
+
+#### Area 1: Onboarding & First-Time Experience
+
+**Proposal R-1.1: Event-driven auto-plan trigger** (P0)
+- Replace `setTimeout(2000)` in `DatasetDetailContentV2.tsx:262` with event-driven approach
+- Listen for `vllora_all_docs_processed` event from knowledge source pipeline
+- Show progress: "Processing document 2 of 3..."
+- Add retry if doc processing fails
+- Components: `DatasetDetailContentV2.tsx`, `knowledge-sources-db.ts`, `DocsProcessingState.tsx`
+- Findings: PP-03
+
+**Proposal R-1.2: Promote Plan as first-class workflow entry** (P1)
+- Add summary card to PlanSection with status and key stats
+- Redesign PlanEmptyState with guidance text and illustration
+- Deduplicate plan display: chat shows "Plan proposed — see Plan tab" link card only
+- Components: `PlanSection.tsx`, `PlanEmptyState.tsx`, `SetupPlanCard.tsx`, Lucy chat renderers
+- Findings: PP-05, IA-07, IA-14, IA-15
+
+**Proposal R-1.3: Plan dismiss confirmation** (P1)
+- Add confirmation dialog before discarding generated plan
+- Rename "Dismiss" to "Discard Plan" for clarity
+- Components: `PlanHeaderActions.tsx`, `SetupPlanEditor.tsx`
+- Findings: PP-06, VI-3.3
+
+#### Area 2: Navigation & Tab Structure
+
+**Proposal R-2.1: Consolidate 9 tabs to 5** (P0)
+- Restructure: Data (+ merged Docs) → Plan (promoted) → Evaluation → Training (renamed) → Deploy
+- Remove arrow stepper, use standard horizontal tab bar
+- README becomes header menu action, not a tab
+- Components: `SectionTabs.tsx`, `DatasetUtilityBar.tsx`, `ArrowSegment.tsx` (remove), `DatasetDetailContentV2.tsx`, `KnowledgeSourcesPanel.tsx`, `ReadmeWithPlan.tsx`
+- Findings: IA-01, IA-03, VI-2.1, PP-11
+
+**Proposal R-2.2: Back navigation breadcrumb** (P0)
+- Ensure always-visible "Datasets > [Name]" breadcrumb at top
+- Components: `DatasetBreadcrumb.tsx`, dataset-detail-header `index.tsx`
+- Findings: PP-01
+
+**Proposal R-2.3: Deploy tab actionable guidance** (P1)
+- Replace "Coming Soon" with download instructions, model ID copy, deployment docs link
+- Components: New `DeploySection.tsx` or update `DatasetDetailContentV2.tsx`
+- Findings: PP-07
+
+#### Area 3: Lucy Sidebar Assistant
+
+**Proposal R-3.1: Pin/persist + responsive collapse** (P1)
+- Add pin toggle next to collapse button, persist in localStorage
+- Unpinned narrow screens: floating "Lucy" button opens overlay
+- Components: `LucyDatasetAssistant.tsx`
+- Findings: PP-08
+
+**Proposal R-3.2: Connection error recovery** (P0)
+- Add retry button for connection failures (after 10s timeout)
+- Add retry/dismiss on chat errors
+- Add 30s timeout on plan generation with retry/cancel
+- Components: `LucyDatasetAssistant.tsx`, `ConnectGatewayCard.tsx`, `LucyChat.tsx`, `PlanLoadingState.tsx`
+- Findings: VI-1.1, VI-1.2, VI-1.3
+
+**Proposal R-3.3: Fix quick actions** (P1)
+- Map each action to a structured prompt (not label text)
+- Fix `jobsCount` hardcoded to 0
+- Components: `LucyDatasetAssistant.tsx`
+- Findings: PP-04, PP-12, VI-3.5
+
+**Proposal R-3.4: Enable message queuing during streaming** (P1)
+- Keep textarea enabled during streaming
+- Show "Queued" badge on pending messages
+- Components: `@distri/react ChatInput.tsx` (upstream), `useFineTuneAgentChat.ts`
+- Findings: VI-3.1
+
+#### Area 4: Data Section
+
+**Proposal R-4.1: Scannable stats + coverage legend** (P1)
+- Simplify header to row of stat pills
+- Standardize badges to numeric across all tabs
+- Add colored legend to topic tree
+- Components: `RecordsSectionHeader.tsx`, `SectionTabs.tsx`, `CoverageIndicator.tsx`
+- Findings: IA-08, PP-11, IA-09
+
+**Proposal R-4.2: AI-generated record badge** (P2)
+- Small "AI" chip on synthetically generated records
+- Components: `SourceCell.tsx`
+- Findings: PP-14
+
+**Proposal R-4.3: Better dataset naming** (P2)
+- Prompt user to name during creation, with editable auto-suggestion
+- Components: `CreateDatasetDialog.tsx`
+- Findings: PP-13
+
+#### Area 5: Evaluation Section
+
+**Proposal R-5.1: Visual evaluation builder for non-developers** (P1)
+- "Simple Mode" / "Code Mode" toggle above Monaco editor
+- Simple Mode: form with metric types, thresholds, rubric criteria
+- Generates JavaScript code from form inputs
+- Components: `EvaluationConfigPanel.tsx`, `JavaScriptPanel.tsx`, new `SimpleEvaluationBuilder.tsx`
+- Findings: PP-10
+
+**Proposal R-5.2: Friendly dry run errors + inline config** (P1)
+- Translate technical errors to plain English with fix suggestions
+- Show dry run config summary inline (sample size, model)
+- Components: `dry-run-dialog/`, `EvaluationConfigPanel.tsx`
+- Findings: IA-10, IA-13
+
+#### Area 6: Finetune Section
+
+**Proposal R-6.1: Surface training config** (P1)
+- Show config as primary content when no jobs (not hidden in popover)
+- Replace 10px AlertCircle with full-width prerequisites banner with navigation links
+- Components: `FinetuneConfigPanel.tsx`
+- Findings: IA-12, PP-02, IA-04
+
+**Proposal R-6.2: Theme-aware colors** (P1)
+- Replace all hardcoded zinc-* with semantic tokens
+- Components: `FinetuneConfigPanel.tsx`, `FinetuneBottomPanel.tsx`
+- Findings: VI-2.3, VI-2.4, VI-4.1
+
+#### Area 7: Plan & Execution Flow
+
+**Proposal R-7.1: Deduplicate ExecutionProgressCard** (P1)
+- Progress renders ONLY in Plan tab
+- Chat shows compact "Plan executing... Step 3/7 [View in Plan tab]"
+- Components: Lucy chat renderers, `ExecutionProgressCard.tsx`
+- Findings: VI-5.1, VI-5.3, IA-07
+
+**Proposal R-7.2: Persist execution progress** (P1)
+- Save progress to IndexedDB alongside workflow state
+- Restore on page load; show "Execution interrupted. [Resume] [Start Over]" if interrupted
+- Components: `proposed-plan-store.ts`, `ExecutionProgressCard.tsx`
+- Findings: PP-09
+
+#### Area 8: Error Handling & Feedback
+
+**Proposal R-8.1: User-friendly tool results** (P1)
+- Display name mapping: `topics_config` → "Topic Setup", `grader_config` → "Evaluation Setup", etc.
+- Human-readable summary per tool result card
+- Visible "Show details" / "Hide details" label
+- Components: `types.ts`, `LucyDefaultToolRenderer.tsx`
+- Findings: IA-05, IA-11, VI-3.4
+
+**Proposal R-8.2: Knowledge source error surfacing** (P1)
+- Failed docs show red indicator with error + "Retry" button
+- Toast on processing failure
+- Components: `KnowledgeSourcesPanel.tsx`, `knowledge-sources-db.ts`
+- Findings: IA-17
+
+**Proposal R-8.3: Remove console.log** (P2)
+- Audit and remove from production paths
+- Components: `lucy-agent/` components, `DatasetDetailContentV2.tsx`
+- Findings: VI-5.2
+
+#### Area 9: Visual Consistency & Polish
+
+**Proposal R-9.1: Standardize styling tokens** (P2)
+- Consistent message margins, timestamp format, icon sizes, border radius
+- Fix undefined `--theme-rgb` CSS variable
+- Components: `lucy-agent/` components, new `ui-constants.ts`
+- Findings: VI-2.5, VI-4.2, VI-4.3, VI-4.4, VI-4.5, VI-2.7
+
+**Proposal R-9.2: Fix avatar typo + Beta badge** (P2)
+- "avarta" → "avatar" in image path
+- Reposition Beta badge next to "Lucy" label, add feedback link
+- Components: `LucyAvatar.tsx`, sidebar header
+- Findings: VI-4.6, VI-2.2, PP-15
+
+**Proposal R-9.3: Agent handover + tool card defaults** (P2)
+- Handover: subtle inline indicator, not a full card
+- Tool cards: default to "input" tab when output empty
+- Components: `@distri/react` renderers or `lucy-agent/`, tool card component
+- Findings: VI-5.6, VI-5.5
+
+---
+
+### Priority Summary (New Proposals)
+
+| Priority | Count | Proposals |
+|----------|-------|-----------|
+| **P0** | 4 | R-1.1 (event-driven auto-plan), R-2.1 (consolidate tabs), R-2.2 (back nav), R-3.2 (error recovery) |
+| **P1** | 15 | R-1.2, R-1.3, R-2.3, R-3.1, R-3.3, R-3.4, R-4.1, R-5.1, R-5.2, R-6.1, R-6.2, R-7.1, R-7.2, R-8.1, R-8.2 |
+| **P2** | 6 | R-4.2, R-4.3, R-8.3, R-9.1, R-9.2, R-9.3 |
+
+### Repo Ownership
+
+| Repo | Proposals |
+|------|-----------|
+| This repo (`src/components/datasets/`, `src/components/finetune/`, `src/lib/`) | ~90% of changes |
+| @distri/react (upstream) | R-3.4 (ChatInput streaming), R-9.3 (handover rendering) |
+
+### Recommended Implementation Order
+
+**Phase 1 — P0 quick wins**: R-2.2 (back nav), R-3.2 (error recovery)
+**Phase 2 — P0 major**: R-1.1 (auto-plan fix), R-2.1 (tab consolidation)
+**Phase 3 — P1 high-impact easy**: R-6.2 (theme tokens), R-7.1 (deduplicate progress), R-8.1 (user-friendly tools), R-3.3 (quick actions)
+**Phase 4 — P1 medium**: R-5.1 (eval builder), R-6.1 (surface config), R-1.2 (plan promotion), R-5.2 (dry run errors)
+**Phase 5 — P2 polish**: Batch all together after P0/P1 stable

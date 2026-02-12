@@ -30,7 +30,7 @@ import { toast } from 'sonner';
 
 const POLL_INTERVAL_MS = 6000; // 3 seconds
 const MAX_POLL_ATTEMPTS = 120; // ~12 minutes max (120 * 6 seconds)
-const MAX_CONSECUTIVE_ERRORS = 5;
+const MAX_CONSECUTIVE_ERRORS = 150;
 
 // =============================================================================
 // Singleton Class
