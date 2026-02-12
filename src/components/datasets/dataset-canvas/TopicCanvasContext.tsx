@@ -55,6 +55,10 @@ export interface TopicCanvasProviderProps {
   onGenerateForTopic?: (topicName: string) => void;
   /** Called when user wants to generate subtopics for a topic (null = root level) */
   onGenerateSubtopics?: (topicId: string | null) => void;
+  /** Called when a record is selected for detail view (opens Sheet) */
+  onSelectRecordId?: (id: string | null) => void;
+  /** Called when user wants to view the current topic in table view */
+  onViewInTable?: (topicId: string) => void;
 }
 
 // ============================================================================
@@ -412,6 +416,10 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     // P0-15: Operation/loading state
     operationProgress,
     generatingTopicName,
+    // Record detail sidebar
+    onSelectRecordId: props.onSelectRecordId,
+    // View in table
+    onViewInTable: props.onViewInTable,
   };
 }
 

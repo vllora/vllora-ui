@@ -165,6 +165,32 @@ export function DatasetDetailContentV2() {
     };
   }, [datasetId, setActiveSection]);
 
+  // 8.1: Show toast when data generation completes (Lucy action attribution)
+  useEffect(() => {
+    const handleGenProgress = (event: {
+      datasetId: string;
+      status: string;
+      completed?: number;
+      topicName?: string;
+    }) => {
+      if (event.datasetId !== datasetId) return;
+      if (event.status === "completed") {
+        const count = event.completed ?? 0;
+        const topicStr = event.topicName ? ` for "${event.topicName}"` : "";
+        toast.success(`Lucy generated ${count} record${count !== 1 ? "s" : ""}${topicStr}`, {
+          action: activeSection !== "records" ? {
+            label: "View Records",
+            onClick: () => setActiveSection("records"),
+          } : undefined,
+        });
+      }
+    };
+    emitter.on("vllora_data_generation_progress", handleGenProgress);
+    return () => {
+      emitter.off("vllora_data_generation_progress", handleGenProgress);
+    };
+  }, [datasetId, activeSection, setActiveSection]);
+
   // Auto-switch to Plan tab if a persisted plan is found on mount
   const hasCheckedPersistedPlan = useRef(false);
   useEffect(() => {
@@ -299,6 +325,24 @@ export function DatasetDetailContentV2() {
     emitter.emit("vllora_lucy_prompt", { prompt });
   }, []);
 
+  // 5.3: Preserve context across view switches
+  const handleViewModeChange = useCallback((mode: "canvas" | "table") => {
+    if (mode === "table" && selectedTopic) {
+      // Switching from canvas to table — focus the selected topic after mount
+      setViewMode(mode);
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("vllora_focus_topic", {
+          detail: { topicId: selectedTopic, topicName: selectedTopic },
+        }));
+      }, 150);
+    } else if (mode === "canvas" && selectedTopic) {
+      // Switching from table to canvas — keep the selected topic
+      setViewMode(mode);
+    } else {
+      setViewMode(mode);
+    }
+  }, [selectedTopic, setViewMode]);
+
   // Check if finetune conditions are met
   const hasRecords = sortedRecords.length > 0;
   const hasEvaluator = !!dataset?.evalScript;
@@ -385,7 +429,7 @@ export function DatasetDetailContentV2() {
           {activeSection === "records" && (
             <DatasetMainContent
               viewMode={viewMode}
-              onViewModeChange={setViewMode}
+              onViewModeChange={handleViewModeChange}
               onExport={handleExport}
               datasetId={datasetId}
               records={sortedRecords}

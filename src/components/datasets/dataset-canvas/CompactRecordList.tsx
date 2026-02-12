@@ -10,16 +10,22 @@
 
 import { useCallback, useRef, useState, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Trash2, Copy, Check, ChevronRight, Coins, MessageSquare } from "lucide-react";
+import { Trash2, ChevronRight, Coins, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { extractMessages, getRoleLabel, getRoleStyle, cleanText } from "../records-table/cells/ConversationThreadCell.utilities";
 import { estimateTokens, countTurns } from "../records-table/cells/StatsBadge";
 import { countTools } from "../records-table/cells/ToolsBadge";
 import { CoverageIndicator } from "./CoverageIndicator";
-import type { DatasetRecord, DatasetEvaluation, TopicHierarchyNode } from "@/types/dataset-types";
+import type { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 
 // Row heights for virtualizer
-const RECORD_ROW_HEIGHT = 68;
+const RECORD_ROW_HEIGHT = 80;
 const HEADER_ROW_HEIGHT = 36;
 
 interface CompactRecordListProps {
@@ -32,122 +38,56 @@ interface CompactRecordListProps {
   /** Total records across all topics (for coverage percentage) */
   totalRecords?: number;
   onDelete?: (recordId: string) => void;
+  /** Called when a record is clicked for detail view */
+  onSelectRecord?: (record: DatasetRecord) => void;
 }
 
 // ─── Flat mode components ────────────────────────────────────────────────────
 
-function CompactRecordId({ id }: { id: string }) {
-  const [copied, setCopied] = useState(false);
-  const shortId = id.length > 6 ? id.slice(0, 6) : id;
-
-  const handleCopy = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    navigator.clipboard.writeText(id);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1200);
-  }, [id]);
-
-  return (
-    <button
-      onClick={handleCopy}
-      title={copied ? "Copied!" : `Copy: ${id}`}
-      className="font-mono text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors flex items-center gap-0.5 shrink-0"
-    >
-      {shortId}
-      {copied ? <Check className="h-2 w-2 text-emerald-400" /> : <Copy className="h-2 w-2 opacity-0 group-hover/row:opacity-100" />}
-    </button>
-  );
-}
-
-function getScoreColor(score: number): string {
-  if (score >= 0.8) return "text-emerald-400";
-  if (score >= 0.6) return "text-amber-400";
-  return "text-red-400";
-}
-
-function CompactRecordStats({ data, evaluation }: { data: unknown; evaluation?: DatasetEvaluation }) {
-  const tokens = estimateTokens(data);
-  const turns = countTurns(data);
-  const tools = countTools(data);
-
-  // Resolve dryrun/finetune scores
-  const dryRunScore = evaluation?.dryRunScore ?? (
-    evaluation?.score != null && !evaluation?.finetuneScore ? evaluation.score : undefined
-  );
-  const dryRunAvg = evaluation?.dryRunAvg;
-  const dryRunCount = evaluation?.dryRunCount ?? (dryRunScore != null ? 1 : 0);
-  const finetuneScore = evaluation?.finetuneScore;
-  const finetuneAvg = evaluation?.finetuneAvg;
-  const finetuneCount = evaluation?.finetuneCount ?? 0;
-
-  const drDisplay = dryRunCount > 1 && dryRunAvg != null ? dryRunAvg : dryRunScore;
-  const ftDisplay = finetuneCount > 1 && finetuneAvg != null ? finetuneAvg : finetuneScore;
-
-  return (
-    <div className="flex items-center gap-3 mt-0.5">
-      <span className="flex items-center gap-1 text-[10px] text-muted-foreground/70">
-        <Coins className="w-2.5 h-2.5 text-emerald-500/70" />
-        {tokens.toLocaleString()}
-      </span>
-      <span className="flex items-center gap-1 text-[10px] text-muted-foreground/70">
-        <MessageSquare className="w-2.5 h-2.5" />
-        {turns}
-      </span>
-      {tools > 0 && (
-        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-px rounded bg-zinc-500/10 border border-zinc-500/20 text-zinc-400">
-          <span className="text-zinc-500 italic font-serif">fx</span>
-          {tools}
-        </span>
-      )}
-      {drDisplay != null && (
-        <span className="flex items-baseline gap-1 text-[10px]">
-          <span className="text-zinc-500">{dryRunCount > 1 ? "Avg Dryrun" : "Dryrun"}:</span>
-          <span className={cn("font-semibold tabular-nums", getScoreColor(drDisplay))}>{drDisplay.toFixed(2)}</span>
-        </span>
-      )}
-      {ftDisplay != null && (
-        <span className="flex items-baseline gap-1 text-[10px]">
-          <span className="text-zinc-500">{finetuneCount > 1 ? "Avg FT" : "FT"}:</span>
-          <span className={cn("font-semibold tabular-nums", getScoreColor(ftDisplay))}>{ftDisplay.toFixed(2)}</span>
-        </span>
-      )}
-    </div>
-  );
-}
-
-function CompactRecordRow({ record, onDelete }: { record: DatasetRecord; onDelete?: (id: string) => void }) {
+function CompactRecordRow({ record, onDelete, onSelectRecord }: { record: DatasetRecord; onDelete?: (id: string) => void; onSelectRecord?: (record: DatasetRecord) => void }) {
   const messages = extractMessages(record.data);
   const previewMessages = messages.slice(0, 2);
+  const tokens = estimateTokens(record.data);
+  const turns = countTurns(record.data);
+  const tools = countTools(record.data);
+
+  const score = record.evaluation?.score ?? record.evaluation?.dryRunScore;
+  const scoreDotColor = score != null
+    ? score >= 0.8 ? "bg-emerald-400" : score >= 0.6 ? "bg-amber-400" : "bg-red-400"
+    : null;
+  const scoreDotGlow = score != null
+    ? score >= 0.8 ? "shadow-[0_0_4px_rgba(16,185,129,0.5)]" : score >= 0.6 ? "shadow-[0_0_4px_rgba(245,158,11,0.5)]" : "shadow-[0_0_4px_rgba(248,113,113,0.5)]"
+    : null;
 
   return (
     <div
       className={cn(
-        "group/row flex items-start gap-2 px-2 py-2 rounded-md transition-colors",
-        "hover:bg-muted/50"
+        "group/row relative py-2.5 px-4 transition-all border-b border-border/20",
+        "hover:bg-muted/30",
+        onSelectRecord && "cursor-pointer"
       )}
+      onClick={() => onSelectRecord?.(record)}
     >
-      {/* ID */}
-      <div className="mt-0.5 shrink-0">
-        <CompactRecordId id={record.id} />
-      </div>
+      {/* Hover accent line */}
+      <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-[rgba(var(--theme-500),0.3)] opacity-0 group-hover/row:opacity-100 transition-opacity" />
 
-      {/* Message previews + stats */}
-      <div className="flex-1 min-w-0 space-y-0.5">
+      {/* Message previews */}
+      <div className="flex flex-col gap-1.5 mb-1.5">
         {previewMessages.map((msg, i) => {
           const roleLabel = getRoleLabel(msg.role);
-          const { badgeClass } = getRoleStyle(msg.role);
+          const { badgeClass, contentClass } = getRoleStyle(msg.role);
           const text = cleanText(msg.content);
-          const truncated = text.length > 80 ? text.slice(0, 80) + "..." : text;
+          const truncated = text.length > 90 ? text.slice(0, 90) + "..." : text;
 
           return (
-            <div key={i} className="flex items-baseline gap-1.5 min-w-0">
+            <div key={i} className="flex items-baseline gap-2 overflow-hidden">
               <span className={cn(
-                "text-[9px] font-semibold px-1 py-px rounded shrink-0",
+                "shrink-0 text-[10px] font-bold tracking-wider uppercase px-1.5 py-0.5 rounded text-center",
                 badgeClass
               )}>
                 {roleLabel}
               </span>
-              <span className="text-xs text-muted-foreground truncate">
+              <span className={cn("text-xs truncate leading-relaxed", contentClass)}>
                 {truncated || "(empty)"}
               </span>
             </div>
@@ -156,24 +96,60 @@ function CompactRecordRow({ record, onDelete }: { record: DatasetRecord; onDelet
         {previewMessages.length === 0 && (
           <span className="text-xs text-muted-foreground/50 italic">No messages</span>
         )}
-        {/* Stats: tokens, turns, scores */}
-        <CompactRecordStats data={record.data} evaluation={record.evaluation} />
       </div>
 
-      {/* Delete — hover only */}
-      {onDelete && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete(record.id);
-          }}
-          className="mt-0.5 shrink-0 p-1 rounded hover:bg-destructive/10 text-muted-foreground/0 group-hover/row:text-muted-foreground hover:!text-destructive transition-colors"
-          title="Delete record"
-        >
-          <Trash2 className="h-3 w-3" />
-        </button>
-      )}
+      {/* Stats footer */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3 text-[10px] tabular-nums text-muted-foreground/50">
+          <span className="flex items-center gap-1">
+            <Coins className="w-2.5 h-2.5" />
+            {tokens.toLocaleString()}
+          </span>
+          <span className="flex items-center gap-1">
+            <MessageSquare className="w-2.5 h-2.5" />
+            {turns} turns
+          </span>
+          {tools > 0 && (
+            <span className="flex items-center gap-1">
+              <span className="italic font-serif text-[9px]">fx</span>
+              {tools}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          {score != null && (
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1.5 bg-muted/50 px-2 py-0.5 rounded-full border border-border/50 cursor-help">
+                    <div className={cn("w-1.5 h-1.5 rounded-full", scoreDotColor, scoreDotGlow)} />
+                    <span className="text-[10px] tabular-nums text-muted-foreground">{score.toFixed(2)}</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <p className="text-xs">Evaluation score</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+
+          {/* Delete — hover only */}
+          {onDelete && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(record.id);
+              }}
+              className="p-1 rounded text-muted-foreground/0 group-hover/row:text-muted-foreground hover:!text-destructive hover:bg-destructive/10 transition-colors"
+              title="Delete record"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -206,7 +182,7 @@ function CompactTopicHeader({
     <div
       className={cn(
         "w-full flex items-center gap-2 py-2 px-3 text-left transition-colors",
-        "bg-zinc-900/60 hover:bg-zinc-800/60 border-l-2 border-l-emerald-500/40"
+        "bg-muted/60 hover:bg-muted/80 border-l-2 border-l-[rgba(var(--theme-500),0.4)]"
       )}
     >
       {/* Expand/collapse */}
@@ -224,24 +200,24 @@ function CompactTopicHeader({
         {hasContent ? (
           <ChevronRight
             className={cn(
-              "w-3.5 h-3.5 transition-transform duration-200 text-emerald-500/70",
+              "w-3.5 h-3.5 transition-transform duration-200 text-[rgba(var(--theme-500),0.7)]",
               isExpanded && "rotate-90"
             )}
           />
         ) : (
-          <span className="w-1.5 h-1.5 rounded-full bg-zinc-700" />
+          <span className="w-1.5 h-1.5 rounded-full bg-border" />
         )}
       </button>
 
       {/* Topic name */}
-      <span className="text-xs font-medium text-emerald-400 truncate flex-1 min-w-0">
+      <span className="text-xs font-medium text-[rgb(var(--theme-500))] truncate flex-1 min-w-0">
         {name}
       </span>
 
       {/* Count + coverage — hide when expanded with children */}
       {(!isExpanded || !hasChildren) && totalCount > 0 && (
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className="text-xs tabular-nums px-1.5 py-0.5 rounded bg-zinc-700/50 text-muted-foreground">
+          <span className="text-xs tabular-nums px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
             {totalCount}
           </span>
           <CoverageIndicator
@@ -338,9 +314,11 @@ function flattenTree(
 function VirtualizedFlatList({
   records,
   onDelete,
+  onSelectRecord,
 }: {
   records: DatasetRecord[];
   onDelete?: (id: string) => void;
+  onSelectRecord?: (record: DatasetRecord) => void;
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -368,7 +346,7 @@ function VirtualizedFlatList({
                 height: virtualItem.size,
               }}
             >
-              <CompactRecordRow record={record} onDelete={onDelete} />
+              <CompactRecordRow record={record} onDelete={onDelete} onSelectRecord={onSelectRecord} />
             </div>
           );
         })}
@@ -384,11 +362,13 @@ function VirtualizedTreeList({
   recordsByTopic,
   totalRecords,
   onDelete,
+  onSelectRecord,
 }: {
   hierarchyNode: TopicHierarchyNode;
   recordsByTopic: Record<string, DatasetRecord[]>;
   totalRecords: number;
   onDelete?: (id: string) => void;
+  onSelectRecord?: (record: DatasetRecord) => void;
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
@@ -461,7 +441,7 @@ function VirtualizedTreeList({
                 height: virtualItem.size,
               }}
             >
-              <CompactRecordRow record={item.record} onDelete={onDelete} />
+              <CompactRecordRow record={item.record} onDelete={onDelete} onSelectRecord={onSelectRecord} />
             </div>
           );
         })}
@@ -478,6 +458,7 @@ export function CompactRecordList({
   recordsByTopic,
   totalRecords = 0,
   onDelete,
+  onSelectRecord,
 }: CompactRecordListProps) {
   // Tree mode
   if (hierarchyNode && recordsByTopic) {
@@ -499,6 +480,7 @@ export function CompactRecordList({
         recordsByTopic={recordsByTopic}
         totalRecords={totalRecords}
         onDelete={onDelete}
+        onSelectRecord={onSelectRecord}
       />
     );
   }
@@ -513,6 +495,6 @@ export function CompactRecordList({
   }
 
   return (
-    <VirtualizedFlatList records={records} onDelete={onDelete} />
+    <VirtualizedFlatList records={records} onDelete={onDelete} onSelectRecord={onSelectRecord} />
   );
 }

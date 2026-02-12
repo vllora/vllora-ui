@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/tooltip";
 import { TopicsHelpTooltip } from "./TopicsHelpTooltip";
 import { BalanceRatingTooltip } from "./BalanceRatingTooltip";
+import { DonutChart } from "./DonutChart";
 
 type BalanceRating = "excellent" | "good" | "fair" | "poor" | "critical";
 
@@ -134,54 +135,18 @@ export function OverviewFilledState({
   return (
     <button
       onClick={onClick}
-      className="w-full rounded-lg border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800/50 transition-colors cursor-pointer text-left overflow-hidden"
+      className="w-full rounded-lg border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800/50 hover:border-[rgba(var(--theme-500),0.3)] transition-all cursor-pointer text-left overflow-hidden focus-visible:ring-2 focus-visible:ring-[rgba(var(--theme-500),0.5)] focus-visible:outline-none relative group"
     >
       <div className="flex">
         {/* Left Section: Records Stats */}
         <div className="flex items-center gap-4 px-5 py-4 border-r border-zinc-800">
           {/* Donut Chart */}
-          <div className="relative w-16 h-16">
-            <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
-              {/* Background circle */}
-              <circle
-                cx="18"
-                cy="18"
-                r="15.5"
-                fill="none"
-                stroke="#3f3f46"
-                strokeWidth="3"
-              />
-              {/* Original segment (gray) */}
-              <circle
-                cx="18"
-                cy="18"
-                r="15.5"
-                fill="none"
-                stroke="#9ca3af"
-                strokeWidth="3"
-                strokeDasharray={`${originalPercent} ${100 - originalPercent}`}
-                strokeLinecap="round"
-              />
-              {/* Generated segment (violet) - offset by original */}
-              {generated > 0 && (
-                <circle
-                  cx="18"
-                  cy="18"
-                  r="15.5"
-                  fill="none"
-                  stroke="#8b5cf6"
-                  strokeWidth="3"
-                  strokeDasharray={`${generatedPercent} ${100 - generatedPercent}`}
-                  strokeDashoffset={`-${originalPercent}`}
-                  strokeLinecap="round"
-                />
-              )}
-            </svg>
-            {/* Center label */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-lg font-bold text-zinc-100">{total}</span>
-            </div>
-          </div>
+          <DonutChart
+            total={total}
+            original={original}
+            generated={generated}
+            className="w-16 h-16"
+          />
 
           {/* Records Breakdown */}
           <div className="space-y-1.5">
@@ -225,15 +190,30 @@ export function OverviewFilledState({
                 <TopicsHelpTooltip hasCategorizedRecords={topicsWithRecords > 0} />
               )}
             </div>
-            {/* Only show balance when there are categorized records */}
-            {balanceConfig && topicsWithRecords > 0 && balanceRating && (
+            {/* Balance rating or "not yet calculated" at zero-state */}
+            {balanceConfig && topicsWithRecords > 0 && balanceRating ? (
               <BalanceRatingTooltip
                 rating={balanceRating}
                 score={balanceScore}
                 colorClass={balanceConfig.color}
                 bgColorClass={balanceConfig.bgColor}
               />
-            )}
+            ) : totalTopics > 0 && topicsWithRecords === 0 ? (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="text-[10px] text-muted-foreground/50 cursor-help">
+                      Balance: not yet calculated
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[220px]">
+                    <p className="text-xs text-muted-foreground">
+                      Balance score is calculated after records are categorized into topics.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : null}
           </div>
 
           {/* Stacked Bar */}
@@ -302,6 +282,10 @@ export function OverviewFilledState({
           )}
         </div>
       </div>
+      {/* Click affordance */}
+      <span className="absolute bottom-2 right-3 text-[10px] text-muted-foreground/40 group-hover:text-muted-foreground/60 transition-colors">
+        View details ›
+      </span>
     </button>
   );
 }

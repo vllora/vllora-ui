@@ -1,16 +1,15 @@
 /**
  * RecordRow
  *
- * Displays a single record row as a conversational thread with tools, strategy, stats, and actions.
- * Supports inline expansion to show detailed view.
+ * Displays a single record row as a conversational thread with stats, strategy, quality, and actions.
+ * Clicking opens the record detail sidebar via onExpand.
  */
 
 import { useState, forwardRef, useCallback } from "react";
-import { Copy, Check } from "lucide-react";
 import { DatasetRecord } from "@/types/dataset-types";
 import { cn } from "@/lib/utils";
 import { emitter } from "@/utils/eventEmitter";
-import { ConversationThreadCell, ToolsBadge, StatsBadge, TopicCell, RecordExpandedDetail, RecordActions, SelectionCheckbox, QualityIndicator } from "./cells";
+import { ConversationThreadCell, TopicCell, RecordActions, SelectionCheckbox, QualityIndicator, StatsBadge } from "./cells";
 import { RecordDataDialog } from "./RecordDataDialog";
 import { COLUMN_WIDTHS } from "../table-columns";
 import type { AvailableTopic } from "../record-utils";
@@ -47,35 +46,6 @@ interface RecordRowProps {
   isHighlighted?: boolean;
 }
 
-function RecordIdBadge({ recordId }: { recordId: string }) {
-  const [copied, setCopied] = useState(false);
-  const shortId = recordId.length > 6 ? recordId.slice(0, 6) : recordId;
-
-  const handleCopy = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    navigator.clipboard.writeText(recordId);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  }, [recordId]);
-
-  return (
-    <button
-      onClick={handleCopy}
-      title={copied ? "Copied!" : `Copy ID: ${recordId}`}
-      className="w-16 shrink-0 flex items-center gap-1 group/id"
-    >
-      <span className="font-mono text-[10px] text-muted-foreground/60 group-hover/id:text-muted-foreground transition-colors">
-        {shortId}
-      </span>
-      {copied ? (
-        <Check className="h-2.5 w-2.5 text-emerald-400" />
-      ) : (
-        <Copy className="h-2.5 w-2.5 text-muted-foreground/30 opacity-0 group-hover/id:opacity-100 transition-opacity" />
-      )}
-    </button>
-  );
-}
-
 export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function RecordRow({
   record,
   onUpdateTopic,
@@ -88,20 +58,13 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
   onExpand,
   availableTopics = [],
   hideTopic = false,
-  isExpanded: controlledExpanded,
-  onToggleExpand,
+  isExpanded: _controlledExpanded,
+  onToggleExpand: _onToggleExpand,
   isHighlighted = false,
 }, ref) {
-  // Internal state for uncontrolled mode
-  const [internalExpanded, setInternalExpanded] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
 
-  // Use controlled or internal state
-  // When onExpand is provided, we use sidebar mode (no inline expansion)
-  const isExpanded = onExpand ? false : (controlledExpanded ?? internalExpanded);
-  const handleToggleExpand = onExpand
-    ? () => onExpand(record)
-    : (onToggleExpand ?? (() => setInternalExpanded(!internalExpanded)));
+  const handleClick = onExpand ? () => onExpand(record) : undefined;
 
   // Handler for QualityIndicator click — navigate to evaluator or jobs tab and highlight record
   const handleScoreNavigate = useCallback((target: "evaluator" | "jobs") => {
@@ -132,21 +95,15 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
   return (
     <div
       ref={ref}
-      onClick={handleToggleExpand}
+      onClick={handleClick}
       className={cn(
-        "group flex flex-col rounded-md overflow-hidden transition-colors bg-card/30 cursor-pointer",
-        isExpanded ? "ring-1 ring-border" : "hover:bg-muted/50",
+        "group flex flex-col rounded-md overflow-hidden transition-colors bg-card/30 cursor-pointer hover:bg-muted/50",
         selected && "bg-[rgba(var(--theme-500),0.1)] ring-1 ring-[rgba(var(--theme-500),0.3)]",
         isHighlighted && "animate-record-highlight"
       )}
     >
       {/* Main row */}
-      <div
-        className={cn(
-          "px-2 py-1.5 flex items-center gap-3 transition-colors",
-          isExpanded && "border-b border-border"
-        )}
-      >
+      <div className="px-2 py-1.5 flex items-center gap-3 transition-colors">
       
 
         {/* Checkbox */}
@@ -158,9 +115,6 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
           />
         )}
 
-        {/* Record ID */}
-        <RecordIdBadge recordId={record.id} />
-
         {/* Conversational Thread */}
         <ConversationThreadCell
           data={record.data}
@@ -168,10 +122,11 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
           sourceRecordId={record.sourceRecordId}
         />
 
-        {/* Tools Badge */}
-        <div className={cn("flex items-center justify-center", COLUMN_WIDTHS.tools)}>
-          <ToolsBadge data={record.data} />
-        </div>
+        {/* Stats (tokens, turns, tools) */}
+        <StatsBadge
+          data={record.data}
+          className={COLUMN_WIDTHS.stats}
+        />
 
         {/* Strategy (Topic) - hidden in grouped mode */}
         {!hideTopic && (
@@ -184,11 +139,6 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
             />
           </div>
         )}
-
-        {/* Stats */}
-        <div className={cn("flex items-center", COLUMN_WIDTHS.stats)}>
-          <StatsBadge data={record.data} />
-        </div>
 
         {/* Quality score — click navigates to evaluator/jobs tab */}
         <QualityIndicator
@@ -206,17 +156,12 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
             onEdit={onSave ? () => setEditDialogOpen(true) : undefined}
             onDelete={() => onDelete(record.id)}
             onGenerateVariants={handleGenerateVariants}
+            onCopyId={() => {
+              navigator.clipboard.writeText(record.id);
+            }}
           />
         </div>
       </div>
-
-      {/* Expanded detail view */}
-      {isExpanded && (
-        <RecordExpandedDetail
-          record={record}
-          availableTopics={availableTopics}
-        />
-      )}
 
       {/* Edit dialog */}
       {onSave && (

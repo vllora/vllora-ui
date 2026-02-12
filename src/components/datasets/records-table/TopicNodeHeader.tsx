@@ -76,8 +76,8 @@ export function TopicNodeHeader({
       <div
         className={cn(
           "group w-full flex items-center gap-2 py-2 px-3 text-left transition-colors",
-          "bg-zinc-900/60 hover:bg-zinc-800/60 border-l-2",
-          isUnassigned ? "border-l-amber-500/40" : "border-l-emerald-500/40",
+          "bg-muted/60 hover:bg-muted/80 border-l-2",
+          isUnassigned ? "border-l-amber-500/40" : "border-l-[rgba(var(--theme-500),0.4)]",
           highlighted && "animate-record-highlight rounded-sm"
         )}
       >
@@ -94,12 +94,12 @@ export function TopicNodeHeader({
             <ChevronRight
               className={cn(
                 "w-4 h-4 transition-transform duration-200",
-                isUnassigned ? "text-amber-500/70" : "text-emerald-500/70",
+                isUnassigned ? "text-amber-500/70" : "text-[rgba(var(--theme-500),0.7)]",
                 isExpanded && "rotate-90"
               )}
             />
           ) : (
-            <span className="w-1.5 h-1.5 rounded-full bg-zinc-700" />
+            <span className="w-1.5 h-1.5 rounded-full bg-border" />
           )}
         </button>
 
@@ -136,7 +136,7 @@ export function TopicNodeHeader({
                       e.stopPropagation();
                       onGenerateForTopic(topicPath);
                     }}
-                    className="flex items-center justify-center w-6 h-6 rounded hover:bg-zinc-700 transition-colors text-muted-foreground hover:text-foreground"
+                    className="flex items-center justify-center w-6 h-6 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
                   >
                     <Grid2X2Plus className="w-3.5 h-3.5" />
                   </button>
@@ -157,7 +157,7 @@ export function TopicNodeHeader({
                       e.stopPropagation();
                       onGenerateSubtopics(topicPath);
                     }}
-                    className="flex items-center justify-center w-6 h-6 rounded hover:bg-zinc-700 transition-colors text-muted-foreground hover:text-foreground"
+                    className="flex items-center justify-center w-6 h-6 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
                   >
                     <GitBranch className="w-3.5 h-3.5" />
                   </button>
@@ -195,7 +195,7 @@ export function TopicNodeHeader({
         <div className="flex items-center justify-end gap-2 shrink-0 ml-auto">
           {/* Loading indicator when generating */}
           {isGenerating && (
-            <div className="flex items-center gap-1.5 text-emerald-400">
+            <div className="flex items-center gap-1.5 text-[rgb(var(--theme-500))]">
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
               <span className="text-xs">
                 {generatingProgress
@@ -208,7 +208,7 @@ export function TopicNodeHeader({
             <>
               {totalCount > 0 ? (
                 <>
-                  <span className="text-xs tabular-nums px-1.5 py-0.5 rounded bg-zinc-700/50 text-muted-foreground">
+                  <span className="text-xs tabular-nums px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
                     {totalCount}
                   </span>
                   <CoverageIndicator
@@ -217,7 +217,7 @@ export function TopicNodeHeader({
                   />
                 </>
               ) : !isUnassigned ? (
-                <span className="text-xs text-zinc-600 italic">
+                <span className="text-xs text-muted-foreground/60 italic">
                   No records yet
                 </span>
               ) : null}

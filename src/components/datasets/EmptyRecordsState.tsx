@@ -34,6 +34,7 @@ interface EmptyRecordsStateProps {
 export function EmptyRecordsState({
   datasetId,
   datasetObjective,
+  hasTopicHierarchy = false,
   onImportClick,
   onDocsClick,
   docsProcessing,
@@ -79,9 +80,11 @@ export function EmptyRecordsState({
   }, [datasetId]);
 
   const handleAskLucy = () => {
-    const prompt = datasetObjective
-      ? "Help me generate training data for this dataset."
-      : "Help me get started with this dataset.";
+    const prompt = hasTopicHierarchy
+      ? "Generate training data to fill my topics."
+      : datasetObjective
+        ? "Help me generate training data for this dataset."
+        : "Help me get started with this dataset.";
     emitter.emit("vllora_lucy_prompt", { prompt });
   };
 
@@ -162,12 +165,14 @@ export function EmptyRecordsState({
         {/* Title */}
         <div className="space-y-2">
           <h3 className="text-lg font-semibold text-foreground">
-            Get started with your dataset
+            {hasTopicHierarchy ? "Your topics are ready for data" : "Get started with your dataset"}
           </h3>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            {datasetObjective
-              ? "Your dataset is ready. Follow these three stages to fine-tune your model."
-              : "Define your training goal and follow three stages to fine-tune your model."}
+            {hasTopicHierarchy
+              ? "Generate training data to fill your topics, or import existing records."
+              : datasetObjective
+                ? "Your dataset is ready. Follow these three stages to fine-tune your model."
+                : "Define your training goal and follow three stages to fine-tune your model."}
           </p>
         </div>
 

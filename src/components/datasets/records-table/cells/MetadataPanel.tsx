@@ -6,11 +6,13 @@
  */
 
 import { useMemo } from "react";
-import { GitBranch } from "lucide-react";
+import { GitBranch, Coins, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DatasetRecord, DataInfo } from "@/types/dataset-types";
 import { ToolDefinitionsViewer } from "@/components/chat/traces/TraceRow/span-info/DetailView/tool-definitions-viewer";
 import type { ToolInfoCall } from "@/components/chat/traces/TraceRow/span-info/DetailView/spans-display/tool-display";
+import { estimateTokens, countTurns } from "./StatsBadge";
+import { countTools } from "./ToolsBadge";
 
 interface MetadataPanelProps {
   record: DatasetRecord;
@@ -86,6 +88,9 @@ export function MetadataPanel({ record, topicPath }: MetadataPanelProps) {
         </div>
       )}
 
+      {/* Conversation Stats */}
+      <ConversationStats data={record.data} />
+
       {/* Metadata */}
       <div>
         <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
@@ -131,6 +136,36 @@ function MetadataRow({ label, value, valueColor = "text-foreground" }: MetadataR
     <div className="flex items-center justify-between py-2.5">
       <span className="text-sm text-zinc-500">{label}</span>
       <span className={cn("text-sm font-medium", valueColor)}>{value}</span>
+    </div>
+  );
+}
+
+function ConversationStats({ data }: { data: unknown }) {
+  const tokens = estimateTokens(data);
+  const turns = countTurns(data);
+  const tools = countTools(data);
+
+  return (
+    <div>
+      <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
+        Statistics
+      </h4>
+      <div className="flex items-center gap-4 text-sm">
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          <Coins className="w-3.5 h-3.5" />
+          <span className="font-medium text-foreground">{tokens.toLocaleString()}</span> tokens
+        </span>
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          <MessageSquare className="w-3.5 h-3.5" />
+          <span className="font-medium text-foreground">{turns}</span> turns
+        </span>
+        {tools > 0 && (
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <span className="italic font-serif text-xs">fx</span>
+            <span className="font-medium text-foreground">{tools}</span> tools
+          </span>
+        )}
+      </div>
     </div>
   );
 }

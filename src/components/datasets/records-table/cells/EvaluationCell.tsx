@@ -6,7 +6,6 @@
 
 import { DatasetEvaluation } from "@/types/dataset-types";
 import { cn } from "@/lib/utils";
-import { Star } from "lucide-react";
 import { COLUMN_WIDTHS } from "../../table-columns";
 
 interface EvaluationCellProps {
@@ -15,18 +14,24 @@ interface EvaluationCellProps {
   tableLayout?: boolean;
 }
 
-// Get color based on score value (1-5 scale assumed)
-const getScoreColor = (score: number): string => {
-  if (score >= 4) return "bg-emerald-500/15 text-emerald-500";
-  if (score >= 3) return "bg-amber-500/15 text-amber-500";
-  return "bg-orange-500/15 text-orange-400";
-};
+/** Normalize score to 0-1 range. Legacy 1-5 scores are divided by 5. */
+function normalizeScore(score: number): number {
+  return score > 1 ? score / 5 : score;
+}
+
+/** Get dot + text color based on normalized 0-1 score */
+function getScoreStyle(score: number): { dot: string; badge: string } {
+  if (score >= 0.8) return { dot: "bg-emerald-400", badge: "bg-emerald-500/15 text-emerald-500" };
+  if (score >= 0.6) return { dot: "bg-amber-400", badge: "bg-amber-500/15 text-amber-500" };
+  return { dot: "bg-red-400", badge: "bg-red-500/15 text-red-400" };
+}
 
 export function EvaluationCell({
   evaluation,
   tableLayout = false,
 }: EvaluationCellProps) {
   const hasScore = evaluation?.score !== undefined;
+  const normalized = hasScore ? normalizeScore(evaluation.score!) : undefined;
 
   return (
     <div
@@ -35,15 +40,15 @@ export function EvaluationCell({
         tableLayout ? COLUMN_WIDTHS.evaluation : "min-w-[100px]"
       )}
     >
-      {hasScore ? (
+      {normalized !== undefined ? (
         <span
           className={cn(
-            "text-[11px] font-medium px-2.5 py-1 rounded-full inline-flex items-center gap-1",
-            getScoreColor(evaluation.score!)
+            "text-[11px] font-medium px-2.5 py-1 rounded-full inline-flex items-center gap-1.5",
+            getScoreStyle(normalized).badge
           )}
         >
-          <Star className="w-3 h-3 fill-current" />
-          {evaluation.score}
+          <span className={cn("w-2 h-2 rounded-full", getScoreStyle(normalized).dot)} />
+          {normalized.toFixed(2)}
         </span>
       ) : (
         <span className="text-[11px] text-muted-foreground/50">

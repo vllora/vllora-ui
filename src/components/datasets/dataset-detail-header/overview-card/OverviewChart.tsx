@@ -6,6 +6,7 @@
  */
 
 import { useMemo } from "react";
+import { DonutChart } from "./DonutChart";
 
 // Colors for topic segments
 const SEGMENT_COLORS = [
@@ -72,16 +73,6 @@ export function OverviewChart({
   const generatedPercent = total > 0 ? (generated / total) * 100 : 0;
   const originalPercent = total > 0 ? (original / total) * 100 : 0;
 
-  // CSS conic-gradient for donut chart
-  const gradientStyle = total > 0
-    ? {
-        background: `conic-gradient(
-          rgb(139 92 246) 0% ${generatedPercent}%,
-          rgb(156 163 175) ${generatedPercent}% 100%
-        )`,
-      }
-    : { background: "rgb(156 163 175)" };
-
   // Build topic segments sorted by count
   const segments = useMemo(() => {
     const entries = Object.entries(topicDistribution)
@@ -142,7 +133,6 @@ export function OverviewChart({
 
   const isMd = size === "md";
   const donutSize = isMd ? "w-16 h-16" : "w-12 h-12";
-  const donutInner = isMd ? "inset-2" : "inset-1.5";
   const fontSize = isMd ? "text-xs" : "text-[10px]";
   const barHeight = isMd ? "h-5" : "h-4";
   const dotSize = isMd ? "w-2 h-2" : "w-1.5 h-1.5";
@@ -152,12 +142,13 @@ export function OverviewChart({
       {/* Left side: Records with donut */}
       <div className="flex items-center gap-3 shrink-0">
         {/* Donut Chart */}
-        <div className="relative">
-          <div className={`${donutSize} rounded-full`} style={gradientStyle} />
-          <div className={`absolute ${donutInner} rounded-full bg-muted/50 flex items-center justify-center`}>
-            <span className={`${fontSize} font-semibold`}>{total}</span>
-          </div>
-        </div>
+        <DonutChart
+          total={total}
+          original={original}
+          generated={generated}
+          className={donutSize}
+          centerLabelClassName={`${fontSize} font-semibold`}
+        />
 
         {/* Records Legend */}
         <div className="min-w-0">

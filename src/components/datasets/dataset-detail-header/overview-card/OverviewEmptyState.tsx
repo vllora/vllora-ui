@@ -11,9 +11,12 @@ import { CardHeader } from "../CardHeader";
 
 interface OverviewEmptyStateProps {
   onClick?: () => void;
+  /** Number of leaf topics configured (0 = no topics) */
+  topicCount?: number;
 }
 
-export function OverviewEmptyState({ onClick }: OverviewEmptyStateProps) {
+export function OverviewEmptyState({ onClick, topicCount = 0 }: OverviewEmptyStateProps) {
+  const hasTopics = topicCount > 0;
   return (
     <button
       onClick={onClick}
@@ -65,12 +68,12 @@ export function OverviewEmptyState({ onClick }: OverviewEmptyStateProps) {
         <div className="flex-1 text-left">
           <div className="flex items-center gap-1.5 mb-0.5">
             <span className="text-sm font-medium text-zinc-300 group-hover:text-zinc-200 transition-colors">
-              Add records
+              {hasTopics ? `${topicCount} topic${topicCount !== 1 ? "s" : ""} configured` : "Add records"}
             </span>
             <Sparkles className="w-3 h-3 text-amber-500/70 opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
           <p className="text-xs text-zinc-500 group-hover:text-zinc-400 transition-colors">
-            Generate data to get started
+            {hasTopics ? "Generate records to fill them" : "Generate data to get started"}
           </p>
         </div>
 

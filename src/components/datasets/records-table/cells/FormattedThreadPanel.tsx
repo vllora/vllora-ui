@@ -6,7 +6,7 @@
  */
 
 import { useMemo } from "react";
-import { SingleMessage } from "@/components/chat/traces/TraceRow/span-info/DetailView/single-message";
+import { SingleMessageRender } from "./SingleMessageRender";
 import { DataInfo } from "@/types/dataset-types";
 
 interface FormattedThreadPanelProps {
@@ -88,17 +88,15 @@ export function FormattedThreadPanel({ data }: FormattedThreadPanelProps) {
     );
   }
   return (
-    <div className="divide-y divide-border/30">
+    <div className="space-y-4">
       {messages.map((msg, idx) => (
-        <SingleMessage
+        <SingleMessageRender
           key={idx}
           role={msg.role}
           content={msg.content}
           toolCalls={msg.toolCalls}
           parts={msg.parts}
           tool_call_id={msg.tool_call_id}
-          isFirst={idx === 0}
-          isLast={idx === messages.length - 1}
         />
       ))}
     </div>

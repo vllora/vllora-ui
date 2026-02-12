@@ -5,7 +5,6 @@ export { SourceCell } from "./SourceCell";
 export { ConversationThreadCell, extractMessages } from "./ConversationThreadCell";
 export { ToolsBadge, countTools } from "./ToolsBadge";
 export { StatsBadge, estimateTokens, countTurns } from "./StatsBadge";
-export { RecordExpandedDetail } from "./RecordExpandedDetail";
 export { FormattedThreadPanel } from "./FormattedThreadPanel";
 export { MetadataPanel } from "./MetadataPanel";
 export { RecordActions } from "./RecordActions";

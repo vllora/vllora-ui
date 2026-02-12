@@ -81,7 +81,18 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
   };
 
   return (
-    <div onClick={handleSelect} className="relative nopan cursor-pointer">
+    <div
+      onClick={handleSelect}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleSelect();
+        }
+      }}
+      tabIndex={0}
+      role="button"
+      className="relative nopan cursor-pointer focus-visible:ring-2 focus-visible:ring-[rgba(var(--theme-500),0.5)] focus-visible:outline-none rounded-xl"
+    >
       {/* Floating toolbar - appears above selected node */}
       {isSelected && (
         <TopicNodeToolbar
@@ -101,7 +112,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
         <Handle
           type="target"
           position={Position.Left}
-          className="!w-1.5 !h-1.5 !bg-emerald-500/50 !border-0 !min-w-0 !min-h-0"
+          className="!w-1.5 !h-1.5 !bg-[rgba(var(--theme-500),0.5)] !border-0 !min-w-0 !min-h-0"
         />
       )}
 
@@ -111,7 +122,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
         <Handle
           type="source"
           position={Position.Right}
-          className="!w-1.5 !h-1.5 !bg-emerald-500/50 !border-0 !min-w-0 !min-h-0"
+          className="!w-1.5 !h-1.5 !bg-[rgba(var(--theme-500),0.5)] !border-0 !min-w-0 !min-h-0"
         />
       )}
 

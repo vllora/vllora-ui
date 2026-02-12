@@ -41,11 +41,11 @@ export const RootNodeComponent = memo(function RootNodeComponent({
           "bg-[#111113] border-[1px]",
           isSelected
             ? "border-[rgb(var(--theme-500))]"
-            : "border-emerald-500/30 hover:border-emerald-500/70"
+            : "border-[rgba(var(--theme-500),0.3)] hover:border-[rgba(var(--theme-500),0.7)]"
         )}
         style={{
           boxShadow: isSelected
-            ? '0 0 15px rgba(16, 185, 129, 0.3), 0 0 30px rgba(16, 185, 129, 0.15)'
+            ? '0 0 15px rgba(var(--theme-500), 0.3), 0 0 30px rgba(var(--theme-500), 0.15)'
             : undefined,
         }}
       >
@@ -63,7 +63,7 @@ export const RootNodeComponent = memo(function RootNodeComponent({
         <Handle
           type="source"
           position={Position.Right}
-          className="!w-1.5 !h-1.5 !bg-emerald-500/50 !border-0 !min-w-0 !min-h-0 !top-8"
+          className="!w-1.5 !h-1.5 !bg-[rgba(var(--theme-500),0.5)] !border-0 !min-w-0 !min-h-0 !top-8"
         />
       )}
 

@@ -28,6 +28,7 @@ import { uploadKnowledgeSourceHandler } from "@/lib/distri-finetune-tools/steps/
 import type { KnowledgeSourceType } from "@/types/dataset-types";
 import { ProviderKeysConsumer } from "@/contexts/ProviderKeysContext";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
+import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { useFineTuneAgentChat } from "@/hooks/useFineTuneAgentChat";
 import {
@@ -119,6 +120,7 @@ export function LucyDatasetAssistant() {
 
   // Get dataset from context (rendered inside DatasetDetailProvider)
   const { dataset: currentDataset, datasetId: selectedDatasetId, isLoading: datasetLoading, records, activeSection } = DatasetDetailConsumer();
+  const { filteredJobs } = FinetuneJobsConsumer();
 
   // Lucy agent state
   const { isConnected, reconnect } = useDistriConnection();
@@ -258,9 +260,9 @@ export function LucyDatasetAssistant() {
     () => getContextualQuickActions(
       records.length,
       !!currentDataset?.evalScript,
-      0, // Jobs count not directly available here; defaults to "no jobs" view
+      filteredJobs.length,
     ),
-    [records.length, currentDataset?.evalScript]
+    [records.length, currentDataset?.evalScript, filteredJobs.length]
   );
 
   // Helper to determine knowledge source type from mime type

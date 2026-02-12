@@ -27,6 +27,8 @@ interface TopicNodeHeaderProps {
   coveragePercentage?: number;
   /** Called when the topic is renamed. Only available for non-root nodes. */
   onRename?: (newName: string) => void;
+  /** 7.4: Filtered record count when a stat filter is active (null = no filter) */
+  filteredCount?: number | null;
 }
 
 const HEADER_HEIGHT = 60;
@@ -39,6 +41,7 @@ export function TopicNodeHeader({
   isExpanded,
   coveragePercentage,
   onRename,
+  filteredCount,
 }: TopicNodeHeaderProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(name);
@@ -175,11 +178,17 @@ export function TopicNodeHeader({
             // For parent nodes, show aggregated count with tooltip; for leaf nodes, show direct count
             const isAggregated = aggregatedRecordCount !== undefined && aggregatedRecordCount !== recordCount;
             const displayCount = aggregatedRecordCount ?? recordCount;
-            const countText = `${displayCount.toLocaleString()} record${displayCount !== 1 ? "s" : ""}`;
+            // 7.4: Show "N of M records" when stat filter is active
+            const hasFilter = filteredCount != null;
+            const countText = hasFilter
+              ? `${filteredCount} of ${displayCount.toLocaleString()} record${displayCount !== 1 ? "s" : ""}`
+              : `${displayCount.toLocaleString()} record${displayCount !== 1 ? "s" : ""}`;
 
-            const tooltipText = isAggregated
-              ? "Total records across all child topics"
-              : "Records assigned to this topic";
+            const tooltipText = hasFilter
+              ? "Matching records based on active filter"
+              : isAggregated
+                ? "Total records across all child topics"
+                : "Records assigned to this topic";
 
             return (
               <TooltipProvider delayDuration={200}>

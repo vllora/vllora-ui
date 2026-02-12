@@ -25,8 +25,9 @@ interface CollapsedTopicNodeProps {
   onRename?: (newName: string) => void;
 }
 
-// Fixed width for collapsed state
+// Fixed width for collapsed state; compact when panel is open
 export const COLLAPSED_WIDTH = 300;
+export const COLLAPSED_WIDTH_COMPACT = 260;
 
 export function CollapsedTopicNode({
   name,
@@ -37,10 +38,16 @@ export function CollapsedTopicNode({
   coveragePercentage,
   onRename,
 }: CollapsedTopicNodeProps) {
-  const { generatingTopicName } = TopicCanvasConsumer();
+  const { generatingTopicName, viewingTopicId, isFullDialogMode, getMatchingCount, isFilterActive } = TopicCanvasConsumer();
+
+  // Shrink nodes when panel is open to give more canvas space
+  const isPanelOpen = viewingTopicId !== null && !isFullDialogMode;
 
   // P0-15: Check if this topic is currently generating
   const isGenerating = generatingTopicName === name;
+
+  // 7.4: Filtered count when stat filter is active
+  const matchingCount = isFilterActive ? getMatchingCount(name) : null;
 
   return (
     <div
@@ -50,10 +57,10 @@ export function CollapsedTopicNode({
           ? "border-[rgb(var(--theme-500))]"
           : "border-border hover:border-muted-foreground/50",
         // P0-15: pulsing border when generating
-        isGenerating && "animate-pulse border-emerald-500/60"
+        isGenerating && "animate-pulse border-[rgba(var(--theme-500),0.6)]"
       )}
       style={{
-        width: COLLAPSED_WIDTH,
+        width: isPanelOpen ? COLLAPSED_WIDTH_COMPACT : COLLAPSED_WIDTH,
         boxShadow: isSelected
           ? '0 0 15px rgba(var(--theme-500), 0.15), 0 0 30px rgba(var(--theme-500), 0.08)'
           : undefined,
@@ -67,6 +74,7 @@ export function CollapsedTopicNode({
         isExpanded={false}
         coveragePercentage={coveragePercentage}
         onRename={onRename}
+        filteredCount={matchingCount}
       />
     </div>
   );

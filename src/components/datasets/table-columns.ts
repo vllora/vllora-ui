@@ -23,6 +23,8 @@ export const COLUMN_WIDTHS = {
   actions: "w-12 shrink-0",
   /** Conversation thread column (new layout) - main content, largest flex */
   thread: "flex-[3] min-w-0",
+  /** Conversation thread column (expanded) - when optional columns are hidden */
+  threadExpanded: "flex-[4] min-w-0",
   /** Tools badge column (new layout) - flex based */
   tools: "flex-[0.8] min-w-0",
   /** Strategy/topic column (new layout) - flex based */
@@ -67,3 +69,4 @@ export const COLUMN_LABELS: Record<ToggleableColumn, string> = {
 
 /** localStorage key for column visibility */
 export const COLUMN_VISIBILITY_STORAGE_KEY = "vllora:dataset-column-visibility";
+

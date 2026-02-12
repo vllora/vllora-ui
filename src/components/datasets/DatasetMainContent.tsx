@@ -6,7 +6,7 @@
  * Note: Evaluator is now a separate section, not handled here.
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import type { ViewMode } from "./dataset-detail-header/DatasetUtilityBar";
 import type { CoverageStats, DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import type { AvailableTopic } from "./record-utils";
@@ -121,6 +121,17 @@ export function DatasetMainContent({
     });
   }, [records, activeStatFilter, roleFilter]);
 
+  // Handle "View in Table" from canvas panel — switch to table view and focus the topic
+  const handleViewInTable = useCallback((topicId: string) => {
+    onViewModeChange("table");
+    // Dispatch focus event after a short delay to let the table mount
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("vllora_focus_topic", {
+        detail: { topicId, topicName: topicId },
+      }));
+    }, 100);
+  }, [onViewModeChange]);
+
   const hasTopics = topicHierarchy && topicHierarchy.length > 0;
 
   // Show empty state only when no records AND no topic hierarchy
@@ -176,7 +187,7 @@ export function DatasetMainContent({
       {viewMode === "canvas" ? (
         <TopicHierarchyCanvas
           hierarchy={topicHierarchy}
-          records={records}
+          records={filteredRecords}
           datasetId={datasetId}
           coverageStats={coverageStats}
           onSelectTopic={onSelectTopic}
@@ -190,46 +201,47 @@ export function DatasetMainContent({
           onCreateChildTopic={onCreateChildTopic}
           onGenerateForTopic={onGenerateForTopic}
           onGenerateSubtopics={onGenerateSubtopics}
+          onSelectRecordId={onSelectRecordId}
+          onViewInTable={handleViewInTable}
         />
       ) : (
-        <>
-          {/* Records Table */}
-          <RecordsTable
-            records={filteredRecords}
-            datasetId={datasetId}
-            showHeader={true}
-            showFooter={false}
-            height="auto"
-            groupByTopic={true}
-            topicHierarchy={topicHierarchy}
-            availableTopics={availableTopics}
-            onUpdateTopic={onUpdateRecordTopic}
-            onDelete={onDeleteRecord}
-            onSave={onSaveRecord}
-            onExpand={(record) => onSelectRecordId(record.id)}
-            viewingRecordId={selectedRecordId}
-            onDeleteTopic={onDeleteTopic}
-            onGenerateForTopic={onGenerateForTopic}
-            onGenerateSubtopics={onGenerateSubtopics}
-            roleFilter={roleFilter}
-            onRoleFilterChange={setRoleFilter}
-          />
-
-          {/* Record Detail Sidebar (Sheet - renders via portal) */}
-          <RecordDetailSidebar
-            record={selectedRecord}
-            onClose={() => onSelectRecordId(null)}
-            availableTopics={availableTopics}
-            onUpdateTopic={onUpdateRecordTopic}
-            onDelete={(recordId) => {
-              onDeleteRecord(recordId);
-              onSelectRecordId(null);
-            }}
-            onSave={onSaveRecord}
-          />
-        </>
+        <RecordsTable
+          records={filteredRecords}
+          datasetId={datasetId}
+          showHeader={true}
+          showFooter={false}
+          height="auto"
+          groupByTopic={true}
+          topicHierarchy={topicHierarchy}
+          availableTopics={availableTopics}
+          onUpdateTopic={onUpdateRecordTopic}
+          onDelete={onDeleteRecord}
+          onSave={onSaveRecord}
+          onExpand={(record) => onSelectRecordId(record.id)}
+          viewingRecordId={selectedRecordId}
+          onDeleteTopic={onDeleteTopic}
+          onGenerateForTopic={onGenerateForTopic}
+          onGenerateSubtopics={onGenerateSubtopics}
+          roleFilter={roleFilter}
+          onRoleFilterChange={setRoleFilter}
+        />
       )}
       </div>
+
+      {/* Record Detail Sidebar — shared across both table and canvas views (renders via portal) */}
+      <RecordDetailSidebar
+        record={selectedRecord}
+        onClose={() => onSelectRecordId(null)}
+        availableTopics={availableTopics}
+        onUpdateTopic={onUpdateRecordTopic}
+        onDelete={(recordId) => {
+          onDeleteRecord(recordId);
+          onSelectRecordId(null);
+        }}
+        onSave={onSaveRecord}
+        records={filteredRecords}
+        onNavigate={onSelectRecordId}
+      />
     </div>
   );
 }

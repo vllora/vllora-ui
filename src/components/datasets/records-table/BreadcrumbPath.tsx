@@ -20,14 +20,14 @@ export function BreadcrumbPath({ path, className }: BreadcrumbPathProps) {
         return (
           <span key={index} className="flex items-center gap-1.5 shrink-0">
             {index > 0 && (
-              <ChevronRight className="w-3 h-3 text-zinc-600" />
+              <ChevronRight className="w-3 h-3 text-muted-foreground/60" />
             )}
             <span
               className={cn(
                 "text-xs",
                 isLast
-                  ? "font-medium text-emerald-400"
-                  : "text-zinc-500"
+                  ? "font-medium text-[rgb(var(--theme-500))]"
+                  : "text-muted-foreground"
               )}
             >
               {segment}

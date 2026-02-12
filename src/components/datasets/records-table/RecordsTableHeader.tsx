@@ -86,7 +86,7 @@ export function RecordsTableHeader({
           </div>
         )}
         <span className={COLUMN_WIDTHS.thread}>Data</span>
-        <span className={cn(COLUMN_WIDTHS.tools, "text-center")}>Tools</span>
+        <span className={COLUMN_WIDTHS.stats}>Stats</span>
         {!hideTopic && (
           <span className={cn(COLUMN_WIDTHS.strategy, "text-center flex items-center justify-center gap-1")}>
             Topic
@@ -103,7 +103,6 @@ export function RecordsTableHeader({
             )}
           </span>
         )}
-        <span className={cn(COLUMN_WIDTHS.stats, "text-center")}>Stats</span>
         <span className={cn(COLUMN_WIDTHS.quality, "text-center")}>Quality</span>
         {/* P0-9: Role filter dropdown */}
         {onRoleFilterChange ? (

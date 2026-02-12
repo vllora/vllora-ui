@@ -67,14 +67,14 @@ export const TopicInputNodeComponent = memo(function TopicInputNodeComponent({
       )}
       style={{
         width: NODE_WIDTH,
-        boxShadow: '0 0 15px rgba(16, 185, 129, 0.2), 0 0 30px rgba(16, 185, 129, 0.1)',
+        boxShadow: '0 0 15px rgba(var(--theme-500), 0.2), 0 0 30px rgba(var(--theme-500), 0.1)',
       }}
     >
       {/* Input handle - Left side for horizontal layout */}
       <Handle
         type="target"
         position={Position.Left}
-        className="!w-1.5 !h-1.5 !bg-emerald-500/50 !border-0 !min-w-0 !min-h-0"
+        className="!w-1.5 !h-1.5 !bg-[rgba(var(--theme-500),0.5)] !border-0 !min-w-0 !min-h-0"
       />
 
       {/* Content */}

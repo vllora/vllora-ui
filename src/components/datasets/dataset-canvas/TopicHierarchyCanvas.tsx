@@ -20,7 +20,7 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { TopicNodeComponent } from "./topic-node/TopicNodeComponent";
 import { TopicInputNodeComponent } from "./TopicInputNode";
 import { RootNodeComponent } from "./RootNodeComponent";
@@ -75,6 +75,10 @@ interface TopicHierarchyCanvasProps {
   onGenerateForTopic?: (topicName: string) => void;
   /** Called when user wants to generate subtopics for a topic (null = root level) */
   onGenerateSubtopics?: (topicId: string | null) => void;
+  /** Called when a record is selected for detail view (opens Sheet) */
+  onSelectRecordId?: (id: string | null) => void;
+  /** Called when user wants to view the current topic in table view */
+  onViewInTable?: (topicId: string) => void;
 }
 
 // Inner component that uses the context
@@ -230,6 +234,16 @@ function TopicHierarchyCanvasInner({
     }
   }, [panelOpen, prevPanelOpen]);
 
+  // 3.7: Banner dismiss state — reset when new operation starts
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const prevOperationRef = useRef(operationProgress);
+  useEffect(() => {
+    if (prevOperationRef.current === null && operationProgress !== null) {
+      setBannerDismissed(false);
+    }
+    prevOperationRef.current = operationProgress;
+  }, [operationProgress]);
+
   // Fit view callback for toolbar
   const handleFitView = () => {
     reactFlowInstance.current?.fitView({
@@ -239,11 +253,11 @@ function TopicHierarchyCanvasInner({
   };
 
   return (
-    <div className="flex-1 relative min-w-0">
+    <div className="flex-1 relative min-w-0 transition-all duration-200">
       {/* P0-15: Operation progress banner */}
-      {operationProgress && (
+      {operationProgress && !bannerDismissed && (
         <div className="absolute top-3 left-3 z-10 flex items-center gap-2 px-3 py-2 bg-background/95 backdrop-blur-sm border border-border rounded-lg shadow-lg">
-          <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+          <Loader2 className="w-4 h-4 animate-spin text-[rgb(var(--theme-500))]" />
           <span className="text-sm text-foreground">
             {operationProgress.type === "generation" && "Generating data"}
             {operationProgress.type === "import" && "Importing records"}
@@ -259,6 +273,13 @@ function TopicHierarchyCanvasInner({
               for &ldquo;{operationProgress.topicName}&rdquo;
             </span>
           )}
+          <button
+            type="button"
+            onClick={() => setBannerDismissed(true)}
+            className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors ml-1"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
       <CanvasToolbar onFitView={handleFitView} />
@@ -323,6 +344,8 @@ export function TopicHierarchyCanvas({
   onCreateChildTopic,
   onGenerateForTopic,
   onGenerateSubtopics,
+  onSelectRecordId,
+  onViewInTable,
 }: TopicHierarchyCanvasProps) {
   return (
     <TopicCanvasProvider
@@ -341,6 +364,8 @@ export function TopicHierarchyCanvas({
       onCreateChildTopic={onCreateChildTopic}
       onGenerateForTopic={onGenerateForTopic}
       onGenerateSubtopics={onGenerateSubtopics}
+      onSelectRecordId={onSelectRecordId}
+      onViewInTable={onViewInTable}
     >
       <CanvasWithPanel hierarchy={hierarchy} />
       <TopicRecordsDialogWrapper />

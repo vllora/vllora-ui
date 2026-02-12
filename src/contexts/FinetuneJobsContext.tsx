@@ -329,12 +329,14 @@ function useFinetuneJobsLogic() {
   // Listen for job created events from quickFinetune
   useEffect(() => {
     const handleJobCreated = (event: { backendDatasetId: string }) => {
-      // Update the current backend dataset ID and refresh jobs list
-      if (event.backendDatasetId) {
+      // Update the current backend dataset ID if it changed
+      const targetId = event.backendDatasetId || currentBackendDatasetId;
+      if (event.backendDatasetId && event.backendDatasetId !== currentBackendDatasetId) {
         setCurrentBackendDatasetId(event.backendDatasetId);
-        // loadJobs will be triggered by the useEffect watching currentBackendDatasetId
+        // useEffect watching currentBackendDatasetId will call loadJobs
       } else {
-        loadJobs(currentBackendDatasetId);
+        // Same dataset — refresh directly (setCurrentBackendDatasetId would be a no-op)
+        loadJobs(targetId);
       }
       setIsSidebarOpen(true);
     };
