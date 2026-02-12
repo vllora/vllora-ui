@@ -237,6 +237,31 @@ class DryRunPollingManager {
   }
 
   /**
+   * Refresh a job's data from the backend API.
+   * Re-fetches evaluation results and updates IndexedDB + emits event.
+   */
+  async refreshJob(jobId: string): Promise<void> {
+    const job = await getDryRunJob(jobId);
+    if (!job || !job.evaluationRunId) return;
+
+    const result = await getEvaluationResult(job.evaluationRunId);
+
+    // Update the polling snapshot so the UI gets fresh per-row data
+    await updateDryRunJob(jobId, {
+      pollingSnapshot: result,
+    });
+
+    // If the backend shows completed/failed but the local job status disagrees,
+    // re-process the results (e.g. a previously "failed" job that actually succeeded)
+    if (
+      (result.status === 'completed' || result.status === 'failed') &&
+      job.status !== result.status
+    ) {
+      await this.handleJobComplete(jobId, result);
+    }
+  }
+
+  /**
    * Check if a job is currently being polled
    */
   isPolling(jobId: string): boolean {
@@ -379,11 +404,12 @@ class DryRunPollingManager {
       // Save results to dataset
       await datasetsDB.updateDatasetDryRunStats(job.datasetId, dryRunStats);
 
-      // Update job with results
+      // Update job with results (clear any previous error)
       await updateDryRunJob(jobId, {
         status: 'completed',
         completedAt: Date.now(),
         result: dryRunStats,
+        error: undefined,
       });
 
       // Update workflow step data on success

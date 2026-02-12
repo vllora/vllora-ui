@@ -69,13 +69,6 @@ export function RunsSidebar({ jobs, selectedId, onSelectJob }: RunsSidebarProps)
                   {formatTime(job.createdAt)}
                 </div>
               </div>
-              {job.result && (
-                <span className={cn(
-                  "w-1.5 h-1.5 rounded-full shrink-0",
-                  job.result.diagnosis.verdict === "GO" ? "bg-emerald-500" :
-                  job.result.diagnosis.verdict === "NO-GO" ? "bg-red-500" : "bg-amber-500"
-                )} />
-              )}
             </button>
           );
         })}

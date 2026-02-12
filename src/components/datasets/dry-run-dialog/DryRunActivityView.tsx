@@ -14,7 +14,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Loader2, CheckCircle2, XCircle, Clock, AlertTriangle, RefreshCw, ChevronRight } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Clock, AlertTriangle, RefreshCw, RotateCw, ChevronRight } from "lucide-react";
 import { VerdictBadge } from "./VerdictBadge";
 import { ScoreStrip } from "./ScoreStrip";
 import { ResultsTable } from "./ResultsTable";
@@ -37,6 +37,8 @@ interface DryRunActivityViewProps {
   initialSelectedId?: string | null;
   /** "Run Again" handler — shown in JobDetail footer when provided */
   onRunAgain?: () => void;
+  /** Refresh a job's data from the backend API */
+  onRefresh?: (jobId: string) => void;
 }
 
 function StatusIcon({ status }: { status: DryRunJob["status"] }) {
@@ -88,7 +90,7 @@ function getScoreInsight(stats: { mean: number; std: number; min: number; max: n
 }
 
 /** Inline detail panel for a selected job (left side of split) */
-function JobDetail({ job, onCancel, onRunAgain }: { job: DryRunJob; onCancel?: () => void; onRunAgain?: () => void }) {
+function JobDetail({ job, onCancel, onRunAgain, onRefresh }: { job: DryRunJob; onCancel?: () => void; onRunAgain?: () => void; onRefresh?: (jobId: string) => void }) {
   const result = job.result;
 
   const scores = useMemo(() => {
@@ -115,6 +117,12 @@ function JobDetail({ job, onCancel, onRunAgain }: { job: DryRunJob; onCancel?: (
     ).length;
     return { errorCount: errors, totalCount: evaluationResults.length };
   }, [evaluationResults]);
+
+  const recommendations = result?.diagnosis?.recommendations || [];
+  const stats = result?.statistics;
+  const verdict = result?.diagnosis?.verdict;
+  // All hooks must be called before any early returns
+  const [showRecs, setShowRecs] = useState(verdict !== "GO" && recommendations.length > 0);
 
   if (job.status === "running") {
     const total = getJobTotalRows(job);
@@ -156,11 +164,6 @@ function JobDetail({ job, onCancel, onRunAgain }: { job: DryRunJob; onCancel?: (
   }
 
   const showErrorView = totalCount > 0 && (errorCount / totalCount) > 0.5;
-  const recommendations = result?.diagnosis?.recommendations || [];
-  const stats = result?.statistics;
-  const verdict = result?.diagnosis?.verdict;
-  // Auto-expand recommendations for WARNING/NO-GO, collapsed for GO
-  const [showRecs, setShowRecs] = useState(verdict !== "GO" && recommendations.length > 0);
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -200,6 +203,15 @@ function JobDetail({ job, onCancel, onRunAgain }: { job: DryRunJob; onCancel?: (
             <span className="text-[10px] text-zinc-600 ml-auto">
               {formatTime(job.createdAt)}
             </span>
+            {onRefresh && (
+              <button
+                onClick={() => onRefresh(job.id)}
+                className="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+                title="Refresh data"
+              >
+                <RotateCw className="h-3 w-3" />
+              </button>
+            )}
             {onRunAgain && (
               <Button
                 onClick={onRunAgain}
@@ -278,7 +290,7 @@ function JobDetail({ job, onCancel, onRunAgain }: { job: DryRunJob; onCancel?: (
   );
 }
 
-export function DryRunActivityView({ jobs, onSelectJob, onBack, splitView = false, onCancelJob, initialSelectedId, onRunAgain }: DryRunActivityViewProps) {
+export function DryRunActivityView({ jobs, onSelectJob, onBack, splitView = false, onCancelJob, initialSelectedId, onRunAgain, onRefresh }: DryRunActivityViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     if (initialSelectedId) return initialSelectedId;
     // Default to most recent completed job
@@ -304,7 +316,7 @@ export function DryRunActivityView({ jobs, onSelectJob, onBack, splitView = fals
         {/* Left: selected job detail */}
         <div className="flex-1 min-w-0 min-h-0 border-r border-zinc-800/60">
           {selectedJob ? (
-            <JobDetail job={selectedJob} onCancel={onCancelJob} onRunAgain={onRunAgain} />
+            <JobDetail job={selectedJob} onCancel={onCancelJob} onRunAgain={onRunAgain} onRefresh={onRefresh} />
           ) : (
             <div className="flex items-center justify-center h-full text-xs text-zinc-600">
               Select a job from the list

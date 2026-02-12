@@ -31,6 +31,7 @@ export function EvaluationBottomPanel({
     runningJob,
     lastCompletedJob,
     cancelDryRun,
+    refreshJob,
   } = DryRunJobsConsumer();
 
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -86,7 +87,7 @@ export function EvaluationBottomPanel({
         {/* Collapse toggle */}
         <button
           onClick={onToggleCollapse}
-          className="p-1.5 mr-1 ml-auto rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors shrink-0"
+          className="p-1.5 mr-1 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors shrink-0"
           title={isCollapsed ? "Expand panel" : "Collapse panel"}
         >
           {isCollapsed ? (
@@ -107,6 +108,7 @@ export function EvaluationBottomPanel({
             splitView
             onCancelJob={handleCancel}
             initialSelectedId={selectedJobId}
+            onRefresh={refreshJob}
           />
         </div>
       )}

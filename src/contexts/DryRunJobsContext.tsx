@@ -104,6 +104,11 @@ function useDryRunJobs(props: {
     await dryRunPollingManager.cancelDryRun(jobId);
   }, []);
 
+  // Refresh a single job's data from the backend API
+  const refreshJob = useCallback(async (jobId: string): Promise<void> => {
+    await dryRunPollingManager.refreshJob(jobId);
+  }, []);
+
   // Compute derived state
   const runningJob = useMemo(
     () => jobs.find((j) => j.status === 'running' || j.status === 'pending') || null,
@@ -124,6 +129,7 @@ function useDryRunJobs(props: {
     startDryRun,
     cancelDryRun,
     refreshJobs: loadJobs,
+    refreshJob,
   };
 }
 
