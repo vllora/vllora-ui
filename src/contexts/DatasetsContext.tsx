@@ -10,6 +10,11 @@ import { Dataset, DatasetEvaluation, DatasetWithRecords } from '@/types/dataset-
 import { Span } from '@/types/common-type';
 import * as datasetsDB from '@/services/datasets-db';
 import * as workflowDB from '@/services/finetune-workflow-db';
+import { deleteKnowledgeSourcesByDataset } from '@/services/knowledge-sources-db';
+import { deleteDryRunJobsByDataset } from '@/services/dry-run-jobs-db';
+import { clearProposedPlan } from '@/lib/distri-finetune-tools/steps/proposed-plan-store';
+import { clearExecution } from '@/lib/distri-finetune-tools/steps/execution-state-store';
+import { cleanupOrphanedData } from '@/services/orphan-cleanup';
 import { emitter } from '@/utils/eventEmitter';
 import { toast } from 'sonner';
 
@@ -127,7 +132,7 @@ function useDatasets() {
     return deletedCount;
   }, [loadDatasets]);
 
-  // Delete a dataset and all related data (including finetune workflow)
+  // Delete a dataset and all related data across all IndexedDB stores
   const deleteDataset = useCallback(async (datasetId: string): Promise<void> => {
     // Delete associated finetune workflow (includes snapshots and generation history)
     const workflow = await workflowDB.getWorkflowByDataset(datasetId);
@@ -135,8 +140,21 @@ function useDatasets() {
       await workflowDB.deleteWorkflow(workflow.id);
     }
 
-    // Delete the dataset and its records
-    await datasetsDB.deleteDataset(datasetId);
+    // Clean up all related data in parallel
+    await Promise.all([
+      // Dataset + records + finetune job associations (vllora-datasets DB)
+      datasetsDB.deleteDataset(datasetId),
+      // Knowledge sources (vllora-knowledge-sources DB)
+      deleteKnowledgeSourcesByDataset(datasetId),
+      // Dry run jobs (vllora-finetune DB)
+      deleteDryRunJobsByDataset(datasetId),
+      // Proposed setup plans (vllora-finetune DB)
+      clearProposedPlan(datasetId),
+    ]);
+
+    // Clear in-memory execution state
+    clearExecution(datasetId);
+
     setDatasets(prev => prev.filter(ds => ds.id !== datasetId));
   }, []);
 
@@ -200,9 +218,9 @@ function useDatasets() {
     }
   }, []);
 
-  // Load on mount
+  // Load on mount + clean up any orphaned data from past incomplete deletes
   useEffect(() => {
-    loadDatasets();
+    loadDatasets().then(() => cleanupOrphanedData());
   }, [loadDatasets]);
 
   // Listen for dataset events from Lucy agent tools

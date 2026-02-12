@@ -239,23 +239,36 @@ export async function addSpansToDataset(
   });
 }
 
-// Delete a dataset and all its records
+// Delete a dataset and all its records (including datasetFinetuneJobs)
 export async function deleteDataset(datasetId: string): Promise<void> {
   const db = await getDB();
 
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(['datasets', 'records'], 'readwrite');
+    const tx = db.transaction(['datasets', 'records', 'datasetFinetuneJobs'], 'readwrite');
     const datasetsStore = tx.objectStore('datasets');
     const recordsStore = tx.objectStore('records');
+    const finetuneJobsStore = tx.objectStore('datasetFinetuneJobs');
 
     // Delete dataset
     datasetsStore.delete(datasetId);
 
     // Delete all records for this dataset
-    const index = recordsStore.index('datasetId');
-    const cursorRequest = index.openCursor(datasetId);
+    const recordsIndex = recordsStore.index('datasetId');
+    const recordsCursor = recordsIndex.openCursor(datasetId);
 
-    cursorRequest.onsuccess = (event) => {
+    recordsCursor.onsuccess = (event) => {
+      const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+      if (cursor) {
+        cursor.delete();
+        cursor.continue();
+      }
+    };
+
+    // Delete all finetune job associations for this dataset
+    const jobsIndex = finetuneJobsStore.index('datasetId');
+    const jobsCursor = jobsIndex.openCursor(datasetId);
+
+    jobsCursor.onsuccess = (event) => {
       const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
       if (cursor) {
         cursor.delete();

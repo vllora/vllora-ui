@@ -24,7 +24,7 @@ const STORE_NAME = 'knowledge_sources';
 
 let dbInstance: IDBDatabase | null = null;
 
-async function getDB(): Promise<IDBDatabase> {
+export async function getDB(): Promise<IDBDatabase> {
   if (dbInstance) return dbInstance;
 
   return new Promise((resolve, reject) => {

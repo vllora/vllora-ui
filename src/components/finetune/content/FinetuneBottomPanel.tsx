@@ -6,14 +6,10 @@
 
 import { useEffect, useCallback, useMemo, useState } from "react";
 import {
-  List,
-  Info,
   Loader2,
   StopCircle,
   Play,
-  BarChart3,
 } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { FinetuneJobStatusBadge } from "../FinetuneJobStatusBadge";
 import { FinetuneJobDetailsSection } from "./FinetuneJobDetailsSection";
@@ -109,55 +105,23 @@ function JobDetailInline({ job }: { job: FinetuneJob }) {
         </div>
       )}
 
-      {/* Tabbed content: Details / Metrics / Per-Row */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-3">
-        <Tabs defaultValue="details" className="w-full">
-          <TabsList className="h-7 mb-2">
-            <TabsTrigger value="details" className="text-[11px] gap-1 h-6">
-              <Info className="h-3 w-3" />
-              Details
-            </TabsTrigger>
-            {job.dataset_id && (
-              <>
-                <TabsTrigger value="metrics" className="text-[11px] gap-1 h-6">
-                  <BarChart3 className="h-3 w-3" />
-                  Metrics
-                </TabsTrigger>
-                <TabsTrigger value="rows" className="text-[11px] gap-1 h-6">
-                  <List className="h-3 w-3" />
-                  Per-Row
-                </TabsTrigger>
-              </>
-            )}
-          </TabsList>
+      {/* Stacked content: Details → Metrics → Per-Row */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-4">
+        <FinetuneJobDetailsSection job={job} />
 
-          <TabsContent value="details" className="mt-2">
-            <FinetuneJobDetailsSection job={job} />
-          </TabsContent>
+        {job.dataset_id && (
+          <TrainingMetricsSection
+            evalResults={evalResults}
+            isLoading={isLoadingEvals}
+            isRefreshing={isRefreshing}
+            error={evalsError}
+            onRefresh={handleRefresh}
+          />
+        )}
 
-          {job.dataset_id && (
-            <>
-              <TabsContent value="metrics" className="mt-2">
-                <TrainingMetricsSection
-                  evalResults={evalResults}
-                  isLoading={isLoadingEvals}
-                  isRefreshing={isRefreshing}
-                  error={evalsError}
-                  onRefresh={handleRefresh}
-                />
-              </TabsContent>
-              <TabsContent value="rows" className="mt-2">
-                {evalResults && evalResults.results.length > 0 ? (
-                  <PerRowDetailsSection results={evalResults.results} />
-                ) : (
-                  <div className="text-xs text-zinc-600 py-2">
-                    No row data available yet
-                  </div>
-                )}
-              </TabsContent>
-            </>
-          )}
-        </Tabs>
+        {job.dataset_id && evalResults && evalResults.results.length > 0 && (
+          <PerRowDetailsSection results={evalResults.results} />
+        )}
       </div>
     </div>
   );

@@ -28,7 +28,7 @@ export function ArrowSegment({
   isLast,
   status,
   isActive,
-  isProcessing = false,
+  isProcessing: _isProcessing = false,
   isOptional = false,
   onClick,
 }: ArrowSegmentProps) {
