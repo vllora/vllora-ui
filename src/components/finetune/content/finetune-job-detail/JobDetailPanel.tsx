@@ -29,6 +29,12 @@ import type { FinetuneJob } from "@/services/finetune-api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getScoreColorClass, formatScore } from "@/utils/parse-score-breakdown";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export function JobDetailPanel({ job }: { job: FinetuneJob }) {
   const { getJobEvaluations, refreshJobEvaluations } = FinetuneJobsConsumer();
@@ -119,29 +125,59 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
     <div className="flex flex-col h-full min-h-0">
       {/* Header: status + summary stats + actions (single compact row) */}
       <div className="shrink-0 border-b border-zinc-800/60">
+        <TooltipProvider delayDuration={300}>
         <div className="flex items-center gap-2 px-3 py-1.5">
-          <FinetuneJobStatusBadge status={job.status} className="text-[10px] px-1.5 py-0.5" />
-          <span className="text-xs text-zinc-400">{getModelDisplayName(job.base_model)}</span>
-          {summary && (
-            <>
-              <span className="text-zinc-700">&middot;</span>
-              <span className="text-xs font-mono text-zinc-400">
-                E<span className="text-zinc-300">{summary.latestEpoch ?? "-"}</span>
-              </span>
-              {summary.latestAvgScore !== null && (
-                <>
-                  <span className="text-zinc-700">&middot;</span>
-                  <span className={cn("text-xs font-mono", getScoreColorClass(summary.latestAvgScore))}>
-                    {formatScore(summary.latestAvgScore)}
-                  </span>
-                </>
-              )}
-              <span className="text-zinc-700">&middot;</span>
-              <span className="text-xs font-mono text-zinc-500">
-                {summary.totalRows}r
-              </span>
-            </>
-          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-2 min-w-0">
+                <FinetuneJobStatusBadge status={job.status} className="text-[10px] px-1.5 py-0.5" />
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-zinc-700/50 text-[10px] font-medium text-zinc-300 border border-zinc-600/40">
+                  {getModelDisplayName(job.base_model)}
+                </span>
+                {summary && (
+                  <>
+                    <span className="text-zinc-700">&middot;</span>
+                    <span className="text-xs font-mono text-zinc-400">
+                      Epoch <span className="text-zinc-300">{summary.latestEpoch ?? "-"}</span>
+                      {job.training_config?.epochs && (
+                        <span className="text-zinc-600">/{job.training_config.epochs}</span>
+                      )}
+                    </span>
+                    {summary.latestAvgScore !== null && (
+                      <>
+                        <span className="text-zinc-700">&middot;</span>
+                        <span className="text-xs font-mono text-zinc-400">
+                          Avg Score{" "}
+                          <span className={getScoreColorClass(summary.latestAvgScore)}>
+                            {formatScore(summary.latestAvgScore)}
+                          </span>
+                        </span>
+                      </>
+                    )}
+                    <span className="text-zinc-700">&middot;</span>
+                    <span className="text-xs font-mono text-zinc-500">
+                      {summary.totalRows} rows
+                    </span>
+                  </>
+                )}
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+              <div className="space-y-0.5">
+                <p><span className="text-zinc-400">Status:</span> {job.status}</p>
+                <p><span className="text-zinc-400">Model:</span> {getModelDisplayName(job.base_model)}</p>
+                {summary && (
+                  <>
+                    <p><span className="text-zinc-400">Epoch:</span> {summary.latestEpoch ?? "-"}{job.training_config?.epochs ? ` of ${job.training_config.epochs}` : ""}</p>
+                    {summary.latestAvgScore !== null && (
+                      <p><span className="text-zinc-400">Avg Score:</span> {formatScore(summary.latestAvgScore)} — average across all rows in latest epoch</p>
+                    )}
+                    <p><span className="text-zinc-400">Rows:</span> {summary.totalRows} training rows evaluated</p>
+                  </>
+                )}
+              </div>
+            </TooltipContent>
+          </Tooltip>
           <span className="text-[10px] text-zinc-600 ml-auto">
             {formatFinetuneJobDate(job.created_at)}
           </span>
@@ -189,6 +225,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
             Details
           </button>
         </div>
+        </TooltipProvider>
       </div>
 
       {/* Collapsible Job Details */}
