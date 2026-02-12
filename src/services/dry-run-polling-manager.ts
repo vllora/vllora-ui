@@ -398,6 +398,7 @@ class DryRunPollingManager {
               row.dataset_row_id,
               {
                 dryRunScore: row.score,
+                dryRunModel: job.rolloutModel,
                 incrementDryRunCount: true,
               }
             );

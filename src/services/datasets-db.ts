@@ -545,7 +545,9 @@ export async function updateRecordEvaluationScores(
   recordId: string,
   update: {
     dryRunScore?: number;
+    dryRunModel?: string;
     finetuneScore?: number;
+    finetuneModel?: string;
     incrementDryRunCount?: boolean;
     incrementFinetuneCount?: boolean;
   }
@@ -577,6 +579,7 @@ export async function updateRecordEvaluationScores(
           : update.dryRunScore;
         existing.score = update.dryRunScore;
         existing.dryRunEvaluatedAt = now;
+        if (update.dryRunModel) existing.dryRunModel = update.dryRunModel;
       }
       if (update.finetuneScore !== undefined) {
         existing.finetuneScore = update.finetuneScore;
@@ -587,6 +590,7 @@ export async function updateRecordEvaluationScores(
           : update.finetuneScore;
         existing.score = update.finetuneScore; // Finetune takes precedence
         existing.finetuneEvaluatedAt = now;
+        if (update.finetuneModel) existing.finetuneModel = update.finetuneModel;
       }
       if (update.incrementDryRunCount) {
         existing.dryRunCount = (existing.dryRunCount || 0) + 1;
@@ -717,6 +721,8 @@ export async function persistFinetuneScoresToRecords(
   }>,
   /** When true, only updates the score without incrementing finetuneCount (for in-progress jobs) */
   previewOnly = false,
+  /** Model name to store with the finetune evaluation */
+  finetuneModel?: string,
 ): Promise<{ persisted: number; localDatasetId?: string }> {
   // Look up local dataset
   const dataset = await getDatasetByBackendId(backendDatasetId);
@@ -747,6 +753,7 @@ export async function persistFinetuneScoresToRecords(
 
     await updateRecordEvaluationScores(dataset.id, recordId, {
       finetuneScore: avgScore,
+      finetuneModel,
       incrementFinetuneCount: !previewOnly,
     });
     persisted++;

@@ -163,13 +163,14 @@ function useFinetuneJobsLogic() {
       // Persist finetune scores to records
       if (results.results.length > 0) {
         const isComplete = job.status !== 'pending' && job.status !== 'running';
+        const modelName = job.base_model;
         try {
           if (isComplete) {
             // Final persistence: increment count, mark as done (once per job)
             const alreadyPersisted = await isJobScoresPersisted(jobId);
             if (!alreadyPersisted) {
               const { persisted, localDatasetId } = await persistFinetuneScoresToRecords(
-                job.dataset_id!, results.results
+                job.dataset_id!, results.results, false, modelName
               );
               if (persisted > 0) {
                 await markJobScoresPersisted(jobId);
@@ -180,7 +181,7 @@ function useFinetuneJobsLogic() {
           } else {
             // Live preview: update scores without incrementing count (overwritten each poll)
             const { persisted, localDatasetId } = await persistFinetuneScoresToRecords(
-              job.dataset_id!, results.results, true
+              job.dataset_id!, results.results, true, modelName
             );
             if (persisted > 0) {
               emitter.emit('vllora_dataset_refresh' as any,

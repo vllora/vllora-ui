@@ -10,6 +10,8 @@ export interface DatasetEvaluation {
   dryRunCount?: number;
   /** Timestamp of the latest dry-run evaluation */
   dryRunEvaluatedAt?: number;
+  /** Model used for the latest dry-run evaluation */
+  dryRunModel?: string;
   /** Latest finetune average score across epochs */
   finetuneScore?: number;
   /** Running average across all finetune jobs */
@@ -18,6 +20,8 @@ export interface DatasetEvaluation {
   finetuneCount?: number;
   /** Timestamp of the latest finetune evaluation */
   finetuneEvaluatedAt?: number;
+  /** Model used for the latest finetune evaluation */
+  finetuneModel?: string;
 }
 
 // Stored in 'records' object store

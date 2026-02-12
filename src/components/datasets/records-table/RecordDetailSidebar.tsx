@@ -244,10 +244,10 @@ function EvaluationScores({ evaluation, onNavigate }: {
   return (
     <div className="space-y-1.5">
       {drScore != null && (
-        <ScoreRow label={drLabel} score={drScore} timestamp={drTime} onClick={onNavigate ? () => onNavigate("evaluator") : undefined} />
+        <ScoreRow label={drLabel} score={drScore} model={evaluation.dryRunModel} timestamp={drTime} onClick={onNavigate ? () => onNavigate("evaluator") : undefined} />
       )}
       {ftScore != null && (
-        <ScoreRow label={ftLabel} score={ftScore} timestamp={ftTime} onClick={onNavigate ? () => onNavigate("jobs") : undefined} />
+        <ScoreRow label={ftLabel} score={ftScore} model={evaluation.finetuneModel} timestamp={ftTime} onClick={onNavigate ? () => onNavigate("jobs") : undefined} />
       )}
     </div>
   );
@@ -259,23 +259,34 @@ function getScoreColor(score: number): string {
   return "text-red-400";
 }
 
-function ScoreRow({ label, score, timestamp, onClick }: { label: string; score: number; timestamp?: number; onClick?: () => void }) {
+function ScoreRow({ label, score, model, timestamp, onClick }: {
+  label: string;
+  score: number;
+  model?: string;
+  timestamp?: number;
+  onClick?: () => void;
+}) {
   return (
     <div
       className={cn(
-        "flex items-baseline justify-between",
+        "flex items-baseline justify-between gap-2",
         onClick && "cursor-pointer hover:bg-muted/50 -mx-1 px-1 rounded transition-colors"
       )}
       onClick={onClick}
     >
-      <div className="flex items-baseline gap-1.5">
-        <span className="text-xs text-zinc-500">{label}:</span>
-        <span className={cn("text-xs font-semibold tabular-nums", getScoreColor(score))}>
+      <div className="flex items-baseline gap-1.5 min-w-0">
+        <span className="text-xs text-zinc-500 shrink-0">{label}:</span>
+        <span className={cn("text-xs font-semibold tabular-nums shrink-0", getScoreColor(score))}>
           {score.toFixed(2)}
         </span>
+        {model && (
+          <span className="text-[10px] text-muted-foreground/40 truncate" title={model}>
+            {model}
+          </span>
+        )}
       </div>
       {timestamp && (
-        <span className="text-[10px] text-muted-foreground/50 tabular-nums">
+        <span className="text-[10px] text-muted-foreground/50 tabular-nums shrink-0">
           {new Date(timestamp).toLocaleString()}
         </span>
       )}
