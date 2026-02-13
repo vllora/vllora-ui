@@ -14,6 +14,7 @@ import * as datasetsDB from '@/services/datasets-db';
 import type { ToolHandler } from '../types';
 import { type ExtractedSection } from './shared/knowledge-context';
 import * as knowledgeDB from '@/services/knowledge-sources-db';
+import { emitter } from '@/utils/eventEmitter';
 
 // =============================================================================
 // Types
@@ -89,10 +90,14 @@ export const analyzeKnowledgeSourcesHandler: ToolHandler = async (
       const statusMessage = readySources.length === 0
         ? `${processingSources.length} document(s) are still processing.`
         : `${readySources.length} of ${total} document(s) are ready, ${processingSources.length} still processing.`;
+
+      // Signal the UI to auto-prompt Lucy when processing completes
+      emitter.emit('vllora_docs_awaiting_plan', { datasetId: dataset_id });
+
       return {
-        success: true,
+        success: false,
         sources_processing: true,
-        message: `${statusMessage} Please wait for all documents to finish processing before analyzing.\n\nThis usually takes about 30-60 seconds per document.`,
+        error: `${statusMessage} STOP: Do NOT call this tool again. Tell the user their documents are still being processed (usually 30-60 seconds per document) and that you will create the setup plan once processing is complete. The frontend will notify you when documents are ready.`,
       };
     }
 

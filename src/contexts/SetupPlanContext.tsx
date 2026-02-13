@@ -164,8 +164,11 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
           switch (storedPlan.status) {
             case 'proposed':
               setHasPlanProposed(true);
-              setIsPlanPreviewActive(true);
-              setPlanEditMode("display");
+              // Don't auto-open plan preview on reload — the banner will show instead.
+              // Plans auto-open via the 'vllora_setup_plan_proposed' event during the
+              // session when they're first proposed, but on reload we let the user
+              // choose to view it. This also avoids showing stale "Approve & Execute"
+              // for plans whose status was never updated to 'completed'.
               break;
             case 'approved':
             case 'executing': {

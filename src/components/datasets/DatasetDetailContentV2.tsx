@@ -152,6 +152,7 @@ export function DatasetDetailContentV2() {
   // Setup plan state from context
   const {
     proposedPlan,
+    planStatus,
     isPlanPreviewActive,
     planEditMode,
     isGeneratingPlan,
@@ -506,6 +507,7 @@ export function DatasetDetailContentV2() {
           {isPlanPreviewActive ? (
             <PlanPreview
               plan={proposedPlan}
+              planStatus={planStatus}
               mode={planEditMode}
               onModeChange={setPlanEditMode}
               onApprove={approvePlan}

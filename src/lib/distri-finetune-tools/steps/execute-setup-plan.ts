@@ -33,7 +33,7 @@ import { quickFinetune } from '@/services/quick-finetune';
 
 // Side-effect import to ensure execution state store is listening for progress events
 import './execution-state-store';
-import { updatePlanStatus, failPlan as failPlanInDB } from './proposed-plan-store';
+import { updatePlanStatus, completePlan as completePlanInDB, failPlan as failPlanInDB } from './proposed-plan-store';
 
 // =============================================================================
 // Pending Plan Store (populated by UI event, consumed by handler)
@@ -671,6 +671,10 @@ export const executeSetupPlanHandler: ToolHandler = async (
     // =========================================================================
     progress.is_complete = true;
     emitProgress(progress);
+
+    // Directly persist completion to IndexedDB (belt-and-suspenders with event listeners)
+    await completePlanInDB(dataset_id, progress);
+
     emitter.emit('vllora_workflow_updated', { datasetId: dataset_id });
 
     console.log('[executeSetupPlan] Execution complete:', executionId);

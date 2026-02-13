@@ -132,6 +132,8 @@ type VlloraEvents = {
   vllora_open_drawer: {
     type: 'docs' | 'readme';
   };
+  // Docs are still processing — UI should auto-prompt Lucy when they're done
+  vllora_docs_awaiting_plan: { datasetId: string };
 };
 
 // ============================================================================

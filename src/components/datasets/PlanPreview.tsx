@@ -9,16 +9,18 @@
  * Empty state: prompt to generate a plan.
  */
 
-import { Eye, Pencil, Sparkles, Loader2, FolderOpen, AlertCircle, X } from "lucide-react";
+import { Eye, Pencil, Sparkles, Loader2, FolderOpen, AlertCircle, X, CheckCircle2, XCircle } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { SetupPlanEditor, planToMarkdown } from "./plan-section/SetupPlanEditor";
 import LazyMarkdownRenderer from "@/components/chat/LazyMarkdownRenderer";
 import { emitter } from "@/utils/eventEmitter";
 import type { SetupPlan } from "@/lib/distri-finetune-tools/steps/propose-setup-plan";
+import type { PlanStatus } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
 
 interface PlanPreviewProps {
   plan: SetupPlan | null;
+  planStatus: PlanStatus | null;
   mode: "display" | "edit";
   onModeChange: (mode: "display" | "edit") => void;
   onApprove: (plan: SetupPlan) => void;
@@ -32,6 +34,7 @@ interface PlanPreviewProps {
 
 export function PlanPreview({
   plan,
+  planStatus,
   mode,
   onModeChange,
   onApprove,
@@ -54,10 +57,13 @@ export function PlanPreview({
     );
   }
 
+  // Plan is actionable only when proposed (not yet executed/completed/failed)
+  const isActionable = planStatus === 'proposed';
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {plan ? (
-        mode === "edit" && !isExecuting ? (
+        mode === "edit" && isActionable && !isExecuting ? (
           <PlanEditView
             plan={plan}
             onModeChange={onModeChange}
@@ -68,10 +74,12 @@ export function PlanPreview({
         ) : (
           <PlanDisplayView
             plan={plan}
+            planStatus={planStatus}
             onModeChange={onModeChange}
             onApprove={onApprove}
             onClose={onClose}
             isExecuting={isExecuting}
+            isActionable={isActionable}
           />
         )
       ) : (
@@ -91,16 +99,20 @@ export function PlanPreview({
 
 function PlanDisplayView({
   plan,
+  planStatus,
   onModeChange,
   onApprove,
   onClose,
   isExecuting,
+  isActionable,
 }: {
   plan: SetupPlan;
+  planStatus: PlanStatus | null;
   onModeChange: (mode: "display" | "edit") => void;
   onApprove: (plan: SetupPlan) => void;
   onClose: () => void;
   isExecuting: boolean;
+  isActionable: boolean;
 }) {
   return (
     <>
@@ -115,9 +127,21 @@ function PlanDisplayView({
               Executing...
             </span>
           )}
+          {planStatus === 'completed' && (
+            <span className="flex items-center gap-1.5 text-xs font-normal text-emerald-600">
+              <CheckCircle2 className="w-3 h-3" />
+              Completed
+            </span>
+          )}
+          {planStatus === 'failed' && (
+            <span className="flex items-center gap-1.5 text-xs font-normal text-red-500">
+              <XCircle className="w-3 h-3" />
+              Failed
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1.5">
-          {!isExecuting && (
+          {isActionable && !isExecuting && (
             <>
               <Button
                 variant="ghost"

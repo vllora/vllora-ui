@@ -165,9 +165,14 @@ export function LucyDatasetAssistant() {
   recordsRef.current = records;
 
   // Knowledge sources from context (single source of truth)
-  const { count: knowledgeSourcesCount } = KnowledgeSourcesConsumer();
+  const { count: knowledgeSourcesCount, isProcessing: docsProcessing } = KnowledgeSourcesConsumer();
   const knowledgeSourcesCountRef = useRef(knowledgeSourcesCount);
   knowledgeSourcesCountRef.current = knowledgeSourcesCount;
+
+  // Track previous processing state to detect completion transitions
+  const prevDocsProcessingRef = useRef(docsProcessing);
+  // Track whether we uploaded docs in this session (to auto-trigger plan flow)
+  const pendingDocsPlanTriggerRef = useRef(false);
 
   // Proactive behavior: auto-analyze dataset when viewing it for the first time
   useEffect(() => {
@@ -217,6 +222,46 @@ export function LucyDatasetAssistant() {
     setAutoTriggerPrompt(null);
     hasSetAutoTriggerRef.current = false;
     lastAnalyzedDatasetRef.current = null;
+  }, [selectedDatasetId]);
+
+  // Auto-prompt Lucy when document extraction completes (isProcessing: true → false)
+  // Only if: pending trigger is set AND no plan is already active
+  useEffect(() => {
+    const wasProcessing = prevDocsProcessingRef.current;
+    prevDocsProcessingRef.current = docsProcessing;
+
+    // Detect transition: processing → done, and we have a pending trigger
+    if (wasProcessing && !docsProcessing && pendingDocsPlanTriggerRef.current) {
+      pendingDocsPlanTriggerRef.current = false;
+
+      // Don't auto-prompt if a plan is already in progress
+      // User might be uploading additional docs to an existing dataset
+      if (planStatus && planStatus !== 'proposed' && planStatus !== 'dismissed') {
+        console.log('[LucyDatasetAssistant] Documents ready, but plan already active (status:', planStatus, ') — skipping auto-prompt');
+        return;
+      }
+
+      console.log('[LucyDatasetAssistant] Documents ready, auto-triggering plan creation');
+      emitter.emit("vllora_lucy_prompt", {
+        prompt: `My documents have finished processing and are ready. Please analyze them and create a setup plan now.`,
+      });
+    }
+  }, [docsProcessing, planStatus]);
+
+  // Listen for analyze_knowledge_sources detecting processing docs
+  // This sets the pending trigger so the auto-prompt fires when processing completes
+  useEffect(() => {
+    const handleDocsAwaiting = ({ datasetId }: { datasetId: string }) => {
+      if (datasetId === selectedDatasetId) {
+        console.log('[LucyDatasetAssistant] Docs awaiting plan — setting pending trigger');
+        pendingDocsPlanTriggerRef.current = true;
+      }
+    };
+
+    emitter.on('vllora_docs_awaiting_plan', handleDocsAwaiting);
+    return () => {
+      emitter.off('vllora_docs_awaiting_plan', handleDocsAwaiting);
+    };
   }, [selectedDatasetId]);
 
   // Listen for external prompt triggers (e.g., "Generate for topic" button)
@@ -342,17 +387,19 @@ export function LucyDatasetAssistant() {
           });
         }
 
-        // Add upload notification and trigger setup plan
+        // Notify UI and set up auto-trigger for when extraction completes
         if (uploadedFiles.length > 0) {
           // Emit event to refresh knowledge sources count
           emitter.emit("vllora_knowledge_source_updated", { datasetId: selectedDatasetId });
 
-          // If user didn't type anything, prompt for setup plan
+          // Mark that we should auto-trigger plan creation when extraction finishes
+          pendingDocsPlanTriggerRef.current = true;
+
+          // Tell Lucy about the upload — don't ask for a plan yet (docs are still extracting)
           if (!userText.trim()) {
-            userText = `I've uploaded ${uploadedFiles.length} document(s): ${uploadedFiles.join(', ')}. Please use the propose_setup_plan tool to analyze these documents and create a comprehensive setup plan for this dataset. Show me the plan with topic hierarchy, data generation strategy, and evaluation criteria.`;
+            userText = `I've uploaded ${uploadedFiles.length} document(s): ${uploadedFiles.join(', ')}. They are being processed now — I'll let you know when they're ready so you can create a setup plan.`;
           } else {
-            // User typed something - append the upload notice with tool suggestion
-            const uploadNotice = `\n\n[Knowledge sources uploaded: ${uploadedFiles.join(', ')}. Use the propose_setup_plan tool to create a setup plan based on these documents.]`;
+            const uploadNotice = `\n\n[Knowledge sources uploaded: ${uploadedFiles.join(', ')}. Documents are being processed — plan creation will be triggered automatically when extraction completes.]`;
             userText += uploadNotice;
           }
         }
