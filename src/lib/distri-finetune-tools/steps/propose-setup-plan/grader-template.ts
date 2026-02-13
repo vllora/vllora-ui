@@ -9,14 +9,42 @@ function escapeForJSString(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
 }
 
+/** Escape a string for safe embedding inside a JS template literal (backtick string) */
+function escapeForTemplateLiteral(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+}
+
 /** Convert a criterion name to a valid JS identifier (snake_case, alphanumeric + underscore only) */
 function toSafeKey(name: string): string {
-  return name
+  let key = name
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, '')  // strip non-alphanumeric (removes /, -, etc.)
     .replace(/\s+/g, '_')          // spaces to underscores
     .replace(/_+/g, '_')           // collapse multiple underscores
     .replace(/^_|_$/g, '');        // trim leading/trailing underscores
+
+  // Ensure non-empty
+  if (!key) key = 'criterion';
+
+  // Ensure doesn't start with a digit (invalid JS identifier)
+  if (/^\d/.test(key)) key = `c_${key}`;
+
+  return key;
+}
+
+/**
+ * Deduplicate safe keys by appending _2, _3, etc. for collisions.
+ * Returns an array of unique keys in the same order as input criteria.
+ */
+function deduplicateKeys(criteria: GraderCriterion[]): string[] {
+  const seen = new Map<string, number>();
+  return criteria.map(c => {
+    let key = toSafeKey(c.name);
+    const count = seen.get(key) ?? 0;
+    seen.set(key, count + 1);
+    if (count > 0) key = `${key}_${count + 1}`;
+    return key;
+  });
 }
 
 export function generateGraderTemplate(
@@ -31,18 +59,17 @@ export function generateGraderTemplate(
 }
 
 function generateConversationalGraderTemplate(criteria: GraderCriterion[], objective: string): string {
-  // Simple numbered list without weights
+  // Simple numbered list without weights (escaped for template literal)
   const criteriaList = criteria
-    .map((c, i) => `${i + 1}. **${c.name}**: ${c.description}`)
+    .map((c, i) => `${i + 1}. **${escapeForTemplateLiteral(c.name)}**: ${escapeForTemplateLiteral(c.description)}`)
     .join('\n');
 
-  // Generate snake_case keys for each criterion
-  const criteriaKeys = criteria.map(c => toSafeKey(c.name));
+  // Generate deduplicated snake_case keys for each criterion
+  const criteriaKeys = deduplicateKeys(criteria);
 
-  const outputSchemaProperties = criteria.map(c => {
-    const key = toSafeKey(c.name);
-    return `                ${key}: { type: "number", minimum: 0, maximum: 5 }`;
-  }).join(',\n');
+  const outputSchemaProperties = criteriaKeys.map(key =>
+    `                ${key}: { type: "number", minimum: 0, maximum: 5 }`
+  ).join(',\n');
 
   const criteriaScoreExtraction = criteriaKeys.map(key =>
     `        const ${key} = typeof result.${key} === 'number' ? result.${key} : 0;`
@@ -108,7 +135,7 @@ Provide a DETAILED explanation for your evaluation, then assign scores (0-5) for
 Answer in JSON format:
 {
   "reasoning": string (Full detailed explanation),
-${criteria.map(c => `  "${toSafeKey(c.name)}": number (0-5)`).join(',\n')}
+${criteriaKeys.map(k => `  "${k}": number (0-5)`).join(',\n')}
 }\`
             }
         ],
@@ -149,7 +176,7 @@ ${criteriaScoreExtraction}
 
         // Calculate average score across all criteria (each is 0-5)
         const total = ${scoreSum};
-        const avgScore = total / ${criteria.length};
+        const avgScore = total / ${criteriaKeys.length};
         // Normalize to 0-1 (divide by 5 since max score per criterion is 5)
         let finalScore = avgScore / 5.0;
 
@@ -181,20 +208,19 @@ function generateStructuredOutputGraderTemplate(
     : [];
   const schemaKeysStr = JSON.stringify(schemaKeys);
 
-  // Build criteria list for the LLM judge
+  // Build criteria list for the LLM judge (escaped for template literal)
   const criteriaList = criteria
-    .map((c, i) => `${i + 1}. **${c.name}**: ${c.description}`)
+    .map((c, i) => `${i + 1}. **${escapeForTemplateLiteral(c.name)}**: ${escapeForTemplateLiteral(c.description)}`)
     .join('\n');
 
-  const criteriaKeys = criteria.map(c => toSafeKey(c.name));
+  const criteriaKeys = deduplicateKeys(criteria);
 
-  const outputSchemaProperties = criteria.map(c => {
-    const key = toSafeKey(c.name);
-    return `                ${key}: { type: "number", minimum: 0, maximum: 5 }`;
-  }).join(',\n');
+  const outputSchemaProperties = criteriaKeys.map(key =>
+    `                ${key}: { type: "number", minimum: 0, maximum: 5 }`
+  ).join(',\n');
 
   const criteriaScoreExtraction = criteriaKeys.map(key =>
-    `        const ${key} = typeof result.${key} === 'number' ? result.${key} : 0;`
+    `        var ${key} = typeof result.${key} === 'number' ? result.${key} : 0;`
   ).join('\n');
 
   const scoreSum = criteriaKeys.join(' + ');
@@ -292,7 +318,7 @@ Provide a DETAILED explanation for your evaluation, then assign scores (0-5) for
 Answer in JSON format:
 {
   "reasoning": string (Full detailed explanation),
-${criteria.map(c => `  "${toSafeKey(c.name)}": number (0-5)`).join(',\n')}
+${criteriaKeys.map(k => `  "${k}": number (0-5)`).join(',\n')}
 }\`
             }
         ],
@@ -333,7 +359,7 @@ ${criteriaScoreExtraction}
 
         // Calculate average score across all criteria (each is 0-5)
         var total = ${scoreSum};
-        var avgScore = total / ${criteria.length};
+        var avgScore = total / ${criteriaKeys.length};
         // Normalize to 0-1 (divide by 5 since max score per criterion is 5)
         var finalScore = avgScore / 5.0;
 

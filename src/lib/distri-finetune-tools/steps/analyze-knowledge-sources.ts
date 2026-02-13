@@ -1,18 +1,19 @@
 /**
  * Analyze Knowledge Sources Tool
  *
- * Analyzes dataset objective and uploaded knowledge sources to produce
- * topics, grader criteria, output schema, and strategy recommendations.
- * Lucy uses this output to construct a plan, then calls propose_setup_plan.
+ * Pure data-access tool — returns extracted knowledge source metadata
+ * from IndexedDB. No LLM calls.
+ *
+ * Lucy uses this to check what knowledge sources exist, then calls
+ * generate_topics to get a topic hierarchy (which handles document-grounding
+ * internally), then constructs a plan with propose_setup_plan.
  */
 
 import type { DistriFnTool } from '@distri/core';
 import * as datasetsDB from '@/services/datasets-db';
 import type { ToolHandler } from '../types';
-import type { ProposedTopic, GraderCriterion, OutputFormat } from './propose-setup-plan';
-import { callLLMForPlan } from './propose-setup-plan';
-import { generateGraderTemplate } from './propose-setup-plan';
-import { buildKnowledgeContentBlocks } from './shared/knowledge-context';
+import { type ExtractedSection } from './shared/knowledge-context';
+import * as knowledgeDB from '@/services/knowledge-sources-db';
 
 // =============================================================================
 // Types
@@ -22,31 +23,26 @@ interface AnalyzeKnowledgeSourcesParams {
   dataset_id: string;
 }
 
-interface AnalysisResult {
-  /** Knowledge sources that were analyzed */
-  knowledge_sources: { name: string; topics_extracted: string[] }[];
-  /** Proposed topic hierarchy */
-  proposed_topics: ProposedTopic[];
-  /** Total leaf topic count */
-  total_topic_count: number;
-  /** Estimated record count based on topic target_counts */
-  estimated_records: number;
-  /** Grader criteria */
-  grader_criteria: GraderCriterion[];
-  /** Pre-generated grader template (JS eval script) */
-  grader_template_preview: string;
-  /** Output format / structured schema (null if free-form) */
-  output_format: OutputFormat | null;
-  /** Data generation strategy notes */
-  strategy: string;
-  /** Whether data generation should be grounded in knowledge sources */
-  grounded_in_knowledge: boolean;
+interface KnowledgeSourceInfo {
+  name: string;
+  type: string;
+  document_type: string;
+  summary: string;
+  topics_extracted: string[];
+  sections: { title: string; content_preview: string }[];
 }
 
 interface AnalyzeKnowledgeSourcesResult {
   success: boolean;
   error?: string;
-  analysis?: AnalysisResult;
+  /** Training objective from the dataset */
+  objective?: string;
+  /** Number of ready knowledge sources */
+  source_count?: number;
+  /** Detailed info per knowledge source */
+  knowledge_sources?: KnowledgeSourceInfo[];
+  /** All extracted topics across all sources (deduplicated) */
+  all_topics?: string[];
   /** True if knowledge sources exist but are still processing */
   sources_processing?: boolean;
   message?: string;
@@ -82,19 +78,17 @@ export const analyzeKnowledgeSourcesHandler: ToolHandler = async (
       };
     }
 
-    // Build knowledge content blocks (native file blocks + text excerpt fallback)
-    const knowledgeCtx = await buildKnowledgeContentBlocks(dataset_id);
-    const { textExcerptContext: knowledgeContext, sourcesSummary: knowledgeSourcesSummary, readyCount, processingCount, fileBlocks, hasFileBlocks } = knowledgeCtx;
+    // Check knowledge source status
+    const sources = await knowledgeDB.getKnowledgeSourcesByDataset(dataset_id);
+    const readySources = sources.filter((s) => s.status === 'ready');
+    const processingSources = sources.filter((s) => s.status === 'processing');
 
     // If ANY documents are still processing, wait for ALL to complete
-    if (processingCount > 0) {
-      const totalSources = readyCount + processingCount;
-      let statusMessage: string;
-      if (readyCount === 0) {
-        statusMessage = `${processingCount} document(s) are still processing.`;
-      } else {
-        statusMessage = `${readyCount} of ${totalSources} document(s) are ready, ${processingCount} still processing.`;
-      }
+    if (processingSources.length > 0) {
+      const total = readySources.length + processingSources.length;
+      const statusMessage = readySources.length === 0
+        ? `${processingSources.length} document(s) are still processing.`
+        : `${readySources.length} of ${total} document(s) are ready, ${processingSources.length} still processing.`;
       return {
         success: true,
         sources_processing: true,
@@ -102,68 +96,54 @@ export const analyzeKnowledgeSourcesHandler: ToolHandler = async (
       };
     }
 
-    console.log('[analyzeKnowledgeSources] Analyzing with', readyCount, 'knowledge sources');
-
-    // Call LLM to analyze (with native file blocks when available)
-    if (hasFileBlocks) {
-      console.log(`[analyzeKnowledgeSources] Sending ${fileBlocks.length} native file content block(s) to LLM`);
-    }
-    const llmResult = await callLLMForPlan(objective, knowledgeContext, hasFileBlocks ? fileBlocks : undefined);
-
-    // Count leaf topics
-    let totalTopicCount = 0;
-    for (const topic of llmResult.proposed_topics) {
-      if (topic.subtopics && topic.subtopics.length > 0) {
-        totalTopicCount += topic.subtopics.length;
-      } else {
-        totalTopicCount += 1;
-      }
+    // No knowledge sources
+    if (readySources.length === 0) {
+      return {
+        success: true,
+        objective,
+        source_count: 0,
+        message: 'No knowledge sources uploaded.',
+      };
     }
 
-    // Calculate estimated records
-    let estimatedRecords = 0;
-    for (const topic of llmResult.proposed_topics) {
-      estimatedRecords += topic.target_count;
-      if (topic.subtopics) {
-        for (const sub of topic.subtopics) {
-          estimatedRecords += sub.target_count;
-        }
-      }
-    }
+    // Extract data from knowledge sources (pure IndexedDB read)
+    console.log('[analyzeKnowledgeSources] Extracting data from', readySources.length, 'knowledge sources');
 
-    // Parse response schema if present
-    let outputFormat: OutputFormat | null = null;
-    if (llmResult.output_schema && llmResult.output_schema.trim() !== '') {
-      try {
-        const parsedSchema = JSON.parse(llmResult.output_schema);
-        outputFormat = {
-          schema: parsedSchema,
-          system_prompt_template: llmResult.system_prompt_template,
-        };
-      } catch {
-        console.warn('[analyzeKnowledgeSources] Failed to parse output_schema, ignoring');
-      }
-    }
+    const knowledgeSources: KnowledgeSourceInfo[] = readySources.map((source) => {
+      const extracted = source.extractedContent;
+      const topics = extracted?.topics || [];
+      const sections = ((extracted?.sections || []) as ExtractedSection[]).slice(0, 15);
+      const metadata = extracted?.metadata as Record<string, unknown> | undefined;
 
-    const analysis: AnalysisResult = {
-      knowledge_sources: knowledgeSourcesSummary,
-      proposed_topics: llmResult.proposed_topics,
-      total_topic_count: totalTopicCount,
-      estimated_records: estimatedRecords,
-      grader_criteria: llmResult.grader_criteria,
-      grader_template_preview: generateGraderTemplate(llmResult.grader_criteria, objective, outputFormat),
-      output_format: outputFormat,
-      strategy: llmResult.strategy_notes,
-      grounded_in_knowledge: readyCount > 0,
-    };
-
-    console.log('[analyzeKnowledgeSources] Analysis complete:', {
-      topics: totalTopicCount,
-      records: estimatedRecords,
-      criteria: llmResult.grader_criteria.length,
+      return {
+        name: source.name,
+        type: source.type || 'unknown',
+        document_type: (metadata?.document_type as string) || '',
+        summary: (metadata?.document_summary as string) || '',
+        topics_extracted: topics,
+        sections: sections.map((s) => ({
+          title: s.title || 'Untitled',
+          content_preview: s.content?.substring(0, 200) || '',
+        })),
+      };
     });
 
-    return { success: true, analysis };
+    // Collect all unique topics
+    const allTopics = [...new Set(knowledgeSources.flatMap((s) => s.topics_extracted))];
+
+    console.log('[analyzeKnowledgeSources] Extracted:', {
+      sources: knowledgeSources.length,
+      totalTopics: allTopics.length,
+    });
+
+    return {
+      success: true,
+      objective,
+      source_count: readySources.length,
+      knowledge_sources: knowledgeSources,
+      all_topics: allTopics,
+      message: `Found ${readySources.length} knowledge source(s) with ${allTopics.length} extracted topics.`,
+    };
   } catch (error) {
     console.error('[analyzeKnowledgeSources] Failed:', error);
     return {
@@ -179,16 +159,12 @@ export const analyzeKnowledgeSourcesHandler: ToolHandler = async (
 
 export const analyzeKnowledgeSourcesTool: DistriFnTool = {
   name: 'analyze_knowledge_sources',
-  description: `Analyze dataset objective and uploaded knowledge sources to produce recommendations.
+  description: `Check what knowledge sources are uploaded for a dataset.
 
-Returns:
-- Proposed topic hierarchy with target counts
-- Grader evaluation criteria and template
-- Output format / structured schema (if applicable)
-- Data generation strategy
+Returns per-source: document name, type, summary, extracted topics, section previews.
+Also returns the training objective and a flat list of all extracted topics.
 
-Use this tool when you need to understand the dataset's knowledge sources before
-constructing a plan. After receiving the analysis, build a plan and call propose_setup_plan.`,
+This is a pure data-access tool (no LLM calls). Use it to understand what documents exist before deciding next steps.`,
   type: 'function',
   parameters: {
     type: 'object',

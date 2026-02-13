@@ -24,6 +24,5 @@ export { proposeSetupPlanTool } from './tool';
 // Re-export adjust plan tool
 export { adjustSetupPlanHandler, adjustSetupPlanTool } from './adjust-plan';
 
-// Re-export utilities for use by other modules (used by analyze-knowledge-sources)
+// Re-export utilities for use by other modules
 export { generateGraderTemplate } from './grader-template';
-export { callLLMForPlan, fetchLucyConfigCached } from './llm-service';

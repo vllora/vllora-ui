@@ -32,6 +32,98 @@ regrading, retraining, bulk topic changes, etc.`,
       plan: {
         type: 'object',
         description: 'The plan to propose. You construct this based on dataset state and user intent.',
+        properties: {
+          dataset_name: { type: 'string', description: 'Dataset display name' },
+          objective: { type: 'string', description: 'Training objective' },
+          title: { type: 'string', description: 'Plan title' },
+          description: { type: 'string', description: 'Plan description' },
+          proposed_topics: {
+            type: 'array',
+            description: 'Topic hierarchy. Each topic: { name, description, target_count, subtopics? }. Parent target_count=0, leaf target_count=30.',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                description: { type: 'string' },
+                target_count: { type: 'number' },
+                subtopics: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      name: { type: 'string' },
+                      description: { type: 'string' },
+                      target_count: { type: 'number' },
+                    },
+                    required: ['name', 'description', 'target_count'],
+                  },
+                },
+              },
+              required: ['name', 'description', 'target_count'],
+            },
+          },
+          grader_config: {
+            type: 'object',
+            description: 'Grader config with criteria and template_preview',
+            properties: {
+              criteria: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string' },
+                    description: { type: 'string' },
+                  },
+                  required: ['name', 'description'],
+                },
+              },
+              template_preview: { type: 'string', description: 'Placeholder - auto-generated during execution' },
+            },
+            required: ['criteria', 'template_preview'],
+          },
+          data_generation: {
+            type: 'object',
+            properties: {
+              strategy: { type: 'string' },
+              grounded_in_knowledge: { type: 'boolean' },
+            },
+            required: ['strategy', 'grounded_in_knowledge'],
+          },
+          output_format: {
+            description: 'Structured output schema, or null for free-form responses',
+          },
+          knowledge_sources: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                topics_extracted: { type: 'array', items: { type: 'string' } },
+              },
+            },
+          },
+          execution_steps: {
+            type: 'array',
+            description: 'Human-readable steps shown in the UI',
+            items: {
+              type: 'object',
+              properties: {
+                step: { type: 'string' },
+                description: { type: 'string' },
+                estimated_time: { type: 'string' },
+              },
+              required: ['step', 'description', 'estimated_time'],
+            },
+          },
+          steps_to_execute: {
+            type: 'array',
+            description: 'Step IDs to run: topics, adjust_topics, categorize, generate, grader, upload, dryrun, readme, finetune',
+            items: { type: 'string' },
+          },
+          estimated_records: { type: 'number' },
+          estimated_duration: { type: 'string' },
+        },
+        required: ['dataset_name', 'objective', 'proposed_topics', 'grader_config', 'execution_steps', 'steps_to_execute', 'estimated_records', 'estimated_duration'],
       },
     },
     required: ['dataset_id', 'plan'],

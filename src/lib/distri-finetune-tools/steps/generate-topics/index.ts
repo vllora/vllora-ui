@@ -42,20 +42,197 @@ async function getKnowledgeSourceTopics(datasetId: string): Promise<string[]> {
 // Set to false to use the existing frontend LLM-based generation
 const USE_BACKEND_TOPIC_GENERATION = false;
 
+// =============================================================================
+// Shared parameter parsing
+// =============================================================================
+
+function parseNumericParam(value: unknown, fallback: number): number {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") return parseInt(value, 10) || fallback;
+  return fallback;
+}
+
+// =============================================================================
+// Core topic generation (no side effects)
+// =============================================================================
+
+// =============================================================================
+// Explicit topics → hierarchy conversion (no LLM)
+// =============================================================================
+
+let explicitNodeCounter = 0;
+
+/** Convert flat topic names into TopicHierarchyNode[] */
+function topicNamesToHierarchy(names: string[]): TopicHierarchyNode[] {
+  explicitNodeCounter = 0;
+  return names.map((name) => ({
+    id: `topic_${++explicitNodeCounter}`,
+    name: name.toLowerCase().replace(/\s+/g, "_"),
+  }));
+}
+
+/** Merge new topics into existing hierarchy (dedup by normalized name) */
+function mergeHierarchies(
+  existing: TopicHierarchyNode[],
+  additions: TopicHierarchyNode[],
+): TopicHierarchyNode[] {
+  const existingNames = new Set<string>();
+  const collectNames = (nodes: TopicHierarchyNode[]) => {
+    for (const n of nodes) {
+      existingNames.add(n.name.toLowerCase());
+      if (n.children) collectNames(n.children);
+    }
+  };
+  collectNames(existing);
+
+  const newOnly = additions.filter((n) => !existingNames.has(n.name.toLowerCase()));
+  return [...existing, ...newOnly];
+}
+
+/**
+ * Generate topics using the frontend LLM pipeline.
+ * Pure function — no DB writes, no workflow state changes.
+ * Used by both the generate_topics tool and plan creation flow.
+ */
+async function generateTopicsCore(
+  datasetId: string,
+  trainingGoals: string | undefined,
+  depthValue: number,
+  degreeValue: number,
+  maxTopicsValue: number,
+  focusValue?: string,
+): Promise<{ success: boolean; hierarchy?: TopicHierarchyNode[]; error?: string }> {
+  if (USE_BACKEND_TOPIC_GENERATION) {
+    const records = await datasetsDB.getRecordsByDatasetId(datasetId);
+    if (records.length === 0) {
+      // For suggest mode (plan creation), empty records is fine
+      // Fall through to frontend generation
+    } else {
+      const formattedRecords = records.slice(0, 20).map((r) => ({ data: r.data }));
+      const autoTopics = await getKnowledgeSourceTopics(datasetId);
+
+      const result = await generateTopicsViaBackend(
+        trainingGoals || "Generate diverse training data",
+        depthValue,
+        degreeValue,
+        formattedRecords,
+        maxTopicsValue,
+        focusValue,
+        autoTopics.length > 0 ? autoTopics : undefined,
+      );
+
+      if (result.success && result.hierarchy) {
+        return { success: true, hierarchy: result.hierarchy };
+      }
+      return { success: false, error: result.error || "Failed to generate topics via backend" };
+    }
+  }
+
+  // Frontend LLM-based topic generation (handles knowledge sources automatically)
+  console.log("[generate_topics] Using frontend generation with automatic knowledge context");
+
+  const result = await generateTopicsViaFrontend(
+    datasetId,
+    depthValue,
+    degreeValue,
+    maxTopicsValue,
+    trainingGoals,
+    focusValue,
+  );
+
+  if (!result.success || !result.hierarchy) {
+    return { success: false, error: result.error || "Failed to generate topics" };
+  }
+
+  return { success: true, hierarchy: result.hierarchy };
+}
+
+// =============================================================================
+// Handler
+// =============================================================================
+
 export const generateTopicsHandler: ToolHandler = async (params) => {
   try {
     const {
       workflow_id,
+      dataset_id,
       method = "auto",
       max_depth = 2,
       degree = 2,
       max_topics = 3,
       focus,
-      seed_topics,
+      topics: rawTopics,
+      mode = "replace",
     } = params;
 
+    const depthValue = parseNumericParam(max_depth, 2);
+    const degreeValue = parseNumericParam(degree, 2);
+    const maxTopicsValue = parseNumericParam(max_topics, 3);
+    const focusValue = typeof focus === "string" && focus.trim() ? focus.trim() : undefined;
+
+    // Parse explicit topics if provided
+    const explicitTopics: string[] | undefined =
+      Array.isArray(rawTopics) && rawTopics.length > 0
+        ? rawTopics.map(String).filter((t) => t.trim().length > 0)
+        : undefined;
+
+    // =========================================================================
+    // Suggest mode: dataset_id only, no side effects
+    // Used during plan creation to get topic suggestions
+    // =========================================================================
+    if (dataset_id && typeof dataset_id === "string" && !workflow_id) {
+      const dataset = await datasetsDB.getDatasetById(dataset_id);
+      if (!dataset) {
+        return { success: false, error: `Dataset ${dataset_id} not found` };
+      }
+
+      let hierarchy: TopicHierarchyNode[];
+
+      if (explicitTopics) {
+        // Explicit topics provided — skip LLM
+        console.log("[generate_topics] Suggest mode with explicit topics:", explicitTopics.length);
+        hierarchy = topicNamesToHierarchy(explicitTopics);
+      } else {
+        // No explicit topics — generate via LLM
+        console.log("[generate_topics] Suggest mode (no DB writes) for dataset:", dataset_id);
+        const result = await generateTopicsCore(
+          dataset_id,
+          dataset.datasetObjective,
+          depthValue,
+          degreeValue,
+          maxTopicsValue,
+          focusValue,
+        );
+        if (!result.success || !result.hierarchy) {
+          return { success: false, error: result.error };
+        }
+        hierarchy = result.hierarchy;
+      }
+
+      // Append mode: merge with existing hierarchy from dataset
+      if (mode === "append") {
+        const existingHierarchy = dataset.topicHierarchy?.hierarchy;
+        if (existingHierarchy && existingHierarchy.length > 0) {
+          const before = hierarchy.length;
+          hierarchy = mergeHierarchies(existingHierarchy, hierarchy);
+          console.log("[generate_topics] Append mode: merged", existingHierarchy.length, "existing +", hierarchy.length - existingHierarchy.length, "new (from", before, "provided)");
+        }
+      }
+
+      return {
+        success: true,
+        hierarchy,
+        topic_count: countLeafTopics(hierarchy),
+        depth: depthValue,
+        suggest_only: true,
+      };
+    }
+
+    // =========================================================================
+    // Normal mode: workflow_id required, full DB writes
+    // =========================================================================
     if (!workflow_id || typeof workflow_id !== "string") {
-      return { success: false, error: "workflow_id is required" };
+      return { success: false, error: "workflow_id or dataset_id is required" };
     }
 
     const workflow = await workflowDB.getWorkflow(workflow_id);
@@ -76,116 +253,37 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
       await workflowDB.advanceToStep(workflow_id, "topics_config");
     }
 
-    // Parse parameters with robust type coercion (LLM may send strings instead of numbers)
-    const depthValue =
-      typeof max_depth === "number"
-        ? max_depth
-        : typeof max_depth === "string"
-          ? parseInt(max_depth, 10) || 2
-          : 2;
-    const degreeValue =
-      typeof degree === "number"
-        ? degree
-        : typeof degree === "string"
-          ? parseInt(degree, 10) || 2
-          : 2;
-    const maxTopicsValue =
-      typeof max_topics === "number"
-        ? max_topics
-        : typeof max_topics === "string"
-          ? parseInt(max_topics, 10) || 3
-          : 3;
-    const focusValue =
-      typeof focus === "string" && focus.trim() ? focus.trim() : undefined;
-
-    console.log("[generate_topics] Parameters received:", {
-      max_depth,
-      degree,
-      max_topics,
-      focus,
-      seed_topics: Array.isArray(seed_topics) ? seed_topics.length : 0,
-    });
-    console.log("[generate_topics] Parsed values:", {
-      depthValue,
-      degreeValue,
-      maxTopicsValue,
-      focusValue,
-    });
-
     let hierarchy: TopicHierarchyNode[];
 
-    if (USE_BACKEND_TOPIC_GENERATION) {
-      // Use backend topic hierarchy generation endpoint
-      const records = await datasetsDB.getRecordsByDatasetId(
-        workflow.datasetId,
-      );
-      if (records.length === 0) {
-        return { success: false, error: "No records found in dataset" };
-      }
-
-      // Format records for the backend API (limit to 20 as per backend implementation)
-      const formattedRecords = records
-        .slice(0, 20)
-        .map((r) => ({ data: r.data }));
-
-      // Get seed topics: use explicit param if provided, otherwise auto-fetch from knowledge sources
-      let seedTopicsValue: string[] | undefined;
-      if (Array.isArray(seed_topics) && seed_topics.length > 0) {
-        // Lucy explicitly provided seed topics
-        seedTopicsValue = seed_topics.filter((t): t is string => typeof t === "string" && t.trim() !== "");
-        console.log("[generate_topics] Using explicit seed topics from Lucy:", seedTopicsValue);
-      } else {
-        // Auto-fetch from knowledge sources (PDFs, etc.)
-        const autoTopics = await getKnowledgeSourceTopics(workflow.datasetId);
-        if (autoTopics.length > 0) {
-          seedTopicsValue = autoTopics;
-          console.log("[generate_topics] Using auto-fetched topics from knowledge sources:", seedTopicsValue);
-        }
-      }
-
-      const result = await generateTopicsViaBackend(
-        workflow.trainingGoals || "Generate diverse training data",
-        depthValue,
-        degreeValue,
-        formattedRecords,
-        maxTopicsValue,
-        focusValue,
-        seedTopicsValue,
-      );
-
-      if (!result.success || !result.hierarchy) {
-        return {
-          success: false,
-          error: result.error || "Failed to generate topics via backend",
-        };
-      }
-
-      hierarchy = result.hierarchy;
+    if (explicitTopics) {
+      // Explicit topics provided — skip LLM
+      console.log("[generate_topics] Using explicit topics:", explicitTopics.length);
+      hierarchy = topicNamesToHierarchy(explicitTopics);
     } else {
-      // Use frontend LLM-based topic generation
-      // Note: generateTopicsViaFrontend now automatically fetches rich knowledge context
-      // (including topics, sections, and summaries) using the shared module
-      console.log("[generate_topics] Using frontend generation with automatic knowledge context");
-
-      const result = await generateTopicsViaFrontend(
+      // No explicit topics — generate via LLM
+      const result = await generateTopicsCore(
         workflow.datasetId,
+        workflow.trainingGoals,
         depthValue,
         degreeValue,
         maxTopicsValue,
-        workflow.trainingGoals,
         focusValue,
       );
-
       if (!result.success || !result.hierarchy) {
-        return {
-          success: false,
-          error: result.error || "Failed to generate topics",
-        };
+        return { success: false, error: result.error };
       }
-
       hierarchy = result.hierarchy;
     }
 
+    // Append mode: merge with existing hierarchy from dataset
+    if (mode === "append") {
+      const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
+      const existingHierarchy = dataset?.topicHierarchy?.hierarchy;
+      if (existingHierarchy && existingHierarchy.length > 0) {
+        hierarchy = mergeHierarchies(existingHierarchy, hierarchy);
+        console.log("[generate_topics] Append mode: merged with existing hierarchy");
+      }
+    }
     const topicCount = countLeafTopics(hierarchy);
 
     // Save hierarchy to dataset (single source of truth)
@@ -229,17 +327,20 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
 export const generateTopicsTool: DistriFnTool = {
   name: "generate_topics",
   description:
-    "Auto-generate topic hierarchy from dataset content. If knowledge sources (PDFs, documents) have been uploaded, their extracted topics and document sections will be used to derive the topic hierarchy - topics will reflect the actual document content rather than generic categories. Available in topics_config and grader_config steps.",
+    "Auto-generate topic hierarchy from dataset content. If knowledge sources (PDFs, documents) have been uploaded, their extracted topics and document sections will be used to derive the topic hierarchy. Can be called in two modes: (1) with workflow_id for full workflow integration (saves to DB), or (2) with dataset_id only for suggest mode (returns hierarchy without side effects — use this during plan creation).",
   type: "function",
   parameters: {
     type: "object",
     properties: {
-      workflow_id: { type: "string", description: "The workflow ID" },
-      method: {
+      workflow_id: {
         type: "string",
-        enum: ["auto", "template", "manual"],
-        default: "auto",
-        description: "Method for generating topics",
+        description:
+          "The workflow ID. Use this for normal workflow mode (saves topics to DB). Either workflow_id or dataset_id is required.",
+      },
+      dataset_id: {
+        type: "string",
+        description:
+          "The dataset ID. Use this for suggest mode during plan creation — returns topic hierarchy without any DB writes or workflow state changes.",
       },
       max_depth: {
         type: "number",
@@ -261,14 +362,21 @@ export const generateTopicsTool: DistriFnTool = {
         description:
           'Optional user guidance for topic generation. Examples: "focus on error handling scenarios", "organize by difficulty level", "emphasize edge cases", "structure around user journey stages"',
       },
-      seed_topics: {
+      topics: {
         type: "array",
         items: { type: "string" },
         description:
-          'Optional list of topics to seed the hierarchy. If not provided, topics are auto-extracted from uploaded knowledge sources (PDFs). Use this to explicitly control which topics to include. Examples: ["sicilian_defense", "kings_gambit", "endgame_techniques"]',
+          'Optional explicit topic names. When provided, skips LLM generation and creates a flat hierarchy from these names. Use when the user specifies exact topics (e.g. "use topics: openings, tactics, endgames").',
+      },
+      mode: {
+        type: "string",
+        enum: ["replace", "append"],
+        default: "replace",
+        description:
+          'How to handle topics. "replace" (default): new topics replace everything. "append": new topics are added to the existing hierarchy (deduplicates by name).',
       },
     },
-    required: ["workflow_id"],
+    required: [],
   },
   handler: async (input) =>
     JSON.stringify(

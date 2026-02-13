@@ -75,6 +75,9 @@ export { regenerateReadmeHandler, regenerateReadmeTool } from './regenerate-read
 // Knowledge Source Analysis
 export { analyzeKnowledgeSourcesHandler, analyzeKnowledgeSourcesTool } from './analyze-knowledge-sources';
 
+// Grader Generation (LLM-based criteria + script generation)
+export { generateGraderHandler, generateGraderTool } from './generate-grader';
+
 // Plan System (propose → approve → execute)
 export { proposeSetupPlanHandler, proposeSetupPlanTool, type SetupPlan } from './propose-setup-plan';
 export { adjustSetupPlanHandler, adjustSetupPlanTool } from './propose-setup-plan';
@@ -141,6 +144,7 @@ import { getDatasetStateHandler, getDatasetStateTool } from './get-dataset-state
 import { updateRecordHandler, updateRecordTool } from './update-record';
 import { regenerateReadmeHandler, regenerateReadmeTool } from './regenerate-readme';
 import { analyzeKnowledgeSourcesHandler, analyzeKnowledgeSourcesTool } from './analyze-knowledge-sources';
+import { generateGraderHandler, generateGraderTool } from './generate-grader';
 import { proposeSetupPlanHandler, proposeSetupPlanTool, adjustSetupPlanHandler, adjustSetupPlanTool } from './propose-setup-plan';
 import { executeSetupPlanHandler, executeSetupPlanTool } from './execute-setup-plan';
 // Note: Stockfish tools (analyzeChessPositionTool, classifyChessMoveTool) are NOT imported here
@@ -179,6 +183,7 @@ export const STEP_TOOL_NAMES = [
   'update_record',
   'regenerate_readme',
   'analyze_knowledge_sources',
+  'generate_grader',
   'propose_setup_plan',
   'adjust_setup_plan',
   'execute_setup_plan',
@@ -221,6 +226,7 @@ export const stepTools: DistriFnTool[] = [
   updateRecordTool,
   regenerateReadmeTool,
   analyzeKnowledgeSourcesTool,
+  generateGraderTool,
   proposeSetupPlanTool,
   adjustSetupPlanTool,
   executeSetupPlanTool,
@@ -257,6 +263,7 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   update_record: updateRecordHandler,
   regenerate_readme: regenerateReadmeHandler,
   analyze_knowledge_sources: analyzeKnowledgeSourcesHandler,
+  generate_grader: generateGraderHandler,
   propose_setup_plan: proposeSetupPlanHandler,
   adjust_setup_plan: adjustSetupPlanHandler,
   execute_setup_plan: executeSetupPlanHandler,
