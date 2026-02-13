@@ -8,6 +8,7 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
+import { toast } from 'sonner';
 import { emitter } from '@/utils/eventEmitter';
 import * as datasetsDB from '@/services/datasets-db';
 import * as workflowDB from '@/services/finetune-workflow-db';
@@ -263,8 +264,12 @@ export const executeSetupPlanHandler: ToolHandler = async (
         result: topicsResult,
       });
 
-      // Switch to Records tab to show the applied topics
-      emitter.emit('vllora_switch_tab', { datasetId: dataset_id, tab: 'records' });
+      toast.success('Topics configured', {
+        action: {
+          label: 'View Data',
+          onClick: () => emitter.emit('vllora_switch_tab', { datasetId: dataset_id, tab: 'records' }),
+        },
+      });
     } catch (error) {
       updateStep('topics', {
         status: 'failed',
@@ -341,8 +346,12 @@ export const executeSetupPlanHandler: ToolHandler = async (
         result: { success: true, grader_type: 'llm-as-judge' },
       });
 
-      // Switch to Evaluator tab to show the configured grader
-      emitter.emit('vllora_switch_tab', { datasetId: dataset_id, tab: 'evaluator' });
+      toast.success('Evaluation configured', {
+        action: {
+          label: 'Review',
+          onClick: () => emitter.emit('vllora_switch_tab', { datasetId: dataset_id, tab: 'evaluator' }),
+        },
+      });
     } catch (error) {
       updateStep('grader', {
         status: 'failed',
@@ -527,8 +536,12 @@ export const executeSetupPlanHandler: ToolHandler = async (
         jobId: finetuneResult.jobId,
       });
 
-      // Switch to Jobs tab to show the finetune job progress
-      emitter.emit('vllora_switch_tab', { datasetId: dataset_id, tab: 'jobs' });
+      toast.success('Fine-tune job started', {
+        action: {
+          label: 'Check Job',
+          onClick: () => emitter.emit('vllora_switch_tab', { datasetId: dataset_id, tab: 'jobs' }),
+        },
+      });
 
       console.log('[executeSetupPlan] Finetune job created:', finetuneResult.jobId);
     } catch (error) {

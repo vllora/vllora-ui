@@ -3,10 +3,11 @@
  *
  * Main content component for dataset detail view:
  * - Header with dataset objective and insights
- * - Section tabs (Records / Evaluator / Jobs)
+ * - Section tabs (Records / Evaluator / Jobs / Deploy)
  * - Records section: Canvas or Table view with view mode toggle
  * - Evaluator section: Evaluation function configuration
  * - Jobs section: Finetune jobs list
+ * - Readme/Docs accessible via header drawer buttons
  */
 
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
@@ -33,13 +34,18 @@ import { EvaluationConfigPanel } from "./evaluation-dialog/EvaluationConfigPanel
 import { FinetuneConfigPanel } from "@/components/finetune/content/FinetuneConfigPanel";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { DryRunJobsProvider } from "@/contexts/DryRunJobsContext";
-import { ReadmeWithPlan } from "./ReadmeWithPlan";
-import { KnowledgeSourcesPanel } from "./KnowledgeSourcesPanel";
-import { PlanSection } from "./plan-section";
+import { ReadmeDrawer } from "./ReadmeDrawer";
+import { DocsDrawer } from "./DocsDrawer";
+import { PlanPreview } from "./PlanPreview";
+import { ActivePlanBanner } from "./ActivePlanBanner";
 import { useDatasetReadme } from "@/hooks/useDatasetReadme";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { SetupPlanConsumer } from "@/contexts/SetupPlanContext";
 import type { CoverageStats } from "@/types/dataset-types";
+import type { DatasetSection } from "./dataset-detail-header/DatasetUtilityBar";
+
+// Side-effect: registers plan approval event listener
+import "@/lib/distri-finetune-tools/steps/execute-setup-plan";
 
 export function DatasetDetailContentV2() {
   const {
@@ -132,6 +138,10 @@ export function DatasetDetailContentV2() {
   // Dialog state for records analytics
   const [analyticsDialogOpen, setAnalyticsDialogOpen] = useState(false);
 
+  // Drawer state for Readme and Docs
+  const [readmeDrawerOpen, setReadmeDrawerOpen] = useState(false);
+  const [docsDrawerOpen, setDocsDrawerOpen] = useState(false);
+
   // Knowledge sources from context (single source of truth)
   const {
     count: knowledgeSourcesCount,
@@ -139,29 +149,82 @@ export function DatasetDetailContentV2() {
     processingCount: docsProcessingCount,
   } = KnowledgeSourcesConsumer();
 
-  // Setup plan state from context (single source of truth)
-  const { isGeneratingPlan, hasPlanProposed } = SetupPlanConsumer();
+  // Setup plan state from context
+  const {
+    proposedPlan,
+    isPlanPreviewActive,
+    planEditMode,
+    isGeneratingPlan,
+    isLoadingPlan,
+    isExecuting,
+    setIsPlanPreviewActive,
+    setPlanEditMode,
+    approvePlan,
+    dismissPlan,
+  } = SetupPlanConsumer();
 
-  // Auto-switch to Plan tab when plan generation starts
+  // Sync plan view state with URL query string (?view=plan&mode=edit)
+  // so refreshing the page preserves the current view.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const isInitialMount = useRef(true);
+
+  // On mount: restore plan view from URL
   useEffect(() => {
-    const handlePlanGenerating = ({ datasetId: id }: { datasetId: string }) => {
-      if (id === datasetId) {
-        setActiveSection("plan");
+    if (searchParams.get("view") === "plan") {
+      setIsPlanPreviewActive(true);
+      if (searchParams.get("mode") === "edit") {
+        setPlanEditMode("edit");
       }
-    };
+    }
+    isInitialMount.current = false;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    // Handle tab switch events during execution
+  // Sync state → URL when plan view changes (skip initial mount to avoid double-setting)
+  useEffect(() => {
+    if (isInitialMount.current) return;
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (isPlanPreviewActive) {
+        params.set("view", "plan");
+        if (planEditMode === "edit") {
+          params.set("mode", "edit");
+        } else {
+          params.delete("mode");
+        }
+      } else {
+        params.delete("view");
+        params.delete("mode");
+      }
+      return params;
+    }, { replace: true });
+  }, [isPlanPreviewActive, planEditMode, setSearchParams]);
+
+  // Handle tab switch events and drawer open events
+  useEffect(() => {
     const handleSwitchTab = ({ datasetId: switchDatasetId, tab }: { datasetId: string; tab: string }) => {
       if (switchDatasetId === datasetId) {
-        setActiveSection(tab as any);
+        // Only accept valid workspace tabs
+        const validTabs: DatasetSection[] = ["records", "evaluator", "jobs", "deploy"];
+        if (validTabs.includes(tab as DatasetSection)) {
+          setActiveSection(tab as DatasetSection);
+        }
       }
     };
 
-    emitter.on("vllora_setup_plan_generating", handlePlanGenerating);
+    const handleOpenDrawer = ({ type }: { type: 'docs' | 'readme' }) => {
+      if (type === 'docs') {
+        setDocsDrawerOpen(true);
+      } else if (type === 'readme') {
+        setReadmeDrawerOpen(true);
+      }
+    };
+
     emitter.on("vllora_switch_tab", handleSwitchTab);
+    emitter.on("vllora_open_drawer", handleOpenDrawer);
     return () => {
-      emitter.off("vllora_setup_plan_generating", handlePlanGenerating);
       emitter.off("vllora_switch_tab", handleSwitchTab);
+      emitter.off("vllora_open_drawer", handleOpenDrawer);
     };
   }, [datasetId, setActiveSection]);
 
@@ -191,20 +254,30 @@ export function DatasetDetailContentV2() {
     };
   }, [datasetId, activeSection, setActiveSection]);
 
-  // Auto-switch to Plan tab if a persisted plan is found on mount
-  const hasCheckedPersistedPlan = useRef(false);
-  useEffect(() => {
-    if (!hasCheckedPersistedPlan.current && hasPlanProposed) {
-      hasCheckedPersistedPlan.current = true;
-      setActiveSection("plan");
-    }
-  }, [hasPlanProposed, setActiveSection]);
-
   // Handle autoGeneratePlan query param (from new dataset with uploaded files)
   // Uses docsProcessing from KnowledgeSourcesContext — triggers when all docs finish
-  const [searchParams, setSearchParams] = useSearchParams();
   const hasTriggeredAutoGenerate = useRef(false);
   const shouldAutoGenerate = searchParams.get("autoGeneratePlan") === "true";
+
+  // Clear autoGeneratePlan param only after plan is actually saved (not before).
+  // This ensures that if the user refreshes during generation, the param is still
+  // present and will re-trigger plan generation.
+  useEffect(() => {
+    if (!shouldAutoGenerate) return;
+
+    const handlePlanProposed = ({ datasetId: id }: { datasetId: string }) => {
+      if (id === datasetId) {
+        const newParams = new URLSearchParams(searchParams);
+        newParams.delete("autoGeneratePlan");
+        setSearchParams(newParams, { replace: true });
+      }
+    };
+
+    emitter.on("vllora_setup_plan_proposed", handlePlanProposed);
+    return () => {
+      emitter.off("vllora_setup_plan_proposed", handlePlanProposed);
+    };
+  }, [shouldAutoGenerate, datasetId, searchParams, setSearchParams]);
 
   // When docs finish processing (or were never processing), trigger plan generation
   useEffect(() => {
@@ -212,15 +285,12 @@ export function DatasetDetailContentV2() {
     if (docsProcessing) return; // Still processing — wait
 
     hasTriggeredAutoGenerate.current = true;
-    const newParams = new URLSearchParams(searchParams);
-    newParams.delete("autoGeneratePlan");
-    setSearchParams(newParams, { replace: true });
 
     toast.info("Lucy is creating a setup plan from your documents...", { duration: 4000 });
     emitter.emit("vllora_lucy_prompt", {
       prompt: `Please analyze the uploaded documents and create a setup plan for this dataset using the propose_setup_plan tool.`,
     });
-  }, [docsProcessing, shouldAutoGenerate, searchParams, setSearchParams, datasetId]);
+  }, [docsProcessing, shouldAutoGenerate, datasetId]);
 
   // Timeout fallback: if docs are still processing after 60s, generate plan anyway
   useEffect(() => {
@@ -229,9 +299,6 @@ export function DatasetDetailContentV2() {
     const timeoutId = setTimeout(() => {
       if (hasTriggeredAutoGenerate.current) return;
       hasTriggeredAutoGenerate.current = true;
-      const newParams = new URLSearchParams(searchParams);
-      newParams.delete("autoGeneratePlan");
-      setSearchParams(newParams, { replace: true });
 
       toast.warning("Document processing is taking longer than expected. Generating plan with available content...", { duration: 5000 });
       emitter.emit("vllora_lucy_prompt", {
@@ -240,7 +307,7 @@ export function DatasetDetailContentV2() {
     }, 60000);
 
     return () => clearTimeout(timeoutId);
-  }, [docsProcessing, shouldAutoGenerate, searchParams, setSearchParams, datasetId]);
+  }, [docsProcessing, shouldAutoGenerate, datasetId]);
 
   // README auto-generation hook
   const { readme, readmeUpdatedAt, regenerateReadme, exportReadme } = useDatasetReadme({
@@ -410,21 +477,47 @@ export function DatasetDetailContentV2() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header with dataset objective and insights */}
           <div className="px-4 py-2 border-b border-border">
-            <DatasetDetailHeader />
+            <DatasetDetailHeader
+              onOpenPlan={() => {
+                setIsPlanPreviewActive(true);
+                setPlanEditMode("display");
+              }}
+              onOpenReadme={() => setReadmeDrawerOpen(true)}
+              onOpenDocs={() => setDocsDrawerOpen(true)}
+              knowledgeSourcesCount={knowledgeSourcesCount}
+              docsProcessing={docsProcessing}
+            />
           </div>
 
-          {/* Section tabs */}
-          <DatasetUtilityBar
-            activeSection={activeSection}
-            onSectionChange={setActiveSection}
-            recordsCount={sortedRecords.length}
-            hasEvaluator={hasEvaluator}
-            knowledgeSourcesCount={knowledgeSourcesCount}
-            hasPlanActivity={isGeneratingPlan || hasPlanProposed}
-            docsProcessing={docsProcessing}
-            isGeneratingPlan={isGeneratingPlan}
-          />
+          {/* Active plan banner (shown when plan exists but workspace shows tab content) */}
+          {!isPlanPreviewActive && <ActivePlanBanner />}
 
+          {/* Section tabs — hidden when plan overlay is active */}
+          {!isPlanPreviewActive && (
+            <DatasetUtilityBar
+              activeSection={activeSection}
+              onSectionChange={setActiveSection}
+              recordsCount={sortedRecords.length}
+              hasEvaluator={hasEvaluator}
+            />
+          )}
+
+          {/* Plan preview overlay OR tab content */}
+          {isPlanPreviewActive ? (
+            <PlanPreview
+              plan={proposedPlan}
+              mode={planEditMode}
+              onModeChange={setPlanEditMode}
+              onApprove={approvePlan}
+              onDismiss={dismissPlan}
+              onClose={() => setIsPlanPreviewActive(false)}
+              isGenerating={isGeneratingPlan}
+              isLoadingPlan={isLoadingPlan}
+              isExecuting={isExecuting}
+              hasKnowledgeSources={knowledgeSourcesCount > 0}
+            />
+          ) : (
+          <>
           {/* Main content area - Records, Evaluator, or Jobs based on active section */}
           {activeSection === "records" && (
             <DatasetMainContent
@@ -448,7 +541,7 @@ export function DatasetDetailContentV2() {
               leafTopicCount={availableTopics.length}
               onOverviewClick={() => setAnalyticsDialogOpen(true)}
               onImportClick={() => setImportDialog(true)}
-              onDocsClick={() => setActiveSection("docs")}
+              onDocsClick={() => setDocsDrawerOpen(true)}
               selectedTopic={selectedTopic}
               onSelectTopic={setSelectedTopic}
               selectedRecord={selectedRecord}
@@ -489,32 +582,25 @@ export function DatasetDetailContentV2() {
               />
             </div>
           )}
-          {activeSection === "plan" && (
-            <PlanSection
-              datasetId={datasetId}
-              isGeneratingPlan={isGeneratingPlan}
-              className="flex-1"
-            />
-          )}
-          {activeSection === "readme" && (
-            <div className="flex-1 overflow-hidden">
-              <ReadmeWithPlan
-                datasetId={datasetId}
-                readme={readme}
-                readmeUpdatedAt={readmeUpdatedAt}
-                onExport={exportReadme}
-                onRegenerate={regenerateReadme}
-                className="h-full"
-              />
-            </div>
-          )}
-          {activeSection === "docs" && (
-            <KnowledgeSourcesPanel
-              datasetId={datasetId}
-              className="flex-1"
-            />
+          </>
           )}
         </div>
+
+
+        {/* Drawers */}
+        <ReadmeDrawer
+          open={readmeDrawerOpen}
+          onOpenChange={setReadmeDrawerOpen}
+          readme={readme}
+          readmeUpdatedAt={readmeUpdatedAt}
+          onExport={exportReadme}
+          onRegenerate={regenerateReadme}
+        />
+        <DocsDrawer
+          open={docsDrawerOpen}
+          onOpenChange={setDocsDrawerOpen}
+          datasetId={datasetId}
+        />
 
         {/* Dialogs */}
         <DeleteConfirmationDialog

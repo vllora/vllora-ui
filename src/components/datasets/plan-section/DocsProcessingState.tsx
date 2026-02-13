@@ -20,7 +20,7 @@ interface DocsProcessingStateProps {
 }
 
 export function DocsProcessingState({
-  datasetId,
+  datasetId: _datasetId,
   sources,
   className,
 }: DocsProcessingStateProps) {
@@ -41,7 +41,7 @@ export function DocsProcessingState({
   }, [sources]);
 
   const handleViewDocs = () => {
-    emitter.emit("vllora_switch_tab", { datasetId, tab: "docs" });
+    emitter.emit("vllora_open_drawer", { type: "docs" });
   };
 
   const readyCount = sources.filter((s) => s.status === "ready").length;

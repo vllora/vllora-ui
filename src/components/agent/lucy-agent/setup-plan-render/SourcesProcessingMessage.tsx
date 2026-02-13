@@ -29,7 +29,7 @@ export function SourcesProcessingMessage({
     if (!hasAutoSwitchedToDocsTab && datasetId && !sourcesReady) {
       setHasAutoSwitchedToDocsTab(true);
       console.log('[SourcesProcessingMessage] Auto-switching to Docs tab');
-      emitter.emit('vllora_switch_tab', { datasetId, tab: 'docs' });
+      emitter.emit('vllora_open_drawer', { type: 'docs' });
     }
   }, [hasAutoSwitchedToDocsTab, datasetId, sourcesReady]);
 
@@ -52,8 +52,6 @@ export function SourcesProcessingMessage({
     if (sourcesReady && !autoTriggered && datasetId) {
       setAutoTriggered(true);
       console.log('[SourcesProcessingMessage] Documents ready, auto-triggering setup plan');
-      // Switch to Plan tab to show the plan being generated
-      emitter.emit('vllora_switch_tab', { datasetId, tab: 'plan' });
       // Emit event to trigger Lucy to generate the setup plan
       emitter.emit('vllora_lucy_prompt', {
         prompt: 'My documents have finished processing. Please use the propose_setup_plan tool to create a comprehensive setup plan based on the uploaded documents.',

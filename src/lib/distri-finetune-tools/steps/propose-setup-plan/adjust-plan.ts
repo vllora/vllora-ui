@@ -11,6 +11,7 @@ import type { ToolHandler } from '../../types';
 import type { SetupPlan, ProposedTopic, GraderCriterion } from './types';
 import { callLucy, type LucyMessage } from '../shared/lucy-client';
 import { generateGraderTemplate } from './grader-template';
+import { saveProposedPlan } from '../proposed-plan-store';
 
 interface AdjustSetupPlanParams {
   dataset_id: string;
@@ -508,6 +509,9 @@ export const adjustSetupPlanHandler: ToolHandler = async (
     };
 
     console.log('[adjustSetupPlan] Plan adjusted successfully:', llmResult.changes_made);
+
+    // Persist adjusted plan to IndexedDB so it survives page refresh
+    await saveProposedPlan(dataset_id, adjustedPlan);
 
     // Emit event so the right panel can display the updated plan
     emitter.emit('vllora_setup_plan_proposed', { datasetId: dataset_id, plan: adjustedPlan });

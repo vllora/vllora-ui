@@ -323,7 +323,7 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
             {/* No results state */}
             {!isLoading && !error && datasets.length > 0 && filteredDatasets.length === 0 && (
               <DatasetsNoResultsState searchQuery={searchQuery} />
-            )}
+          )}
 
             {/* Dataset grid */}
             {!isLoading && !error && filteredDatasets.length > 0 && (

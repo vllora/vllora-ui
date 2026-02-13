@@ -13,7 +13,7 @@ import type { ViewMode } from "./ViewModeToggle";
 import { SectionTabs } from "./SectionTabs";
 
 export type { ViewMode };
-export type DatasetSection = "records" | "evaluator" | "jobs" | "readme" | "docs" | "plan" | 'deploy';
+export type DatasetSection = "records" | "evaluator" | "jobs" | "deploy";
 
 export interface DatasetUtilityBarProps {
   /** Current active section */
@@ -24,14 +24,6 @@ export interface DatasetUtilityBarProps {
   recordsCount?: number;
   /** Whether the dataset has an evaluation function configured */
   hasEvaluator?: boolean;
-  /** Number of uploaded knowledge sources */
-  knowledgeSourcesCount?: number;
-  /** Whether a plan is being generated or proposed */
-  hasPlanActivity?: boolean;
-  /** Whether any knowledge sources are currently processing */
-  docsProcessing?: boolean;
-  /** Whether a plan is currently being generated */
-  isGeneratingPlan?: boolean;
 }
 
 export function DatasetUtilityBar({
@@ -39,10 +31,6 @@ export function DatasetUtilityBar({
   onSectionChange,
   recordsCount = 0,
   hasEvaluator,
-  knowledgeSourcesCount = 0,
-  hasPlanActivity = false,
-  docsProcessing = false,
-  isGeneratingPlan = false,
 }: DatasetUtilityBarProps) {
   const { filteredJobs } = FinetuneJobsConsumer();
   const { isGeneratingTopics, isGeneratingTraces, generationProgress } = DatasetDetailConsumer();
@@ -73,18 +61,8 @@ export function DatasetUtilityBar({
       tabs.add("evaluator");
     }
 
-    // Docs tab: knowledge sources are being processed
-    if (docsProcessing) {
-      tabs.add("docs");
-    }
-
-    // Plan tab: plan is being generated or docs are processing (plan blocked)
-    if (isGeneratingPlan || docsProcessing) {
-      tabs.add("plan");
-    }
-
     return tabs;
-  }, [isGeneratingTopics, isGeneratingTraces, generationProgress, filteredJobs, dryRunRunningJob, docsProcessing, isGeneratingPlan]);
+  }, [isGeneratingTopics, isGeneratingTraces, generationProgress, filteredJobs, dryRunRunningJob]);
 
   return (
     <div className="px-4 py-1.5 border-b border-border">
@@ -94,8 +72,6 @@ export function DatasetUtilityBar({
         recordsCount={recordsCount}
         hasEvaluator={hasEvaluator}
         jobsCount={jobsCount}
-        knowledgeSourcesCount={knowledgeSourcesCount}
-        hasPlanActivity={hasPlanActivity}
         processingTabs={processingTabs}
       />
     </div>
