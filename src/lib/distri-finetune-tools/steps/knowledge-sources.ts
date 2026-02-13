@@ -9,9 +9,8 @@ import type { DistriFnTool } from '@distri/core';
 import * as knowledgeDB from '@/services/knowledge-sources-db';
 import type { ToolHandler } from '../types';
 import type { KnowledgeSourceType, ExtractedContent, MarkdownPurpose, KnowledgeSourceProgress } from '@/types/dataset-types';
-import { extractPdfContent } from './pdf-extractor';
+import { extractPdfContentNative, type ExtractionProgressCallback } from './pdf-native-extractor';
 import { emitter } from '@/utils/eventEmitter';
-import type { ExtractionProgressCallback } from './pdf-llm-extractor';
 
 // =============================================================================
 // Markdown Classification
@@ -120,8 +119,7 @@ export function classifyMarkdownPurpose(content: string): {
 
 /**
  * Extract content from a knowledge source
- * - PDF: Uses pdfjs-dist for client-side text extraction with section detection
- *        Supports 'llm' mode (default) for better quality or 'basic' for speed
+ * - PDF: Uses native file block LLM call for extraction (no client-side pdfjs)
  * - Text: Parses markdown-style headings and structures content
  * - Image: Placeholder (requires Vision API integration)
  * - URL: Placeholder (would fetch and parse HTML)
@@ -222,7 +220,7 @@ async function extractContent(
   type: KnowledgeSourceType,
   content: string,
   _name: string,
-  extractionMode: 'basic' | 'llm' = 'llm',
+  _extractionMode: 'basic' | 'llm' = 'llm',
   onProgress?: ExtractionProgressCallback
 ): Promise<ExtractedContent> {
 
@@ -310,31 +308,8 @@ async function extractContent(
   }
 
   if (type === 'pdf') {
-    // Use pdfjs-dist for client-side PDF text extraction
-    try {
-      const pdfResult = await extractPdfContent(content, { extractionMode, onProgress });
-      return {
-        text: pdfResult.text,
-        sections: pdfResult.sections,
-        topics: pdfResult.topics,
-        metadata: {
-          ...pdfResult.metadata,
-          type: 'pdf',
-        },
-      };
-    } catch (error) {
-      console.error('[extractContent] PDF extraction failed:', error);
-      // Fall back to placeholder if extraction fails
-      return {
-        text: `[PDF content - extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}]`,
-        sections: [],
-        topics: [],
-        metadata: {
-          type: 'pdf',
-          error: error instanceof Error ? error.message : 'Extraction failed',
-        },
-      };
-    }
+    const result = await extractPdfContentNative(content, _name, { onProgress });
+    return result;
   }
 
   // For image, return placeholder (requires Vision API)
