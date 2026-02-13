@@ -18,6 +18,8 @@ interface KnowledgeSourceCardProps {
   isExpanded: boolean;
   onToggleExpand: () => void;
   onDelete: () => void;
+  /** Compact mode: hides delete button and expand controls */
+  compact?: boolean;
 }
 
 /**
@@ -49,6 +51,7 @@ export function KnowledgeSourceCard({
   isExpanded,
   onToggleExpand,
   onDelete,
+  compact = false,
 }: KnowledgeSourceCardProps) {
   const hasContent =
     source.extractedContent &&
@@ -62,19 +65,21 @@ export function KnowledgeSourceCard({
       <div
         className={cn(
           "flex items-center gap-3 px-3 py-2.5 bg-card",
-          hasContent && "cursor-pointer hover:bg-muted/50"
+          !compact && hasContent && "cursor-pointer hover:bg-muted/50"
         )}
-        onClick={() => hasContent && onToggleExpand()}
+        onClick={() => !compact && hasContent && onToggleExpand()}
       >
-        {/* Expand/collapse icon */}
-        {hasContent ? (
-          isExpanded ? (
-            <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+        {/* Expand/collapse icon (hidden in compact mode) */}
+        {!compact && (
+          hasContent ? (
+            isExpanded ? (
+              <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+            )
           ) : (
-            <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+            <div className="w-4" />
           )
-        ) : (
-          <div className="w-4" />
         )}
 
         {/* File icon */}
@@ -104,18 +109,20 @@ export function KnowledgeSourceCard({
           {source.status}
         </span>
 
-        {/* Delete button */}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </Button>
+        {/* Delete button (hidden in compact mode) */}
+        {!compact && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
+        )}
       </div>
 
       {/* Processing progress indicator */}

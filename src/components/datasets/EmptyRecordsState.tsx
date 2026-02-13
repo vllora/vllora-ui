@@ -7,9 +7,11 @@
  */
 
 import { useEffect, useState } from "react";
-import { Database, FlaskConical, Sparkles, Loader2, Upload, FileUp, FileText } from "lucide-react";
+import { Database, FlaskConical, Sparkles, Loader2, Upload, FileUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { emitter } from "@/utils/eventEmitter";
+import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
+import { KnowledgeSourceCard } from "./KnowledgeSourceCard";
 
 interface GenerationProgress {
   status: "started" | "progress" | "completed" | "failed";
@@ -126,37 +128,10 @@ export function EmptyRecordsState({
     );
   }
 
-  // When docs are processing, show a dedicated processing state
+  // When docs are processing, show per-doc processing status
   // instead of the default "Get started" empty state
   if (docsProcessing) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8">
-        <div className="flex flex-col items-center gap-6 max-w-sm text-center">
-          <div className="w-16 h-16 rounded-2xl bg-[rgba(var(--theme-500),0.1)] flex items-center justify-center">
-            <FileText className="w-8 h-8 text-[rgb(var(--theme-500))]" />
-          </div>
-          <div className="space-y-2">
-            <h3 className="text-base font-medium text-foreground">
-              Processing reference documents
-            </h3>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              {docsProcessingCount} of {docsTotal} document{docsTotal !== 1 ? "s" : ""} still processing.
-              Training data will be generated from these documents once extraction is complete.
-            </p>
-          </div>
-          <div className="flex items-center gap-2 text-[rgb(var(--theme-500))]">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            <span className="text-sm">Extracting content...</span>
-          </div>
-          {onDocsClick && (
-            <Button variant="outline" size="sm" onClick={onDocsClick} className="gap-2">
-              <FileText className="w-4 h-4" />
-              View Reference Docs
-            </Button>
-          )}
-        </div>
-      </div>
-    );
+    return <DocsProcessingView docsProcessingCount={docsProcessingCount} docsTotal={docsTotal} />;
   }
 
   return (
@@ -233,6 +208,50 @@ export function EmptyRecordsState({
             Or import existing data
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Sub-component for docs processing state.
+ * Consumes KnowledgeSourcesContext directly to show per-doc cards.
+ */
+function DocsProcessingView({
+  docsProcessingCount,
+  docsTotal,
+}: {
+  docsProcessingCount: number;
+  docsTotal: number;
+}) {
+  const { sources } = KnowledgeSourcesConsumer();
+
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center p-8">
+      <div className="flex flex-col items-center gap-5 w-full max-w-md text-center">
+        <div className="space-y-2">
+          <h3 className="text-base font-medium text-foreground">
+            Processing reference documents
+          </h3>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            {docsProcessingCount} of {docsTotal} document{docsTotal !== 1 ? "s" : ""} still processing.
+            Lucy will create a setup plan once extraction is complete.
+          </p>
+        </div>
+
+        {/* Per-doc processing cards */}
+        <div className="w-full space-y-2">
+          {sources.map((source) => (
+            <KnowledgeSourceCard
+              key={source.id}
+              source={source}
+              isExpanded={false}
+              onToggleExpand={() => {}}
+              onDelete={() => {}}
+              compact
+            />
+          ))}
+        </div>
       </div>
     </div>
   );
