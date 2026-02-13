@@ -22,8 +22,8 @@ export function PlanCard() {
   if (!proposedPlan) return null;
 
   // Extract summary stats
-  const topicCount = proposedPlan.total_topic_count || proposedPlan.proposed_topics.length;
-  const recordTarget = proposedPlan.estimated_records;
+  const topicCount = proposedPlan.total_topic_count ?? proposedPlan.proposed_topics?.length ?? 0;
+  const recordTarget = proposedPlan.estimated_records ?? 0;
   const criteriaCount = proposedPlan.grader_config?.criteria?.length ?? 0;
   const estimatedDuration = proposedPlan.estimated_duration;
 
@@ -46,12 +46,20 @@ export function PlanCard() {
       {/* Header */}
       <div className="flex items-center gap-2">
         <Sparkles className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-        <span className="text-xs font-semibold text-foreground">Setup Plan</span>
+        <span className="text-xs font-semibold text-foreground">
+          {proposedPlan.title || 'Setup Plan'}
+        </span>
       </div>
 
       {/* Stats */}
       <div className="text-[11px] text-muted-foreground space-y-0.5">
-        <div>{topicCount} topic{topicCount !== 1 ? "s" : ""} &middot; {recordTarget} records</div>
+        {(topicCount > 0 || recordTarget > 0) && (
+          <div>
+            {topicCount > 0 && <>{topicCount} topic{topicCount !== 1 ? "s" : ""}</>}
+            {topicCount > 0 && recordTarget > 0 && <> &middot; </>}
+            {recordTarget > 0 && <>{recordTarget} records</>}
+          </div>
+        )}
         {criteriaCount > 0 && (
           <div>{criteriaCount} eval criteri{criteriaCount !== 1 ? "a" : "on"}</div>
         )}
