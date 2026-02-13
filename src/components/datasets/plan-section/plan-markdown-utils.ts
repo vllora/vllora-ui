@@ -53,7 +53,8 @@ ${criteria.map((c) =>
     : '_No evaluation criteria configured_';
 
   // Build execution steps
-  const stepsContent = plan.execution_steps.map((s, i) =>
+  const executionSteps = plan.execution_steps ?? [];
+  const stepsContent = executionSteps.map((s, i) =>
     `| ${i + 1} | ${s.step} | ${s.estimated_time} |`
   ).join('\n');
 
