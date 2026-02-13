@@ -1,11 +1,8 @@
 /**
  * Propose Setup Plan
  *
- * Analyzes dataset objective and knowledge sources to propose a complete
- * setup plan for first-time users. The plan includes topic hierarchy,
- * data generation strategy, grader configuration, and execution steps.
- *
- * This is the first step in the guided onboarding flow.
+ * Validates, persists, and displays a plan for user approval.
+ * Lucy constructs the plan; this tool just shows it to the user.
  */
 
 // Re-export types
@@ -27,6 +24,6 @@ export { proposeSetupPlanTool } from './tool';
 // Re-export adjust plan tool
 export { adjustSetupPlanHandler, adjustSetupPlanTool } from './adjust-plan';
 
-// Re-export utilities for use by other modules
+// Re-export utilities for use by other modules (used by analyze-knowledge-sources)
 export { generateGraderTemplate } from './grader-template';
 export { callLLMForPlan, fetchLucyConfigCached } from './llm-service';

@@ -106,10 +106,13 @@ export function ExecutionProgressCard({
     }
   };
 
-  const completedCount = progress.steps.filter((s) => s.status === 'completed').length;
-  const overallProgress = (completedCount / progress.total_steps) * 100;
-  const currentStep = progress.steps.find((s) => s.status === 'running');
-  const failedStep = progress.steps.find((s) => s.status === 'failed');
+  // Filter out skipped steps — only show steps that are actually in this execution
+  const activeSteps = progress.steps.filter((s) => s.status !== 'skipped');
+  const completedCount = activeSteps.filter((s) => s.status === 'completed').length;
+  const totalActive = activeSteps.length;
+  const overallProgress = totalActive > 0 ? (completedCount / totalActive) * 100 : 0;
+  const currentStep = activeSteps.find((s) => s.status === 'running');
+  const failedStep = activeSteps.find((s) => s.status === 'failed');
 
   return (
     <div className="rounded-lg border border-border bg-card overflow-hidden">
@@ -134,7 +137,7 @@ export function ExecutionProgressCard({
               </span>
               {!progress.is_complete && (
                 <span className="text-xs text-muted-foreground shrink-0">
-                  {completedCount}/{progress.total_steps}
+                  {completedCount}/{totalActive}
                 </span>
               )}
             </div>
@@ -163,12 +166,12 @@ export function ExecutionProgressCard({
       {/* Step List */}
       <div className="px-4 py-3">
         <div className="space-y-0">
-          {progress.steps.map((step, index) => (
+          {activeSteps.map((step, index) => (
             <div key={step.id} className="flex gap-3">
               {/* Indicator + connector */}
               <div className="flex flex-col items-center">
                 {getStepIndicator(step.status)}
-                {index < progress.steps.length - 1 && (
+                {index < activeSteps.length - 1 && (
                   <div
                     className={cn(
                       'w-px flex-1 min-h-[12px]',

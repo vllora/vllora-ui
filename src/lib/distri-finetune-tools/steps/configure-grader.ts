@@ -125,9 +125,9 @@ export const configureGraderHandler: ToolHandler = async (params) => {
       }
 
       script = generateGraderTemplate(
-        plan!.grader_config.criteria,
+        plan!.grader_config?.criteria ?? [],
         plan!.objective,
-        plan!.output_format,
+        plan!.output_format ?? null,
       );
       regenerated = true;
     }

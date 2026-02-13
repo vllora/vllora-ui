@@ -119,7 +119,7 @@ async function callLLMToAdjustPlan(
   changes_made: string;
 }> {
   // Format current criteria for context (topics are regenerated from scratch based on user feedback)
-  const currentCriteriaJson = JSON.stringify(currentPlan.grader_config.criteria, null, 2);
+  const currentCriteriaJson = JSON.stringify(currentPlan.grader_config?.criteria ?? [], null, 2);
 
   // Parse user feedback to extract numbers and structure preferences
   const topicCountMatch = userFeedback.match(/(\d+)\s*(?:leaf\s*)?topics?/i);

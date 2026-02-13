@@ -100,6 +100,10 @@ interface GenerateInitialDataParams {
   distribute_by_topic?: boolean;
   /** Response schema for structured output tasks */
   output_format?: OutputFormatParam | null;
+  /** Generate only for specific topic names (subset of hierarchy leaves) */
+  target_topics?: string[];
+  /** Override count per each target topic */
+  per_topic_count?: number;
 }
 
 interface GeneratedExample {
@@ -581,6 +585,8 @@ export const generateInitialDataHandler: ToolHandler = async (
       user_guidance,
       distribute_by_topic = false,
       output_format,
+      target_topics,
+      per_topic_count,
     } = params as unknown as GenerateInitialDataParams;
 
     if (!dataset_id) {
@@ -641,9 +647,20 @@ export const generateInitialDataHandler: ToolHandler = async (
 
     // Check if we should use topic-based generation
     const topicHierarchy = dataset.topicHierarchy?.hierarchy;
-    const leafTopics = (distribute_by_topic && topicHierarchy && topicHierarchy.length > 0)
+    const allLeafTopics = (distribute_by_topic && topicHierarchy && topicHierarchy.length > 0)
       ? getLeafTopics(topicHierarchy)
       : [];
+
+    // Filter to target topics if specified
+    const leafTopics = target_topics?.length
+      ? allLeafTopics.filter(t => target_topics.includes(t.name))
+      : allLeafTopics;
+
+    // If per_topic_count is set, override the total count calculation
+    const effectiveCount = per_topic_count
+      ? per_topic_count * leafTopics.length
+      : count;
+
     const useTopicBasedGeneration = leafTopics.length > 0;
 
     let totalGenerated = 0;
@@ -654,7 +671,7 @@ export const generateInitialDataHandler: ToolHandler = async (
       // Topic-based generation: distribute count across leaf topics - PARALLEL
       // Each topic's count is further batched to avoid timeouts
       // =========================================================================
-      const topicDistribution = distributeCountAcrossTopics(count, leafTopics);
+      const topicDistribution = distributeCountAcrossTopics(effectiveCount, leafTopics);
 
       // Build a flat list of all batch jobs
       interface BatchJob {

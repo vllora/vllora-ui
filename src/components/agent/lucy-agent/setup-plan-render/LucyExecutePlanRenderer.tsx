@@ -73,13 +73,19 @@ export function LucyExecutePlanRenderer({ toolCall, state }: ToolRendererProps) 
       );
     }
 
+    // Filter out skipped steps — only show steps that are actually in this execution
+    const activeSteps = progress.steps.filter((s: any) => s.status !== 'skipped');
+    const completedCount = activeSteps.filter((s: any) => s.status === 'completed').length;
+    const runningIdx = activeSteps.findIndex((s: any) => s.status === 'running');
+    const currentStepNum = runningIdx >= 0 ? runningIdx + 1 : completedCount;
+
     return (
       <div className="rounded-lg border border-border bg-card p-3 space-y-2">
         <div className="text-xs font-medium text-foreground">
           Executing setup plan...
         </div>
         <div className="space-y-1">
-          {progress.steps.map((step: any) => (
+          {activeSteps.map((step: any) => (
             <div key={step.name} className="flex items-center gap-2 text-[11px]">
               {step.status === 'completed' ? (
                 <Check className="w-3 h-3 text-[rgb(var(--theme-500))] shrink-0" />
@@ -102,7 +108,7 @@ export function LucyExecutePlanRenderer({ toolCall, state }: ToolRendererProps) 
           ))}
         </div>
         <div className="text-[10px] text-muted-foreground pt-1">
-          Step {progress.current_step} of {progress.total_steps}
+          Step {currentStepNum} of {activeSteps.length}
         </div>
       </div>
     );

@@ -92,10 +92,10 @@ export function SetupPlanCard({
       <div className="px-4 py-3 bg-gradient-to-r from-primary/10 to-primary/5 border-b border-border">
         <div className="flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-primary" />
-          <div>
-            <h3 className="text-sm font-semibold">Setup Plan</h3>
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold">{plan.title || 'Setup Plan'}</h3>
             <p className="text-xs text-muted-foreground">
-              for {plan.dataset_name}
+              {plan.description || `for ${plan.dataset_name}`}
             </p>
           </div>
         </div>
@@ -110,7 +110,7 @@ export function SetupPlanCard({
       </div>
 
       {/* Knowledge Sources */}
-      {plan.knowledge_sources.length > 0 && (
+      {plan.knowledge_sources && plan.knowledge_sources.length > 0 && (
         <div className="border-b border-border">
           <SectionHeader
             id="knowledge"
@@ -172,12 +172,13 @@ export function SetupPlanCard({
       )}
 
       {/* Topics */}
+      {plan.proposed_topics && plan.proposed_topics.length > 0 && (
       <div className="border-b border-border">
         <SectionHeader
           id="topics"
           icon={FolderTree}
           title="Topic Hierarchy"
-          subtitle={`${plan.total_topic_count} topics organized`}
+          subtitle={`${plan.total_topic_count ?? plan.proposed_topics.length} topics organized`}
         />
         {expandedSections.has('topics') && (
           <div className="px-4 pb-3">
@@ -211,14 +212,16 @@ export function SetupPlanCard({
           </div>
         )}
       </div>
+      )}
 
       {/* Data Generation */}
+      {plan.data_generation && (
       <div className="border-b border-border">
         <SectionHeader
           id="data"
           icon={Database}
           title="Data Generation"
-          subtitle={`${plan.estimated_records} examples`}
+          subtitle={plan.estimated_records ? `${plan.estimated_records} examples` : undefined}
         />
         {expandedSections.has('data') && (
           <div className="px-4 pb-3 text-xs space-y-2">
@@ -236,8 +239,10 @@ export function SetupPlanCard({
           </div>
         )}
       </div>
+      )}
 
       {/* Grader Configuration */}
+      {plan.grader_config?.criteria && plan.grader_config.criteria.length > 0 && (
       <div className="border-b border-border">
         <SectionHeader
           id="grader"
@@ -266,6 +271,7 @@ export function SetupPlanCard({
           </div>
         )}
       </div>
+      )}
 
       {/* Execution Steps */}
       <div className="border-b border-border">
@@ -307,7 +313,9 @@ export function SetupPlanCard({
         <div className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">Estimated total:</span>
           <span className="font-medium">
-            {plan.estimated_records} records in {plan.estimated_duration}
+            {plan.estimated_records
+              ? `${plan.estimated_records} records in ${plan.estimated_duration}`
+              : `~${plan.estimated_duration}`}
           </span>
         </div>
       </div>

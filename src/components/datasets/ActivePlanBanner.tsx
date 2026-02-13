@@ -51,17 +51,22 @@ export function ActivePlanBanner() {
   }
 
   // Plan proposed — show summary with View/Edit buttons
-  const topicCount = proposedPlan?.total_topic_count || proposedPlan?.proposed_topics?.length || 0;
-  const recordTarget = proposedPlan?.estimated_records || 0;
+  const topicCount = proposedPlan?.total_topic_count ?? proposedPlan?.proposed_topics?.length ?? 0;
+  const recordTarget = proposedPlan?.estimated_records ?? 0;
+  const planLabel = proposedPlan?.title || 'Setup plan ready';
 
   return (
     <div className="px-4 py-2 bg-[rgba(var(--theme-500),0.1)] border-b border-[rgba(var(--theme-500),0.2)] flex items-center gap-2 text-xs">
       <Sparkles className="w-3.5 h-3.5 text-[rgb(var(--theme-500))]" />
       <span className="text-foreground/80 flex-1">
-        Setup plan ready
-        {topicCount > 0 && (
+        {planLabel}
+        {(topicCount > 0 || recordTarget > 0) && (
           <span className="text-muted-foreground">
-            {" "}({topicCount} topic{topicCount !== 1 ? "s" : ""} &middot; {recordTarget} records)
+            {" "}(
+            {topicCount > 0 && <>{topicCount} topic{topicCount !== 1 ? "s" : ""}</>}
+            {topicCount > 0 && recordTarget > 0 && <> &middot; </>}
+            {recordTarget > 0 && <>{recordTarget} records</>}
+            )
           </span>
         )}
       </span>

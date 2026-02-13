@@ -18,6 +18,7 @@ import {
   useRef,
   type ReactNode,
 } from "react";
+import { toast } from "sonner";
 import { emitter } from "@/utils/eventEmitter";
 import {
   getStoredPlan,
@@ -30,7 +31,8 @@ import {
 } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
 import { getCurrentExecution, getExecutingPlan } from "@/lib/distri-finetune-tools/steps/execution-state-store";
 import type { SetupPlan } from "@/lib/distri-finetune-tools/steps/propose-setup-plan";
-import type { ExecutionProgress } from "@/lib/distri-finetune-tools/steps/execute-setup-plan";
+import { STEP_ORDER, validatePlanForExecution } from "@/lib/distri-finetune-tools/steps/execute-setup-plan";
+import type { ExecutionProgress, ExecutionStepId } from "@/lib/distri-finetune-tools/steps/execute-setup-plan";
 
 // ============================================================================
 // Types
@@ -166,12 +168,31 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
               setPlanEditMode("display");
               break;
             case 'approved':
-            case 'executing':
+            case 'executing': {
               setIsExecuting(true);
               if (storedPlan.executionProgress) {
                 setExecutionProgress(storedPlan.executionProgress);
               }
+              // Stale execution detected (page refreshed mid-execution):
+              // No in-memory execution exists, but IndexedDB says 'executing'.
+              // Auto-prompt Lucy to resume from the next incomplete step.
+              if (storedPlan.status === 'executing' && storedPlan.executionProgress) {
+                const completedStepIds = storedPlan.executionProgress.steps
+                  .filter(s => s.status === 'completed')
+                  .map(s => s.id);
+                const resumeFromStep = STEP_ORDER.find(id => !completedStepIds.includes(id));
+                if (resumeFromStep) {
+                  // Delay the auto-prompt slightly so the agent has time to connect
+                  setTimeout(() => {
+                    if (cancelled) return;
+                    emitter.emit("vllora_lucy_prompt", {
+                      prompt: `The setup plan execution was interrupted. Steps completed: [${completedStepIds.join(', ')}]. Please call get_dataset_state first to check what already exists, then call execute_setup_plan with only the steps that still need to run (using steps_to_execute and overrides).`,
+                    });
+                  }, 2000);
+                }
+              }
               break;
+            }
             case 'completed':
               setExecutedPlan(storedPlan.plan);
               break;
@@ -300,6 +321,14 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
 
   // Actions
   const approvePlan = useCallback((plan: SetupPlan) => {
+    // Validate before approving
+    const stepsToRun = new Set<ExecutionStepId>(plan.steps_to_execute ?? STEP_ORDER);
+    const validation = validatePlanForExecution(plan, stepsToRun, plan.overrides);
+    if (!validation.valid) {
+      toast.error('Plan has issues', { description: validation.errors[0] });
+      return; // Block approval
+    }
+
     // Update plan status to 'approved' in IndexedDB (keep the plan data!)
     updatePlanStatus(datasetId, 'approved');
     setPlanStatus('approved');

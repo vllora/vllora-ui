@@ -66,13 +66,16 @@ export { deployModelHandler, deployModelTool } from './deploy-model';
 
 // Data Access
 export { getDatasetRecordsHandler, getDatasetRecordsTool } from './get-dataset-records';
-export { getDatasetStatsHandler, getDatasetStatsTool } from './get-dataset-stats';
+export { getDatasetStateHandler, getDatasetStateTool, computeDatasetStats, type DatasetState } from './get-dataset-state';
 export { updateRecordHandler, updateRecordTool } from './update-record';
 
 // README
 export { regenerateReadmeHandler, regenerateReadmeTool } from './regenerate-readme';
 
-// Guided Onboarding (Setup Plan)
+// Knowledge Source Analysis
+export { analyzeKnowledgeSourcesHandler, analyzeKnowledgeSourcesTool } from './analyze-knowledge-sources';
+
+// Plan System (propose → approve → execute)
 export { proposeSetupPlanHandler, proposeSetupPlanTool, type SetupPlan } from './propose-setup-plan';
 export { adjustSetupPlanHandler, adjustSetupPlanTool } from './propose-setup-plan';
 export {
@@ -81,6 +84,7 @@ export {
   type ExecutionProgress,
   type ExecutionStep,
   type ExecutionStepStatus,
+  type ExecutionStepId,
 } from './execute-setup-plan';
 
 // Stockfish Chess Analysis (conditionally used for chess datasets only)
@@ -133,9 +137,10 @@ import { startTrainingHandler, startTrainingTool } from './start-training';
 import { checkTrainingStatusHandler, checkTrainingStatusTool } from './check-training-status';
 import { deployModelHandler, deployModelTool } from './deploy-model';
 import { getDatasetRecordsHandler, getDatasetRecordsTool } from './get-dataset-records';
-import { getDatasetStatsHandler, getDatasetStatsTool } from './get-dataset-stats';
+import { getDatasetStateHandler, getDatasetStateTool } from './get-dataset-state';
 import { updateRecordHandler, updateRecordTool } from './update-record';
 import { regenerateReadmeHandler, regenerateReadmeTool } from './regenerate-readme';
+import { analyzeKnowledgeSourcesHandler, analyzeKnowledgeSourcesTool } from './analyze-knowledge-sources';
 import { proposeSetupPlanHandler, proposeSetupPlanTool, adjustSetupPlanHandler, adjustSetupPlanTool } from './propose-setup-plan';
 import { executeSetupPlanHandler, executeSetupPlanTool } from './execute-setup-plan';
 // Note: Stockfish tools (analyzeChessPositionTool, classifyChessMoveTool) are NOT imported here
@@ -170,9 +175,10 @@ export const STEP_TOOL_NAMES = [
   'check_training_status',
   'deploy_model',
   'get_dataset_records',
-  'get_dataset_stats',
+  'get_dataset_state',
   'update_record',
   'regenerate_readme',
+  'analyze_knowledge_sources',
   'propose_setup_plan',
   'adjust_setup_plan',
   'execute_setup_plan',
@@ -211,9 +217,10 @@ export const stepTools: DistriFnTool[] = [
   checkTrainingStatusTool,
   deployModelTool,
   getDatasetRecordsTool,
-  getDatasetStatsTool,
+  getDatasetStateTool,
   updateRecordTool,
   regenerateReadmeTool,
+  analyzeKnowledgeSourcesTool,
   proposeSetupPlanTool,
   adjustSetupPlanTool,
   executeSetupPlanTool,
@@ -246,9 +253,10 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   check_training_status: checkTrainingStatusHandler,
   deploy_model: deployModelHandler,
   get_dataset_records: getDatasetRecordsHandler,
-  get_dataset_stats: getDatasetStatsHandler,
+  get_dataset_state: getDatasetStateHandler,
   update_record: updateRecordHandler,
   regenerate_readme: regenerateReadmeHandler,
+  analyze_knowledge_sources: analyzeKnowledgeSourcesHandler,
   propose_setup_plan: proposeSetupPlanHandler,
   adjust_setup_plan: adjustSetupPlanHandler,
   execute_setup_plan: executeSetupPlanHandler,

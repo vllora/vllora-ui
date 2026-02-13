@@ -84,7 +84,7 @@ The orchestrator (`vllora_finetune_agent`) delegates specialized tasks to sub-ag
 
 | Sub-Agent | Purpose | Tools |
 |-----------|---------|-------|
-| `finetune_analysis` | Dataset analysis, pattern identification | `get_dataset_records`, `get_dataset_stats` |
+| `finetune_analysis` | Dataset analysis, pattern identification | `get_dataset_records`, `get_dataset_state` |
 | `finetune_topics` | Topic hierarchy generation/manipulation | `generate_topics`, `apply_topic_hierarchy`, `adjust_topic_hierarchy`, `get_topic_hierarchy` |
 | `finetune_workflow` | Workflow operations, training, deployment | All workflow + training tools |
 
@@ -93,7 +93,7 @@ The orchestrator (`vllora_finetune_agent`) delegates specialized tasks to sub-ag
 vllora_finetune_agent (Orchestrator)
     │
     ├── transfer_to_agent("finetune_analysis", "Analyze dataset...")
-    │       └── Calls get_dataset_stats, get_dataset_records
+    │       └── Calls get_dataset_state, get_dataset_records
     │
     ├── transfer_to_agent("finetune_topics", "Generate topics...")
     │       └── Calls generate_topics, apply_topic_hierarchy
@@ -358,7 +358,7 @@ distri-finetune-tools/
 | **Training (Step 6)** | `start_training`, `check_training_status` |
 | **Deploy (Step 7)** | `deploy_model` |
 | **Setup Plan** | `propose_setup_plan`, `adjust_setup_plan`, `execute_setup_plan` |
-| **Data Access** | `get_dataset_records`, `get_dataset_stats`, `update_record`, `validate_records` |
+| **Data Access** | `get_dataset_records`, `get_dataset_state`, `update_record`, `validate_records` |
 | **Documentation** | `regenerate_readme` |
 
 ---

@@ -35,7 +35,7 @@ export function ReadmeDrawer({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-[60vw] max-w-3xl min-w-[400px] p-0 flex flex-col"
+        className="w-[60vw] max-w-[60vw] min-w-[400px] p-0 flex flex-col"
       >
         <SheetHeader className="sr-only">
           <SheetTitle>Dataset README</SheetTitle>

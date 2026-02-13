@@ -348,7 +348,7 @@ export function DatasetDetailContentV2() {
     if (dataset?.coverageStats) {
       return dataset.coverageStats;
     }
-    // Fallback to stats from get_dataset_stats
+    // Fallback to stats from get_dataset_state
     if (dataset?.stats) {
       return {
         balanceScore: 0, // Not computed in stats, default to 0

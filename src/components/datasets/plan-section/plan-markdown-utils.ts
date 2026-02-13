@@ -11,41 +11,46 @@ import type { SetupPlan } from '@/lib/distri-finetune-tools/steps/propose-setup-
  * Convert SetupPlan to editable markdown with professional formatting
  */
 export function planToMarkdown(plan: SetupPlan): string {
+  const topics = plan.proposed_topics ?? [];
+  const criteria = plan.grader_config?.criteria ?? [];
+
   // Calculate total examples
-  const totalExamples = plan.proposed_topics.reduce((acc, t) => {
+  const totalExamples = topics.reduce((acc, t) => {
     const topicTotal = t.target_count + (t.subtopics?.reduce((s, sub) => s + sub.target_count, 0) || 0);
     return acc + topicTotal;
   }, 0);
 
   // Count leaf topics recursively (topics without children = where records get assigned)
-  const countLeafTopics = (topics: typeof plan.proposed_topics): number => {
-    return topics.reduce((acc, t) => {
+  const countLeafTopics = (topicList: typeof topics): number => {
+    return topicList.reduce((acc, t) => {
       if (t.subtopics && t.subtopics.length > 0) {
-        // Has children, so this is not a leaf - count its children recursively
-        return acc + countLeafTopics(t.subtopics as typeof plan.proposed_topics);
+        return acc + countLeafTopics(t.subtopics as typeof topics);
       }
-      // No children = leaf topic
       return acc + 1;
     }, 0);
   };
-  const leafTopicCount = countLeafTopics(plan.proposed_topics);
+  const leafTopicCount = countLeafTopics(topics);
 
   // Build topics table
-  const topicsTable = `| Topic | Examples | Description |
+  const topicsTable = topics.length > 0
+    ? `| Topic | Examples | Description |
 |:------|:--------:|:------------|
-${plan.proposed_topics.map((t) => {
+${topics.map((t) => {
   const subtopicRows = t.subtopics?.map((s) =>
     `| ↳ ${s.name} | ${s.target_count} | ${s.description || '-'} |`
   ).join('\n') || '';
   return `| **${t.name}** | ${t.target_count} | ${t.description} |${subtopicRows ? '\n' + subtopicRows : ''}`;
-}).join('\n')}`;
+}).join('\n')}`
+    : '_No topics configured_';
 
   // Build criteria table (simple list, all equally weighted)
-  const criteriaTable = `| Criterion | Description |
+  const criteriaTable = criteria.length > 0
+    ? `| Criterion | Description |
 |:----------|:------------|
-${plan.grader_config.criteria.map((c) =>
+${criteria.map((c) =>
   `| ${c.name} | ${c.description} |`
-).join('\n')}`;
+).join('\n')}`
+    : '_No evaluation criteria configured_';
 
   // Build execution steps
   const stepsContent = plan.execution_steps.map((s, i) =>
@@ -79,8 +84,8 @@ ${JSON.stringify(plan.output_format.schema, null, 2)}
 
 ## 📚 Knowledge Sources
 
-${plan.knowledge_sources.length > 0
-  ? plan.knowledge_sources.map((s) => `- 📄 \`${s.name}\``).join('\n')
+${(plan.knowledge_sources ?? []).length > 0
+  ? (plan.knowledge_sources ?? []).map((s) => `- 📄 \`${s.name}\``).join('\n')
   : '_No knowledge sources uploaded_'}
 
 ---
@@ -97,8 +102,8 @@ ${topicsTable}
 
 | Setting | Value |
 |:--------|:------|
-| **Strategy** | ${plan.data_generation.strategy} |
-| **Based on Docs** | ${plan.data_generation.grounded_in_knowledge ? '✅ Yes - uses your uploaded documents' : '❌ No - generates from general knowledge'} |
+| **Strategy** | ${plan.data_generation?.strategy ?? 'N/A'} |
+| **Based on Docs** | ${plan.data_generation?.grounded_in_knowledge ? '✅ Yes - uses your uploaded documents' : '❌ No - generates from general knowledge'} |
 
 ---
 
@@ -109,7 +114,7 @@ ${criteriaTable}
 ### Evaluator Function Preview
 
 \`\`\`javascript
-${plan.grader_config.template_preview}
+${plan.grader_config?.template_preview ?? '// No evaluator configured'}
 \`\`\`
 
 ---
@@ -124,7 +129,7 @@ ${stepsContent}
 
 <div align="center">
 
-**📈 Estimated Output:** \`${plan.estimated_records} records\` · **⏱️ Duration:** \`${plan.estimated_duration}\`
+**📈 Estimated Output:** \`${plan.estimated_records ?? 0} records\` · **⏱️ Duration:** \`${plan.estimated_duration}\`
 
 </div>
 `;
@@ -141,11 +146,12 @@ export function markdownToPlan(md: string, originalPlan: SetupPlan): SetupPlan {
   // Parse topics from table rows
   // Main topic: | **Topic Name** | 40 | Description |
   // Subtopic: | ↳ Subtopic Name | 20 | Description |
-  const topics: typeof plan.proposed_topics = [];
+  type TopicArray = NonNullable<typeof plan.proposed_topics>;
+  const topics: TopicArray = [];
   const topicTableRegex = /\|\s*\*\*([^*|]+)\*\*\s*\|\s*(\d+)\s*\|\s*([^|]*)\|/g;
   const subtopicTableRegex = /\|\s*↳\s*([^|]+)\|\s*(\d+)\s*\|\s*([^|]*)\|/g;
 
-  let currentTopic: (typeof plan.proposed_topics)[0] | null = null;
+  let currentTopic: TopicArray[0] | null = null;
   let topicMatch;
 
   // First pass: get all main topics
@@ -204,7 +210,7 @@ export function markdownToPlan(md: string, originalPlan: SetupPlan): SetupPlan {
 
   // Parse criteria from table rows: | Criterion Name | Description |
   const criteriaTableRegex = /\|\s*([^|*]+)\s*\|\s*([^|]+)\|/g;
-  const criteria: typeof plan.grader_config.criteria = [];
+  const parsedCriteria: NonNullable<typeof plan.grader_config>['criteria'] = [];
   let criteriaMatch;
 
   // Find the criteria section
@@ -219,15 +225,19 @@ export function markdownToPlan(md: string, originalPlan: SetupPlan): SetupPlan {
       if (name.toLowerCase() === 'criterion' || name.startsWith(':') || name.startsWith('-')) continue;
       if (description.toLowerCase() === 'description' || description.startsWith(':') || description.startsWith('-')) continue;
 
-      criteria.push({
+      parsedCriteria.push({
         name,
         description,
       });
     }
   }
 
-  if (criteria.length > 0) {
-    plan.grader_config.criteria = criteria;
+  if (parsedCriteria.length > 0) {
+    if (!plan.grader_config) {
+      plan.grader_config = { criteria: parsedCriteria, template_preview: '' };
+    } else {
+      plan.grader_config.criteria = parsedCriteria;
+    }
   }
 
   return plan;

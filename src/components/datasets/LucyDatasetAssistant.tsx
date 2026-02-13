@@ -126,7 +126,7 @@ export function LucyDatasetAssistant() {
   // Lucy agent state
   const { isConnected, reconnect } = useDistriConnection();
   const { providers, loading: providersLoading } = ProviderKeysConsumer();
-  const { planStatus } = SetupPlanConsumer();
+  const { planStatus, executionProgress } = SetupPlanConsumer();
 
   // Use finetune agent when viewing a specific dataset
   const {
@@ -144,6 +144,7 @@ export function LucyDatasetAssistant() {
     datasetName: currentDataset?.name,
     trainingGoals: currentDataset?.datasetObjective,
     planStatus,
+    executionProgress,
   });
 
   // Auto-trigger prompt for proactive analysis
@@ -195,8 +196,6 @@ export function LucyDatasetAssistant() {
       return;
     }
 
-    // Capture values for the timeout (in case they change during the delay)
-    const promptDataset = currentDataset;
     const targetDatasetId = selectedDatasetId;
 
     // Use a delay to ensure LucyChat is fully mounted and ready
@@ -206,13 +205,7 @@ export function LucyDatasetAssistant() {
       if (lastAnalyzedDatasetRef.current !== targetDatasetId && messagesRef.current.length === 0) {
         lastAnalyzedDatasetRef.current = targetDatasetId;
         // Use refs to get latest values at trigger time
-        setAutoTriggerPrompt(buildDatasetAnalysisPrompt({
-          dataset: promptDataset,
-          workflow: workflowRef.current,
-          recordCount: recordsRef.current.length,
-          knowledgeSourcesCount: knowledgeSourcesCountRef.current,
-          hasEvaluator: !!workflowRef.current?.graderConfig,
-        }));
+        setAutoTriggerPrompt(buildDatasetAnalysisPrompt(recordsRef.current.length === 0));
       }
     }, 300);
 

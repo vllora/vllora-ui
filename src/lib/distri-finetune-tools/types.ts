@@ -7,6 +7,8 @@
 import { FinetuneWorkflowState, FinetuneStep, GenerationStrategy, DryRunVerdict } from '@/services/finetune-workflow-db';
 import { TopicHierarchyNode } from '@/types/dataset-types';
 import type { PlanStatus } from './steps/proposed-plan-store';
+import type { ExecutionProgress, ExecutionStepId } from './steps/execute-setup-plan';
+import { STEP_ORDER } from './steps/execute-setup-plan';
 
 // Tool handler function type
 export type ToolHandler = (params: Record<string, unknown>) => Promise<unknown>;
@@ -266,6 +268,14 @@ export interface FinetuneContext {
   setup_plan?: {
     status: PlanStatus;
     has_active_plan: boolean;
+    /** When status is 'executing', details about which steps completed/failed before interruption */
+    execution_progress?: {
+      current_step: number;
+      total_steps: number;
+      completed_steps: string[];
+      failed_steps: string[];
+      resume_from_step: ExecutionStepId | null;
+    };
   };
   finetune_workflow: {
     workflow_id: string;
@@ -287,7 +297,29 @@ export function workflowToContext(
   workflow: FinetuneWorkflowState | null,
   datasetHasEvalScript?: boolean,
   planStatus?: PlanStatus | null,
+  executionProgress?: ExecutionProgress | null,
 ): FinetuneContext {
+  // Build execution progress details for interrupted plans
+  let executionProgressDetails: {
+    current_step: number;
+    total_steps: number;
+    completed_steps: string[];
+    failed_steps: string[];
+    resume_from_step: ExecutionStepId | null;
+  } | undefined;
+  if (planStatus === 'executing' && executionProgress) {
+    const completedSteps = executionProgress.steps.filter(s => s.status === 'completed').map(s => s.id);
+    const failedSteps = executionProgress.steps.filter(s => s.status === 'failed').map(s => s.id);
+    const resumeFrom = STEP_ORDER.find(id => !completedSteps.includes(id)) || null;
+    executionProgressDetails = {
+      current_step: executionProgress.current_step,
+      total_steps: executionProgress.total_steps,
+      completed_steps: completedSteps,
+      failed_steps: failedSteps,
+      resume_from_step: resumeFrom as ExecutionStepId | null,
+    };
+  }
+
   return {
     page: 'datasets',
     current_dataset_id: datasetId,
@@ -295,6 +327,7 @@ export function workflowToContext(
       setup_plan: {
         status: planStatus,
         has_active_plan: planStatus === 'proposed' || planStatus === 'approved' || planStatus === 'executing',
+        ...(executionProgressDetails ? { execution_progress: executionProgressDetails } : {}),
       },
     } : {}),
     finetune_workflow: workflow
