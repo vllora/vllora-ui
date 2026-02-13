@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { FileText } from "lucide-react";
+import { FileText, HelpCircle } from "lucide-react";
 import {
   getScoreColorClass,
   formatScore,
@@ -49,7 +49,29 @@ export function EpochScoresTable({
           <thead>
             <tr className="text-muted-foreground">
               <th className="text-left py-1 pr-2 w-16">Epoch</th>
-              <th className="text-left py-1 pr-2 w-16">Score</th>
+              <th className="text-left py-1 pr-2 w-16">
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex items-center gap-1 cursor-help">
+                        Score
+                        <HelpCircle className="h-3 w-3 text-muted-foreground/60" />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-[260px] text-xs p-3">
+                      <p className="font-semibold mb-2">Score Color Guide</p>
+                      <div className="space-y-1.5">
+                        <p><span className="text-green-400 font-medium">Green ≥ 0.8</span> — High</p>
+                        <p><span className="text-yellow-400 font-medium">Yellow ≥ 0.6</span> — Moderate</p>
+                        <p><span className="text-red-400 font-medium">Red &lt; 0.6</span> — Low</p>
+                      </div>
+                      <p className="text-muted-foreground mt-2 border-t border-zinc-700 pt-2">
+                        Early epochs typically score lower — look for an upward trend across epochs.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </th>
               {criteriaNames.map((c) => (
                 <th key={c} className="text-left py-1 pr-2 w-16">
                   {c}

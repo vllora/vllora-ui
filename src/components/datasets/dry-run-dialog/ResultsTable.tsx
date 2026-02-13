@@ -18,7 +18,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Filter, ArrowUpDown } from "lucide-react";
+import { Search, Filter, ArrowUpDown, HelpCircle } from "lucide-react";
+import {
+  Tooltip as UITooltip,
+  TooltipContent as UITooltipContent,
+  TooltipProvider as UITooltipProvider,
+  TooltipTrigger as UITooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { FlatEvaluationResult } from "@/services/finetune-api";
 import { DryrunEvaluationResultRow } from "./DryrunEvaluationResultRow";
 
@@ -224,7 +230,29 @@ export function ResultsTable({
           <div className="w-6 shrink-0 py-1" />
           <div className="w-12 shrink-0 py-1 pr-2">Row</div>
           {onRecordIdClick && <div className="w-24 shrink-0 py-1 pr-2">Record</div>}
-          <div className="w-16 shrink-0 py-1 pr-2">Score</div>
+          <div className="w-16 shrink-0 py-1 pr-2">
+            <UITooltipProvider delayDuration={200}>
+              <UITooltip>
+                <UITooltipTrigger asChild>
+                  <span className="inline-flex items-center gap-1 cursor-help">
+                    Score
+                    <HelpCircle className="h-3 w-3 text-muted-foreground/60" />
+                  </span>
+                </UITooltipTrigger>
+                <UITooltipContent side="bottom" className="max-w-[260px] text-xs p-3">
+                  <p className="font-semibold mb-2">Score Color Guide</p>
+                  <div className="space-y-1.5">
+                    <p><span className="text-green-400 font-medium">Green ≥ 0.8</span> — High</p>
+                    <p><span className="text-yellow-400 font-medium">Yellow ≥ 0.6</span> — Moderate</p>
+                    <p><span className="text-red-400 font-medium">Red &lt; 0.6</span> — Low</p>
+                  </div>
+                  <p className="text-muted-foreground mt-2 border-t border-zinc-700 pt-2">
+                    Scores reflect how well each sample performed against your grader criteria.
+                  </p>
+                </UITooltipContent>
+              </UITooltip>
+            </UITooltipProvider>
+          </div>
           <div className="w-16 shrink-0 py-1 pr-2">Status</div>
           <div className="flex-1 py-1 pr-2">Reasoning</div>
           <div className="w-12 shrink-0 py-1 text-center">Logs</div>
