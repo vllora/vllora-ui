@@ -323,8 +323,8 @@ distri-finetune-tools/
 │   ├── update-record.ts
 │   ├── regenerate-readme.ts      # README regeneration tool
 │   ├── execute-setup-plan.ts     # 7-step plan execution
-│   ├── execution-state-store.ts  # In-memory execution progress store
-│   ├── proposed-plan-store.ts    # IndexedDB-persisted proposed plans
+│   ├── execution-state-store.ts  # In-memory execution cache (write-through to IndexedDB)
+│   ├── proposed-plan-store.ts    # IndexedDB plan persistence with lifecycle status tracking
 │   ├── stockfish-tools.ts        # Chess-specific tools (conditional)
 │   ├── stockfish-service.ts      # Stockfish engine integration
 │   └── helpers.ts
@@ -393,7 +393,7 @@ interface FinetuneWorkflowState {
 ```
 
 **Storage Separation (3 IndexedDB databases):**
-- **`vllora-finetune`** (v4): Step progress, metadata, snapshots, dry run jobs, job evaluation cache (with `scoresPersisted` tracking), proposed plans
+- **`vllora-finetune`** (v4): Step progress, metadata, snapshots, dry run jobs, job evaluation cache (with `scoresPersisted` tracking), setup plans (with lifecycle status: proposed → approved → executing → completed/failed)
 - **`vllora-datasets`**: Actual data (records, topicHierarchy, evaluationConfig)
 - **`vllora-knowledge-sources`**: Uploaded documents with extracted content
 

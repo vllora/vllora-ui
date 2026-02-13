@@ -6,6 +6,7 @@
 
 import { FinetuneWorkflowState, FinetuneStep, GenerationStrategy, DryRunVerdict } from '@/services/finetune-workflow-db';
 import { TopicHierarchyNode } from '@/types/dataset-types';
+import type { PlanStatus } from './steps/proposed-plan-store';
 
 // Tool handler function type
 export type ToolHandler = (params: Record<string, unknown>) => Promise<unknown>;
@@ -262,6 +263,10 @@ export interface DatasetStatsResult {
 export interface FinetuneContext {
   page: 'datasets';
   current_dataset_id: string;
+  setup_plan?: {
+    status: PlanStatus;
+    has_active_plan: boolean;
+  };
   finetune_workflow: {
     workflow_id: string;
     current_step: FinetuneStep;
@@ -280,11 +285,18 @@ export interface FinetuneContext {
 export function workflowToContext(
   datasetId: string,
   workflow: FinetuneWorkflowState | null,
-  datasetHasEvalScript?: boolean
+  datasetHasEvalScript?: boolean,
+  planStatus?: PlanStatus | null,
 ): FinetuneContext {
   return {
     page: 'datasets',
     current_dataset_id: datasetId,
+    ...(planStatus ? {
+      setup_plan: {
+        status: planStatus,
+        has_active_plan: planStatus === 'proposed' || planStatus === 'approved' || planStatus === 'executing',
+      },
+    } : {}),
     finetune_workflow: workflow
       ? {
           workflow_id: workflow.id,

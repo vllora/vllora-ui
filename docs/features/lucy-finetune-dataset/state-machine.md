@@ -513,7 +513,38 @@ The finetune workflow system uses **three separate IndexedDB databases** to pers
 | `generationHistory` | `id` | `workflowId`, `createdAt` | v1 | Synthetic data generation runs |
 | `dryRunJobs` | `id` | `datasetId`, `status`, `createdAt` | v2 | Dry run job tracking |
 | `jobEvaluations` | `id` | `updatedAt` | v3 | Finetune job evaluation results (includes `scoresPersisted` flag) |
-| `proposedPlans` | `datasetId` | (none) | v4 | Persisted proposed plans (survives refresh) |
+| `proposedPlans` | `datasetId` | (none) | v4 | Persisted setup plans with lifecycle status tracking |
+
+#### Proposed Plans Store Schema
+
+```typescript
+type PlanStatus = 'proposed' | 'approved' | 'executing' | 'completed' | 'failed' | 'dismissed';
+
+interface StoredPlan {
+  datasetId: string;             // Key — one plan per dataset
+  plan: SetupPlan;               // The full plan data
+  status: PlanStatus;            // Lifecycle status (single source of truth)
+  executionProgress: ExecutionProgress | null;  // Per-step progress (persisted for refresh survival)
+  createdAt: number;
+  updatedAt: number;
+}
+```
+
+**Plan Status Transitions:**
+```
+proposed → approved → executing → completed
+                                → failed
+proposed → dismissed (deleted from store)
+```
+
+- **proposed**: Lucy generated and presented the plan. Stored in IndexedDB, shown in UI.
+- **approved**: User clicked "Approve & Execute". Plan remains in IndexedDB (NOT deleted).
+- **executing**: `execute_setup_plan` tool handler is running steps. Progress written to IndexedDB on each step.
+- **completed**: All steps finished successfully. Final progress preserved.
+- **failed**: A step failed during execution. Final progress preserved with error details.
+- **dismissed**: User discarded the plan. Record deleted from IndexedDB entirely.
+
+**Backward Compatibility:** Old records without `status` field are normalized to `'proposed'` on read.
 
 #### Workflow Store Schema
 
@@ -658,7 +689,7 @@ interface Dataset {
 | Snapshots | `vllora-finetune` (snapshots) | Enables rollback without affecting dataset |
 | Dry run jobs | `vllora-finetune` (dryRunJobs) | Tracks dry run execution per dataset |
 | Job evaluations | `vllora-finetune` (jobEvaluations) | Stores finetune job evaluation cache + `scoresPersisted` flag for persistence tracking |
-| Proposed plans | `vllora-finetune` (proposedPlans) | Persists plans across page refresh (keyed by datasetId) |
+| Proposed plans | `vllora-finetune` (proposedPlans) | Persists plans with lifecycle status (`proposed` → `approved` → `executing` → `completed`/`failed`) |
 | Knowledge sources | `vllora-knowledge-sources` | Documents are large, independent lifecycle from workflow |
 
 **Key Design Decision:** The workflow stores **metadata/pointers** to configurations, not the configurations themselves. This prevents data duplication and ensures the dataset remains the source of truth for `topicHierarchy` and `evaluationConfig`.

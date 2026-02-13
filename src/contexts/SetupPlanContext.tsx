@@ -19,7 +19,15 @@ import {
   type ReactNode,
 } from "react";
 import { emitter } from "@/utils/eventEmitter";
-import { getProposedPlan, clearProposedPlan } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
+import {
+  getStoredPlan,
+  clearProposedPlan,
+  updatePlanStatus,
+  updatePlanExecution,
+  completePlan,
+  failPlan,
+  type PlanStatus,
+} from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
 import { getCurrentExecution, getExecutingPlan } from "@/lib/distri-finetune-tools/steps/execution-state-store";
 import type { SetupPlan } from "@/lib/distri-finetune-tools/steps/propose-setup-plan";
 import type { ExecutionProgress } from "@/lib/distri-finetune-tools/steps/execute-setup-plan";
@@ -29,6 +37,10 @@ import type { ExecutionProgress } from "@/lib/distri-finetune-tools/steps/execut
 // ============================================================================
 
 interface SetupPlanContextType {
+  // Plan status (single source of truth, persisted to IndexedDB)
+  /** Persisted plan lifecycle status: proposed → approved → executing → completed/failed/dismissed */
+  planStatus: PlanStatus | null;
+
   // Loading state
   /** Whether plan data is being loaded from IndexedDB on mount */
   isLoadingPlan: boolean;
@@ -80,6 +92,9 @@ interface SetupPlanProviderProps {
 }
 
 export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProps) {
+  // Plan status (persisted to IndexedDB — single source of truth)
+  const [planStatus, setPlanStatus] = useState<PlanStatus | null>(null);
+
   // Loading state (true until initial IndexedDB check completes)
   const [isLoadingPlan, setIsLoadingPlan] = useState(true);
 
@@ -119,6 +134,7 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
         if (cancelled) return;
         setExecutionProgress(currentExecution);
         setIsExecuting(true);
+        setPlanStatus('executing');
         if (executingPlanData) {
           setProposedPlan(executingPlanData);
         }
@@ -130,20 +146,42 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
         if (cancelled) return;
         // Execution completed but we have the plan — show as executed
         setExecutedPlan(executingPlanData);
+        setPlanStatus('completed');
         setIsLoadingPlan(false);
         return;
       }
 
-      // Check IndexedDB for a persisted proposed plan (survives page refresh)
+      // Check IndexedDB for a persisted plan (survives page refresh)
       try {
-        const persistedPlan = await getProposedPlan(datasetId);
+        const storedPlan = await getStoredPlan(datasetId);
         if (cancelled) return;
-        if (persistedPlan) {
-          setProposedPlan(persistedPlan);
-          setHasPlanProposed(true);
-          // Auto-show plan in workspace so user sees it on page load
-          setIsPlanPreviewActive(true);
-          setPlanEditMode("display");
+        if (storedPlan) {
+          setPlanStatus(storedPlan.status);
+          setProposedPlan(storedPlan.plan);
+
+          switch (storedPlan.status) {
+            case 'proposed':
+              setHasPlanProposed(true);
+              setIsPlanPreviewActive(true);
+              setPlanEditMode("display");
+              break;
+            case 'approved':
+            case 'executing':
+              setIsExecuting(true);
+              if (storedPlan.executionProgress) {
+                setExecutionProgress(storedPlan.executionProgress);
+              }
+              break;
+            case 'completed':
+              setExecutedPlan(storedPlan.plan);
+              break;
+            case 'failed':
+              setExecutedPlan(storedPlan.plan);
+              if (storedPlan.executionProgress) {
+                setExecutionProgress(storedPlan.executionProgress);
+              }
+              break;
+          }
         }
       } catch (error) {
         console.error('[SetupPlanContext] Failed to load persisted plan:', error);
@@ -171,6 +209,7 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
 
     const handleProposed = ({ datasetId: id, plan }: { datasetId: string; plan: unknown }) => {
       if (id === datasetId) {
+        setPlanStatus('proposed');
         setIsGeneratingPlan(false);
         setHasPlanProposed(true);
         setProposedPlan(plan as SetupPlan);
@@ -186,6 +225,7 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
 
     const handleDismissed = ({ datasetId: id }: { datasetId: string }) => {
       if (id === datasetId) {
+        setPlanStatus(null);
         setIsGeneratingPlan(false);
         setHasPlanProposed(false);
         setProposedPlan(null);
@@ -211,8 +251,19 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
         setExecutionProgress(progress);
         if (!progress.is_complete) {
           setIsExecuting(true);
+          setPlanStatus('executing');
+          // Persist progress to IndexedDB (write-through)
+          updatePlanExecution(datasetId, progress);
         }
         if (progress.is_complete) {
+          // Persist final status to IndexedDB
+          if (progress.has_error) {
+            failPlan(datasetId, progress);
+            setPlanStatus('failed');
+          } else {
+            completePlan(datasetId, progress);
+            setPlanStatus('completed');
+          }
           // Keep showing progress briefly, then transition
           setTimeout(() => {
             // Guard: if user navigated to a different dataset, skip stale update
@@ -249,8 +300,9 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
 
   // Actions
   const approvePlan = useCallback((plan: SetupPlan) => {
-    // Clear persisted plan from IndexedDB (it's now being executed)
-    clearProposedPlan(datasetId);
+    // Update plan status to 'approved' in IndexedDB (keep the plan data!)
+    updatePlanStatus(datasetId, 'approved');
+    setPlanStatus('approved');
     // Emit the approved plan via event (Lucy will pick it up)
     emitter.emit("vllora_setup_plan_approved", { datasetId, plan });
     // Send a simple prompt to Lucy
@@ -274,6 +326,7 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
   }, [datasetId]);
 
   const value: SetupPlanContextType = {
+    planStatus,
     isLoadingPlan,
     isGeneratingPlan,
     hasPlanProposed,

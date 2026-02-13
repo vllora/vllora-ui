@@ -15,6 +15,7 @@ import { useAgent, useChatMessages, createAskFollowUpTool } from '@distri/react'
 import type { DistriAnyTool } from '@distri/react';
 import { uuidv4, DistriMessage, DistriClient } from '@distri/core';
 import { finetuneTools, workflowToContext } from '@/lib/distri-finetune-tools';
+import type { PlanStatus } from '@/lib/distri-finetune-tools/steps/proposed-plan-store';
 import { stockfishTools, isChessDataset } from '@/lib/distri-finetune-tools/steps';
 import { finetuneWorkflowService, FinetuneWorkflowState } from '@/services/finetune-workflow-db';
 import { getDatasetById } from '@/services/datasets-db';
@@ -45,9 +46,10 @@ function createNewThreadId(): string {
 function buildContextMessage(
   datasetId: string,
   workflow: FinetuneWorkflowState | null,
-  datasetHasEvaluator?: boolean
+  datasetHasEvaluator?: boolean,
+  planStatus?: PlanStatus | null,
 ): string {
-  const context = workflowToContext(datasetId, workflow, datasetHasEvaluator);
+  const context = workflowToContext(datasetId, workflow, datasetHasEvaluator, planStatus);
   // Put dataset_id prominently at the top to help LLM copy it exactly
   // UUIDs are hard for LLMs to transcribe from JSON - make it explicit
   return `DATASET_ID: ${datasetId}\n\nContext:\n\`\`\`json\n${JSON.stringify(context, null, 2)}\n\`\`\``;
@@ -64,6 +66,8 @@ interface UseFineTuneAgentChatOptions {
   datasetName?: string;
   /** Training goals (used for workflow initialization) */
   trainingGoals?: string;
+  /** Current plan status (from SetupPlanContext) */
+  planStatus?: PlanStatus | null;
 }
 
 // ============================================================================
@@ -100,7 +104,7 @@ interface UseFineTuneAgentChatReturn {
 export function useFineTuneAgentChat(
   options: UseFineTuneAgentChatOptions
 ): UseFineTuneAgentChatReturn {
-  const { datasetId, trainingGoals } = options;
+  const { datasetId, trainingGoals, planStatus } = options;
 
   // Agent state
   const { agent, loading: agentLoading } = useAgent({
@@ -200,7 +204,7 @@ export function useFineTuneAgentChat(
   const prepareMessage = useCallback(
     (userMessage: string, additionalParts?: any[]): DistriMessage => {
       // Build context from current workflow state
-      const contextText = buildContextMessage(datasetId, workflow, datasetHasEvalScript);
+      const contextText = buildContextMessage(datasetId, workflow, datasetHasEvalScript, planStatus);
 
       // Create message with context prepended
       const fullMessage = `${contextText}\n\nUser message: ${userMessage}`;
@@ -215,7 +219,7 @@ export function useFineTuneAgentChat(
 
       return DistriClient.initDistriMessage('user', parts);
     },
-    [datasetId, workflow, datasetHasEvalScript]
+    [datasetId, workflow, datasetHasEvalScript, planStatus]
   );
 
   return {

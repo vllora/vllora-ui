@@ -202,19 +202,20 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 **Listeners:**
 | File | What it does |
 |------|-------------|
-| `execute-setup-plan.ts` (tool) | Stores plan, waits for Lucy to call execute tool |
-| `execution-state-store.ts` (tool) | Stores plan in execution state |
+| `execute-setup-plan.ts` (tool) | Stores plan in memory, waits for Lucy to call execute tool |
+| `execution-state-store.ts` (tool) | Stores plan in execution state + persists `'approved'` status to IndexedDB |
+| `SetupPlanContext.tsx` | Updates `planStatus` to `'approved'` + persists to IndexedDB |
 
 ---
 
 ### 7. `vllora_setup_plan_progress`
 
-**Purpose:** Real-time execution progress updates.
+**Purpose:** Real-time execution progress updates. Each progress event is written through to IndexedDB for refresh survival.
 
 | | Details |
 |---|---|
 | **Data** | `{ progress: ExecutionProgress }` |
-| **Direction** | Tool handler → React |
+| **Direction** | Tool handler → React + IndexedDB |
 
 **Emitters:**
 | File | When |
@@ -224,9 +225,9 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 **Listeners:**
 | File | What it does |
 |------|-------------|
-| `PlanSection.tsx` | Updates execution UI, transitions to completed |
+| `SetupPlanContext.tsx` | Updates execution state + persists progress to IndexedDB. On completion, calls `completePlan()`/`failPlan()` |
 | `ExecutionProgressCard.tsx` | Renders step-by-step progress |
-| `execution-state-store.ts` (tool) | Persists progress in memory |
+| `execution-state-store.ts` (tool) | In-memory cache + write-through to IndexedDB via `updatePlanExecution()`/`completePlan()`/`failPlan()` |
 
 ---
 
@@ -387,12 +388,12 @@ Previously 3 components independently called `knowledgeDB.getKnowledgeSourcesByD
 
 ### `SetupPlanContext` (`src/contexts/SetupPlanContext.tsx`)
 
-**Listens to:** `vllora_setup_plan_generating`, `vllora_setup_plan_proposed`, `vllora_setup_plan_dismissed`, `vllora_workflow_updated`
+**Listens to:** `vllora_setup_plan_generating`, `vllora_setup_plan_proposed`, `vllora_setup_plan_dismissed`, `vllora_workflow_updated`, `vllora_setup_plan_progress`
 **Provides:** `isGeneratingPlan`, `hasPlanProposed`
 **Consumers:** `DatasetDetailContentV2`
 **Provider:** `SetupPlanProvider` wraps `DatasetDetailContentV2` in `DatasetDetailView.tsx`
 
-Previously `DatasetDetailContentV2` tracked `isGeneratingPlan`/`hasPlanProposed` from events. Now the context owns this state. `PlanSection` still manages its own internal state (`proposedPlan`, `isExecuting`, `executionProgress`) since those are UI-specific.
+Single source of truth for the setup plan lifecycle. Exposes `planStatus: PlanStatus | null` alongside boolean convenience properties (`isGeneratingPlan`, `hasPlanProposed`, `isExecuting`). On mount, hydrates from `getStoredPlan()` in IndexedDB. On approval, persists `'approved'` status (plan is NOT deleted). During execution, writes progress to IndexedDB on each step. On completion/failure, persists terminal status with final progress. The agent also receives `plan_status` and `has_active_plan` in its context injection.
 
 > **Note:** `DatasetDetailContentV2` still listens to `vllora_setup_plan_generating` directly (for auto-switching to the Plan tab), but no longer tracks plan state — that's in `SetupPlanContext`.
 

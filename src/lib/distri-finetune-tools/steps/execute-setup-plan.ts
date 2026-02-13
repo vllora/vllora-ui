@@ -31,6 +31,7 @@ emitter.on('vllora_setup_plan_approved', ({ datasetId, plan }) => {
 /**
  * Get and consume the pending approved plan for a dataset.
  * First checks in-memory store, then falls back to IndexedDB persistence.
+ * Plan is NOT deleted from IndexedDB — status tracking preserves it.
  */
 export async function consumePendingPlan(datasetId: string): Promise<SetupPlan | null> {
   console.log('[executeSetupPlan] Attempting to consume pending plan for:', datasetId);
@@ -44,13 +45,13 @@ export async function consumePendingPlan(datasetId: string): Promise<SetupPlan |
     return plan;
   }
 
-  // Fall back to IndexedDB-persisted plan
+  // Fall back to IndexedDB-persisted plan (now with status tracking)
   try {
-    const { getProposedPlan } = await import('./proposed-plan-store');
-    const persistedPlan = await getProposedPlan(datasetId);
-    if (persistedPlan) {
-      console.log('[executeSetupPlan] Successfully consumed pending plan from IndexedDB');
-      return persistedPlan;
+    const { getStoredPlan } = await import('./proposed-plan-store');
+    const storedPlan = await getStoredPlan(datasetId);
+    if (storedPlan && (storedPlan.status === 'approved' || storedPlan.status === 'proposed')) {
+      console.log('[executeSetupPlan] Successfully consumed pending plan from IndexedDB (status:', storedPlan.status, ')');
+      return storedPlan.plan;
     }
   } catch (error) {
     console.error('[executeSetupPlan] Failed to fetch persisted plan:', error);
@@ -75,6 +76,7 @@ import { quickFinetune } from '@/services/quick-finetune';
 
 // Side-effect import to ensure execution state store is listening for progress events
 import './execution-state-store';
+import { updatePlanStatus, failPlan as failPlanInDB } from './proposed-plan-store';
 
 // =============================================================================
 // Types
@@ -185,6 +187,9 @@ export const executeSetupPlanHandler: ToolHandler = async (
       return { success: false, error: `Dataset ${dataset_id} not found` };
     }
 
+    // Mark plan as executing in IndexedDB
+    updatePlanStatus(dataset_id, 'executing');
+
     // Get or create workflow for this dataset
     let workflow = await workflowDB.getWorkflowByDataset(dataset_id);
     if (!workflow) {
@@ -227,6 +232,23 @@ export const executeSetupPlanHandler: ToolHandler = async (
       }
     };
 
+    // Helper to update workflow stepStatus in IndexedDB
+    const markWorkflowStep = async (
+      finetuneStep: workflowDB.FinetuneStep,
+      status: workflowDB.StepStatus,
+    ): Promise<void> => {
+      try {
+        const wf = await workflowDB.getWorkflow(workflow_id);
+        if (wf) {
+          wf.stepStatus[finetuneStep] = status;
+          wf.updatedAt = Date.now();
+          await workflowDB.updateWorkflow(wf);
+        }
+      } catch (err) {
+        console.warn('[executeSetupPlan] Failed to update workflow stepStatus:', finetuneStep, err);
+      }
+    };
+
     // Summary tracking
     const summary = {
       topics_created: 0,
@@ -263,6 +285,8 @@ export const executeSetupPlanHandler: ToolHandler = async (
         message: `Applied ${plan.total_topic_count} topics`,
         result: topicsResult,
       });
+
+      await markWorkflowStep('topics_config', 'completed');
 
       toast.success('Topics configured', {
         action: {
@@ -310,6 +334,7 @@ export const executeSetupPlanHandler: ToolHandler = async (
         message: `Generated ${summary.records_generated} training examples`,
         result: generateResult,
       });
+      await markWorkflowStep('coverage_generation', 'completed');
     } catch (error) {
       updateStep('generate', {
         status: 'failed',
@@ -345,6 +370,8 @@ export const executeSetupPlanHandler: ToolHandler = async (
         message: 'LLM-as-judge evaluator configured',
         result: { success: true, grader_type: 'llm-as-judge' },
       });
+
+      await markWorkflowStep('grader_config', 'completed');
 
       toast.success('Evaluation configured', {
         action: {
@@ -426,6 +453,7 @@ export const executeSetupPlanHandler: ToolHandler = async (
         message: `Dry run started in background`,
         result: dryRunResult,
       });
+      await markWorkflowStep('dry_run', 'completed');
     } catch (error) {
       // Dry run failure is not fatal - we can still proceed
       updateStep('dryrun', {
@@ -543,6 +571,8 @@ export const executeSetupPlanHandler: ToolHandler = async (
         },
       });
 
+      await markWorkflowStep('training', 'in_progress');
+
       console.log('[executeSetupPlan] Finetune job created:', finetuneResult.jobId);
     } catch (error) {
       // Finetune job creation failure is not fatal - user can start manually
@@ -572,6 +602,19 @@ export const executeSetupPlanHandler: ToolHandler = async (
     };
   } catch (error) {
     console.error('[executeSetupPlan] Failed:', error);
+    // Persist failure status to IndexedDB
+    const { dataset_id } = params as unknown as ExecuteSetupPlanParams;
+    if (dataset_id) {
+      const failProgress: ExecutionProgress = {
+        dataset_id,
+        current_step: 0,
+        total_steps: 0,
+        steps: [],
+        is_complete: true,
+        has_error: true,
+      };
+      failPlanInDB(dataset_id, failProgress);
+    }
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Setup plan execution failed',

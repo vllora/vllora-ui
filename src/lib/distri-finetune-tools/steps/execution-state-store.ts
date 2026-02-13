@@ -9,6 +9,7 @@
 import type { ExecutionProgress } from './execute-setup-plan';
 import type { SetupPlan } from './propose-setup-plan';
 import { emitter } from '@/utils/eventEmitter';
+import { updatePlanStatus, updatePlanExecution, completePlan, failPlan } from './proposed-plan-store';
 
 // Simple in-memory store for current execution per dataset
 const executionStore = new Map<string, ExecutionProgress>();
@@ -53,12 +54,23 @@ export function setExecutingPlan(datasetId: string, plan: SetupPlan): void {
   executingPlanStore.set(datasetId, plan);
 }
 
-// Subscribe to progress events and update the store
+// Subscribe to progress events and update the store (write-through to IndexedDB)
 emitter.on('vllora_setup_plan_progress' as any, ({ progress }: { progress: ExecutionProgress }) => {
   if (progress.dataset_id) {
     executionStore.set(progress.dataset_id, progress);
 
-    // Auto-clear completed executions after a delay
+    // Write-through: persist execution progress to IndexedDB
+    if (progress.is_complete) {
+      if (progress.has_error) {
+        failPlan(progress.dataset_id, progress);
+      } else {
+        completePlan(progress.dataset_id, progress);
+      }
+    } else {
+      updatePlanExecution(progress.dataset_id, progress);
+    }
+
+    // Auto-clear in-memory store after a delay (IndexedDB retains the data)
     if (progress.is_complete) {
       setTimeout(() => {
         const current = executionStore.get(progress.dataset_id);
@@ -75,6 +87,8 @@ emitter.on('vllora_setup_plan_progress' as any, ({ progress }: { progress: Execu
 emitter.on('vllora_setup_plan_approved', ({ datasetId, plan }: { datasetId: string; plan: unknown }) => {
   if (datasetId && plan) {
     executingPlanStore.set(datasetId, plan as SetupPlan);
+    // Persist status to IndexedDB (SetupPlanContext also does this, but belt-and-suspenders)
+    updatePlanStatus(datasetId, 'approved');
   }
 });
 

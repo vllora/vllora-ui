@@ -30,6 +30,7 @@ import { ProviderKeysConsumer } from "@/contexts/ProviderKeysContext";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
+import { SetupPlanConsumer } from "@/contexts/SetupPlanContext";
 import { useFineTuneAgentChat } from "@/hooks/useFineTuneAgentChat";
 import {
   LucyChat,
@@ -125,6 +126,7 @@ export function LucyDatasetAssistant() {
   // Lucy agent state
   const { isConnected, reconnect } = useDistriConnection();
   const { providers, loading: providersLoading } = ProviderKeysConsumer();
+  const { planStatus } = SetupPlanConsumer();
 
   // Use finetune agent when viewing a specific dataset
   const {
@@ -141,6 +143,7 @@ export function LucyDatasetAssistant() {
     datasetId: selectedDatasetId || '',
     datasetName: currentDataset?.name,
     trainingGoals: currentDataset?.datasetObjective,
+    planStatus,
   });
 
   // Auto-trigger prompt for proactive analysis
