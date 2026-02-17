@@ -25,8 +25,8 @@ async function getKnowledgeSourceTopics(datasetId: string): Promise<string[]> {
     const allTopics: string[] = [];
 
     for (const source of sources) {
-      if (source.status === "ready" && source.extractedContent?.topics) {
-        allTopics.push(...source.extractedContent.topics);
+      if (source.status === "ready" && source.extractedContent?.sectionHeadings) {
+        allTopics.push(...source.extractedContent.sectionHeadings);
       }
     }
 

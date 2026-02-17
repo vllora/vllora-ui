@@ -319,7 +319,7 @@ export async function extractPdfContentNative(
         content: s.summary + (s.key_concepts.length > 0 ? `\n\nKey concepts: ${s.key_concepts.join(', ')}` : ''),
         level: s.level,
       })),
-      topics: topics.topics,
+      sectionHeadings: topics.topics,
       metadata: {
         type: 'pdf',
         documentType: structure.document_type,
@@ -337,7 +337,7 @@ export async function extractPdfContentNative(
     return {
       text: `[PDF content - native extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}]`,
       sections: [],
-      topics: [],
+      sectionHeadings: [],
       metadata: {
         type: 'pdf',
         error: error instanceof Error ? error.message : 'Native extraction failed',

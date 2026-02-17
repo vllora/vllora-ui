@@ -73,6 +73,21 @@ export function countLeafTopics(nodes: TopicHierarchyNode[]): number {
 }
 
 /**
+ * Get leaf topic names from a hierarchy (nodes with no children)
+ */
+export function getLeafTopicNames(nodes: TopicHierarchyNode[]): string[] {
+  const names: string[] = [];
+  for (const node of nodes) {
+    if (!node.children || node.children.length === 0) {
+      names.push(node.name);
+    } else {
+      names.push(...getLeafTopicNames(node.children));
+    }
+  }
+  return names;
+}
+
+/**
  * Calculate maximum depth of a hierarchy
  */
 export function calculateMaxDepth(nodes: TopicHierarchyNode[], currentDepth = 1): number {

@@ -17,9 +17,9 @@ export interface KnowledgeSourceContext {
   /** Formatted context string for LLM prompts */
   contextString: string;
   /** Summary of sources for plan display */
-  sourcesSummary: Array<{ name: string; topics_extracted: string[] }>;
-  /** All extracted topics (flat list, deduplicated) */
-  allTopics: string[];
+  sourcesSummary: Array<{ name: string; section_headings: string[] }>;
+  /** All extracted section headings (flat list, deduplicated) */
+  allSectionHeadings: string[];
   /** Number of ready sources */
   readyCount: number;
   /** Number of processing sources */
@@ -43,21 +43,21 @@ export async function buildKnowledgeContext(
   const readySources = sources.filter((s) => s.status === 'ready');
   const processingSources = sources.filter((s) => s.status === 'processing');
 
-  const sourcesSummary: Array<{ name: string; topics_extracted: string[] }> = [];
-  const allTopics: string[] = [];
+  const sourcesSummary: Array<{ name: string; section_headings: string[] }> = [];
+  const allSectionHeadings: string[] = [];
   const contextParts: string[] = [];
 
   for (const source of readySources) {
     const extracted = source.extractedContent;
-    const topics = extracted?.topics || [];
+    const topics = extracted?.sectionHeadings || [];
     const metadata = extracted?.metadata as Record<string, unknown> | undefined;
     const extractionMethod = (metadata?.extractionMethod as string) || 'unknown';
 
     sourcesSummary.push({
       name: source.name,
-      topics_extracted: topics,
+      section_headings: topics,
     });
-    allTopics.push(...topics);
+    allSectionHeadings.push(...topics);
 
     // Build rich context that emphasizes document structure
     const sourceParts: string[] = [`## Document: ${source.name}`];
@@ -89,7 +89,7 @@ export async function buildKnowledgeContext(
 
       if (topics.length > 0) {
         sourceParts.push(
-          `\n### Extracted Topics (USE THESE FOR TOPIC GENERATION):\n${topics.map((t) => `- ${t}`).join('\n')}`
+          `\n### Document Section Headings:\n${topics.map((t) => `- ${t}`).join('\n')}`
         );
       }
 
@@ -121,7 +121,7 @@ export async function buildKnowledgeContext(
 
       if (topics.length > 0) {
         sourceParts.push(
-          `\n### Extracted Topics (USE THESE FOR TOPIC GENERATION):\n${topics.map((t) => `- ${t}`).join('\n')}`
+          `\n### Document Section Headings:\n${topics.map((t) => `- ${t}`).join('\n')}`
         );
       }
 
@@ -143,13 +143,13 @@ export async function buildKnowledgeContext(
     contextParts.push(sourceParts.join('\n'));
   }
 
-  // Deduplicate topics
-  const uniqueTopics = [...new Set(allTopics)];
+  // Deduplicate section headings
+  const uniqueSectionHeadings = [...new Set(allSectionHeadings)];
 
   return {
     contextString: contextParts.length > 0 ? contextParts.join('\n\n---\n\n') : '',
     sourcesSummary,
-    allTopics: uniqueTopics,
+    allSectionHeadings: uniqueSectionHeadings,
     readyCount: readySources.length,
     processingCount: processingSources.length,
   };
@@ -187,7 +187,7 @@ export interface KnowledgeContentBlocks {
   /** Whether any file blocks were produced */
   hasFileBlocks: boolean;
   /** Summary of sources for plan display */
-  sourcesSummary: Array<{ name: string; topics_extracted: string[] }>;
+  sourcesSummary: Array<{ name: string; section_headings: string[] }>;
   /** Number of ready sources */
   readyCount: number;
   /** Number of processing sources */
@@ -232,11 +232,11 @@ export async function buildKnowledgeContentBlocks(
   const processingSources = sources.filter((s) => s.status === 'processing');
 
   const fileBlocks: FileContentBlock[] = [];
-  const sourcesSummary: Array<{ name: string; topics_extracted: string[] }> = [];
+  const sourcesSummary: Array<{ name: string; section_headings: string[] }> = [];
 
   for (const source of readySources) {
-    const topics = source.extractedContent?.topics || [];
-    sourcesSummary.push({ name: source.name, topics_extracted: topics });
+    const sectionHeadings = source.extractedContent?.sectionHeadings || [];
+    sourcesSummary.push({ name: source.name, section_headings: sectionHeadings });
 
     // Skip raw file blocks for locally-extracted sources — text is already extracted
     const extractionMethod = (source.extractedContent?.metadata as Record<string, unknown> | undefined)?.extractionMethod as string | undefined;

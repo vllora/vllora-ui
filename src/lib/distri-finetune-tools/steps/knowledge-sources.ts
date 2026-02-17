@@ -241,7 +241,7 @@ async function extractContent(
       return {
         text: classification.markdownContent,
         sections,
-        topics,
+        sectionHeadings: topics,
         metadata: {
           type: 'markdown',
           purpose: 'process',
@@ -258,7 +258,7 @@ async function extractContent(
       return {
         text: textContent,  // Use decoded text, not base64
         sections,
-        topics,
+        sectionHeadings: topics,
         metadata: {
           type: 'markdown',
           purpose: 'knowledge',
@@ -298,7 +298,7 @@ async function extractContent(
     return {
       text: content,
       sections,
-      topics: [], // Would be extracted by LLM
+      sectionHeadings: [], // Would be extracted by LLM
     };
   }
 
@@ -307,7 +307,7 @@ async function extractContent(
     return {
       text: `Content from URL: ${content}`,
       sections: [{ title: 'Web Content', content: 'URL content would be fetched here', level: 1 }],
-      topics: [],
+      sectionHeadings: [],
     };
   }
 
@@ -324,7 +324,7 @@ async function extractContent(
   return {
     text: `[${type.toUpperCase()} content - extraction would happen here]`,
     sections: [],
-    topics: [],
+    sectionHeadings: [],
     metadata: {
       type,
       note: 'Image extraction requires Vision API integration',
@@ -483,7 +483,7 @@ export const listKnowledgeSourcesHandler: ToolHandler = async (params) => {
           created_at: s.createdAt,
           processed_at: s.processedAt,
           section_count: s.extractedContent?.sections?.length || 0,
-          topic_count: s.extractedContent?.topics?.length || 0,
+          topic_count: s.extractedContent?.sectionHeadings?.length || 0,
           error: s.error,
         };
       }),
@@ -522,9 +522,9 @@ export const extractTopicsFromSourceHandler: ToolHandler = async (params) => {
     const sourceTopics: Record<string, string[]> = {};
 
     for (const source of sources) {
-      if (source.status === 'ready' && source.extractedContent?.topics) {
-        sourceTopics[source.name] = source.extractedContent.topics;
-        allTopics.push(...source.extractedContent.topics);
+      if (source.status === 'ready' && source.extractedContent?.sectionHeadings) {
+        sourceTopics[source.name] = source.extractedContent.sectionHeadings;
+        allTopics.push(...source.extractedContent.sectionHeadings);
       }
     }
 

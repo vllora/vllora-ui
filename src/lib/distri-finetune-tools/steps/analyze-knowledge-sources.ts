@@ -45,7 +45,7 @@ interface KnowledgeSourceInfo {
   chunks?: ChunkInfo[];
   /** Legacy section-level structure (for LLM extraction) */
   sections?: { title: string; content_preview: string }[];
-  topics_extracted: string[];
+  section_headings: string[];
 }
 
 interface AnalyzeKnowledgeSourcesResult {
@@ -57,8 +57,8 @@ interface AnalyzeKnowledgeSourcesResult {
   source_count?: number;
   /** Detailed info per knowledge source */
   knowledge_sources?: KnowledgeSourceInfo[];
-  /** All extracted topics across all sources (deduplicated) */
-  all_topics?: string[];
+  /** All document section headings across all sources (deduplicated) */
+  document_sections?: string[];
   /** True if knowledge sources exist but are still processing */
   sources_processing?: boolean;
   message?: string;
@@ -131,7 +131,7 @@ export const analyzeKnowledgeSourcesHandler: ToolHandler = async (
 
     const knowledgeSources: KnowledgeSourceInfo[] = readySources.map((source) => {
       const extracted = source.extractedContent;
-      const topics = extracted?.topics || [];
+      const topics = extracted?.sectionHeadings || [];
       const metadata = extracted?.metadata as Record<string, unknown> | undefined;
       const extractionMethod = (metadata?.extractionMethod as string) || 'unknown';
 
@@ -173,7 +173,7 @@ export const analyzeKnowledgeSourcesHandler: ToolHandler = async (
               pages: pageRange,
             };
           }),
-          topics_extracted: topics,
+          section_headings: topics,
         };
       }
 
@@ -192,16 +192,16 @@ export const analyzeKnowledgeSourcesHandler: ToolHandler = async (
           title: s.title || 'Untitled',
           content_preview: s.content?.substring(0, 200) || '',
         })),
-        topics_extracted: topics,
+        section_headings: topics,
       };
     });
 
-    // Collect all unique topics
-    const allTopics = [...new Set(knowledgeSources.flatMap((s) => s.topics_extracted))];
+    // Collect all unique section headings
+    const allSectionHeadings = [...new Set(knowledgeSources.flatMap((s) => s.section_headings))];
 
     console.log('[analyzeKnowledgeSources] Extracted:', {
       sources: knowledgeSources.length,
-      totalTopics: allTopics.length,
+      totalSectionHeadings: allSectionHeadings.length,
     });
 
     return {
@@ -209,8 +209,8 @@ export const analyzeKnowledgeSourcesHandler: ToolHandler = async (
       objective,
       source_count: readySources.length,
       knowledge_sources: knowledgeSources,
-      all_topics: allTopics,
-      message: `Found ${readySources.length} knowledge source(s) with ${allTopics.length} extracted topics.`,
+      document_sections: allSectionHeadings,
+      message: `Found ${readySources.length} knowledge source(s) with ${allSectionHeadings.length} document section headings.`,
     };
   } catch (error) {
     console.error('[analyzeKnowledgeSources] Failed:', error);

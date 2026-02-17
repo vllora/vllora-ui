@@ -126,10 +126,10 @@ export function SetupPlanCard({
                   className="text-xs bg-muted/50 rounded-lg p-2"
                 >
                   <div className="font-medium">{source.name}</div>
-                  {source.topics_extracted.length > 0 && (
+                  {source.section_headings.length > 0 && (
                     <div className="text-muted-foreground mt-1">
-                      Topics: {source.topics_extracted.slice(0, 5).join(', ')}
-                      {source.topics_extracted.length > 5 && ' ...'}
+                      Sections: {source.section_headings.slice(0, 5).join(', ')}
+                      {source.section_headings.length > 5 && ' ...'}
                     </div>
                   )}
                 </div>

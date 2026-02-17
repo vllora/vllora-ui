@@ -98,7 +98,7 @@ regrading, retraining, bulk topic changes, etc.`,
               type: 'object',
               properties: {
                 name: { type: 'string' },
-                topics_extracted: { type: 'array', items: { type: 'string' } },
+                section_headings: { type: 'array', items: { type: 'string' } },
               },
             },
           },

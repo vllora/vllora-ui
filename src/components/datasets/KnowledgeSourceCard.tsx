@@ -56,7 +56,7 @@ export function KnowledgeSourceCard({
   const hasContent =
     source.extractedContent &&
     (source.extractedContent.text ||
-      (source.extractedContent.topics && source.extractedContent.topics.length > 0) ||
+      (source.extractedContent.sectionHeadings && source.extractedContent.sectionHeadings.length > 0) ||
       (source.extractedContent.sections && source.extractedContent.sections.length > 0));
 
   return (
@@ -90,8 +90,8 @@ export function KnowledgeSourceCard({
           <p className="text-sm font-medium truncate">{source.name}</p>
           <p className="text-xs text-muted-foreground">
             {source.type.toUpperCase()}
-            {source.extractedContent?.topics && source.extractedContent.topics.length > 0 && (
-              <> &middot; {source.extractedContent.topics.length} topics</>
+            {source.extractedContent?.sectionHeadings && source.extractedContent.sectionHeadings.length > 0 && (
+              <> &middot; {source.extractedContent.sectionHeadings.length} sections</>
             )}
             {source.extractedContent?.sections && source.extractedContent.sections.length > 0 && (
               <> &middot; {source.extractedContent.sections.length} sections</>
@@ -160,22 +160,22 @@ export function KnowledgeSourceCard({
       {/* Expanded content */}
       {isExpanded && hasContent && (
         <div className="border-t border-border bg-muted/30 p-3 space-y-3">
-          {/* Topics */}
-          {source.extractedContent?.topics && source.extractedContent.topics.length > 0 && (
+          {/* Document Sections */}
+          {source.extractedContent?.sectionHeadings && source.extractedContent.sectionHeadings.length > 0 && (
             <div>
-              <p className="text-xs font-medium text-muted-foreground mb-1.5">Extracted Topics</p>
+              <p className="text-xs font-medium text-muted-foreground mb-1.5">Document Sections</p>
               <div className="flex flex-wrap gap-1.5">
-                {source.extractedContent.topics.slice(0, MAX_TOPICS_SHOWN).map((topic, i) => (
+                {source.extractedContent.sectionHeadings.slice(0, MAX_TOPICS_SHOWN).map((heading, i) => (
                   <span
                     key={i}
                     className="px-2 py-0.5 text-xs bg-blue-500/10 text-blue-500 rounded-full"
                   >
-                    {topic}
+                    {heading}
                   </span>
                 ))}
-                {source.extractedContent.topics.length > MAX_TOPICS_SHOWN && (
+                {source.extractedContent.sectionHeadings.length > MAX_TOPICS_SHOWN && (
                   <span className="px-2 py-0.5 text-xs text-muted-foreground">
-                    +{source.extractedContent.topics.length - MAX_TOPICS_SHOWN} more
+                    +{source.extractedContent.sectionHeadings.length - MAX_TOPICS_SHOWN} more
                   </span>
                 )}
               </div>

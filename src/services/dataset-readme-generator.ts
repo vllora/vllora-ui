@@ -21,7 +21,7 @@ import type { FinetuneWorkflowState, FinetuneStep } from './finetune-workflow-db
 export interface KnowledgeSourceInfo {
   name: string;
   type: string;
-  topics_extracted: string[];
+  section_headings: string[];
   size?: number;
 }
 
@@ -450,8 +450,8 @@ function generateKnowledgeSourcesSection(
   }
 
   const rows = knowledgeSources.map((source) => {
-    const topics = source.topics_extracted.length > 0
-      ? source.topics_extracted.slice(0, 3).join(', ') + (source.topics_extracted.length > 3 ? '...' : '')
+    const topics = source.section_headings.length > 0
+      ? source.section_headings.slice(0, 3).join(', ') + (source.section_headings.length > 3 ? '...' : '')
       : '_None extracted_';
     const size = source.size ? `${(source.size / 1024).toFixed(1)} KB` : '-';
     return `| ${source.name} | ${source.type} | ${size} | ${topics} |`;

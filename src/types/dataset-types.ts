@@ -363,8 +363,8 @@ export interface ExtractedContent {
     content: string;
     level: number;
   }>;
-  /** Extracted topics/concepts */
-  topics?: string[];
+  /** Extracted section headings from document structure */
+  sectionHeadings?: string[];
   /** Metadata about the content */
   metadata?: Record<string, unknown>;
 }

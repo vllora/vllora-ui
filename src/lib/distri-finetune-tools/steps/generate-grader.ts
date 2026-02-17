@@ -242,6 +242,7 @@ export const generateGraderHandler: ToolHandler = async (params) => {
     const { workflow_id, dataset_id, topics, criteria: rawCriteria, mode = 'replace' } = params;
     const topicNames = Array.isArray(topics) ? topics.map(String) : undefined;
 
+
     // Parse explicit criteria if provided
     let parsedCriteria: GraderCriterion[] | undefined =
       Array.isArray(rawCriteria) && rawCriteria.length > 0

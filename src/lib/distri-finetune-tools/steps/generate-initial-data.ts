@@ -161,9 +161,9 @@ async function getKnowledgeContext(datasetId: string): Promise<KnowledgeContext>
       sourceNames.push(source.name);
       const extracted = source.extractedContent!;
 
-      // Collect topics
-      if (extracted.topics) {
-        allTopics.push(...extracted.topics);
+      // Collect section headings
+      if (extracted.sectionHeadings) {
+        allTopics.push(...extracted.sectionHeadings);
       }
 
       // Collect sections (limit content length per section)

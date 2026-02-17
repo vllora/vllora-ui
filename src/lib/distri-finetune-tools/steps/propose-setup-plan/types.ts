@@ -55,7 +55,7 @@ export interface SetupPlan {
   // Optional: only present for plans that analyze knowledge sources
   knowledge_sources?: {
     name: string;
-    topics_extracted: string[];
+    section_headings: string[];
   }[];
 
   // Proposed topic hierarchy

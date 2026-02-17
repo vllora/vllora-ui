@@ -113,7 +113,7 @@ export async function extractPdfContentLocal(
     return {
       text: `# ${filename}\n\nNo extractable text found in this PDF. It may be an image-only document.`,
       sections: [],
-      topics: [],
+      sectionHeadings: [],
       metadata: {
         type: 'pdf',
         extractionMethod: 'local-semantic',
@@ -133,7 +133,7 @@ export async function extractPdfContentLocal(
     return {
       text: `# ${filename}\n\nNo sentences could be extracted from this PDF.`,
       sections: [],
-      topics: [],
+      sectionHeadings: [],
       metadata: {
         type: 'pdf',
         extractionMethod: 'local-semantic',
@@ -181,7 +181,7 @@ export async function extractPdfContentLocal(
         content: c.summary,
         level: 1,
       })),
-      topics: chunks.map((c) => c.heading),
+      sectionHeadings: chunks.map((c) => c.heading),
       metadata: {
         type: 'pdf',
         extractionMethod: 'local-semantic',
@@ -245,7 +245,7 @@ export async function extractPdfContentLocal(
       content: c.summary,
       level: 1,
     })),
-    topics: chunks.map((c) => c.heading),
+    sectionHeadings: chunks.map((c) => c.heading),
     metadata: {
       type: 'pdf',
       extractionMethod: 'local-semantic',
@@ -382,9 +382,9 @@ function generateMarkdown(filename: string, chunks: SemanticChunk[], totalPages:
 // LLM Section Extraction (used by primary path)
 // ---------------------------------------------------------------------------
 
-const PHASE2_MODEL = 'openai/gpt-5-mini';
+const SECTION_LLM_MODEL = 'openai/gpt-5-mini';
 
-const PHASE2_SYSTEM = `You are a document structure analyzer.
+const SECTION_LLM_SYSTEM = `You are a document structure analyzer.
 
 {{OBJECTIVE_BLOCK}}
 
@@ -402,7 +402,7 @@ Rules:
 - Group content by what's relevant to the training objective
 - Don't create sections smaller than a paragraph`;
 
-const PHASE2_RESPONSE_FORMAT = {
+const SECTION_LLM_RESPONSE_FORMAT = {
   type: 'json_schema',
   json_schema: {
     name: 'document_sections',
@@ -458,7 +458,7 @@ async function extractSectionsWithLLM(
     ? objectiveLines.join('\n')
     : 'Identify the most logical and useful sections of this document.';
 
-  const systemPrompt = PHASE2_SYSTEM.replace('{{OBJECTIVE_BLOCK}}', objectiveBlock);
+  const systemPrompt = SECTION_LLM_SYSTEM.replace('{{OBJECTIVE_BLOCK}}', objectiveBlock);
 
   // Build user content: prefer sending the actual PDF file when available
   let userContent: string | ContentBlock[];
@@ -479,7 +479,7 @@ async function extractSectionsWithLLM(
         text: `Analyze this ${totalPages}-page document and identify its sections.`,
       } as TextContentBlock,
     ];
-    console.log(`[extraction] Phase 2 sending PDF as file content block: ${filename || 'document.pdf'}`);
+    console.log(`[extraction] Sending PDF as file content block: ${filename || 'document.pdf'}`);
   } else {
     userContent = `Document (${totalPages} pages):\n\n${rawText}`;
   }
@@ -490,10 +490,10 @@ async function extractSectionsWithLLM(
   ];
 
   const response = await callLucy(messages, {
-    model: PHASE2_MODEL,
+    model: SECTION_LLM_MODEL,
     temperature: 0.2,
-    response_format: PHASE2_RESPONSE_FORMAT,
-    label: 'phase2_section_extraction',
+    response_format: SECTION_LLM_RESPONSE_FORMAT,
+    label: 'section_extraction',
   });
 
   const parsed = JSON.parse(response) as { sections: LLMSection[] };

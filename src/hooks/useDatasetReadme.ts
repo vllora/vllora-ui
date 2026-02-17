@@ -69,7 +69,7 @@ export function useDatasetReadme({
         .map(s => ({
           name: s.name,
           type: s.type,
-          topics_extracted: s.extractedContent?.topics || [],
+          section_headings: s.extractedContent?.sectionHeadings || [],
           size: s.size,
         }));
 

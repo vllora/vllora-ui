@@ -331,7 +331,7 @@ export async function generateTopicsViaFrontend(
       maxTopics: effectiveMaxTopics,
       hasKnowledgeSources,
       knowledgeSourcesCount: knowledgeCtx.readyCount,
-      extractedTopicsCount: knowledgeCtx.allTopics.length,
+      extractedTopicsCount: knowledgeCtx.allSectionHeadings.length,
     });
 
     // Call LLM
