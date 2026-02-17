@@ -189,7 +189,7 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
                   setTimeout(() => {
                     if (cancelled) return;
                     emitter.emit("vllora_lucy_prompt", {
-                      prompt: `The setup plan execution was interrupted. Steps completed: [${completedStepIds.join(', ')}]. Please call get_dataset_state first to check what already exists, then call execute_setup_plan with only the steps that still need to run (using steps_to_execute and overrides).`,
+                      prompt: `The flow execution was interrupted. Steps completed: [${completedStepIds.join(', ')}]. Please call get_dataset_state first to check what already exists, then call execute_setup_plan with only the steps that still need to run (using steps_to_execute and overrides).`,
                     });
                   }, 2000);
                 }
@@ -339,7 +339,7 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
     emitter.emit("vllora_setup_plan_approved", { datasetId, plan });
     // Send a simple prompt to Lucy
     emitter.emit("vllora_lucy_prompt", {
-      prompt: `I approve the setup plan. Please execute it now.`,
+      prompt: `I approve the flow. Please execute it now.`,
     });
     // Start showing execution progress
     setIsExecuting(true);

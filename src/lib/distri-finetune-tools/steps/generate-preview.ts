@@ -118,7 +118,7 @@ const PREVIEW_RESPONSE_SCHEMA = {
               user_message: { type: 'string' },
               source_reference: { type: 'string' },
             },
-            required: ['system_prompt', 'user_message'],
+            required: ['system_prompt', 'user_message', 'source_reference'],
             additionalProperties: false,
           },
         },

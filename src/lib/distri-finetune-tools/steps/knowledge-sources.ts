@@ -7,9 +7,11 @@
 
 import type { DistriFnTool } from '@distri/core';
 import * as knowledgeDB from '@/services/knowledge-sources-db';
+import * as datasetsDB from '@/services/datasets-db';
 import type { ToolHandler } from '../types';
 import type { KnowledgeSourceType, ExtractedContent, MarkdownPurpose, KnowledgeSourceProgress } from '@/types/dataset-types';
 import { extractPdfContentNative, type ExtractionProgressCallback } from './pdf-native-extractor';
+import { extractPdfContentLocal } from './semantic-pdf-extractor';
 import { emitter } from '@/utils/eventEmitter';
 
 // =============================================================================
@@ -220,8 +222,10 @@ async function extractContent(
   type: KnowledgeSourceType,
   content: string,
   _name: string,
-  _extractionMode: 'basic' | 'llm' = 'llm',
-  onProgress?: ExtractionProgressCallback
+  _extractionMode: 'basic' | 'llm' | 'local' = 'local',
+  onProgress?: ExtractionProgressCallback,
+  objective?: string,
+  comment?: string,
 ): Promise<ExtractedContent> {
 
   // Handle markdown files with dual-purpose detection
@@ -308,6 +312,10 @@ async function extractContent(
   }
 
   if (type === 'pdf') {
+    if (_extractionMode === 'local') {
+      const result = await extractPdfContentLocal(content, _name, { onProgress, objective, comment });
+      return result;
+    }
     const result = await extractPdfContentNative(content, _name, { onProgress });
     return result;
   }
@@ -334,17 +342,20 @@ interface UploadKnowledgeSourceParams {
   type: KnowledgeSourceType;
   content: string;
   mime_type?: string;
+  /** Optional user comment / objective describing what this document is for */
+  comment?: string;
   /**
    * Extraction mode for PDFs:
-   * - 'llm': LLM-assisted extraction for better quality (default)
+   * - 'local': In-browser semantic chunking with local embeddings (default)
+   * - 'llm': LLM-assisted extraction for better quality
    * - 'basic': Fast, regex-based extraction
    */
-  extraction_mode?: 'basic' | 'llm';
+  extraction_mode?: 'basic' | 'llm' | 'local';
 }
 
 export const uploadKnowledgeSourceHandler: ToolHandler = async (params) => {
   try {
-    const { dataset_id, name, type, content, mime_type, extraction_mode = 'llm' } = params as unknown as UploadKnowledgeSourceParams;
+    const { dataset_id, name, type, content, mime_type, comment, extraction_mode = 'local' } = params as unknown as UploadKnowledgeSourceParams;
 
     if (!dataset_id) {
       return { success: false, error: 'dataset_id is required' };
@@ -359,6 +370,7 @@ export const uploadKnowledgeSourceHandler: ToolHandler = async (params) => {
       content,
       mimeType: mime_type,
       size: content.length,
+      comment,
     });
 
     // Update status to processing
@@ -366,7 +378,7 @@ export const uploadKnowledgeSourceHandler: ToolHandler = async (params) => {
 
     // Extract content in background (non-blocking)
     // This allows the UI to proceed immediately while extraction happens async
-    processExtractionInBackground(source.id, dataset_id, type, content, name, extraction_mode);
+    processExtractionInBackground(source.id, dataset_id, type, content, name, extraction_mode, comment);
 
     // Return immediately with 'processing' status
     return {
@@ -395,7 +407,8 @@ async function processExtractionInBackground(
   type: KnowledgeSourceType,
   content: string,
   name: string,
-  extractionMode: 'basic' | 'llm'
+  extractionMode: 'basic' | 'llm' | 'local',
+  comment?: string,
 ): Promise<void> {
   try {
     console.log(`[processExtractionInBackground] Starting extraction for ${sourceId}`);
@@ -416,7 +429,15 @@ async function processExtractionInBackground(
       emitter.emit('vllora_knowledge_source_updated', { datasetId, sourceId, progress: progressInfo });
     };
 
-    const extractedContent = await extractContent(type, content, name, extractionMode, onProgress);
+    // Fetch objective from dataset (for PDF LLM extraction context)
+    let objective: string | undefined;
+    if (type === 'pdf') {
+      const dataset = await datasetsDB.getDatasetById(datasetId);
+      objective = dataset?.datasetObjective;
+    }
+
+    // Extract content (LLM-primary for PDFs with embeddings fallback)
+    const extractedContent = await extractContent(type, content, name, extractionMode, onProgress, objective, comment);
     await knowledgeDB.updateKnowledgeSourceStatus(sourceId, 'ready', { extractedContent });
     console.log(`[processExtractionInBackground] Extraction complete for ${sourceId}`);
     // Emit event to notify UI of status change
@@ -447,17 +468,25 @@ export const listKnowledgeSourcesHandler: ToolHandler = async (params) => {
 
     return {
       success: true,
-      sources: sources.map((s) => ({
-        id: s.id,
-        name: s.name,
-        type: s.type,
-        status: s.status,
-        created_at: s.createdAt,
-        processed_at: s.processedAt,
-        section_count: s.extractedContent?.sections?.length || 0,
-        topic_count: s.extractedContent?.topics?.length || 0,
-        error: s.error,
-      })),
+      sources: sources.map((s) => {
+        const metadata = s.extractedContent?.metadata as Record<string, unknown> | undefined;
+        return {
+          id: s.id,
+          name: s.name,
+          type: s.type,
+          status: s.status,
+          comment: s.comment,
+          extraction_method: (metadata?.extractionMethod as string) || undefined,
+          total_pages: (metadata?.totalPages as number) || undefined,
+          total_chunks: (metadata?.totalChunks as number) || undefined,
+          extraction_phase: s.extractionPhase || (metadata?.extractionPhase as string) || undefined,
+          created_at: s.createdAt,
+          processed_at: s.processedAt,
+          section_count: s.extractedContent?.sections?.length || 0,
+          topic_count: s.extractedContent?.topics?.length || 0,
+          error: s.error,
+        };
+      }),
       total: sources.length,
     };
   } catch (error) {
@@ -519,20 +548,46 @@ export const extractTopicsFromSourceHandler: ToolHandler = async (params) => {
 
 interface SearchKnowledgeParams {
   dataset_id: string;
-  query: string;
+  query?: string;
+  chunk_id?: string;
   max_results?: number;
 }
 
 export const searchKnowledgeHandler: ToolHandler = async (params) => {
   try {
-    const { dataset_id, query, max_results = 10 } = params as unknown as SearchKnowledgeParams;
+    const { dataset_id, query, chunk_id, max_results = 5 } = params as unknown as SearchKnowledgeParams;
 
     if (!dataset_id) {
       return { success: false, error: 'dataset_id is required' };
     }
 
+    // Fetch mode: return full text for a specific chunk
+    if (chunk_id) {
+      const sources = await knowledgeDB.getKnowledgeSourcesByDataset(dataset_id);
+      for (const source of sources) {
+        if (source.status !== 'ready' || !source.extractedContent) continue;
+        const metadata = source.extractedContent.metadata as Record<string, unknown> | undefined;
+        const chunks = (metadata?.chunks as Array<{ id: string; heading: string; summary: string; text: string; pageStart: number; pageEnd: number }>) || [];
+        const chunk = chunks.find((c) => c.id === chunk_id);
+        if (chunk) {
+          const pages = chunk.pageStart === chunk.pageEnd ? `p.${chunk.pageStart}` : `pp.${chunk.pageStart}–${chunk.pageEnd}`;
+          return {
+            success: true,
+            mode: 'fetch',
+            chunk_id,
+            source_name: source.name,
+            heading: chunk.heading,
+            summary: chunk.summary,
+            pages,
+            text: chunk.text,
+          };
+        }
+      }
+      return { success: false, error: `Chunk ${chunk_id} not found` };
+    }
+
     if (!query) {
-      return { success: false, error: 'query is required' };
+      return { success: false, error: 'Either query or chunk_id is required' };
     }
 
     const results = await knowledgeDB.searchKnowledgeSources(dataset_id, query);
@@ -540,12 +595,35 @@ export const searchKnowledgeHandler: ToolHandler = async (params) => {
     return {
       success: true,
       query,
-      results: results.slice(0, max_results).map((r) => ({
-        source_id: r.source.id,
-        source_name: r.source.name,
-        source_type: r.source.type,
-        matches: r.matches,
-      })),
+      results: results.slice(0, max_results).map((r) => {
+        // Return chunk-structured results for local-semantic sources
+        if (r.chunk_matches && r.chunk_matches.length > 0) {
+          return {
+            source_id: r.source.id,
+            source_name: r.source.name,
+            source_type: r.source.type,
+            chunks: r.chunk_matches.slice(0, 5).map((c) => ({
+              chunk_id: c.chunk_id,
+              heading: c.heading,
+              summary: c.summary,
+              pages: c.pages,
+              matching_sentences: c.matching_sentences.slice(0, 3),
+              content_preview: c.text.length > 500
+                ? c.text.slice(0, 500) + '...'
+                : c.text,
+            })),
+            total_chunk_matches: r.chunk_matches.length,
+          };
+        }
+
+        // Legacy format for non-chunked sources
+        return {
+          source_id: r.source.id,
+          source_name: r.source.name,
+          source_type: r.source.type,
+          matches: r.matches,
+        };
+      }),
       total_matches: results.length,
     };
   } catch (error) {
@@ -605,11 +683,15 @@ For markdown files, the system automatically detects whether it's a knowledge so
         type: 'string',
         description: 'MIME type of the content (optional)',
       },
+      comment: {
+        type: 'string',
+        description: 'Optional user comment or objective describing what this document is for and how it should be used',
+      },
       extraction_mode: {
         type: 'string',
-        enum: ['llm', 'basic'],
-        default: 'llm',
-        description: 'Extraction mode for PDFs: "llm" for LLM-assisted high-quality extraction (default), "basic" for fast regex-based extraction',
+        enum: ['local', 'llm', 'basic'],
+        default: 'local',
+        description: 'Extraction mode for PDFs: "local" for in-browser semantic chunking with local embeddings (default), "llm" for LLM-assisted extraction, "basic" for fast regex-based extraction',
       },
     },
     required: ['dataset_id', 'name', 'type', 'content'],
@@ -673,14 +755,13 @@ If source_id is not provided, extracts from all sources for the dataset.`,
 
 export const searchKnowledgeTool: DistriFnTool = {
   name: 'search_knowledge',
-  description: `Search across indexed knowledge sources for specific content.
+  description: `Search knowledge sources or fetch a specific chunk's full text.
 
-Use this tool to:
-- Find relevant content for a topic
-- Ground data generation in source material
-- Verify facts against uploaded sources
+Two modes:
+1. Search mode (provide query): Returns matching chunks with heading, summary, content preview (500 chars), and up to 3 matching sentences. Use this to find relevant content.
+2. Fetch mode (provide chunk_id): Returns the full text of a specific chunk. Use this after searching to get complete content for data generation.
 
-Returns matching passages from knowledge sources.`,
+Call once per query. Do NOT retry if results seem incomplete.`,
   type: 'function',
   parameters: {
     type: 'object',
@@ -691,15 +772,19 @@ Returns matching passages from knowledge sources.`,
       },
       query: {
         type: 'string',
-        description: 'Search query (concept, topic, or phrase to find)',
+        description: 'Search query (concept, topic, or phrase to find). Required unless chunk_id is provided.',
+      },
+      chunk_id: {
+        type: 'string',
+        description: 'Fetch full text for a specific chunk (e.g. "chunk-5"). Skips search.',
       },
       max_results: {
         type: 'number',
-        default: 10,
-        description: 'Maximum number of results to return (default: 10)',
+        default: 5,
+        description: 'Maximum number of chunk results to return (default: 5)',
       },
     },
-    required: ['dataset_id', 'query'],
+    required: ['dataset_id'],
   },
   autoExecute: true,
   handler: async (input) =>

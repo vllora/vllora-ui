@@ -63,7 +63,7 @@ export function DatasetDetailHeader({
                     ) : (
                       <Sparkles className="h-4 w-4" />
                     )}
-                    <span className="text-xs">Plan</span>
+                    <span className="text-xs">Flow</span>
                     {hasPlanProposed && (
                       <span className="w-1.5 h-1.5 rounded-full bg-[rgb(var(--theme-500))]" />
                     )}
@@ -71,10 +71,10 @@ export function DatasetDetailHeader({
                 </TooltipTrigger>
                 <TooltipContent>
                   {isGeneratingPlan
-                    ? "Generating setup plan..."
+                    ? "Generating flow..."
                     : hasPlanProposed
-                      ? "View setup plan"
-                      : "Setup plan"}
+                      ? "View flow"
+                      : "Flow"}
                 </TooltipContent>
               </Tooltip>
             )}

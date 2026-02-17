@@ -287,9 +287,9 @@ export function DatasetDetailContentV2() {
 
     hasTriggeredAutoGenerate.current = true;
 
-    toast.info("Lucy is creating a setup plan from your documents...", { duration: 4000 });
+    toast.info("Lucy is creating a flow from your documents...", { duration: 4000 });
     emitter.emit("vllora_lucy_prompt", {
-      prompt: `Please analyze the uploaded documents and create a setup plan for this dataset using the propose_setup_plan tool.`,
+      prompt: `Please analyze the uploaded documents and create a flow for this dataset using the propose_setup_plan tool.`,
     });
   }, [docsProcessing, shouldAutoGenerate, datasetId]);
 
@@ -301,9 +301,9 @@ export function DatasetDetailContentV2() {
       if (hasTriggeredAutoGenerate.current) return;
       hasTriggeredAutoGenerate.current = true;
 
-      toast.warning("Document processing is taking longer than expected. Generating plan with available content...", { duration: 5000 });
+      toast.warning("Document processing is taking longer than expected. Generating flow with available content...", { duration: 5000 });
       emitter.emit("vllora_lucy_prompt", {
-        prompt: `Please analyze the uploaded documents and create a setup plan for this dataset using the propose_setup_plan tool.`,
+        prompt: `Please analyze the uploaded documents and create a flow for this dataset using the propose_setup_plan tool.`,
       });
     }, 60000);
 

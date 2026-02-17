@@ -1,7 +1,7 @@
 /**
  * Adjust Setup Plan Tool
  *
- * Modifies an existing setup plan based on user feedback.
+ * Modifies an existing flow based on user feedback.
  * Allows users to request changes via chat instead of manual editing.
  */
 
@@ -82,7 +82,7 @@ const ADJUST_PLAN_RESPONSE_SCHEMA = {
   },
 };
 
-const ADJUST_PLAN_SYSTEM = `You adjust fine-tuning setup plans based on user requests.
+const ADJUST_PLAN_SYSTEM = `You adjust fine-tuning flows based on user requests.
 
 ## ABSOLUTE RULES - VIOLATION IS FAILURE
 
@@ -525,22 +525,22 @@ export const adjustSetupPlanHandler: ToolHandler = async (
     console.error('[adjustSetupPlan] Failed:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to adjust setup plan',
+      error: error instanceof Error ? error.message : 'Failed to adjust flow',
     };
   }
 };
 
 export const adjustSetupPlanTool: DistriFnTool = {
   name: 'adjust_setup_plan',
-  description: `Adjust an existing setup plan based on user feedback.
+  description: `Adjust an existing flow based on user feedback.
 
 Use this tool when:
-- A setup plan has already been proposed
-- The user requests changes to the plan (e.g., "reduce to 5 topics", "increase examples to 100 each")
+- A flow has already been proposed
+- The user requests changes to the flow (e.g., "reduce to 5 topics", "increase examples to 100 each")
 - The user wants to modify topic structure, counts, or criteria
 
-This tool takes the current plan and user feedback, then regenerates an adjusted plan.
-The adjusted plan is shown to the user for approval.`,
+This tool takes the current flow and user feedback, then regenerates an adjusted flow.
+The adjusted flow is shown to the user for approval.`,
   type: 'function',
   parameters: {
     type: 'object',
@@ -551,7 +551,7 @@ The adjusted plan is shown to the user for approval.`,
       },
       current_plan: {
         type: 'object',
-        description: 'The current setup plan to adjust',
+        description: 'The current flow to adjust',
       },
       user_feedback: {
         type: 'string',

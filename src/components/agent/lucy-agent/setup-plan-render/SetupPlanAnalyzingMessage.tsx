@@ -1,7 +1,7 @@
 /**
  * SetupPlanAnalyzingMessage
  *
- * Displays a loading message while the setup plan is being generated.
+ * Displays a loading message while the flow is being generated.
  * Shows a spinning loader with analyzing text.
  */
 
@@ -12,7 +12,7 @@ export function SetupPlanAnalyzingMessage() {
     <div className="rounded-lg bg-muted/30 p-4">
       <div className="flex items-center gap-2 text-muted-foreground">
         <Loader2 className="w-4 h-4 animate-spin" />
-        <span className="text-[11px]">Analyzing your documents and creating a setup plan...</span>
+        <span className="text-[11px]">Analyzing your documents and creating a flow...</span>
       </div>
     </div>
   );

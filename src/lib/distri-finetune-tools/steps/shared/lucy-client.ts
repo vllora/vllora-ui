@@ -75,14 +75,18 @@ export async function callLucy(
   const temperature = options.temperature ?? modelSettings.temperature ?? 0.7;
   const max_tokens = options.max_tokens || modelSettings.max_tokens || undefined;
 
+  const isGpt5 = model.includes('gpt-5');
+
   const body: Record<string, unknown> = {
     model,
     messages,
-    temperature,
+    // gpt-5 series only supports default temperature (1)
+    ...(isGpt5 ? {} : { temperature }),
   };
 
   if (max_tokens) {
-    body.max_tokens = max_tokens;
+    // gpt-5 series requires max_completion_tokens instead of max_tokens
+    body[isGpt5 ? 'max_completion_tokens' : 'max_tokens'] = max_tokens;
   }
 
   if (options.response_format) {

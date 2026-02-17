@@ -50,11 +50,8 @@ export async function buildKnowledgeContext(
   for (const source of readySources) {
     const extracted = source.extractedContent;
     const topics = extracted?.topics || [];
-    const sections = (extracted?.sections || []) as ExtractedSection[];
-    // Check metadata for additional info from LLM extraction
     const metadata = extracted?.metadata as Record<string, unknown> | undefined;
-    const summary = (metadata?.document_summary as string) || '';
-    const docType = (metadata?.document_type as string) || '';
+    const extractionMethod = (metadata?.extractionMethod as string) || 'unknown';
 
     sourcesSummary.push({
       name: source.name,
@@ -65,31 +62,81 @@ export async function buildKnowledgeContext(
     // Build rich context that emphasizes document structure
     const sourceParts: string[] = [`## Document: ${source.name}`];
 
-    if (docType) {
-      sourceParts.push(`Type: ${docType}`);
+    // Include user comment/objective if provided
+    if (source.comment) {
+      sourceParts.push(`User Note: ${source.comment}`);
     }
 
-    if (summary) {
-      sourceParts.push(`Summary: ${summary}`);
-    }
+    // --- Local-semantic extraction: use chunk structure ---
+    if (extractionMethod === 'local-semantic') {
+      const totalPages = (metadata?.totalPages as number) || 0;
+      const chunks = (metadata?.chunks as Array<{
+        id: string;
+        heading: string;
+        summary: string;
+        sentences: string[];
+        pageStart: number;
+        pageEnd: number;
+      }>) || [];
 
-    if (topics.length > 0) {
-      sourceParts.push(
-        `\n### Extracted Topics (USE THESE FOR TOPIC GENERATION):\n${topics.map((t) => `- ${t}`).join('\n')}`
-      );
-    }
+      if (totalPages > 0) {
+        sourceParts.push(`Pages: ${totalPages} | Chunks: ${chunks.length}`);
+      }
 
-    if (sections.length > 0) {
-      sourceParts.push(`\n### Document Sections (USE THESE FOR TOPIC GENERATION):`);
-      for (const section of sections.slice(0, 10)) {
-        const sectionTitle = section.title || 'Untitled';
-        const contentPreview = section.content?.substring(0, 150) || '';
+      if (chunks.length > 0 && chunks[0].summary) {
+        sourceParts.push(`Summary: ${chunks[0].summary}`);
+      }
+
+      if (topics.length > 0) {
         sourceParts.push(
-          `- **${sectionTitle}**: ${contentPreview}${contentPreview.length >= 150 ? '...' : ''}`
+          `\n### Extracted Topics (USE THESE FOR TOPIC GENERATION):\n${topics.map((t) => `- ${t}`).join('\n')}`
         );
       }
-      if (sections.length > 10) {
-        sourceParts.push(`  ...and ${sections.length - 10} more sections`);
+
+      if (chunks.length > 0) {
+        sourceParts.push(`\n### Document Chunks (semantic sections):`);
+        for (const chunk of chunks) {
+          const pageRange = chunk.pageStart === chunk.pageEnd
+            ? `p.${chunk.pageStart}`
+            : `pp.${chunk.pageStart}–${chunk.pageEnd}`;
+          const sentenceCount = chunk.sentences?.length || 0;
+          sourceParts.push(
+            `- **${chunk.heading}** [${pageRange}, ${sentenceCount} sentences]: ${chunk.summary}`
+          );
+        }
+      }
+    } else {
+      // --- LLM extraction: use legacy sections format ---
+      const sections = (extracted?.sections || []) as ExtractedSection[];
+      const summary = (metadata?.document_summary as string) || (metadata?.documentSummary as string) || '';
+      const docType = (metadata?.document_type as string) || '';
+
+      if (docType) {
+        sourceParts.push(`Type: ${docType}`);
+      }
+
+      if (summary) {
+        sourceParts.push(`Summary: ${summary}`);
+      }
+
+      if (topics.length > 0) {
+        sourceParts.push(
+          `\n### Extracted Topics (USE THESE FOR TOPIC GENERATION):\n${topics.map((t) => `- ${t}`).join('\n')}`
+        );
+      }
+
+      if (sections.length > 0) {
+        sourceParts.push(`\n### Document Sections (USE THESE FOR TOPIC GENERATION):`);
+        for (const section of sections.slice(0, 10)) {
+          const sectionTitle = section.title || 'Untitled';
+          const contentPreview = section.content?.substring(0, 150) || '';
+          sourceParts.push(
+            `- **${sectionTitle}**: ${contentPreview}${contentPreview.length >= 150 ? '...' : ''}`
+          );
+        }
+        if (sections.length > 10) {
+          sourceParts.push(`  ...and ${sections.length - 10} more sections`);
+        }
       }
     }
 
@@ -190,6 +237,15 @@ export async function buildKnowledgeContentBlocks(
   for (const source of readySources) {
     const topics = source.extractedContent?.topics || [];
     sourcesSummary.push({ name: source.name, topics_extracted: topics });
+
+    // Skip raw file blocks for locally-extracted sources — text is already extracted
+    const extractionMethod = (source.extractedContent?.metadata as Record<string, unknown> | undefined)?.extractionMethod as string | undefined;
+    if (extractionMethod === 'local-semantic') {
+      console.log(
+        `[knowledge-context] Skipping file block for "${source.name}": locally extracted, using text context instead`,
+      );
+      continue;
+    }
 
     // Build file content block if raw base64 content is available
     if (source.content && source.content.length <= MAX_FILE_BASE64_SIZE) {

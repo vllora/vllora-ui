@@ -235,7 +235,7 @@ function DocsProcessingView({
           </h3>
           <p className="text-sm text-muted-foreground leading-relaxed">
             {docsProcessingCount} of {docsTotal} document{docsTotal !== 1 ? "s" : ""} still processing.
-            Lucy will create a setup plan once extraction is complete.
+            Lucy will create a flow once extraction is complete.
           </p>
         </div>
 

@@ -93,7 +93,7 @@ export function SetupPlanCard({
         <div className="flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-primary" />
           <div className="flex-1">
-            <h3 className="text-sm font-semibold">{plan.title || 'Setup Plan'}</h3>
+            <h3 className="text-sm font-semibold">{plan.title || 'Flow'}</h3>
             <p className="text-xs text-muted-foreground">
               {plan.description || `for ${plan.dataset_name}`}
             </p>

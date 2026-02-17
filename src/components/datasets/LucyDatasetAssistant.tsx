@@ -243,7 +243,7 @@ export function LucyDatasetAssistant() {
 
       console.log('[LucyDatasetAssistant] Documents ready, auto-triggering plan creation');
       emitter.emit("vllora_lucy_prompt", {
-        prompt: `My documents have finished processing and are ready. Please analyze them and create a setup plan now.`,
+        prompt: `My documents have finished processing and are ready. Please analyze them and create a flow now.`,
       });
     }
   }, [docsProcessing, planStatus]);
@@ -397,7 +397,7 @@ export function LucyDatasetAssistant() {
 
           // Tell Lucy about the upload — don't ask for a plan yet (docs are still extracting)
           if (!userText.trim()) {
-            userText = `I've uploaded ${uploadedFiles.length} document(s): ${uploadedFiles.join(', ')}. They are being processed now — I'll let you know when they're ready so you can create a setup plan.`;
+            userText = `I've uploaded ${uploadedFiles.length} document(s): ${uploadedFiles.join(', ')}. They are being processed now — I'll let you know when they're ready so you can create a flow.`;
           } else {
             const uploadNotice = `\n\n[Knowledge sources uploaded: ${uploadedFiles.join(', ')}. Documents are being processed — plan creation will be triggered automatically when extraction completes.]`;
             userText += uploadNotice;

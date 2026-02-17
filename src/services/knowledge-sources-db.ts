@@ -73,6 +73,7 @@ export async function createKnowledgeSource(
     content?: string;
     size?: number;
     mimeType?: string;
+    comment?: string;
   }
 ): Promise<KnowledgeSource> {
   const db = await getDB();
@@ -87,6 +88,7 @@ export async function createKnowledgeSource(
     size: options?.size,
     mimeType: options?.mimeType,
     content: options?.content,
+    comment: options?.comment,
     createdAt: now,
   };
 
@@ -203,6 +205,37 @@ export async function updateKnowledgeSourceProgress(
 }
 
 /**
+ * Update a knowledge source's chunks and extraction phase without changing status.
+ * Used by Phase 2 (background LLM enhancement) to replace basic chunks with enhanced ones.
+ */
+export async function updateKnowledgeSourceChunks(
+  id: string,
+  extractedContent: ExtractedContent,
+  extractionPhase: 'basic' | 'enhanced'
+): Promise<void> {
+  const db = await getDB();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const getRequest = store.get(id);
+
+    getRequest.onsuccess = () => {
+      const source = getRequest.result;
+      if (source) {
+        source.extractedContent = extractedContent;
+        source.extractionPhase = extractionPhase;
+        source.needsLlmExtraction = false;
+        store.put(source);
+      }
+    };
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/**
  * Delete a knowledge source
  */
 export async function deleteKnowledgeSource(id: string): Promise<void> {
@@ -250,41 +283,117 @@ export async function getKnowledgeSourceCount(datasetId: string): Promise<number
  * Search knowledge sources by content
  * Simple text search across extracted content
  */
+export interface ChunkMatch {
+  chunk_id: string;
+  heading: string;
+  summary: string;
+  pages: string;
+  sentence_count: number;
+  /** Matching sentences from this chunk */
+  matching_sentences: string[];
+  /** Full chunk text (for grounded generation) */
+  text: string;
+}
+
+export interface SearchResult {
+  source: KnowledgeSource;
+  /** Legacy string matches (for non-chunked sources) */
+  matches: string[];
+  /** Structured chunk matches (for local-semantic sources) */
+  chunk_matches?: ChunkMatch[];
+}
+
 export async function searchKnowledgeSources(
   datasetId: string,
   query: string
-): Promise<Array<{ source: KnowledgeSource; matches: string[] }>> {
+): Promise<SearchResult[]> {
   const sources = await getKnowledgeSourcesByDataset(datasetId);
   const queryLower = query.toLowerCase();
-  const results: Array<{ source: KnowledgeSource; matches: string[] }> = [];
+  const queryTerms = queryLower.split(/\s+/).filter((t) => t.length > 2);
+  const results: SearchResult[] = [];
 
   for (const source of sources) {
     if (source.status !== 'ready' || !source.extractedContent) continue;
 
-    const matches: string[] = [];
+    const metadata = source.extractedContent.metadata as Record<string, unknown> | undefined;
+    const extractionMethod = (metadata?.extractionMethod as string) || '';
 
-    // Find matching sentences/paragraphs
-    const sentences = source.extractedContent.text.split(/[.!?]+/);
-    for (const sentence of sentences) {
-      if (sentence.toLowerCase().includes(queryLower)) {
-        matches.push(sentence.trim());
-      }
-    }
+    // --- Chunk-aware search for local-semantic sources ---
+    if (extractionMethod === 'local-semantic') {
+      const chunks = (metadata?.chunks as Array<{
+        id: string;
+        heading: string;
+        summary: string;
+        sentences: string[];
+        text: string;
+        pageStart: number;
+        pageEnd: number;
+      }>) || [];
 
-    // Also check sections
-    if (source.extractedContent.sections) {
-      for (const section of source.extractedContent.sections) {
-        if (
-          section.title.toLowerCase().includes(queryLower) ||
-          section.content.toLowerCase().includes(queryLower)
-        ) {
-          matches.push(`[${section.title}] ${section.content.substring(0, 200)}...`);
+      const chunkMatches: ChunkMatch[] = [];
+
+      for (const chunk of chunks) {
+        // Search heading, summary, and individual sentences
+        const headingMatch = queryTerms.some((t) => chunk.heading.toLowerCase().includes(t));
+        const summaryMatch = queryTerms.some((t) => chunk.summary.toLowerCase().includes(t));
+
+        const matchingSentences: string[] = [];
+        for (const sentence of chunk.sentences) {
+          const sentLower = sentence.toLowerCase();
+          if (queryTerms.some((t) => sentLower.includes(t))) {
+            matchingSentences.push(sentence);
+          }
+        }
+
+        if (headingMatch || summaryMatch || matchingSentences.length > 0) {
+          const pages = chunk.pageStart === chunk.pageEnd
+            ? `p.${chunk.pageStart}`
+            : `pp.${chunk.pageStart}–${chunk.pageEnd}`;
+
+          chunkMatches.push({
+            chunk_id: chunk.id,
+            heading: chunk.heading,
+            summary: chunk.summary,
+            pages,
+            sentence_count: chunk.sentences.length,
+            matching_sentences: matchingSentences.slice(0, 5),
+            text: chunk.text,
+          });
         }
       }
-    }
 
-    if (matches.length > 0) {
-      results.push({ source, matches: matches.slice(0, 5) }); // Limit matches
+      if (chunkMatches.length > 0) {
+        results.push({
+          source,
+          matches: chunkMatches.map((c) => `[${c.heading}] ${c.summary}`),
+          chunk_matches: chunkMatches,
+        });
+      }
+    } else {
+      // --- Legacy substring search for non-chunked sources ---
+      const matches: string[] = [];
+
+      const sentences = source.extractedContent.text.split(/[.!?]+/);
+      for (const sentence of sentences) {
+        if (sentence.toLowerCase().includes(queryLower)) {
+          matches.push(sentence.trim());
+        }
+      }
+
+      if (source.extractedContent.sections) {
+        for (const section of source.extractedContent.sections) {
+          if (
+            section.title.toLowerCase().includes(queryLower) ||
+            section.content.toLowerCase().includes(queryLower)
+          ) {
+            matches.push(`[${section.title}] ${section.content.substring(0, 200)}...`);
+          }
+        }
+      }
+
+      if (matches.length > 0) {
+        results.push({ source, matches: matches.slice(0, 5) });
+      }
     }
   }
 

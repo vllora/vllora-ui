@@ -44,7 +44,7 @@ export function ActivePlanBanner() {
       <div className="px-4 py-2 bg-[rgba(var(--theme-500),0.1)] border-b border-[rgba(var(--theme-500),0.2)] flex items-center gap-2 text-xs">
         <Loader2 className="w-3.5 h-3.5 animate-spin text-[rgb(var(--theme-500))]" />
         <span className="text-foreground/80">
-          Plan executing... step {current_step} of {total_steps}
+          Flow executing... step {current_step} of {total_steps}
         </span>
       </div>
     );
@@ -53,7 +53,7 @@ export function ActivePlanBanner() {
   // Plan proposed — show summary with View/Edit buttons
   const topicCount = proposedPlan?.total_topic_count ?? proposedPlan?.proposed_topics?.length ?? 0;
   const recordTarget = proposedPlan?.estimated_records ?? 0;
-  const planLabel = proposedPlan?.title || 'Setup plan ready';
+  const planLabel = proposedPlan?.title || 'Flow ready';
 
   return (
     <div className="px-4 py-2 bg-[rgba(var(--theme-500),0.1)] border-b border-[rgba(var(--theme-500),0.2)] flex items-center gap-2 text-xs">
@@ -77,7 +77,7 @@ export function ActivePlanBanner() {
         onClick={handleView}
       >
         <Eye className="w-3 h-3" />
-        View Plan
+        View Flow
       </Button>
       <Button
         variant="outline"

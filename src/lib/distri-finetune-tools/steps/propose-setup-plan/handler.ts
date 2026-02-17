@@ -148,7 +148,7 @@ export const proposeSetupPlanHandler: ToolHandler = async (
     console.error('[proposeSetupPlan] Failed:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to propose setup plan',
+      error: error instanceof Error ? error.message : 'Failed to propose flow',
     };
   }
 };

@@ -62,7 +62,7 @@ export function LucySetupPlanRenderer({ toolCall, state }: ToolRendererProps) {
     return (
       <div className="border border-destructive/30 rounded-lg bg-destructive/10 p-4">
         <div className="text-sm text-destructive">
-          {state?.error || result?.error || 'Failed to generate setup plan'}
+          {state?.error || result?.error || 'Failed to generate flow'}
         </div>
       </div>
     );

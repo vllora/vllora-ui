@@ -120,7 +120,7 @@ function PlanDisplayView({
       <div className="flex items-center justify-between px-4 py-2 border-b border-border">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">
           <Sparkles className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-          Setup Plan
+          Flow
           {isExecuting && (
             <span className="flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
               <Loader2 className="w-3 h-3 animate-spin" />
@@ -280,8 +280,8 @@ function PlanEmptyView({
     setHasTimedOut(false);
     emitter.emit("vllora_lucy_prompt", {
       prompt: hasKnowledgeSources
-        ? `Please analyze the uploaded documents and create a setup plan for this dataset using the propose_setup_plan tool.`
-        : `Please create a setup plan for this dataset using the propose_setup_plan tool based on the training objective.`,
+        ? `Please analyze the uploaded documents and create a flow for this dataset using the propose_setup_plan tool.`
+        : `Please create a flow for this dataset using the propose_setup_plan tool based on the training objective.`,
     });
   };
 
@@ -291,7 +291,7 @@ function PlanEmptyView({
     <>
       {/* Header bar */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
-        <span className="text-sm font-medium text-foreground">Setup Plan</span>
+        <span className="text-sm font-medium text-foreground">Flow</span>
         <Button
           variant="ghost"
           size="icon"
@@ -311,9 +311,9 @@ function PlanEmptyView({
                 <Loader2 className="w-6 h-6 animate-spin text-[rgb(var(--theme-500))]" />
               </div>
               <div>
-                <h3 className="text-base font-medium text-foreground mb-1">Generating setup plan...</h3>
+                <h3 className="text-base font-medium text-foreground mb-1">Generating flow...</h3>
                 <p className="text-sm text-muted-foreground">
-                  Lucy is analyzing your {hasKnowledgeSources ? "documents and " : ""}dataset to create a customized plan.
+                  Lucy is analyzing your {hasKnowledgeSources ? "documents and " : ""}dataset to create a customized flow.
                 </p>
               </div>
             </>
@@ -323,9 +323,9 @@ function PlanEmptyView({
                 <Sparkles className="w-6 h-6 text-[rgb(var(--theme-500))]" />
               </div>
               <div>
-                <h3 className="text-base font-medium text-foreground mb-1">No setup plan yet</h3>
+                <h3 className="text-base font-medium text-foreground mb-1">No flow yet</h3>
                 <p className="text-sm text-muted-foreground">
-                  Let Lucy create a plan with topics, data generation strategy, and evaluation criteria.
+                  Let Lucy create a flow with topics, data generation strategy, and evaluation criteria.
                 </p>
               </div>
               {hasTimedOut && (
@@ -340,7 +340,7 @@ function PlanEmptyView({
                   className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
                 >
                   <Sparkles className="w-4 h-4" />
-                  {hasTimedOut ? "Retry" : "Generate Plan"}
+                  {hasTimedOut ? "Retry" : "Generate Flow"}
                 </Button>
                 {!hasKnowledgeSources && (
                   <Button

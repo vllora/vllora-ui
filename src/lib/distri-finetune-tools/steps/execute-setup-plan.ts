@@ -66,7 +66,7 @@ export async function consumePendingPlan(datasetId: string): Promise<SetupPlan |
   try {
     const { getStoredPlan } = await import('./proposed-plan-store');
     const storedPlan = await getStoredPlan(datasetId);
-    if (storedPlan && (storedPlan.status === 'approved' || storedPlan.status === 'proposed' || storedPlan.status === 'executing')) {
+    if (storedPlan && (storedPlan.status === 'approved' || storedPlan.status === 'proposed' || storedPlan.status === 'executing' || storedPlan.status === 'failed')) {
       console.log('[executeSetupPlan] Consumed pending plan from IndexedDB (status:', storedPlan.status, ')');
       return storedPlan.plan;
     }
@@ -528,7 +528,7 @@ export const executeSetupPlanHandler: ToolHandler = async (
     // Resolve plan: params → in-memory → IndexedDB
     const plan = planFromParams || await consumePendingPlan(dataset_id);
     if (!plan) {
-      return { success: false, error: 'No plan provided. Please approve a setup plan first.' };
+      return { success: false, error: 'No flow provided. Please approve a flow first.' };
     }
 
     // Verify dataset

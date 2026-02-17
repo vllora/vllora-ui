@@ -477,7 +477,7 @@ function generateSetupPlanSection(
 
   const date = formatDate(summary.executed_at);
 
-  return `## Setup Plan Execution
+  return `## Flow Execution
 
 *Executed: ${date}*
 

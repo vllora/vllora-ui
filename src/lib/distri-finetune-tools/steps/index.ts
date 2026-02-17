@@ -72,6 +72,9 @@ export { updateRecordHandler, updateRecordTool } from './update-record';
 // README
 export { regenerateReadmeHandler, regenerateReadmeTool } from './regenerate-readme';
 
+// Semantic PDF Extraction (local, in-browser) — internal function, not an agent tool
+export { extractPdfContentLocal } from './semantic-pdf-extractor';
+
 // Knowledge Source Analysis
 export { analyzeKnowledgeSourcesHandler, analyzeKnowledgeSourcesTool } from './analyze-knowledge-sources';
 

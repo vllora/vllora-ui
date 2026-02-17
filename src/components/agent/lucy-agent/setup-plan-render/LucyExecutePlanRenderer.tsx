@@ -67,7 +67,7 @@ export function LucyExecutePlanRenderer({ toolCall, state }: ToolRendererProps) 
         <div className="rounded-lg border border-border bg-card p-3">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            <span>Starting setup plan execution...</span>
+            <span>Starting flow execution...</span>
           </div>
         </div>
       );
@@ -82,7 +82,7 @@ export function LucyExecutePlanRenderer({ toolCall, state }: ToolRendererProps) 
     return (
       <div className="rounded-lg border border-border bg-card p-3 space-y-2">
         <div className="text-xs font-medium text-foreground">
-          Executing setup plan...
+          Executing flow...
         </div>
         <div className="space-y-1">
           {activeSteps.map((step: any) => (
@@ -119,7 +119,7 @@ export function LucyExecutePlanRenderer({ toolCall, state }: ToolRendererProps) 
     return (
       <div className="border border-destructive/30 rounded-lg bg-destructive/10 p-4">
         <div className="text-sm text-destructive">
-          {state?.error || result?.error || 'Setup plan execution failed'}
+          {state?.error || result?.error || 'Flow execution failed'}
         </div>
       </div>
     );

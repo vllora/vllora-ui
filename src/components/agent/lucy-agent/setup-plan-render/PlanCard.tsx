@@ -47,7 +47,7 @@ export function PlanCard() {
       <div className="flex items-center gap-2">
         <Sparkles className="w-4 h-4 text-[rgb(var(--theme-500))]" />
         <span className="text-xs font-semibold text-foreground">
-          {proposedPlan.title || 'Setup Plan'}
+          {proposedPlan.title || 'Flow'}
         </span>
       </div>
 

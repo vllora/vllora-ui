@@ -21,3 +21,19 @@ export {
   type LucyMessage,
   type LucyChatOptions,
 } from './lucy-client';
+
+export {
+  embed,
+  isModelLoaded,
+  type EmbeddingProgressCallback,
+} from './local-embeddings';
+
+export {
+  preprocessText,
+  splitSentences,
+  splitSentencesWithPages,
+  cosineSimilarity,
+  clusterSentences,
+  type SentenceWithPage,
+  type SemanticChunk,
+} from './semantic-chunker';

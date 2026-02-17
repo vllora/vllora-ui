@@ -1,7 +1,7 @@
 /**
  * PlanCompletedState
  *
- * Shows when a setup plan has been successfully executed.
+ * Shows when a flow has been successfully executed.
  * Displays a summary and links to next steps.
  */
 
@@ -27,7 +27,7 @@ export function PlanCompletedState({
 }: PlanCompletedStateProps) {
   const handleGenerateNewPlan = () => {
     emitter.emit("vllora_lucy_prompt", {
-      prompt: `Please analyze my dataset and create a new setup plan using the propose_setup_plan tool.`,
+      prompt: `Please analyze my dataset and create a new flow using the propose_setup_plan tool.`,
     });
   };
 
@@ -42,7 +42,7 @@ export function PlanCompletedState({
         {/* Copy */}
         <div className="space-y-2">
           <h3 className="text-lg font-medium text-foreground">
-            Setup Plan Completed
+            Flow Completed
           </h3>
           <p className="text-sm text-muted-foreground leading-relaxed">
             Your dataset has been configured and is ready for fine-tuning.
@@ -93,7 +93,7 @@ export function PlanCompletedState({
             className="gap-2 text-muted-foreground hover:text-foreground"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            Generate New Plan
+            Generate New Flow
           </Button>
         </div>
       </div>

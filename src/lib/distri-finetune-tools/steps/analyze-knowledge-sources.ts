@@ -24,13 +24,28 @@ interface AnalyzeKnowledgeSourcesParams {
   dataset_id: string;
 }
 
+interface ChunkInfo {
+  id: string;
+  heading: string;
+  pages: string;
+}
+
 interface KnowledgeSourceInfo {
   name: string;
   type: string;
+  extraction_method: string;
+  /** 'basic' = Phase 1 embedding chunks, 'enhanced' = Phase 2 LLM-restructured */
+  extraction_phase?: string;
+  comment?: string;
   document_type: string;
   summary: string;
+  total_pages?: number;
+  total_chunks?: number;
+  /** Chunk-level structure (for local-semantic extraction) */
+  chunks?: ChunkInfo[];
+  /** Legacy section-level structure (for LLM extraction) */
+  sections?: { title: string; content_preview: string }[];
   topics_extracted: string[];
-  sections: { title: string; content_preview: string }[];
 }
 
 interface AnalyzeKnowledgeSourcesResult {
@@ -97,7 +112,7 @@ export const analyzeKnowledgeSourcesHandler: ToolHandler = async (
       return {
         success: false,
         sources_processing: true,
-        error: `${statusMessage} STOP: Do NOT call this tool again. Tell the user their documents are still being processed (usually 30-60 seconds per document) and that you will create the setup plan once processing is complete. The frontend will notify you when documents are ready.`,
+        error: `${statusMessage} STOP: Do NOT call this tool again. Tell the user their documents are still being processed (usually 30-60 seconds per document) and that you will create the flow once processing is complete. The frontend will notify you when documents are ready.`,
       };
     }
 
@@ -117,19 +132,67 @@ export const analyzeKnowledgeSourcesHandler: ToolHandler = async (
     const knowledgeSources: KnowledgeSourceInfo[] = readySources.map((source) => {
       const extracted = source.extractedContent;
       const topics = extracted?.topics || [];
-      const sections = ((extracted?.sections || []) as ExtractedSection[]).slice(0, 15);
       const metadata = extracted?.metadata as Record<string, unknown> | undefined;
+      const extractionMethod = (metadata?.extractionMethod as string) || 'unknown';
+
+      // Local-semantic extraction: use chunk structure
+      if (extractionMethod === 'local-semantic') {
+        const chunks = (metadata?.chunks as Array<{
+          id: string;
+          heading: string;
+          summary: string;
+          sentences: string[];
+          pageStart: number;
+          pageEnd: number;
+        }>) || [];
+        const totalPages = (metadata?.totalPages as number) || 0;
+        const totalChunks = (metadata?.totalChunks as number) || chunks.length;
+
+        // Build first chunk's summary as overall document summary
+        const overallSummary = chunks.length > 0
+          ? chunks[0].summary
+          : '';
+
+        return {
+          name: source.name,
+          type: source.type || 'unknown',
+          extraction_method: extractionMethod,
+          extraction_phase: source.extractionPhase || (metadata?.extractionPhase as string) || 'basic',
+          comment: source.comment,
+          document_type: 'pdf',
+          summary: overallSummary,
+          total_pages: totalPages,
+          total_chunks: totalChunks,
+          chunks: chunks.map((c) => {
+            const pageRange = c.pageStart === c.pageEnd
+              ? `${c.pageStart}`
+              : `${c.pageStart}–${c.pageEnd}`;
+            return {
+              id: c.id,
+              heading: c.heading,
+              pages: pageRange,
+            };
+          }),
+          topics_extracted: topics,
+        };
+      }
+
+      // LLM extraction: use legacy sections format
+      const sections = ((extracted?.sections || []) as ExtractedSection[]).slice(0, 15);
 
       return {
         name: source.name,
         type: source.type || 'unknown',
+        extraction_method: extractionMethod,
+        extraction_phase: source.extractionPhase || (metadata?.extractionPhase as string) || undefined,
+        comment: source.comment,
         document_type: (metadata?.document_type as string) || '',
-        summary: (metadata?.document_summary as string) || '',
-        topics_extracted: topics,
+        summary: (metadata?.document_summary as string) || (metadata?.documentSummary as string) || '',
         sections: sections.map((s) => ({
           title: s.title || 'Untitled',
           content_preview: s.content?.substring(0, 200) || '',
         })),
+        topics_extracted: topics,
       };
     });
 
@@ -166,10 +229,14 @@ export const analyzeKnowledgeSourcesTool: DistriFnTool = {
   name: 'analyze_knowledge_sources',
   description: `Check what knowledge sources are uploaded for a dataset.
 
-Returns per-source: document name, type, summary, extracted topics, section previews.
-Also returns the training objective and a flat list of all extracted topics.
+Returns a lightweight overview per source:
+- Document name, type, user comment/objective, summary, total pages/chunks
+- Chunk table of contents: heading + page range per chunk (no full text)
+- Extracted topics
 
-This is a pure data-access tool (no LLM calls). Use it to understand what documents exist before deciding next steps.`,
+This is a quick overview tool. To read actual chunk content or search for specific topics, use search_knowledge instead.
+
+Pure data-access (no LLM calls). Call once to understand what's available, then proceed.`,
   type: 'function',
   parameters: {
     type: 'object',

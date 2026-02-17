@@ -389,8 +389,14 @@ export interface KnowledgeSource {
   extractedContent?: ExtractedContent;
   /** Error message if processing failed */
   error?: string;
+  /** Optional user comment / objective for this source */
+  comment?: string;
   /** Current processing progress */
   progress?: KnowledgeSourceProgress;
+  /** Whether this source needs LLM-based re-extraction (Phase 2) */
+  needsLlmExtraction?: boolean;
+  /** Current extraction phase: 'basic' (page-based) or 'enhanced' (LLM-structured) */
+  extractionPhase?: 'basic' | 'enhanced';
   /** When the source was uploaded */
   createdAt: number;
   /** When processing completed */

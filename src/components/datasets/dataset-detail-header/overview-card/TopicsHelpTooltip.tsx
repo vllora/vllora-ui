@@ -23,9 +23,9 @@ export function TopicsHelpTooltip({ hasCategorizedRecords }: TopicsHelpTooltipPr
     <TooltipProvider delayDuration={200}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button className="text-zinc-600 hover:text-zinc-400 transition-colors">
+          <span role="button" tabIndex={0} className="text-zinc-600 hover:text-zinc-400 transition-colors">
             <HelpCircle className="w-3.5 h-3.5" />
-          </button>
+          </span>
         </TooltipTrigger>
         <TooltipContent side="bottom" align="start" className="max-w-[300px]">
           <div className="text-xs space-y-2">

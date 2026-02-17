@@ -266,7 +266,7 @@ export async function extractPdfContentNative(
     };
 
     // Step 2: Fire 3 parallel passes
-    onProgress?.({ step: 'Analyzing document (3 parallel passes)...', percent: 20 });
+    onProgress?.({ step: 'Analyzing document...', percent: 20 });
 
     const buildMessages = (systemPrompt: string, userPrompt: string): LucyMessage[] => [
       { role: 'system', content: systemPrompt },
