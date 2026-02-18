@@ -222,7 +222,7 @@ async function extractContent(
   type: KnowledgeSourceType,
   content: string,
   _name: string,
-  _extractionMode: 'basic' | 'llm' | 'local' = 'local',
+  _extractionMode: 'basic' | 'llm' | 'local' = 'llm',
   onProgress?: ExtractionProgressCallback,
   objective?: string,
   comment?: string,
@@ -312,8 +312,22 @@ async function extractContent(
   }
 
   if (type === 'pdf') {
+    if (_extractionMode === 'llm') {
+      const result = await extractPdfContentLocal(content, _name, {
+        onProgress,
+        objective,
+        comment,
+        allowFallback: false,
+      });
+      return result;
+    }
     if (_extractionMode === 'local') {
-      const result = await extractPdfContentLocal(content, _name, { onProgress, objective, comment });
+      const result = await extractPdfContentLocal(content, _name, {
+        onProgress,
+        objective,
+        comment,
+        allowFallback: true,
+      });
       return result;
     }
     const result = await extractPdfContentNative(content, _name, { onProgress });
@@ -346,8 +360,8 @@ interface UploadKnowledgeSourceParams {
   comment?: string;
   /**
    * Extraction mode for PDFs:
-   * - 'local': In-browser semantic chunking with local embeddings (default)
-   * - 'llm': LLM-assisted extraction for better quality
+   * - 'llm': LLM section extraction with start/end anchors (default, no fallback)
+   * - 'local': LLM section extraction with embeddings fallback
    * - 'basic': Fast, regex-based extraction
    */
   extraction_mode?: 'basic' | 'llm' | 'local';
@@ -355,7 +369,7 @@ interface UploadKnowledgeSourceParams {
 
 export const uploadKnowledgeSourceHandler: ToolHandler = async (params) => {
   try {
-    const { dataset_id, name, type, content, mime_type, comment, extraction_mode = 'local' } = params as unknown as UploadKnowledgeSourceParams;
+    const { dataset_id, name, type, content, mime_type, comment, extraction_mode = 'llm' } = params as unknown as UploadKnowledgeSourceParams;
 
     if (!dataset_id) {
       return { success: false, error: 'dataset_id is required' };
@@ -690,8 +704,8 @@ For markdown files, the system automatically detects whether it's a knowledge so
       extraction_mode: {
         type: 'string',
         enum: ['local', 'llm', 'basic'],
-        default: 'local',
-        description: 'Extraction mode for PDFs: "local" for in-browser semantic chunking with local embeddings (default), "llm" for LLM-assisted extraction, "basic" for fast regex-based extraction',
+        default: 'llm',
+        description: 'Extraction mode for PDFs: "llm" for LLM section extraction with start/end anchors (default, no fallback), "local" for LLM section extraction with embeddings fallback, "basic" for fast regex-based extraction',
       },
     },
     required: ['dataset_id', 'name', 'type', 'content'],

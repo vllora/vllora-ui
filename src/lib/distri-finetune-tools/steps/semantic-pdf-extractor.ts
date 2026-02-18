@@ -46,6 +46,7 @@ export interface LocalExtractionOptions {
   similarityThreshold?: number;
   objective?: string;
   comment?: string;
+  allowFallback?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -64,7 +65,13 @@ export async function extractPdfContentLocal(
   filename: string,
   options: LocalExtractionOptions = {}
 ): Promise<ExtractedContent> {
-  const { onProgress, similarityThreshold, objective, comment } = options;
+  const {
+    onProgress,
+    similarityThreshold,
+    objective,
+    comment,
+    allowFallback = true,
+  } = options;
 
   // Step 1: Decode base64 → load PDF
   onProgress?.({ step: 'Loading PDF...', percent: 5 });
@@ -196,6 +203,9 @@ export async function extractPdfContentLocal(
       `[semantic-pdf-extractor] LLM primary path failed, falling back to embeddings:`,
       llmError,
     );
+    if (!allowFallback) {
+      throw llmError;
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -595,4 +605,3 @@ function buildChunksFromSections(
 
   return chunks;
 }
-

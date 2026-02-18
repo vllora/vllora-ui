@@ -135,7 +135,7 @@ export function KnowledgeSourcesPanel({ datasetId, className }: KnowledgeSources
           content: base64,
           mime_type: file.type,
           comment: comment.trim() || undefined,
-          extraction_mode: "local",
+          extraction_mode: "llm",
         });
       }
       await fetchSources();
