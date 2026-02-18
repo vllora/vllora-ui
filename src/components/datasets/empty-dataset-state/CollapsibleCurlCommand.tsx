@@ -38,9 +38,12 @@ export function CollapsibleCurlCommand({
         className
       )}
     >
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors"
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setIsExpanded(!isExpanded); }}
+        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors cursor-pointer"
       >
         <div className="flex items-center gap-2">
           <Terminal className="w-4 h-4 text-muted-foreground" />
@@ -70,7 +73,7 @@ export function CollapsibleCurlCommand({
             <ChevronDown className="w-4 h-4 text-muted-foreground" />
           )}
         </div>
-      </button>
+      </div>
 
       {/* Collapsible Code Content */}
       <div

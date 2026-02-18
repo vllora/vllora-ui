@@ -59,7 +59,7 @@ function spanToTrace(span: Span): Trace {
   } as Intl.DateTimeFormatOptions);
 
   // Extract messages from attribute
-  const attr = span.attribute as { input?: string };
+  const attr = span.attribute as { input?: string; request?: string };
   const parsed = attr?.input ? tryParseJson(attr.input) : [];
   const msgArray = Array.isArray(parsed) ? parsed : [];
 
@@ -69,10 +69,20 @@ function spanToTrace(span: Span): Trace {
     content: msg.content,
   }));
 
+  // Extract tools from the full request attribute
+  const requestJson = attr?.request ? tryParseJson(attr.request) : null;
+  const tools: unknown[] | undefined =
+    Array.isArray(requestJson?.tools) && requestJson.tools.length > 0
+      ? requestJson.tools
+      : undefined;
+
   return {
+    traceId: span.span_id,
     time,
     status: "CAPTURED",
     messages,
+    tools,
+    startTimeUs: span.start_time_us,
   };
 }
 
@@ -116,6 +126,7 @@ export function EmptyDatasetsState() {
   // Real trace feed data from API
   const [traces, setTraces] = useState<Trace[]>([]);
   const tracesRef = useRef<Trace[]>([]);
+  const [clearedIds, setClearedIds] = useState<Set<string>>(new Set());
 
   // Fetch recent model_call spans
   const fetchTraces = useCallback(async () => {
@@ -388,7 +399,8 @@ export function EmptyDatasetsState() {
         ) : (
           <ApiInitializeTab
             hasBackendSpans={hasBackendSpans}
-            traces={traces}
+            traces={clearedIds.size > 0 ? traces.filter(t => !clearedIds.has(t.traceId)) : traces}
+            onClear={() => setClearedIds(new Set(traces.map(t => t.traceId)))}
           />
         )}
       </div>

@@ -16,20 +16,25 @@ export interface TraceMessage {
 }
 
 export interface Trace {
+  traceId: string;
   time: string;
   status: string;
   messages: TraceMessage[];
+  tools?: unknown[];
+  startTimeUs?: number;
 }
 
 interface LiveTraceFeedProps {
   isActive: boolean;
   traces: Trace[];
+  onClear?: () => void;
   className?: string;
 }
 
 export function LiveTraceFeed({
   isActive,
   traces,
+  onClear,
   className,
 }: LiveTraceFeedProps) {
   return (
@@ -39,7 +44,7 @@ export function LiveTraceFeed({
         className
       )}
     >
-      <LiveTraceFeedHeader isActive={isActive} />
+      <LiveTraceFeedHeader isActive={isActive} onClear={onClear} />
 
       <div className="flex-1 p-3 space-y-2 overflow-y-auto">
         {traces.length > 0 ? (

@@ -132,6 +132,8 @@ interface ExtractedConversation {
   prefixMessages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
   /** The final user message to generate variants of */
   finalUserMessage: string;
+  /** Tools from the source record's input */
+  tools: any[];
 }
 
 function extractMessagesFromRecord(record: DatasetRecord): ExtractedConversation | null {
@@ -163,12 +165,17 @@ function extractMessagesFromRecord(record: DatasetRecord): ExtractedConversation
 
   const finalUserMessage = messages[lastUserIdx].content || "";
 
-  return { prefixMessages, finalUserMessage };
+  const tools = Array.isArray((data as any)?.input?.tools)
+    ? (data as any).input.tools
+    : [];
+
+  return { prefixMessages, finalUserMessage, tools };
 }
 
 function variantToDataInfo(
   variant: GeneratedVariant,
   prefixMessages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+  tools: any[],
 ): DataInfo {
   // Reconstruct the conversation: prefix messages + varied final user message
   const inputMessages = [
@@ -180,7 +187,7 @@ function variantToDataInfo(
   return {
     input: {
       messages: inputMessages,
-      tools: [],
+      tools,
     },
     output: {
       messages: undefined,
@@ -324,7 +331,7 @@ export const generateRecordVariantsHandler: ToolHandler = async (
     // Convert to dataset records with lineage tracking
     // Each variant preserves the full conversation history, only varying the final user message
     const recordsToAdd = variants.map((variant) => ({
-      data: variantToDataInfo(variant, extracted.prefixMessages),
+      data: variantToDataInfo(variant, extracted.prefixMessages, extracted.tools),
       is_generated: true,
       topic: sourceRecord.topic, // Inherit topic from source
       sourceRecordId: record_id, // Track lineage

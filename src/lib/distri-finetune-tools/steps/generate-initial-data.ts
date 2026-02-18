@@ -19,6 +19,7 @@ import {
   type FileContentBlock,
 } from "./shared/lucy-client";
 import { buildKnowledgeContentBlocks } from "./shared/knowledge-context";
+import { extractSeedTools, extractSeedMessages, extractSeedSystemPrompt } from "@/lib/distri-dataset-tools/analysis/generate-traces/utils";
 
 // =============================================================================
 // Topic Hierarchy Helpers
@@ -232,6 +233,7 @@ const INITIAL_DATA_GENERATION_USER_RFT = `Generate {{count}} diverse training ex
 Training Objective:
 {{objective}}
 {{user_guidance}}
+{{system_prompt_section}}
 {{topic_context}}
 {{knowledge_context}}
 Generate a JSON array of examples. Each example should be a realistic user query/prompt that would be sent to an AI assistant being trained for this objective.
@@ -264,6 +266,7 @@ const INITIAL_DATA_GENERATION_USER_SFT = `Generate {{count}} diverse training ex
 Training Objective:
 {{objective}}
 {{user_guidance}}
+{{system_prompt_section}}
 {{topic_context}}
 {{knowledge_context}}
 Generate a JSON array of complete conversation examples. Each example should demonstrate the ideal assistant behavior for this objective.
@@ -443,6 +446,7 @@ async function callLLMForInitialData(
   topicContext?: LeafTopic,
   outputFormatConfig?: OutputFormatParam | null,
   fileContentBlocks?: FileContentBlock[],
+  seedSystemPrompt?: string,
 ): Promise<GeneratedExample[]> {
   // Select prompt template: structured output RFT when response schema is present
   let userPromptTemplate: string;
@@ -475,10 +479,16 @@ async function callLLMForInitialData(
     ? JSON.stringify(outputFormatConfig.schema, null, 2)
     : "";
 
+  // Build seed system prompt section if available
+  const systemPromptSection = seedSystemPrompt
+    ? `\n--- FIXED SYSTEM PROMPT ---\nUse this EXACT system prompt for ALL examples (copy it verbatim):\n${seedSystemPrompt}\n--- END FIXED SYSTEM PROMPT ---\n`
+    : "";
+
   const userPrompt = userPromptTemplate
     .replace(/\{\{count\}\}/g, String(count))
     .replace("{{objective}}", objective)
     .replace("{{user_guidance}}", guidanceSection)
+    .replace("{{system_prompt_section}}", systemPromptSection)
     .replace("{{topic_context}}", topicSection)
     .replace("{{knowledge_context}}", knowledgeSection)
     .replace("{{system_prompt_template}}", systemPromptTemplatePlaceholder)
@@ -531,9 +541,11 @@ async function callLLMForInitialData(
 function exampleToDataInfo(
   example: GeneratedExample,
   mode: "rft" | "sft",
+  tools: any[],
+  seedSystemPrompt?: string,
 ): DataInfo {
   const inputMessages = [
-    { role: "system" as const, content: example.system_prompt },
+    { role: "system" as const, content: seedSystemPrompt ?? example.system_prompt },
     { role: "user" as const, content: example.user_message },
   ];
 
@@ -541,7 +553,7 @@ function exampleToDataInfo(
     return {
       input: {
         messages: inputMessages,
-        tools: [],
+        tools,
       },
       output: {
         messages: [
@@ -556,7 +568,7 @@ function exampleToDataInfo(
   return {
     input: {
       messages: inputMessages,
-      tools: [],
+      tools,
     },
     output: {
       messages: undefined,
@@ -606,6 +618,20 @@ export const generateInitialDataHandler: ToolHandler = async (
       if (!workflow.currentStep || workflow.currentStep === "not_started") {
         await workflowDB.advanceToStep(workflow.id, "topics_config");
       }
+    }
+
+    // Extract tools from the first non-generated seed record (if any)
+    const existingRecords = await datasetsDB.getRecordsByDatasetId(dataset_id);
+    const seedRecord = existingRecords.find(r => !r.is_generated);
+    const seedTools = extractSeedTools(seedRecord);
+    if (seedTools.length > 0) {
+      console.log(`[generateInitialData] Found ${seedTools.length} seed tool(s) from existing records`);
+    }
+
+    const seedMessages = extractSeedMessages(seedRecord);
+    const seedSystemPrompt = extractSeedSystemPrompt(seedMessages) ?? undefined;
+    if (seedSystemPrompt) {
+      console.log(`[generateInitialData] Found seed system prompt (${seedSystemPrompt.length} chars)`);
     }
 
     // Get training objective
@@ -738,6 +764,7 @@ export const generateInitialDataHandler: ToolHandler = async (
             job.topic,
             output_format,
             chunkFileBlocks,
+            seedSystemPrompt,
           ).then(examples => ({ job, examples }))
             .catch(err => {
               console.error(`[generateInitialData] Topic "${job.topic.name}" batch ${job.batchIndex + 1} failed:`, err);
@@ -763,7 +790,7 @@ export const generateInitialDataHandler: ToolHandler = async (
 
           // Convert to records with topic already assigned
           const topicRecords = examples.map((example) => ({
-            data: exampleToDataInfo(example, generation_mode),
+            data: exampleToDataInfo(example, generation_mode, seedTools, seedSystemPrompt),
             is_generated: true,
             topic: job.topic.name,
             metadata: {
@@ -841,6 +868,7 @@ export const generateInitialDataHandler: ToolHandler = async (
               undefined,
               output_format,
               chunkFileBlocks,
+              seedSystemPrompt,
             ).then(examples => ({ batchIndex, examples }))
               .catch(err => {
                 console.error(`[generateInitialData] Batch ${batchIndex + 1} failed:`, err);
@@ -859,7 +887,7 @@ export const generateInitialDataHandler: ToolHandler = async (
           totalGenerated += examples.length;
 
           const batchRecords = examples.map((example) => ({
-            data: exampleToDataInfo(example, generation_mode),
+            data: exampleToDataInfo(example, generation_mode, seedTools, seedSystemPrompt),
             is_generated: true,
             metadata: {
               generation_source: "initial_data",

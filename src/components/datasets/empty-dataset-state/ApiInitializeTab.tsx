@@ -70,9 +70,10 @@ const CURL_COMMAND = `curl http://localhost:9090/v1/chat/completions \\
 interface ApiInitializeTabProps {
   hasBackendSpans: boolean;
   traces: Trace[];
+  onClear?: () => void;
 }
 
-export function ApiInitializeTab({ hasBackendSpans, traces }: ApiInitializeTabProps) {
+export function ApiInitializeTab({ hasBackendSpans, traces, onClear }: ApiInitializeTabProps) {
   const navigate = useNavigate();
   const [datasetObjective, setDatasetObjective] = useState("");
   const [isInferring, setIsInferring] = useState(false);
@@ -135,6 +136,7 @@ export function ApiInitializeTab({ hasBackendSpans, traces }: ApiInitializeTabPr
           data: {
             input: {
               messages: inputMessages.map((m) => ({ role: m.role, content: m.content })),
+              ...(trace.tools ? { tools: trace.tools } : {}),
             },
             output: {
               messages: outputMessages.map((m) => ({ role: m.role, content: m.content })),
@@ -262,6 +264,7 @@ export function ApiInitializeTab({ hasBackendSpans, traces }: ApiInitializeTabPr
         <LiveTraceFeed
           isActive={hasBackendSpans}
           traces={traces}
+          onClear={onClear}
           className="w-80 shrink-0"
         />
       </div>
