@@ -84,31 +84,20 @@ const ADJUST_PLAN_RESPONSE_SCHEMA = {
 
 const ADJUST_PLAN_SYSTEM = `You adjust fine-tuning flows based on user requests.
 
-## ABSOLUTE RULES - VIOLATION IS FAILURE
+## GOALS
+- Apply the smallest possible change to satisfy the request.
+- Preserve existing topic hierarchy, counts, and grader criteria unless the user explicitly asks to change them.
+- If the user gives exact numbers (topic counts, records per topic), follow them exactly.
 
-1. **EXACT LEAF TOPIC COUNT**: When user says "X topics", output EXACTLY X leaf topics.
-   - Leaf topics = topics where records are assigned (the children/subtopics)
-   - "5 topics" = exactly 5 leaf topics total
+## TOPIC STRUCTURE RULES
+- Maintain the current hierarchy depth (flat vs 2-level) unless the user asks to change it.
+- If adding topics, place them under the most relevant existing parent when a hierarchy exists; otherwise add as leaf topics.
+- Keep topic names 2-4 words; put details in descriptions.
 
-2. **DEFAULT 2-LEVEL HIERARCHY**: Unless user says "flat", organize topics in 2 levels:
-   - Parent categories (2-4 categories) with target_count: 0
-   - Leaf subtopics under parents with the actual target_count
-   - Total leaf count must match user's requested topic count
-
-3. **EXACT RECORD COUNT**: When user says "Y records each", set target_count: Y on EVERY leaf topic.
-   - "55 records each" = target_count: 55 on all leaf topics
-   - Parent topics ALWAYS get target_count: 0
-   - No variation, no rounding, EXACTLY the number specified
-
-4. **FLAT ONLY IF REQUESTED**: Only use flat structure (subtopics: []) if user explicitly says "flat"
-
-5. **SHORT NAMES**: Topic names 2-4 words max. Details go in description.
-
-Example 1: "5 topics with 55 records each" (default = 2-level)
-→ 2-3 parent categories (target_count: 0) with subtopics totaling 5 leaves (target_count: 55 each)
-
-Example 2: "5 flat topics with 55 records each"
-→ 5 topics with subtopics: [] and target_count: 55 each`;
+## OUTPUT REQUIREMENTS
+- Return a COMPLETE updated proposed_topics list (not just diffs).
+- Return grader_criteria (unchanged unless explicitly modified).
+- Summarize changes briefly in changes_made.`;
 
 async function callLLMToAdjustPlan(
   currentPlan: SetupPlan,
@@ -118,8 +107,33 @@ async function callLLMToAdjustPlan(
   grader_criteria: GraderCriterion[];
   changes_made: string;
 }> {
-  // Format current criteria for context (topics are regenerated from scratch based on user feedback)
+  // Format current topics and criteria for context (preserve unless user requests changes)
+  const currentTopicsJson = JSON.stringify(currentPlan.proposed_topics ?? [], null, 2);
   const currentCriteriaJson = JSON.stringify(currentPlan.grader_config?.criteria ?? [], null, 2);
+
+  const existingTopics = currentPlan.proposed_topics ?? [];
+  const leafTargetCounts: number[] = [];
+  const collectLeafCounts = (topics: ProposedTopic[]): void => {
+    for (const topic of topics) {
+      if (topic.subtopics && topic.subtopics.length > 0) {
+        for (const subtopic of topic.subtopics) {
+          leafTargetCounts.push(subtopic.target_count);
+        }
+      } else {
+        leafTargetCounts.push(topic.target_count);
+      }
+    }
+  };
+  collectLeafCounts(existingTopics);
+  const targetCountFrequency = new Map<number, number>();
+  for (const count of leafTargetCounts) {
+    targetCountFrequency.set(count, (targetCountFrequency.get(count) ?? 0) + 1);
+  }
+  const defaultLeafTargetCount = Array.from(targetCountFrequency.entries())
+    .sort((a, b) => b[1] - a[1])[0]?.[0];
+  const defaultLeafTargetCountText = defaultLeafTargetCount !== undefined
+    ? `${defaultLeafTargetCount}`
+    : '20';
 
   // Parse user feedback to extract numbers and structure preferences
   const topicCountMatch = userFeedback.match(/(\d+)\s*(?:leaf\s*)?topics?/i);
@@ -131,20 +145,19 @@ async function callLLMToAdjustPlan(
   const extractedRecordCount = recordCountMatch ? parseInt(recordCountMatch[1], 10) : null;
   const extractedCategoryCount = categoryCountMatch ? parseInt(categoryCountMatch[1], 10) : null;
 
+  const hasHierarchy = existingTopics.some((topic) => topic.subtopics && topic.subtopics.length > 0);
   let structureNote = '';
   if (wantsFlat) {
     structureNote = `- STRUCTURE: FLAT (user requested flat - all topics have subtopics: [])`;
   } else if (extractedCategoryCount) {
     structureNote = `- STRUCTURE: 2-LEVEL with exactly ${extractedCategoryCount} parent categories
-- Parent topics: target_count = 0
-- Leaf subtopics: target_count = ${extractedRecordCount || 'as specified'} each
-- Total leaf count: ${extractedTopicCount || 'as requested'}`;
+ - Parent topics: target_count = 0
+ - Leaf subtopics: target_count = ${extractedRecordCount || 'as specified'} each
+ - Total leaf count: ${extractedTopicCount || 'as requested'}`;
   } else {
-    // Default: 2-level hierarchy with auto-determined category count
-    structureNote = `- STRUCTURE: 2-LEVEL HIERARCHY (default)
-- Create 2-4 parent categories (target_count = 0)
-- Distribute ${extractedTopicCount || 'requested'} leaf subtopics across parents
-- Leaf subtopics: target_count = ${extractedRecordCount || 'as specified'} each`;
+    structureNote = hasHierarchy
+      ? '- STRUCTURE: KEEP CURRENT HIERARCHY (preserve parents and depth)'
+      : '- STRUCTURE: KEEP CURRENT FLAT STRUCTURE (no parents)';
   }
 
   const numbersEmphasis = extractedTopicCount || extractedRecordCount
@@ -159,15 +172,24 @@ ${structureNote}`
 User Request: "${userFeedback}"
 ${numbersEmphasis}
 
-Current grader criteria (keep unless user asks to change):
+Current proposed topics (preserve unless user asks to change):
+${currentTopicsJson}
+
+Current grader criteria (preserve unless user asks to change):
 ${currentCriteriaJson}
 
-Generate exactly what the user asked for. Output JSON with:
-- proposed_topics: array of parent categories with subtopics (2-level hierarchy by default)
-- grader_criteria: keep existing criteria
+Guidelines:
+- Apply the smallest possible change to satisfy the request.
+- Keep existing target_count values unchanged unless the user specifies new counts.
+- If adding new leaf topics without a specified count, use target_count: ${defaultLeafTargetCountText}.
+- Maintain the existing hierarchy structure unless the user explicitly requests a different structure.
+
+Output JSON with:
+- proposed_topics: full updated hierarchy
+- grader_criteria: full updated criteria list
 - changes_made: brief description
 
-Remember: "X topics" means X LEAF topics. Default is 2-level hierarchy with parent categories (target_count=0) and leaf subtopics.`;
+Remember: "X topics" means X LEAF topics where records are assigned.`;
 
   const messages: LucyMessage[] = [
     { role: 'system', content: ADJUST_PLAN_SYSTEM },
