@@ -73,8 +73,7 @@ CONVERSATION CONTEXT (preserve this history unchanged):
 
 FINAL USER MESSAGE TO VARY:
 {{final_user_message}}
-{{guidance_section}}
-Create variations of the final user message that:
+{{guidance_section}}{{tools_section}}Create variations of the final user message that:
 - Ask about similar topics but with different specific scenarios or angles
 - Vary the complexity (some simpler, some more complex questions)
 - Use different phrasings, tones, and styles (formal, casual, brief, detailed)
@@ -197,6 +196,21 @@ function variantToDataInfo(
 }
 
 // =============================================================================
+// Helper Functions (prompts)
+// =============================================================================
+
+function buildToolsSection(tools: unknown[]): string {
+  if (!tools || tools.length === 0) return "";
+  const lines = tools.map((t: any) => {
+    const fn = t?.function ?? t;
+    const name = fn?.name ?? "unknown";
+    const desc = fn?.description ?? "";
+    return `- ${name}${desc ? ": " + desc : ""}`;
+  });
+  return `\nTool Schema:\nThe assistant has access to the following tools. Generate user messages that would naturally use one or more of these tools:\n${lines.join("\n")}\n`;
+}
+
+// =============================================================================
 // LLM Call
 // =============================================================================
 
@@ -205,6 +219,7 @@ async function callLLMForVariants(
   finalUserMessage: string,
   count: number,
   guidance?: string,
+  tools?: any[],
 ): Promise<GeneratedVariant[]> {
   const lucyConfig = await fetchLucyConfigCached();
   const rawUrl = lucyConfig.distri_url || getDistriUrl();
@@ -226,7 +241,8 @@ async function callLLMForVariants(
     .replace(/\{\{count\}\}/g, String(count))
     .replace("{{conversation_context}}", conversationContext)
     .replace("{{final_user_message}}", finalUserMessage)
-    .replace("{{guidance_section}}", guidanceSection);
+    .replace("{{guidance_section}}", guidanceSection)
+    .replace("{{tools_section}}", buildToolsSection(tools ?? []));
 
   const messages: DistriMessage[] = [
     DistriClient.initDistriMessage("system", [
@@ -324,6 +340,7 @@ export const generateRecordVariantsHandler: ToolHandler = async (
       extracted.finalUserMessage,
       count,
       guidance,
+      extracted.tools,
     );
 
     console.log("[generateRecordVariants] Generated", variants.length, "variants");

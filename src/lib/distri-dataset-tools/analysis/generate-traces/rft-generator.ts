@@ -19,12 +19,27 @@ import {
 } from './utils';
 
 /**
+ * Build a compact "Tool Schema" section to inject into prompts.
+ */
+function buildToolsSection(tools: unknown[]): string {
+  if (!tools || tools.length === 0) return "";
+  const lines = tools.map((t: any) => {
+    const fn = t?.function ?? t;
+    const name = fn?.name ?? "unknown";
+    const desc = fn?.description ?? "";
+    return `- ${name}${desc ? ": " + desc : ""}`;
+  });
+  return `\nTool Schema:\nThe assistant has access to the following tools. Generate user messages that would naturally use one or more of these tools:\n${lines.join("\n")}\n`;
+}
+
+/**
  * Generate a varied version of a user message based on persona (RFT mode)
  */
 export async function generateVariedUserMessage(
   originalMessage: string,
   contextStr: string,
-  persona: string
+  persona: string,
+  tools: any[] = []
 ): Promise<string> {
   console.log(`[generateVariedUserMessage] Called with:`);
   console.log(`  - originalMessage: "${originalMessage.substring(0, 100)}${originalMessage.length > 100 ? '...' : ''}"`);
@@ -34,7 +49,8 @@ export async function generateVariedUserMessage(
   const prompt = RFT_USER_VARIATION_PROMPT
     .replace('{{original_message}}', originalMessage)
     .replace('{{subtopics}}', contextStr)
-    .replace('{{persona}}', persona);
+    .replace('{{persona}}', persona)
+    .replace('{{tools_section}}', buildToolsSection(tools));
 
   console.log(`[generateVariedUserMessage] Prompt built (${prompt.length} chars), calling LLM...`);
 
@@ -54,12 +70,14 @@ export async function generateVariedUserMessage(
 async function generateFirstUserMessage(
   contextStr: string,
   persona: string,
-  systemPrompt: string
+  systemPrompt: string,
+  tools: any[] = []
 ): Promise<string> {
   const prompt = SIMULATED_USER_PROMPT
     .replace('{{subtopics}}', contextStr)
     .replace('{{persona}}', persona)
-    .replace('{{system_prompt}}', systemPrompt);
+    .replace('{{system_prompt}}', systemPrompt)
+    .replace('{{tools_section}}', buildToolsSection(tools));
   const content = await callLLMText(prompt);
   return content.trim();
 }
@@ -71,7 +89,7 @@ async function generateFirstUserMessage(
 export async function generateRFTRecord(
   topicPath: string[],
   seedRecord: DatasetRecord | undefined,
-  _tools: any[], // Tools are passed through but not used in RFT record generation
+  tools: any[],
   personaCache: Map<string, string[]>
 ): Promise<SyntheticTraceRecord | null> {
   const topicStr = topicPath.join(' -> ');
@@ -101,7 +119,7 @@ export async function generateRFTRecord(
     // Fallback: generate a fresh first message
     const persona = await ensurePersona(personaCache, topicKey, contextStr);
     const systemPrompt = seedSystemPrompt || `You are a helpful assistant specializing in ${topicStr}.`;
-    const firstUserMsg = await generateFirstUserMessage(contextStr, persona, systemPrompt);
+    const firstUserMsg = await generateFirstUserMessage(contextStr, persona, systemPrompt, tools);
 
     const messages: SyntheticMessage[] = [
       { role: 'system', content: systemPrompt, tool_calls: null, tool_call_id: null },
@@ -127,7 +145,7 @@ export async function generateRFTRecord(
   const persona = await ensurePersona(personaCache, topicKey, contextStr);
   console.log(`[generateRFTRecord] Persona: ${persona.substring(0, 50)}...`);
 
-  const variedUserMessage = await generateVariedUserMessage(originalUserMessage, contextStr, persona);
+  const variedUserMessage = await generateVariedUserMessage(originalUserMessage, contextStr, persona, tools);
   console.log(`[generateRFTRecord] Varied message generated (${variedUserMessage.length} chars)`);
 
   // Build messages: system (if any) + context + varied user message

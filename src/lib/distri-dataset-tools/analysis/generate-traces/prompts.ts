@@ -33,7 +33,7 @@ Your goal is to initiate a natural and realistic conversation about a specific t
 Topic context: {{subtopics}}
 System Persona the assistant follows: {{system_prompt}}
 Your Persona: {{persona}}
-
+{{tools_section}}
 Based on the context and topic, write your first message as the user.
 Do not provide the assistant's response.
 Just write the initial user prompt.`;
@@ -139,7 +139,7 @@ Original User Message:
 
 Topic Context: {{subtopics}}
 Persona: {{persona}}
-
+{{tools_section}}
 Generate a new user message that:
 1. Conveys the same core intent/request as the original
 2. Uses language and tone consistent with the persona
