@@ -12,8 +12,8 @@ import * as workflowDB from "@/services/finetune-workflow-db";
 import * as datasetsDB from "@/services/datasets-db";
 import { updateDatasetEvalScript as updateBackendEvalScript } from "@/services/finetune-api";
 import { getProposedPlan } from "./proposed-plan-store";
-import { generateGraderTemplate } from "./propose-setup-plan/grader-template";
-import { proposeSetupPlanHandler } from "./propose-setup-plan";
+import { generateGraderTemplate } from "./propose-plan/grader-template";
+import { proposePlanHandler } from "./propose-plan";
 import { callLucy } from "./shared/lucy-client";
 import type { ToolHandler } from "../types";
 
@@ -107,8 +107,8 @@ export const configureGraderHandler: ToolHandler = async (params) => {
       let plan = await getProposedPlan(workflow.datasetId);
 
       if (!plan?.grader_config?.criteria || !plan.objective) {
-        // No plan exists → auto-run propose_setup_plan to generate one
-        const proposeResult = await proposeSetupPlanHandler({
+        // No plan exists → auto-run propose_plan to generate one
+        const proposeResult = await proposePlanHandler({
           dataset_id: workflow.datasetId,
         });
         const result = proposeResult as Record<string, unknown>;
@@ -119,7 +119,7 @@ export const configureGraderHandler: ToolHandler = async (params) => {
             success: false,
             error:
               result.error as string ||
-              "No proposed plan found and auto-generation failed. Please set a training objective and run propose_setup_plan first.",
+              "No proposed plan found and auto-generation failed. Please set a training objective and run propose_plan first.",
           };
         }
       }

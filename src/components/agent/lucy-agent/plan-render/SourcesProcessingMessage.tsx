@@ -1,7 +1,7 @@
 /**
  * SourcesProcessingMessage
  *
- * Component that shows "documents processing" message and auto-triggers flow when done.
+ * Component that shows "documents processing" message and auto-triggers a plan when done.
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -47,14 +47,14 @@ export function SourcesProcessingMessage({
     }
   }, [datasetId]);
 
-  // Auto-trigger flow generation when sources become ready
+  // Auto-trigger plan generation when sources become ready
   useEffect(() => {
     if (sourcesReady && !autoTriggered && datasetId) {
       setAutoTriggered(true);
-      console.log('[SourcesProcessingMessage] Documents ready, auto-triggering flow');
-      // Emit event to trigger Lucy to generate the flow
+      console.log('[SourcesProcessingMessage] Documents ready, auto-triggering plan');
+      // Emit event to trigger Lucy to generate the plan
       emitter.emit('vllora_lucy_prompt', {
-        prompt: 'My documents have finished processing. Please use the propose_setup_plan tool to create a comprehensive flow based on the uploaded documents.',
+        prompt: 'My documents have finished processing. Please use the propose_plan tool to create a comprehensive plan based on the uploaded documents.',
       });
     }
   }, [sourcesReady, autoTriggered, datasetId]);
@@ -94,7 +94,7 @@ export function SourcesProcessingMessage({
           <span className="text-sm font-medium">Documents ready!</span>
         </div>
         <div className="text-[12px] text-muted-foreground mt-2">
-          Your documents have finished processing. Generating flow...
+          Your documents have finished processing. Generating plan...
         </div>
       </div>
     );

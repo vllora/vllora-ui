@@ -1,7 +1,7 @@
 /**
- * SetupPlanContext
+ * PlanContext
  *
- * Single source of truth for setup plan state.
+ * Single source of truth for plan state.
  * Manages plan lifecycle: generation → proposal → approval → execution → completion.
  *
  * Previously plan state was split between PlanSection (local component state)
@@ -30,16 +30,16 @@ import {
   type PlanStatus,
 } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
 import { getCurrentExecution, getExecutingPlan } from "@/lib/distri-finetune-tools/steps/execution-state-store";
-import type { SetupPlan } from "@/lib/distri-finetune-tools/steps/propose-setup-plan";
-import { STEP_ORDER, validatePlanForExecution } from "@/lib/distri-finetune-tools/steps/execute-setup-plan";
-import type { ExecutionProgress, ExecutionStepId } from "@/lib/distri-finetune-tools/steps/execute-setup-plan";
+import type { Plan } from "@/lib/distri-finetune-tools/steps/propose-plan";
+import { STEP_ORDER, validatePlanForExecution } from "@/lib/distri-finetune-tools/steps/execute-plan";
+import type { ExecutionProgress, ExecutionStepId } from "@/lib/distri-finetune-tools/steps/execute-plan";
 import type { PlanDiff } from "@/components/datasets/plan-section/plan-markdown-utils";
 
 // ============================================================================
 // Types
 // ============================================================================
 
-interface SetupPlanContextType {
+interface PlanContextType {
   // Plan status (single source of truth, persisted to IndexedDB)
   /** Persisted plan lifecycle status: proposed → approved → executing → completed/failed/dismissed */
   planStatus: PlanStatus | null;
@@ -49,14 +49,14 @@ interface SetupPlanContextType {
   isLoadingPlan: boolean;
 
   // Generation state
-  /** Whether Lucy is currently generating a setup plan */
+  /** Whether Lucy is currently generating a plan */
   isGeneratingPlan: boolean;
   /** Whether a plan has been proposed and is waiting for user action */
   hasPlanProposed: boolean;
 
   // Plan data
   /** The currently proposed plan (null if no plan) */
-  proposedPlan: SetupPlan | null;
+  proposedPlan: Plan | null;
   /** Diff between the current plan and the previous committed plan (null if first proposal or no diff) */
   planDiff: PlanDiff | null;
 
@@ -66,7 +66,7 @@ interface SetupPlanContextType {
   /** Current execution progress (null if not executing) */
   executionProgress: ExecutionProgress | null;
   /** The plan that was last executed (shown after completion) */
-  executedPlan: SetupPlan | null;
+  executedPlan: Plan | null;
 
   // Workspace overlay state
   /** Whether the plan preview is shown in workspace (replaces tab content) */
@@ -77,7 +77,7 @@ interface SetupPlanContextType {
   // Actions
   setIsPlanPreviewActive: (active: boolean) => void;
   setPlanEditMode: (mode: "display" | "edit") => void;
-  approvePlan: (plan: SetupPlan) => void;
+  approvePlan: (plan: Plan) => void;
   dismissPlan: () => void;
 }
 
@@ -85,18 +85,18 @@ interface SetupPlanContextType {
 // Context
 // ============================================================================
 
-const SetupPlanContext = createContext<SetupPlanContextType | undefined>(undefined);
+const PlanContext = createContext<PlanContextType | undefined>(undefined);
 
 // ============================================================================
 // Provider
 // ============================================================================
 
-interface SetupPlanProviderProps {
+interface PlanProviderProps {
   datasetId: string;
   children: ReactNode;
 }
 
-export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProps) {
+export function PlanProvider({ datasetId, children }: PlanProviderProps) {
   // Plan status (persisted to IndexedDB — single source of truth)
   const [planStatus, setPlanStatus] = useState<PlanStatus | null>(null);
 
@@ -108,13 +108,13 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
   const [hasPlanProposed, setHasPlanProposed] = useState(false);
 
   // Plan data
-  const [proposedPlan, setProposedPlan] = useState<SetupPlan | null>(null);
+  const [proposedPlan, setProposedPlan] = useState<Plan | null>(null);
   const [planDiff, setPlanDiff] = useState<PlanDiff | null>(null);
 
   // Execution state
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionProgress, setExecutionProgress] = useState<ExecutionProgress | null>(null);
-  const [executedPlan, setExecutedPlan] = useState<SetupPlan | null>(null);
+  const [executedPlan, setExecutedPlan] = useState<Plan | null>(null);
 
   // Workspace overlay state
   const [isPlanPreviewActive, setIsPlanPreviewActive] = useState(false);
@@ -169,7 +169,7 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
             case 'proposed':
               setHasPlanProposed(true);
               // Don't auto-open plan preview on reload — the banner will show instead.
-              // Plans auto-open via the 'vllora_setup_plan_proposed' event during the
+              // Plans auto-open via the 'vllora_plan_proposed' event during the
               // session when they're first proposed, but on reload we let the user
               // choose to view it. This also avoids showing stale "Approve & Execute"
               // for plans whose status was never updated to 'completed'.
@@ -193,7 +193,7 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
                   setTimeout(() => {
                     if (cancelled) return;
                     emitter.emit("vllora_lucy_prompt", {
-                      prompt: `The flow execution was interrupted. Steps completed: [${completedStepIds.join(', ')}]. Please call get_dataset_state first to check what already exists, then call execute_setup_plan with only the steps that still need to run (using steps_to_execute and overrides).`,
+                      prompt: `The plan execution was interrupted. Steps completed: [${completedStepIds.join(', ')}]. Please call get_dataset_state first to check what already exists, then call execute_plan with only the steps that still need to run (using steps_to_execute and overrides).`,
                     });
                   }, 2000);
                 }
@@ -212,7 +212,7 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
           }
         }
       } catch (error) {
-        console.error('[SetupPlanContext] Failed to load persisted plan:', error);
+        console.error('[PlanContext] Failed to load persisted plan:', error);
       } finally {
         if (!cancelled) {
           setIsLoadingPlan(false);
@@ -240,7 +240,7 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
         setPlanStatus('proposed');
         setIsGeneratingPlan(false);
         setHasPlanProposed(true);
-        setProposedPlan(plan as SetupPlan);
+        setProposedPlan(plan as Plan);
         setPlanDiff(diff ?? null);
         setIsExecuting(false);
         setExecutionProgress(null);
@@ -312,23 +312,23 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
       }
     };
 
-    emitter.on("vllora_setup_plan_generating", handleGenerating);
-    emitter.on("vllora_setup_plan_proposed", handleProposed);
-    emitter.on("vllora_setup_plan_dismissed", handleDismissed);
+    emitter.on("vllora_plan_generating", handleGenerating);
+    emitter.on("vllora_plan_proposed", handleProposed);
+    emitter.on("vllora_plan_dismissed", handleDismissed);
     emitter.on("vllora_workflow_updated", handleWorkflowUpdated);
-    emitter.on("vllora_setup_plan_progress", handleExecutionProgress);
+    emitter.on("vllora_plan_progress", handleExecutionProgress);
 
     return () => {
-      emitter.off("vllora_setup_plan_generating", handleGenerating);
-      emitter.off("vllora_setup_plan_proposed", handleProposed);
-      emitter.off("vllora_setup_plan_dismissed", handleDismissed);
+      emitter.off("vllora_plan_generating", handleGenerating);
+      emitter.off("vllora_plan_proposed", handleProposed);
+      emitter.off("vllora_plan_dismissed", handleDismissed);
       emitter.off("vllora_workflow_updated", handleWorkflowUpdated);
-      emitter.off("vllora_setup_plan_progress", handleExecutionProgress);
+      emitter.off("vllora_plan_progress", handleExecutionProgress);
     };
   }, [datasetId, executionProgress?.is_complete]);
 
   // Actions
-  const approvePlan = useCallback((plan: SetupPlan) => {
+  const approvePlan = useCallback((plan: Plan) => {
     // Validate before approving
     const stepsToRun = new Set<ExecutionStepId>(plan.steps_to_execute ?? STEP_ORDER);
     const validation = validatePlanForExecution(plan, stepsToRun, plan.overrides);
@@ -336,7 +336,7 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
       const errorMsg = validation.errors.join('; ');
       toast.error('Plan has issues', { description: validation.errors[0] });
       emitter.emit('vllora_lucy_prompt', {
-        prompt: `The plan failed validation and cannot be approved. Error: "${errorMsg}". Please fix the plan and re-propose it using adjust_setup_plan followed by save_flow.`,
+        prompt: `The plan failed validation and cannot be approved. Error: "${errorMsg}". Please fix the plan and re-propose it using adjust_plan followed by save_plan.`,
       });
       return; // Block approval
     }
@@ -345,10 +345,10 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
     updatePlanStatus(datasetId, 'approved');
     setPlanStatus('approved');
     // Emit the approved plan via event (Lucy will pick it up)
-    emitter.emit("vllora_setup_plan_approved", { datasetId, plan });
+    emitter.emit("vllora_plan_approved", { datasetId, plan });
     // Send a simple prompt to Lucy
     emitter.emit("vllora_lucy_prompt", {
-      prompt: `I approve the flow. Please execute it now.`,
+      prompt: `I approve the plan. Please execute it now.`,
     });
     // Start showing execution progress
     setIsExecuting(true);
@@ -358,7 +358,7 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
 
   const dismissPlan = useCallback(() => {
     clearProposedPlan(datasetId);
-    emitter.emit("vllora_setup_plan_dismissed", { datasetId });
+    emitter.emit("vllora_plan_dismissed", { datasetId });
     setProposedPlan(null);
     setHasPlanProposed(false);
     setIsExecuting(false);
@@ -366,7 +366,7 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
     setIsPlanPreviewActive(false);
   }, [datasetId]);
 
-  const value: SetupPlanContextType = {
+  const value: PlanContextType = {
     planStatus,
     isLoadingPlan,
     isGeneratingPlan,
@@ -385,9 +385,9 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
   };
 
   return (
-    <SetupPlanContext.Provider value={value}>
+    <PlanContext.Provider value={value}>
       {children}
-    </SetupPlanContext.Provider>
+    </PlanContext.Provider>
   );
 }
 
@@ -395,10 +395,10 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
 // Consumer
 // ============================================================================
 
-export function SetupPlanConsumer() {
-  const context = useContext(SetupPlanContext);
+export function PlanConsumer() {
+  const context = useContext(PlanContext);
   if (context === undefined) {
-    throw new Error("SetupPlanConsumer must be used within a SetupPlanProvider");
+    throw new Error("PlanConsumer must be used within a PlanProvider");
   }
   return context;
 }

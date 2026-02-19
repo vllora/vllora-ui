@@ -6,7 +6,7 @@
  *
  * Lucy uses this to check what knowledge sources exist, then calls
  * generate_topics to get a topic hierarchy (which handles document-grounding
- * internally), then constructs a plan with propose_setup_plan.
+ * internally), then constructs a plan with propose_plan.
  */
 
 import type { DistriFnTool } from '@distri/core';
@@ -112,7 +112,7 @@ export const analyzeKnowledgeSourcesHandler: ToolHandler = async (
       return {
         success: false,
         sources_processing: true,
-        error: `${statusMessage} STOP: Do NOT call this tool again. Tell the user their documents are still being processed (usually 30-60 seconds per document) and that you will create the flow once processing is complete. The frontend will notify you when documents are ready.`,
+        error: `${statusMessage} STOP: Do NOT call this tool again. Tell the user their documents are still being processed (usually 30-60 seconds per document) and that you will create the plan once processing is complete. The frontend will notify you when documents are ready.`,
       };
     }
 

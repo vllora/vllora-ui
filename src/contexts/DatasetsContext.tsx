@@ -148,7 +148,7 @@ function useDatasets() {
       deleteKnowledgeSourcesByDataset(datasetId),
       // Dry run jobs (vllora-finetune DB)
       deleteDryRunJobsByDataset(datasetId),
-      // Proposed setup plans (vllora-finetune DB)
+      // Proposed plans (vllora-finetune DB)
       clearProposedPlan(datasetId),
     ]);
 

@@ -5,7 +5,7 @@
  * knowledge source context for LLM-based topic generation.
  *
  * Used by:
- * - propose-setup-plan (for plan generation)
+ * - propose-plan (for plan generation)
  * - generate-topics (for topic hierarchy generation)
  */
 

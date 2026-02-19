@@ -29,7 +29,8 @@ export * from './LucyStepIndicator';
 // Tool components
 export * from './LucyToolCalls';
 export * from './LucyToolRenderer';
-export * from './setup-plan-render/LucySetupPlanRenderer';
+export * from './plan-render/LucyPlanRenderer';
+export * from './plan-render/LucySavePlanRenderer';
 export * from './LucyToolCallCard';
 export * from './LucyToolExecutionRenderer';
 export * from './LucyToolActions';

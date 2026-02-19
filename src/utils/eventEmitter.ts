@@ -95,16 +95,20 @@ type VlloraEvents = {
       percent?: number;
     };
   };
-  // Setup plan execution progress
-  vllora_setup_plan_progress: { progress: import('@/lib/distri-finetune-tools/steps/execute-setup-plan').ExecutionProgress };
-  // Setup plan generation started (show loading in right panel and switch to README tab)
-  vllora_setup_plan_generating: { datasetId: string; switchToReadme?: boolean };
-  // Setup plan proposed (for displaying in right panel)
-  vllora_setup_plan_proposed: { datasetId: string; plan: unknown };
-  // Setup plan dismissed (user closed the card without approving)
-  vllora_setup_plan_dismissed: { datasetId: string };
-  // Setup plan approved (user approved, triggers execution)
-  vllora_setup_plan_approved: { datasetId: string; plan: unknown };
+  // plan execution progress
+  vllora_plan_progress: { progress: import('@/lib/distri-finetune-tools/steps/execute-plan').ExecutionProgress };
+  // plan generation started (show loading in right panel and switch to README tab)
+  vllora_plan_generating: { datasetId: string; switchToReadme?: boolean };
+  // plan proposed (for displaying in right panel)
+  vllora_plan_proposed: {
+    datasetId: string;
+    plan: unknown;
+    diff?: import('@/components/datasets/plan-section/plan-markdown-utils').PlanDiff;
+  };
+  // plan dismissed (user closed the card without approving)
+  vllora_plan_dismissed: { datasetId: string };
+  // plan approved (user approved, triggers execution)
+  vllora_plan_approved: { datasetId: string; plan: unknown };
   // Workflow updated (triggers refresh in UI)
   vllora_workflow_updated: { datasetId: string };
   // Data generation progress (for showing loading state in Records tab)

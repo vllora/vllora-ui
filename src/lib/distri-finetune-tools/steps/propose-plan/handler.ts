@@ -1,5 +1,5 @@
 /**
- * Propose Setup Plan Handler
+ * Propose plan Handler
  *
  * Validates, persists, and emits a plan for user approval.
  * This tool is intentionally "dumb" — Lucy constructs the plan,
@@ -10,10 +10,10 @@ import * as datasetsDB from '@/services/datasets-db';
 import { emitter } from '@/utils/eventEmitter';
 import type { ToolHandler } from '../../types';
 import type {
-  ProposeSetupPlanParams,
+  ProposePlanParams,
   ProposedTopic,
-  SetupPlan,
-  ProposeSetupPlanResult,
+  Plan,
+  ProposePlanResult,
 } from './types';
 import { saveProposedPlan } from '../proposed-plan-store';
 
@@ -44,7 +44,7 @@ function normalizeTargetCounts(topics: ProposedTopic[]): ProposedTopic[] {
 }
 
 /** Validate output_format — if output_schema is invalid JSON, clear it */
-function validateOutputFormat(plan: SetupPlan): void {
+function validateOutputFormat(plan: Plan): void {
   if (!plan.output_format) return;
   const schema = plan.output_format.schema;
   if (!schema || Object.keys(schema).length === 0) {
@@ -52,7 +52,7 @@ function validateOutputFormat(plan: SetupPlan): void {
     return;
   }
   if (!plan.output_format.system_prompt_template?.trim()) {
-    console.log('[proposeSetupPlan] output_format.schema present but system_prompt_template missing, clearing');
+    console.log('[proposePlan] output_format.schema present but system_prompt_template missing, clearing');
     plan.output_format = null;
   }
 }
@@ -61,13 +61,13 @@ function validateOutputFormat(plan: SetupPlan): void {
 // Handler
 // =============================================================================
 
-export const proposeSetupPlanHandler: ToolHandler = async (
+export const proposePlanHandler: ToolHandler = async (
   params
-): Promise<ProposeSetupPlanResult> => {
+): Promise<ProposePlanResult> => {
   try {
-    console.log('[proposeSetupPlan] Starting with params:', JSON.stringify(params, null, 2));
+    console.log('[proposePlan] Starting with params:', JSON.stringify(params, null, 2));
 
-    const { dataset_id, plan: agentPlan } = params as unknown as ProposeSetupPlanParams;
+    const { dataset_id, plan: agentPlan } = params as unknown as ProposePlanParams;
 
     if (!dataset_id) {
       return { success: false, error: 'dataset_id is required' };
@@ -81,7 +81,7 @@ export const proposeSetupPlanHandler: ToolHandler = async (
     }
 
     // Show loading state in UI
-    emitter.emit('vllora_setup_plan_generating', { datasetId: dataset_id });
+    emitter.emit('vllora_plan_generating', { datasetId: dataset_id });
 
     // Validate dataset exists
     const dataset = await datasetsDB.getDatasetById(dataset_id);
@@ -90,7 +90,7 @@ export const proposeSetupPlanHandler: ToolHandler = async (
     }
 
     // Fill in defaults from dataset
-    const plan: SetupPlan = {
+    const plan: Plan = {
       ...agentPlan,
       dataset_id,
       dataset_name: agentPlan.dataset_name || dataset.name,
@@ -128,15 +128,15 @@ export const proposeSetupPlanHandler: ToolHandler = async (
     await saveProposedPlan(dataset_id, plan);
 
     // Emit event so the UI can display the plan card
-    emitter.emit('vllora_setup_plan_proposed', { datasetId: dataset_id, plan });
+    emitter.emit('vllora_plan_proposed', { datasetId: dataset_id, plan });
 
-    console.log('[proposeSetupPlan] Plan persisted and emitted');
+    console.log('[proposePlan] Plan persisted and emitted');
     return { success: true, plan };
   } catch (error) {
-    console.error('[proposeSetupPlan] Failed:', error);
+    console.error('[proposePlan] Failed:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to propose flow',
+      error: error instanceof Error ? error.message : 'Failed to propose plan',
     };
   }
 };

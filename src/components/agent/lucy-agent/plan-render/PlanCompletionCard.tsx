@@ -8,7 +8,7 @@
 import { CheckCircle2, Database, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { emitter } from "@/utils/eventEmitter";
-import type { ExecutionProgress } from "@/lib/distri-finetune-tools/steps/execute-setup-plan";
+import type { ExecutionProgress } from "@/lib/distri-finetune-tools/steps/execute-plan";
 
 interface PlanCompletionCardProps {
   progress: ExecutionProgress;

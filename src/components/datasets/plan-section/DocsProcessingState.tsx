@@ -59,7 +59,7 @@ export function DocsProcessingState({
             Processing Reference Documents
           </h3>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            {readyCount} of {totalCount} complete. The flow will be generated automatically once all documents finish.
+            {readyCount} of {totalCount} complete. The plan will be generated automatically once all documents finish.
           </p>
         </div>
 

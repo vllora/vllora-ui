@@ -1,7 +1,7 @@
 /**
  * LucyExecutePlanRenderer
  *
- * Renderer for execute_setup_plan tool.
+ * Renderer for execute_plan tool.
  * Shows inline progress checklist in sidebar, or completion card when done.
  */
 
@@ -10,7 +10,7 @@ import { ToolCallState } from '@distri/react';
 import { tryParseJson } from '@/utils/modelUtils';
 import { SimpleFallbackRenderer } from './SimpleFallbackRenderer';
 import { PlanCompletionCard } from './PlanCompletionCard';
-import { SetupPlanConsumer } from '@/contexts/SetupPlanContext';
+import { PlanConsumer } from '@/contexts/PlanContext';
 import { Check, Circle, Loader2, AlertCircle } from 'lucide-react';
 
 // Local type definition to avoid circular imports
@@ -20,13 +20,13 @@ interface ToolRendererProps {
 }
 
 /**
- * Renderer for execute_setup_plan tool - shows execution progress
+ * Renderer for execute_plan tool - shows execution progress
  */
 export function LucyExecutePlanRenderer({ toolCall, state }: ToolRendererProps) {
   const isRunning = state?.status === 'running';
   const isCompleted = state?.status === 'completed';
 
-  const { executionProgress, isExecuting } = SetupPlanConsumer();
+  const { executionProgress, isExecuting } = PlanConsumer();
 
   // Extract result
   const getResultData = (): any => {
@@ -67,7 +67,7 @@ export function LucyExecutePlanRenderer({ toolCall, state }: ToolRendererProps) 
         <div className="rounded-lg border border-border bg-card p-3">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            <span>Starting flow execution...</span>
+            <span>Starting plan execution...</span>
           </div>
         </div>
       );
@@ -82,7 +82,7 @@ export function LucyExecutePlanRenderer({ toolCall, state }: ToolRendererProps) 
     return (
       <div className="rounded-lg border border-border bg-card p-3 space-y-2">
         <div className="text-xs font-medium text-foreground">
-          Executing flow...
+          Executing plan...
         </div>
         <div className="space-y-1">
           {activeSteps.map((step: any) => (
@@ -119,7 +119,7 @@ export function LucyExecutePlanRenderer({ toolCall, state }: ToolRendererProps) 
     return (
       <div className="border border-destructive/30 rounded-lg bg-destructive/10 p-4">
         <div className="text-sm text-destructive">
-          {state?.error || result?.error || 'Flow execution failed'}
+          {state?.error || result?.error || 'Plan execution failed'}
         </div>
       </div>
     );

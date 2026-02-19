@@ -16,7 +16,7 @@ import type { DistriAnyTool } from '@distri/react';
 import { uuidv4, DistriMessage, DistriClient } from '@distri/core';
 import { finetuneTools, workflowToContext } from '@/lib/distri-finetune-tools';
 import type { PlanStatus } from '@/lib/distri-finetune-tools/steps/proposed-plan-store';
-import type { ExecutionProgress } from '@/lib/distri-finetune-tools/steps/execute-setup-plan';
+import type { ExecutionProgress } from '@/lib/distri-finetune-tools/steps/execute-plan';
 import { stockfishTools, isChessDataset } from '@/lib/distri-finetune-tools/steps';
 import { finetuneWorkflowService, FinetuneWorkflowState } from '@/services/finetune-workflow-db';
 import { getDatasetById } from '@/services/datasets-db';
@@ -68,9 +68,9 @@ interface UseFineTuneAgentChatOptions {
   datasetName?: string;
   /** Training goals (used for workflow initialization) */
   trainingGoals?: string;
-  /** Current plan status (from SetupPlanContext) */
+  /** Current plan status (from PlanContext) */
   planStatus?: PlanStatus | null;
-  /** Current execution progress (from SetupPlanContext, used for resume context) */
+  /** Current execution progress (from PlanContext, used for resume context) */
   executionProgress?: ExecutionProgress | null;
 }
 
@@ -179,7 +179,7 @@ export function useFineTuneAgentChat(
     refreshWorkflow();
   }, [refreshWorkflow]);
 
-  // Listen for workflow updated events (e.g., after execute_setup_plan completes)
+  // Listen for workflow updated events (e.g., after execute_plan completes)
   useEffect(() => {
     const handleWorkflowUpdated = ({ datasetId: updatedDatasetId }: { datasetId: string }) => {
       if (updatedDatasetId === datasetId) {

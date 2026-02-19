@@ -40,12 +40,12 @@ import { PlanPreview } from "./PlanPreview";
 import { ActivePlanBanner } from "./ActivePlanBanner";
 import { useDatasetReadme } from "@/hooks/useDatasetReadme";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
-import { SetupPlanConsumer } from "@/contexts/SetupPlanContext";
+import { PlanConsumer } from "@/contexts/PlanContext";
 import type { CoverageStats } from "@/types/dataset-types";
 import type { DatasetSection } from "./dataset-detail-header/DatasetUtilityBar";
 
 // Side-effect: registers plan approval event listener
-import "@/lib/distri-finetune-tools/steps/execute-setup-plan";
+import "@/lib/distri-finetune-tools/steps/execute-plan";
 
 export function DatasetDetailContentV2() {
   const {
@@ -149,7 +149,7 @@ export function DatasetDetailContentV2() {
     processingCount: docsProcessingCount,
   } = KnowledgeSourcesConsumer();
 
-  // Setup plan state from context
+  // plan state from context
   const {
     proposedPlan,
     planStatus,
@@ -163,7 +163,7 @@ export function DatasetDetailContentV2() {
     setPlanEditMode,
     approvePlan,
     dismissPlan,
-  } = SetupPlanConsumer();
+  } = PlanConsumer();
 
   // Sync plan view state with URL query string (?view=plan&mode=edit)
   // so refreshing the page preserves the current view.
@@ -275,9 +275,9 @@ export function DatasetDetailContentV2() {
       }
     };
 
-    emitter.on("vllora_setup_plan_proposed", handlePlanProposed);
+    emitter.on("vllora_plan_proposed", handlePlanProposed);
     return () => {
-      emitter.off("vllora_setup_plan_proposed", handlePlanProposed);
+      emitter.off("vllora_plan_proposed", handlePlanProposed);
     };
   }, [shouldAutoGenerate, datasetId, searchParams, setSearchParams]);
 
@@ -288,9 +288,9 @@ export function DatasetDetailContentV2() {
 
     hasTriggeredAutoGenerate.current = true;
 
-    toast.info("Lucy is creating a flow from your documents...", { duration: 4000 });
+    toast.info("Lucy is creating a plan from your documents...", { duration: 4000 });
     emitter.emit("vllora_lucy_prompt", {
-      prompt: `Please analyze the uploaded documents and create a flow for this dataset using the propose_setup_plan tool.`,
+      prompt: `Please analyze the uploaded documents and create a plan for this dataset using the propose_plan tool.`,
     });
   }, [docsProcessing, shouldAutoGenerate, datasetId]);
 
@@ -302,9 +302,9 @@ export function DatasetDetailContentV2() {
       if (hasTriggeredAutoGenerate.current) return;
       hasTriggeredAutoGenerate.current = true;
 
-      toast.warning("Document processing is taking longer than expected. Generating flow with available content...", { duration: 5000 });
+      toast.warning("Document processing is taking longer than expected. Generating plan with available content...", { duration: 5000 });
       emitter.emit("vllora_lucy_prompt", {
-        prompt: `Please analyze the uploaded documents and create a flow for this dataset using the propose_setup_plan tool.`,
+        prompt: `Please analyze the uploaded documents and create a plan for this dataset using the propose_plan tool.`,
       });
     }, 60000);
 

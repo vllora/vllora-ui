@@ -10,12 +10,12 @@
 /**
  * Auto-trigger prompt when user opens a dataset.
  * Two cases:
- * - Empty dataset → direct Lucy to create a flow (matches Plan-First Trigger)
+ * - Empty dataset → direct Lucy to create a plan (matches Plan-First Trigger)
  * - Has records → let Lucy decide next steps based on injected context
  */
 export function buildDatasetAnalysisPrompt(isEmpty: boolean): string {
   if (isEmpty) {
-    return `I just opened this new dataset. Please create a flow so we can get started.`;
+    return `I just opened this new dataset. Please create a plan so we can get started.`;
   }
   return `I just opened this dataset. What should we do next?`;
 }

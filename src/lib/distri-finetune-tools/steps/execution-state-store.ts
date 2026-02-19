@@ -1,13 +1,13 @@
 /**
  * Execution State Store
  *
- * A simple shared store for tracking setup plan execution progress.
+ * A simple shared store for tracking plan execution progress.
  * This persists the current execution state so components that mount
  * after execution started can still access the current progress.
  */
 
-import type { ExecutionProgress } from './execute-setup-plan';
-import type { SetupPlan } from './propose-setup-plan';
+import type { ExecutionProgress } from './execute-plan';
+import type { Plan } from './propose-plan';
 import { emitter } from '@/utils/eventEmitter';
 import { updatePlanStatus, updatePlanExecution, completePlan, failPlan } from './proposed-plan-store';
 
@@ -15,7 +15,7 @@ import { updatePlanStatus, updatePlanExecution, completePlan, failPlan } from '.
 const executionStore = new Map<string, ExecutionProgress>();
 
 // Store the plan being executed (so we can show it during execution)
-const executingPlanStore = new Map<string, SetupPlan>();
+const executingPlanStore = new Map<string, Plan>();
 
 /**
  * Get current execution progress for a dataset
@@ -43,19 +43,19 @@ export function clearExecution(datasetId: string): void {
 /**
  * Get the plan currently being executed for a dataset
  */
-export function getExecutingPlan(datasetId: string): SetupPlan | null {
+export function getExecutingPlan(datasetId: string): Plan | null {
   return executingPlanStore.get(datasetId) || null;
 }
 
 /**
  * Set the plan being executed for a dataset
  */
-export function setExecutingPlan(datasetId: string, plan: SetupPlan): void {
+export function setExecutingPlan(datasetId: string, plan: Plan): void {
   executingPlanStore.set(datasetId, plan);
 }
 
 // Subscribe to progress events and update the store (write-through to IndexedDB)
-emitter.on('vllora_setup_plan_progress' as any, ({ progress }: { progress: ExecutionProgress }) => {
+emitter.on('vllora_plan_progress' as any, ({ progress }: { progress: ExecutionProgress }) => {
   if (progress.dataset_id) {
     executionStore.set(progress.dataset_id, progress);
 
@@ -84,10 +84,10 @@ emitter.on('vllora_setup_plan_progress' as any, ({ progress }: { progress: Execu
 });
 
 // Store the plan when it's approved for execution
-emitter.on('vllora_setup_plan_approved', ({ datasetId, plan }: { datasetId: string; plan: unknown }) => {
+emitter.on('vllora_plan_approved', ({ datasetId, plan }: { datasetId: string; plan: unknown }) => {
   if (datasetId && plan) {
-    executingPlanStore.set(datasetId, plan as SetupPlan);
-    // Persist status to IndexedDB (SetupPlanContext also does this, but belt-and-suspenders)
+    executingPlanStore.set(datasetId, plan as Plan);
+    // Persist status to IndexedDB (PlanContext also does this, but belt-and-suspenders)
     updatePlanStatus(datasetId, 'approved');
   }
 });

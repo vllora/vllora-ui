@@ -198,7 +198,7 @@ export function EmptyDatasetsState() {
       // If files were uploaded, add them as knowledge sources
       if (files && files.length > 0) {
         // Emit generating event immediately so UI shows loading state
-        emitter.emit("vllora_setup_plan_generating", { datasetId: dataset.id });
+        emitter.emit("vllora_plan_generating", { datasetId: dataset.id });
 
         // Upload files as knowledge sources (processing happens async)
         for (const file of files) {

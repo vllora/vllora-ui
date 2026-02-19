@@ -8,7 +8,7 @@
 import { DatasetDetailProvider } from "@/contexts/DatasetDetailContext";
 import { FinetuneJobsProvider } from "@/contexts/FinetuneJobsContext";
 import { KnowledgeSourcesProvider } from "@/contexts/KnowledgeSourcesContext";
-import { SetupPlanProvider } from "@/contexts/SetupPlanContext";
+import { PlanProvider } from "@/contexts/PlanContext";
 import { DatasetDetailContentV2 } from "./DatasetDetailContentV2";
 
 interface DatasetDetailViewProps {
@@ -27,9 +27,9 @@ export function DatasetDetailView({ datasetId, onBack, onSelectDataset }: Datase
     >
       <FinetuneJobsProvider>
         <KnowledgeSourcesProvider datasetId={datasetId}>
-          <SetupPlanProvider datasetId={datasetId}>
+          <PlanProvider datasetId={datasetId}>
             <DatasetDetailContentV2 />
-          </SetupPlanProvider>
+          </PlanProvider>
         </KnowledgeSourcesProvider>
       </FinetuneJobsProvider>
     </DatasetDetailProvider>

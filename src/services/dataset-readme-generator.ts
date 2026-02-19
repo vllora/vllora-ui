@@ -25,15 +25,15 @@ export interface KnowledgeSourceInfo {
   size?: number;
 }
 
-export interface SetupPlanSummary {
+export interface PlanSummary {
   executed_at: number;
   topics_created: number;
   records_generated: number;
   grader_configured: boolean;
   dry_run_completed: boolean;
-  /** System prompt template from the setup plan output format */
+  /** System prompt template from the plan output format */
   system_prompt_template?: string;
-  /** Output schema from the setup plan output format */
+  /** Output schema from the plan output format */
   output_schema?: Record<string, unknown>;
   /** Strategy notes from the plan */
   strategy?: string;
@@ -47,8 +47,8 @@ export interface ReadmeGeneratorOptions {
   workflow?: FinetuneWorkflowState | null;
   /** Knowledge sources used to generate topics and data */
   knowledgeSources?: KnowledgeSourceInfo[];
-  /** Summary from setup plan execution */
-  setupPlanSummary?: SetupPlanSummary;
+  /** Summary from plan execution */
+  planSummary?: PlanSummary;
 }
 
 // =============================================================================
@@ -468,8 +468,8 @@ ${rows}
 Training data is grounded in these source materials to ensure accuracy and relevance.`;
 }
 
-function generateSetupPlanSection(
-  summary?: SetupPlanSummary
+function generatePlanSection(
+  summary?: PlanSummary
 ): string | null {
   if (!summary) {
     return null;
@@ -477,7 +477,7 @@ function generateSetupPlanSection(
 
   const date = formatDate(summary.executed_at);
 
-  return `## Flow Execution
+  return `## Plan Execution
 
 *Executed: ${date}*
 
@@ -492,7 +492,7 @@ Records were generated with topics pre-assigned based on the topic hierarchy str
 }
 
 function generateOutputFormatSection(
-  summary?: SetupPlanSummary
+  summary?: PlanSummary
 ): string | null {
   if (!summary?.system_prompt_template && !summary?.output_schema) {
     return null;
@@ -587,7 +587,7 @@ ${formatted}`;
 }
 
 function generateEvaluationCriteriaSection(
-  summary?: SetupPlanSummary
+  summary?: PlanSummary
 ): string | null {
   if (!summary?.grader_criteria || summary.grader_criteria.length === 0) {
     return null;
@@ -633,24 +633,24 @@ function generateFooter(): string {
  * Generate a README markdown string for a dataset
  */
 export function generateDatasetReadme(options: ReadmeGeneratorOptions): string {
-  const { dataset, records, workflow, knowledgeSources, setupPlanSummary } = options;
+  const { dataset, records, workflow, knowledgeSources, planSummary } = options;
 
   const sections: (string | null)[] = [
     generateHeaderSection(dataset),
     generateOverviewSection(dataset, records),
     // Data provenance: where the data came from
     generateKnowledgeSourcesSection(knowledgeSources),
-    // Setup plan execution summary (if applicable)
-    generateSetupPlanSection(setupPlanSummary),
+    // plan execution summary (if applicable)
+    generatePlanSection(planSummary),
     // Output format: system prompt + schema
-    generateOutputFormatSection(setupPlanSummary),
+    generateOutputFormatSection(planSummary),
     // Sample training records
     generateSampleRecordsSection(records),
     // Dataset structure
     generateTopicHierarchySection(dataset, records),
     generateCoverageSection(dataset, records),
     // Evaluation criteria
-    generateEvaluationCriteriaSection(setupPlanSummary),
+    generateEvaluationCriteriaSection(planSummary),
     // Quality metrics
     dataset.dryRunStats ? generateQualitySection(dataset.dryRunStats) : null,
     // Workflow status

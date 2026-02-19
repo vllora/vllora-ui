@@ -9,7 +9,7 @@ import type { DistriFnTool } from '@distri/core';
 import * as datasetsDB from '@/services/datasets-db';
 import * as workflowDB from '@/services/finetune-workflow-db';
 import * as knowledgeDB from '@/services/knowledge-sources-db';
-import { generateDatasetReadme, type KnowledgeSourceInfo, type SetupPlanSummary } from '@/services/dataset-readme-generator';
+import { generateDatasetReadme, type KnowledgeSourceInfo, type PlanSummary } from '@/services/dataset-readme-generator';
 import type { ToolHandler } from '../types';
 
 // =============================================================================
@@ -65,8 +65,8 @@ export const regenerateReadmeHandler: ToolHandler = async (
         size: s.size,
       }));
 
-    // Reconstruct setup plan summary from existing data
-    let setupPlanSummary: SetupPlanSummary | undefined;
+    // Reconstruct plan summary from existing data
+    let planSummary: PlanSummary | undefined;
     const generatedRecords = records.filter(r => r.is_generated);
     if (generatedRecords.length > 0) {
       // Extract system prompt template from first record's system message
@@ -77,7 +77,7 @@ export const regenerateReadmeHandler: ToolHandler = async (
         ? new Set(records.map(r => r.topic).filter(Boolean)).size
         : 0;
 
-      setupPlanSummary = {
+      planSummary = {
         executed_at: generatedRecords[0]?.createdAt || Date.now(),
         topics_created: topicCount,
         records_generated: generatedRecords.length,
@@ -93,7 +93,7 @@ export const regenerateReadmeHandler: ToolHandler = async (
       records,
       workflow,
       knowledgeSources,
-      setupPlanSummary,
+      planSummary,
     });
 
     // Save to IndexedDB

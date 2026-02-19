@@ -1,16 +1,16 @@
 /**
  * Plan Markdown Utilities
  *
- * Functions to convert between SetupPlan objects and markdown format.
- * Used by SetupPlanEditor for rendering and parsing user edits.
+ * Functions to convert between Plan objects and markdown format.
+ * Used by PlanEditor for rendering and parsing user edits.
  */
 
-import type { SetupPlan } from '@/lib/distri-finetune-tools/steps/propose-setup-plan';
+import type { Plan } from '@/lib/distri-finetune-tools/steps/propose-plan';
 
 /**
- * Convert SetupPlan to editable markdown with professional formatting
+ * Convert Plan to editable markdown with professional formatting
  */
-export function planToMarkdown(plan: SetupPlan): string {
+export function planToMarkdown(plan: Plan): string {
   const topics = plan.proposed_topics ?? [];
   const criteria = plan.grader_config?.criteria ?? [];
 
@@ -132,11 +132,11 @@ ${stepsContent}
 }
 
 /**
- * Parse markdown back to SetupPlan (best effort)
+ * Parse markdown back to Plan (best effort)
  * Handles table format for topics and criteria
  */
-export function markdownToPlan(md: string, originalPlan: SetupPlan): SetupPlan {
-  const plan = JSON.parse(JSON.stringify(originalPlan)) as SetupPlan;
+export function markdownToPlan(md: string, originalPlan: Plan): Plan {
+  const plan = JSON.parse(JSON.stringify(originalPlan)) as Plan;
 
   // Parse topics from table rows
   // Main topic: | **Topic Name** | 40 | Description |
@@ -253,7 +253,7 @@ export interface PlanDiff {
 }
 
 /** Collect all leaf topic names from a topic tree (flat list of names) */
-function collectLeafNames(topics: NonNullable<SetupPlan['proposed_topics']>): Map<string, string> {
+function collectLeafNames(topics: NonNullable<Plan['proposed_topics']>): Map<string, string> {
   const names = new Map<string, string>();
   for (const t of topics) {
     if (t.subtopics && t.subtopics.length > 0) {
@@ -271,7 +271,7 @@ function collectLeafNames(topics: NonNullable<SetupPlan['proposed_topics']>): Ma
  * Compute a diff between two plans.
  * If `original` is null (first proposal), all topics/criteria count as "added".
  */
-export function diffPlans(original: SetupPlan | null, updated: SetupPlan): PlanDiff {
+export function diffPlans(original: Plan | null, updated: Plan): PlanDiff {
   // --- Topics diff ---
   const prevTopics = original?.proposed_topics
     ? collectLeafNames(original.proposed_topics)

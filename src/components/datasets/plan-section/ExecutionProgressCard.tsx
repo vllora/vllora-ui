@@ -21,7 +21,7 @@ import { DatasetDetailConsumer } from '@/contexts/DatasetDetailContext';
 import type {
   ExecutionProgress,
   ExecutionStepStatus,
-} from '@/lib/distri-finetune-tools/steps/execute-setup-plan';
+} from '@/lib/distri-finetune-tools/steps/execute-plan';
 
 interface ExecutionProgressCardProps {
   initialProgress?: ExecutionProgress;
@@ -54,9 +54,9 @@ export function ExecutionProgressCard({
       }
     };
 
-    emitter.on('vllora_setup_plan_progress' as any, handleProgress);
+    emitter.on('vllora_plan_progress' as any, handleProgress);
     return () => {
-      emitter.off('vllora_setup_plan_progress' as any, handleProgress);
+      emitter.off('vllora_plan_progress' as any, handleProgress);
     };
   }, [onComplete]);
 

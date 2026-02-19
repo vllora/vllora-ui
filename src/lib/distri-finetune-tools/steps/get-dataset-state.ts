@@ -14,7 +14,7 @@ import type { ToolHandler } from '../types';
 import type { DatasetStats, SanitizationStats, DatasetRecord } from '@/types/dataset-types';
 import { sanitizeRecords, DEFAULT_VALIDATION_CONFIG } from '@/components/datasets/sanitization-utils';
 import { getStoredPlan } from './proposed-plan-store';
-import { STEP_ORDER } from './execute-setup-plan';
+import { STEP_ORDER } from './execute-plan';
 
 // =============================================================================
 // Types
@@ -285,10 +285,10 @@ Returns:
 - plan: exists? status? completed_steps, failed_step, remaining_steps
 
 IMPORTANT: If plan.exists is true and plan.status is 'failed' or 'executing',
-do NOT create a new plan. Resume the existing plan by calling execute_setup_plan
+do NOT create a new plan. Resume the existing plan by calling execute_plan
 with steps_to_execute set to plan.remaining_steps.
 
-ALWAYS call this before execute_setup_plan when resuming an interrupted execution.
+ALWAYS call this before execute_plan when resuming an interrupted execution.
 Compare the returned state against the plan to decide which steps still need to run.`,
   type: 'function',
   parameters: {

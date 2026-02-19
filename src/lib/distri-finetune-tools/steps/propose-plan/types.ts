@@ -1,18 +1,18 @@
 /**
- * Types for Propose Setup Plan
+ * Types for Propose plan
  */
 
-import type { ExecutionStepId } from '../execute-setup-plan';
+import type { ExecutionStepId } from '../execute-plan';
 
 export interface OutputFormat {
   schema: Record<string, unknown>;
   system_prompt_template: string;
 }
 
-export interface ProposeSetupPlanParams {
+export interface ProposePlanParams {
   dataset_id: string;
   /** The plan to propose. Lucy constructs this. */
-  plan: SetupPlan;
+  plan: Plan;
 }
 
 export interface ProposedTopic {
@@ -27,7 +27,7 @@ export interface GraderCriterion {
   description: string;
 }
 
-export interface SetupPlan {
+export interface Plan {
   dataset_id: string;
   dataset_name: string;
   objective: string;
@@ -89,9 +89,9 @@ export interface SetupPlan {
   estimated_duration: string;
 }
 
-export interface ProposeSetupPlanResult {
+export interface ProposePlanResult {
   success: boolean;
   error?: string;
-  plan?: SetupPlan;
+  plan?: Plan;
   message?: string;
 }

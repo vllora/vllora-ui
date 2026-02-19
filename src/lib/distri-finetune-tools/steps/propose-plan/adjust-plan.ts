@@ -1,27 +1,27 @@
 /**
- * Adjust Setup Plan Tool
+ * Adjust plan Tool
  *
- * Modifies an existing flow based on user feedback.
+ * Modifies an existing plan based on user feedback.
  * Allows users to request changes via chat instead of manual editing.
  */
 
 import type { DistriFnTool } from '@distri/core';
 import { emitter } from '@/utils/eventEmitter';
 import type { ToolHandler } from '../../types';
-import type { SetupPlan, ProposedTopic, GraderCriterion } from './types';
+import type { Plan, ProposedTopic, GraderCriterion } from './types';
 import { callLucy, type LucyMessage } from '../shared/lucy-client';
 import { getStoredPlan, saveProposedPlan } from '../proposed-plan-store';
 
-interface AdjustSetupPlanParams {
+interface AdjustPlanParams {
   dataset_id: string;
-  current_plan?: SetupPlan;
+  current_plan?: Plan;
   user_feedback: string;
 }
 
-interface AdjustSetupPlanResult {
+interface AdjustPlanResult {
   success: boolean;
   error?: string;
-  plan?: SetupPlan;
+  plan?: Plan;
   message?: string;
 }
 
@@ -81,7 +81,7 @@ const ADJUST_PLAN_RESPONSE_SCHEMA = {
   },
 };
 
-const ADJUST_PLAN_SYSTEM = `You adjust fine-tuning flows based on user requests.
+const ADJUST_PLAN_SYSTEM = `You adjust fine-tuning plans based on user requests.
 
 ## GOALS
 - Apply the smallest possible change to satisfy the request.
@@ -99,7 +99,7 @@ const ADJUST_PLAN_SYSTEM = `You adjust fine-tuning flows based on user requests.
 - Summarize changes briefly in changes_made.`;
 
 async function callLLMToAdjustPlan(
-  currentPlan: SetupPlan,
+  currentPlan: Plan,
   userFeedback: string
 ): Promise<{
   proposed_topics: ProposedTopic[];
@@ -198,7 +198,7 @@ Remember: "X topics" means X LEAF topics where records are assigned.`;
   const responseText = await callLucy(messages, {
     temperature: 0, // Force deterministic output for exact number following
     response_format: ADJUST_PLAN_RESPONSE_SCHEMA,
-    label: 'adjust_setup_plan',
+    label: 'adjust_plan',
   });
 
   const parsed = JSON.parse(responseText.trim());
@@ -270,7 +270,7 @@ function validateAndFixResponse(
     const leafCount = countLeafs(topics);
 
     if (leafCount !== requiredTopicCount) {
-      console.log(`[adjustSetupPlan] Fixing topic count: LLM returned ${leafCount}, required ${requiredTopicCount}`);
+      console.log(`[adjustPlan] Fixing topic count: LLM returned ${leafCount}, required ${requiredTopicCount}`);
 
       if (wantsFlat) {
         // For flat structure, adjust number of top-level topics
@@ -438,13 +438,13 @@ function setRecordCountOnLeafs(topics: ProposedTopic[], recordCount: number): Pr
   });
 }
 
-export const adjustSetupPlanHandler: ToolHandler = async (
+export const adjustPlanHandler: ToolHandler = async (
   params
-): Promise<AdjustSetupPlanResult> => {
+): Promise<AdjustPlanResult> => {
   try {
-    console.log('[adjustSetupPlan] Starting with feedback:', params);
+    console.log('[adjustPlan] Starting with feedback:', params);
 
-    const { dataset_id, current_plan, user_feedback } = params as unknown as AdjustSetupPlanParams;
+    const { dataset_id, current_plan, user_feedback } = params as unknown as AdjustPlanParams;
 
     if (!dataset_id) {
       return { success: false, error: 'dataset_id is required' };
@@ -459,14 +459,14 @@ export const adjustSetupPlanHandler: ToolHandler = async (
     if (!resolvedPlan) {
       return {
         success: false,
-        error: 'No current plan found. Create a plan first with propose_setup_plan, then adjust it.',
+        error: 'No current plan found. Create a plan first with propose_plan, then adjust it.',
       };
     }
 
     // Emit event to show loading state
-    emitter.emit('vllora_setup_plan_generating', { datasetId: dataset_id });
+    emitter.emit('vllora_plan_generating', { datasetId: dataset_id });
 
-    console.log('[adjustSetupPlan] Calling LLM to adjust plan...');
+    console.log('[adjustPlan] Calling LLM to adjust plan...');
 
     // Call LLM to adjust the plan
     const llmResult = await callLLMToAdjustPlan(resolvedPlan, user_feedback);
@@ -495,7 +495,7 @@ export const adjustSetupPlanHandler: ToolHandler = async (
     }
 
     // Build the adjusted plan
-    const adjustedPlan: SetupPlan = {
+    const adjustedPlan: Plan = {
       ...resolvedPlan,
       proposed_topics: llmResult.proposed_topics,
       total_topic_count: totalTopicCount,
@@ -533,13 +533,13 @@ export const adjustSetupPlanHandler: ToolHandler = async (
       estimated_duration: '3-5 minutes',
     };
 
-    console.log('[adjustSetupPlan] Plan adjusted successfully:', llmResult.changes_made);
+    console.log('[adjustPlan] Plan adjusted successfully:', llmResult.changes_made);
 
     // Persist adjusted plan to IndexedDB so it survives page refresh
     await saveProposedPlan(dataset_id, adjustedPlan);
 
     // Emit event so the right panel can display the updated plan
-    emitter.emit('vllora_setup_plan_proposed', { datasetId: dataset_id, plan: adjustedPlan });
+    emitter.emit('vllora_plan_proposed', { datasetId: dataset_id, plan: adjustedPlan });
 
     return {
       success: true,
@@ -547,25 +547,25 @@ export const adjustSetupPlanHandler: ToolHandler = async (
       message: `Plan adjusted: ${llmResult.changes_made}`,
     };
   } catch (error) {
-    console.error('[adjustSetupPlan] Failed:', error);
+    console.error('[adjustPlan] Failed:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to adjust flow',
+      error: error instanceof Error ? error.message : 'Failed to adjust plan',
     };
   }
 };
 
-export const adjustSetupPlanTool: DistriFnTool = {
-  name: 'adjust_setup_plan',
-  description: `Adjust an existing flow based on user feedback.
+export const adjustPlanTool: DistriFnTool = {
+  name: 'adjust_plan',
+  description: `Adjust an existing plan based on user feedback.
 
 Use this tool when:
-- A flow has already been proposed
-- The user requests changes to the flow (e.g., "reduce to 5 topics", "increase examples to 100 each")
+- A plan has already been proposed
+- The user requests changes to the plan (e.g., "reduce to 5 topics", "increase examples to 100 each")
 - The user wants to modify topic structure, counts, or criteria
 
-This tool takes the current flow and user feedback, then regenerates an adjusted flow.
-The adjusted flow is shown to the user for approval.`,
+This tool takes the current plan and user feedback, then regenerates an adjusted plan.
+The adjusted plan is shown to the user for approval.`,
   type: 'function',
   parameters: {
     type: 'object',
@@ -576,7 +576,7 @@ The adjusted flow is shown to the user for approval.`,
       },
       current_plan: {
         type: 'object',
-        description: 'The current flow to adjust. Optional: if omitted, the latest persisted flow for this dataset is used.',
+        description: 'The current plan to adjust. Optional: if omitted, the latest persisted plan for this dataset is used.',
       },
       user_feedback: {
         type: 'string',
@@ -587,5 +587,5 @@ The adjusted flow is shown to the user for approval.`,
   },
   autoExecute: true,
   handler: async (input) =>
-    JSON.stringify(await adjustSetupPlanHandler(input as Record<string, unknown>)),
+    JSON.stringify(await adjustPlanHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

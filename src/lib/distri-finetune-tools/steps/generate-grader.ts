@@ -22,8 +22,8 @@ import * as datasetsDB from '@/services/datasets-db';
 import * as workflowDB from '@/services/finetune-workflow-db';
 import { updateDatasetEvalScript as updateBackendEvalScript } from '@/services/finetune-api';
 import { buildKnowledgeContext } from './shared/knowledge-context';
-import { generateGraderTemplate } from './propose-setup-plan/grader-template';
-import type { GraderCriterion } from './propose-setup-plan/types';
+import { generateGraderTemplate } from './propose-plan/grader-template';
+import type { GraderCriterion } from './propose-plan/types';
 import { getProposedPlan } from './proposed-plan-store';
 import type { ToolHandler } from '../types';
 

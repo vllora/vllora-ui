@@ -30,7 +30,7 @@ import { ProviderKeysConsumer } from "@/contexts/ProviderKeysContext";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
-import { SetupPlanConsumer } from "@/contexts/SetupPlanContext";
+import { PlanConsumer } from "@/contexts/PlanContext";
 import { useFineTuneAgentChat } from "@/hooks/useFineTuneAgentChat";
 import {
   LucyChat,
@@ -39,7 +39,7 @@ import {
   LucyAvatar,
   lucyToolRenderers,
 } from "@/components/agent/lucy-agent";
-import { PlanCard } from "@/components/agent/lucy-agent/setup-plan-render/PlanCard";
+import { PlanCard } from "@/components/agent/lucy-agent/plan-render/PlanCard";
 import type { QuickAction } from "@/components/agent/lucy-agent/LucyWelcome";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -127,7 +127,7 @@ export function LucyDatasetAssistant() {
   // Lucy agent state
   const { isConnected, reconnect } = useDistriConnection();
   const { providers, loading: providersLoading } = ProviderKeysConsumer();
-  const { planStatus, executionProgress, proposedPlan } = SetupPlanConsumer();
+  const { planStatus, executionProgress, proposedPlan } = PlanConsumer();
 
   // Use finetune agent when viewing a specific dataset
   const {
@@ -172,7 +172,7 @@ export function LucyDatasetAssistant() {
 
   // Track previous processing state to detect completion transitions
   const prevDocsProcessingRef = useRef(docsProcessing);
-  // Track whether we uploaded docs in this session (to auto-trigger plan flow)
+  // Track whether we uploaded docs in this session (to auto-trigger plan creation)
   const pendingDocsPlanTriggerRef = useRef(false);
 
   // Proactive behavior: auto-analyze dataset when viewing it for the first time
@@ -250,7 +250,7 @@ export function LucyDatasetAssistant() {
 
       console.log('[LucyDatasetAssistant] Documents ready, auto-triggering plan creation');
       emitter.emit("vllora_lucy_prompt", {
-        prompt: `My documents have finished processing and are ready. Please analyze them and create a flow now.`,
+        prompt: `My documents have finished processing and are ready. Please analyze them and create a plan now.`,
       });
     }
   }, [docsProcessing, planStatus]);
@@ -404,7 +404,7 @@ export function LucyDatasetAssistant() {
 
           // Tell Lucy about the upload — don't ask for a plan yet (docs are still extracting)
           if (!userText.trim()) {
-            userText = `I've uploaded ${uploadedFiles.length} document(s): ${uploadedFiles.join(', ')}. They are being processed now — I'll let you know when they're ready so you can create a flow.`;
+            userText = `I've uploaded ${uploadedFiles.length} document(s): ${uploadedFiles.join(', ')}. They are being processed now — I'll let you know when they're ready so you can create a plan.`;
           } else {
             const uploadNotice = `\n\n[Knowledge sources uploaded: ${uploadedFiles.join(', ')}. Documents are being processed — plan creation will be triggered automatically when extraction completes.]`;
             userText += uploadNotice;

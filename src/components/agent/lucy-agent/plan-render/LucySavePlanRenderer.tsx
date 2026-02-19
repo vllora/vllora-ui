@@ -1,0 +1,86 @@
+/**
+ * LucySavePlanRenderer
+ *
+ * Compact renderer for save_plan tool results.
+ * Shows plan save status and diff summary without rendering a full PlanCard.
+ */
+
+import { ToolCall, extractToolResultData } from '@distri/core';
+import { ToolCallState } from '@distri/react';
+import { CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { tryParseJson } from '@/utils/modelUtils';
+import { SimpleFallbackRenderer } from './SimpleFallbackRenderer';
+
+interface ToolRendererProps {
+  toolCall: ToolCall;
+  state?: ToolCallState;
+}
+
+export function LucySavePlanRenderer({ toolCall, state }: ToolRendererProps) {
+  const isRunning = state?.status === 'running';
+
+  const getResultData = (): any => {
+    if (!state?.result) return null;
+
+    const resultData = extractToolResultData(state.result);
+    const rawResult = resultData ? resultData.result : state.result;
+
+    if (typeof rawResult === 'string') {
+      const parsed = tryParseJson(rawResult);
+      return parsed ?? rawResult;
+    }
+
+    return rawResult;
+  };
+
+  const result = getResultData();
+
+  if (isRunning) {
+    return (
+      <div className="rounded-lg border border-border bg-card p-3">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          <span>Saving plan...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (state?.error || (result && !result.success)) {
+    return (
+      <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3">
+        <div className="flex items-center gap-2 text-xs text-destructive">
+          <AlertCircle className="w-3.5 h-3.5" />
+          <span>{state?.error || result?.error || 'Failed to save plan'}</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (result?.success) {
+    const diffSummary = typeof result.diff_summary === 'string' ? result.diff_summary : '';
+    const topicsChanged = typeof result.topics_changed === 'number' ? result.topics_changed : null;
+    const criteriaChanged = typeof result.criteria_changed === 'number' ? result.criteria_changed : null;
+
+    return (
+      <div className="rounded-lg border border-border bg-card p-3 space-y-1.5">
+        <div className="flex items-center gap-2 text-xs text-foreground">
+          <CheckCircle2 className="w-3.5 h-3.5 text-[rgb(var(--theme-500))]" />
+          <span className="font-medium">Plan saved</span>
+        </div>
+        {diffSummary && (
+          <div className="text-[11px] text-muted-foreground">{diffSummary}</div>
+        )}
+        {(topicsChanged !== null || criteriaChanged !== null) && (
+          <div className="text-[10px] text-muted-foreground">
+            {topicsChanged !== null ? `${topicsChanged} topic change${topicsChanged === 1 ? '' : 's'}` : ''}
+            {topicsChanged !== null && criteriaChanged !== null ? ' · ' : ''}
+            {criteriaChanged !== null ? `${criteriaChanged} criteria change${criteriaChanged === 1 ? '' : 's'}` : ''}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return <SimpleFallbackRenderer toolCall={toolCall} state={state} />;
+}

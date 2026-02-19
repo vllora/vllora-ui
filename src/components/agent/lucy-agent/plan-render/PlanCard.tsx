@@ -7,7 +7,7 @@
 
 import { Sparkles, Eye, Pencil, X, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { SetupPlanConsumer } from "@/contexts/SetupPlanContext";
+import { PlanConsumer } from "@/contexts/PlanContext";
 
 export function PlanCard() {
   const {
@@ -17,7 +17,7 @@ export function PlanCard() {
     dismissPlan,
     setIsPlanPreviewActive,
     setPlanEditMode,
-  } = SetupPlanConsumer();
+  } = PlanConsumer();
 
   if (!proposedPlan) return null;
 
@@ -47,7 +47,7 @@ export function PlanCard() {
       <div className="flex items-center gap-2">
         <Sparkles className="w-4 h-4 text-[rgb(var(--theme-500))]" />
         <span className="text-xs font-semibold text-foreground">
-          {proposedPlan.title || 'Flow'}
+          {proposedPlan.title || 'Plan'}
         </span>
       </div>
 

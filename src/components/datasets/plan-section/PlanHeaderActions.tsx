@@ -21,7 +21,7 @@ interface PlanHeaderActionsProps {
 
 export function PlanHeaderActions({
   markdown,
-  filename = 'flow',
+  filename = 'plan',
 }: PlanHeaderActionsProps) {
   const [copied, setCopied] = useState(false);
 
@@ -31,7 +31,7 @@ export function PlanHeaderActions({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      console.error('Failed to copy flow:', error);
+      console.error('Failed to copy plan:', error);
     }
   }, [markdown]);
 

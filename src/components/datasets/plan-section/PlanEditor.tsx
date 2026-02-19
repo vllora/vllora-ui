@@ -1,7 +1,7 @@
 /**
- * SetupPlanEditor
+ * PlanEditor
  *
- * Markdown-based flow editor for easy modification.
+ * Markdown-based plan editor for easy modification.
  * Users can edit the plan directly in markdown format.
  */
 
@@ -20,7 +20,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import type { SetupPlan } from '@/lib/distri-finetune-tools/steps/propose-setup-plan';
+import type { Plan } from '@/lib/distri-finetune-tools/steps/propose-plan';
 import LazyMarkdownRenderer from '@/components/chat/LazyMarkdownRenderer';
 import { planToMarkdown, markdownToPlan } from './plan-markdown-utils';
 import { PlanHeaderActions } from './PlanHeaderActions';
@@ -29,13 +29,13 @@ import { PlanModeToggle } from './PlanModeToggle';
 // Re-export for backwards compatibility
 export { planToMarkdown } from './plan-markdown-utils';
 
-interface SetupPlanEditorProps {
-  plan: SetupPlan;
-  onApprove: (plan: SetupPlan) => void;
+interface PlanEditorProps {
+  plan: Plan;
+  onApprove: (plan: Plan) => void;
   onDismiss?: () => void;
 }
 
-export function SetupPlanEditor({ plan, onApprove, onDismiss }: SetupPlanEditorProps) {
+export function PlanEditor({ plan, onApprove, onDismiss }: PlanEditorProps) {
   const initialMarkdown = useMemo(() => planToMarkdown(plan), [plan]);
   const [markdown, setMarkdown] = useState(initialMarkdown);
   const [isPreview, setIsPreview] = useState(true);
@@ -51,12 +51,12 @@ export function SetupPlanEditor({ plan, onApprove, onDismiss }: SetupPlanEditorP
       <div className="flex items-center justify-between px-4 py-2 border-b border-border/50">
         <div className="flex items-center gap-2 text-muted-foreground">
           <Sparkles className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-          <span className="text-xs font-medium">Flow</span>
+          <span className="text-xs font-medium">Plan</span>
         </div>
 
         <div className="flex items-center gap-2">
           {/* Copy & Export buttons */}
-          <PlanHeaderActions markdown={markdown} filename="flow" />
+          <PlanHeaderActions markdown={markdown} filename="plan" />
 
           {/* Mode toggle */}
           <PlanModeToggle isPreview={isPreview} onToggle={setIsPreview} />
@@ -75,7 +75,7 @@ export function SetupPlanEditor({ plan, onApprove, onDismiss }: SetupPlanEditorP
             <div className="mx-4 mt-3 mb-2 flex items-start gap-2 px-3 py-2 rounded-md border border-amber-500/30 bg-amber-500/10 text-xs">
               <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
               <p className="text-amber-600 dark:text-amber-400">
-                <span className="font-medium">Editing the raw flow may affect its structure.</span>
+                <span className="font-medium">Editing the raw plan may affect its structure.</span>
                 {' '}For safer modifications, use Lucy chat to make changes instead.
               </p>
             </div>
@@ -83,7 +83,7 @@ export function SetupPlanEditor({ plan, onApprove, onDismiss }: SetupPlanEditorP
               value={markdown}
               onChange={(e) => setMarkdown(e.target.value)}
               className="w-full flex-1 min-h-[400px] border-0 rounded-none resize-none font-mono text-sm focus-visible:ring-0 focus-visible:ring-offset-0 p-4"
-              placeholder="Edit the flow..."
+              placeholder="Edit the plan..."
             />
           </div>
         )}
@@ -96,18 +96,18 @@ export function SetupPlanEditor({ plan, onApprove, onDismiss }: SetupPlanEditorP
             <AlertDialogTrigger asChild>
               <Button variant="ghost" size="sm" className="h-8 text-destructive hover:text-destructive">
                 <Trash2 className="w-4 h-4 mr-1" />
-                Discard Flow
+                Discard Plan
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Discard flow?</AlertDialogTitle>
+                <AlertDialogTitle>Discard plan?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This flow took time to generate. Discarding it will permanently remove it and you'll need to regenerate from scratch.
+                  This plan took time to generate. Discarding it will permanently remove it and you'll need to regenerate from scratch.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Keep Flow</AlertDialogCancel>
+                <AlertDialogCancel>Keep Plan</AlertDialogCancel>
                 <AlertDialogAction
                   onClick={onDismiss}
                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"

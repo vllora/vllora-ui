@@ -1,7 +1,7 @@
 /**
- * Save Flow Tool
+ * Save Plan Tool
  *
- * Called by Lucy after propose_setup_plan / adjust_setup_plan.
+ * Called by Lucy after propose_plan / adjust_plan.
  * Validates the draft plan, computes a diff against the previous plan,
  * commits it, and emits the UI event with diff payload.
  *
@@ -12,7 +12,7 @@
 import type { DistriFnTool } from '@distri/core';
 import { emitter } from '@/utils/eventEmitter';
 import type { ToolHandler } from '../types';
-import type { SetupPlan } from './propose-setup-plan/types';
+import type { Plan } from './propose-plan/types';
 import {
   getStoredPlan,
   savePreviousPlanSnapshot,
@@ -24,11 +24,11 @@ import { diffPlans, type PlanDiff } from '@/components/datasets/plan-section/pla
 // Types
 // =============================================================================
 
-interface SaveFlowParams {
+interface SavePlanParams {
   dataset_id: string;
 }
 
-interface SaveFlowResult {
+interface SavePlanResult {
   success: boolean;
   errors?: string[];
   diff_summary?: string;
@@ -40,7 +40,7 @@ interface SaveFlowResult {
 // Validation
 // =============================================================================
 
-function validatePlan(plan: SetupPlan): string[] {
+function validatePlan(plan: Plan): string[] {
   const errors: string[] = [];
 
   if (!plan.objective?.trim()) {
@@ -118,11 +118,11 @@ function buildDiffSummary(diff: PlanDiff): string {
 // Handler
 // =============================================================================
 
-export const saveFlowHandler: ToolHandler = async (
+export const savePlanHandler: ToolHandler = async (
   params
-): Promise<SaveFlowResult> => {
+): Promise<SavePlanResult> => {
   try {
-    const { dataset_id } = params as unknown as SaveFlowParams;
+    const { dataset_id } = params as unknown as SavePlanParams;
 
     if (!dataset_id) {
       return { success: false, errors: ['dataset_id is required'] };
@@ -133,7 +133,7 @@ export const saveFlowHandler: ToolHandler = async (
     if (!stored) {
       return {
         success: false,
-        errors: ['No draft plan found. Call propose_setup_plan or adjust_setup_plan first.'],
+        errors: ['No draft plan found. Call propose_plan or adjust_plan first.'],
       };
     }
     const draft = stored.plan;
@@ -141,7 +141,7 @@ export const saveFlowHandler: ToolHandler = async (
     // 2. Validate
     const errors = validatePlan(draft);
     if (errors.length > 0) {
-      console.warn('[saveFlow] Validation failed:', errors);
+      console.warn('[savePlan] Validation failed:', errors);
       return { success: false, errors };
     }
 
@@ -153,7 +153,7 @@ export const saveFlowHandler: ToolHandler = async (
     await savePreviousPlanSnapshot(dataset_id, draft);
 
     // 5. Emit event with diff payload so UI can show the diff banner
-    emitter.emit('vllora_setup_plan_proposed', {
+    emitter.emit('vllora_plan_proposed', {
       datasetId: dataset_id,
       plan: draft,
       diff,
@@ -165,7 +165,7 @@ export const saveFlowHandler: ToolHandler = async (
     const criteriaChanged =
       diff.criteriaAdded.length + diff.criteriaRemoved.length + diff.criteriaModified.length;
 
-    console.log('[saveFlow] Plan committed and emitted. Diff:', diffSummary);
+    console.log('[savePlan] Plan committed and emitted. Diff:', diffSummary);
 
     return {
       success: true,
@@ -174,10 +174,10 @@ export const saveFlowHandler: ToolHandler = async (
       criteria_changed: criteriaChanged,
     };
   } catch (error) {
-    console.error('[saveFlow] Failed:', error);
+    console.error('[savePlan] Failed:', error);
     return {
       success: false,
-      errors: [error instanceof Error ? error.message : 'Failed to save flow'],
+      errors: [error instanceof Error ? error.message : 'Failed to save plan'],
     };
   }
 };
@@ -186,19 +186,19 @@ export const saveFlowHandler: ToolHandler = async (
 // Tool Definition
 // =============================================================================
 
-export const saveFlowTool: DistriFnTool = {
-  name: 'save_flow',
+export const savePlanTool: DistriFnTool = {
+  name: 'save_plan',
   description: `Validate and commit a proposed or adjusted plan, then show it to the user.
 
-Always call this AFTER propose_setup_plan or adjust_setup_plan.
+Always call this AFTER propose_plan or adjust_plan.
 
 Workflow:
-1. propose_setup_plan / adjust_setup_plan  (saves draft)
-2. save_flow(dataset_id)
+1. propose_plan / adjust_plan  (saves draft)
+2. save_plan(dataset_id)
    - If errors: fix the plan and go back to step 1
    - If success: plan is committed and shown to user with diff summary
 3. Wait for user to click "Approve & Execute" in the UI
-4. execute_setup_plan(dataset_id)
+4. execute_plan(dataset_id)
 
 Returns:
 - { success: false, errors: [...] }  → Lucy fixes proposal and retries step 1
@@ -216,5 +216,5 @@ Returns:
   },
   autoExecute: true,
   handler: async (input) =>
-    JSON.stringify(await saveFlowHandler(input as Record<string, unknown>)),
+    JSON.stringify(await savePlanHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

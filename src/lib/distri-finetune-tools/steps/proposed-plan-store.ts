@@ -1,13 +1,13 @@
 /**
  * Proposed Plan Store
  *
- * Persists setup plans to IndexedDB with lifecycle status tracking.
+ * Persists plans to IndexedDB with lifecycle status tracking.
  * Plans survive page refresh and track their full lifecycle:
  * proposed → approved → executing → completed/failed/dismissed
  */
 
-import type { SetupPlan } from "./propose-setup-plan";
-import type { ExecutionProgress } from "./execute-setup-plan";
+import type { Plan } from "./propose-plan";
+import type { ExecutionProgress } from "./execute-plan";
 import { getDB } from "@/services/finetune-workflow-db";
 
 // =============================================================================
@@ -18,7 +18,7 @@ export type PlanStatus = 'proposed' | 'approved' | 'executing' | 'completed' | '
 
 export interface StoredPlan {
   datasetId: string;
-  plan: SetupPlan;
+  plan: Plan;
   status: PlanStatus;
   executionProgress: ExecutionProgress | null;
   createdAt: number;
@@ -28,7 +28,7 @@ export interface StoredPlan {
 // Backward compat alias
 interface StoredProposedPlan {
   datasetId: string;
-  plan: SetupPlan;
+  plan: Plan;
   status?: PlanStatus;
   executionProgress?: ExecutionProgress | null;
   createdAt: number;
@@ -70,7 +70,7 @@ function normalizeStored(raw: StoredProposedPlan): StoredPlan {
  */
 export async function saveProposedPlan(
   datasetId: string,
-  plan: SetupPlan,
+  plan: Plan,
 ): Promise<void> {
   try {
     const db = await getDB();
@@ -137,7 +137,7 @@ export async function getStoredPlan(
  */
 export async function getProposedPlan(
   datasetId: string,
-): Promise<SetupPlan | null> {
+): Promise<Plan | null> {
   const stored = await getStoredPlan(datasetId);
   return stored?.plan || null;
 }
@@ -318,16 +318,16 @@ export async function hasProposedPlan(datasetId: string): Promise<boolean> {
 }
 
 // =============================================================================
-// Plan Snapshots (for diff computation in save_flow)
+// Plan Snapshots (for diff computation in save_plan)
 // =============================================================================
 
 const SNAPSHOT_KEY_PREFIX = 'previous:';
 
 /**
- * Save snapshot of the last applied plan (for diff computation in save_flow).
+ * Save snapshot of the last applied plan (for diff computation in save_plan).
  * Uses a separate key prefix so it doesn't interfere with the main plan lifecycle.
  */
-export async function savePreviousPlanSnapshot(datasetId: string, plan: SetupPlan): Promise<void> {
+export async function savePreviousPlanSnapshot(datasetId: string, plan: Plan): Promise<void> {
   try {
     const db = await getDB();
     if (!hasStore(db)) return;
@@ -359,9 +359,9 @@ export async function savePreviousPlanSnapshot(datasetId: string, plan: SetupPla
 
 /**
  * Get the last applied plan snapshot (null if first proposal).
- * Used by save_flow to compute diff against previous plan.
+ * Used by save_plan to compute diff against previous plan.
  */
-export async function getPreviousPlanSnapshot(datasetId: string): Promise<SetupPlan | null> {
+export async function getPreviousPlanSnapshot(datasetId: string): Promise<Plan | null> {
   try {
     const db = await getDB();
     if (!hasStore(db)) return null;

@@ -16,7 +16,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
-import { SetupPlanConsumer } from "@/contexts/SetupPlanContext";
+import { PlanConsumer } from "@/contexts/PlanContext";
 import { EditableTitle } from "./EditableTitle";
 
 interface DatasetDetailHeaderProps {
@@ -35,7 +35,7 @@ export function DatasetDetailHeader({
   docsProcessing = false,
 }: DatasetDetailHeaderProps) {
   const { dataset, handleRenameDataset, handleUpdateObjective } = DatasetDetailConsumer();
-  const { hasPlanProposed, isGeneratingPlan, isPlanPreviewActive } = SetupPlanConsumer();
+  const { hasPlanProposed, isGeneratingPlan, isPlanPreviewActive } = PlanConsumer();
   const [isEditingObjective, setIsEditingObjective] = useState(false);
   const [objectiveValue, setObjectiveValue] = useState("");
 
@@ -67,7 +67,7 @@ export function DatasetDetailHeader({
                     ) : (
                       <Sparkles className="h-4 w-4" />
                     )}
-                    <span className="text-xs">Flow</span>
+                    <span className="text-xs">Plan</span>
                     {hasPlanProposed && (
                       <span className="w-1.5 h-1.5 rounded-full bg-[rgb(var(--theme-500))]" />
                     )}
@@ -75,10 +75,10 @@ export function DatasetDetailHeader({
                 </TooltipTrigger>
                 <TooltipContent>
                   {isGeneratingPlan
-                    ? "Generating flow..."
+                    ? "Generating plan..."
                     : hasPlanProposed
-                      ? "View flow"
-                      : "Flow"}
+                      ? "View plan"
+                      : "Plan"}
                 </TooltipContent>
               </Tooltip>
             )}

@@ -5,27 +5,27 @@
  * Tabs remain visible above so the user can click any tab to return.
  *
  * Display mode: rendered markdown with Edit toggle.
- * Edit mode: SetupPlanEditor with Preview toggle + Save/Cancel.
+ * Edit mode: PlanEditor with Preview toggle + Save/Cancel.
  * Empty state: prompt to generate a plan.
  */
 
 import { Eye, Pencil, Sparkles, Loader2, FolderOpen, AlertCircle, X, CheckCircle2, XCircle, ArrowLeftRight } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { SetupPlanEditor, planToMarkdown } from "./plan-section/SetupPlanEditor";
+import { PlanEditor, planToMarkdown } from "./plan-section/PlanEditor";
 import LazyMarkdownRenderer from "@/components/chat/LazyMarkdownRenderer";
 import { emitter } from "@/utils/eventEmitter";
-import type { SetupPlan } from "@/lib/distri-finetune-tools/steps/propose-setup-plan";
+import type { Plan } from "@/lib/distri-finetune-tools/steps/propose-plan";
 import type { PlanStatus } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
 import type { PlanDiff } from "./plan-section/plan-markdown-utils";
 
 interface PlanPreviewProps {
-  plan: SetupPlan | null;
+  plan: Plan | null;
   planStatus: PlanStatus | null;
   planDiff?: PlanDiff | null;
   mode: "display" | "edit";
   onModeChange: (mode: "display" | "edit") => void;
-  onApprove: (plan: SetupPlan) => void;
+  onApprove: (plan: Plan) => void;
   onDismiss: () => void;
   onClose: () => void;
   isGenerating: boolean;
@@ -54,7 +54,7 @@ export function PlanPreview({
       <div className="flex-1 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="w-6 h-6 animate-spin text-[rgb(var(--theme-500))]" />
-          <p className="text-sm text-muted-foreground">Loading flow...</p>
+          <p className="text-sm text-muted-foreground">Loading plan...</p>
         </div>
       </div>
     );
@@ -111,11 +111,11 @@ function PlanDisplayView({
   isExecuting,
   isActionable,
 }: {
-  plan: SetupPlan;
+  plan: Plan;
   planStatus: PlanStatus | null;
   planDiff?: PlanDiff | null;
   onModeChange: (mode: "display" | "edit") => void;
-  onApprove: (plan: SetupPlan) => void;
+  onApprove: (plan: Plan) => void;
   onClose: () => void;
   isExecuting: boolean;
   isActionable: boolean;
@@ -135,7 +135,7 @@ function PlanDisplayView({
       <div className="flex items-center justify-between px-4 py-2 border-b border-border">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">
           <Sparkles className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-          Flow
+          Plan
           {isExecuting && (
             <span className="flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
               <Loader2 className="w-3 h-3 animate-spin" />
@@ -187,7 +187,7 @@ function PlanDisplayView({
         </div>
       </div>
 
-      {/* Diff banner — shown when save_flow committed a plan with changes */}
+      {/* Diff banner — shown when save_plan committed a plan with changes */}
       {planDiff?.hasChanges && diffParts.length > 0 && (
         <div className="mx-4 mt-3 flex items-center gap-2 px-3 py-2 rounded-md border border-blue-500/30 bg-blue-500/10 text-xs">
           <ArrowLeftRight className="w-3.5 h-3.5 text-blue-500 shrink-0" />
@@ -217,9 +217,9 @@ function PlanEditView({
   onDismiss,
   onClose,
 }: {
-  plan: SetupPlan;
+  plan: Plan;
   onModeChange: (mode: "display" | "edit") => void;
-  onApprove: (plan: SetupPlan) => void;
+  onApprove: (plan: Plan) => void;
   onDismiss: () => void;
   onClose: () => void;
 }) {
@@ -229,7 +229,7 @@ function PlanEditView({
       <div className="flex items-center justify-between px-4 py-2 border-b border-border">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">
           <Pencil className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-          Editing Flow
+          Editing Plan
         </div>
         <div className="flex items-center gap-1.5">
           <Button
@@ -253,7 +253,7 @@ function PlanEditView({
       </div>
 
       {/* Editor */}
-      <SetupPlanEditor
+      <PlanEditor
         plan={plan}
         onApprove={onApprove}
         onDismiss={onDismiss}
@@ -294,9 +294,9 @@ function PlanEmptyView({
       setHasTimedOut(true);
     }, 10000);
 
-    emitter.on("vllora_setup_plan_generating", handleGenerating);
+    emitter.on("vllora_plan_generating", handleGenerating);
     return () => {
-      emitter.off("vllora_setup_plan_generating", handleGenerating);
+      emitter.off("vllora_plan_generating", handleGenerating);
       clearTimeout(timeoutId);
     };
   }, [isRequesting]);
@@ -306,8 +306,8 @@ function PlanEmptyView({
     setHasTimedOut(false);
     emitter.emit("vllora_lucy_prompt", {
       prompt: hasKnowledgeSources
-        ? `Please analyze the uploaded documents and create a flow for this dataset using the propose_setup_plan tool.`
-        : `Please create a flow for this dataset using the propose_setup_plan tool based on the training objective.`,
+        ? `Please analyze the uploaded documents and create a plan for this dataset using the propose_plan tool.`
+        : `Please create a plan for this dataset using the propose_plan tool based on the training objective.`,
     });
   };
 
@@ -317,7 +317,7 @@ function PlanEmptyView({
     <>
       {/* Header bar */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
-        <span className="text-sm font-medium text-foreground">Flow</span>
+        <span className="text-sm font-medium text-foreground">Plan</span>
         <Button
           variant="ghost"
           size="icon"
@@ -337,9 +337,9 @@ function PlanEmptyView({
                 <Loader2 className="w-6 h-6 animate-spin text-[rgb(var(--theme-500))]" />
               </div>
               <div>
-                <h3 className="text-base font-medium text-foreground mb-1">Generating flow...</h3>
+                <h3 className="text-base font-medium text-foreground mb-1">Generating plan...</h3>
                 <p className="text-sm text-muted-foreground">
-                  Lucy is analyzing your {hasKnowledgeSources ? "documents and " : ""}dataset to create a customized flow.
+                  Lucy is analyzing your {hasKnowledgeSources ? "documents and " : ""}dataset to create a customized plan.
                 </p>
               </div>
             </>
@@ -349,9 +349,9 @@ function PlanEmptyView({
                 <Sparkles className="w-6 h-6 text-[rgb(var(--theme-500))]" />
               </div>
               <div>
-                <h3 className="text-base font-medium text-foreground mb-1">No flow yet</h3>
+                <h3 className="text-base font-medium text-foreground mb-1">No plan yet</h3>
                 <p className="text-sm text-muted-foreground">
-                  Let Lucy create a flow with topics, data generation strategy, and evaluation criteria.
+                  Let Lucy create a plan with topics, data generation strategy, and evaluation criteria.
                 </p>
               </div>
               {hasTimedOut && (
@@ -366,7 +366,7 @@ function PlanEmptyView({
                   className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
                 >
                   <Sparkles className="w-4 h-4" />
-                  {hasTimedOut ? "Retry" : "Generate Flow"}
+                  {hasTimedOut ? "Retry" : "Generate Plan"}
                 </Button>
                 {!hasKnowledgeSources && (
                   <Button

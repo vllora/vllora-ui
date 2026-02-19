@@ -1,12 +1,12 @@
 /**
- * Propose Setup Plan Tool Definition
+ * Propose plan Tool Definition
  */
 
 import type { DistriFnTool } from '@distri/core';
-import { proposeSetupPlanHandler } from './handler';
+import { proposePlanHandler } from './handler';
 
-export const proposeSetupPlanTool: DistriFnTool = {
-  name: 'propose_setup_plan',
+export const proposePlanTool: DistriFnTool = {
+  name: 'propose_plan',
   description: `Propose a plan for user approval before executing a complex operation.
 
 This tool validates, persists, and displays the plan in the UI for user review.
@@ -17,7 +17,7 @@ Workflow:
 2. If needed, analyze knowledge sources (use analyze_knowledge_sources)
 3. Construct a plan with execution_steps, steps_to_execute, and any overrides
 4. Call this tool to show the plan to the user
-5. After user approves, call execute_setup_plan
+5. After user approves, call execute_plan
 
 Use this for any complex multi-step operation: initial setup, data augmentation,
 regrading, retraining, bulk topic changes, etc.`,
@@ -129,5 +129,5 @@ regrading, retraining, bulk topic changes, etc.`,
   },
   autoExecute: true,
   handler: async (input) =>
-    JSON.stringify(await proposeSetupPlanHandler(input as Record<string, unknown>)),
+    JSON.stringify(await proposePlanHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

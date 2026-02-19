@@ -7,8 +7,8 @@
 import { FinetuneWorkflowState, FinetuneStep, GenerationStrategy, DryRunVerdict } from '@/services/finetune-workflow-db';
 import { TopicHierarchyNode } from '@/types/dataset-types';
 import type { PlanStatus } from './steps/proposed-plan-store';
-import type { ExecutionProgress, ExecutionStepId } from './steps/execute-setup-plan';
-import { STEP_ORDER } from './steps/execute-setup-plan';
+import type { ExecutionProgress, ExecutionStepId } from './steps/execute-plan';
+import { STEP_ORDER } from './steps/execute-plan';
 
 // Tool handler function type
 export type ToolHandler = (params: Record<string, unknown>) => Promise<unknown>;
@@ -265,7 +265,7 @@ export interface DatasetStatsResult {
 export interface FinetuneContext {
   page: 'datasets';
   current_dataset_id: string;
-  setup_plan?: {
+  plan?: {
     status: PlanStatus;
     has_active_plan: boolean;
     /** When status is 'executing', details about which steps completed/failed before interruption */
@@ -324,7 +324,7 @@ export function workflowToContext(
     page: 'datasets',
     current_dataset_id: datasetId,
     ...(planStatus ? {
-      setup_plan: {
+      plan: {
         status: planStatus,
         has_active_plan: planStatus === 'proposed' || planStatus === 'approved' || planStatus === 'executing',
         ...(executionProgressDetails ? { execution_progress: executionProgressDetails } : {}),

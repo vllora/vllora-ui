@@ -1,5 +1,5 @@
 /**
- * Execute Setup Plan Tool
+ * Execute plan Tool
  *
  * Registry-based orchestrator. Each step is a registered executor.
  * The handler iterates plan.steps_to_execute and calls each executor.
@@ -13,7 +13,7 @@ import { emitter } from '@/utils/eventEmitter';
 import * as datasetsDB from '@/services/datasets-db';
 import * as workflowDB from '@/services/finetune-workflow-db';
 import type { ToolHandler } from '../types';
-import type { SetupPlan } from './propose-setup-plan';
+import type { Plan } from './propose-plan';
 import type { TopicHierarchyNode } from '@/types/dataset-types';
 
 // Import step handlers
@@ -26,13 +26,13 @@ import { runDryRunHandler } from './run-dry-run';
 
 // Import for README generation
 import * as knowledgeDB from '@/services/knowledge-sources-db';
-import { generateDatasetReadme, type KnowledgeSourceInfo, type SetupPlanSummary } from '@/services/dataset-readme-generator';
+import { generateDatasetReadme, type KnowledgeSourceInfo, type PlanSummary } from '@/services/dataset-readme-generator';
 
 // Import for finetune job creation
 import { quickFinetune } from '@/services/quick-finetune';
 
 // Import grader template generator
-import { generateGraderTemplate } from './propose-setup-plan/grader-template';
+import { generateGraderTemplate } from './propose-plan/grader-template';
 
 // Side-effect import to ensure execution state store is listening for progress events
 import './execution-state-store';
@@ -42,26 +42,26 @@ import { updatePlanStatus, completePlan as completePlanInDB, failPlan as failPla
 // Pending Plan Store (populated by UI event, consumed by handler)
 // =============================================================================
 
-let pendingApprovedPlan: { datasetId: string; plan: SetupPlan } | null = null;
+let pendingApprovedPlan: { datasetId: string; plan: Plan } | null = null;
 
 // Listen for plan approval events from UI
-emitter.on('vllora_setup_plan_approved', ({ datasetId, plan }) => {
-  console.log('[executeSetupPlan] Received plan approval event for dataset:', datasetId);
-  pendingApprovedPlan = { datasetId, plan: plan as SetupPlan };
+emitter.on('vllora_plan_approved', ({ datasetId, plan }) => {
+  console.log('[executePlan] Received plan approval event for dataset:', datasetId);
+  pendingApprovedPlan = { datasetId, plan: plan as Plan };
 });
 
 /**
  * Get and consume the pending approved plan for a dataset.
  * First checks in-memory store, then falls back to IndexedDB persistence.
  */
-export async function consumePendingPlan(datasetId: string): Promise<SetupPlan | null> {
-  console.log('[executeSetupPlan] Attempting to consume pending plan for:', datasetId);
+export async function consumePendingPlan(datasetId: string): Promise<Plan | null> {
+  console.log('[executePlan] Attempting to consume pending plan for:', datasetId);
 
   // Try in-memory store first
   if (pendingApprovedPlan?.datasetId === datasetId) {
     const plan = pendingApprovedPlan.plan;
     pendingApprovedPlan = null;
-    console.log('[executeSetupPlan] Consumed pending plan from memory');
+    console.log('[executePlan] Consumed pending plan from memory');
     return plan;
   }
 
@@ -70,14 +70,14 @@ export async function consumePendingPlan(datasetId: string): Promise<SetupPlan |
     const { getStoredPlan } = await import('./proposed-plan-store');
     const storedPlan = await getStoredPlan(datasetId);
     if (storedPlan && (storedPlan.status === 'approved' || storedPlan.status === 'proposed' || storedPlan.status === 'executing' || storedPlan.status === 'failed')) {
-      console.log('[executeSetupPlan] Consumed pending plan from IndexedDB (status:', storedPlan.status, ')');
+      console.log('[executePlan] Consumed pending plan from IndexedDB (status:', storedPlan.status, ')');
       return storedPlan.plan;
     }
   } catch (error) {
-    console.error('[executeSetupPlan] Failed to fetch persisted plan:', error);
+    console.error('[executePlan] Failed to fetch persisted plan:', error);
   }
 
-  console.log('[executeSetupPlan] No pending plan found');
+  console.log('[executePlan] No pending plan found');
   return null;
 }
 
@@ -111,7 +111,7 @@ export interface ExecutionProgress {
 /** Shared context passed to every step executor */
 export interface StepContext {
   dataset_id: string;
-  plan: SetupPlan;
+  plan: Plan;
   workflow_id: string;
   workflow: workflowDB.FinetuneWorkflowState;
   overrides?: {
@@ -152,9 +152,9 @@ interface StepExecutor {
   execute: (ctx: StepContext) => Promise<StepResult>;
 }
 
-interface ExecuteSetupPlanParams {
+interface ExecutePlanParams {
   dataset_id: string;
-  plan: SetupPlan;
+  plan: Plan;
   steps_to_execute?: ExecutionStepId[];
   overrides?: {
     adjust_topics?: { instruction?: string };
@@ -163,7 +163,7 @@ interface ExecuteSetupPlanParams {
   };
 }
 
-interface ExecuteSetupPlanResult {
+interface ExecutePlanResult {
   success: boolean;
   error?: string;
   execution_id?: string;
@@ -176,7 +176,7 @@ interface ExecuteSetupPlanResult {
 // =============================================================================
 
 function emitProgress(progress: ExecutionProgress): void {
-  emitter.emit('vllora_setup_plan_progress' as any, { progress });
+  emitter.emit('vllora_plan_progress' as any, { progress });
 }
 
 function generateTopicId(): string {
@@ -184,7 +184,7 @@ function generateTopicId(): string {
 }
 
 function convertToHierarchyNodes(
-  proposedTopics: NonNullable<SetupPlan['proposed_topics']>
+  proposedTopics: NonNullable<Plan['proposed_topics']>
 ): TopicHierarchyNode[] {
   return proposedTopics.map((topic) => ({
     id: generateTopicId(),
@@ -365,7 +365,7 @@ async function executeReadme(ctx: StepContext): Promise<StepResult> {
       size: s.size,
     }));
 
-  const setupPlanSummary: SetupPlanSummary = {
+  const planSummary: PlanSummary = {
     executed_at: Date.now(),
     topics_created: summary.topics_created,
     records_generated: summary.records_generated,
@@ -382,7 +382,7 @@ async function executeReadme(ctx: StepContext): Promise<StepResult> {
     records: allRecords,
     workflow,
     knowledgeSources,
-    setupPlanSummary,
+    planSummary,
   });
 
   await datasetsDB.updateDatasetReadme(dataset_id, readme);
@@ -449,11 +449,11 @@ export const STEP_ORDER: ExecutionStepId[] = [
  * and that each step's prerequisites are satisfied in the plan data.
  *
  * Called in two places:
- * 1. UI gate (SetupPlanContext.approvePlan) — shows toast.error and blocks approval
- * 2. Handler gate (executeSetupPlanHandler) — safety net before marking 'executing'
+ * 1. UI gate (PlanContext.approvePlan) — shows toast.error and blocks approval
+ * 2. Handler gate (executePlanHandler) — safety net before marking 'executing'
  */
 export function validatePlanForExecution(
-  plan: SetupPlan,
+  plan: Plan,
   stepsToRun: Set<ExecutionStepId>,
   overrides?: StepContext['overrides'],
 ): PlanValidationResult {
@@ -513,9 +513,9 @@ const STEP_REGISTRY: Record<ExecutionStepId, StepExecutor> = {
 // Main Handler (registry-based loop)
 // =============================================================================
 
-export const executeSetupPlanHandler: ToolHandler = async (
+export const executePlanHandler: ToolHandler = async (
   params
-): Promise<ExecuteSetupPlanResult> => {
+): Promise<ExecutePlanResult> => {
   const executionId = `exec-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
   // Declared outside try so the catch block can access them for error reporting
@@ -523,14 +523,14 @@ export const executeSetupPlanHandler: ToolHandler = async (
   let summary: ExecutionSummary | null = null;
 
   try {
-    console.log('[executeSetupPlan] Starting execution:', executionId);
+    console.log('[executePlan] Starting execution:', executionId);
 
     const {
       dataset_id,
       plan: planFromParams,
       steps_to_execute,
       overrides,
-    } = params as unknown as ExecuteSetupPlanParams;
+    } = params as unknown as ExecutePlanParams;
 
     if (!dataset_id) {
       return { success: false, error: 'dataset_id is required' };
@@ -539,7 +539,7 @@ export const executeSetupPlanHandler: ToolHandler = async (
     // Resolve plan: params → in-memory → IndexedDB
     const plan = planFromParams || await consumePendingPlan(dataset_id);
     if (!plan) {
-      return { success: false, error: 'No flow provided. Please approve a flow first.' };
+      return { success: false, error: 'No plan provided. Please approve a plan first.' };
     }
 
     // Verify dataset
@@ -571,7 +571,7 @@ export const executeSetupPlanHandler: ToolHandler = async (
     // Mark plan as executing (only after validation passes)
     updatePlanStatus(dataset_id, 'executing');
 
-    console.log('[executeSetupPlan] Steps:', [...stepsToRun]);
+    console.log('[executePlan] Steps:', [...stepsToRun]);
 
     // Build step context
     summary = {
@@ -629,7 +629,7 @@ export const executeSetupPlanHandler: ToolHandler = async (
           await workflowDB.updateWorkflow(wf);
         }
       } catch (err) {
-        console.warn('[executeSetupPlan] Failed to update workflow step:', finetuneStep, err);
+        console.warn('[executePlan] Failed to update workflow step:', finetuneStep, err);
       }
     };
 
@@ -664,7 +664,7 @@ export const executeSetupPlanHandler: ToolHandler = async (
 
         if (executor.nonFatal) {
           // Non-fatal: log and continue
-          console.error(`[executeSetupPlan] ${executor.name} failed (non-fatal):`, error);
+          console.error(`[executePlan] ${executor.name} failed (non-fatal):`, error);
           // For dryrun failure, still mark as ready if we have records + grader
           if (stepId === 'dryrun') {
             summary.ready_to_finetune = summary.records_generated > 0 && summary.grader_configured;
@@ -688,7 +688,7 @@ export const executeSetupPlanHandler: ToolHandler = async (
 
     emitter.emit('vllora_workflow_updated', { datasetId: dataset_id });
 
-    console.log('[executeSetupPlan] Execution complete:', executionId);
+    console.log('[executePlan] Execution complete:', executionId);
 
     return {
       success: true,
@@ -697,8 +697,8 @@ export const executeSetupPlanHandler: ToolHandler = async (
       summary,
     };
   } catch (error) {
-    console.error('[executeSetupPlan] Failed:', error);
-    const { dataset_id } = params as unknown as ExecuteSetupPlanParams;
+    console.error('[executePlan] Failed:', error);
+    const { dataset_id } = params as unknown as ExecutePlanParams;
 
     // Mark progress as complete+error (use real progress if available)
     if (progress) {
@@ -730,7 +730,7 @@ export const executeSetupPlanHandler: ToolHandler = async (
     const resumeHint = completedSteps.length > 0
       ? ` Completed steps: [${completedSteps.join(', ')}].` +
         (failedStep ? ` Failed at: ${failedStep.id} (${failedStep.error}).` : '') +
-        ` To resume, call execute_setup_plan with steps_to_execute: [${remainingSteps.join(', ')}].` +
+        ` To resume, call execute_plan with steps_to_execute: [${remainingSteps.join(', ')}].` +
         ` Do NOT create a new plan — the existing plan is still valid.`
       : '';
 
@@ -748,8 +748,8 @@ export const executeSetupPlanHandler: ToolHandler = async (
 // Tool Definition
 // =============================================================================
 
-export const executeSetupPlanTool: DistriFnTool = {
-  name: 'execute_setup_plan',
+export const executePlanTool: DistriFnTool = {
+  name: 'execute_plan',
   description: `Execute an approved plan. Runs steps from the plan's steps_to_execute in order.
 
 Available steps: ${STEP_ORDER.join(', ')}
@@ -806,5 +806,5 @@ the remaining steps via steps_to_execute.`,
   },
   autoExecute: true,
   handler: async (input) =>
-    JSON.stringify(await executeSetupPlanHandler(input as Record<string, unknown>)),
+    JSON.stringify(await executePlanHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

@@ -1,8 +1,8 @@
 /**
- * SetupPlanCard
+ * PlanCard
  *
- * Displays a proposed setup plan with approve/edit actions.
- * Used in the Lucy chat as a tool renderer for propose_setup_plan results.
+ * Displays a proposed plan with approve/edit actions.
+ * Used in the Lucy chat as a tool renderer for propose_plan results.
  */
 
 import { useState } from 'react';
@@ -22,21 +22,21 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { SetupPlan } from '@/lib/distri-finetune-tools/steps/propose-setup-plan';
+import type { Plan } from '@/lib/distri-finetune-tools/steps/propose-plan';
 
-interface SetupPlanCardProps {
-  plan: SetupPlan;
-  onApprove: (plan: SetupPlan) => void;
-  onEdit?: (plan: SetupPlan) => void;
+interface PlanCardProps {
+  plan: Plan;
+  onApprove: (plan: Plan) => void;
+  onEdit?: (plan: Plan) => void;
   isExecuting?: boolean;
 }
 
-export function SetupPlanCard({
+export function PlanCard({
   plan,
   onApprove,
   onEdit,
   isExecuting = false,
-}: SetupPlanCardProps) {
+}: PlanCardProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(['topics', 'steps'])
   );
@@ -93,7 +93,7 @@ export function SetupPlanCard({
         <div className="flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-primary" />
           <div className="flex-1">
-            <h3 className="text-sm font-semibold">{plan.title || 'Flow'}</h3>
+            <h3 className="text-sm font-semibold">{plan.title || 'Plan'}</h3>
             <p className="text-xs text-muted-foreground">
               {plan.description || `for ${plan.dataset_name}`}
             </p>
@@ -331,7 +331,7 @@ export function SetupPlanCard({
             className="flex-1"
           >
             <Edit3 className="w-4 h-4 mr-2" />
-            Edit Flow
+            Edit Plan
           </Button>
         )}
         <Button
