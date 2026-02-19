@@ -966,6 +966,34 @@ export async function renameDataset(datasetId: string, newName: string): Promise
   });
 }
 
+export async function updateDatasetObjective(datasetId: string, objective: string): Promise<void> {
+  const db = await getDB();
+  const now = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('datasets', 'readwrite');
+    const store = tx.objectStore('datasets');
+
+    const getRequest = store.get(datasetId);
+    getRequest.onsuccess = () => {
+      const dataset = getRequest.result;
+      if (dataset) {
+        const trimmed = objective.trim();
+        if (trimmed) {
+          dataset.datasetObjective = trimmed;
+        } else {
+          delete dataset.datasetObjective;
+        }
+        dataset.updatedAt = now;
+        store.put(dataset);
+      }
+    };
+
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 // Update a dataset's backend dataset ID (set after uploading to cloud provider)
 export async function updateDatasetBackendId(
   datasetId: string,

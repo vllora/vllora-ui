@@ -316,3 +316,73 @@ export async function hasProposedPlan(datasetId: string): Promise<boolean> {
   const stored = await getStoredPlan(datasetId);
   return stored !== null && stored.status === 'proposed';
 }
+
+// =============================================================================
+// Plan Snapshots (for diff computation in save_flow)
+// =============================================================================
+
+const SNAPSHOT_KEY_PREFIX = 'previous:';
+
+/**
+ * Save snapshot of the last applied plan (for diff computation in save_flow).
+ * Uses a separate key prefix so it doesn't interfere with the main plan lifecycle.
+ */
+export async function savePreviousPlanSnapshot(datasetId: string, plan: SetupPlan): Promise<void> {
+  try {
+    const db = await getDB();
+    if (!hasStore(db)) return;
+
+    const snapshot: StoredPlan = {
+      datasetId: `${SNAPSHOT_KEY_PREFIX}${datasetId}`,
+      plan,
+      status: 'proposed',
+      executionProgress: null,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("proposedPlans", "readwrite");
+      const store = tx.objectStore("proposedPlans");
+      const request = store.put(snapshot);
+
+      request.onsuccess = () => {
+        console.log("[proposed-plan-store] Previous plan snapshot saved for dataset:", datasetId);
+        resolve();
+      };
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.error("[proposed-plan-store] Failed to save previous plan snapshot:", error);
+  }
+}
+
+/**
+ * Get the last applied plan snapshot (null if first proposal).
+ * Used by save_flow to compute diff against previous plan.
+ */
+export async function getPreviousPlanSnapshot(datasetId: string): Promise<SetupPlan | null> {
+  try {
+    const db = await getDB();
+    if (!hasStore(db)) return null;
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("proposedPlans", "readonly");
+      const store = tx.objectStore("proposedPlans");
+      const request = store.get(`${SNAPSHOT_KEY_PREFIX}${datasetId}`);
+
+      request.onsuccess = () => {
+        const raw = request.result as StoredProposedPlan | undefined;
+        if (!raw) {
+          resolve(null);
+          return;
+        }
+        resolve(normalizeStored(raw).plan);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.error("[proposed-plan-store] Failed to get previous plan snapshot:", error);
+    return null;
+  }
+}

@@ -10,12 +10,11 @@ import { emitter } from '@/utils/eventEmitter';
 import type { ToolHandler } from '../../types';
 import type { SetupPlan, ProposedTopic, GraderCriterion } from './types';
 import { callLucy, type LucyMessage } from '../shared/lucy-client';
-import { generateGraderTemplate } from './grader-template';
-import { saveProposedPlan } from '../proposed-plan-store';
+import { getStoredPlan, saveProposedPlan } from '../proposed-plan-store';
 
 interface AdjustSetupPlanParams {
   dataset_id: string;
-  current_plan: SetupPlan;
+  current_plan?: SetupPlan;
   user_feedback: string;
 }
 
@@ -451,12 +450,17 @@ export const adjustSetupPlanHandler: ToolHandler = async (
       return { success: false, error: 'dataset_id is required' };
     }
 
-    if (!current_plan) {
-      return { success: false, error: 'current_plan is required' };
-    }
-
     if (!user_feedback || !user_feedback.trim()) {
       return { success: false, error: 'user_feedback is required' };
+    }
+
+    // Robust fallback: if the agent omits current_plan, load the latest persisted one.
+    const resolvedPlan = current_plan ?? (await getStoredPlan(dataset_id))?.plan;
+    if (!resolvedPlan) {
+      return {
+        success: false,
+        error: 'No current plan found. Create a plan first with propose_setup_plan, then adjust it.',
+      };
     }
 
     // Emit event to show loading state
@@ -465,7 +469,7 @@ export const adjustSetupPlanHandler: ToolHandler = async (
     console.log('[adjustSetupPlan] Calling LLM to adjust plan...');
 
     // Call LLM to adjust the plan
-    const llmResult = await callLLMToAdjustPlan(current_plan, user_feedback);
+    const llmResult = await callLLMToAdjustPlan(resolvedPlan, user_feedback);
 
     // Count leaf topics only (topics that will have records assigned)
     // If a topic has subtopics, count only the subtopics (not the parent)
@@ -492,12 +496,11 @@ export const adjustSetupPlanHandler: ToolHandler = async (
 
     // Build the adjusted plan
     const adjustedPlan: SetupPlan = {
-      ...current_plan,
+      ...resolvedPlan,
       proposed_topics: llmResult.proposed_topics,
       total_topic_count: totalTopicCount,
       grader_config: {
         criteria: llmResult.grader_criteria,
-        template_preview: generateGraderTemplate(llmResult.grader_criteria, current_plan.objective),
       },
       execution_steps: [
         {
@@ -573,14 +576,14 @@ The adjusted flow is shown to the user for approval.`,
       },
       current_plan: {
         type: 'object',
-        description: 'The current flow to adjust',
+        description: 'The current flow to adjust. Optional: if omitted, the latest persisted flow for this dataset is used.',
       },
       user_feedback: {
         type: 'string',
         description: 'The user\'s feedback/request for changes (e.g., "reduce to 5 topics with 50 records each")',
       },
     },
-    required: ['dataset_id', 'current_plan', 'user_feedback'],
+    required: ['dataset_id', 'user_feedback'],
   },
   autoExecute: true,
   handler: async (input) =>

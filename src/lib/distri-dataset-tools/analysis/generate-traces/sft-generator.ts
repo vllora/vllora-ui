@@ -28,12 +28,17 @@ import {
 export async function generateFirstUserMessage(
   contextStr: string,
   persona: string,
-  systemPrompt: string
+  systemPrompt: string,
+  tools: any[] = []
 ): Promise<string> {
+  const toolsSection = tools.length > 0
+    ? `\nTool Schema:\nThe assistant has access to the following tools. Generate user messages that would naturally use one or more of these tools:\n${tools.map((t: any) => { const fn = t?.function ?? t; return `- ${fn?.name ?? "unknown"}${fn?.description ? ": " + fn.description : ""}`; }).join("\n")}\n`
+    : "";
   const prompt = SIMULATED_USER_PROMPT
     .replace('{{subtopics}}', contextStr)
     .replace('{{persona}}', persona)
-    .replace('{{system_prompt}}', systemPrompt);
+    .replace('{{system_prompt}}', systemPrompt)
+    .replace('{{tools_section}}', toolsSection);
   const content = await callLLMText(prompt);
   return content.trim();
 }
@@ -149,7 +154,7 @@ export async function simulateConversation(
 
   const systemPrompt = seedSystemPrompt || `You are a helpful assistant specializing in ${topicStr}.`;
   console.log(`[simulateConversation] Generating first user message...`);
-  const firstUserMsg = await generateFirstUserMessage(contextStr, persona, systemPrompt);
+  const firstUserMsg = await generateFirstUserMessage(contextStr, persona, systemPrompt, tools);
   console.log(`[simulateConversation] First user message generated (${firstUserMsg.length} chars)`);
 
   const messages: SyntheticMessage[] = [

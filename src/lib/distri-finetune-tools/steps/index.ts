@@ -81,9 +81,10 @@ export { analyzeKnowledgeSourcesHandler, analyzeKnowledgeSourcesTool } from './a
 // Grader Generation (LLM-based criteria + script generation)
 export { generateGraderHandler, generateGraderTool } from './generate-grader';
 
-// Plan System (propose → approve → execute)
+// Plan System (propose → save → approve → execute)
 export { proposeSetupPlanHandler, proposeSetupPlanTool, type SetupPlan } from './propose-setup-plan';
 export { adjustSetupPlanHandler, adjustSetupPlanTool } from './propose-setup-plan';
+export { saveFlowHandler, saveFlowTool } from './save-flow';
 export {
   executeSetupPlanHandler,
   executeSetupPlanTool,
@@ -149,6 +150,7 @@ import { regenerateReadmeHandler, regenerateReadmeTool } from './regenerate-read
 import { analyzeKnowledgeSourcesHandler, analyzeKnowledgeSourcesTool } from './analyze-knowledge-sources';
 import { generateGraderHandler, generateGraderTool } from './generate-grader';
 import { proposeSetupPlanHandler, proposeSetupPlanTool, adjustSetupPlanHandler, adjustSetupPlanTool } from './propose-setup-plan';
+import { saveFlowHandler, saveFlowTool } from './save-flow';
 import { executeSetupPlanHandler, executeSetupPlanTool } from './execute-setup-plan';
 // Note: Stockfish tools (analyzeChessPositionTool, classifyChessMoveTool) are NOT imported here
 // They are conditionally added via stockfishTools in useFineTuneAgentChat for chess datasets only
@@ -189,6 +191,7 @@ export const STEP_TOOL_NAMES = [
   'generate_grader',
   'propose_setup_plan',
   'adjust_setup_plan',
+  'save_flow',
   'execute_setup_plan',
   // Note: Stockfish tools ('analyze_chess_position', 'classify_chess_move') are NOT in this list
   // They are conditionally available for chess datasets only via stockfishTools export
@@ -232,6 +235,7 @@ export const stepTools: DistriFnTool[] = [
   generateGraderTool,
   proposeSetupPlanTool,
   adjustSetupPlanTool,
+  saveFlowTool,
   executeSetupPlanTool,
   // Note: Stockfish tools are NOT included here - they are conditionally added
   // via stockfishTools in useFineTuneAgentChat for chess datasets only
@@ -269,6 +273,7 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   generate_grader: generateGraderHandler,
   propose_setup_plan: proposeSetupPlanHandler,
   adjust_setup_plan: adjustSetupPlanHandler,
+  save_flow: saveFlowHandler,
   execute_setup_plan: executeSetupPlanHandler,
   // Note: Stockfish handlers are in stockfishToolHandlers export, not here
 };

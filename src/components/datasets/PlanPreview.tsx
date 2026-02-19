@@ -9,7 +9,7 @@
  * Empty state: prompt to generate a plan.
  */
 
-import { Eye, Pencil, Sparkles, Loader2, FolderOpen, AlertCircle, X, CheckCircle2, XCircle } from "lucide-react";
+import { Eye, Pencil, Sparkles, Loader2, FolderOpen, AlertCircle, X, CheckCircle2, XCircle, ArrowLeftRight } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { SetupPlanEditor, planToMarkdown } from "./plan-section/SetupPlanEditor";
@@ -17,10 +17,12 @@ import LazyMarkdownRenderer from "@/components/chat/LazyMarkdownRenderer";
 import { emitter } from "@/utils/eventEmitter";
 import type { SetupPlan } from "@/lib/distri-finetune-tools/steps/propose-setup-plan";
 import type { PlanStatus } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
+import type { PlanDiff } from "./plan-section/plan-markdown-utils";
 
 interface PlanPreviewProps {
   plan: SetupPlan | null;
   planStatus: PlanStatus | null;
+  planDiff?: PlanDiff | null;
   mode: "display" | "edit";
   onModeChange: (mode: "display" | "edit") => void;
   onApprove: (plan: SetupPlan) => void;
@@ -35,6 +37,7 @@ interface PlanPreviewProps {
 export function PlanPreview({
   plan,
   planStatus,
+  planDiff,
   mode,
   onModeChange,
   onApprove,
@@ -51,7 +54,7 @@ export function PlanPreview({
       <div className="flex-1 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="w-6 h-6 animate-spin text-[rgb(var(--theme-500))]" />
-          <p className="text-sm text-muted-foreground">Loading plan...</p>
+          <p className="text-sm text-muted-foreground">Loading flow...</p>
         </div>
       </div>
     );
@@ -75,6 +78,7 @@ export function PlanPreview({
           <PlanDisplayView
             plan={plan}
             planStatus={planStatus}
+            planDiff={planDiff}
             onModeChange={onModeChange}
             onApprove={onApprove}
             onClose={onClose}
@@ -100,6 +104,7 @@ export function PlanPreview({
 function PlanDisplayView({
   plan,
   planStatus,
+  planDiff,
   onModeChange,
   onApprove,
   onClose,
@@ -108,12 +113,22 @@ function PlanDisplayView({
 }: {
   plan: SetupPlan;
   planStatus: PlanStatus | null;
+  planDiff?: PlanDiff | null;
   onModeChange: (mode: "display" | "edit") => void;
   onApprove: (plan: SetupPlan) => void;
   onClose: () => void;
   isExecuting: boolean;
   isActionable: boolean;
 }) {
+  // Build human-readable diff summary for banner
+  const diffParts: string[] = [];
+  if (planDiff?.hasChanges) {
+    const t = planDiff.topicsAdded.length + planDiff.topicsRemoved.length + planDiff.topicsModified.length;
+    const c = planDiff.criteriaAdded.length + planDiff.criteriaRemoved.length + planDiff.criteriaModified.length;
+    if (t > 0) diffParts.push(`${t} topic${t > 1 ? 's' : ''} changed`);
+    if (c > 0) diffParts.push(`${c} criterion${c > 1 ? ' changed' : 's changed'}`);
+  }
+
   return (
     <>
       {/* Header toolbar */}
@@ -172,6 +187,17 @@ function PlanDisplayView({
         </div>
       </div>
 
+      {/* Diff banner — shown when save_flow committed a plan with changes */}
+      {planDiff?.hasChanges && diffParts.length > 0 && (
+        <div className="mx-4 mt-3 flex items-center gap-2 px-3 py-2 rounded-md border border-blue-500/30 bg-blue-500/10 text-xs">
+          <ArrowLeftRight className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+          <span className="text-blue-600 dark:text-blue-400">
+            <span className="font-medium">Updated: </span>
+            {diffParts.join(', ')}
+          </span>
+        </div>
+      )}
+
       {/* Plan content */}
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-3xl mx-auto">
@@ -203,7 +229,7 @@ function PlanEditView({
       <div className="flex items-center justify-between px-4 py-2 border-b border-border">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">
           <Pencil className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-          Editing Plan
+          Editing Flow
         </div>
         <div className="flex items-center gap-1.5">
           <Button

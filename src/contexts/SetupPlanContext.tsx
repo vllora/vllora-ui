@@ -33,6 +33,7 @@ import { getCurrentExecution, getExecutingPlan } from "@/lib/distri-finetune-too
 import type { SetupPlan } from "@/lib/distri-finetune-tools/steps/propose-setup-plan";
 import { STEP_ORDER, validatePlanForExecution } from "@/lib/distri-finetune-tools/steps/execute-setup-plan";
 import type { ExecutionProgress, ExecutionStepId } from "@/lib/distri-finetune-tools/steps/execute-setup-plan";
+import type { PlanDiff } from "@/components/datasets/plan-section/plan-markdown-utils";
 
 // ============================================================================
 // Types
@@ -56,6 +57,8 @@ interface SetupPlanContextType {
   // Plan data
   /** The currently proposed plan (null if no plan) */
   proposedPlan: SetupPlan | null;
+  /** Diff between the current plan and the previous committed plan (null if first proposal or no diff) */
+  planDiff: PlanDiff | null;
 
   // Execution state
   /** Whether plan execution is in progress */
@@ -106,6 +109,7 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
 
   // Plan data
   const [proposedPlan, setProposedPlan] = useState<SetupPlan | null>(null);
+  const [planDiff, setPlanDiff] = useState<PlanDiff | null>(null);
 
   // Execution state
   const [isExecuting, setIsExecuting] = useState(false);
@@ -231,12 +235,13 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
       }
     };
 
-    const handleProposed = ({ datasetId: id, plan }: { datasetId: string; plan: unknown }) => {
+    const handleProposed = ({ datasetId: id, plan, diff }: { datasetId: string; plan: unknown; diff?: PlanDiff }) => {
       if (id === datasetId) {
         setPlanStatus('proposed');
         setIsGeneratingPlan(false);
         setHasPlanProposed(true);
         setProposedPlan(plan as SetupPlan);
+        setPlanDiff(diff ?? null);
         setIsExecuting(false);
         setExecutionProgress(null);
         // Clear executed plan when new plan is proposed
@@ -363,6 +368,7 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
     isGeneratingPlan,
     hasPlanProposed,
     proposedPlan,
+    planDiff,
     isExecuting,
     executionProgress,
     executedPlan,

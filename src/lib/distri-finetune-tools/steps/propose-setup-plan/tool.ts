@@ -64,7 +64,7 @@ regrading, retraining, bulk topic changes, etc.`,
           },
           grader_config: {
             type: 'object',
-            description: 'Grader config with criteria and template_preview',
+            description: 'Grader config with evaluation criteria. Do NOT include template_preview — the JS evaluator is generated fresh at execution time.',
             properties: {
               criteria: {
                 type: 'array',
@@ -77,9 +77,8 @@ regrading, retraining, bulk topic changes, etc.`,
                   required: ['name', 'description'],
                 },
               },
-              template_preview: { type: 'string', description: 'Placeholder - auto-generated during execution' },
             },
-            required: ['criteria', 'template_preview'],
+            required: ['criteria'],
           },
           data_generation: {
             type: 'object',

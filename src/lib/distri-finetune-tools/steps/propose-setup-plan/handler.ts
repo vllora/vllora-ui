@@ -16,7 +16,6 @@ import type {
   ProposeSetupPlanResult,
 } from './types';
 import { saveProposedPlan } from '../proposed-plan-store';
-import { generateGraderTemplate } from './grader-template';
 
 // =============================================================================
 // Plan normalization helpers (compensate for LLM imprecision)
@@ -115,17 +114,6 @@ export const proposeSetupPlanHandler: ToolHandler = async (
 
     // --- Validate output_format ---
     validateOutputFormat(plan);
-
-    // --- Always regenerate grader template_preview from criteria ---
-    // Criteria are the source of truth; template is derived from them.
-    // This ensures the JS evaluator matches the plan's output_format.
-    if (plan.grader_config?.criteria?.length) {
-      plan.grader_config.template_preview = generateGraderTemplate(
-        plan.grader_config.criteria,
-        plan.objective,
-        plan.output_format,
-      );
-    }
 
     // --- Default execution_steps if missing ---
     if (!plan.execution_steps?.length) {

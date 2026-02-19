@@ -39,6 +39,7 @@ import {
   LucyAvatar,
   lucyToolRenderers,
 } from "@/components/agent/lucy-agent";
+import { PlanCard } from "@/components/agent/lucy-agent/setup-plan-render/PlanCard";
 import type { QuickAction } from "@/components/agent/lucy-agent/LucyWelcome";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -126,7 +127,7 @@ export function LucyDatasetAssistant() {
   // Lucy agent state
   const { isConnected, reconnect } = useDistriConnection();
   const { providers, loading: providersLoading } = ProviderKeysConsumer();
-  const { planStatus, executionProgress } = SetupPlanConsumer();
+  const { planStatus, executionProgress, proposedPlan } = SetupPlanConsumer();
 
   // Use finetune agent when viewing a specific dataset
   const {
@@ -201,6 +202,12 @@ export function LucyDatasetAssistant() {
       return;
     }
 
+    // Skip if a plan is already proposed — sticky PlanCard handles the reload case
+    if (planStatus === 'proposed') {
+      lastAnalyzedDatasetRef.current = selectedDatasetId;
+      return;
+    }
+
     const targetDatasetId = selectedDatasetId;
 
     // Use a delay to ensure LucyChat is fully mounted and ready
@@ -215,7 +222,7 @@ export function LucyDatasetAssistant() {
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [datasetLoading, workflowLoading, agentLoading, agent, isConnected, selectedDatasetId, currentDataset]);
+  }, [datasetLoading, workflowLoading, agentLoading, agent, isConnected, selectedDatasetId, currentDataset, planStatus]);
 
   // Reset state when dataset changes - always start fresh
   useEffect(() => {
@@ -434,18 +441,25 @@ export function LucyDatasetAssistant() {
           className="h-full"
         />
       ) : isConnected && agent ? (
-        <LucyChat
-          threadId={threadId}
-          agent={agent}
-          externalTools={tools}
-          initialMessages={messages}
-          beforeSendMessage={handleBeforeSendMessage}
-          toolRenderers={toolRenderers}
-          quickActions={contextualQuickActions}
-          proactivePrompt="Hi! I'm Lucy, your fine-tuning assistant. I'll help you prepare training data, configure evaluation, and train your model. Let me take a look at your dataset..."
-          autoTriggerPrompt={autoTriggerPrompt}
-          activeSection={activeSection}
-        />
+        <div className="flex flex-col h-full min-h-0">
+          {!!proposedPlan && planStatus === 'proposed' && messages.length === 0 && (
+            <div className="px-3 pt-3 shrink-0">
+              <PlanCard />
+            </div>
+          )}
+          <LucyChat
+            threadId={threadId}
+            agent={agent}
+            externalTools={tools}
+            initialMessages={messages}
+            beforeSendMessage={handleBeforeSendMessage}
+            toolRenderers={toolRenderers}
+            quickActions={contextualQuickActions}
+            proactivePrompt="Hi! I'm Lucy, your fine-tuning assistant. I'll help you prepare training data, configure evaluation, and train your model. Let me take a look at your dataset..."
+            autoTriggerPrompt={autoTriggerPrompt}
+            activeSection={activeSection}
+          />
+        </div>
       ) : (
         <div className="flex flex-col items-center justify-center h-full gap-3">
           <Plug className="h-6 w-6 text-muted-foreground animate-pulse" />

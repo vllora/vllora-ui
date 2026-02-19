@@ -74,7 +74,7 @@ export interface SetupPlan {
   // Optional: only present for plans that configure grader
   grader_config?: {
     criteria: GraderCriterion[];
-    template_preview: string;
+    template_preview?: string;  // only generated at execution time, not stored in proposal
   };
 
   // Execution steps (what the user sees)

@@ -226,6 +226,7 @@ export function LucyCodeToolRenderer({ toolCall, state }: ToolRendererProps) {
 export const lucyToolRenderers: ToolRendererMap = {
   // Setup plan tools
   propose_setup_plan: LucySetupPlanRenderer,
+  save_flow: LucySetupPlanRenderer,
   execute_setup_plan: LucyExecutePlanRenderer,
   // Add more specific tool renderers here
   // 'search': LucySearchToolRenderer,

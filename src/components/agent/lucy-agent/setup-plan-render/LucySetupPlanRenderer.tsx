@@ -53,7 +53,7 @@ export function LucySetupPlanRenderer({ toolCall, state }: ToolRendererProps) {
   }
 
   // If there's a plan, show PlanCard (reads latest plan from context)
-  if (isCompleted && result?.success && result?.plan) {
+  if (isCompleted && result?.success) {
     return <PlanCard />;
   }
 

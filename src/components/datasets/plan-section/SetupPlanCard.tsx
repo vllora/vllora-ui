@@ -331,7 +331,7 @@ export function SetupPlanCard({
             className="flex-1"
           >
             <Edit3 className="w-4 h-4 mr-2" />
-            Edit Plan
+            Edit Flow
           </Button>
         )}
         <Button

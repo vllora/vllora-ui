@@ -22,7 +22,7 @@ import type { Dataset, DatasetRecord, TopicHierarchyConfig, TopicHierarchyNode }
 import { emitter } from "@/utils/eventEmitter";
 import { toast } from "sonner";
 import { quickFinetune } from "@/services/quick-finetune";
-import { updateDatasetTopicHierarchy, clearAllRecordTopics, updateRecordTopicsBatch, renameTopicInRecords, clearTopicFromRecords, updateDatasetEvalScript } from "@/services/datasets-db";
+import { updateDatasetTopicHierarchy, clearAllRecordTopics, updateRecordTopicsBatch, renameTopicInRecords, clearTopicFromRecords, updateDatasetEvalScript, updateDatasetObjective } from "@/services/datasets-db";
 import { updateDatasetEvalScript as updateBackendEvalScript } from "@/services/finetune-api";
 import { filterAndSortRecords } from "@/components/datasets/record-filters";
 import {
@@ -406,6 +406,21 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
       }
     },
     [dataset, renameDataset]
+  );
+
+  const handleUpdateObjective = useCallback(
+    async (newObjective: string) => {
+      if (!dataset) return;
+      try {
+        await updateDatasetObjective(dataset.id, newObjective);
+        const trimmed = newObjective.trim();
+        setDataset({ ...dataset, datasetObjective: trimmed || undefined });
+        toast.success("Objective updated");
+      } catch {
+        toast.error("Failed to update objective");
+      }
+    },
+    [dataset]
   );
 
   const handleDeleteDataset = useCallback(async () => {
@@ -1309,6 +1324,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     // Handlers
     loadDataset,
     handleRenameDataset,
+    handleUpdateObjective,
     handleDeleteRecord,
     handleUpdateRecordTopic,
     handleUpdateRecordEvaluation,

@@ -31,6 +31,9 @@ import { generateDatasetReadme, type KnowledgeSourceInfo, type SetupPlanSummary 
 // Import for finetune job creation
 import { quickFinetune } from '@/services/quick-finetune';
 
+// Import grader template generator
+import { generateGraderTemplate } from './propose-setup-plan/grader-template';
+
 // Side-effect import to ensure execution state store is listening for progress events
 import './execution-state-store';
 import { updatePlanStatus, completePlan as completePlanInDB, failPlan as failPlanInDB } from './proposed-plan-store';
@@ -278,10 +281,18 @@ async function executeGenerate(ctx: StepContext): Promise<StepResult> {
 async function executeGrader(ctx: StepContext): Promise<StepResult> {
   const { dataset_id, plan, workflow_id, summary } = ctx;
 
-  const evalScript = plan.grader_config?.template_preview;
-  if (!evalScript) {
-    throw new Error('Grader config template_preview is required for grader step');
+  if (!plan.grader_config?.criteria?.length) {
+    throw new Error('grader_config.criteria is required for grader step');
   }
+
+  // Generate template fresh from criteria at execution time.
+  // This ensures the JS evaluator always reflects the latest criteria,
+  // even if criteria changed between proposal and execution.
+  const evalScript = generateGraderTemplate(
+    plan.grader_config.criteria,
+    plan.objective,
+    plan.output_format,
+  );
 
   await datasetsDB.updateDatasetEvalScript(dataset_id, evalScript);
   await workflowDB.updateStepData(workflow_id, 'graderConfig', {
@@ -475,8 +486,8 @@ export function validatePlanForExecution(
     }
   }
 
-  if (stepsToRun.has('grader') && !plan.grader_config?.template_preview?.trim()) {
-    errors.push("Step 'grader' requires grader_config.template_preview in the plan");
+  if (stepsToRun.has('grader') && !plan.grader_config?.criteria?.length) {
+    errors.push("Step 'grader' requires grader_config.criteria in the plan");
   }
 
   return { valid: errors.length === 0, errors };
