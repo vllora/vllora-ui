@@ -19,6 +19,7 @@ import type { TopicHierarchyNode } from '@/types/dataset-types';
 // Import step handlers
 import { applyTopicHierarchyHandler } from './apply-hierarchy';
 import { adjustTopicHierarchyHandler } from './adjust-hierarchy';
+import { rollbackToStepHandler } from '../workflow/index';
 import { categorizeRecordsHandler } from './categorize-records';
 import { generateInitialDataHandler } from './generate-initial-data';
 import { uploadDatasetHandler } from './upload-dataset';
@@ -207,12 +208,41 @@ async function executeTopics(ctx: StepContext): Promise<StepResult> {
   const { plan, workflow_id, summary, dataset_id } = ctx;
   const hierarchyNodes = convertToHierarchyNodes(plan.proposed_topics || []);
 
+  // Auto-rollback if the workflow is in a state that doesn't allow topic changes (e.g. training).
+  // The user approved a plan with the topics step, so rolling back is the right action.
+  const allowedSteps = ['not_started', 'topics_config', 'grader_config'];
+  const workflow = await workflowDB.getWorkflow(workflow_id);
+  if (workflow && !allowedSteps.includes(workflow.currentStep)) {
+    const rollback = await rollbackToStepHandler({ workflow_id, step: 'topics_config' });
+    if (!(rollback as any).success) {
+      throw new Error(
+        `Cannot apply topics: workflow is in "${workflow.currentStep}" state and rollback to topics_config failed. ` +
+        `${(rollback as any).error ?? ''}`
+      );
+    }
+  }
+
   const result = await applyTopicHierarchyHandler({ workflow_id, hierarchy: hierarchyNodes });
   if (!(result as any).success) {
     throw new Error((result as any).error || 'Failed to apply topic hierarchy');
   }
 
   summary.topics_created = plan.total_topic_count || 0;
+
+  // Warn if categorize is missing but the dataset already has records — they'll be unassigned.
+  const stepsToRun = new Set(ctx.plan.steps_to_execute ?? STEP_ORDER);
+  if (!stepsToRun.has('categorize')) {
+    const existingRecordCount = await datasetsDB.getRecordCount(dataset_id);
+    if (existingRecordCount > 0) {
+      console.warn(
+        '[executeTopics] New hierarchy applied but "categorize" is not in steps_to_execute. ' +
+        'Existing records will not be assigned to the new topics.'
+      );
+      emitter.emit('vllora_lucy_prompt', {
+        prompt: `Topics were applied but the plan does not include a "categorize" step. The dataset has existing records that are now unassigned to the new topics. Should I add a categorize step and re-run?`,
+      });
+    }
+  }
 
   toast.success('Topics configured', {
     action: {
@@ -228,6 +258,15 @@ async function executeAdjustTopics(ctx: StepContext): Promise<StepResult> {
   const { workflow_id, plan, overrides, summary, dataset_id } = ctx;
   const instruction = overrides?.adjust_topics?.instruction ?? plan.adjust_topics_instruction;
   if (!instruction) throw new Error('adjust_topics requires an instruction (in plan.adjust_topics_instruction or overrides)');
+
+  // Pre-flight: ensure a hierarchy exists to adjust
+  const dataset = await datasetsDB.getDatasetById(dataset_id);
+  if (!dataset?.topicHierarchy?.hierarchy?.length) {
+    throw new Error(
+      'No topic hierarchy exists to adjust. ' +
+      'Recovery: add "topics" before "adjust_topics" in steps_to_execute and re-run execute_plan.'
+    );
+  }
 
   const result = await adjustTopicHierarchyHandler({ workflow_id, instruction });
   if (!(result as any).success) throw new Error((result as any).error || 'Failed to adjust topics');
@@ -245,7 +284,25 @@ async function executeAdjustTopics(ctx: StepContext): Promise<StepResult> {
 }
 
 async function executeCategorize(ctx: StepContext): Promise<StepResult> {
-  const { workflow_id } = ctx;
+  const { workflow_id, dataset_id } = ctx;
+
+  // Pre-flight: hierarchy must exist
+  const dataset = await datasetsDB.getDatasetById(dataset_id);
+  if (!dataset?.topicHierarchy?.hierarchy?.length) {
+    throw new Error(
+      'Cannot categorize: no topic hierarchy configured. ' +
+      'Recovery: add "topics" before "categorize" in steps_to_execute and re-run execute_plan.'
+    );
+  }
+
+  // Pre-flight: records must exist
+  const recordCount = await datasetsDB.getRecordCount(dataset_id);
+  if (recordCount === 0) {
+    throw new Error(
+      'Cannot categorize: dataset has no records. ' +
+      'Recovery: add "generate" before "categorize" in steps_to_execute and re-run execute_plan.'
+    );
+  }
 
   const result = await categorizeRecordsHandler({ workflow_id });
   if (!(result as any).success) throw new Error((result as any).error || 'Failed to categorize records');
@@ -258,6 +315,19 @@ async function executeCategorize(ctx: StepContext): Promise<StepResult> {
 
 async function executeGenerate(ctx: StepContext): Promise<StepResult> {
   const { dataset_id, plan, overrides, summary } = ctx;
+
+  // Pre-flight: dataset objective is required
+  const dataset = await datasetsDB.getDatasetById(dataset_id);
+  if (!dataset?.datasetObjective?.trim()) {
+    emitter.emit('vllora_lucy_prompt', {
+      prompt: 'The dataset has no training objective defined. What is the goal of this fine-tuning run? Please describe the task or behavior you want the model to learn.',
+    });
+    throw new Error(
+      'Cannot generate data: dataset has no training objective defined. ' +
+      'Recovery: ask the user for the training objective, set it via update_dataset, then re-run execute_plan.'
+    );
+  }
+
   const recordCount = overrides?.generate?.count ?? plan.estimated_records ?? 0;
 
   const result = await generateInitialDataHandler({
@@ -282,7 +352,10 @@ async function executeGrader(ctx: StepContext): Promise<StepResult> {
   const { dataset_id, plan, workflow_id, summary } = ctx;
 
   if (!plan.grader_config?.criteria?.length) {
-    throw new Error('grader_config.criteria is required for grader step');
+    throw new Error(
+      'grader_config.criteria is required for grader step. ' +
+      'Recovery: call generate_grader({ dataset_id }) to get criteria, add them to the plan via adjust_plan, then re-run execute_plan.'
+    );
   }
 
   // Generate template fresh from criteria at execution time.
@@ -313,7 +386,16 @@ async function executeGrader(ctx: StepContext): Promise<StepResult> {
 }
 
 async function executeUpload(ctx: StepContext): Promise<StepResult> {
-  const { workflow_id, overrides } = ctx;
+  const { workflow_id, overrides, dataset_id } = ctx;
+
+  // Pre-flight: must have records to upload
+  const recordCount = await datasetsDB.getRecordCount(dataset_id);
+  if (recordCount === 0) {
+    throw new Error(
+      'Cannot upload: dataset has no records. ' +
+      'Recovery: add "generate" before "upload" in steps_to_execute and re-run execute_plan.'
+    );
+  }
 
   const result = await uploadDatasetHandler({
     workflow_id,
@@ -321,7 +403,10 @@ async function executeUpload(ctx: StepContext): Promise<StepResult> {
   });
 
   if (!(result as any).success && !(result as any).already_uploaded) {
-    throw new Error((result as any).error || 'Failed to upload dataset');
+    throw new Error(
+      ((result as any).error || 'Failed to upload dataset') +
+      ' Recovery: retry with overrides.upload.force_reupload = true.'
+    );
   }
 
   return { message: 'Dataset uploaded', result };
