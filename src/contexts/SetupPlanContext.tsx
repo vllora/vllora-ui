@@ -333,7 +333,11 @@ export function SetupPlanProvider({ datasetId, children }: SetupPlanProviderProp
     const stepsToRun = new Set<ExecutionStepId>(plan.steps_to_execute ?? STEP_ORDER);
     const validation = validatePlanForExecution(plan, stepsToRun, plan.overrides);
     if (!validation.valid) {
+      const errorMsg = validation.errors.join('; ');
       toast.error('Plan has issues', { description: validation.errors[0] });
+      emitter.emit('vllora_lucy_prompt', {
+        prompt: `The plan failed validation and cannot be approved. Error: "${errorMsg}". Please fix the plan and re-propose it using adjust_setup_plan followed by save_flow.`,
+      });
       return; // Block approval
     }
 
