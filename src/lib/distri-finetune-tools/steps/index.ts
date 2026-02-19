@@ -72,6 +72,9 @@ export { updateRecordHandler, updateRecordTool } from './update-record';
 // README
 export { regenerateReadmeHandler, regenerateReadmeTool } from './regenerate-readme';
 
+// Objective
+export { updateObjectiveHandler, updateObjectiveTool } from './update-objective';
+
 // Semantic PDF Extraction (local, in-browser) — internal function, not an agent tool
 export { extractPdfContentLocal } from './semantic-pdf-extractor';
 
@@ -147,6 +150,7 @@ import { getDatasetRecordsHandler, getDatasetRecordsTool } from './get-dataset-r
 import { getDatasetStateHandler, getDatasetStateTool } from './get-dataset-state';
 import { updateRecordHandler, updateRecordTool } from './update-record';
 import { regenerateReadmeHandler, regenerateReadmeTool } from './regenerate-readme';
+import { updateObjectiveHandler, updateObjectiveTool } from './update-objective';
 import { analyzeKnowledgeSourcesHandler, analyzeKnowledgeSourcesTool } from './analyze-knowledge-sources';
 import { generateGraderHandler, generateGraderTool } from './generate-grader';
 import { proposeSetupPlanHandler, proposeSetupPlanTool, adjustSetupPlanHandler, adjustSetupPlanTool } from './propose-setup-plan';
@@ -187,6 +191,7 @@ export const STEP_TOOL_NAMES = [
   'get_dataset_state',
   'update_record',
   'regenerate_readme',
+  'update_objective',
   'analyze_knowledge_sources',
   'generate_grader',
   'propose_setup_plan',
@@ -231,6 +236,7 @@ export const stepTools: DistriFnTool[] = [
   getDatasetStateTool,
   updateRecordTool,
   regenerateReadmeTool,
+  updateObjectiveTool,
   analyzeKnowledgeSourcesTool,
   generateGraderTool,
   proposeSetupPlanTool,
@@ -269,6 +275,7 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   get_dataset_state: getDatasetStateHandler,
   update_record: updateRecordHandler,
   regenerate_readme: regenerateReadmeHandler,
+  update_objective: updateObjectiveHandler,
   analyze_knowledge_sources: analyzeKnowledgeSourcesHandler,
   generate_grader: generateGraderHandler,
   propose_setup_plan: proposeSetupPlanHandler,
