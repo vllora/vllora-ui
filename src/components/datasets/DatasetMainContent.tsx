@@ -162,7 +162,7 @@ export function DatasetMainContent({
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Records Section Header */}
-      <div className="px-4 py-3 border-b border-border space-y-3">
+      <div className="px-4 py-3 border-b border-border space-y-3 shrink-0 relative z-10 bg-background">
         {/* Overview card */}
         <DatasetOverviewCard
           total={overviewStats.total}

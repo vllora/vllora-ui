@@ -25,10 +25,6 @@ import { generateInitialDataHandler } from './generate-initial-data';
 import { uploadDatasetHandler } from './upload-dataset';
 import { runDryRunHandler } from './run-dry-run';
 
-// Import for README generation
-import * as knowledgeDB from '@/services/knowledge-sources-db';
-import { generateDatasetReadme, type KnowledgeSourceInfo, type PlanSummary } from '@/services/dataset-readme-generator';
-
 // Import for finetune job creation
 import { quickFinetune } from '@/services/quick-finetune';
 
@@ -86,7 +82,7 @@ export async function consumePendingPlan(datasetId: string): Promise<Plan | null
 // Types
 // =============================================================================
 
-export type ExecutionStepId = 'topics' | 'adjust_topics' | 'categorize' | 'generate' | 'grader' | 'upload' | 'dryrun' | 'readme' | 'finetune';
+export type ExecutionStepId = 'topics' | 'adjust_topics' | 'categorize' | 'generate' | 'grader' | 'upload' | 'dryrun' | 'finetune';
 
 export type ExecutionStepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
 
@@ -114,7 +110,8 @@ export interface StepContext {
   dataset_id: string;
   plan: Plan;
   workflow_id: string;
-  workflow: workflowDB.FinetuneWorkflowState;
+  /** Ordered subset of steps being executed for this run */
+  selected_steps: ExecutionStepId[];
   overrides?: {
     adjust_topics?: { instruction?: string };
     generate?: { count?: number; target_topics?: string[]; per_topic_count?: number };
@@ -230,7 +227,7 @@ async function executeTopics(ctx: StepContext): Promise<StepResult> {
   summary.topics_created = plan.total_topic_count || 0;
 
   // Warn if categorize is missing but the dataset already has records — they'll be unassigned.
-  const stepsToRun = new Set(ctx.plan.steps_to_execute ?? STEP_ORDER);
+  const stepsToRun = new Set(ctx.selected_steps);
   if (!stepsToRun.has('categorize')) {
     const existingRecordCount = await datasetsDB.getRecordCount(dataset_id);
     if (existingRecordCount > 0) {
@@ -434,47 +431,6 @@ async function executeDryRun(ctx: StepContext): Promise<StepResult> {
   return { message: 'Dry run started in background', result };
 }
 
-async function executeReadme(ctx: StepContext): Promise<StepResult> {
-  const { dataset_id, plan, workflow, summary } = ctx;
-
-  const updatedDataset = await datasetsDB.getDatasetById(dataset_id);
-  const allRecords = await datasetsDB.getRecordsByDatasetId(dataset_id);
-
-  const sources = await knowledgeDB.getKnowledgeSourcesByDataset(dataset_id);
-  const knowledgeSources: KnowledgeSourceInfo[] = sources
-    .filter(s => s.status === 'ready')
-    .map(s => ({
-      name: s.name,
-      type: s.type,
-      section_headings: s.extractedContent?.sectionHeadings || [],
-      size: s.size,
-    }));
-
-  const planSummary: PlanSummary = {
-    executed_at: Date.now(),
-    topics_created: summary.topics_created,
-    records_generated: summary.records_generated,
-    grader_configured: summary.grader_configured,
-    dry_run_completed: summary.dry_run_completed,
-    system_prompt_template: plan.output_format?.system_prompt_template || undefined,
-    output_schema: plan.output_format?.schema || undefined,
-    strategy: plan.data_generation?.strategy || undefined,
-    grader_criteria: plan.grader_config?.criteria || undefined,
-  };
-
-  const readme = generateDatasetReadme({
-    dataset: updatedDataset!,
-    records: allRecords,
-    workflow,
-    knowledgeSources,
-    planSummary,
-  });
-
-  await datasetsDB.updateDatasetReadme(dataset_id, readme);
-
-  return { message: 'README generated with data provenance and statistics' };
-}
-
 async function executeFinetune(ctx: StepContext): Promise<StepResult> {
   const { dataset_id, summary, workflow_id } = ctx;
 
@@ -526,8 +482,45 @@ export interface PlanValidationResult {
 /** Canonical ordered list of all step IDs — defines execution order */
 export const STEP_ORDER: ExecutionStepId[] = [
   'topics', 'adjust_topics', 'categorize', 'generate',
-  'grader', 'upload', 'dryrun', 'readme', 'finetune',
+  'grader', 'upload', 'dryrun', 'finetune',
 ];
+const STEP_ORDER_SET = new Set<string>(STEP_ORDER);
+const LEGACY_STEP_IDS = new Set<string>(['readme']);
+
+interface NormalizedStepSelection {
+  steps: ExecutionStepId[];
+  unknownSteps: string[];
+  filteredLegacySteps: string[];
+}
+
+function normalizeRequestedSteps(stepIds?: readonly string[] | null): NormalizedStepSelection {
+  if (stepIds == null) {
+    return { steps: [...STEP_ORDER], unknownSteps: [], filteredLegacySteps: [] };
+  }
+
+  const steps: ExecutionStepId[] = [];
+  const unknownSteps: string[] = [];
+  const filteredLegacySteps: string[] = [];
+
+  for (const stepId of stepIds) {
+    if (LEGACY_STEP_IDS.has(stepId)) {
+      filteredLegacySteps.push(stepId);
+      continue;
+    }
+
+    if (STEP_ORDER_SET.has(stepId)) {
+      const typedId = stepId as ExecutionStepId;
+      if (!steps.includes(typedId)) {
+        steps.push(typedId);
+      }
+      continue;
+    }
+
+    unknownSteps.push(stepId);
+  }
+
+  return { steps, unknownSteps, filteredLegacySteps };
+}
 
 /**
  * Validate a plan before execution. Checks that all step IDs are known
@@ -590,7 +583,6 @@ const STEP_REGISTRY: Record<ExecutionStepId, StepExecutor> = {
   grader:        { name: 'Configure Evaluator',    workflowStep: 'grader_config',       execute: executeGrader },
   upload:        { name: 'Upload Dataset',                                               execute: executeUpload },
   dryrun:        { name: 'Run Dry Run',            workflowStep: 'dry_run',             execute: executeDryRun,   nonFatal: true },
-  readme:        { name: 'Generate README',                                              execute: executeReadme,   nonFatal: true },
   finetune:      { name: 'Start Finetune Job',                                           execute: executeFinetune, nonFatal: true },
 };
 
@@ -622,10 +614,32 @@ export const executePlanHandler: ToolHandler = async (
     }
 
     // Resolve plan: params → in-memory → IndexedDB
-    const plan = planFromParams || await consumePendingPlan(dataset_id);
-    if (!plan) {
+    const resolvedPlan = planFromParams || await consumePendingPlan(dataset_id);
+    if (!resolvedPlan) {
       return { success: false, error: 'No plan provided. Please approve a plan first.' };
     }
+
+    const planSelection = normalizeRequestedSteps(
+      Array.isArray(resolvedPlan.steps_to_execute)
+        ? (resolvedPlan.steps_to_execute as unknown as string[])
+        : undefined
+    );
+    if (planSelection.unknownSteps.length > 0) {
+      return {
+        success: false,
+        error: `Plan has unknown step IDs: ${planSelection.unknownSteps.join(', ')}`,
+      };
+    }
+    if (planSelection.filteredLegacySteps.length > 0) {
+      console.log(
+        `[executePlan] Ignoring legacy plan step IDs: ${planSelection.filteredLegacySteps.join(', ')}`
+      );
+    }
+
+    const plan: Plan = {
+      ...resolvedPlan,
+      steps_to_execute: planSelection.steps,
+    };
 
     // Verify dataset
     const dataset = await datasetsDB.getDatasetById(dataset_id);
@@ -639,10 +653,28 @@ export const executePlanHandler: ToolHandler = async (
       workflow = await workflowDB.createWorkflow(dataset_id, dataset.datasetObjective || 'Plan execution');
     }
 
-    // Determine which steps to run (params > plan > all)
-    const stepsToRun = new Set<ExecutionStepId>(
-      steps_to_execute || plan.steps_to_execute || STEP_ORDER
+    // Determine which steps to run (params > normalized plan > all)
+    if (steps_to_execute !== undefined && !Array.isArray(steps_to_execute)) {
+      return { success: false, error: 'steps_to_execute must be an array when provided' };
+    }
+
+    const stepSelection = normalizeRequestedSteps(
+      Array.isArray(steps_to_execute)
+        ? (steps_to_execute as unknown as string[])
+        : (plan.steps_to_execute as unknown as string[] | undefined)
     );
+    if (stepSelection.unknownSteps.length > 0) {
+      return {
+        success: false,
+        error: `Unknown step IDs in steps_to_execute: ${stepSelection.unknownSteps.join(', ')}`,
+      };
+    }
+    if (stepSelection.filteredLegacySteps.length > 0) {
+      console.log(
+        `[executePlan] Ignoring legacy steps_to_execute entries: ${stepSelection.filteredLegacySteps.join(', ')}`
+      );
+    }
+    const stepsToRun = new Set<ExecutionStepId>(stepSelection.steps);
 
     // Merge overrides (params > plan)
     const effectiveOverrides = overrides || plan.overrides;
@@ -671,7 +703,7 @@ export const executePlanHandler: ToolHandler = async (
       dataset_id,
       plan,
       workflow_id: workflow.id,
-      workflow,
+      selected_steps: stepSelection.steps,
       overrides: effectiveOverrides,
       summary,
     };

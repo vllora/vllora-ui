@@ -46,7 +46,7 @@ export const DatasetReadmeViewer = memo(function DatasetReadmeViewer({
 
   // Empty state
   if (!readme) {
-    return <ReadmeEmptyState onRegenerate={onRegenerate} className={className} />;
+    return <ReadmeEmptyState className={className} />;
   }
 
   return (
@@ -55,7 +55,7 @@ export const DatasetReadmeViewer = memo(function DatasetReadmeViewer({
       <div className="flex items-center justify-between px-4 py-2 border-b border-border/50">
         <div className="flex items-center gap-2 text-muted-foreground">
           <FileText className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-          <span className="text-xs font-medium">README</span>
+          <span className="text-xs font-medium">Overview</span>
           {formattedDate && (
             <span className="text-xs text-muted-foreground/60">
               · Updated {formattedDate}

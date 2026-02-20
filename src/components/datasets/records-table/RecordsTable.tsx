@@ -298,7 +298,7 @@ export function RecordsTable({
     return (
       <div className="flex flex-col" style={containerStyle}>
         {/* No column header in tree mode — the tree has its own visual structure */}
-        <div className="flex-1 overflow-auto min-h-0">
+        <div className="flex-1 overflow-auto min-h-0 pt-1">
           <TopicRecordTree
             hierarchy={topicHierarchy}
             records={displayRecords}
@@ -551,4 +551,3 @@ export function RecordsTable({
     </div>
   );
 }
-

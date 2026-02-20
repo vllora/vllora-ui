@@ -15,10 +15,12 @@ import type { ToolHandler } from '../types';
 import type { Plan } from './propose-plan/types';
 import {
   getStoredPlan,
+  saveProposedPlan,
   savePreviousPlanSnapshot,
   getPreviousPlanSnapshot,
 } from './proposed-plan-store';
 import { diffPlans, type PlanDiff } from '@/components/datasets/plan-section/plan-markdown-utils';
+import { normalizePlanSteps, areStepListsEqual } from './plan-step-normalization';
 
 // =============================================================================
 // Types
@@ -45,6 +47,14 @@ function validatePlan(plan: Plan): string[] {
 
   if (!plan.objective?.trim()) {
     errors.push('objective must not be empty');
+  }
+
+  const rawSteps = Array.isArray(plan.steps_to_execute)
+    ? (plan.steps_to_execute as unknown as string[])
+    : undefined;
+  const stepNormalization = normalizePlanSteps(rawSteps);
+  if (stepNormalization.unknownSteps.length > 0) {
+    errors.push(`steps_to_execute contains unknown IDs: ${stepNormalization.unknownSteps.join(', ')}`);
   }
 
   if (!plan.steps_to_execute?.length) {
@@ -136,7 +146,23 @@ export const savePlanHandler: ToolHandler = async (
         errors: ['No draft plan found. Call propose_plan or adjust_plan first.'],
       };
     }
-    const draft = stored.plan;
+    let draft = stored.plan;
+
+    // Normalize step IDs before validation so legacy plans don't fail approval.
+    const rawSteps = Array.isArray(draft.steps_to_execute)
+      ? (draft.steps_to_execute as unknown as string[])
+      : undefined;
+    const stepNormalization = normalizePlanSteps(rawSteps, { fallbackToDefaultWhenEmpty: true });
+    if (stepNormalization.hadInput) {
+      const normalizedStepIds = stepNormalization.steps as unknown as string[];
+      if (!areStepListsEqual(rawSteps, normalizedStepIds)) {
+        draft = {
+          ...draft,
+          steps_to_execute: stepNormalization.steps as unknown as Plan['steps_to_execute'],
+        };
+        await saveProposedPlan(dataset_id, draft);
+      }
+    }
 
     // 2. Validate
     const errors = validatePlan(draft);

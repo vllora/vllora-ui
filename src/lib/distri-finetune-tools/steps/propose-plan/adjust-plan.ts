@@ -11,6 +11,7 @@ import type { ToolHandler } from '../../types';
 import type { Plan, ProposedTopic, GraderCriterion } from './types';
 import { callLucy, type LucyMessage } from '../shared/lucy-client';
 import { getStoredPlan, saveProposedPlan } from '../proposed-plan-store';
+import { normalizePlanSteps } from '../plan-step-normalization';
 
 interface AdjustPlanParams {
   dataset_id: string;
@@ -495,6 +496,14 @@ export const adjustPlanHandler: ToolHandler = async (
     }
 
     // Build the adjusted plan
+    const rawSteps = Array.isArray(resolvedPlan.steps_to_execute)
+      ? (resolvedPlan.steps_to_execute as unknown as string[])
+      : undefined;
+    const stepNormalization = normalizePlanSteps(rawSteps, { fallbackToDefaultWhenEmpty: true });
+    const normalizedSteps = stepNormalization.hadInput
+      ? stepNormalization.steps
+      : normalizePlanSteps(['topics', 'generate', 'grader', 'upload', 'dryrun', 'finetune']).steps;
+
     const adjustedPlan: Plan = {
       ...resolvedPlan,
       proposed_topics: llmResult.proposed_topics,
@@ -502,6 +511,7 @@ export const adjustPlanHandler: ToolHandler = async (
       grader_config: {
         criteria: llmResult.grader_criteria,
       },
+      steps_to_execute: normalizedSteps as unknown as Plan['steps_to_execute'],
       execution_steps: [
         {
           step: 'Apply Topic Hierarchy',

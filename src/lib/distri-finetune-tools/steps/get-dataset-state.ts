@@ -16,6 +16,22 @@ import { sanitizeRecords, DEFAULT_VALIDATION_CONFIG } from '@/components/dataset
 import { getStoredPlan } from './proposed-plan-store';
 import { STEP_ORDER } from './execute-plan';
 
+const EXECUTION_STEP_SET = new Set<string>(STEP_ORDER);
+
+function normalizePlanStepIds(stepIds?: readonly string[] | null): string[] {
+  if (stepIds == null) {
+    return [...STEP_ORDER];
+  }
+
+  const normalized: string[] = [];
+  for (const stepId of stepIds) {
+    if (EXECUTION_STEP_SET.has(stepId) && !normalized.includes(stepId)) {
+      normalized.push(stepId);
+    }
+  }
+  return normalized;
+}
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -239,12 +255,19 @@ export const getDatasetStateHandler: ToolHandler = async (params) => {
         if (!storedPlan) {
           return { exists: false, status: null, completed_steps: [], failed_step: null, remaining_steps: [] };
         }
-        const completedSteps = storedPlan.executionProgress?.steps
+        const completedSteps = normalizePlanStepIds(
+          storedPlan.executionProgress?.steps
           .filter(s => s.status === 'completed')
-          .map(s => s.id) ?? [];
-        const failedStep = storedPlan.executionProgress?.steps
+          .map(s => s.id) ?? []
+        );
+        const failedStepRaw = storedPlan.executionProgress?.steps
           .find(s => s.status === 'failed')?.id ?? null;
-        const allPlannedSteps = storedPlan.plan?.steps_to_execute ?? STEP_ORDER;
+        const failedStep = failedStepRaw && EXECUTION_STEP_SET.has(failedStepRaw)
+          ? failedStepRaw
+          : null;
+        const allPlannedSteps = normalizePlanStepIds(
+          (storedPlan.plan?.steps_to_execute as unknown as string[] | undefined) ?? STEP_ORDER
+        );
         const remainingSteps = allPlannedSteps
           .filter(id => !completedSteps.includes(id));
         return {

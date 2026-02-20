@@ -116,7 +116,7 @@ regrading, retraining, bulk topic changes, etc.`,
           },
           steps_to_execute: {
             type: 'array',
-            description: 'Step IDs to run: topics, adjust_topics, categorize, generate, grader, upload, dryrun, readme, finetune',
+            description: 'Step IDs to run: topics, adjust_topics, categorize, generate, grader, upload, dryrun, finetune',
             items: { type: 'string' },
           },
           estimated_records: { type: 'number' },

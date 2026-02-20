@@ -38,8 +38,8 @@ export function ReadmeDrawer({
         className="w-[60vw] !max-w-[60vw] min-w-[400px] p-0 flex flex-col"
       >
         <SheetHeader className="sr-only">
-          <SheetTitle>Dataset README</SheetTitle>
-          <SheetDescription>Auto-generated README for this dataset</SheetDescription>
+          <SheetTitle>Dataset Overview</SheetTitle>
+          <SheetDescription>Auto-generated overview for this dataset</SheetDescription>
         </SheetHeader>
         <DatasetReadmeViewer
           readme={readme}

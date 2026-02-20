@@ -2,6 +2,7 @@ import { Dataset, DatasetEvaluation, DatasetRecord, TopicHierarchyConfig } from 
 import { Span } from '@/types/common-type';
 import { extractDataInfoFromSpan } from '@/utils/modelUtils';
 import { emitter } from '@/utils/eventEmitter';
+import { generateDatasetReadme } from './dataset-readme-generator';
 
 // Event type for dataset changes - context listens for this to refresh
 export const DATASET_REFRESH_EVENT = 'vllora_dataset_refresh';
@@ -174,12 +175,24 @@ export async function getTopicCoverageStats(datasetId: string): Promise<{ total:
 export async function createDataset(name: string, datasetObjective?: string): Promise<Dataset> {
   const db = await getDB();
   const now = Date.now();
-  const dataset: Dataset = {
+  const baseDataset: Dataset = {
     id: crypto.randomUUID(),
     name: name.trim(),
     createdAt: now,
     updatedAt: now,
     ...(datasetObjective?.trim() && { datasetObjective: datasetObjective.trim() }),
+  };
+  const initialReadme = generateDatasetReadme({
+    dataset: baseDataset,
+    records: [],
+    workflow: null,
+    knowledgeSources: [],
+    planSummary: undefined,
+  });
+  const dataset: Dataset = {
+    ...baseDataset,
+    readme: initialReadme,
+    readmeUpdatedAt: now,
   };
 
   // First, save the dataset to IndexedDB
@@ -1390,4 +1403,3 @@ export async function updateDatasetReadme(
     tx.onerror = () => reject(tx.error);
   });
 }
-

@@ -36,7 +36,7 @@ export function ReadmeHeaderActions({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      console.error('Failed to copy README:', error);
+      console.error('Failed to copy overview:', error);
     }
   }, [readme]);
 
@@ -69,7 +69,7 @@ export function ReadmeHeaderActions({
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
-            <p>Regenerate README</p>
+            <p>Regenerate Overview</p>
           </TooltipContent>
         </Tooltip>
 

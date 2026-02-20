@@ -16,6 +16,7 @@ import type {
   ProposePlanResult,
 } from './types';
 import { saveProposedPlan } from '../proposed-plan-store';
+import { normalizePlanSteps } from '../plan-step-normalization';
 
 // =============================================================================
 // Plan normalization helpers (compensate for LLM imprecision)
@@ -114,6 +115,25 @@ export const proposePlanHandler: ToolHandler = async (
 
     // --- Validate output_format ---
     validateOutputFormat(plan);
+
+    // --- Normalize execution step IDs (legacy compatibility + unknown filtering) ---
+    const rawSteps = Array.isArray(plan.steps_to_execute)
+      ? (plan.steps_to_execute as unknown as string[])
+      : undefined;
+    const stepNormalization = normalizePlanSteps(rawSteps, { fallbackToDefaultWhenEmpty: true });
+    if (stepNormalization.hadInput) {
+      if (stepNormalization.strippedLegacySteps.length > 0) {
+        console.log(
+          `[proposePlan] Stripped legacy steps: ${stepNormalization.strippedLegacySteps.join(', ')}`
+        );
+      }
+      if (stepNormalization.unknownSteps.length > 0) {
+        console.warn(
+          `[proposePlan] Removed unknown step IDs: ${stepNormalization.unknownSteps.join(', ')}`
+        );
+      }
+      plan.steps_to_execute = stepNormalization.steps as unknown as Plan['steps_to_execute'];
+    }
 
     // --- Default execution_steps if missing ---
     if (!plan.execution_steps?.length) {

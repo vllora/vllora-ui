@@ -9,6 +9,7 @@
 import type { Plan } from "./propose-plan";
 import type { ExecutionProgress } from "./execute-plan";
 import { getDB } from "@/services/finetune-workflow-db";
+import { normalizePlanSteps } from "./plan-step-normalization";
 
 // =============================================================================
 // Types
@@ -51,9 +52,21 @@ function hasStore(db: IDBDatabase): boolean {
 }
 
 function normalizeStored(raw: StoredProposedPlan): StoredPlan {
+  const rawSteps = Array.isArray(raw.plan.steps_to_execute)
+    ? (raw.plan.steps_to_execute as unknown as string[])
+    : undefined;
+  const stepNormalization = normalizePlanSteps(rawSteps, { fallbackToDefaultWhenEmpty: true });
+
+  const normalizedPlan: Plan = stepNormalization.hadInput
+    ? {
+        ...raw.plan,
+        steps_to_execute: stepNormalization.steps as unknown as Plan["steps_to_execute"],
+      }
+    : raw.plan;
+
   return {
     datasetId: raw.datasetId,
-    plan: raw.plan,
+    plan: normalizedPlan,
     status: raw.status || 'proposed',
     executionProgress: raw.executionProgress || null,
     createdAt: raw.createdAt,
@@ -76,9 +89,20 @@ export async function saveProposedPlan(
     const db = await getDB();
     if (!hasStore(db)) return;
 
+    const rawSteps = Array.isArray(plan.steps_to_execute)
+      ? (plan.steps_to_execute as unknown as string[])
+      : undefined;
+    const stepNormalization = normalizePlanSteps(rawSteps, { fallbackToDefaultWhenEmpty: true });
+    const normalizedPlan: Plan = stepNormalization.hadInput
+      ? {
+          ...plan,
+          steps_to_execute: stepNormalization.steps as unknown as Plan["steps_to_execute"],
+        }
+      : plan;
+
     const stored: StoredPlan = {
       datasetId,
-      plan,
+      plan: normalizedPlan,
       status: 'proposed',
       executionProgress: null,
       createdAt: Date.now(),
@@ -332,9 +356,20 @@ export async function savePreviousPlanSnapshot(datasetId: string, plan: Plan): P
     const db = await getDB();
     if (!hasStore(db)) return;
 
+    const rawSteps = Array.isArray(plan.steps_to_execute)
+      ? (plan.steps_to_execute as unknown as string[])
+      : undefined;
+    const stepNormalization = normalizePlanSteps(rawSteps, { fallbackToDefaultWhenEmpty: true });
+    const normalizedPlan: Plan = stepNormalization.hadInput
+      ? {
+          ...plan,
+          steps_to_execute: stepNormalization.steps as unknown as Plan["steps_to_execute"],
+        }
+      : plan;
+
     const snapshot: StoredPlan = {
       datasetId: `${SNAPSHOT_KEY_PREFIX}${datasetId}`,
-      plan,
+      plan: normalizedPlan,
       status: 'proposed',
       executionProgress: null,
       createdAt: Date.now(),
