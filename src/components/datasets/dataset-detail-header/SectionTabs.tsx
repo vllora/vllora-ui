@@ -5,7 +5,7 @@
  * 4 tabs: Data → Evaluation → Fine-tune → Deploy.
  */
 
-import { Database, FlaskConical, Sparkles, Check, Lock, Loader2, Circle, ChevronRight, type LucideIcon, RocketIcon } from "lucide-react";
+import { Database, FlaskConical, Sparkles, Check, Lock, Loader2, Circle, ChevronRight, LayoutDashboard, type LucideIcon, RocketIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -30,6 +30,7 @@ interface TabConfig {
 }
 
 const TABS: TabConfig[] = [
+  { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "records", label: "Data", icon: Database, required: true },
   { id: "evaluator", label: "Evaluation", icon: FlaskConical, required: true },
   { id: "jobs", label: "Fine-tune", icon: Sparkles, required: true },
@@ -57,6 +58,7 @@ export function SectionTabs({
   const hasData = recordsCount > 0;
 
   const depsMetFor = (tabId: DatasetSection): boolean => {
+    if (tabId === "overview") return true;
     if (tabId === "records") return true;
     if (tabId === "evaluator") return true;
     if (tabId === "jobs") return hasData && hasEvaluator;
@@ -65,6 +67,7 @@ export function SectionTabs({
   };
 
   const isStepComplete = (tabId: DatasetSection): boolean => {
+    if (tabId === "overview") return false;
     if (tabId === "records") return hasData;
     if (tabId === "evaluator") return hasEvaluator;
     if (tabId === "jobs") return jobsCount > 0;
@@ -79,6 +82,7 @@ export function SectionTabs({
   };
 
   const getTooltipText = (tabId: DatasetSection, status: string): string => {
+    if (tabId === "overview") return "Project overview and activity history";
     if (isStepComplete(tabId)) {
       if (tabId === "records") return `${recordsCount} record${recordsCount !== 1 ? "s" : ""} added`;
       if (tabId === "evaluator") return "Evaluation configured";

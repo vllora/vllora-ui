@@ -48,7 +48,7 @@ import type { ImportMode } from "@/components/datasets/IngestDataDialog";
 export type ViewMode = "canvas" | "table";
 
 /** Active section tab */
-export type DatasetSection = "records" | "evaluator" | "jobs" | "deploy";
+export type DatasetSection = "overview" | "records" | "evaluator" | "jobs" | "deploy";
 
 interface DatasetDetailHookProps {
   datasetId: string;
@@ -123,7 +123,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
   // UI View state - initialize from URL query params
   const [activeSection, setActiveSectionState] = useState<DatasetSection>(() => {
     const tabParam = searchParams.get("tab");
-    if (tabParam === "evaluator" || tabParam === "jobs" || tabParam === "records") {
+    if (tabParam === "overview" || tabParam === "evaluator" || tabParam === "jobs" || tabParam === "records") {
       return tabParam;
     }
     return "records";

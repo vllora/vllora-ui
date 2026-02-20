@@ -52,6 +52,8 @@ export interface OverviewFilledStateProps {
   /** Total number of leaf topics in the hierarchy */
   leafTopicCount?: number;
   onClick?: () => void;
+  /** Compact mode: reduced padding/sizes for use in smaller containers */
+  compact?: boolean;
 }
 
 function getDisplayName(topicPath: string): string {
@@ -69,6 +71,7 @@ export function OverviewFilledState({
   balanceScore,
   leafTopicCount,
   onClick,
+  compact = false,
 }: OverviewFilledStateProps) {
   const generatedPercent = total > 0 ? (generated / total) * 100 : 0;
   const originalPercent = total > 0 ? (original / total) * 100 : 0;
@@ -104,8 +107,8 @@ export function OverviewFilledState({
     return segs;
   }, [topicDistribution, uncategorizedCount]);
 
-  // Show top 5 topics in legend (since we have more horizontal space now)
-  const maxLegendItems = 5;
+  // Show top 5 topics in legend (compact: 3)
+  const maxLegendItems = compact ? 3 : 5;
   const legendItems = useMemo(() => {
     if (segments.length <= maxLegendItems) return segments;
     const topItems = segments.slice(0, maxLegendItems - 1);
@@ -135,17 +138,17 @@ export function OverviewFilledState({
   return (
     <button
       onClick={onClick}
-      className="w-full rounded-lg border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800/50 hover:border-[rgba(var(--theme-500),0.3)] transition-all cursor-pointer text-left overflow-hidden focus-visible:ring-2 focus-visible:ring-[rgba(var(--theme-500),0.5)] focus-visible:outline-none relative group"
+      className="w-full h-full rounded-lg border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800/50 hover:border-[rgba(var(--theme-500),0.3)] transition-all cursor-pointer text-left overflow-hidden focus-visible:ring-2 focus-visible:ring-[rgba(var(--theme-500),0.5)] focus-visible:outline-none relative group"
     >
       <div className="flex">
         {/* Left Section: Records Stats */}
-        <div className="flex items-center gap-4 px-5 py-4 border-r border-zinc-800">
+        <div className={`flex items-center gap-4 border-r border-zinc-800 ${compact ? "px-4 py-3" : "px-5 py-4"}`}>
           {/* Donut Chart */}
           <DonutChart
             total={total}
             original={original}
             generated={generated}
-            className="w-16 h-16"
+            className={compact ? "w-12 h-12" : "w-16 h-16"}
           />
 
           {/* Records Breakdown */}
@@ -172,7 +175,7 @@ export function OverviewFilledState({
         </div>
 
         {/* Right Section: Topics Distribution */}
-        <div className="flex-1 px-5 py-4">
+        <div className={`flex-1 ${compact ? "px-4 py-3" : "px-5 py-4"}`}>
           {/* Header with Balance */}
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -218,7 +221,7 @@ export function OverviewFilledState({
 
           {/* Stacked Bar */}
           {segments.length > 0 ? (
-            <div className="h-5 rounded-md overflow-hidden flex bg-zinc-800 mb-3">
+            <div className={`${compact ? "h-2 mb-2" : "h-5 mb-3"} rounded-md overflow-hidden flex bg-zinc-800`}>
               {segments.map((seg, idx) => (
                 <div
                   key={idx}
@@ -233,7 +236,7 @@ export function OverviewFilledState({
               ))}
             </div>
           ) : (
-            <div className="h-5 rounded-md bg-zinc-800 mb-3" />
+            <div className={`${compact ? "h-2 mb-2" : "h-5 mb-3"} rounded-md bg-zinc-800`} />
           )}
 
           {/* Legend */}

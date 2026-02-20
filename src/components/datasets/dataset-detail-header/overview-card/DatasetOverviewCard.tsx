@@ -26,6 +26,8 @@ export interface DatasetOverviewCardProps {
   onClick?: () => void;
   // Handler for empty state (import records)
   onImportClick?: () => void;
+  /** Compact mode: smaller padding/sizes */
+  compact?: boolean;
 }
 
 export function DatasetOverviewCard({
@@ -39,6 +41,7 @@ export function DatasetOverviewCard({
   leafTopicCount,
   onClick,
   onImportClick,
+  compact,
 }: DatasetOverviewCardProps) {
   // Show empty state when no records
   if (total === 0) {
@@ -56,6 +59,7 @@ export function DatasetOverviewCard({
       balanceScore={balanceScore}
       leafTopicCount={leafTopicCount}
       onClick={onClick}
+      compact={compact}
     />
   );
 }

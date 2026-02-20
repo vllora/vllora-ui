@@ -39,6 +39,7 @@ import { DocsDrawer } from "./DocsDrawer";
 import { PlanPreview } from "./PlanPreview";
 import { ActivePlanBanner } from "./ActivePlanBanner";
 import { useDatasetReadme } from "@/hooks/useDatasetReadme";
+import { DatasetOverviewPanel } from "./DatasetOverviewPanel";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { PlanConsumer } from "@/contexts/PlanContext";
 import type { CoverageStats } from "@/types/dataset-types";
@@ -207,7 +208,7 @@ export function DatasetDetailContentV2() {
     const handleSwitchTab = ({ datasetId: switchDatasetId, tab }: { datasetId: string; tab: string }) => {
       if (switchDatasetId === datasetId) {
         // Only accept valid workspace tabs
-        const validTabs: DatasetSection[] = ["records", "evaluator", "jobs", "deploy"];
+        const validTabs: DatasetSection[] = ["overview", "records", "evaluator", "jobs", "deploy"];
         if (validTabs.includes(tab as DatasetSection)) {
           setActiveSection(tab as DatasetSection);
         }
@@ -522,7 +523,17 @@ export function DatasetDetailContentV2() {
             />
           ) : (
           <>
-          {/* Main content area - Records, Evaluator, or Jobs based on active section */}
+          {/* Main content area - Overview, Records, Evaluator, or Jobs based on active section */}
+          {activeSection === "overview" && (
+            <DatasetOverviewPanel
+              readme={readme}
+              readmeUpdatedAt={readmeUpdatedAt}
+              onExport={exportReadme}
+              onRegenerate={regenerateReadme}
+              datasetId={datasetId}
+              onOverviewClick={() => setAnalyticsDialogOpen(true)}
+            />
+          )}
           {activeSection === "records" && (
             <DatasetMainContent
               viewMode={viewMode}
