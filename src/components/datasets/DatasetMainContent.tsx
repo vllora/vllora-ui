@@ -161,9 +161,8 @@ export function DatasetMainContent({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Records Section Header */}
-      <div className="px-4 py-3 border-b border-border space-y-3 shrink-0 relative z-10 bg-background">
-        {/* Overview card */}
+      {/* Overview card */}
+      <div className="px-4 py-3 border-b border-border shrink-0 bg-background">
         <DatasetOverviewCard
           total={overviewStats.total}
           original={overviewStats.original}
@@ -176,7 +175,10 @@ export function DatasetMainContent({
           onClick={onOverviewClick}
           onImportClick={onImportClick}
         />
-        {/* View controls below card */}
+      </div>
+
+      {/* Stats bar + view controls */}
+      <div className="px-4 py-2 border-b border-border shrink-0 bg-background">
         <RecordsSectionHeader
           viewMode={viewMode}
           onViewModeChange={onViewModeChange}
