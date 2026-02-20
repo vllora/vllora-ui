@@ -63,7 +63,7 @@ export function PlanCompletionCard({ progress, datasetId }: PlanCompletionCardPr
           onClick={handleViewData}
         >
           <Database className="w-3 h-3" />
-          View Data
+          View Records
         </Button>
         <Button
           variant="outline"

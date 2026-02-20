@@ -22,25 +22,13 @@ export function OverviewEmptyState({ onClick, topicCount = 0 }: OverviewEmptySta
       onClick={onClick}
       className={cn(
         "group relative w-full px-4 py-3 rounded-lg min-h-[88px] overflow-hidden",
-        "bg-gradient-to-br from-zinc-900/90 via-zinc-900/70 to-zinc-800/50",
-        "border border-zinc-800/80 border-dashed",
-        "hover:border-cyan-600/40 hover:from-zinc-900/95 hover:via-zinc-800/80 hover:to-cyan-950/20",
+        "bg-zinc-900/50 border border-zinc-800",
+        "hover:border-[rgba(var(--theme-500),0.3)] hover:bg-zinc-800/50",
         "transition-all duration-300 cursor-pointer"
       )}
     >
-      {/* Subtle background pattern */}
-      <div className="absolute inset-0 opacity-[0.03] group-hover:opacity-[0.05] transition-opacity">
-        <div
-          className="absolute inset-0"
-          style={{
-            backgroundImage: `radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)`,
-            backgroundSize: "16px 16px",
-          }}
-        />
-      </div>
-
       {/* Glow effect on hover */}
-      <div className="absolute -top-12 -right-12 w-24 h-24 bg-cyan-500/10 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+      <div className="absolute -top-12 -right-12 w-24 h-24 bg-[rgb(var(--theme-500))]/10 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
       <CardHeader label="Dataset" />
 
@@ -51,14 +39,14 @@ export function OverviewEmptyState({ onClick, topicCount = 0 }: OverviewEmptySta
           className={cn(
             "flex items-center justify-center w-12 h-12 rounded-lg",
             "bg-zinc-800/50 border border-zinc-700/50",
-            "group-hover:bg-cyan-950/30 group-hover:border-cyan-700/30",
+            "group-hover:bg-[rgb(var(--theme-500))]/10 group-hover:border-[rgb(var(--theme-500))]/30",
             "transition-all duration-300"
           )}
         >
           <Database
             className={cn(
               "w-5 h-5 text-zinc-500",
-              "group-hover:text-cyan-400",
+              "group-hover:text-[rgb(var(--theme-500))]",
               "transition-colors duration-300"
             )}
           />
@@ -82,7 +70,7 @@ export function OverviewEmptyState({ onClick, topicCount = 0 }: OverviewEmptySta
           className={cn(
             "w-4 h-4 text-zinc-600",
             "opacity-0 -translate-x-2",
-            "group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-cyan-400",
+            "group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-[rgb(var(--theme-500))]",
             "transition-all duration-300"
           )}
         />

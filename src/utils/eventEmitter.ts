@@ -97,7 +97,7 @@ type VlloraEvents = {
   };
   // plan execution progress
   vllora_plan_progress: { progress: import('@/lib/distri-finetune-tools/steps/execute-plan').ExecutionProgress };
-  // plan generation started (show loading in right panel and switch to README tab)
+  // plan generation started (show loading in right panel and open plan preview state)
   vllora_plan_generating: { datasetId: string; switchToReadme?: boolean };
   // plan proposed (for displaying in right panel)
   vllora_plan_proposed: {
@@ -130,7 +130,7 @@ type VlloraEvents = {
   // Switch to a specific tab during execution
   vllora_switch_tab: {
     datasetId: string;
-    tab: 'records' | 'evaluator' | 'jobs' | 'deploy';
+    tab: 'overview' | 'records' | 'evaluator' | 'jobs' | 'deploy';
   };
   // Open a drawer (docs or readme) from non-React code
   vllora_open_drawer: {

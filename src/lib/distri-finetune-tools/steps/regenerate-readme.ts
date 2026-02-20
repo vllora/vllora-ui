@@ -143,7 +143,7 @@ Use this tool:
 - After generating synthetic data
 - After completing a dry run
 
-The README is viewable in the dataset's README tab.`,
+The README is viewable from the dataset header via the README drawer.`,
   type: 'function',
   parameters: {
     type: 'object',

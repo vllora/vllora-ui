@@ -657,14 +657,13 @@ export function DatasetOverviewPanel({
     [filteredJobs]
   );
 
-  // Merge and sort: running first, then by timestamp descending
+  // Merge and sort chronologically: oldest first for easier timeline scanning.
   const allEntries: ActivityEntry[] = useMemo(
     () =>
       [...stepEntries, ...evalEntries, ...finetuneEntries].sort((a, b) => {
-        const aRunning = a.status === "running" ? 1 : 0;
-        const bRunning = b.status === "running" ? 1 : 0;
-        if (aRunning !== bRunning) return bRunning - aRunning;
-        return (b.timestamp ?? 0) - (a.timestamp ?? 0);
+        const aTime = a.timestamp ?? Number.MAX_SAFE_INTEGER;
+        const bTime = b.timestamp ?? Number.MAX_SAFE_INTEGER;
+        return aTime - bTime;
       }),
     [stepEntries, evalEntries, finetuneEntries]
   );

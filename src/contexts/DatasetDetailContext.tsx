@@ -123,10 +123,14 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
   // UI View state - initialize from URL query params
   const [activeSection, setActiveSectionState] = useState<DatasetSection>(() => {
     const tabParam = searchParams.get("tab");
-    if (tabParam === "overview" || tabParam === "evaluator" || tabParam === "jobs" || tabParam === "records") {
+    // Backward compatibility: "data" aliases to the records section.
+    if (tabParam === "data" || tabParam === "records") {
+      return "records";
+    }
+    if (tabParam === "overview" || tabParam === "evaluator" || tabParam === "jobs" || tabParam === "deploy") {
       return tabParam;
     }
-    return "records";
+    return "overview";
   });
   const [viewModeState, setViewModeState] = useState<ViewMode>(() => {
     const viewParam = searchParams.get("view");
@@ -141,8 +145,10 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     const newParams = new URLSearchParams(searchParams);
 
     if (updates.tab !== undefined) {
-      if (updates.tab === "records" || updates.tab === null) {
+      if (updates.tab === "overview" || updates.tab === null) {
         newParams.delete("tab");
+      } else if (updates.tab === "records") {
+        newParams.set("tab", "records");
       } else {
         newParams.set("tab", updates.tab);
       }
@@ -170,6 +176,15 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     setViewModeState(mode);
     updateUrlParams({ view: mode });
   }, [updateUrlParams]);
+
+  // Canonicalize legacy `?tab=data` links to `?tab=records`.
+  useEffect(() => {
+    if (searchParams.get("tab") !== "data") return;
+
+    const newParams = new URLSearchParams(searchParams);
+    newParams.set("tab", "records");
+    setSearchParams(newParams, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   // Expose viewMode for reading
   const viewMode = viewModeState;

@@ -246,7 +246,7 @@ async function executeTopics(ctx: StepContext): Promise<StepResult> {
 
   toast.success('Topics configured', {
     action: {
-      label: 'View Data',
+      label: 'View Records',
       onClick: () => emitter.emit('vllora_switch_tab', { datasetId: dataset_id, tab: 'records' }),
     },
   });
@@ -275,7 +275,7 @@ async function executeAdjustTopics(ctx: StepContext): Promise<StepResult> {
 
   toast.success('Topics adjusted', {
     action: {
-      label: 'View Data',
+      label: 'View Records',
       onClick: () => emitter.emit('vllora_switch_tab', { datasetId: dataset_id, tab: 'records' }),
     },
   });
