@@ -97,8 +97,8 @@ export function RecordsSectionHeader({
   };
 
   return (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+    <div className="flex flex-wrap items-center justify-between gap-2 bg-background min-h-8">
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
         {totalRecords === 0 ? (
           <span className="text-muted-foreground">No records yet</span>
         ) : (
@@ -159,7 +159,7 @@ export function RecordsSectionHeader({
           </>
         )}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         {/* Generation progress indicator */}
         {generationProgress && (
           <div className="flex items-center gap-1.5 text-emerald-400 text-xs px-2 py-1 bg-emerald-500/10 rounded-md">

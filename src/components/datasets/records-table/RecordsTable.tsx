@@ -296,28 +296,30 @@ export function RecordsTable({
   // Show topic structure even with 0 records so users can see their topics
   if (groupByTopic && topicHierarchy && topicHierarchy.length > 0) {
     return (
-      <div className="flex flex-col" style={containerStyle}>
+      <div className="flex flex-col min-h-0" style={containerStyle}>
         {/* No column header in tree mode — the tree has its own visual structure */}
-        <div className="flex-1 overflow-auto min-h-0 pt-1">
-          <TopicRecordTree
-            hierarchy={topicHierarchy}
-            records={displayRecords}
-            datasetId={datasetId || ''}
-            onUpdateTopic={onUpdateTopic}
-            onDelete={onDelete}
-            onSave={onSave}
-            selectable={selectable}
-            selectedIds={selectedIds}
-            onSelectRecord={handleSelectRecord}
-            onExpand={onExpand}
-            viewingRecordId={viewingRecordId}
-            availableTopics={availableTopics}
-            onDeleteTopic={onDeleteTopic}
-            onGenerateForTopic={onGenerateForTopic}
-            onGenerateSubtopics={onGenerateSubtopics}
-            highlightedRecordId={highlightedRecordId}
-            setRecordRef={setRecordRef}
-          />
+        <div className="flex-1 overflow-auto min-h-0 bg-background">
+          <div className="pt-3">
+            <TopicRecordTree
+              hierarchy={topicHierarchy}
+              records={displayRecords}
+              datasetId={datasetId || ''}
+              onUpdateTopic={onUpdateTopic}
+              onDelete={onDelete}
+              onSave={onSave}
+              selectable={selectable}
+              selectedIds={selectedIds}
+              onSelectRecord={handleSelectRecord}
+              onExpand={onExpand}
+              viewingRecordId={viewingRecordId}
+              availableTopics={availableTopics}
+              onDeleteTopic={onDeleteTopic}
+              onGenerateForTopic={onGenerateForTopic}
+              onGenerateSubtopics={onGenerateSubtopics}
+              highlightedRecordId={highlightedRecordId}
+              setRecordRef={setRecordRef}
+            />
+          </div>
         </div>
         {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
         {showFooter && <RecordsTableFooter records={displayRecords} selectedCount={selectedIds.size} datasetId={datasetId} />}

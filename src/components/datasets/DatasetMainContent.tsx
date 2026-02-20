@@ -191,7 +191,7 @@ export function DatasetMainContent({
       </div>
 
       {/* Main content area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
       {viewMode === "canvas" ? (
         <TopicHierarchyCanvas
           hierarchy={topicHierarchy}
