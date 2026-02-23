@@ -227,7 +227,24 @@ function buildQualityDistributionBlock(
 function formatTrainingConfigValue(value: unknown): string | undefined {
   if (value == null) return undefined;
   if (typeof value === "number") {
-    return Number.isInteger(value) ? `${value}` : `${Math.round(value * 1000) / 1000}`;
+    if (!Number.isFinite(value)) return `${value}`;
+    if (Number.isInteger(value)) return `${value}`;
+
+    const abs = Math.abs(value);
+    if (abs > 0 && (abs < 1e-8 || abs >= 1e9)) {
+      return value.toExponential(2).replace(/e\+?/, "e");
+    }
+
+    const decimals =
+      abs >= 1
+        ? 3
+        : Math.min(8, Math.max(3, Math.ceil(-Math.log10(abs)) + 2));
+
+    const fixed = value.toFixed(decimals);
+    return fixed
+      .replace(/(\.\d*?[1-9])0+$/, "$1")
+      .replace(/\.0+$/, "")
+      .replace(/^-0$/, "0");
   }
   if (typeof value === "string") return value;
   return undefined;
@@ -782,7 +799,7 @@ function ActivityDetailBlocks({ blocks }: { blocks: ActivityDetailBlock[] }) {
                   {block.title}
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              <div className={cn("grid gap-x-4 gap-y-2", block.metrics.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
                 {block.metrics.map((metric, i) => (
                   <div key={`${metric.label}-${i}`} className="min-w-0">
                     <div className="text-[9px] uppercase tracking-wide text-muted-foreground/90">
@@ -877,11 +894,11 @@ function ActivityDetailBlocks({ blocks }: { blocks: ActivityDetailBlock[] }) {
                 </div>
 
                 {block.footer && (
-                  <div className="mt-2 flex items-center justify-between gap-2">
-                    <span className="text-[9px] uppercase tracking-wide text-muted-foreground">
+                  <div className="mt-2 flex items-center justify-between gap-2 min-w-0">
+                    <span className="text-[9px] uppercase tracking-wide text-muted-foreground shrink-0">
                       Result
                     </span>
-                    <span className="text-[10px] font-semibold text-[rgb(var(--theme-500))] truncate" title={block.footer}>
+                    <span className="text-[10px] font-semibold text-[rgb(var(--theme-500))] truncate text-right" title={block.footer}>
                       {block.footer}
                     </span>
                   </div>
@@ -978,11 +995,11 @@ function ActivityDetailBlocks({ blocks }: { blocks: ActivityDetailBlock[] }) {
               </div>
 
               {block.footer && (
-                <div className="mt-2 flex items-center justify-between gap-2">
-                  <span className="text-[9px] uppercase tracking-wide text-muted-foreground">
+                <div className="mt-2 flex items-center justify-between gap-2 min-w-0">
+                  <span className="text-[9px] uppercase tracking-wide text-muted-foreground shrink-0">
                     Result
                   </span>
-                  <span className="text-[10px] font-semibold text-[rgb(var(--theme-500))] truncate" title={block.footer}>
+                  <span className="text-[10px] font-semibold text-[rgb(var(--theme-500))] truncate text-right" title={block.footer}>
                     {block.footer}
                   </span>
                 </div>
@@ -1007,7 +1024,7 @@ function ActivityDetailBlocks({ blocks }: { blocks: ActivityDetailBlock[] }) {
                     )}
                   >
                     <span className="text-[10px] text-muted-foreground">{row.key}</span>
-                    <span className="text-[10px] font-medium text-foreground truncate" title={row.value}>
+                    <span className="text-[10px] font-medium text-foreground truncate text-right max-w-[65%]" title={row.value}>
                       {row.value}
                     </span>
                   </div>
