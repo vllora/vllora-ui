@@ -4,7 +4,7 @@
  * Displays the list of all datasets in a grid card view.
  */
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { DatasetsConsumer } from "@/contexts/DatasetsContext";
 import { LoadingIndicator } from "@/components/ui/LoadingIndicator";
 import { toast } from "sonner";
@@ -12,6 +12,8 @@ import { getKnowledgeSourceCount } from "@/services/knowledge-sources-db";
 import { getWorkflowByDataset } from "@/services/finetune-workflow-db";
 import type { FinetuneWorkflowState } from "@/services/finetune-workflow-db";
 import { getDryRunJobsByDataset } from "@/services/dry-run-jobs-db";
+import { getJobCompletedRows, getJobTotalRows, getJobAverageScore } from "@/types/dry-run-job";
+import { emitter } from "@/utils/eventEmitter";
 import { computeFilterGroup } from "@/types/dataset-types";
 import type { DatasetFilterGroup } from "@/types/dataset-types";
 import {
@@ -53,6 +55,17 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
   const [workflows, setWorkflows] = useState<Record<string, FinetuneWorkflowState>>({});
   const [activeDryRunCounts, setActiveDryRunCounts] = useState<Record<string, number>>({});
   const [completedDryRunCounts, setCompletedDryRunCounts] = useState<Record<string, number>>({});
+  const [activeEvalData, setActiveEvalData] = useState<Record<string, {
+    completedRows: number;
+    totalRows: number;
+    avgScore?: number;
+  }>>({});
+  const [lastCompletedEval, setLastCompletedEval] = useState<Record<string, {
+    avgScore?: number;
+    sampleSize: number;
+    rolloutModel?: string;
+    completedAt?: number;
+  }>>({});
   const [editingDatasetId, setEditingDatasetId] = useState<string | null>(null);
   const [editingDatasetName, setEditingDatasetName] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmation | null>(null);
@@ -119,46 +132,6 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
     return sorted;
   }, [datasets, searchQuery, activeFilter, activeSort, recordCounts, workflows, activeDryRunCounts]);
 
-  // Load record counts, docs counts, topic stats, and workflow/job states for all datasets.
-  // Re-runs when `datasets` changes — DatasetsContext already listens for
-  // vllora_dataset_refresh events (emitted by DryRunJobsContext, FinetuneJobsContext, etc.)
-  // and reloads datasets, which triggers this effect.
-  useEffect(() => {
-    const loadStats = async () => {
-      const counts: Record<string, number> = {};
-      const docs: Record<string, number> = {};
-      const stats: Record<string, { total: number; withTopic: number; topicCount: number }> = {};
-      const wfs: Record<string, FinetuneWorkflowState> = {};
-      const dryRuns: Record<string, number> = {};
-      const completedRuns: Record<string, number> = {};
-      await Promise.all(
-        datasets.map(async (ds) => {
-          counts[ds.id] = await getRecordCount(ds.id);
-          docs[ds.id] = await getKnowledgeSourceCount(ds.id);
-          const coverage = await getTopicCoverageStats(ds.id);
-          const topicCount = ds.topicHierarchy?.hierarchy
-            ? countTopics(ds.topicHierarchy.hierarchy)
-            : 0;
-          stats[ds.id] = { ...coverage, topicCount };
-          const wf = await getWorkflowByDataset(ds.id);
-          if (wf) wfs[ds.id] = wf;
-          const jobs = await getDryRunJobsByDataset(ds.id);
-          dryRuns[ds.id] = jobs.filter(j => j.status === 'running' || j.status === 'pending').length;
-          completedRuns[ds.id] = jobs.filter(j => j.status === 'completed').length;
-        })
-      );
-      setRecordCounts(counts);
-      setDocsCounts(docs);
-      setTopicStats(stats);
-      setWorkflows(wfs);
-      setActiveDryRunCounts(dryRuns);
-      setCompletedDryRunCounts(completedRuns);
-    };
-    if (datasets.length > 0) {
-      loadStats();
-    }
-  }, [datasets, getRecordCount, getTopicCoverageStats]);
-
   // Count topics in hierarchy
   function countTopics(nodes: { children?: unknown[] }[]): number {
     let count = 0;
@@ -170,6 +143,79 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
     }
     return count;
   }
+
+  // Load record counts, docs counts, topic stats, and workflow/job states for all datasets.
+  const loadStats = useCallback(async () => {
+    if (datasets.length === 0) return;
+    const counts: Record<string, number> = {};
+    const docs: Record<string, number> = {};
+    const stats: Record<string, { total: number; withTopic: number; topicCount: number }> = {};
+    const wfs: Record<string, FinetuneWorkflowState> = {};
+    const dryRuns: Record<string, number> = {};
+    const completedRuns: Record<string, number> = {};
+    const activeEvalProgressData: Record<string, { completedRows: number; totalRows: number; avgScore?: number }> = {};
+    const lastCompletedEvalData: Record<string, { avgScore?: number; sampleSize: number; rolloutModel?: string; completedAt?: number }> = {};
+    await Promise.all(
+      datasets.map(async (ds) => {
+        counts[ds.id] = await getRecordCount(ds.id);
+        docs[ds.id] = await getKnowledgeSourceCount(ds.id);
+        const coverage = await getTopicCoverageStats(ds.id);
+        const topicCount = ds.topicHierarchy?.hierarchy
+          ? countTopics(ds.topicHierarchy.hierarchy)
+          : 0;
+        stats[ds.id] = { ...coverage, topicCount };
+        const wf = await getWorkflowByDataset(ds.id);
+        if (wf) wfs[ds.id] = wf;
+        const jobs = await getDryRunJobsByDataset(ds.id);
+        dryRuns[ds.id] = jobs.filter(j => j.status === 'running' || j.status === 'pending').length;
+        completedRuns[ds.id] = jobs.filter(j => j.status === 'completed').length;
+
+        // Active job progress
+        const activeJob = jobs.find(j => j.status === 'running' || j.status === 'pending');
+        if (activeJob) {
+          activeEvalProgressData[ds.id] = {
+            completedRows: getJobCompletedRows(activeJob),
+            totalRows: getJobTotalRows(activeJob),
+            avgScore: getJobAverageScore(activeJob),
+          };
+        }
+
+        // Most recent completed job
+        const completedJobs = jobs
+          .filter(j => j.status === 'completed')
+          .sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0));
+        if (completedJobs.length > 0) {
+          const last = completedJobs[0];
+          lastCompletedEvalData[ds.id] = {
+            avgScore: last.result?.statistics?.mean ?? getJobAverageScore(last),
+            sampleSize: last.sampleSize,
+            rolloutModel: last.rolloutModel,
+            completedAt: last.completedAt,
+          };
+        }
+      })
+    );
+    setRecordCounts(counts);
+    setDocsCounts(docs);
+    setTopicStats(stats);
+    setWorkflows(wfs);
+    setActiveDryRunCounts(dryRuns);
+    setCompletedDryRunCounts(completedRuns);
+    setActiveEvalData(activeEvalProgressData);
+    setLastCompletedEval(lastCompletedEvalData);
+  }, [datasets, getRecordCount, getTopicCoverageStats]);
+
+  // Re-runs when `datasets` changes — DatasetsContext already listens for
+  // vllora_dataset_refresh events and reloads datasets, which triggers this effect.
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
+
+  // Re-run loadStats whenever a dry-run job updates (so progress bar refreshes during polling)
+  useEffect(() => {
+    emitter.on('vllora_dry_run_job_update', loadStats);
+    return () => emitter.off('vllora_dry_run_job_update', loadStats);
+  }, [loadStats]);
 
   // Handlers
   const handleRenameDataset = async (datasetId: string) => {
@@ -339,6 +385,8 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
                       filterGroup={getFilterGroup(dataset)}
                       activeEvalJobs={activeDryRunCounts[dataset.id] ?? 0}
                       completedEvalJobs={completedDryRunCounts[dataset.id] ?? 0}
+                      activeEvalData={activeEvalData[dataset.id]}
+                      lastCompletedEval={lastCompletedEval[dataset.id]}
                       activeFinetuneJob={
                         !!workflows[dataset.id]?.training &&
                         ['pending', 'queued', 'running'].includes(workflows[dataset.id].training!.status)

@@ -46,6 +46,8 @@ interface DatasetCardProps {
   filterGroup: DatasetFilterGroup;
   activeEvalJobs: number;
   completedEvalJobs: number;
+  activeEvalData?: { completedRows: number; totalRows: number; avgScore?: number };
+  lastCompletedEval?: { avgScore?: number; sampleSize: number; rolloutModel?: string; completedAt?: number };
   activeFinetuneJob: boolean;
   recordCount: number | string;
   topicCount: number;
@@ -130,6 +132,8 @@ export function DatasetCard({
   filterGroup,
   activeEvalJobs,
   completedEvalJobs,
+  activeEvalData,
+  lastCompletedEval,
   activeFinetuneJob,
   recordCount,
   topicCount,
@@ -291,53 +295,95 @@ export function DatasetCard({
           </div>
 
           {/* Footer — separated by border */}
-          <div className="px-0 pt-3 mt-2 border-t border-white/5 flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              {/* Active jobs — can show both simultaneously */}
-              {activeFinetuneJob && (
-                <span className="flex items-center gap-1.5 text-[11px] font-medium text-blue-400">
-                  <Zap className="w-3.5 h-3.5 animate-pulse" />
-                  Finetuning...
-                </span>
-              )}
-              {activeEvalJobs > 0 && (
-                <span className="flex items-center gap-1.5 text-[11px] font-medium text-blue-400">
-                  <FlaskConical className="w-3.5 h-3.5 animate-pulse" />
-                  {activeEvalJobs} eval running...
-                </span>
-              )}
-              {/* Idle states — only show when nothing is actively running */}
-              {!activeFinetuneJob && activeEvalJobs === 0 && (
-                completedEvalJobs > 0 ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="flex items-center gap-1.5 text-[11px] font-medium text-[rgb(var(--theme-500))]">
-                        <CircleCheck className="w-3.5 h-3.5" />
-                        {completedEvalJobs} eval{completedEvalJobs > 1 ? "s" : ""} completed
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" sideOffset={4}>
-                      <p className="text-xs">
-                        {completedEvalJobs} evaluation{completedEvalJobs > 1 ? "s" : ""} completed
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                ) : hasEvalScript ? (
-                  <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-                    <FlaskConical className="w-3.5 h-3.5" />
-                    Eval fn configured
-                    <CircleCheck className="w-2.5 h-2.5 text-emerald-500" />
+          <div className="px-0 pt-3 mt-2 border-t border-white/5">
+            {/* Eval progress bar (running state) — takes full width */}
+            {activeEvalJobs > 0 && (
+              <div className="flex flex-col gap-1 w-full mb-2">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="flex items-center gap-1.5 font-medium text-blue-400">
+                    <FlaskConical className="w-3.5 h-3.5 animate-pulse" />
+                    Evaluating
                   </span>
-                ) : (
-                  <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/60">
-                    <Ban className="w-3.5 h-3.5" />
-                    No eval fn
-                  </span>
-                )
-              )}
-            </div>
+                  {activeEvalData && activeEvalData.totalRows > 0 && (
+                    <span className="text-muted-foreground/60 font-mono">
+                      {activeEvalData.completedRows}/{activeEvalData.totalRows}
+                      {" "}({Math.round((activeEvalData.completedRows / activeEvalData.totalRows) * 100)}%)
+                    </span>
+                  )}
+                </div>
+                {activeEvalData && activeEvalData.totalRows > 0 && (
+                  <div className="w-full h-1 rounded-full bg-white/5 overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                      style={{ width: `${Math.round((activeEvalData.completedRows / activeEvalData.totalRows) * 100)}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                {/* Finetune active indicator */}
+                {activeFinetuneJob && (
+                  <span className="flex items-center gap-1.5 text-[11px] font-medium text-blue-400">
+                    <Zap className="w-3.5 h-3.5 animate-pulse" />
+                    Finetuning...
+                  </span>
+                )}
+                {/* Idle states — only show when nothing is actively running */}
+                {!activeFinetuneJob && activeEvalJobs === 0 && (
+                  completedEvalJobs > 0 ? (
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <div className="flex items-center gap-1.5 text-[11px] font-medium text-[rgb(var(--theme-500))]">
+                        <CircleCheck className="w-3.5 h-3.5 shrink-0" />
+                        Eval Run
+                        <span className="ml-auto text-[10px] font-mono text-muted-foreground/40">DONE</span>
+                      </div>
+                      {/* Green filled bar for completed evals */}
+                      <div className="w-full h-1 rounded-full bg-white/5 overflow-hidden my-1">
+                        <div className="h-full bg-emerald-500/70 rounded-full" style={{ width: '100%' }} />
+                      </div>
+                      {lastCompletedEval && (
+                        <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-muted-foreground/60">
+                          {lastCompletedEval.avgScore !== undefined && (
+                            <span className="font-medium text-emerald-400/80">
+                              {Math.round(lastCompletedEval.avgScore * 100)}% avg
+                            </span>
+                          )}
+                          <span>·</span>
+                          <span>{lastCompletedEval.sampleSize} samples</span>
+                          {lastCompletedEval.rolloutModel && (
+                            <>
+                              <span>·</span>
+                              <span className="font-mono truncate max-w-[80px]">{lastCompletedEval.rolloutModel}</span>
+                            </>
+                          )}
+                          {lastCompletedEval.completedAt && (
+                            <>
+                              <span>·</span>
+                              <span>{formatDate(lastCompletedEval.completedAt)}</span>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : hasEvalScript ? (
+                    <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                      <FlaskConical className="w-3.5 h-3.5" />
+                      Eval fn configured
+                      <CircleCheck className="w-2.5 h-2.5 text-emerald-500" />
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/60">
+                      <Ban className="w-3.5 h-3.5" />
+                      No eval fn
+                    </span>
+                  )
+                )}
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="text-[10px] text-muted-foreground/40 font-mono">
@@ -387,6 +433,7 @@ export function DatasetCard({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+            </div>
             </div>
           </div>
         </div>
