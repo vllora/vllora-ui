@@ -51,6 +51,13 @@ type ActivityEntryStatus =
   | "pending"
   | "skipped";
 
+type ActivityCategoryBadgeTone = "data" | "eval" | "finetune" | "neutral";
+
+interface ActivityCategoryBadge {
+  label: string;
+  tone: ActivityCategoryBadgeTone;
+}
+
 interface ActivityEntry {
   id: string;
   type: ActivityEntryType;
@@ -61,6 +68,7 @@ interface ActivityEntry {
   timestamp?: number;
   progress?: number;
   details?: ActivityDetailBlock[];
+  categoryBadge?: ActivityCategoryBadge;
 }
 
 type ActivityDetailTone = "default" | "success" | "warning" | "danger";
@@ -121,6 +129,19 @@ function formatRelativeTime(timestamp: number): string {
   const diffHours = Math.floor(diffMins / 60);
   if (diffHours < 24) return `${diffHours}h ago`;
   return `${Math.floor(diffHours / 24)}d ago`;
+}
+
+function getStepCategoryBadge(stepId: string): ActivityCategoryBadge | undefined {
+  if (["topics", "adjust_topics", "categorize", "generate", "upload"].includes(stepId)) {
+    return { label: "Data", tone: "data" };
+  }
+  if (["grader", "dryrun"].includes(stepId)) {
+    return { label: "Eval", tone: "eval" };
+  }
+  if (stepId === "finetune") {
+    return { label: "Fine-tune", tone: "finetune" };
+  }
+  return undefined;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -1104,6 +1125,25 @@ function ActivityEntryRow({ entry }: { entry: ActivityEntry }) {
   };
 
   const TypeBadge = () => {
+    if (entry.categoryBadge) {
+      const badgeClassesByTone: Record<ActivityCategoryBadgeTone, string> = {
+        data: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+        eval: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+        finetune: "bg-purple-500/10 text-purple-600 dark:text-purple-400",
+        neutral: "bg-muted text-muted-foreground",
+      };
+      return (
+        <span
+          className={cn(
+            "px-1.5 py-0.5 rounded text-[10px] font-medium",
+            badgeClassesByTone[entry.categoryBadge.tone]
+          )}
+        >
+          {entry.categoryBadge.label}
+        </span>
+      );
+    }
+
     if (entry.type === "evaluation") {
       return (
         <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400">
@@ -1335,6 +1375,7 @@ export function DatasetOverviewPanel({
           id: `step-${s.id}`,
           type: "step" as ActivityEntryType,
           label: s.name,
+          categoryBadge: getStepCategoryBadge(s.id),
           status: s.status as ActivityEntryStatus,
           detail: s.message ?? undefined,
           secondaryDetail: s.error ?? undefined,
