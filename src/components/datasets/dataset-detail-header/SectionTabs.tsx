@@ -67,7 +67,7 @@ export function SectionTabs({
   };
 
   const isStepComplete = (tabId: DatasetSection): boolean => {
-    if (tabId === "overview") return false;
+    if (tabId === "overview") return true;
     if (tabId === "records") return hasData;
     if (tabId === "evaluator") return hasEvaluator;
     if (tabId === "jobs") return jobsCount > 0;
