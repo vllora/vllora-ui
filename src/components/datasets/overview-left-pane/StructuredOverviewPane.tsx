@@ -243,7 +243,7 @@ function ScoreDistributionMini({ stats }: { stats: DryRunStats }) {
   const max = Math.max(...bins.map((b) => b.count), 1);
 
   return (
-    <div className="rounded-lg border border-border/50 bg-background/40 p-3">
+    <div className="rounded-lg border border-border/40 bg-background/30 p-3">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Score Distribution</span>
         <span className="text-[10px] text-muted-foreground">{stats.samplesEvaluated} samples</span>
@@ -284,15 +284,16 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-border/60 bg-card/50 overflow-hidden">
-      <div className="px-4 py-3 border-b border-border/40 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+    <section className="space-y-0">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 pb-2">
+        <div className="min-w-0 flex items-center gap-2.5">
           <Icon className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-          <h3 className="text-sm font-semibold">{title}</h3>
+          <h3 className="text-lg font-semibold tracking-tight">{title}</h3>
         </div>
-        {right}
+        {right ? <div className="min-w-0 flex items-center gap-2">{right}</div> : null}
       </div>
-      <div className="p-4">{children}</div>
+      <div className="mt-6 border-b border-border/40" />
+      <div className="pt-2">{children}</div>
     </section>
   );
 }
@@ -337,7 +338,7 @@ function TopicTree({
   };
 
   return (
-    <div className="rounded-lg border border-border/50 bg-background/30 p-3 space-y-2">
+    <div className="rounded-lg border border-border/40 bg-background/20 p-3 space-y-2">
       <div className="flex items-center gap-2 text-xs font-medium">
         <Sparkles className="w-3.5 h-3.5 text-[rgb(var(--theme-500))]" />
         <span className="truncate">{rootLabel}</span>
@@ -416,7 +417,7 @@ export function StructuredOverviewPane({
 
   return (
     <div className={cn("flex flex-col h-full overflow-hidden", className)}>
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-5">
         <SectionCard
           title="Project Objective"
           icon={Target}
@@ -446,7 +447,12 @@ export function StructuredOverviewPane({
           title="Dataset Snapshot"
           icon={Database}
           right={
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={onOpenRecords}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 px-3 text-xs gap-1.5 border-border/50 bg-background/20 text-muted-foreground hover:bg-background/35 hover:text-foreground"
+              onClick={onOpenRecords}
+            >
               Records
               <ArrowRight className="w-3 h-3" />
             </Button>
@@ -491,7 +497,12 @@ export function StructuredOverviewPane({
                   Updated {formatRelativeTime(topicLastUpdated)}
                 </span>
               ) : null}
-              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={onOpenRecords}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-3 text-xs gap-1.5 border-border/50 bg-background/20 text-muted-foreground hover:bg-background/35 hover:text-foreground"
+                onClick={onOpenRecords}
+              >
                 Open Records
                 <ArrowRight className="w-3 h-3" />
               </Button>
@@ -528,7 +539,12 @@ export function StructuredOverviewPane({
           icon={FlaskConical}
           right={
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={onOpenEvaluator}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-3 text-xs gap-1.5 border-border/50 bg-background/20 text-muted-foreground hover:bg-background/35 hover:text-foreground"
+                onClick={onOpenEvaluator}
+              >
                 Evaluator
                 <ArrowRight className="w-3 h-3" />
               </Button>
@@ -536,7 +552,7 @@ export function StructuredOverviewPane({
                 <button
                   type="button"
                   onClick={() => onOpenDryRunJob(latestDryRunJob.id)}
-                  className="w-7 h-7 rounded-full border border-border/50 bg-background/60 text-muted-foreground hover:text-foreground hover:border-[rgb(var(--theme-500))]/40 transition-colors flex items-center justify-center"
+                  className="w-7 h-7 rounded-full border border-border/40 bg-background/50 text-muted-foreground hover:text-foreground hover:border-[rgb(var(--theme-500))]/40 transition-colors flex items-center justify-center"
                   title="Open latest evaluation job"
                 >
                   <ArrowRight className="w-3 h-3" />
@@ -546,7 +562,7 @@ export function StructuredOverviewPane({
           }
         >
           {runningDryRunJob && (
-            <div className="mb-3 rounded-lg border border-blue-500/20 bg-blue-500/5 p-3">
+            <div className="mb-3 rounded-lg border border-blue-500/15 bg-blue-500/5 p-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-medium", getDryRunStatusPill(runningDryRunJob.status))}>
@@ -622,7 +638,12 @@ export function StructuredOverviewPane({
           title="Sample Records"
           icon={BookOpen}
           right={
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={onOpenRecords}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 px-3 text-xs gap-1.5 border-border/50 bg-background/20 text-muted-foreground hover:bg-background/35 hover:text-foreground"
+              onClick={onOpenRecords}
+            >
               View All
               <ArrowRight className="w-3 h-3" />
             </Button>
@@ -634,7 +655,7 @@ export function StructuredOverviewPane({
                 const score = record.evaluation?.dryRunScore ?? record.evaluation?.score;
                 const topicLabel = record.topic ? (topicPathMap.get(record.topic) ?? record.topic) : "Unassigned";
                 return (
-                  <div key={record.id} className="rounded-lg border border-border/50 bg-background/30 p-3">
+                  <div key={record.id} className="rounded-lg border border-border/40 bg-background/20 p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5 flex-wrap">
@@ -669,7 +690,7 @@ export function StructuredOverviewPane({
                         type="button"
                         onClick={() => onOpenRecord(record.id)}
                         title="Open record"
-                        className="w-7 h-7 rounded-full border border-border/50 bg-background/60 text-muted-foreground hover:text-foreground hover:border-[rgb(var(--theme-500))]/40 transition-colors flex items-center justify-center shrink-0"
+                        className="w-7 h-7 rounded-full border border-border/40 bg-background/50 text-muted-foreground hover:text-foreground hover:border-[rgb(var(--theme-500))]/40 transition-colors flex items-center justify-center shrink-0"
                       >
                         <ArrowRight className="w-3 h-3" />
                       </button>
@@ -691,7 +712,12 @@ export function StructuredOverviewPane({
           title="Fine-tune Snapshot"
           icon={TrendingUp}
           right={
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={onOpenJobs}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 px-3 text-xs gap-1.5 border-border/50 bg-background/20 text-muted-foreground hover:bg-background/35 hover:text-foreground"
+              onClick={onOpenJobs}
+            >
               Jobs
               <ArrowRight className="w-3 h-3" />
             </Button>
@@ -726,7 +752,7 @@ export function StructuredOverviewPane({
                     type="button"
                     onClick={() => onOpenFinetuneJob(latestFinetuneJob.id)}
                     title="Open latest fine-tune job"
-                    className="w-8 h-8 rounded-full border border-border/50 bg-background/60 text-muted-foreground hover:text-foreground hover:border-[rgb(var(--theme-500))]/40 transition-colors flex items-center justify-center shrink-0"
+                    className="w-8 h-8 rounded-full border border-border/40 bg-background/50 text-muted-foreground hover:text-foreground hover:border-[rgb(var(--theme-500))]/40 transition-colors flex items-center justify-center shrink-0"
                   >
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
@@ -793,7 +819,7 @@ function EmptySection({
   onAction?: () => void;
 }) {
   return (
-    <div className="rounded-lg border border-dashed border-border/60 bg-background/20 p-4 flex items-start justify-between gap-3">
+    <div className="rounded-lg border border-dashed border-border/40 bg-background/15 p-4 flex items-start justify-between gap-3">
       <p className="text-sm text-muted-foreground leading-relaxed">{text}</p>
       {actionLabel && onAction ? (
         <Button size="sm" variant="outline" className="h-7 text-xs shrink-0" onClick={onAction}>
@@ -812,4 +838,3 @@ function countAllTopics(nodes: TopicHierarchyNode[]): number {
   }
   return count;
 }
-
