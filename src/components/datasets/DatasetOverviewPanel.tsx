@@ -1227,17 +1227,30 @@ function ActivityEntryRow({ entry }: { entry: ActivityEntry }) {
         <StatusIcon />
       </div>
       <div className="flex-1 min-w-0 pb-1">
-        {/* Type badge + label */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <TypeBadge />
-          <span
-            className={cn(
-              "text-sm font-semibold",
-              isSkippedOrPending && "text-muted-foreground"
+        {/* Header: type/label on left, status/time on right */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <TypeBadge />
+              <span
+                className={cn(
+                  "text-sm font-semibold",
+                  isSkippedOrPending && "text-muted-foreground"
+                )}
+              >
+                {entry.label}
+              </span>
+            </div>
+          </div>
+
+          <div className="shrink-0 flex items-center gap-2">
+            <StatusBadge />
+            {entry.timestamp != null && (
+              <span className="text-[10px] text-muted-foreground">
+                {formatRelativeTime(entry.timestamp)}
+              </span>
             )}
-          >
-            {entry.label}
-          </span>
+          </div>
         </div>
 
         {/* Primary detail */}
@@ -1260,16 +1273,6 @@ function ActivityEntryRow({ entry }: { entry: ActivityEntry }) {
             {entry.secondaryDetail}
           </p>
         )}
-
-        {/* Status badge + timestamp */}
-        <div className="flex items-center gap-2 mt-1">
-          <StatusBadge />
-          {entry.timestamp != null && (
-            <span className="text-[10px] text-muted-foreground">
-              {formatRelativeTime(entry.timestamp)}
-            </span>
-          )}
-        </div>
 
         {/* Progress bar (running only) */}
         {isRunning && (
