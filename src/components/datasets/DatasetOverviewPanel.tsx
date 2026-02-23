@@ -233,6 +233,24 @@ function formatTrainingConfigValue(value: unknown): string | undefined {
   return undefined;
 }
 
+function getLeafTopicNames(topics?: Plan["proposed_topics"]): string[] {
+  if (!topics?.length) return [];
+  const names: string[] = [];
+
+  const visit = (nodes: NonNullable<Plan["proposed_topics"]>) => {
+    for (const node of nodes) {
+      if (node.subtopics?.length) {
+        visit(node.subtopics);
+      } else if (node.name?.trim()) {
+        names.push(node.name.trim());
+      }
+    }
+  };
+
+  visit(topics);
+  return names;
+}
+
 function buildFinetuneConfigRows(job: FinetuneJob): Array<{ key: string; value: string }> {
   const cfg = asRecord(job.training_config);
   if (!cfg) return [];
@@ -316,15 +334,13 @@ function getStepDetails({
   const details: ActivityDetailBlock[] = [];
 
   if (stepId === "topics") {
-    const topicNames =
-      plan?.proposed_topics?.map((t) => t.name).filter(Boolean) ??
-      [];
+    const topicNames = getLeafTopicNames(plan?.proposed_topics);
     if (topicNames.length) {
       details.push({
         type: "tag_list",
         title: "Generated Topics",
         items: topicNames,
-        maxVisible: 6,
+        maxVisible: topicNames.length,
       });
     }
 
@@ -725,29 +741,31 @@ function ActivityDetailBlocks({ blocks }: { blocks: ActivityDetailBlock[] }) {
   if (blocks.length === 0) return null;
 
   return (
-    <div className="space-y-2">
+    <div className="rounded-lg border border-border/60 bg-muted/20 overflow-hidden">
       {blocks.map((block, idx) => {
+        const sectionClass = cn("px-3 py-2.5", idx > 0 && "border-t border-border/40");
+
         if (block.type === "tag_list") {
           const maxVisible = block.maxVisible ?? 6;
           const visible = block.items.slice(0, maxVisible);
           const hiddenCount = Math.max(0, block.items.length - visible.length);
           return (
-            <div key={idx} className="rounded-md border border-border bg-muted/40 p-2.5">
+            <div key={idx} className={sectionClass}>
               <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5">
                 {block.title}
               </div>
-              <div className="flex flex-wrap gap-1">
+              <div className="flex flex-wrap gap-1.5">
                 {visible.map((item, i) => (
                   <span
                     key={`${item}-${i}`}
-                    className="px-2 py-0.5 rounded border border-border bg-background text-xs text-foreground max-w-full truncate"
+                    className="px-2 py-0.5 rounded-full bg-background/60 text-xs text-foreground/90 max-w-full truncate"
                     title={item}
                   >
                     {item}
                   </span>
                 ))}
                 {hiddenCount > 0 && (
-                  <span className="px-2 py-0.5 rounded border border-border bg-background text-xs text-muted-foreground">
+                  <span className="px-2 py-0.5 rounded-full bg-background/50 text-xs text-muted-foreground">
                     +{hiddenCount} more
                   </span>
                 )}
@@ -758,21 +776,21 @@ function ActivityDetailBlocks({ blocks }: { blocks: ActivityDetailBlock[] }) {
 
         if (block.type === "metric_grid") {
           return (
-            <div key={idx} className="rounded-md border border-border bg-muted/40 p-2.5">
+            <div key={idx} className={sectionClass}>
               {block.title && (
                 <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5">
                   {block.title}
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                 {block.metrics.map((metric, i) => (
-                  <div key={`${metric.label}-${i}`} className="rounded border border-border/60 bg-background/60 px-2 py-1">
-                    <div className="text-[9px] uppercase tracking-wide text-muted-foreground">
+                  <div key={`${metric.label}-${i}`} className="min-w-0">
+                    <div className="text-[9px] uppercase tracking-wide text-muted-foreground/90">
                       {metric.label}
                     </div>
                     <div
                       className={cn(
-                        "text-[11px] font-semibold truncate",
+                        "text-[11px] font-semibold truncate mt-0.5",
                         DETAIL_TONE_CLASS[metric.tone ?? "default"]
                       )}
                       title={metric.value}
@@ -803,13 +821,13 @@ function ActivityDetailBlocks({ blocks }: { blocks: ActivityDetailBlock[] }) {
             ];
 
             return (
-              <div key={idx} className="rounded-md border border-border bg-muted/40 p-2.5">
+              <div key={idx} className={sectionClass}>
                 <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5">
                   {block.title}
                 </div>
 
                 <div className="space-y-1">
-                  <div className="relative flex items-end h-9 gap-px rounded-md overflow-hidden bg-zinc-800/30 border border-border/50">
+                  <div className="relative flex items-end h-9 gap-px rounded-md overflow-hidden bg-zinc-800/20 border border-border/40">
                     {block.bins.map((bin, i) => {
                       const heightPct = bin.value === 0 ? 0 : Math.max(15, (bin.value / max) * 100);
                       return (
@@ -859,7 +877,7 @@ function ActivityDetailBlocks({ blocks }: { blocks: ActivityDetailBlock[] }) {
                 </div>
 
                 {block.footer && (
-                  <div className="mt-2 rounded border border-border/60 bg-background/60 px-2 py-1 flex items-center justify-between gap-2">
+                  <div className="mt-2 flex items-center justify-between gap-2">
                     <span className="text-[9px] uppercase tracking-wide text-muted-foreground">
                       Result
                     </span>
@@ -913,12 +931,12 @@ function ActivityDetailBlocks({ blocks }: { blocks: ActivityDetailBlock[] }) {
               ];
 
           return (
-            <div key={idx} className="rounded-md border border-border bg-muted/40 p-2.5">
+            <div key={idx} className={sectionClass}>
               <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5">
                 {block.title}
               </div>
 
-              <div className="h-16 rounded-md border border-border/50 bg-background/70 p-2 flex flex-col justify-between">
+              <div className="h-16 rounded-md border border-border/40 bg-background/50 p-2 flex flex-col justify-between">
                 <div className="h-8 flex items-end gap-1">
                   {visibleBins.map((bin, i) => {
                     const pct = total > 0 ? (bin.value / total) * 100 : 0;
@@ -960,7 +978,7 @@ function ActivityDetailBlocks({ blocks }: { blocks: ActivityDetailBlock[] }) {
               </div>
 
               {block.footer && (
-                <div className="mt-2 rounded border border-border/60 bg-background/60 px-2 py-1 flex items-center justify-between gap-2">
+                <div className="mt-2 flex items-center justify-between gap-2">
                   <span className="text-[9px] uppercase tracking-wide text-muted-foreground">
                     Result
                   </span>
@@ -975,15 +993,18 @@ function ActivityDetailBlocks({ blocks }: { blocks: ActivityDetailBlock[] }) {
 
         if (block.type === "kv_list") {
           return (
-            <div key={idx} className="rounded-md border border-border bg-muted/40 p-2.5">
+            <div key={idx} className={sectionClass}>
               <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5">
                 {block.title}
               </div>
-              <div className="space-y-1">
+              <div className="divide-y divide-border/30">
                 {block.rows.map((row, i) => (
                   <div
                     key={`${row.key}-${i}`}
-                    className="rounded border border-border/60 bg-background/60 px-2 py-1 flex items-center justify-between gap-2"
+                    className={cn(
+                      "flex items-center justify-between gap-2",
+                      i === 0 ? "pt-0 pb-1.5" : "py-1.5"
+                    )}
                   >
                     <span className="text-[10px] text-muted-foreground">{row.key}</span>
                     <span className="text-[10px] font-medium text-foreground truncate" title={row.value}>
@@ -999,10 +1020,7 @@ function ActivityDetailBlocks({ blocks }: { blocks: ActivityDetailBlock[] }) {
         return (
           <div
             key={idx}
-            className={cn(
-              "rounded-md border border-border bg-muted/40 p-2.5",
-              block.tone && DETAIL_TONE_CLASS[block.tone]
-            )}
+            className={sectionClass}
           >
             {block.title && (
               <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">
