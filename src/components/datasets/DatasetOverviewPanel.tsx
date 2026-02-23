@@ -20,6 +20,7 @@ import {
   TrendingUp,
   ArrowUp,
   ArrowDown,
+  ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DatasetReadmeViewer } from "@/components/datasets/readme-viewer";
@@ -69,6 +70,10 @@ interface ActivityEntry {
   progress?: number;
   details?: ActivityDetailBlock[];
   categoryBadge?: ActivityCategoryBadge;
+  action?: {
+    title: string;
+    onClick: () => void;
+  };
 }
 
 type ActivityDetailTone = "default" | "success" | "warning" | "danger";
@@ -142,6 +147,31 @@ function getStepCategoryBadge(stepId: string): ActivityCategoryBadge | undefined
     return { label: "Fine-tune", tone: "finetune" };
   }
   return undefined;
+}
+
+const OPEN_DRY_RUN_JOB_EVENT = "vllora_select_dry_run_job";
+const OPEN_FINETUNE_JOB_EVENT = "vllora_select_finetune_job";
+
+function navigateToDryRunJob(datasetId: string, jobId: string): void {
+  emitter.emit("vllora_switch_tab", { datasetId, tab: "evaluator" });
+  setTimeout(() => {
+    window.dispatchEvent(
+      new CustomEvent(OPEN_DRY_RUN_JOB_EVENT, {
+        detail: { datasetId, jobId },
+      })
+    );
+  }, 150);
+}
+
+function navigateToFinetuneJob(datasetId: string, jobId: string): void {
+  emitter.emit("vllora_switch_tab", { datasetId, tab: "jobs" });
+  setTimeout(() => {
+    window.dispatchEvent(
+      new CustomEvent(OPEN_FINETUNE_JOB_EVENT, {
+        detail: { datasetId, jobId },
+      })
+    );
+  }, 150);
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -1250,6 +1280,17 @@ function ActivityEntryRow({ entry }: { entry: ActivityEntry }) {
                 {formatRelativeTime(entry.timestamp)}
               </span>
             )}
+            {entry.action && (
+              <button
+                type="button"
+                onClick={entry.action.onClick}
+                title={entry.action.title}
+                aria-label={entry.action.title}
+                className="w-6 h-6 rounded-full border border-border/50 bg-background/60 text-muted-foreground hover:text-foreground hover:border-[rgb(var(--theme-500))]/40 hover:bg-[rgb(var(--theme-500))]/5 transition-colors flex items-center justify-center"
+              >
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -1296,6 +1337,7 @@ function ActivityEntryRow({ entry }: { entry: ActivityEntry }) {
             <ActivityDetailBlocks blocks={entry.details} />
           </div>
         )}
+
       </div>
     </div>
   );
@@ -1374,25 +1416,60 @@ export function DatasetOverviewPanel({
     () =>
       (activeProgress?.steps ?? [])
         .filter((s) => s.status !== "pending")
-        .map((s) => ({
-          id: `step-${s.id}`,
-          type: "step" as ActivityEntryType,
-          label: s.name,
-          categoryBadge: getStepCategoryBadge(s.id),
-          status: s.status as ActivityEntryStatus,
-          detail: s.message ?? undefined,
-          secondaryDetail: s.error ?? undefined,
-          timestamp: planTimestamp ?? undefined,
-          progress: s.progress,
-          details: getStepDetails({
-            stepId: s.id,
-            stepResult: s.result,
-            plan: proposedPlan,
-            dataset: (dataset as Dataset | null | undefined) ?? null,
-            dryRunJobs,
-            finetuneJobs: filteredJobs,
-          }),
-        })),
+        .map((s) => {
+          const stepResult = asRecord(s.result);
+          const matchedDryRun =
+            s.id === "dryrun"
+              ? getDryRunStatsForStep(stepResult, dryRunJobs, dataset?.dryRunStats)
+              : undefined;
+          const dryRunJobId =
+            s.id === "dryrun"
+              ? asString(stepResult?.dry_run_job_id) ?? matchedDryRun?.job?.id
+              : undefined;
+
+          const matchedFinetuneJob =
+            s.id === "finetune"
+              ? getFinetuneJobForStep(stepResult, filteredJobs)
+              : undefined;
+          const finetuneJobId =
+            s.id === "finetune"
+              ? asString(stepResult?.jobId) ??
+                asString(stepResult?.job_id) ??
+                asString(stepResult?.id) ??
+                matchedFinetuneJob?.id
+              : undefined;
+
+          return {
+            id: `step-${s.id}`,
+            type: "step" as ActivityEntryType,
+            label: s.name,
+            categoryBadge: getStepCategoryBadge(s.id),
+            status: s.status as ActivityEntryStatus,
+            detail: s.message ?? undefined,
+            secondaryDetail: s.error ?? undefined,
+            timestamp: planTimestamp ?? undefined,
+            progress: s.progress,
+            details: getStepDetails({
+              stepId: s.id,
+              stepResult: s.result,
+              plan: proposedPlan,
+              dataset: (dataset as Dataset | null | undefined) ?? null,
+              dryRunJobs,
+              finetuneJobs: filteredJobs,
+            }),
+            action: dryRunJobId
+              ? {
+                  title: "Open evaluation job",
+                  onClick: () => navigateToDryRunJob(datasetId, dryRunJobId),
+                }
+              : finetuneJobId
+              ? {
+                  title: "Open fine-tune job",
+                  onClick: () => navigateToFinetuneJob(datasetId, finetuneJobId),
+                }
+              : undefined,
+          };
+        }),
     [activeProgress, planTimestamp, proposedPlan, dataset, dryRunJobs, filteredJobs]
   );
 
@@ -1430,9 +1507,13 @@ export function DatasetOverviewPanel({
                 ? Math.round((completedRows / totalRows) * 100)
                 : undefined,
             details: getEvaluationDetails(j, dataset?.dryRunStats),
+            action: {
+              title: "Open evaluation job",
+              onClick: () => navigateToDryRunJob(datasetId, j.id),
+            },
           };
         }),
-    [dryRunJobs, dataset?.dryRunStats]
+    [dryRunJobs, dataset?.dryRunStats, datasetId]
   );
 
   // Finetune jobs
@@ -1452,9 +1533,13 @@ export function DatasetOverviewPanel({
             ? new Date(j.completed_at).getTime()
             : new Date(j.created_at).getTime(),
           details: getFinetuneDetails(j),
+          action: {
+            title: "Open fine-tune job",
+            onClick: () => navigateToFinetuneJob(datasetId, j.id),
+          },
         };
       }),
-    [filteredJobs]
+    [filteredJobs, datasetId]
   );
 
   // Merge and sort chronologically: oldest first for easier timeline scanning.

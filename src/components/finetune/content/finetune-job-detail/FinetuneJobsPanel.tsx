@@ -12,6 +12,8 @@ import { cn } from "@/lib/utils";
 import { JobDetailPanel } from "./JobDetailPanel";
 import { StatusIcon } from "./StatusIcon";
 
+const OPEN_FINETUNE_JOB_EVENT = "vllora_select_finetune_job";
+
 export function FinetuneJobsPanel() {
   const { filteredJobs, isLoading } = FinetuneJobsConsumer();
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -35,6 +37,20 @@ export function FinetuneJobsPanel() {
       setSelectedJobId(runningJob.id);
     }
   }, [filteredJobs]);
+
+  // Allow Overview activity timeline to navigate and open a specific finetune job.
+  useEffect(() => {
+    const handleSelectFinetuneJob = (event: Event) => {
+      const detail = (event as CustomEvent<{ jobId?: string }>).detail;
+      if (!detail?.jobId) return;
+      setSelectedJobId(detail.jobId);
+    };
+
+    window.addEventListener(OPEN_FINETUNE_JOB_EVENT, handleSelectFinetuneJob as EventListener);
+    return () => {
+      window.removeEventListener(OPEN_FINETUNE_JOB_EVENT, handleSelectFinetuneJob as EventListener);
+    };
+  }, []);
 
   return (
     <div className="flex h-full min-h-0 overflow-hidden bg-background">

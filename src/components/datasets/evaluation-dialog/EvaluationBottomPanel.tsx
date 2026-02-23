@@ -17,6 +17,8 @@ import { DryRunActivityView } from "../dry-run-dialog/DryRunActivityView";
 import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
 import { cn } from "@/lib/utils";
 
+const OPEN_DRY_RUN_JOB_EVENT = "vllora_select_dry_run_job";
+
 interface EvaluationBottomPanelProps {
   isCollapsed: boolean;
   onToggleCollapse: () => void;
@@ -50,6 +52,21 @@ export function EvaluationBottomPanel({
       setSelectedJobId(lastCompletedJob.id);
     }
   }, [runningJob, lastCompletedJob]);
+
+  // Allow other screens (e.g., Overview activity timeline) to open a specific dry-run job.
+  useEffect(() => {
+    const handleSelectDryRunJob = (event: Event) => {
+      const detail = (event as CustomEvent<{ datasetId?: string; jobId?: string }>).detail;
+      if (!detail?.jobId || detail.datasetId !== datasetId) return;
+      setSelectedJobId(detail.jobId);
+      if (isCollapsed) onToggleCollapse();
+    };
+
+    window.addEventListener(OPEN_DRY_RUN_JOB_EVENT, handleSelectDryRunJob as EventListener);
+    return () => {
+      window.removeEventListener(OPEN_DRY_RUN_JOB_EVENT, handleSelectDryRunJob as EventListener);
+    };
+  }, [datasetId, isCollapsed, onToggleCollapse]);
 
   const handleCancel = useCallback(async () => {
     if (runningJob) {
