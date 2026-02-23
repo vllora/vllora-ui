@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DatasetReadmeViewer } from "@/components/datasets/readme-viewer";
+import { StructuredOverviewPane } from "@/components/datasets/overview-left-pane/StructuredOverviewPane";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { PlanConsumer } from "@/contexts/PlanContext";
 import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
@@ -1595,15 +1597,59 @@ export function DatasetOverviewPanel({
 
       {/* Dual pane */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left 60%: README */}
+        {/* Left 60%: Structured Overview + README */}
         <div className="w-[60%] border-r border-border flex flex-col overflow-hidden">
-          <DatasetReadmeViewer
-            readme={readme}
-            readmeUpdatedAt={readmeUpdatedAt}
-            onExport={onExport}
-            onRegenerate={onRegenerate}
-            className="h-full"
-          />
+          <Tabs defaultValue="overview" className="flex flex-col h-full">
+            <div className="px-4 py-2 border-b border-border/50 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <TabsList className="h-8 bg-muted/50">
+                  <TabsTrigger value="overview" className="h-6 px-2.5 text-xs data-[state=active]:bg-background/80">
+                    Overview
+                  </TabsTrigger>
+                  <TabsTrigger value="readme" className="h-6 px-2.5 text-xs data-[state=active]:bg-background/80">
+                    README
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+              <div className="text-[10px] text-muted-foreground hidden sm:block">
+                Structured summary + generated markdown
+              </div>
+            </div>
+
+            <TabsContent value="overview" className="flex-1 min-h-0 mt-0 overflow-hidden">
+              <StructuredOverviewPane
+                dataset={dataset}
+                records={sortedRecords}
+                dryRunJobs={dryRunJobs}
+                latestFinetuneJob={latestJob}
+                finetuneJobsCount={filteredJobs.length}
+                proposedPlan={proposedPlan}
+                onOpenRecords={() => emitter.emit("vllora_switch_tab", { datasetId, tab: "records" })}
+                onOpenEvaluator={() => emitter.emit("vllora_switch_tab", { datasetId, tab: "evaluator" })}
+                onOpenJobs={() => emitter.emit("vllora_switch_tab", { datasetId, tab: "jobs" })}
+                onOpenRecord={(recordId) => {
+                  emitter.emit("vllora_switch_tab", { datasetId, tab: "records" });
+                  setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent("vllora_highlight_record", { detail: { recordId } }));
+                  }, 150);
+                }}
+                onOpenDryRunJob={(jobId) => navigateToDryRunJob(datasetId, jobId)}
+                onOpenFinetuneJob={(jobId) => navigateToFinetuneJob(datasetId, jobId)}
+                className="h-full"
+              />
+            </TabsContent>
+
+            <TabsContent value="readme" className="flex-1 min-h-0 mt-0 overflow-hidden">
+              <DatasetReadmeViewer
+                readme={readme}
+                readmeUpdatedAt={readmeUpdatedAt}
+                onExport={onExport}
+                onRegenerate={onRegenerate}
+                headerLabel="README"
+                className="h-full"
+              />
+            </TabsContent>
+          </Tabs>
         </div>
 
         {/* Right 40%: Activity Timeline */}

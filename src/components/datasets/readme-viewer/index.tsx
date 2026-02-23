@@ -23,6 +23,8 @@ interface DatasetReadmeViewerProps {
   onExport: () => void;
   /** Callback to regenerate README */
   onRegenerate: () => Promise<void>;
+  /** Optional header label (defaults to "Overview") */
+  headerLabel?: string;
   /** Optional className for container */
   className?: string;
 }
@@ -32,6 +34,7 @@ export const DatasetReadmeViewer = memo(function DatasetReadmeViewer({
   readmeUpdatedAt,
   onExport,
   onRegenerate,
+  headerLabel = "Overview",
   className,
 }: DatasetReadmeViewerProps) {
   const formattedDate = readmeUpdatedAt
@@ -55,7 +58,7 @@ export const DatasetReadmeViewer = memo(function DatasetReadmeViewer({
       <div className="flex items-center justify-between px-4 py-2 border-b border-border/50">
         <div className="flex items-center gap-2 text-muted-foreground">
           <FileText className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-          <span className="text-xs font-medium">Overview</span>
+          <span className="text-xs font-medium">{headerLabel}</span>
           {formattedDate && (
             <span className="text-xs text-muted-foreground/60">
               · Updated {formattedDate}
