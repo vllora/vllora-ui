@@ -70,12 +70,15 @@ interface TopicHierarchyResponse {
   hierarchy: Array<{
     name: string;
     description: string;
+    source_chunks: string[];
     children?: Array<{
       name: string;
       description: string;
+      source_chunks: string[];
       children?: Array<{
         name: string;
         description: string;
+        source_chunks: string[];
       }>;
     }>;
   }>;
@@ -97,6 +100,11 @@ const TOPIC_HIERARCHY_SCHEMA = {
             properties: {
               name: { type: 'string', description: 'Topic name (lowercase_with_underscores)' },
               description: { type: 'string', description: 'Brief description of this topic' },
+              source_chunks: {
+                type: 'array',
+                description: 'Ref tags from knowledge sources relevant to this topic (e.g., ["abc:chunk-1"])',
+                items: { type: 'string' },
+              },
               children: {
                 type: 'array',
                 description: 'Child topics (optional)',
@@ -105,6 +113,11 @@ const TOPIC_HIERARCHY_SCHEMA = {
                   properties: {
                     name: { type: 'string' },
                     description: { type: 'string' },
+                    source_chunks: {
+                      type: 'array',
+                      description: 'Ref tags from knowledge sources relevant to this topic',
+                      items: { type: 'string' },
+                    },
                     children: {
                       type: 'array',
                       items: {
@@ -112,18 +125,23 @@ const TOPIC_HIERARCHY_SCHEMA = {
                         properties: {
                           name: { type: 'string' },
                           description: { type: 'string' },
+                          source_chunks: {
+                            type: 'array',
+                            description: 'Ref tags from knowledge sources relevant to this topic',
+                            items: { type: 'string' },
+                          },
                         },
-                        required: ['name', 'description'],
+                        required: ['name', 'description', 'source_chunks'],
                         additionalProperties: false,
                       },
                     },
                   },
-                  required: ['name', 'description', 'children'],
+                  required: ['name', 'description', 'source_chunks', 'children'],
                   additionalProperties: false,
                 },
               },
             },
-            required: ['name', 'description', 'children'],
+            required: ['name', 'description', 'source_chunks', 'children'],
             additionalProperties: false,
           },
         },
@@ -202,7 +220,8 @@ ${JSON.stringify(sampleRecords, null, 2)}`;
 3. Go ${depth} levels deep when content warrants it
 4. Topic names: lowercase_with_underscores (e.g., "opening_theory", "tactical_patterns")
 5. Provide brief descriptions for each topic
-${knowledgeContext ? '6. Topics MUST reflect the ACTUAL CONTENT of uploaded documents' : ''}
+${knowledgeContext ? `6. Topics MUST reflect the ACTUAL CONTENT of uploaded documents
+7. For each topic, include the source_chunks array with the [ref:...] IDs from the knowledge sources above that are most relevant to that topic. Return [] if no refs apply.` : ''}
 
 Generate the topic hierarchy JSON:`;
 
@@ -269,11 +288,13 @@ function convertToHierarchyNodes(
   function convertNode(node: {
     name: string;
     description: string;
-    children?: Array<{ name: string; description: string; children?: Array<{ name: string; description: string }> }>;
+    source_chunks?: string[];
+    children?: Array<{ name: string; description: string; source_chunks?: string[]; children?: Array<{ name: string; description: string; source_chunks?: string[] }> }>;
   }): TopicHierarchyNode {
     const result: TopicHierarchyNode = {
       id: `topic_${++nodeIdCounter}`,
       name: node.name.toLowerCase().replace(/\s+/g, '_'),
+      sourceChunkRefs: node.source_chunks?.length ? node.source_chunks : undefined,
     };
     if (node.children && node.children.length > 0) {
       result.children = node.children.map(convertNode);

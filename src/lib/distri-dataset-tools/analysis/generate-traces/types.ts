@@ -63,12 +63,14 @@ export interface TopicHierarchyNode {
   id: string;
   name: string;
   children?: TopicHierarchyNode[];
+  sourceChunkRefs?: string[];
 }
 
 export interface LeafTopic {
   id: string;   // Topic ID for storing in records
   name: string; // Topic name for display/matching
   path: string[];
+  sourceChunkRefs?: string[];
 }
 
 export interface TopicGenerationTask {
@@ -79,6 +81,8 @@ export interface TopicGenerationTask {
   seedRecords: (DatasetRecord | undefined)[];
   tools: any[];
   generationMode: 'rft' | 'sft';
+  /** Resolved knowledge source text for prompt injection (from sourceChunkRefs) */
+  knowledgeContext?: string;
 }
 
 export interface TopicGenerationResult {

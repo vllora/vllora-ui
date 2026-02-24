@@ -188,10 +188,12 @@ function convertToHierarchyNodes(
     id: generateTopicId(),
     name: topic.name,
     description: topic.description,
+    sourceChunkRefs: topic.source_chunk_refs,
     children: topic.subtopics?.map((sub) => ({
       id: generateTopicId(),
       name: sub.name,
       description: sub.description,
+      sourceChunkRefs: sub.source_chunk_refs,
       children: [],
     })) || [],
   }));

@@ -101,7 +101,7 @@ export async function buildKnowledgeContext(
             : `pp.${chunk.pageStart}–${chunk.pageEnd}`;
           const sentenceCount = chunk.sentences?.length || 0;
           sourceParts.push(
-            `- **${chunk.heading}** [${pageRange}, ${sentenceCount} sentences]: ${chunk.summary}`
+            `- [ref:${source.id}:${chunk.id}] **${chunk.heading}** [${pageRange}, ${sentenceCount} sentences]: ${chunk.summary}`
           );
         }
       }
@@ -127,11 +127,12 @@ export async function buildKnowledgeContext(
 
       if (sections.length > 0) {
         sourceParts.push(`\n### Document Sections (USE THESE FOR TOPIC GENERATION):`);
-        for (const section of sections.slice(0, 10)) {
+        for (let i = 0; i < Math.min(sections.length, 10); i++) {
+          const section = sections[i];
           const sectionTitle = section.title || 'Untitled';
           const contentPreview = section.content?.substring(0, 150) || '';
           sourceParts.push(
-            `- **${sectionTitle}**: ${contentPreview}${contentPreview.length >= 150 ? '...' : ''}`
+            `- [ref:${source.id}:section-${i}] **${sectionTitle}**: ${contentPreview}${contentPreview.length >= 150 ? '...' : ''}`
           );
         }
         if (sections.length > 10) {

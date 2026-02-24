@@ -20,6 +20,8 @@ export interface ProposedTopic {
   description: string;
   target_count: number;
   subtopics?: ProposedTopic[];
+  /** Composite refs to knowledge source chunks: "sourceId:chunkId" */
+  source_chunk_refs?: string[];
 }
 
 export interface GraderCriterion {

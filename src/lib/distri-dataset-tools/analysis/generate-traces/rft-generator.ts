@@ -90,11 +90,12 @@ export async function generateRFTRecord(
   topicPath: string[],
   seedRecord: DatasetRecord | undefined,
   tools: any[],
-  personaCache: Map<string, string[]>
+  personaCache: Map<string, string[]>,
+  knowledgeContext?: string,
 ): Promise<SyntheticTraceRecord | null> {
   const topicStr = topicPath.join(' -> ');
   const topicKey = topicPath.join('/');
-  const contextStr = topicStr;
+  const contextStr = knowledgeContext ? `${topicStr}\n\n${knowledgeContext}` : topicStr;
 
   console.log(`[generateRFTRecord] Starting for topic: ${topicStr}`);
   console.log(`[generateRFTRecord] Seed record ID: ${seedRecord?.id || 'none'}`);
