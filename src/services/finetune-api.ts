@@ -814,7 +814,7 @@ export async function updateDatasetEvalScript(
     `/finetune/datasets/${datasetId}/evaluator`,
     {
       method: "PATCH",
-      body: JSON.stringify({ evaluator: { type: "js", script } }),
+      body: JSON.stringify({ evaluator: { type: "js", config: { script } } }),
     },
   );
   return handleApiResponse<UpdateEvaluatorResponse>(response);
