@@ -241,7 +241,7 @@ interface ExecuteSetupPlanResult {
    - Topic hierarchy visualization
    - Record statistics and coverage analysis
    - Setup plan execution summary
-7. **Start Finetune Job** - Automatically creates and submits the training job using `quickFinetune()` with base model `google/gemma-3-4b-it`. Emits `vllora_finetune_job_created` event and switches UI to Jobs tab. (Non-fatal if fails, user can start manually)
+7. **Start Finetune Job** - Automatically creates and submits the training job using `quickFinetune()` with base model `unsloth/Qwen3-4B` and default hyperparameters: learning rate `0.0001`, epochs `2`, batch size `10` (samples), LoRA rank `8`. Emits `vllora_finetune_job_created` event and switches UI to Jobs tab. (Non-fatal if fails, user can start manually)
 
 ## Progress Indicators
 
