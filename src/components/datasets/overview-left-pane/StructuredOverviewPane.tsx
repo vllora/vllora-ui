@@ -248,7 +248,7 @@ function ScoreDistributionMini({ stats }: { stats: DryRunStats }) {
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Score Distribution</span>
         <span className="text-[10px] text-muted-foreground">{stats.samplesEvaluated} samples</span>
       </div>
-      <div className="flex items-end gap-1 h-12">
+      <div className="flex items-start gap-1">
         {bins.map((bin) => {
           const h = bin.count > 0 ? Math.max(4, Math.round((bin.count / max) * 48)) : 2;
           const pct = total > 0 ? Math.round((bin.count / total) * 100) : 0;
