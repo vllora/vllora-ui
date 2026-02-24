@@ -17,7 +17,7 @@
  * - Auto-trigger prompts for proactive analysis
  */
 
-import { useCallback, useRef, useEffect, useState } from 'react';
+import { useCallback, useRef, useEffect, useState, useMemo } from 'react';
 import { useChat, useChatStateStore, TodosDisplay } from '@distri/react';
 import type { ToolRendererMap, DistriAnyTool } from '@distri/react';
 import { Agent, DistriChatMessage, DistriMessage, DistriPart, ToolExecutionOptions } from '@distri/core';
@@ -169,6 +169,43 @@ export function LucyChat({
     getMetadata,
   });
 
+  // Error dismiss/retry state
+  const [dismissedError, setDismissedError] = useState<string | null>(null);
+  const showError = error && error.message !== dismissedError;
+
+  // Find the last user message for retry
+  const lastUserMessage = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if ('role' in msg && msg.role === 'user') {
+        const textPart = msg.parts.find((p: DistriPart) => p.part_type === 'text');
+        return textPart?.data as string | undefined;
+      }
+    }
+    return undefined;
+  }, [messages]);
+
+  const handleRetry = useCallback(() => {
+    if (lastUserMessage) {
+      setDismissedError(error?.message ?? null);
+      sendMessage([{ part_type: 'text', data: lastUserMessage }]);
+    }
+  }, [lastUserMessage, error, sendMessage]);
+
+  const handleDismissError = useCallback(() => {
+    setDismissedError(error?.message ?? null);
+  }, [error]);
+
+  // Reset dismissed error when error changes to something new
+  useEffect(() => {
+    if (error && error.message !== dismissedError) {
+      // New error appeared — don't auto-dismiss
+    }
+    if (!error) {
+      setDismissedError(null);
+    }
+  }, [error]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Get tool calls state from store
   const toolCalls = useChatStateStore((state) => state.toolCalls);
   const hasPendingToolCalls = useChatStateStore((state) => state.hasPendingToolCalls);
@@ -310,10 +347,10 @@ export function LucyChat({
     useChatStateStore.getState().resetStreamingStates();
   }, [stopStreaming]);
 
-  // Handle quick action click
+  // Handle quick action click — send structured prompt if available, fallback to label
   const handleQuickAction = useCallback(
     (action: QuickAction) => {
-      handleSend(action.label);
+      handleSend(action.prompt || action.label);
     },
     [handleSend]
   );
@@ -373,7 +410,7 @@ export function LucyChat({
     <div className={cn('flex flex-col h-full bg-background', className)}>
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto px-4 py-4 space-y-4">
+        <div className="max-w-3xl mx-auto px-3 py-2 space-y-2">
           {showWelcome ? (
             <LucyWelcome
               quickActions={quickActions}
@@ -382,11 +419,14 @@ export function LucyChat({
             />
           ) : isAutoAnalyzing && messages.length === 0 ? (
             /* Lucy "reviewing" indicator before first auto-analysis */
-            <div className="flex items-start gap-3 pt-4">
-              <LucyAvatar size="sm" />
-              <div className="flex-1 bg-muted/40 border border-border/50 rounded-2xl rounded-tl-sm px-4 py-3">
+            <div className="flex flex-col items-start gap-1 pt-2">
+              <div className="flex items-center gap-1.5">
+                <LucyAvatar size="xs" />
+                <span className="text-xs font-medium text-muted-foreground">Lucy</span>
+              </div>
+              <div className="border-l-2 border-[rgb(var(--theme-500))] pl-3 py-1">
                 <LucyTypingIndicator />
-                <p className="text-xs text-muted-foreground mt-1">Lucy is reviewing your dataset...</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Lucy is reviewing your dataset...</p>
               </div>
             </div>
           ) : (
@@ -412,10 +452,26 @@ export function LucyChat({
               {/* Render pending message */}
               <LucyPendingMessage pendingMessage={pendingMessage} />
 
-              {/* Error display */}
-              {error && (
-                <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-sm">
-                  {error.message}
+              {/* Error display with retry/dismiss */}
+              {showError && (
+                <div className="border-l-2 border-destructive pl-3 py-1.5 space-y-1.5">
+                  <p className="text-destructive text-sm">{error.message}</p>
+                  <div className="flex items-center gap-2">
+                    {lastUserMessage && (
+                      <button
+                        onClick={handleRetry}
+                        className="text-xs font-medium text-destructive hover:text-destructive/80 transition-colors"
+                      >
+                        Retry
+                      </button>
+                    )}
+                    <button
+                      onClick={handleDismissError}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
                 </div>
               )}
             </>

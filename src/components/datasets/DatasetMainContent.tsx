@@ -7,7 +7,7 @@
  */
 
 import { useState, useMemo, useCallback } from "react";
-import type { ViewMode } from "./dataset-detail-header/DatasetUtilityBar";
+import type { ViewMode } from "./dataset-detail-header/ViewModeToggle";
 import type { CoverageStats, DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import type { AvailableTopic } from "./record-utils";
 import { RecordsSectionHeader } from "./dataset-detail-header/RecordsSectionHeader";

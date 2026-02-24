@@ -7,7 +7,7 @@
 
 export function LucyTypingIndicator() {
   return (
-    <div className="flex items-center gap-2 px-3 py-2">
+    <div className="flex items-center gap-2 px-0 py-1">
       <div className="flex gap-1">
         <span
           className="w-1.5 h-1.5 rounded-full bg-[rgba(var(--theme-500),0.7)] animate-bounce"

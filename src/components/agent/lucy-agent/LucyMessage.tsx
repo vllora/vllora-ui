@@ -10,7 +10,6 @@ import { DistriChatMessage, DistriMessage, isDistriMessage } from '@distri/core'
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { LucyAvatar } from './LucyAvatar';
-import { UserAvatar } from './UserAvatar';
 import { cn } from '@/lib/utils';
 
 // ============================================================================
@@ -91,20 +90,15 @@ export function LucyMessage({ message, className }: LucyMessageProps) {
 
   if (isUser) {
     return (
-      <div className={cn('flex flex-col items-end gap-1', className)}>
-        {/* Header: timestamp + avatar */}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>You</span>
-          <span>•</span>
-          <span>{timeLabel}</span>
-          <UserAvatar size="sm" />
-        </div>
+      <div className={cn('flex flex-col items-start gap-1', className)}>
+        {/* Header — left-aligned, no avatar */}
+        <span className="text-xs font-medium text-muted-foreground">
+          You • {timeLabel}
+        </span>
 
-        {/* Message bubble */}
-        <div className="max-w-[85%] bg-[rgba(var(--theme-900),0.3)] border border-[rgba(var(--theme-800),0.3)] rounded-2xl rounded-tr-sm px-4 py-3">
-          <div className="text-sm text-foreground whitespace-pre-wrap">
-            {text}
-          </div>
+        {/* Message content — no bubble */}
+        <div className="text-sm text-foreground whitespace-pre-wrap overflow-hidden">
+          {text}
         </div>
       </div>
     );
@@ -113,16 +107,16 @@ export function LucyMessage({ message, className }: LucyMessageProps) {
   // Assistant message
   return (
     <div className={cn('flex flex-col items-start gap-1', className)}>
-      {/* Header: avatar + name + timestamp */}
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <LucyAvatar size="sm" />
-        <span className="font-medium text-foreground">Lucy</span>
-        <span>•</span>
-        <span>{timeLabel}</span>
+      {/* Header: tiny avatar + name + timestamp */}
+      <div className="flex items-center gap-1.5">
+        <LucyAvatar size="xs" />
+        <span className="text-xs font-medium text-muted-foreground">
+          Lucy • {timeLabel}
+        </span>
       </div>
 
-      {/* Message bubble */}
-      <div className="max-w-[85%] bg-muted/50 border border-border rounded-2xl rounded-tl-sm px-4 py-3 ml-8">
+      {/* Message content — no bubble */}
+      <div className="max-w-[100%] overflow-hidden">
         <div className="prose prose-sm prose-invert max-w-none text-sm">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>
             {text}

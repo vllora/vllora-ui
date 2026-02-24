@@ -199,14 +199,12 @@ export const LucyToolActions: React.FC<LucyToolActionsProps> = ({
   // Processing state - show spinner
   if (isProcessing) {
     return (
-      <div className="border border-border rounded-xl p-4 bg-muted/20">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-            <Loader2 className="h-5 w-5 text-blue-600 dark:text-blue-400 animate-spin" />
-          </div>
+      <div className="border-l-2 border-[rgb(var(--theme-500))] pl-3 py-1.5">
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-4 w-4 text-[rgb(var(--theme-500))] animate-spin shrink-0" />
           <div>
-            <div className="text-sm font-medium">Executing...</div>
-            <code className="text-xs text-muted-foreground font-mono">{toolName}</code>
+            <span className="text-xs font-medium">Executing...</span>
+            <code className="text-xs text-muted-foreground font-mono ml-1.5">{toolName}</code>
           </div>
         </div>
       </div>
@@ -219,37 +217,28 @@ export const LucyToolActions: React.FC<LucyToolActionsProps> = ({
     return (
       <div
         className={cn(
-          'border rounded-xl p-4',
+          'border-l pl-3 py-1.5',
           wasSuccessful
-            ? 'border-[rgba(var(--theme-200),1)] dark:border-[rgba(var(--theme-800),1)] bg-[rgba(var(--theme-50),0.5)] dark:bg-[rgba(var(--theme-900),0.1)]'
-            : 'border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/10'
+            ? 'border-[rgb(var(--theme-500))]'
+            : 'border-destructive'
         )}
       >
-        <div className="flex items-center gap-3 mb-3">
-          <div
-            className={cn(
-              'w-10 h-10 rounded-full flex items-center justify-center',
-              wasSuccessful ? 'bg-[rgba(var(--theme-100),1)] dark:bg-[rgba(var(--theme-900),0.3)]' : 'bg-red-100 dark:bg-red-900/30'
-            )}
-          >
-            {wasSuccessful ? (
-              <CheckCircle2 className="h-5 w-5 text-[rgb(var(--theme-600))] dark:text-[rgb(var(--theme-400))]" />
-            ) : (
-              <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
-            )}
-          </div>
-          <div>
-            <div className="text-sm font-medium">
-              {wasSuccessful ? 'Completed' : 'Failed'}
-            </div>
-            <code className="text-xs text-muted-foreground font-mono">{toolName}</code>
-          </div>
+        <div className="flex items-center gap-2">
+          {wasSuccessful ? (
+            <CheckCircle2 className="h-3.5 w-3.5 text-[rgb(var(--theme-500))] shrink-0" />
+          ) : (
+            <XCircle className="h-3.5 w-3.5 text-destructive shrink-0" />
+          )}
+          <span className="text-xs font-medium">
+            {wasSuccessful ? 'Completed' : 'Failed'}
+          </span>
+          <code className="text-xs text-muted-foreground font-mono">{toolName}</code>
         </div>
 
         {toolCallState?.result && (
-          <div className="mt-3">
-            <div className="text-xs font-medium text-muted-foreground mb-1">Result</div>
-            <pre className="text-xs bg-background/80 p-2 rounded-lg border overflow-x-auto max-h-32">
+          <div className="mt-1.5">
+            <div className="text-[11px] font-medium text-muted-foreground mb-0.5">Result</div>
+            <pre className="text-xs bg-zinc-900/50 p-2 rounded-md border border-border/50 overflow-x-auto max-h-32">
               {typeof toolCallState.result === 'string'
                 ? toolCallState.result
                 : JSON.stringify(toolCallState.result, null, 2)}
@@ -258,9 +247,9 @@ export const LucyToolActions: React.FC<LucyToolActionsProps> = ({
         )}
 
         {toolCallState?.error && (
-          <div className="mt-3">
-            <div className="text-xs font-medium text-red-600 dark:text-red-400 mb-1">Error</div>
-            <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded-lg border border-red-200 dark:border-red-800">
+          <div className="mt-1.5">
+            <div className="text-[11px] font-medium text-destructive mb-0.5">Error</div>
+            <div className="text-xs text-destructive">
               {toolCallState.error}
             </div>
           </div>
@@ -271,21 +260,19 @@ export const LucyToolActions: React.FC<LucyToolActionsProps> = ({
 
   // Pending state with action buttons
   return (
-    <div className="border border-[rgb(var(--theme-200))] dark:border-[rgb(var(--theme-800))] rounded-xl p-4 bg-[rgba(var(--theme-50),0.5)] dark:bg-[rgba(var(--theme-900),0.1)]">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="w-10 h-10 rounded-full bg-[rgb(var(--theme-100))] dark:bg-[rgba(var(--theme-900),0.3)] flex items-center justify-center">
-          <Wrench className="h-5 w-5 text-[rgb(var(--theme-600))] dark:text-[rgb(var(--theme-400))]" />
-        </div>
+    <div className="border-l-2 border-[rgb(var(--theme-500))] pl-3 py-2">
+      <div className="flex items-center gap-2 mb-3">
+        <Wrench className="h-4 w-4 text-[rgb(var(--theme-500))] shrink-0" />
         <div>
-          <div className="text-sm font-medium">Action Required</div>
-          <code className="text-xs text-muted-foreground font-mono">{toolName}</code>
+          <span className="text-xs font-medium">Action Required</span>
+          <code className="text-xs text-muted-foreground font-mono ml-1.5">{toolName}</code>
         </div>
       </div>
 
       {/* Editable input with JsonEditor */}
-      <div className="mb-4">
-        <div className="text-xs font-medium text-muted-foreground mb-1">Input</div>
-        <div className="rounded-lg border overflow-hidden h-[150px]">
+      <div className="mb-3">
+        <div className="text-[11px] font-medium text-muted-foreground mb-1">Input</div>
+        <div className="rounded-md border border-border/50 overflow-hidden h-[150px]">
           <JsonEditor
             value={editedInput}
             onChange={(value) => {

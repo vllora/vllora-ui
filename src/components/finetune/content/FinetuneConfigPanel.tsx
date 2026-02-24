@@ -134,11 +134,11 @@ export function FinetuneConfigPanel({ datasetId, canStartJob, initialConfig }: F
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header bar */}
       <TooltipProvider delayDuration={300}>
-        <div className="flex items-center gap-1 px-2 py-1 border-b border-zinc-800/60 bg-zinc-900/40 shrink-0">
-          <span className="text-xs font-medium text-zinc-400 px-1">Finetune Jobs</span>
+        <div className="flex items-center gap-1 px-2 py-1 border-b border-border bg-muted/40 shrink-0">
+          <span className="text-xs font-medium text-muted-foreground px-1">Finetune Jobs</span>
 
           {filteredJobs.length > 0 && (
-            <span className="px-1 py-0.5 rounded text-[10px] font-medium bg-zinc-800 text-zinc-400">
+            <span className="px-1 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground">
               {filteredJobs.length}
             </span>
           )}
@@ -146,7 +146,7 @@ export function FinetuneConfigPanel({ datasetId, canStartJob, initialConfig }: F
           {!canStartJob && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="flex items-center gap-1 ml-2 text-[10px] text-zinc-600">
+                <div className="flex items-center gap-1 ml-2 text-[10px] text-muted-foreground/50">
                   <AlertCircle className="h-3 w-3" />
                   <span>Prerequisites missing</span>
                 </div>
@@ -162,7 +162,7 @@ export function FinetuneConfigPanel({ datasetId, canStartJob, initialConfig }: F
           {/* Training config popover */}
           <Popover>
             <PopoverTrigger asChild>
-              <button className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors">
+              <button className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
                 <Settings className="w-3.5 h-3.5" />
               </button>
             </PopoverTrigger>
@@ -170,11 +170,11 @@ export function FinetuneConfigPanel({ datasetId, canStartJob, initialConfig }: F
               <div className="space-y-3">
                 {/* Base Model */}
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-medium text-zinc-500 uppercase tracking-wider">
+                  <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                     Base Model
                   </label>
                   <Select value={baseModel} onValueChange={setBaseModel}>
-                    <SelectTrigger className="h-8 bg-zinc-800/50 border-zinc-700/50 text-xs text-zinc-300 focus:ring-zinc-600 focus:ring-offset-0">
+                    <SelectTrigger className="h-8 bg-muted/50 border-border/50 text-xs text-foreground focus:ring-ring focus:ring-offset-0">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -190,7 +190,7 @@ export function FinetuneConfigPanel({ datasetId, canStartJob, initialConfig }: F
                 {/* Advanced */}
                 <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
                   <CollapsibleTrigger asChild>
-                    <button className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors">
+                    <button className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors">
                       <Settings2 className="h-3 w-3" />
                       Advanced
                       {showAdvanced ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
@@ -199,54 +199,54 @@ export function FinetuneConfigPanel({ datasetId, canStartJob, initialConfig }: F
                   <CollapsibleContent className="pt-2 space-y-2">
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
-                        <Label className="text-[10px] text-zinc-500">Learning Rate</Label>
+                        <Label className="text-[10px] text-muted-foreground">Learning Rate</Label>
                         <Input
                           type="number"
                           step="0.00001"
                           value={learningRate}
                           onChange={(e) => setLearningRate(e.target.value)}
-                          className="h-7 text-xs bg-zinc-800/50 border-zinc-700/50 text-zinc-300"
+                          className="h-7 text-xs bg-muted/50 border-border/50 text-foreground"
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-[10px] text-zinc-500">Epochs</Label>
+                        <Label className="text-[10px] text-muted-foreground">Epochs</Label>
                         <Input
                           type="number"
                           step="0.5"
                           value={epochs}
                           onChange={(e) => setEpochs(e.target.value)}
-                          className="h-7 text-xs bg-zinc-800/50 border-zinc-700/50 text-zinc-300"
+                          className="h-7 text-xs bg-muted/50 border-border/50 text-foreground"
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-[10px] text-zinc-500">Batch Size</Label>
+                        <Label className="text-[10px] text-muted-foreground">Batch Size</Label>
                         <Input
                           type="number"
                           value={batchSize}
                           onChange={(e) => setBatchSize(e.target.value)}
-                          className="h-7 text-xs bg-zinc-800/50 border-zinc-700/50 text-zinc-300"
+                          className="h-7 text-xs bg-muted/50 border-border/50 text-foreground"
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-[10px] text-zinc-500">LoRA Rank</Label>
+                        <Label className="text-[10px] text-muted-foreground">LoRA Rank</Label>
                         <Input
                           type="number"
                           value={loraRank}
                           onChange={(e) => setLoraRank(e.target.value)}
-                          className="h-7 text-xs bg-zinc-800/50 border-zinc-700/50 text-zinc-300"
+                          className="h-7 text-xs bg-muted/50 border-border/50 text-foreground"
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-[10px] text-zinc-500">Max Tokens</Label>
+                        <Label className="text-[10px] text-muted-foreground">Max Tokens</Label>
                         <Input
                           type="number"
                           value={maxOutputTokens}
                           onChange={(e) => setMaxOutputTokens(e.target.value)}
-                          className="h-7 text-xs bg-zinc-800/50 border-zinc-700/50 text-zinc-300"
+                          className="h-7 text-xs bg-muted/50 border-border/50 text-foreground"
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-[10px] text-zinc-500">Temperature</Label>
+                        <Label className="text-[10px] text-muted-foreground">Temperature</Label>
                         <Input
                           type="number"
                           step="0.1"
@@ -254,7 +254,7 @@ export function FinetuneConfigPanel({ datasetId, canStartJob, initialConfig }: F
                           max="2"
                           value={temperature}
                           onChange={(e) => setTemperature(e.target.value)}
-                          className="h-7 text-xs bg-zinc-800/50 border-zinc-700/50 text-zinc-300"
+                          className="h-7 text-xs bg-muted/50 border-border/50 text-foreground"
                         />
                       </div>
                     </div>
@@ -270,7 +270,7 @@ export function FinetuneConfigPanel({ datasetId, canStartJob, initialConfig }: F
               <button
                 onClick={() => loadJobs()}
                 disabled={isLoading}
-                className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               >
                 <RefreshCw className={cn("w-3.5 h-3.5", isLoading && "animate-spin")} />
               </button>
@@ -280,7 +280,7 @@ export function FinetuneConfigPanel({ datasetId, canStartJob, initialConfig }: F
             </TooltipContent>
           </Tooltip>
 
-          <div className="w-px h-3.5 bg-zinc-700/50 mx-0.5" />
+          <div className="w-px h-3.5 bg-border mx-0.5" />
 
           {/* Start Training */}
           <Tooltip>
@@ -291,8 +291,8 @@ export function FinetuneConfigPanel({ datasetId, canStartJob, initialConfig }: F
                 className={cn(
                   "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors",
                   canStart
-                    ? "text-[rgb(var(--theme-400))] hover:text-[rgb(var(--theme-300))] hover:bg-zinc-800"
-                    : "text-zinc-600 cursor-not-allowed"
+                    ? "text-[rgb(var(--theme-400))] hover:text-[rgb(var(--theme-300))] hover:bg-muted"
+                    : "text-muted-foreground/50 cursor-not-allowed"
                 )}
               >
                 {isSubmitting ? (

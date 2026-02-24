@@ -33,6 +33,7 @@ import { generateGraderTemplate } from './propose-plan/grader-template';
 
 // Side-effect import to ensure execution state store is listening for progress events
 import './execution-state-store';
+import { isExecutionCancelled, clearCancellation } from './execution-state-store';
 import { updatePlanStatus, completePlan as completePlanInDB, failPlan as failPlanInDB } from './proposed-plan-store';
 
 // =============================================================================
@@ -758,6 +759,20 @@ export const executePlanHandler: ToolHandler = async (
     // =========================================================================
     for (const stepId of STEP_ORDER) {
       if (!stepsToRun.has(stepId)) continue;
+
+      // Check cancellation before starting each step
+      if (isExecutionCancelled(dataset_id)) {
+        clearCancellation(dataset_id);
+        // Mark remaining steps as skipped
+        for (const s of progress.steps) {
+          if (s.status === 'pending') s.status = 'skipped';
+        }
+        progress.is_complete = true;
+        progress.has_error = true;
+        emitProgress(progress);
+        await failPlanInDB(dataset_id, progress);
+        throw new Error('Execution cancelled by user');
+      }
 
       const executor = STEP_REGISTRY[stepId];
       progress.current_step = STEP_ORDER.indexOf(stepId);

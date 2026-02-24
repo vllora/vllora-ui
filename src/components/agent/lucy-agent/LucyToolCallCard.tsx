@@ -51,20 +51,14 @@ export function LucyToolCallCard({ toolCall, state }: LucyToolCallCardProps) {
   // Pending/Running state
   if (state?.status === 'pending' || state?.status === 'running') {
     return (
-      <div className="my-2 p-3 rounded-lg border border-[rgba(var(--theme-500),0.2)] bg-[rgba(var(--theme-500),0.05)]">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[rgba(var(--theme-500),0.1)]">
-            <div className="animate-spin rounded-full h-4 w-4 border-2 border-[rgb(var(--theme-500))] border-t-transparent" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[rgba(var(--theme-500),0.2)] text-[rgb(var(--theme-400))]">
-                {toolCall.tool_name}
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-1 animate-pulse">{friendlyMessage}</p>
-          </div>
+      <div className="my-1 border-l-2 border-[rgb(var(--theme-500))] pl-3 py-1.5">
+        <div className="flex items-center gap-2">
+          <div className="animate-spin rounded-full h-4 w-4 border-2 border-[rgb(var(--theme-500))] border-t-transparent shrink-0" />
+          <span className="text-xs font-mono text-[rgb(var(--theme-400))]">
+            {toolCall.tool_name}
+          </span>
         </div>
+        <p className="text-xs text-muted-foreground mt-0.5 animate-pulse">{friendlyMessage}</p>
       </div>
     );
   }
@@ -72,51 +66,45 @@ export function LucyToolCallCard({ toolCall, state }: LucyToolCallCardProps) {
   // Completed state
   if (state?.status === 'completed') {
     return (
-      <div className="my-1 rounded-lg border border-border/50 bg-muted/30 overflow-hidden">
+      <div className="my-1 border-l border-border/40 pl-3 overflow-hidden">
         {/* Header */}
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="w-full p-2 flex items-center gap-3 hover:bg-muted/50 transition-colors"
+          className="w-full py-1 flex items-center gap-2 hover:bg-muted/30 transition-colors -ml-3 pl-3 pr-1"
         >
-          <div className="flex items-center justify-center w-5 h-5 rounded-full bg-[rgba(var(--theme-500),0.1)]">
-            <CheckCircle className="w-3 h-3 text-[rgb(var(--theme-500))]" />
-          </div>
-          <div className="flex-1 min-w-0 text-left">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-mono px-2 py-0.5 rounded-full text-[12px] text-gray-400">
-                {toolCall.tool_name}
-              </span>
-              {!!executionTime && executionTime >= 500 && (
-                <span className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  {executionTime >= 1000
-                    ? `${(executionTime / 1000).toFixed(1)}s`
-                    : `${executionTime}ms`}
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <CheckCircle className="w-3 h-3 text-[rgb(var(--theme-500))] shrink-0" />
+          <span className="text-xs font-mono text-muted-foreground">
+            {toolCall.tool_name}
+          </span>
+          {!!executionTime && executionTime >= 500 && (
+            <span className="text-xs text-muted-foreground/60 flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {executionTime >= 1000
+                ? `${(executionTime / 1000).toFixed(1)}s`
+                : `${executionTime}ms`}
+            </span>
+          )}
+          <div className="ml-auto flex items-center text-xs text-muted-foreground">
             {isExpanded ? (
-              <ChevronDown className="h-4 w-4" />
+              <ChevronDown className="h-3.5 w-3.5" />
             ) : (
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-3.5 w-3.5" />
             )}
           </div>
         </button>
 
         {/* Expandable Content */}
         {isExpanded && (
-          <div className="border-t border-border/50 p-3 bg-muted/20">
-            <div className="mb-3 flex items-center gap-2">
+          <div className="border-t border-border/30 pt-2 pb-1 mt-1">
+            <div className="mb-2 flex items-center gap-1.5">
               {(['output', 'input'] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className={cn(
-                    'text-xs px-3 py-1.5 rounded-md font-medium transition-colors',
+                    'text-xs px-2.5 py-1 rounded-md font-medium transition-colors',
                     activeTab === tab
-                      ? 'bg-[rgb(var(--theme-600))] text-white shadow-sm'
+                      ? 'bg-[rgb(var(--theme-600))] text-white'
                       : 'bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80'
                   )}
                 >
@@ -124,7 +112,7 @@ export function LucyToolCallCard({ toolCall, state }: LucyToolCallCardProps) {
                 </button>
               ))}
             </div>
-            <div className="rounded-md border border-border/50 bg-zinc-900/50 p-2 max-h-64 overflow-auto">
+            <div className="rounded-md border border-border/50 bg-muted/50 p-2 max-h-64 overflow-auto">
               <JsonViewer
                 data={activeTab === 'input' ? toolCall.input : getResultData()}
                 collapsed={5}
@@ -140,25 +128,19 @@ export function LucyToolCallCard({ toolCall, state }: LucyToolCallCardProps) {
   // Error state
   if (state?.status === 'error') {
     return (
-      <div className="my-2 p-3 rounded-lg border border-destructive/30 bg-destructive/5">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-destructive/10">
-            <XCircle className="w-4 h-4 text-destructive" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-destructive/20 text-destructive">
-                {toolCall.tool_name}
-              </span>
-            </div>
-            <p className="text-sm text-destructive mt-1">
-              {friendlyMessage.replace('...', '')} failed
-            </p>
-            {state.error && (
-              <p className="text-xs text-muted-foreground mt-1 truncate">{state.error}</p>
-            )}
-          </div>
+      <div className="my-1 border-l-2 border-destructive pl-3 py-1.5">
+        <div className="flex items-center gap-2">
+          <XCircle className="w-4 h-4 text-destructive shrink-0" />
+          <span className="text-xs font-mono text-destructive">
+            {toolCall.tool_name}
+          </span>
         </div>
+        <p className="text-xs text-destructive mt-0.5">
+          {friendlyMessage.replace('...', '')} failed
+        </p>
+        {state.error && (
+          <p className="text-xs text-muted-foreground mt-0.5 truncate">{state.error}</p>
+        )}
       </div>
     );
   }

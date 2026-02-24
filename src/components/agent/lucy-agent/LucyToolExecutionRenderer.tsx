@@ -32,7 +32,7 @@ export function LucyToolExecutionRenderer({ event, toolRenderers }: LucyToolExec
   if (toolCalls.length === 0) return null;
 
   return (
-    <div className="">
+    <div className="border-l border-border/40 pl-3 ml-1">
       {toolCalls
         .filter((tc: any) => tc.tool_name !== 'final')
         .map((toolCall: any) => {

@@ -10,7 +10,7 @@
 
 import { useCallback, useRef, useState, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Trash2, ChevronRight, Coins, MessageSquare } from "lucide-react";
+import { Trash2, ChevronRight, Coins, MessageSquare, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -101,6 +101,12 @@ function CompactRecordRow({ record, onDelete, onSelectRecord }: { record: Datase
       {/* Stats footer */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3 text-[10px] tabular-nums text-muted-foreground/50">
+          {record.is_generated && (
+            <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-medium bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]">
+              <Sparkles className="w-2 h-2" />
+              AI
+            </span>
+          )}
           <span className="flex items-center gap-1">
             <Coins className="w-2.5 h-2.5" />
             {tokens.toLocaleString()}

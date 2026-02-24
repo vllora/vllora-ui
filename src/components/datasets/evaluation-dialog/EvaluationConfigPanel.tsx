@@ -287,16 +287,16 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
           <div className="flex flex-col h-full">
             {/* Editor header bar */}
             <TooltipProvider delayDuration={300}>
-            <div className="flex items-center gap-1 px-2 py-1 border-b border-zinc-800/60 bg-zinc-900/40 shrink-0">
-              <span className="text-xs font-medium text-zinc-400 px-1">Grader Script</span>
+            <div className="flex items-center gap-1 px-2 py-1 border-b border-border bg-muted/40 shrink-0">
+              <span className="text-xs font-medium text-muted-foreground px-1">Grader Script</span>
               {!hideHeaderActions && (
                 <>
-                  <div className="w-px h-3.5 bg-zinc-700/50 mx-1" />
+                  <div className="w-px h-3.5 bg-border mx-1" />
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
                         onClick={handleLoadTemplate}
-                        className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+                        className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                       >
                         <FileCode2 className="w-3.5 h-3.5" />
                       </button>
@@ -309,7 +309,7 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
                     <TooltipTrigger asChild>
                       <button
                         onClick={handleCopy}
-                        className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+                        className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                       >
                         <Copy className="w-3.5 h-3.5" />
                       </button>
@@ -325,14 +325,14 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
               {/* Dry run config popover */}
               <Popover>
                 <PopoverTrigger asChild>
-                  <button className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors">
+                  <button className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
                     <Settings className="w-3.5 h-3.5" />
                   </button>
                 </PopoverTrigger>
                 <PopoverContent side="bottom" align="end" className="w-64 p-3">
                   <div className="space-y-3">
                     <div className="space-y-1.5">
-                      <label className="text-[11px] font-medium text-zinc-500 uppercase tracking-wider">
+                      <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                         Sample Size
                       </label>
                       <div className="flex gap-1">
@@ -343,24 +343,24 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
                             className={cn(
                               "px-2.5 py-1 rounded text-xs font-medium transition-colors",
                               sampleSize === option.value
-                                ? "bg-zinc-700 text-zinc-100"
-                                : "bg-zinc-800/50 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+                                ? "bg-muted text-foreground"
+                                : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
                             )}
                           >
                             {option.label}
                           </button>
                         ))}
                       </div>
-                      <p className="text-[10px] text-zinc-600">
+                      <p className="text-[10px] text-muted-foreground/50">
                         {recordCount.toLocaleString()} records available
                       </p>
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-[11px] font-medium text-zinc-500 uppercase tracking-wider">
+                      <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                         Rollout Model
                       </label>
                       <Select value={rolloutModel} onValueChange={setRolloutModel}>
-                        <SelectTrigger className="h-8 bg-zinc-800/50 border-zinc-700/50 text-xs text-zinc-300 focus:ring-zinc-600 focus:ring-offset-0">
+                        <SelectTrigger className="h-8 bg-muted/50 border-border/50 text-xs text-foreground focus:ring-ring focus:ring-offset-0">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -385,8 +385,8 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
                     className={cn(
                       "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors",
                       hasGraderConfig && !runningJob
-                        ? "text-[rgb(var(--theme-400))] hover:text-[rgb(var(--theme-300))] hover:bg-zinc-800"
-                        : "text-zinc-600 cursor-not-allowed"
+                        ? "text-[rgb(var(--theme-400))] hover:text-[rgb(var(--theme-300))] hover:bg-muted"
+                        : "text-muted-foreground/50 cursor-not-allowed"
                     )}
                   >
                     {runningJob ? (
@@ -402,7 +402,7 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
                 </TooltipContent>
               </Tooltip>
 
-              <div className="w-px h-3.5 bg-zinc-700/50 mx-0.5" />
+              <div className="w-px h-3.5 bg-border mx-0.5" />
 
               {/* Save button */}
               <button
@@ -411,8 +411,8 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
                 className={cn(
                   "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-colors",
                   hasChanges
-                    ? "text-[rgb(var(--theme-400))] hover:text-[rgb(var(--theme-300))] hover:bg-zinc-800"
-                    : "text-zinc-600 cursor-default"
+                    ? "text-[rgb(var(--theme-400))] hover:text-[rgb(var(--theme-300))] hover:bg-muted"
+                    : "text-muted-foreground/50 cursor-default"
                 )}
               >
                 {isSaving ? (

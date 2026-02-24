@@ -36,23 +36,23 @@ export function LucyAssistantMessage({ message }: LucyAssistantMessageProps) {
   if (!content.text && content.imageParts.length === 0) return null;
 
   return (
-    <div className="flex flex-col items-start gap-2">
-      {/* Header */}
-      <div className="flex items-center gap-2">
-        <LucyAvatar size="sm" />
-        <span className="text-xs font-mono text-muted-foreground">
+    <div className="flex flex-col items-start gap-1">
+      {/* Header — tiny avatar + label */}
+      <div className="flex items-center gap-1.5">
+        <LucyAvatar size="xs" />
+        <span className="text-xs font-medium text-muted-foreground">
           Lucy {timestamp && <span>• {timestamp}</span>}
         </span>
       </div>
 
-      {/* Message content */}
+      {/* Message content — no bubble */}
       <div className="max-w-[100%]">
         {/* Step indicator */}
         {step && <LucyStepIndicator step={step} />}
 
         {/* Text content */}
         {content.text && (
-          <div className="bg-muted/40 border border-border/50 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm overflow-hidden">
+          <div className="overflow-hidden">
             <LucyTextRenderer text={content.text} isStreaming={isStreaming} />
           </div>
         )}

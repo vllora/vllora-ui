@@ -87,8 +87,8 @@ export function LucyMessageRenderer({
 
       case 'agent_handover':
         return (
-          <div key={`handover-${index}`} className="p-3 bg-muted rounded-lg border">
-            <div className="text-sm text-muted-foreground">
+          <div key={`handover-${index}`} className="border-l-2 border-[rgb(var(--theme-500))] pl-3 py-1">
+            <div className="text-xs text-muted-foreground">
               <strong>Handover to:</strong> {event.data?.to_agent || 'unknown agent'}
             </div>
           </div>
@@ -98,9 +98,9 @@ export function LucyMessageRenderer({
         return (
           <div
             key={`run-error-${index}`}
-            className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg"
+            className="border-l-2 border-destructive pl-3 py-1.5"
           >
-            <div className="text-sm text-destructive">
+            <div className="text-xs text-destructive">
               <strong>Error:</strong> {event.data?.message || 'Unknown error occurred'}
             </div>
           </div>

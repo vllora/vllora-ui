@@ -29,7 +29,7 @@ import {
   failPlan,
   type PlanStatus,
 } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
-import { getCurrentExecution, getExecutingPlan } from "@/lib/distri-finetune-tools/steps/execution-state-store";
+import { getCurrentExecution, getExecutingPlan, cancelExecution as cancelExecutionInStore } from "@/lib/distri-finetune-tools/steps/execution-state-store";
 import type { Plan } from "@/lib/distri-finetune-tools/steps/propose-plan";
 import { STEP_ORDER, validatePlanForExecution } from "@/lib/distri-finetune-tools/steps/execute-plan";
 import type { ExecutionProgress, ExecutionStepId } from "@/lib/distri-finetune-tools/steps/execute-plan";
@@ -79,6 +79,7 @@ interface PlanContextType {
   setPlanEditMode: (mode: "display" | "edit") => void;
   approvePlan: (plan: Plan) => void;
   dismissPlan: () => void;
+  cancelExecution: () => void;
 }
 
 // ============================================================================
@@ -366,6 +367,11 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
     setIsPlanPreviewActive(false);
   }, [datasetId]);
 
+  const cancelExecution = useCallback(() => {
+    cancelExecutionInStore(datasetId);
+    toast.info("Cancelling execution after current step completes...");
+  }, [datasetId]);
+
   const value: PlanContextType = {
     planStatus,
     isLoadingPlan,
@@ -382,6 +388,7 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
     setPlanEditMode,
     approvePlan,
     dismissPlan,
+    cancelExecution,
   };
 
   return (

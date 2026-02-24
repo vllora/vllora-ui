@@ -12,7 +12,7 @@
  */
 
 import { useMemo, useCallback, useState, useEffect, useRef } from "react";
-import { Plus, PanelLeftClose, PanelLeft, Settings2, Plug, Rocket, BarChart3, TrendingUp, Sparkles, Scale, FlaskConical } from "lucide-react";
+import { Plus, PanelLeftClose, PanelLeft, Settings2, Plug, Rocket, BarChart3, TrendingUp, Sparkles, Scale, FlaskConical, Pin, PinOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LoadingIndicator } from "@/components/ui/LoadingIndicator";
 import { emitter } from "@/utils/eventEmitter";
@@ -44,19 +44,22 @@ import type { QuickAction } from "@/components/agent/lucy-agent/LucyWelcome";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { buildDatasetAnalysisPrompt } from "./lucy-prompt-utils";
+import { SidebarTabStrip, DatasetExplorer } from "./sidebar";
+import type { SidebarTab } from "./sidebar";
 
 // Icon size for quick actions
 const QA_ICON = "w-4 h-4";
 
 // All available quick actions (plain language for non-technical users)
+// `prompt` is what Lucy receives; `label` is what the user sees on the button
 const ALL_QUICK_ACTIONS: Record<string, QuickAction> = {
-  "start-finetune": { id: "start-finetune", icon: <Rocket className={QA_ICON} />, label: "Start training setup" },
-  "check-status": { id: "check-status", icon: <BarChart3 className={QA_ICON} />, label: "Check progress" },
-  "analyze-coverage": { id: "analyze-coverage", icon: <TrendingUp className={QA_ICON} />, label: "Check data variety" },
-  "generate-data": { id: "generate-data", icon: <Sparkles className={QA_ICON} />, label: "Create more training examples" },
-  "configure-grader": { id: "configure-grader", icon: <Scale className={QA_ICON} />, label: "Set up quality scoring" },
-  "run-dry-run": { id: "run-dry-run", icon: <FlaskConical className={QA_ICON} />, label: "Test before training" },
-  "start-training": { id: "start-training", icon: <Rocket className={QA_ICON} />, label: "Start training" },
+  "start-finetune": { id: "start-finetune", icon: <Rocket className={QA_ICON} />, label: "Start training setup", prompt: "Help me set up fine-tuning for this dataset. Analyze what I have and create a plan." },
+  "check-status": { id: "check-status", icon: <BarChart3 className={QA_ICON} />, label: "Check progress", prompt: "What's the current status of my fine-tuning workflow? Summarize where I am and what's next." },
+  "analyze-coverage": { id: "analyze-coverage", icon: <TrendingUp className={QA_ICON} />, label: "Check data variety", prompt: "Analyze the topic coverage and balance of my training data. Are there any gaps?" },
+  "generate-data": { id: "generate-data", icon: <Sparkles className={QA_ICON} />, label: "Create more examples", prompt: "Generate more synthetic training examples to improve coverage and balance." },
+  "configure-grader": { id: "configure-grader", icon: <Scale className={QA_ICON} />, label: "Set up evaluation", prompt: "Help me configure an evaluation grader to score the quality of my training data." },
+  "run-dry-run": { id: "run-dry-run", icon: <FlaskConical className={QA_ICON} />, label: "Test before training", prompt: "Run a dry run evaluation on a sample of my data to check quality before training." },
+  "start-training": { id: "start-training", icon: <Rocket className={QA_ICON} />, label: "Start training", prompt: "Start the fine-tuning training job with my current dataset configuration." },
 };
 
 /** Return context-appropriate quick actions based on workflow state */
@@ -103,13 +106,34 @@ const BREAKPOINT_WIDE = 1536;
 
 export function LucyDatasetAssistant() {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isPinned, setIsPinned] = useState(() => localStorage.getItem("lucy-sidebar-pinned") === "true");
+  const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab>("lucy");
   const [sidebarWidthClass, setSidebarWidthClass] = useState(SIDEBAR_WIDTH_WIDE);
 
-  // Auto-collapse on narrow viewports, adjust width on resize
+  // Connection timeout state
+  const [connectionTimedOut, setConnectionTimedOut] = useState(false);
+  const connectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Unread message tracking for collapsed sidebar indicator
+  const [unreadCount, setUnreadCount] = useState(0);
+  const collapsedMessageCountRef = useRef(0);
+  const isCollapsedRef = useRef(isCollapsed);
+  isCollapsedRef.current = isCollapsed;
+
+  // Persist pin state to localStorage
+  const togglePin = useCallback(() => {
+    setIsPinned((prev) => {
+      const next = !prev;
+      localStorage.setItem("lucy-sidebar-pinned", String(next));
+      return next;
+    });
+  }, []);
+
+  // Auto-collapse on narrow viewports (unless pinned), adjust width on resize
   useEffect(() => {
     const handleResize = () => {
       const width = window.innerWidth;
-      if (width < BREAKPOINT_COLLAPSE) {
+      if (width < BREAKPOINT_COLLAPSE && !isPinned) {
         setIsCollapsed(true);
       }
       setSidebarWidthClass(width >= BREAKPOINT_WIDE ? SIDEBAR_WIDTH_WIDE : SIDEBAR_WIDTH_STANDARD);
@@ -118,7 +142,7 @@ export function LucyDatasetAssistant() {
     handleResize(); // Set initial state
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [isPinned]);
 
   // Get dataset from context (rendered inside DatasetDetailProvider)
   const { dataset: currentDataset, datasetId: selectedDatasetId, isLoading: datasetLoading, records, activeSection } = DatasetDetailConsumer();
@@ -127,7 +151,18 @@ export function LucyDatasetAssistant() {
   // Lucy agent state
   const { isConnected, reconnect } = useDistriConnection();
   const { providers, loading: providersLoading } = ProviderKeysConsumer();
-  const { planStatus, executionProgress, proposedPlan } = PlanConsumer();
+  const { planStatus, executionProgress, proposedPlan, isGeneratingPlan, isExecuting } = PlanConsumer();
+
+  // Connection timeout: 15s to detect stalled connections
+  useEffect(() => {
+    if (isConnected) {
+      setConnectionTimedOut(false);
+      if (connectionTimerRef.current) clearTimeout(connectionTimerRef.current);
+      return;
+    }
+    connectionTimerRef.current = setTimeout(() => setConnectionTimedOut(true), 15000);
+    return () => { if (connectionTimerRef.current) clearTimeout(connectionTimerRef.current); };
+  }, [isConnected]);
 
   // Use finetune agent when viewing a specific dataset
   const {
@@ -147,6 +182,23 @@ export function LucyDatasetAssistant() {
     planStatus,
     executionProgress,
   });
+
+  // Track unread messages while sidebar is collapsed
+  // When collapsing: snapshot the current count. When expanding: reset unread.
+  useEffect(() => {
+    if (isCollapsed) {
+      collapsedMessageCountRef.current = messages.length;
+    } else {
+      setUnreadCount(0);
+    }
+  }, [isCollapsed]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Update unread count when messages change while collapsed
+  useEffect(() => {
+    if (isCollapsedRef.current && messages.length > collapsedMessageCountRef.current) {
+      setUnreadCount(messages.length - collapsedMessageCountRef.current);
+    }
+  }, [messages.length]);
 
   // Auto-trigger prompt for proactive analysis
   const [autoTriggerPrompt, setAutoTriggerPrompt] = useState<string | null>(null);
@@ -274,8 +326,9 @@ export function LucyDatasetAssistant() {
   // Listen for external prompt triggers (e.g., "Generate for topic" button)
   useEffect(() => {
     const handleLucyPrompt = ({ prompt }: { prompt: string }) => {
-      // Expand the sidebar if collapsed
+      // Expand the sidebar and switch to Lucy tab
       setIsCollapsed(false);
+      setActiveSidebarTab("lucy");
       // Clear first, then set - ensures re-trigger even if same prompt
       setAutoTriggerPrompt(null);
       // Use setTimeout to ensure the clear happens before setting new value
@@ -442,7 +495,7 @@ export function LucyDatasetAssistant() {
         />
       ) : isConnected && agent ? (
         <div className="flex flex-col h-full min-h-0">
-          {!!proposedPlan && planStatus === 'proposed' && messages.length === 0 && (
+          {!!proposedPlan && planStatus === 'proposed' && (
             <div className="px-3 pt-3 shrink-0">
               <PlanCard />
             </div>
@@ -455,19 +508,33 @@ export function LucyDatasetAssistant() {
             beforeSendMessage={handleBeforeSendMessage}
             toolRenderers={toolRenderers}
             quickActions={contextualQuickActions}
-            proactivePrompt="Hi! I'm Lucy, your fine-tuning assistant. I'll help you prepare training data, configure evaluation, and train your model. Let me take a look at your dataset..."
+            proactivePrompt="Hi! I'm Lucy, your fine-tuning assistant. I can help you organize training data, set up evaluation criteria, and run training jobs. What would you like to work on?"
             autoTriggerPrompt={autoTriggerPrompt}
             activeSection={activeSection}
           />
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center h-full gap-3">
-          <Plug className="h-6 w-6 text-muted-foreground animate-pulse" />
-          <LoadingIndicator
-            variant="progress"
-            message="Connecting..."
-            submessage="Establishing connection to the assistant"
-          />
+          <Plug className={cn("h-6 w-6 text-muted-foreground", !connectionTimedOut && "animate-pulse")} />
+          {connectionTimedOut ? (
+            <>
+              <p className="text-sm font-medium text-foreground">Connection timed out</p>
+              <p className="text-xs text-muted-foreground text-center px-6">Could not reach the assistant server. Check your connection and try again.</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { setConnectionTimedOut(false); reconnect(); }}
+              >
+                Retry
+              </Button>
+            </>
+          ) : (
+            <LoadingIndicator
+              variant="progress"
+              message="Connecting..."
+              submessage="Establishing connection to the assistant"
+            />
+          )}
         </div>
       )}
     </>
@@ -504,6 +571,32 @@ export function LucyDatasetAssistant() {
                 <TooltipContent side="right">Expand Lucy Assistant</TooltipContent>
               </Tooltip>
             </TooltipProvider>
+
+            {/* Collapsed activity indicators */}
+            {(agentLoading || isGeneratingPlan || isExecuting) && (
+              <span className="w-2.5 h-2.5 rounded-full bg-[rgb(var(--theme-500))] animate-pulse" />
+            )}
+            {isExecuting && executionProgress && (
+              <span className="text-[10px] font-medium text-muted-foreground tabular-nums">
+                {executionProgress.current_step}/{executionProgress.total_steps}
+              </span>
+            )}
+            {unreadCount > 0 && !isExecuting && (
+              <TooltipProvider delayDuration={300}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setIsCollapsed(false)}
+                      className="flex items-center justify-center w-5 h-5 rounded-full bg-[rgb(var(--theme-500))] text-white text-[10px] font-bold"
+                    >
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">{unreadCount} new message{unreadCount !== 1 ? "s" : ""}</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+
             <TooltipProvider delayDuration={300}>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -521,38 +614,47 @@ export function LucyDatasetAssistant() {
             </TooltipProvider>
           </>
         ) : (
-          // Expanded header
+          // Expanded header: tab strip + action buttons
           <>
-            <div className="flex items-center gap-2.5">
-              <LucyAvatar size="sm" />
-              <span className="font-semibold text-sm">Lucy Assistant</span>
-              <TooltipProvider delayDuration={300}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[rgba(var(--theme-500),0.2)] text-[rgb(var(--theme-400))] border border-[rgba(var(--theme-500),0.3)] uppercase tracking-wide cursor-help">
-                      Beta
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="text-xs max-w-[220px]">
-                    Lucy is in beta. AI-generated content should be reviewed for accuracy.
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+            <div className="flex-1 min-w-0">
+              <SidebarTabStrip
+                activeTab={activeSidebarTab}
+                onTabChange={setActiveSidebarTab}
+                lucyUnreadCount={activeSidebarTab !== "lucy" ? unreadCount : 0}
+                lucyProcessing={agentLoading || isGeneratingPlan || isExecuting}
+              />
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-0.5 px-1 shrink-0">
+              {activeSidebarTab === "lucy" && (
+                <TooltipProvider delayDuration={300}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={handleNewChat}
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">New Chat</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
               <TooltipProvider delayDuration={300}>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7"
-                      onClick={handleNewChat}
+                      className={cn("h-7 w-7", isPinned && "text-[rgb(var(--theme-500))]")}
+                      onClick={togglePin}
                     >
-                      <Plus className="h-3.5 w-3.5" />
+                      {isPinned ? <Pin className="h-3.5 w-3.5" /> : <PinOff className="h-3.5 w-3.5" />}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom">New Chat</TooltipContent>
+                  <TooltipContent side="bottom">{isPinned ? "Unpin sidebar" : "Pin sidebar open"}</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
               <TooltipProvider delayDuration={300}>
@@ -575,12 +677,23 @@ export function LucyDatasetAssistant() {
         )}
       </div>
 
-      {/* Chat Content - hidden when collapsed but stays mounted */}
+      {/* Content - hidden when collapsed but stays mounted */}
       <div className={cn(
         "flex-1 flex flex-col min-h-0 overflow-hidden transition-all duration-200",
         isCollapsed && "hidden"
       )}>
-        {chatContent}
+        {/* Explorer panel */}
+        {activeSidebarTab === "explorer" && (
+          <DatasetExplorer onNavigate={() => {}} />
+        )}
+
+        {/* Lucy chat panel — always mounted to preserve state, hidden when Explorer active */}
+        <div className={cn(
+          "flex-1 flex flex-col min-h-0",
+          activeSidebarTab !== "lucy" && "hidden"
+        )}>
+          {chatContent}
+        </div>
       </div>
     </div>
   );

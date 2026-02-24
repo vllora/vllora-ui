@@ -17,6 +17,9 @@ const executionStore = new Map<string, ExecutionProgress>();
 // Store the plan being executed (so we can show it during execution)
 const executingPlanStore = new Map<string, Plan>();
 
+// Cancellation flags — checked between steps during execution
+const cancelledDatasets = new Set<string>();
+
 /**
  * Get current execution progress for a dataset
  */
@@ -52,6 +55,28 @@ export function getExecutingPlan(datasetId: string): Plan | null {
  */
 export function setExecutingPlan(datasetId: string, plan: Plan): void {
   executingPlanStore.set(datasetId, plan);
+}
+
+/**
+ * Request cancellation of an active execution.
+ * The execution loop checks this flag between steps.
+ */
+export function cancelExecution(datasetId: string): void {
+  cancelledDatasets.add(datasetId);
+}
+
+/**
+ * Check if execution has been cancelled for a dataset.
+ */
+export function isExecutionCancelled(datasetId: string): boolean {
+  return cancelledDatasets.has(datasetId);
+}
+
+/**
+ * Clear the cancellation flag (called after the execution loop acknowledges it).
+ */
+export function clearCancellation(datasetId: string): void {
+  cancelledDatasets.delete(datasetId);
 }
 
 // Subscribe to progress events and update the store (write-through to IndexedDB)
