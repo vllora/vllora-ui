@@ -16,7 +16,7 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 │  DatasetsUIContext        ←─ listens ── events ──┤           │
 │  DatasetDetailContext     ←─ listens ── events ──┤           │
 │  KnowledgeSourcesContext  ←─ listens ── events ──┤           │
-│  SetupPlanContext         ←─ listens ── events ──┤           │
+│  PlanContext         ←─ listens ── events ──┤           │
 │  DryRunJobsContext        ←─ listens ── events ──┤           │
 │  FinetuneJobsContext      ←─ listens ── events ──┤           │
 │                                                  │           │
@@ -44,15 +44,15 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 ┌──────────────────────────────────────────────────┤───────────┐
 │  Tool Handlers & Services (outside React)        │           │
 │                                                  │           │
-│  propose-setup-plan       ── emits ──► events ───┤           │
-│  execute-setup-plan       ── emits ──► events ───┤           │
+│  propose-plan       ── emits ──► events ───┤           │
+│  execute-plan       ── emits ──► events ───┤           │
 │  generate-initial-data    ── emits ──► events ───┤           │
 │  knowledge-sources        ── emits ──► events ───┤           │
 │  categorize-records       ── emits ──► events ───┤           │
 │  datasets-db (service)    ── emits ──► events ───┘           │
 │  dry-run-jobs-db          ── emits ──► events                │
 │  execution-state-store    ←─ listens ── events               │
-│  execute-setup-plan       ←─ listens ── events               │
+│  execute-plan       ←─ listens ── events               │
 │                                                              │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -74,8 +74,8 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 **Emitters (~10 emit sites across 7 files):**
 | File | When |
 |------|------|
-| `PlanEmptyState.tsx` | User clicks "Generate Setup Plan" |
-| `PlanSection.tsx` | User approves plan → sends execute prompt |
+| `PlanEmptyState.tsx` | User clicks "Generate Plan" |
+| `PlanPreview.tsx` | User approves plan → sends execute prompt |
 | `PlanCompletedState.tsx` | User clicks "Generate New Plan" |
 | `DatasetDetailContentV2.tsx` | Auto-plan trigger after docs finish processing |
 | `DatasetDetailContentV2.tsx` | Timeout fallback if docs processing takes >60s |
@@ -114,7 +114,7 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 
 ---
 
-### 3. `vllora_setup_plan_generating`
+### 3. `vllora_plan_generating`
 
 **Purpose:** Signal that plan generation has started (show loading UI).
 
@@ -126,43 +126,43 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 **Emitters:**
 | File | When |
 |------|------|
-| `propose-setup-plan/handler.ts` (tool) | LLM starts generating plan |
-| `propose-setup-plan/adjust-plan.ts` (tool) | LLM starts adjusting existing plan |
+| `propose-plan/handler.ts` (tool) | LLM starts generating plan |
+| `propose-plan/adjust-plan.ts` (tool) | LLM starts adjusting existing plan |
 | `empty-dataset-state/index.tsx` | Immediately when creating dataset with files |
 
 **Listeners:**
 | File | What it does |
 |------|-------------|
-| `SetupPlanContext.tsx` | Sets `isGeneratingPlan=true` |
+| `PlanContext.tsx` | Sets `isGeneratingPlan=true` |
 | `DatasetDetailContentV2.tsx` | Auto-switches to Plan tab |
 | `PlanEmptyState.tsx` | Clears "Waiting for Lucy..." loading state |
 
 ---
 
-### 4. `vllora_setup_plan_proposed`
+### 4. `vllora_plan_proposed`
 
-**Purpose:** A setup plan is ready for user review.
+**Purpose:** A plan is ready for user review.
 
 | | Details |
 |---|---|
-| **Data** | `{ datasetId: string; plan: SetupPlan }` |
+| **Data** | `{ datasetId: string; plan: Plan }` |
 | **Direction** | Tool handler → React |
 
 **Emitters:**
 | File | When |
 |------|------|
-| `propose-setup-plan/handler.ts` (tool) | Plan generated successfully |
-| `propose-setup-plan/adjust-plan.ts` (tool) | Adjusted plan ready |
+| `propose-plan/handler.ts` (tool) | Plan generated successfully |
+| `propose-plan/adjust-plan.ts` (tool) | Adjusted plan ready |
 
 **Listeners:**
 | File | What it does |
 |------|-------------|
-| `SetupPlanContext.tsx` | Clears loading state, sets `hasPlanProposed=true` |
-| `PlanSection.tsx` | Displays SetupPlanEditor with the plan |
+| `PlanContext.tsx` | Clears loading state, sets `hasPlanProposed=true` |
+| `PlanPreview.tsx` | Displays PlanEditor with the plan |
 
 ---
 
-### 5. `vllora_setup_plan_dismissed`
+### 5. `vllora_plan_dismissed`
 
 **Purpose:** Plan was dismissed (user discarded or docs not ready).
 
@@ -174,41 +174,41 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 **Emitters:**
 | File | When |
 |------|------|
-| `PlanSection.tsx` | User clicks "Discard Plan" |
-| `propose-setup-plan/handler.ts` (tool) | Docs still processing, can't generate yet |
+| `PlanPreview.tsx` | User clicks "Discard Plan" |
+| `propose-plan/handler.ts` (tool) | Docs still processing, can't generate yet |
 
 **Listeners:**
 | File | What it does |
 |------|-------------|
-| `SetupPlanContext.tsx` | Clears generating/proposed state |
-| `PlanSection.tsx` | Clears proposed plan, resets UI |
+| `PlanContext.tsx` | Clears generating/proposed state |
+| `PlanPreview.tsx` | Clears proposed plan, resets UI |
 
 ---
 
-### 6. `vllora_setup_plan_approved`
+### 6. `vllora_plan_approved`
 
 **Purpose:** User approved the plan, trigger execution.
 
 | | Details |
 |---|---|
-| **Data** | `{ datasetId: string; plan: SetupPlan }` |
+| **Data** | `{ datasetId: string; plan: Plan }` |
 | **Direction** | React → Tool handler |
 
 **Emitters:**
 | File | When |
 |------|------|
-| `PlanSection.tsx` | User clicks "Approve & Execute" |
+| `PlanPreview.tsx` | User clicks "Approve & Execute" |
 
 **Listeners:**
 | File | What it does |
 |------|-------------|
-| `execute-setup-plan.ts` (tool) | Stores plan in memory, waits for Lucy to call execute tool |
+| `execute-plan.ts` (tool) | Stores plan in memory, waits for Lucy to call execute tool |
 | `execution-state-store.ts` (tool) | Stores plan in execution state + persists `'approved'` status to IndexedDB |
-| `SetupPlanContext.tsx` | Updates `planStatus` to `'approved'` + persists to IndexedDB |
+| `PlanContext.tsx` | Updates `planStatus` to `'approved'` + persists to IndexedDB |
 
 ---
 
-### 7. `vllora_setup_plan_progress`
+### 7. `vllora_plan_progress`
 
 **Purpose:** Real-time execution progress updates. Each progress event is written through to IndexedDB for refresh survival.
 
@@ -220,12 +220,12 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 **Emitters:**
 | File | When |
 |------|------|
-| `execute-setup-plan.ts` (tool) | After each step completes/fails |
+| `execute-plan.ts` (tool) | After each step completes/fails |
 
 **Listeners:**
 | File | What it does |
 |------|-------------|
-| `SetupPlanContext.tsx` | Updates execution state + persists progress to IndexedDB. On completion, calls `completePlan()`/`failPlan()` |
+| `PlanContext.tsx` | Updates execution state + persists progress to IndexedDB. On completion, calls `completePlan()`/`failPlan()` |
 | `ExecutionProgressCard.tsx` | Renders step-by-step progress |
 | `execution-state-store.ts` (tool) | In-memory cache + write-through to IndexedDB via `updatePlanExecution()`/`completePlan()`/`failPlan()` |
 
@@ -243,7 +243,7 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 **Emitters:**
 | File | When |
 |------|------|
-| `execute-setup-plan.ts` (tool) | After generating data → records, after grader → evaluator, after job → jobs |
+| `execute-plan.ts` (tool) | After generating data → records, after grader → evaluator, after job → jobs |
 | `DocsProcessingState.tsx` | User clicks "View Reference Docs" |
 | `SourcesProcessingMessage.tsx` | Auto-switch to docs/plan during processing |
 | `RecordRow.tsx` | User clicks evaluation/finetune link on a record |
@@ -269,13 +269,13 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 **Emitters:**
 | File | When |
 |------|------|
-| `execute-setup-plan.ts` (tool) | Plan execution completes |
+| `execute-plan.ts` (tool) | Plan execution completes |
 
 **Listeners:**
 | File | What it does |
 |------|-------------|
-| `SetupPlanContext.tsx` | Resets plan generation state |
-| `PlanSection.tsx` | Clears execution if complete |
+| `PlanContext.tsx` | Resets plan generation state |
+| `PlanPreview.tsx` | Clears execution if complete |
 | `useFineTuneAgentChat.ts` | Refreshes workflow data |
 | `execution-state-store.ts` (tool) | Handles state cleanup |
 
@@ -318,7 +318,7 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 **Emitters:**
 | File | When |
 |------|------|
-| `execute-setup-plan.ts` (tool) | After creating finetune job via plan execution |
+| `execute-plan.ts` (tool) | After creating finetune job via plan execution |
 | `quick-finetune.ts` (service) | After creating finetune job via quick-finetune flow |
 
 **Listener:** `FinetuneJobsContext.tsx` — refreshes jobs list
@@ -373,6 +373,27 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 
 ---
 
+### 14. `vllora_docs_awaiting_plan`
+
+**Purpose:** Signal that docs are still processing when a plan was requested — UI should auto-prompt Lucy when processing completes.
+
+| | Details |
+|---|---|
+| **Data** | `{ datasetId: string }` |
+| **Direction** | Tool handler → React |
+
+**Emitter:**
+| File | When |
+|------|------|
+| `analyze-knowledge-sources.ts` (tool) | Knowledge sources are still processing when plan generation is requested |
+
+**Listener:**
+| File | What it does |
+|------|-------------|
+| `LucyDatasetAssistant.tsx` | Sets `pendingDocsPlanTriggerRef` so Lucy auto-triggers plan proposal when docs finish processing |
+
+---
+
 ## Contexts (Single Source of Truth)
 
 Contexts consolidate duplicated state that was previously tracked independently by multiple components:
@@ -386,16 +407,16 @@ Contexts consolidate duplicated state that was previously tracked independently 
 
 Previously 3 components independently called `knowledgeDB.getKnowledgeSourcesByDataset()` on every event. Now the context fetches once and shares the result.
 
-### `SetupPlanContext` (`src/contexts/SetupPlanContext.tsx`)
+### `PlanContext` (`src/contexts/PlanContext.tsx`)
 
-**Listens to:** `vllora_setup_plan_generating`, `vllora_setup_plan_proposed`, `vllora_setup_plan_dismissed`, `vllora_workflow_updated`, `vllora_setup_plan_progress`
+**Listens to:** `vllora_plan_generating`, `vllora_plan_proposed`, `vllora_plan_dismissed`, `vllora_workflow_updated`, `vllora_plan_progress`
 **Provides:** `isGeneratingPlan`, `hasPlanProposed`
 **Consumers:** `DatasetDetailContentV2`
-**Provider:** `SetupPlanProvider` wraps `DatasetDetailContentV2` in `DatasetDetailView.tsx`
+**Provider:** `PlanProvider` wraps `DatasetDetailContentV2` in `DatasetDetailView.tsx`
 
-Single source of truth for the setup plan lifecycle. Exposes `planStatus: PlanStatus | null` alongside boolean convenience properties (`isGeneratingPlan`, `hasPlanProposed`, `isExecuting`). On mount, hydrates from `getStoredPlan()` in IndexedDB. On approval, persists `'approved'` status (plan is NOT deleted). During execution, writes progress to IndexedDB on each step. On completion/failure, persists terminal status with final progress. The agent also receives `plan_status` and `has_active_plan` in its context injection.
+Single source of truth for the plan lifecycle. Exposes `planStatus: PlanStatus | null` alongside boolean convenience properties (`isGeneratingPlan`, `hasPlanProposed`, `isExecuting`). On mount, hydrates from `getStoredPlan()` in IndexedDB. On approval, persists `'approved'` status (plan is NOT deleted). During execution, writes progress to IndexedDB on each step. On completion/failure, persists terminal status with final progress. The agent also receives `plan_status` and `has_active_plan` in its context injection.
 
-> **Note:** `DatasetDetailContentV2` still listens to `vllora_setup_plan_generating` directly (for auto-switching to the Plan tab), but no longer tracks plan state — that's in `SetupPlanContext`.
+> **Note:** `DatasetDetailContentV2` still listens to `vllora_plan_generating` directly (for auto-switching to the Plan tab), but no longer tracks plan state — that's in `PlanContext`.
 
 ### `DatasetsContext` (`src/contexts/DatasetsContext.tsx`)
 
@@ -428,11 +449,12 @@ Events are the **correct pattern** when:
 
 These should remain events:
 - `vllora_lucy_prompt` — ~10 emitters, 1 listener, fire-and-forget
-- `vllora_setup_plan_generating/proposed/dismissed/progress` — tool handlers emit these (contexts listen to them)
+- `vllora_plan_generating/proposed/dismissed/progress` — tool handlers emit these (contexts listen to them)
+- `vllora_docs_awaiting_plan` — tool handler → React (deferred auto-prompt)
 - `vllora_data_generation_progress` — tool handler → multiple React listeners
 - `vllora_workflow_updated` — tool handler notification
 - `vllora_finetune_job_created` / `vllora_dry_run_job_update` — external sources
-- `vllora_setup_plan_approved` — React → tool handler (reverse direction)
+- `vllora_plan_approved` — React → tool handler (reverse direction)
 - `vllora_dataset_refresh` — service layer → contexts (bridges IndexedDB writes to React state)
 
 ## What to Leave Alone (Low ROI)
