@@ -40,7 +40,7 @@ import {
   LucyAvatar,
   lucyToolRenderers,
 } from "@/components/agent/lucy-agent";
-import { PlanCard } from "@/components/agent/lucy-agent/plan-render/PlanCard";
+
 import type { QuickAction } from "@/components/agent/lucy-agent/LucyWelcome";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -126,7 +126,7 @@ export function LucySidebar() {
   // Lucy agent state
   const { isConnected, reconnect } = useDistriConnection();
   const { providers, loading: providersLoading } = ProviderKeysConsumer();
-  const { planStatus, executionProgress, proposedPlan, isGeneratingPlan, isExecuting } = PlanConsumer();
+  const { planStatus, executionProgress, isGeneratingPlan, isExecuting } = PlanConsumer();
 
   // Connection timeout: 15s to detect stalled connections
   useEffect(() => {
@@ -395,11 +395,6 @@ export function LucySidebar() {
         />
       ) : isConnected && agent ? (
         <div className="flex flex-col h-full min-h-0">
-          {!!proposedPlan && planStatus === 'proposed' && (
-            <div className="px-3 pt-3 shrink-0">
-              <PlanCard />
-            </div>
-          )}
           <LucyChat
             threadId={threadId}
             agent={agent}

@@ -171,25 +171,29 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       badge: planBadge,
     });
 
-    // tasks.md
+    // tasks.md — only shown when there are active tasks
     const activeTodos = todos.filter((t) => t.status !== "done");
-    nodes.push({
-      id: "tasks.md",
-      name: "tasks.md",
-      type: "file",
-      icon: <ListChecks className={`${ICON_CLS} text-orange-500`} />,
-      badge: activeTodos.length > 0
-        ? { label: String(activeTodos.length), variant: "count" }
-        : { label: "empty", variant: "default" },
-    });
+    if (activeTodos.length > 0) {
+      nodes.push({
+        id: "tasks.md",
+        name: "tasks.md",
+        type: "file",
+        icon: <ListChecks className={`${ICON_CLS} text-orange-500`} />,
+        badge: { label: String(activeTodos.length), variant: "count" },
+      });
+    }
 
-    // logs.md
-    nodes.push({
-      id: "logs.md",
-      name: "logs.md",
-      type: "file",
-      icon: <FileText className={`${ICON_CLS} text-muted-foreground`} />,
-    });
+    // logs.md — only shown when there's activity to display
+    const hasLogs = sources.length > 0 || dryRunJobs.length > 0 ||
+      finetuneJobs.length > 0 || !!dataset?.topicHierarchy?.generatedAt;
+    if (hasLogs) {
+      nodes.push({
+        id: "logs.md",
+        name: "logs.md",
+        type: "file",
+        icon: <FileText className={`${ICON_CLS} text-muted-foreground`} />,
+      });
+    }
 
     // --- documents/ (only shown when there are knowledge sources) ---
     if (sources.length > 0) {

@@ -4,9 +4,10 @@
  * Header for the datasets grid view with search bar, segmented filter tabs, and sort.
  */
 
+import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
+import { Search, Plus } from "lucide-react";
 import { DATASET_FILTER_CONFIG } from "@/types/dataset-types";
 import type { DatasetFilterGroup } from "@/types/dataset-types";
 import { DatasetSortDropdown } from "./DatasetSortDropdown";
@@ -77,12 +78,21 @@ export function DatasetsListHeader({
       {/* Sort dropdown */}
       <DatasetSortDropdown activeSort={activeSort} onSortChange={onSortChange} />
 
-      {/* Count */}
-      {totalCount !== undefined && (
-        <span className="text-xs text-muted-foreground/50 ml-auto tabular-nums">
-          {totalCount} dataset{totalCount !== 1 ? "s" : ""}
-        </span>
-      )}
+      {/* Count + New Dataset button */}
+      <div className="flex items-center gap-3 ml-auto">
+        {totalCount !== undefined && (
+          <span className="text-xs text-muted-foreground/50 tabular-nums">
+            {totalCount} dataset{totalCount !== 1 ? "s" : ""}
+          </span>
+        )}
+        <Link
+          to="/datasets/new"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--theme-500))] text-white hover:bg-[rgb(var(--theme-600))] transition-colors shrink-0"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          New Dataset
+        </Link>
+      </div>
     </div>
   );
 }
