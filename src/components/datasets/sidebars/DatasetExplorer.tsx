@@ -275,7 +275,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
           return {
             id: `evaluations/jobs/${job.id}`,
-            name: `dry-run-${job.id.slice(0, 6)}`,
+            name: `eval-${job.id.slice(0, 6)}`,
             type: "file" as const,
             icon: <FlaskConical className={`${ICON_CLS} text-violet-500`} />,
             badge: statusBadge,
