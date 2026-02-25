@@ -11,6 +11,7 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { emitter } from "@/utils/eventEmitter";
 import { DeleteConfirmationDialog } from "./DeleteConfirmationDialog";
@@ -42,6 +43,7 @@ import { DeployGuidancePanel } from "./DeployGuidancePanel";
 import { WorkspaceTabsProvider, WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
 import { WorkspaceTabManager } from "./WorkspaceTabManager";
 import { mapTabPathToSection, type ContentSection } from "./TabContentRouter";
+import { WorkspaceWelcome } from "./WorkspaceWelcome";
 import type { CoverageStats } from "@/types/dataset-types";
 
 // Side-effect: registers plan approval event listener
@@ -100,7 +102,6 @@ export function DatasetDetailContentV2() {
     selectedRecordIds,
 
     // UI View state
-    activeSection,
     viewMode,
     setViewMode,
     selectedTopic,
@@ -575,9 +576,9 @@ export function DatasetDetailContentV2() {
     return <DatasetNotFound onBack={onBack} />;
   }
 
-  // Derive content section: prefer workspace-tab-driven section, fallback to activeSection
-  // tabContentSection is set by WorkspaceTabBridge when a workspace tab is active
-  const contentSection: ContentSection = tabContentSection ?? mapTabPathToSection(activeSection);
+  // Derive content section from the active workspace tab.
+  // When no tabs are open (null), WorkspaceWelcome is shown instead of falling back to overview.
+  const contentSection: ContentSection = tabContentSection;
 
   return (
     <DryRunJobsProvider dataset={dataset}>
@@ -602,6 +603,28 @@ export function DatasetDetailContentV2() {
           <DatasetBreadcrumbBar />
 
           {/* Content panel — driven by the active workspace tab */}
+          {contentSection === null && (
+            <ErrorBoundary
+              fallback={
+                <div className="flex-1 flex items-center justify-center p-8 text-zinc-500 text-xs">
+                  Open a file from the explorer sidebar to get started
+                </div>
+              }
+            >
+              <WorkspaceWelcome
+                datasetName={dataset.name || "Untitled Experiment"}
+                onOpenTab={openTabRef.current}
+                recordCount={sortedRecords.length}
+                generatedCount={insights.generatedRecords}
+                originalCount={insights.originalRecords}
+                leafTopicCount={availableTopics.length}
+                planStatus={planStatus}
+                knowledgeSourcesCount={knowledgeSourcesCount}
+                hasEvalScript={!!dataset.evalScript}
+                hasReadme={!!readme}
+              />
+            </ErrorBoundary>
+          )}
           {contentSection === "overview" && (
             <DatasetOverviewPanel
               readme={readme}
