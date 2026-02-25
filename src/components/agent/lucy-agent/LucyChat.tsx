@@ -446,8 +446,15 @@ export function LucyChat({
               {/* Render external tool calls that need user approval */}
               <LucyToolCalls tools={externalTools} />
 
-              {/* Render streaming indicator (typing/thinking) */}
-              <LucyStreamingIndicator isStreaming={isStreaming} />
+              {/* Render streaming indicator (typing/thinking).
+                  Hide the "Lucy is typing..." dots when tool call spinners are
+                  already visible — they provide sufficient activity feedback. */}
+              <LucyStreamingIndicator
+                isStreaming={isStreaming}
+                hideWhenToolsActive={Array.from(toolCalls.values()).some(
+                  (tc) => tc.status === 'running' || tc.status === 'pending'
+                )}
+              />
 
               {/* Render pending message */}
               <LucyPendingMessage pendingMessage={pendingMessage} />

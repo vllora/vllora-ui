@@ -291,9 +291,9 @@ function PlanEmptyView({
   const [hasTimedOut, setHasTimedOut] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
 
-  // Detect when Lucy is actively streaming (covers manual chat flow
-  // where user asks Lucy to create a plan but vllora_plan_generating
-  // hasn't fired yet because Lucy is still in early tool calls)
+  // Detect when Lucy is actively streaming (covers the gap between the user
+  // asking for a plan and Lucy actually calling propose_plan — e.g. she may
+  // run get_dataset_state or analyze_knowledge_sources first).
   const isLucyStreaming = useChatStateStore((state) => state.isStreaming);
 
   useEffect(() => {
@@ -340,7 +340,7 @@ function PlanEmptyView({
   // Show loading when:
   // 1. isGenerating — vllora_plan_generating event fired (propose_plan tool running)
   // 2. isRequesting — user clicked "Generate Plan" button
-  // 3. isLucyStreaming — Lucy is actively streaming (covers manual chat requests)
+  // 3. isLucyStreaming — Lucy is actively streaming (covers the gap before propose_plan fires)
   const showLoading = isGenerating || isRequesting || isLucyStreaming;
 
   // Distinguish message: "Generating plan..." when we know it's plan-specific,

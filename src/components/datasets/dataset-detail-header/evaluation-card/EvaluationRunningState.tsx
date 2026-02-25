@@ -54,7 +54,7 @@ export function EvaluationRunningState({
         <div className="flex items-center gap-2">
           <Loader2 className="w-3.5 h-3.5 text-blue-500 animate-spin" />
           <span className="text-xs text-muted-foreground">
-            Dry run in progress...
+            Evaluation in progress...
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -70,7 +70,7 @@ export function EvaluationRunningState({
                 onCancel();
               }}
               className="text-muted-foreground hover:text-red-400 transition-colors"
-              title="Cancel dry run"
+              title="Cancel evaluation"
             >
               <StopCircle className="w-3.5 h-3.5" />
             </button>

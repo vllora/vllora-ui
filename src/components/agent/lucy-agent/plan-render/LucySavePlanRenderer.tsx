@@ -51,7 +51,7 @@ export function LucySavePlanRenderer({ toolCall, state }: ToolRendererProps) {
       <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3">
         <div className="flex items-center gap-2 text-xs text-destructive">
           <AlertCircle className="w-3.5 h-3.5" />
-          <span>{state?.error || result?.error || 'Failed to save plan'}</span>
+          <span>{state?.error || (Array.isArray(result?.errors) && result.errors.length > 0 ? result.errors.join('; ') : null) || result?.error || 'Failed to save plan'}</span>
         </div>
       </div>
     );

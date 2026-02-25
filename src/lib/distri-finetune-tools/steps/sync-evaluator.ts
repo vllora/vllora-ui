@@ -48,7 +48,7 @@ export const syncEvaluatorHandler: ToolHandler = async (params) => {
       success: true,
       backend_dataset_id: backendDatasetId,
       evaluator_type: 'js',
-      message: 'Eval script configured and dataset uploaded. Ready for dry run. Note: If eval script changed, use upload_dataset with force_reupload=true.',
+      message: 'Eval script configured and dataset uploaded. Ready for evaluation. Note: If eval script changed, use upload_dataset with force_reupload=true.',
     };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to check evaluator status' };

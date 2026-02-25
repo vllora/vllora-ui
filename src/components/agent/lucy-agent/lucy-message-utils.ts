@@ -137,7 +137,7 @@ export function getFriendlyToolMessage(toolName: string, input: any): string {
     case 'sync_evaluator':
       return 'Syncing evaluator config...';
     case 'run_dry_run':
-      return 'Running evaluation dry run...';
+      return 'Running evaluation...';
 
     // Training tools
     case 'start_training':

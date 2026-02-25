@@ -78,7 +78,7 @@ export function QualityIndicator({ evaluation, className, onNavigate }: QualityI
 
   // Determine display values and labels
   const drScore = dryRunCount > 1 && dryRunAvg != null ? dryRunAvg : dryRunLatest!;
-  const drLabel = dryRunCount > 1 ? "Avg Dryrun" : "Dryrun";
+  const drLabel = dryRunCount > 1 ? "Avg Evaluation" : "Evaluation";
   const ftScore = finetuneCount > 1 && finetuneAvg != null ? finetuneAvg : finetuneLatest!;
   const ftLabel = finetuneCount > 1 ? "Avg Finetune" : "Finetune";
 
@@ -86,10 +86,10 @@ export function QualityIndicator({ evaluation, className, onNavigate }: QualityI
   const tooltipLines: string[] = [];
   if (hasDryRun) {
     if (dryRunCount > 1 && dryRunAvg != null) {
-      tooltipLines.push(`Avg: ${dryRunAvg.toFixed(2)} across ${dryRunCount} dry runs`);
+      tooltipLines.push(`Avg: ${dryRunAvg.toFixed(2)} across ${dryRunCount} evaluations`);
       tooltipLines.push(`Latest run: ${dryRunLatest!.toFixed(2)}`);
     } else {
-      tooltipLines.push(`Dry run score: ${dryRunLatest!.toFixed(2)}`);
+      tooltipLines.push(`Evaluation score: ${dryRunLatest!.toFixed(2)}`);
     }
     tooltipLines.push("Click to view runs →");
   }

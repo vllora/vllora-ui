@@ -450,7 +450,7 @@ export function getStepDetails({
     if (sampleSize != null) metrics.push({ label: "Samples", value: `${sampleSize}` });
     if (samplePct != null) metrics.push({ label: "Sample %", value: `${samplePct}%` });
     if (verdict) metrics.push({ label: "Verdict", value: verdict, tone: getVerdictTone(verdict) });
-    if (metrics.length) details.push({ type: "metric_grid", title: "Dry Run", metrics });
+    if (metrics.length) details.push({ type: "metric_grid", title: "Evaluation", metrics });
     const qualityBlock = buildQualityDistributionBlock(stats);
     if (qualityBlock) details.push(qualityBlock);
     if (stats?.statistics) {

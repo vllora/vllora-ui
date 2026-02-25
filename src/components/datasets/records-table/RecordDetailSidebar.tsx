@@ -232,7 +232,7 @@ function EvaluationScores({ evaluation, onNavigate }: {
   const dryRunCount = evaluation.dryRunCount ?? (dryRun != null ? 1 : 0);
   const finetuneCount = evaluation.finetuneCount ?? 0;
 
-  const drLabel = dryRunCount > 1 ? "Avg Dryrun" : "Dryrun";
+  const drLabel = dryRunCount > 1 ? "Avg Evaluation" : "Evaluation";
   const ftLabel = finetuneCount > 1 ? "Avg Finetune" : "Finetune";
 
   const drScore = dryRunCount > 1 && evaluation.dryRunAvg != null ? evaluation.dryRunAvg : dryRun;

@@ -280,7 +280,7 @@ function FinetuneProcessInner({ children }: { children: ReactNode }) {
     // Step 5: Dry Run
     steps.push({
       id: 'dryrun',
-      name: 'Dry Run',
+      name: 'Evaluation',
       category: 'VALIDATION',
       status: hasGrader ? 'ready' : 'waiting',
       statusText: 'Validate before training',

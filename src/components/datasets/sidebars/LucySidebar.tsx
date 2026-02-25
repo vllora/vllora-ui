@@ -56,7 +56,7 @@ const ALL_QUICK_ACTIONS: Record<string, QuickAction> = {
   "analyze-coverage": { id: "analyze-coverage", icon: <TrendingUp className={QA_ICON} />, label: "Check data variety", prompt: "Analyze the topic coverage and balance of my training data. Are there any gaps?" },
   "generate-data": { id: "generate-data", icon: <Sparkles className={QA_ICON} />, label: "Create more examples", prompt: "Generate more synthetic training examples to improve coverage and balance." },
   "configure-grader": { id: "configure-grader", icon: <Scale className={QA_ICON} />, label: "Set up evaluation", prompt: "Help me configure an evaluation grader to score the quality of my training data." },
-  "run-dry-run": { id: "run-dry-run", icon: <FlaskConical className={QA_ICON} />, label: "Test before training", prompt: "Run a dry run evaluation on a sample of my data to check quality before training." },
+  "run-dry-run": { id: "run-dry-run", icon: <FlaskConical className={QA_ICON} />, label: "Test before training", prompt: "Run an evaluation on a sample of my data to check quality before training." },
   "start-training": { id: "start-training", icon: <Rocket className={QA_ICON} />, label: "Start training", prompt: "Start the fine-tuning training job with my current dataset configuration." },
 };
 
