@@ -77,7 +77,7 @@ function HighlightedText({ text }: { text: string }) {
         part.isKeyword ? (
           <code
             key={i}
-            className="mx-0.5 px-1 py-0.5 rounded bg-red-500/15 text-red-400 font-mono text-[11px]"
+            className="mx-0.5 px-1 py-0.5 rounded bg-red-500/10 text-red-400 font-mono text-[11px]"
           >
             {part.text}
           </code>
@@ -104,7 +104,7 @@ function RecordIdCell({ recordId, onNavigate }: { recordId: string; onNavigate: 
     <div className="w-24 shrink-0 py-1 pr-2 group/id">
       <div className="flex items-center gap-0.5">
         <button
-          className="font-mono text-[11px] text-zinc-400 hover:text-blue-400 transition-colors truncate"
+          className="font-mono text-[11px] text-[rgb(var(--theme-400))] hover:text-[rgb(var(--theme-300))] hover:underline transition-colors truncate"
           onClick={onNavigate}
           title={`Go to record ${recordId}`}
         >
@@ -148,8 +148,9 @@ export function DryrunEvaluationResultRow({
   return (
     <div
       className={cn(
-        "flex items-center border-t border-border/50 first:border-t-0 rounded-sm",
-        isExpandable ? "cursor-pointer hover:bg-muted/30" : "h-full",
+        "flex items-center border-t border-zinc-800/40 first:border-t-0 rounded-sm",
+        isExpandable ? "cursor-pointer hover:bg-zinc-800/30" : "h-full",
+        isExpanded && "bg-zinc-800/20",
         isHighlighted && "animate-record-highlight"
       )}
       style={{ minHeight: 32 }}
@@ -159,15 +160,15 @@ export function DryrunEvaluationResultRow({
       <div className="w-6 shrink-0 flex items-center justify-center">
         {isExpandable ? (
           isExpanded ? (
-            <ChevronDown className="h-3 w-3 text-muted-foreground" />
+            <ChevronDown className="h-3 w-3 text-zinc-500" />
           ) : (
-            <ChevronRight className="h-3 w-3 text-muted-foreground" />
+            <ChevronRight className="h-3 w-3 text-zinc-600" />
           )
         ) : null}
       </div>
 
       {/* Row index column */}
-      <div className="w-12 shrink-0 py-1 pr-2 font-mono text-xs">
+      <div className="w-12 shrink-0 py-1 pr-2 font-mono text-xs text-zinc-400">
         {index + 1}
       </div>
 
@@ -185,13 +186,13 @@ export function DryrunEvaluationResultRow({
       {/* Score column */}
       <div className="w-16 shrink-0 py-1 pr-2">
         {result.score != null && isSuccess ? (
-          <span className={cn("font-mono text-xs", getScoreColorClass(result.score))}>
+          <span className={cn("font-mono text-xs font-medium", getScoreColorClass(result.score))}>
             {formatScore(result.score)}
           </span>
         ) : isPending ? (
-          <div className="h-3 w-3 rounded-full border-2 border-muted-foreground/50 border-t-muted-foreground animate-spin" />
+          <div className="h-3 w-3 rounded-full border-2 border-zinc-600 border-t-zinc-400 animate-spin" />
         ) : (
-          <span className="font-mono text-xs text-muted-foreground">-</span>
+          <span className="font-mono text-xs text-zinc-600">-</span>
         )}
       </div>
 
@@ -200,14 +201,14 @@ export function DryrunEvaluationResultRow({
         {isSuccess ? (
           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
         ) : isFailed ? (
-          <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+          <AlertCircle className="h-3.5 w-3.5 text-red-400" />
         ) : (
-          <span className="text-xs text-muted-foreground">...</span>
+          <span className="text-xs text-zinc-600">...</span>
         )}
       </div>
 
       {/* Message/Reasoning column */}
-      <div className="flex-1 py-1 pr-2 text-xs text-muted-foreground truncate min-w-0">
+      <div className="flex-1 py-1 pr-2 text-xs text-zinc-500 truncate min-w-0">
         {isFailed ? <HighlightedText text={message} /> : message}
       </div>
 

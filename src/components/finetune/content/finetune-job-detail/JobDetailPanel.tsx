@@ -1,12 +1,22 @@
 /**
  * JobDetailPanel
  *
- * Displays job detail for the selected finetune job (left side of split view).
- * Layout: Header → Quick Summary Bar → [Collapsible Details] → [Error] → Tabs (Metrics | Per-Row)
+ * Premium job detail view for the selected finetune job (left side of split view).
+ * Layout: Header → Stat Cards → [Collapsible Details] → [Error] → Tabs (Metrics | Per-Row)
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { StopCircle, Play, Download, Loader2, ChevronRight } from "lucide-react";
+import {
+  StopCircle,
+  Play,
+  Download,
+  Loader2,
+  ChevronDown,
+  RefreshCw,
+  Layers,
+  BarChart3,
+  Rows3,
+} from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { FinetuneJobStatusBadge } from "../../FinetuneJobStatusBadge";
@@ -18,6 +28,7 @@ import {
   formatFinetuneJobDate,
   getModelDisplayName,
   computeTrainingSummary,
+  formatDuration,
   triggerFileDownload,
 } from "../utils";
 import {
@@ -36,13 +47,78 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+/** Stat card used in the quick-summary row */
+function StatCard({
+  label,
+  value,
+  subValue,
+  icon: Icon,
+  valueClassName,
+  children,
+}: {
+  label: string;
+  value: string;
+  subValue?: string;
+  icon: React.ElementType;
+  valueClassName?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="flex-1 rounded-lg border border-zinc-800/60 bg-zinc-900/40 px-3 py-2 min-w-0">
+      <div className="flex items-center gap-1.5 mb-1">
+        <Icon className="h-3 w-3 text-zinc-500" />
+        <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+          {label}
+        </span>
+      </div>
+      <div className="flex items-baseline gap-1.5">
+        <span
+          className={cn(
+            "text-lg font-semibold font-mono tabular-nums leading-none",
+            valueClassName ?? "text-zinc-200"
+          )}
+        >
+          {value}
+        </span>
+        {subValue && (
+          <span className="text-[10px] text-zinc-600 font-mono">{subValue}</span>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** Thin epoch progress bar */
+function EpochProgressBar({
+  current,
+  total,
+}: {
+  current: number;
+  total: number;
+}) {
+  const pct = total > 0 ? Math.min((current / total) * 100, 100) : 0;
+  return (
+    <div className="mt-1.5 h-1 w-full rounded-full bg-zinc-800/80 overflow-hidden">
+      <div
+        className="h-full rounded-full bg-[rgb(var(--theme-500))] transition-all duration-500"
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
+
 export function JobDetailPanel({ job }: { job: FinetuneJob }) {
   const { getJobEvaluations, refreshJobEvaluations } = FinetuneJobsConsumer();
-  const { data: evalResults, isLoading: isLoadingEvals, error: evalsError } = getJobEvaluations(job.id);
+  const {
+    data: evalResults,
+    isLoading: isLoadingEvals,
+    error: evalsError,
+  } = getJobEvaluations(job.id);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  const [showDetails, setShowDetails] = useState(true);
+  const [showDetails, setShowDetails] = useState(false);
   const [activeTab, setActiveTab] = useState("metrics");
 
   // Listen for highlight events from QualityIndicator finetune score clicks.
@@ -57,15 +133,20 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
       setActiveTab("per-row");
       // Re-dispatch after Per-Row tab mounts so ResultsTable can catch it
       setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('vllora_highlight_eval_result', {
-          detail: { recordId, _fromJobPanel: true }
-        }));
+        window.dispatchEvent(
+          new CustomEvent("vllora_highlight_eval_result", {
+            detail: { recordId, _fromJobPanel: true },
+          })
+        );
       }, 200);
     };
 
-    window.addEventListener('vllora_highlight_eval_result', handleHighlight);
+    window.addEventListener("vllora_highlight_eval_result", handleHighlight);
     return () => {
-      window.removeEventListener('vllora_highlight_eval_result', handleHighlight);
+      window.removeEventListener(
+        "vllora_highlight_eval_result",
+        handleHighlight
+      );
     };
   }, []);
 
@@ -87,7 +168,9 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
       await cancelReinforcementJob(job.provider_job_id);
       toast.success("Job cancelled");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to cancel");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to cancel"
+      );
     } finally {
       setIsActionLoading(false);
     }
@@ -100,7 +183,9 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
       await resumeReinforcementJob(job.provider_job_id);
       toast.success("Job resumed");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to resume");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to resume"
+      );
     } finally {
       setIsActionLoading(false);
     }
@@ -109,10 +194,19 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
   const handleDownloadWeights = useCallback(async () => {
     setIsDownloading(true);
     try {
-      const { download_url } = await getWeightsDownloadUrl(job.provider_job_id);
-      triggerFileDownload(download_url, `weights-${job.provider_job_id}.tar.gz`);
+      const { download_url } = await getWeightsDownloadUrl(
+        job.provider_job_id
+      );
+      triggerFileDownload(
+        download_url,
+        `weights-${job.provider_job_id}.tar.gz`
+      );
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to get download URL");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to get download URL"
+      );
     } finally {
       setIsDownloading(false);
     }
@@ -120,129 +214,191 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
 
   const canCancel = job.status === "pending" || job.status === "running";
   const canResume = job.status === "cancelled";
+  const totalEpochs = job.training_config?.epochs ?? null;
+  const duration = formatDuration(
+    job.created_at,
+    job.completed_at ?? (job.status === "running" ? undefined : null)
+  );
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Header: status + summary stats + actions (single compact row) */}
+      {/* ── Header ─────────────────────────────────────────────── */}
       <div className="shrink-0 border-b border-zinc-800/60">
         <TooltipProvider delayDuration={200}>
-        <div className="flex items-center gap-2 px-3 py-1.5">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex items-center gap-2 min-w-0">
-                <FinetuneJobStatusBadge status={job.status} className="text-[10px] px-1.5 py-0.5" />
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-zinc-700/50 text-[10px] font-medium text-zinc-300 border border-zinc-600/40">
-                  {getModelDisplayName(job.base_model)}
-                </span>
-                {summary && (
-                  <>
-                    <span className="text-zinc-700">&middot;</span>
-                    <span className="text-xs font-mono text-zinc-400">
-                      Epoch <span className="text-zinc-300">{summary.latestEpoch ?? "-"}</span>
-                      {job.training_config?.epochs && (
-                        <span className="text-zinc-600">/{job.training_config.epochs}</span>
-                      )}
-                    </span>
-                    {summary.latestAvgScore !== null && (
-                      <>
-                        <span className="text-zinc-700">&middot;</span>
-                        <span className="text-xs font-mono text-zinc-400">
-                          Avg Score{" "}
-                          <span className={getScoreColorClass(summary.latestAvgScore)}>
-                            {formatScore(summary.latestAvgScore)}
-                          </span>
-                        </span>
-                      </>
-                    )}
-                    <span className="text-zinc-700">&middot;</span>
-                    <span className="text-xs font-mono text-zinc-500">
-                      {summary.totalRows} rows
-                    </span>
-                  </>
-                )}
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">
-              <div className="space-y-0.5">
-                <p><span className="text-zinc-400">Status:</span> {job.status}</p>
-                <p><span className="text-zinc-400">Model:</span> {getModelDisplayName(job.base_model)}</p>
-                {summary && (
-                  <>
-                    <p><span className="text-zinc-400">Epoch:</span> {summary.latestEpoch ?? "-"}{job.training_config?.epochs ? ` of ${job.training_config.epochs}` : ""}</p>
-                    {summary.latestAvgScore !== null && (
-                      <p><span className="text-zinc-400">Avg Score:</span> {formatScore(summary.latestAvgScore)} — average across all rows in latest epoch</p>
-                    )}
-                    <p><span className="text-zinc-400">Rows:</span> {summary.totalRows} training rows evaluated</p>
-                  </>
-                )}
-              </div>
-            </TooltipContent>
-          </Tooltip>
-          <span className="text-[10px] text-zinc-600 ml-auto">
-            {formatFinetuneJobDate(job.created_at)}
-          </span>
-          {canCancel && (
-            <button
-              onClick={handleCancel}
-              disabled={isActionLoading}
-              className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-red-400 transition-colors"
-            >
-              <StopCircle className="h-3 w-3" />
-              Cancel
-            </button>
-          )}
-          {canResume && (
-            <button
-              onClick={handleResume}
-              disabled={isActionLoading}
-              className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-emerald-400 transition-colors"
-            >
-              <Play className="h-3 w-3" />
-              Resume
-            </button>
-          )}
-          {job.status === "succeeded" && (
-            <button
-              onClick={handleDownloadWeights}
-              disabled={isDownloading}
-              className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-emerald-400 transition-colors"
-            >
-              {isDownloading ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Download className="h-3 w-3" />
-              )}
-              Weights
-            </button>
-          )}
-          <button
-            onClick={() => setShowDetails(!showDetails)}
-            className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
-          >
-            <ChevronRight
-              className={cn("h-3 w-3 transition-transform", showDetails && "rotate-90")}
+          <div className="flex items-center gap-2 px-3 py-1.5">
+            {/* Status + Model */}
+            <FinetuneJobStatusBadge
+              status={job.status}
+              className="text-[10px] px-1.5 py-0.5"
             />
-            Details
-          </button>
-        </div>
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-zinc-800/60 text-[10px] font-medium text-zinc-300 border border-zinc-700/40 font-mono">
+              {getModelDisplayName(job.base_model)}
+            </span>
+
+            {/* Duration */}
+            <span className="text-[10px] text-zinc-600 font-mono">
+              {duration}
+            </span>
+
+            {/* Spacer */}
+            <span className="flex-1" />
+
+            {/* Created date */}
+            <span className="text-[10px] text-zinc-600">
+              {formatFinetuneJobDate(job.created_at)}
+            </span>
+
+            {/* Refresh */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={handleRefresh}
+                  disabled={isLoadingEvals || isRefreshing}
+                  className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors disabled:opacity-40"
+                >
+                  <RefreshCw
+                    className={cn(
+                      "h-3 w-3",
+                      isRefreshing && "animate-spin"
+                    )}
+                  />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-[10px]">
+                Refresh metrics
+              </TooltipContent>
+            </Tooltip>
+
+            {/* Actions */}
+            {canCancel && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={handleCancel}
+                    disabled={isActionLoading}
+                    className="p-1 text-zinc-500 hover:text-red-400 transition-colors"
+                  >
+                    <StopCircle className="h-3 w-3" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-[10px]">
+                  Cancel job
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {canResume && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={handleResume}
+                    disabled={isActionLoading}
+                    className="p-1 text-zinc-500 hover:text-emerald-400 transition-colors"
+                  >
+                    <Play className="h-3 w-3" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-[10px]">
+                  Resume job
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {job.status === "succeeded" && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={handleDownloadWeights}
+                    disabled={isDownloading}
+                    className="p-1 text-zinc-500 hover:text-emerald-400 transition-colors"
+                  >
+                    {isDownloading ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Download className="h-3 w-3" />
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-[10px]">
+                  Download weights
+                </TooltipContent>
+              </Tooltip>
+            )}
+
+            {/* Details toggle */}
+            <button
+              onClick={() => setShowDetails(!showDetails)}
+              className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors rounded hover:bg-zinc-800/50"
+            >
+              <ChevronDown
+                className={cn(
+                  "h-3 w-3 transition-transform duration-200",
+                  !showDetails && "-rotate-90"
+                )}
+              />
+              Details
+            </button>
+          </div>
         </TooltipProvider>
       </div>
 
-      {/* Collapsible Job Details */}
+      {/* ── Stat Cards ─────────────────────────────────────────── */}
+      {summary && (
+        <div className="shrink-0 flex gap-2 px-3 py-2 border-b border-zinc-800/60">
+          {/* Epoch */}
+          <StatCard
+            label="Epoch"
+            icon={Layers}
+            value={String(summary.latestEpoch ?? "-")}
+            subValue={totalEpochs ? `/ ${totalEpochs}` : undefined}
+          >
+            {totalEpochs && summary.latestEpoch != null && (
+              <EpochProgressBar
+                current={summary.latestEpoch}
+                total={totalEpochs}
+              />
+            )}
+          </StatCard>
+
+          {/* Avg Score */}
+          <StatCard
+            label="Avg Score"
+            icon={BarChart3}
+            value={
+              summary.latestAvgScore !== null
+                ? formatScore(summary.latestAvgScore)
+                : "-"
+            }
+            valueClassName={
+              summary.latestAvgScore !== null
+                ? getScoreColorClass(summary.latestAvgScore)
+                : "text-zinc-500"
+            }
+          />
+
+          {/* Rows */}
+          <StatCard
+            label="Rows"
+            icon={Rows3}
+            value={String(summary.totalRows)}
+            subValue="evaluated"
+          />
+        </div>
+      )}
+
+      {/* ── Collapsible Details ────────────────────────────────── */}
       {showDetails && (
-        <div className="shrink-0 px-3 py-2 border-b border-zinc-800/60 bg-zinc-900/10">
+        <div className="shrink-0 px-3 py-2.5 border-b border-zinc-800/60 bg-zinc-900/20">
           <FinetuneJobDetailsSection job={job} hideDownload />
         </div>
       )}
 
-      {/* Error */}
+      {/* ── Error ──────────────────────────────────────────────── */}
       {job.error_message && (
         <div className="shrink-0 px-3 pt-2">
           <ErrorLogSection errorMessage={job.error_message} />
         </div>
       )}
 
-      {/* Tabbed content: Metrics | Per-Row — only show if there's data or the job might produce data */}
+      {/* ── Tabbed Content ─────────────────────────────────────── */}
       {(() => {
         const hasEvalData = evalResults && evalResults.results.length > 0;
         const isFailed = job.status === "failed";
@@ -254,18 +410,31 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
         }
 
         return (
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col">
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="flex-1 min-h-0 flex flex-col"
+          >
             <div className="shrink-0 px-3 pt-2">
-              <TabsList className="h-7">
-                <TabsTrigger value="metrics" className="text-[11px] px-3 h-5">
+              <TabsList className="h-7 bg-zinc-900/50">
+                <TabsTrigger
+                  value="metrics"
+                  className="text-[11px] px-3 h-5 data-[state=active]:bg-zinc-800"
+                >
                   Metrics
                 </TabsTrigger>
-                <TabsTrigger value="per-row" className="text-[11px] px-3 h-5">
+                <TabsTrigger
+                  value="per-row"
+                  className="text-[11px] px-3 h-5 data-[state=active]:bg-zinc-800"
+                >
                   Per-Row
                 </TabsTrigger>
               </TabsList>
             </div>
-            <TabsContent value="metrics" className="flex-1 min-h-0 overflow-y-auto p-3 mt-0">
+            <TabsContent
+              value="metrics"
+              className="flex-1 min-h-0 overflow-y-auto p-3 mt-0"
+            >
               {job.dataset_id ? (
                 <TrainingMetricsSection
                   evalResults={evalResults}
@@ -276,16 +445,26 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
                 />
               ) : (
                 <div className="text-xs text-muted-foreground py-2">
-                  No dataset linked to this job
+                  No experiment linked to this job
                 </div>
               )}
             </TabsContent>
-            <TabsContent value="per-row" className="flex-1 min-h-0 p-3 mt-0">
+            <TabsContent
+              value="per-row"
+              className="flex-1 min-h-0 p-3 mt-0"
+            >
               {job.dataset_id && hasEvalData ? (
-                <PerRowDetailsSection results={evalResults.results} datasetId={job.dataset_id} />
+                <PerRowDetailsSection
+                  results={evalResults.results}
+                  datasetId={job.dataset_id}
+                />
               ) : (
                 <div className="text-xs text-muted-foreground py-2">
-                  {isLoadingEvals ? "Loading..." : isActive ? "Evaluation data will appear as training progresses" : "No per-row data available"}
+                  {isLoadingEvals
+                    ? "Loading..."
+                    : isActive
+                      ? "Evaluation data will appear as training progresses"
+                      : "No per-row data available"}
                 </div>
               )}
             </TabsContent>

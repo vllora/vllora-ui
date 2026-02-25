@@ -1,12 +1,12 @@
 /**
  * TrainingMetricsSection
  *
- * Displays training metrics including epoch summary and charts for a finetune job.
+ * Wrapper around TrainingMetricsChart with loading / error / empty states.
+ * Refresh button is now in the parent header, so this just renders the chart or a status message.
  */
 
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { RefreshCw, Loader2 } from "lucide-react";
+import { RefreshCw, Loader2, BarChart3 } from "lucide-react";
 import { FinetuneEvalResultsResponse } from "@/services/finetune-api";
 import { TrainingMetricsChart } from "../TrainingMetricsChart";
 
@@ -25,36 +25,58 @@ export function TrainingMetricsSection({
   error,
   onRefresh,
 }: TrainingMetricsSectionProps) {
-  return (
-    <div className="space-y-2 pt-2 border-t">
-      <div className="flex items-center justify-end">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 px-2 text-xs gap-1"
-          onClick={onRefresh}
-          disabled={isLoading || isRefreshing}
-        >
-          <RefreshCw className={cn("h-3 w-3", isRefreshing && "animate-spin")} />
-          Refresh
-        </Button>
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 py-8 text-zinc-500">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        <span className="text-xs">Loading evaluation metrics...</span>
       </div>
-      {isLoading ? (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Loading evaluation metrics...
-        </div>
-      ) : error ? (
-        <div className="text-xs text-muted-foreground py-2">
-          {error.includes('404') ? 'No evaluation metrics available yet' : error}
-        </div>
-      ) : evalResults && evalResults.results.length > 0 ? (
-        <TrainingMetricsChart results={evalResults.results} />
-      ) : (
-        <div className="text-xs text-muted-foreground py-2">
-          Metrics will appear here as training progresses. Hit Refresh to check for updates.
-        </div>
-      )}
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 py-8 text-zinc-500">
+        <BarChart3 className="h-5 w-5 opacity-40" />
+        <span className="text-xs">
+          {error.includes("404")
+            ? "No evaluation metrics available yet"
+            : error}
+        </span>
+        <button
+          onClick={onRefresh}
+          disabled={isRefreshing}
+          className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors mt-1"
+        >
+          <RefreshCw
+            className={cn("h-3 w-3", isRefreshing && "animate-spin")}
+          />
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (evalResults && evalResults.results.length > 0) {
+    return <TrainingMetricsChart results={evalResults.results} />;
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 py-8 text-zinc-500">
+      <BarChart3 className="h-5 w-5 opacity-40" />
+      <span className="text-xs">
+        Metrics will appear here as training progresses.
+      </span>
+      <button
+        onClick={onRefresh}
+        disabled={isRefreshing}
+        className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors mt-1"
+      >
+        <RefreshCw
+          className={cn("h-3 w-3", isRefreshing && "animate-spin")}
+        />
+        Check for updates
+      </button>
     </div>
   );
 }
