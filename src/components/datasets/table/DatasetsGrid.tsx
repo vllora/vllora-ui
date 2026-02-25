@@ -220,25 +220,25 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
   // Handlers
   const handleRenameDataset = async (datasetId: string) => {
     if (!editingDatasetName.trim()) {
-      toast.error("Dataset name cannot be empty");
+      toast.error("Experiment name cannot be empty");
       return;
     }
     try {
       await renameDataset(datasetId, editingDatasetName);
-      toast.success("Dataset renamed");
+      toast.success("Experiment renamed");
       setEditingDatasetId(null);
     } catch {
-      toast.error("Failed to rename dataset");
+      toast.error("Failed to rename experiment");
     }
   };
 
   const handleDeleteDataset = async (datasetId: string) => {
     try {
       await deleteDataset(datasetId);
-      toast.success("Dataset deleted");
+      toast.success("Experiment deleted");
     } catch (err) {
       console.error("Failed to delete dataset:", err);
-      toast.error("Failed to delete dataset", { description: err as string });
+      toast.error("Failed to delete experiment", { description: err as string });
     }
     setDeleteConfirm(null);
   };
@@ -290,7 +290,7 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
     try {
       const datasetWithRecords = await getDatasetWithRecords(datasetId);
       if (!datasetWithRecords) {
-        toast.error("Dataset not found");
+        toast.error("Experiment not found");
         return;
       }
 
@@ -329,7 +329,7 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
       toast.success(`Exported ${datasetWithRecords.records.length} records as JSONL`);
     } catch (err) {
       console.error("Failed to export dataset:", err);
-      toast.error("Failed to export dataset");
+      toast.error("Failed to export experiment");
     }
   };
 

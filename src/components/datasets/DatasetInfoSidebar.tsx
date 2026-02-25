@@ -79,16 +79,16 @@ export function DatasetInfoSidebar({
     <div className="col-span-1 h-full flex flex-col min-h-0">
       <div className="border border-border rounded-lg bg-card flex flex-col h-full">
         <div className="p-6 pb-0 flex-1 flex flex-col min-h-0">
-          <h2 className="text-lg font-semibold mb-6 shrink-0">Dataset Info</h2>
+          <h2 className="text-lg font-semibold mb-6 shrink-0">Experiment Info</h2>
 
           <div className="flex flex-col flex-1 min-h-0 gap-6">
             {/* Dataset Name */}
             <div className="shrink-0">
               <label className="block text-sm font-medium mb-2">
-                Dataset Name
+                Experiment Name
               </label>
               <Input
-                placeholder="my-training-dataset"
+                placeholder="my-experiment"
                 value={datasetName}
                 onChange={(e) => onDatasetNameChange(e.target.value)}
               />

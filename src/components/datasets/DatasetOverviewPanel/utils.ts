@@ -432,7 +432,7 @@ export function getStepDetails({
     const rows: Array<{ key: string; value: string }> = [];
     if (dataset?.backendDatasetId) {
       rows.push({
-        key: "Backend Dataset ID",
+        key: "Backend ID",
         value: truncateMiddle(dataset.backendDatasetId),
       });
     }

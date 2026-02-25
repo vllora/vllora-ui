@@ -42,7 +42,7 @@ export const SpanFooter = ({ span }: SpanFooterProps) => {
               <button className="flex items-center gap-2 px-2.5 py-1.5 rounded-md hover:bg-muted/50 transition-colors text-sm text-muted-foreground">
                 <Database className="h-3.5 w-3.5" />
                 <span>
-                  In <span className="text-foreground font-medium">{spanDatasets.length}</span> dataset{spanDatasets.length !== 1 ? 's' : ''}
+                  In <span className="text-foreground font-medium">{spanDatasets.length}</span> experiment{spanDatasets.length !== 1 ? 's' : ''}
                 </span>
                 <ChevronDown className="h-3 w-3 opacity-50" />
               </button>
@@ -63,7 +63,7 @@ export const SpanFooter = ({ span }: SpanFooterProps) => {
             </PopoverContent>
           </Popover>
         ) : (
-          <span className="text-sm text-muted-foreground">Not in any dataset</span>
+          <span className="text-sm text-muted-foreground">Not in any experiment</span>
         )}
 
         <Button

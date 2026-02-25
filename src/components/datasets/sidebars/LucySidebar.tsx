@@ -51,13 +51,13 @@ const QA_ICON = "w-4 h-4";
 
 // All available quick actions (plain language for non-technical users)
 const ALL_QUICK_ACTIONS: Record<string, QuickAction> = {
-  "start-finetune": { id: "start-finetune", icon: <Rocket className={QA_ICON} />, label: "Start training setup", prompt: "Help me set up fine-tuning for this dataset. Analyze what I have and create a plan." },
+  "start-finetune": { id: "start-finetune", icon: <Rocket className={QA_ICON} />, label: "Start training setup", prompt: "Help me set up fine-tuning for this experiment. Analyze what I have and create a plan." },
   "check-status": { id: "check-status", icon: <BarChart3 className={QA_ICON} />, label: "Check progress", prompt: "What's the current status of my fine-tuning workflow? Summarize where I am and what's next." },
   "analyze-coverage": { id: "analyze-coverage", icon: <TrendingUp className={QA_ICON} />, label: "Check data variety", prompt: "Analyze the topic coverage and balance of my training data. Are there any gaps?" },
   "generate-data": { id: "generate-data", icon: <Sparkles className={QA_ICON} />, label: "Create more examples", prompt: "Generate more synthetic training examples to improve coverage and balance." },
   "configure-grader": { id: "configure-grader", icon: <Scale className={QA_ICON} />, label: "Set up evaluation", prompt: "Help me configure an evaluation grader to score the quality of my training data." },
   "run-dry-run": { id: "run-dry-run", icon: <FlaskConical className={QA_ICON} />, label: "Test before training", prompt: "Run an evaluation on a sample of my data to check quality before training." },
-  "start-training": { id: "start-training", icon: <Rocket className={QA_ICON} />, label: "Start training", prompt: "Start the fine-tuning training job with my current dataset configuration." },
+  "start-training": { id: "start-training", icon: <Rocket className={QA_ICON} />, label: "Start training", prompt: "Start the fine-tuning training job with my current experiment configuration." },
 };
 
 /** Return context-appropriate quick actions based on workflow state */

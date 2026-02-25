@@ -123,7 +123,7 @@ export function ObjectiveInputTab({
                     type="text"
                     value={datasetName}
                     onChange={(e) => onDatasetNameChange(e.target.value)}
-                    placeholder="Dataset name"
+                    placeholder="Experiment name"
                     className="h-8 w-40 px-2 text-sm bg-background/50 border border-border/50 rounded-md outline-none focus:border-[rgba(var(--theme-500),0.5)] transition-colors placeholder:text-muted-foreground/40"
                   />
                 </div>

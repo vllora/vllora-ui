@@ -426,7 +426,7 @@ export function LucyChat({
               </div>
               <div className="border-l-2 border-[rgb(var(--theme-500))] pl-3 py-1">
                 <LucyTypingIndicator />
-                <p className="text-xs text-muted-foreground mt-0.5">Lucy is reviewing your dataset...</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Lucy is reviewing your experiment...</p>
               </div>
             </div>
           ) : (

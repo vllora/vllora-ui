@@ -70,7 +70,7 @@ export function useDatasetCreation() {
                                   spanContent.includes("rnbqkbnr");
 
       if (isChessTutorSample) {
-        setDatasetName("Chess Tutor Dataset");
+        setDatasetName("Chess Tutor");
         setFinetuneObjective(CHESS_TUTOR_OBJECTIVE.description);
       }
     }
@@ -231,7 +231,7 @@ export function useDatasetCreation() {
   // Create dataset
   const handleCreateDataset = useCallback(async () => {
     if (!datasetName.trim()) {
-      toast.error("Please enter a dataset name");
+      toast.error("Please enter an experiment name");
       return;
     }
 
@@ -244,7 +244,7 @@ export function useDatasetCreation() {
     }
 
     setIsCreating(true);
-    setCreatingStatus("Creating dataset...");
+    setCreatingStatus("Creating experiment...");
     try {
       // Create the dataset
       const dataset = await createDataset(datasetName.trim(), finetuneObjective);
@@ -283,7 +283,7 @@ export function useDatasetCreation() {
 
       setCreatingStatus("Importing records...");
       await importRecords(dataset.id, records);
-      toast.success(`Created dataset "${datasetName}" with ${records.length} records`);
+      toast.success(`Created experiment "${datasetName}" with ${records.length} records`);
 
       // Clear upload session from IndexedDB if we used uploaded records
       if (activeTab === "upload") {
@@ -298,7 +298,7 @@ export function useDatasetCreation() {
       navigate(`/datasets/${dataset.id}`);
     } catch (err) {
       console.error("Failed to create dataset:", err);
-      toast.error("Failed to create dataset");
+      toast.error("Failed to create experiment");
     } finally {
       setIsCreating(false);
       setCreatingStatus(undefined);

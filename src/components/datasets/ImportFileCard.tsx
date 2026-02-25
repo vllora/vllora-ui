@@ -208,7 +208,7 @@ export function ImportFileCard() {
       navigate(`/datasets/${dataset.id}`);
     } catch (err) {
       console.error("Failed to create dataset:", err);
-      toast.error("Failed to create dataset");
+      toast.error("Failed to create experiment");
     } finally {
       setIsCreating(false);
     }
@@ -350,7 +350,7 @@ export function ImportFileCard() {
             <Input
               value={datasetName}
               onChange={(e) => setDatasetName(e.target.value)}
-              placeholder="Dataset name"
+              placeholder="Experiment name"
               className="h-9"
             />
             <Button

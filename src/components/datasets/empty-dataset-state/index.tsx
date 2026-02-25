@@ -234,7 +234,7 @@ export function EmptyDatasetsState() {
       }
     } catch (error) {
       console.error("Failed to create dataset:", error);
-      toast.error("Failed to create dataset");
+      toast.error("Failed to create experiment");
       setIsCreating(false);
     }
   };
@@ -244,11 +244,11 @@ export function EmptyDatasetsState() {
     try {
       const sampleConfig = getDefaultSampleDataset();
       const result = await createSampleDataset(sampleConfig);
-      toast.success(`Created sample dataset with ${result.recordCount} records`);
+      toast.success(`Created sample experiment with ${result.recordCount} records`);
       navigate(`/datasets/${result.datasetId}`);
     } catch (error) {
       console.error("Failed to load sample dataset:", error);
-      toast.error("Failed to load sample dataset");
+      toast.error("Failed to load sample experiment");
     } finally {
       setIsLoadingSample(false);
     }
@@ -345,7 +345,7 @@ export function EmptyDatasetsState() {
         {/* Title */}
         <h1 className="text-4xl md:text-5xl font-bold mb-4 text-foreground">
           What is the objective of{" "}
-          <span className="text-[rgb(var(--theme-500))]">your dataset?</span>
+          <span className="text-[rgb(var(--theme-500))]">your experiment?</span>
         </h1>
         <p className="text-muted-foreground text-lg">
           Define your goal to let our AI agent optimize your data enhancement strategy.

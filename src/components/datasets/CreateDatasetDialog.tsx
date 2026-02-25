@@ -34,13 +34,13 @@ export function CreateDatasetDialog() {
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Create new dataset</DialogTitle>
+          <DialogTitle>Create new experiment</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <Input
             value={newDatasetName}
             onChange={(e) => setNewDatasetName(e.target.value)}
-            placeholder="Dataset name"
+            placeholder="Experiment name"
             autoFocus
             onKeyDown={(e) => {
               if (e.key === "Enter" && newDatasetName.trim()) {

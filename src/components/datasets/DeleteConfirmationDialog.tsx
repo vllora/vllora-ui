@@ -40,11 +40,11 @@ export function DeleteConfirmationDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            Delete {isDataset ? "Dataset" : "Record"}?
+            Delete {isDataset ? "Experiment" : "Record"}?
           </AlertDialogTitle>
           <AlertDialogDescription>
             {isDataset
-              ? "This will permanently delete the dataset and all its records. This action cannot be undone."
+              ? "This will permanently delete the experiment and all its records. This action cannot be undone."
               : "This will permanently delete this record. This action cannot be undone."}
           </AlertDialogDescription>
         </AlertDialogHeader>

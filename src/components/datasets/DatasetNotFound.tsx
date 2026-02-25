@@ -14,10 +14,10 @@ interface DatasetNotFoundProps {
 export function DatasetNotFound({ onBack }: DatasetNotFoundProps) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-4">
-      <p className="text-muted-foreground">Dataset not found</p>
+      <p className="text-muted-foreground">Experiment not found</p>
       <Button variant="outline" onClick={onBack}>
         <ArrowLeft className="w-4 h-4 mr-2" />
-        Back to Datasets
+        Back to Experiments
       </Button>
     </div>
   );

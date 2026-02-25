@@ -56,7 +56,7 @@ export function DatasetSelector({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-48 max-h-72 overflow-auto">
         <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-          Switch dataset
+          Switch experiment
         </div>
         {datasets.map((dataset) => {
           const count = recordCounts?.[dataset.id];
@@ -99,7 +99,7 @@ export function DatasetSelector({
               className="gap-2 cursor-pointer text-muted-foreground hover:text-foreground"
             >
               <Plus className="w-4 h-4 flex-shrink-0" />
-              <span>Create new dataset</span>
+              <span>Create new experiment</span>
             </DropdownMenuItem>
           </>
         )}

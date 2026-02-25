@@ -51,7 +51,7 @@ function useDatasets() {
       const error = err instanceof Error ? err : new Error('Failed to load datasets');
       setError(error);
       setDatasets([]);
-      toast.error('Failed to load datasets', {
+      toast.error('Failed to load experiments', {
         description: error.message,
       });
     } finally {

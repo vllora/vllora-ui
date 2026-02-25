@@ -54,7 +54,7 @@ export const FloatingActionBar = ({
             className="gap-2 rounded-full bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white whitespace-nowrap"
           >
             <Database className="h-4 w-4" />
-            Add to Dataset
+            Add to Experiment
           </Button>
 
           {/* Delete button */}

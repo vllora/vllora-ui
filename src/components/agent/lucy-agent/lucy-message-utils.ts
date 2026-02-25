@@ -145,7 +145,7 @@ export function getFriendlyToolMessage(toolName: string, input: any): string {
     case 'check_training_status':
       return 'Checking training status...';
     case 'upload_dataset':
-      return 'Uploading dataset...';
+      return 'Uploading training data...';
     case 'deploy_model':
       return 'Deploying model...';
 
@@ -163,7 +163,7 @@ export function getFriendlyToolMessage(toolName: string, input: any): string {
 
     // Dataset state tools
     case 'get_dataset_state':
-      return 'Loading dataset state...';
+      return 'Loading experiment state...';
     case 'get_dataset_records':
       return 'Loading records...';
     case 'update_objective':

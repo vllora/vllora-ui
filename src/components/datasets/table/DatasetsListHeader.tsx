@@ -52,7 +52,7 @@ export function DatasetsListHeader({
         <Input
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search datasets..."
+          placeholder="Search experiments..."
           className="pl-9 bg-transparent border-border/50 focus-visible:ring-1 focus-visible:ring-[rgb(var(--theme-500))]"
         />
       </div>

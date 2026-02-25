@@ -213,9 +213,9 @@ export function FinetuneJobsPanel({ className }: FinetuneJobsPanelProps) {
           ) : filteredJobs.length === 0 ? (
             <div className="text-center py-8 text-sm text-muted-foreground">
               <Sparkles className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p>No finetune jobs for this dataset</p>
+              <p>No finetune jobs yet</p>
               <p className="text-xs mt-1">
-                Start a finetune job from this dataset to see it here
+                Start a finetune job to see it here
               </p>
             </div>
           ) : (

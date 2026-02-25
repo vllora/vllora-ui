@@ -157,7 +157,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
     // plan.md
     const planBadge: FileTreeBadge | undefined = (() => {
-      if (planStatus === "executing") return { label: "running", variant: "loading" };
+      if (planStatus === "executing") return { label: "executing", variant: "loading" };
       if (planStatus === "completed") return { label: "done", variant: "success" };
       if (planStatus === "failed") return { label: "failed", variant: "error" };
       if (hasPlanProposed) return { label: "proposed", variant: "warning" };
