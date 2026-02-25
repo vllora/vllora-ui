@@ -132,14 +132,16 @@ export function PlanCard() {
         </Button>
       </div>
 
-      {/* View Plan link — always visible so user can navigate to plan tab */}
-      <button
-        onClick={handleViewPlan}
-        className="flex items-center gap-1 text-[11px] text-[rgb(var(--theme-500))] hover:underline w-full"
-      >
-        <Eye className="w-3 h-3" />
-        {isPlanTabActive ? "Viewing full plan" : "View full plan"}
-      </button>
+      {/* View Plan link — hidden when plan tab is already active */}
+      {!isPlanTabActive && (
+        <button
+          onClick={handleViewPlan}
+          className="flex items-center gap-1 text-[11px] text-[rgb(var(--theme-500))] hover:underline w-full"
+        >
+          <Eye className="w-3 h-3" />
+          View full plan
+        </button>
+      )}
     </div>
   );
 }

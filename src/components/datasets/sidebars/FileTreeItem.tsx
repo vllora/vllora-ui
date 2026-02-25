@@ -64,6 +64,7 @@ export function FileTreeItem({
     <>
       <button
         onClick={handleClick}
+        title={node.title}
         className={cn(
           "w-full flex items-center gap-1 py-[3px] pr-2 text-left text-[13px] leading-[22px]",
           "hover:bg-muted/60 transition-colors cursor-pointer select-none",

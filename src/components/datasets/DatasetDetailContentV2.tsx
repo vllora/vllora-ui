@@ -23,7 +23,6 @@ import { SanitizeDataDialog } from "./SanitizeDataDialog";
 import { getLeafTopicsFromHierarchy, computeCoverageStats, computeDatasetInsights } from "./record-utils";
 import { getTopicCounts } from "./topic-hierarchy-utils";
 import { RecordsAnalyticsDialog } from "./dataset-detail-header/detail-records-analytics-dialog";
-import { DatasetDetailHeader } from "./dataset-detail-header";
 import { DatasetMainContent } from "./DatasetMainContent";
 import { DatasetNotFound } from "./DatasetNotFound";
 import { ExplorerSidebar, LucySidebar, TasksViewer, LogsViewer } from "./sidebars";
@@ -32,7 +31,7 @@ import { FinetuneConfigPanel } from "@/components/finetune/content/FinetuneConfi
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { DryRunJobsProvider } from "@/contexts/DryRunJobsContext";
 import { PlanPreview } from "./PlanPreview";
-import { ActivePlanBanner } from "./ActivePlanBanner";
+import { DatasetTitleBar, DatasetBreadcrumbBar } from "./DatasetBreadcrumbBar";
 import { useDatasetReadme } from "@/hooks/useDatasetReadme";
 import { DatasetOverviewPanel } from "./DatasetOverviewPanel";
 import { DatasetReadmeViewer } from "./readme-viewer";
@@ -562,22 +561,21 @@ export function DatasetDetailContentV2() {
       {/* Bridge: syncs workspace tab state ↔ parent content section */}
       <WorkspaceTabBridge openTabRef={openTabRef} onSectionChange={setTabContentSection} />
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Explorer sidebar on the left */}
-        <ExplorerSidebar />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Title bar — dataset name (editable), spans full width like VS Code */}
+        <DatasetTitleBar />
 
-        {/* Main content in the center */}
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-          {/* Header with dataset objective and action buttons */}
-          <div className="px-4 py-2 border-b border-border">
-            <DatasetDetailHeader />
-          </div>
+        <div className="flex-1 flex overflow-hidden min-h-0">
+          {/* Explorer sidebar on the left */}
+          <ExplorerSidebar />
 
-          {/* Active plan banner (shown when plan exists but plan tab isn't active) */}
-          <ActivePlanBanner />
-
+          {/* Main content in the center */}
+          <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           {/* Dynamic workspace tabs */}
           <WorkspaceTabManager />
+
+          {/* Path breadcrumb — only shown for subfolder navigation */}
+          <DatasetBreadcrumbBar />
 
           {/* Content panel — driven by the active workspace tab */}
           {contentSection === "overview" && (
@@ -705,8 +703,9 @@ export function DatasetDetailContentV2() {
           )}
         </div>
 
-        {/* Lucy AI assistant on the right */}
-        <LucySidebar />
+          {/* Lucy AI assistant on the right */}
+          <LucySidebar />
+        </div>
 
         {/* Dialogs */}
         <DeleteConfirmationDialog

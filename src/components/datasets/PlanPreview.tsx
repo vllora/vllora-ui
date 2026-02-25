@@ -128,42 +128,68 @@ function PlanDisplayView({
   isExecuting: boolean;
   isActionable: boolean;
 }) {
-  // Build human-readable diff summary for banner
+  // Build human-readable diff summary for banner.
+  // Skip the banner on the first plan proposal (only additions, no removals/modifications)
+  // since "Updated: 6 topics changed" is misleading when nothing existed before.
   const diffParts: string[] = [];
   if (planDiff?.hasChanges) {
-    const t = planDiff.topicsAdded.length + planDiff.topicsRemoved.length + planDiff.topicsModified.length;
-    const c = planDiff.criteriaAdded.length + planDiff.criteriaRemoved.length + planDiff.criteriaModified.length;
-    if (t > 0) diffParts.push(`${t} topic${t > 1 ? 's' : ''} changed`);
-    if (c > 0) diffParts.push(`${c} criterion${c > 1 ? ' changed' : 's changed'}`);
+    const hasRemovalsOrMods =
+      planDiff.topicsRemoved.length > 0 ||
+      planDiff.topicsModified.length > 0 ||
+      planDiff.criteriaRemoved.length > 0 ||
+      planDiff.criteriaModified.length > 0;
+
+    if (hasRemovalsOrMods) {
+      const t = planDiff.topicsAdded.length + planDiff.topicsRemoved.length + planDiff.topicsModified.length;
+      const c = planDiff.criteriaAdded.length + planDiff.criteriaRemoved.length + planDiff.criteriaModified.length;
+      if (t > 0) diffParts.push(`${t} topic${t > 1 ? 's' : ''} changed`);
+      if (c > 0) diffParts.push(`${c} ${c > 1 ? 'criteria' : 'criterion'} changed`);
+    }
   }
 
   return (
     <>
-      {/* Header toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border">
-        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <Sparkles className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-          Plan
+      {/* Diff banner — shown when save_plan committed a plan with changes */}
+      {planDiff?.hasChanges && diffParts.length > 0 && (
+        <div className="mx-4 mt-3 flex items-center gap-2 px-3 py-2 rounded-md border border-blue-500/30 bg-blue-500/10 text-xs">
+          <ArrowLeftRight className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+          <span className="text-blue-600 dark:text-blue-400">
+            <span className="font-medium">Updated: </span>
+            {diffParts.join(', ')}
+          </span>
+        </div>
+      )}
+
+      {/* Plan content */}
+      <div className="flex-1 overflow-auto p-6">
+        <div className="max-w-3xl mx-auto">
+          <div className="text-sm [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_table]:text-xs [&_p]:text-sm [&_li]:text-sm [&_blockquote]:text-sm">
+            <LazyMarkdownRenderer content={planToMarkdown(plan)} />
+          </div>
+        </div>
+      </div>
+
+      {/* Sticky footer — action buttons + status */}
+      {(isActionable || isExecuting || planStatus === 'completed' || planStatus === 'failed') && (
+        <div className="flex items-center justify-end px-4 py-2 border-t border-border bg-background/80 backdrop-blur-sm shrink-0 gap-2">
           {isExecuting && (
-            <span className="flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground mr-auto">
               <Loader2 className="w-3 h-3 animate-spin" />
               Executing...
             </span>
           )}
           {planStatus === 'completed' && (
-            <span className="flex items-center gap-1.5 text-xs font-normal text-emerald-600">
+            <span className="flex items-center gap-1.5 text-xs text-emerald-600 mr-auto">
               <CheckCircle2 className="w-3 h-3" />
               Completed
             </span>
           )}
           {planStatus === 'failed' && (
-            <span className="flex items-center gap-1.5 text-xs font-normal text-red-500">
+            <span className="flex items-center gap-1.5 text-xs text-red-500 mr-auto">
               <XCircle className="w-3 h-3" />
               Failed
             </span>
           )}
-        </div>
-        <div className="flex items-center gap-1.5">
           {isActionable && !isExecuting && (
             <>
               <Button
@@ -205,27 +231,7 @@ function PlanDisplayView({
             </>
           )}
         </div>
-      </div>
-
-      {/* Diff banner — shown when save_plan committed a plan with changes */}
-      {planDiff?.hasChanges && diffParts.length > 0 && (
-        <div className="mx-4 mt-3 flex items-center gap-2 px-3 py-2 rounded-md border border-blue-500/30 bg-blue-500/10 text-xs">
-          <ArrowLeftRight className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-          <span className="text-blue-600 dark:text-blue-400">
-            <span className="font-medium">Updated: </span>
-            {diffParts.join(', ')}
-          </span>
-        </div>
       )}
-
-      {/* Plan content */}
-      <div className="flex-1 overflow-auto p-6">
-        <div className="max-w-3xl mx-auto">
-          <div className="text-sm [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_table]:text-xs [&_p]:text-sm [&_li]:text-sm [&_blockquote]:text-sm">
-            <LazyMarkdownRenderer content={planToMarkdown(plan)} />
-          </div>
-        </div>
-      </div>
     </>
   );
 }

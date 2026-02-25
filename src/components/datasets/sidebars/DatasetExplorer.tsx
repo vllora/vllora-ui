@@ -394,23 +394,8 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
   // Render
   // ============================================================================
 
-  // Project header
-  const datasetName = dataset?.name || "Untitled Dataset";
-  const stepLabel = dataset?.topicHierarchy ? "In Fine-tune" : "Setup";
-  const recordLabel = records.length > 0 ? `${records.length} record${records.length !== 1 ? "s" : ""}` : "No records";
-
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Project header */}
-      <div className="px-3 pt-3 pb-2 shrink-0">
-        <h2 className="text-[13px] font-semibold text-foreground uppercase tracking-wide truncate">
-          {datasetName}
-        </h2>
-        <p className="text-[11px] text-muted-foreground mt-0.5">
-          {stepLabel} &middot; {recordLabel}
-        </p>
-      </div>
-
       {/* File tree */}
       <div className="flex-1 overflow-y-auto py-1">
         {tree.map((node) => (

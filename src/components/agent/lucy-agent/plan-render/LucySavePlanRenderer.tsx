@@ -75,7 +75,7 @@ export function LucySavePlanRenderer({ toolCall, state }: ToolRendererProps) {
           <div className="text-[10px] text-muted-foreground">
             {topicsChanged !== null ? `${topicsChanged} topic change${topicsChanged === 1 ? '' : 's'}` : ''}
             {topicsChanged !== null && criteriaChanged !== null ? ' · ' : ''}
-            {criteriaChanged !== null ? `${criteriaChanged} criteria change${criteriaChanged === 1 ? '' : 's'}` : ''}
+            {criteriaChanged !== null ? `${criteriaChanged} ${criteriaChanged === 1 ? 'criterion' : 'criteria'} change${criteriaChanged === 1 ? '' : 's'}` : ''}
           </div>
         )}
       </div>

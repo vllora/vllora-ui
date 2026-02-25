@@ -30,4 +30,6 @@ export interface FileTreeNode {
   children?: FileTreeNode[];
   /** Whether the folder can be expanded (defaults to true for folders with children) */
   isExpandable?: boolean;
+  /** Optional native tooltip text (shown on hover) */
+  title?: string;
 }
