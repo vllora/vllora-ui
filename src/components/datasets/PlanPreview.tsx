@@ -23,6 +23,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { useChatStateStore } from "@distri/react";
 import { PlanEditor, planToMarkdown } from "./plan-section/PlanEditor";
 import LazyMarkdownRenderer from "@/components/chat/LazyMarkdownRenderer";
 import { emitter } from "@/utils/eventEmitter";
@@ -284,6 +285,11 @@ function PlanEmptyView({
   const [hasTimedOut, setHasTimedOut] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
 
+  // Detect when Lucy is actively streaming (covers manual chat flow
+  // where user asks Lucy to create a plan but vllora_plan_generating
+  // hasn't fired yet because Lucy is still in early tool calls)
+  const isLucyStreaming = useChatStateStore((state) => state.isStreaming);
+
   useEffect(() => {
     if (isGenerating) {
       setIsRequesting(false);
@@ -325,7 +331,15 @@ function PlanEmptyView({
     });
   };
 
-  const showLoading = isGenerating || isRequesting;
+  // Show loading when:
+  // 1. isGenerating — vllora_plan_generating event fired (propose_plan tool running)
+  // 2. isRequesting — user clicked "Generate Plan" button
+  // 3. isLucyStreaming — Lucy is actively streaming (covers manual chat requests)
+  const showLoading = isGenerating || isRequesting || isLucyStreaming;
+
+  // Distinguish message: "Generating plan..." when we know it's plan-specific,
+  // "Lucy is working..." when she's streaming but hasn't hit propose_plan yet
+  const isConfirmedPlanGeneration = isGenerating || isRequesting;
 
   return (
     <>
@@ -343,9 +357,13 @@ function PlanEmptyView({
                 <Loader2 className="w-6 h-6 animate-spin text-[rgb(var(--theme-500))]" />
               </div>
               <div>
-                <h3 className="text-base font-medium text-foreground mb-1">Generating plan...</h3>
+                <h3 className="text-base font-medium text-foreground mb-1">
+                  {isConfirmedPlanGeneration ? "Generating plan..." : "Lucy is working..."}
+                </h3>
                 <p className="text-sm text-muted-foreground">
-                  Lucy is analyzing your {hasKnowledgeSources ? "documents and " : ""}dataset to create a customized plan.
+                  {isConfirmedPlanGeneration
+                    ? `Lucy is analyzing your ${hasKnowledgeSources ? "documents and " : ""}dataset to create a customized plan.`
+                    : "Lucy is analyzing your dataset. A plan will appear here when ready."}
                 </p>
               </div>
             </>

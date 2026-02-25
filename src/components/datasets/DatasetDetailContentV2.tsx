@@ -332,6 +332,10 @@ export function DatasetDetailContentV2() {
 
     hasTriggeredAutoGenerate.current = true;
 
+    // Emit generating event early so plan.md shows "Generating plan..." immediately,
+    // rather than waiting for the agent to eventually call the propose_plan tool.
+    emitter.emit("vllora_plan_generating", { datasetId });
+
     toast.info("Lucy is creating a plan from your documents...", { duration: 4000 });
     emitter.emit("vllora_lucy_prompt", {
       prompt: `Please analyze the uploaded documents and create a plan for this dataset using the propose_plan tool.`,
@@ -345,6 +349,8 @@ export function DatasetDetailContentV2() {
     const timeoutId = setTimeout(() => {
       if (hasTriggeredAutoGenerate.current) return;
       hasTriggeredAutoGenerate.current = true;
+
+      emitter.emit("vllora_plan_generating", { datasetId });
 
       toast.warning("Document processing is taking longer than expected. Generating plan with available content...", { duration: 5000 });
       emitter.emit("vllora_lucy_prompt", {

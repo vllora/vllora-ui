@@ -191,168 +191,177 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       icon: <FileText className={`${ICON_CLS} text-muted-foreground`} />,
     });
 
-    // --- documents/ ---
-    const docChildren: FileTreeNode[] = sources.map((src) => {
-      const statusBadge: FileTreeBadge | undefined = (() => {
-        if (src.status === "processing") return { label: "loading", variant: "loading" };
-        if (src.status === "ready") return { label: "done", variant: "success" };
-        if (src.status === "failed") return { label: "error", variant: "error" };
-        if (src.status === "pending") return { label: "pending", variant: "default" };
-        return undefined;
-      })();
+    // --- documents/ (only shown when there are knowledge sources) ---
+    if (sources.length > 0) {
+      const docChildren: FileTreeNode[] = sources.map((src) => {
+        const statusBadge: FileTreeBadge | undefined = (() => {
+          if (src.status === "processing") return { label: "loading", variant: "loading" };
+          if (src.status === "ready") return { label: "done", variant: "success" };
+          if (src.status === "failed") return { label: "error", variant: "error" };
+          if (src.status === "pending") return { label: "pending", variant: "default" };
+          return undefined;
+        })();
 
-      return {
-        id: `documents/${src.id}`,
-        name: src.name,
-        type: "file" as const,
-        icon: <FileText className={`${ICON_CLS} text-blue-400`} />,
-        badge: statusBadge,
-      };
-    });
+        return {
+          id: `documents/${src.id}`,
+          name: src.name,
+          type: "file" as const,
+          icon: <FileText className={`${ICON_CLS} text-blue-400`} />,
+          badge: statusBadge,
+        };
+      });
 
-    nodes.push({
-      id: "documents",
-      name: "documents/",
-      type: "folder",
-      icon: folderIcon(expandedNodes, "documents"),
-      badge: sources.length > 0 ? { label: String(sources.length), variant: "count" } : undefined,
-      children: docChildren,
-      isExpandable: true,
-    });
+      nodes.push({
+        id: "documents",
+        name: "documents/",
+        type: "folder",
+        icon: folderIcon(expandedNodes, "documents"),
+        badge: { label: String(sources.length), variant: "count" },
+        children: docChildren,
+        isExpandable: true,
+      });
+    }
 
-    // --- topics/ ---
+    // --- topics/ (only shown when dataset has records or a topic hierarchy) ---
     const topicHierarchy = dataset?.topicHierarchy?.hierarchy;
     const topicChildren = topicHierarchy
       ? buildTopicChildren(topicHierarchy, "", topicCounts, expandedNodes)
       : [];
 
-    nodes.push({
-      id: "topics",
-      name: "topics/",
-      type: "folder",
-      icon: folderIcon(expandedNodes, "topics"),
-      badge: records.length > 0
-        ? { label: String(records.length), variant: "count" }
-        : undefined,
-      children: topicChildren,
-      isExpandable: true,
-    });
-
-    // --- evaluations/ ---
-    const evalChildren: FileTreeNode[] = [];
-
-    // grader-script.ts
-    evalChildren.push({
-      id: "evaluations/grader-script.ts",
-      name: "grader-script.ts",
-      type: "file",
-      icon: <FileCode className={`${ICON_CLS} text-yellow-500`} />,
-      badge: dataset?.evalScript
-        ? undefined
-        : { label: "empty", variant: "default" },
-    });
-
-    // evaluations/jobs/
-    if (dryRunJobs.length > 0) {
-      const jobChildren: FileTreeNode[] = dryRunJobs.map((job) => {
-        const statusBadge: FileTreeBadge | undefined = (() => {
-          if (job.status === "running") return { label: "running", variant: "loading" };
-          if (job.status === "completed") return { label: "pass", variant: "success" };
-          if (job.status === "failed") return { label: "fail", variant: "error" };
-          return { label: job.status, variant: "default" };
-        })();
-
-        return {
-          id: `evaluations/jobs/${job.id}`,
-          name: `dry-run-${job.id.slice(0, 6)}.json`,
-          type: "file" as const,
-          icon: <FlaskConical className={`${ICON_CLS} text-violet-500`} />,
-          badge: statusBadge,
-        };
-      });
-
-      evalChildren.push({
-        id: "evaluations/jobs",
-        name: "jobs/",
+    if (records.length > 0 || topicChildren.length > 0) {
+      nodes.push({
+        id: "topics",
+        name: "topics/",
         type: "folder",
-        icon: folderIcon(expandedNodes, "evaluations/jobs"),
-        children: jobChildren,
+        icon: folderIcon(expandedNodes, "topics"),
+        badge: records.length > 0
+          ? { label: String(records.length), variant: "count" }
+          : undefined,
+        children: topicChildren,
         isExpandable: true,
       });
     }
 
-    nodes.push({
-      id: "evaluations",
-      name: "evaluations/",
-      type: "folder",
-      icon: folderIcon(expandedNodes, "evaluations"),
-      children: evalChildren,
-      isExpandable: true,
-    });
+    // --- evaluations/ (only shown when grader script exists or dry-run jobs exist) ---
+    const hasEvalContent = !!dataset?.evalScript || dryRunJobs.length > 0;
+    if (hasEvalContent) {
+      const evalChildren: FileTreeNode[] = [];
 
-    // --- finetune/ ---
-    const finetuneChildren: FileTreeNode[] = finetuneJobs.map((job) => {
-      const statusBadge: FileTreeBadge | undefined = (() => {
-        if (job.status === "running") return { label: "running", variant: "loading" };
-        if (job.status === "succeeded") return { label: "done", variant: "success" };
-        if (job.status === "failed") return { label: "failed", variant: "error" };
-        if (job.status === "pending") return { label: "queued", variant: "default" };
-        return { label: job.status, variant: "default" };
-      })();
-
-      const displayName = job.suffix || job.provider_job_id.slice(0, 12);
-
-      return {
-        id: `finetune/${job.id}`,
-        name: `${displayName}.json`,
-        type: "file" as const,
-        icon: <Rocket className={`${ICON_CLS} text-[rgb(var(--theme-500))]`} />,
-        badge: statusBadge,
-      };
-    });
-
-    nodes.push({
-      id: "finetune",
-      name: "finetune/",
-      type: "folder",
-      icon: folderIcon(expandedNodes, "finetune"),
-      badge: finetuneJobs.length > 0
-        ? { label: String(finetuneJobs.length), variant: "count" }
-        : undefined,
-      children: finetuneChildren,
-      isExpandable: true,
-    });
-
-    // --- quick-stats/ ---
-    const statsChildren: FileTreeNode[] = [
-      {
-        id: "quick-stats/coverage.md",
-        name: "coverage.md",
+      // grader-script.ts
+      evalChildren.push({
+        id: "evaluations/grader-script.ts",
+        name: "grader-script.ts",
         type: "file",
-        icon: <BarChart3 className={`${ICON_CLS} text-cyan-500`} />,
-      },
-      {
-        id: "quick-stats/balance.md",
-        name: "balance.md",
-        type: "file",
-        icon: <BarChart3 className={`${ICON_CLS} text-cyan-500`} />,
-      },
-      {
-        id: "quick-stats/quality-scores.md",
-        name: "quality-scores.md",
-        type: "file",
-        icon: <Sparkles className={`${ICON_CLS} text-cyan-500`} />,
-      },
-    ];
+        icon: <FileCode className={`${ICON_CLS} text-yellow-500`} />,
+        badge: dataset?.evalScript
+          ? undefined
+          : { label: "empty", variant: "default" },
+      });
 
-    nodes.push({
-      id: "quick-stats",
-      name: "quick-stats/",
-      type: "folder",
-      icon: folderIcon(expandedNodes, "quick-stats"),
-      children: statsChildren,
-      isExpandable: true,
-    });
+      // evaluations/jobs/
+      if (dryRunJobs.length > 0) {
+        const jobChildren: FileTreeNode[] = dryRunJobs.map((job) => {
+          const statusBadge: FileTreeBadge | undefined = (() => {
+            if (job.status === "running") return { label: "running", variant: "loading" };
+            if (job.status === "completed") return { label: "pass", variant: "success" };
+            if (job.status === "failed") return { label: "fail", variant: "error" };
+            return { label: job.status, variant: "default" };
+          })();
+
+          return {
+            id: `evaluations/jobs/${job.id}`,
+            name: `dry-run-${job.id.slice(0, 6)}.json`,
+            type: "file" as const,
+            icon: <FlaskConical className={`${ICON_CLS} text-violet-500`} />,
+            badge: statusBadge,
+          };
+        });
+
+        evalChildren.push({
+          id: "evaluations/jobs",
+          name: "jobs/",
+          type: "folder",
+          icon: folderIcon(expandedNodes, "evaluations/jobs"),
+          children: jobChildren,
+          isExpandable: true,
+        });
+      }
+
+      nodes.push({
+        id: "evaluations",
+        name: "evaluations/",
+        type: "folder",
+        icon: folderIcon(expandedNodes, "evaluations"),
+        children: evalChildren,
+        isExpandable: true,
+      });
+    }
+
+    // --- finetune/ (only shown when there are finetune jobs) ---
+    if (finetuneJobs.length > 0) {
+      const finetuneChildren: FileTreeNode[] = finetuneJobs.map((job) => {
+        const statusBadge: FileTreeBadge | undefined = (() => {
+          if (job.status === "running") return { label: "running", variant: "loading" };
+          if (job.status === "succeeded") return { label: "done", variant: "success" };
+          if (job.status === "failed") return { label: "failed", variant: "error" };
+          if (job.status === "pending") return { label: "queued", variant: "default" };
+          return { label: job.status, variant: "default" };
+        })();
+
+        const displayName = job.suffix || job.provider_job_id.slice(0, 12);
+
+        return {
+          id: `finetune/${job.id}`,
+          name: `${displayName}.json`,
+          type: "file" as const,
+          icon: <Rocket className={`${ICON_CLS} text-[rgb(var(--theme-500))]`} />,
+          badge: statusBadge,
+        };
+      });
+
+      nodes.push({
+        id: "finetune",
+        name: "finetune/",
+        type: "folder",
+        icon: folderIcon(expandedNodes, "finetune"),
+        badge: { label: String(finetuneJobs.length), variant: "count" },
+        children: finetuneChildren,
+        isExpandable: true,
+      });
+    }
+
+    // --- quick-stats/ (only shown when dataset has records to report on) ---
+    if (records.length > 0) {
+      const statsChildren: FileTreeNode[] = [
+        {
+          id: "quick-stats/coverage.md",
+          name: "coverage.md",
+          type: "file",
+          icon: <BarChart3 className={`${ICON_CLS} text-cyan-500`} />,
+        },
+        {
+          id: "quick-stats/balance.md",
+          name: "balance.md",
+          type: "file",
+          icon: <BarChart3 className={`${ICON_CLS} text-cyan-500`} />,
+        },
+        {
+          id: "quick-stats/quality-scores.md",
+          name: "quality-scores.md",
+          type: "file",
+          icon: <Sparkles className={`${ICON_CLS} text-cyan-500`} />,
+        },
+      ];
+
+      nodes.push({
+        id: "quick-stats",
+        name: "quick-stats/",
+        type: "folder",
+        icon: folderIcon(expandedNodes, "quick-stats"),
+        children: statsChildren,
+        isExpandable: true,
+      });
+    }
 
     return nodes;
   }, [
