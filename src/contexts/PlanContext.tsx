@@ -308,6 +308,19 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
             // Keep proposedPlan intact so the user can still view it.
             // Plan is only cleared on explicit dismiss or new plan generation.
             setIsPlanPreviewActive(false);
+            // Auto-switch to the tab most relevant to the last completed step
+            if (!progress.has_error) {
+              type SwitchTab = 'overview' | 'records' | 'evaluator' | 'jobs' | 'deploy';
+              const lastCompleted = [...progress.steps].reverse().find(s => s.status === 'completed');
+              const stepTabMap: Record<string, SwitchTab> = {
+                topics: 'records', adjust_topics: 'records', categorize: 'records',
+                generate: 'records', upload: 'records',
+                grader: 'evaluator', dryrun: 'evaluator',
+                finetune: 'jobs',
+              };
+              const tab: SwitchTab = stepTabMap[lastCompleted?.id ?? ''] ?? 'records';
+              emitter.emit('vllora_switch_tab', { datasetId: progress.dataset_id, tab });
+            }
           }, 2000);
         }
       }

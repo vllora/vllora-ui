@@ -65,7 +65,7 @@ function buildTopicChildren(
 
     return {
       id: nodeId,
-      name: hasChildren ? `${node.name}/` : node.name,
+      name: node.name,
       type: hasChildren ? "folder" : "file",
       icon: hasChildren
         ? folderIcon(expandedNodes, nodeId)
@@ -217,7 +217,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
       nodes.push({
         id: "documents",
-        name: "documents/",
+        name: "documents",
         type: "folder",
         icon: folderIcon(expandedNodes, "documents"),
         badge: { label: String(sources.length), variant: "count" },
@@ -235,7 +235,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
     if (records.length > 0 || topicChildren.length > 0) {
       nodes.push({
         id: "topics",
-        name: "topics/",
+        name: "topics",
         type: "folder",
         icon: folderIcon(expandedNodes, "topics"),
         badge: records.length > 0
@@ -283,7 +283,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
         evalChildren.push({
           id: "evaluations/jobs",
-          name: "jobs/",
+          name: "jobs",
           type: "folder",
           icon: folderIcon(expandedNodes, "evaluations/jobs"),
           children: jobChildren,
@@ -293,7 +293,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
       nodes.push({
         id: "evaluations",
-        name: "evaluations/",
+        name: "evaluations",
         type: "folder",
         icon: folderIcon(expandedNodes, "evaluations"),
         children: evalChildren,
@@ -325,7 +325,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
       nodes.push({
         id: "finetune",
-        name: "finetune/",
+        name: "finetune",
         type: "folder",
         icon: folderIcon(expandedNodes, "finetune"),
         badge: { label: String(finetuneJobs.length), variant: "count" },
@@ -359,7 +359,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
       nodes.push({
         id: "quick-stats",
-        name: "quick-stats/",
+        name: "quick-stats",
         type: "folder",
         icon: folderIcon(expandedNodes, "quick-stats"),
         children: statsChildren,
