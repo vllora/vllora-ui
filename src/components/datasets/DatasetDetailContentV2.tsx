@@ -26,7 +26,7 @@ import { RecordsAnalyticsDialog } from "./dataset-detail-header/detail-records-a
 import { DatasetDetailHeader } from "./dataset-detail-header";
 import { DatasetMainContent } from "./DatasetMainContent";
 import { DatasetNotFound } from "./DatasetNotFound";
-import { LucyDatasetAssistant } from "./LucyDatasetAssistant";
+import { ExplorerSidebar, LucySidebar, TasksViewer, LogsViewer } from "./sidebars";
 import { EvaluationConfigPanel } from "./evaluation-dialog/EvaluationConfigPanel";
 import { FinetuneConfigPanel } from "@/components/finetune/content/FinetuneConfigPanel";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
@@ -43,7 +43,6 @@ import { DeployGuidancePanel } from "./DeployGuidancePanel";
 import { WorkspaceTabsProvider, WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
 import { WorkspaceTabManager } from "./WorkspaceTabManager";
 import { mapTabPathToSection, type ContentSection } from "./TabContentRouter";
-import { TasksViewer, LogsViewer } from "./sidebar";
 import type { CoverageStats } from "@/types/dataset-types";
 
 // Side-effect: registers plan approval event listener
@@ -461,25 +460,44 @@ export function DatasetDetailContentV2() {
   const hasRecords = sortedRecords.length > 0;
   const hasEvaluator = !!dataset?.evalScript;
 
+  // For empty datasets with no plan, seed the tab system with plan.md so the user
+  // sees Lucy's plan creation immediately instead of an empty Overview.
+  // MUST be before early returns to satisfy React's Rules of Hooks.
+  const hasUrlTab = !!searchParams.get("tab") || !!searchParams.get("view");
+  const emptyDatasetInitialTabs = useMemo(() => {
+    if (hasUrlTab) return undefined;
+    const isEmpty = sortedRecords.length === 0;
+    const hasNoPlan = !proposedPlan && planStatus !== "proposed" && planStatus !== "approved";
+    if (isEmpty && hasNoPlan) {
+      return [{ path: "plan.md", label: "plan.md" }];
+    }
+    return undefined;
+  }, [sortedRecords.length, proposedPlan, planStatus, hasUrlTab]);
+
   if (isLoading) {
     return (
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar skeleton */}
-        <div className="w-[340px] border-r border-border flex flex-col shrink-0">
-          <div className="flex items-center gap-2.5 px-4 py-3 border-b">
-            <div className="w-8 h-8 rounded-full bg-muted animate-pulse" />
-            <div className="h-4 w-28 bg-muted animate-pulse rounded" />
-          </div>
-          <div className="flex-1 p-4 space-y-4">
-            <div className="space-y-2">
-              <div className="h-3 w-3/4 bg-muted animate-pulse rounded" />
-              <div className="h-3 w-full bg-muted animate-pulse rounded" />
-              <div className="h-3 w-2/3 bg-muted animate-pulse rounded" />
+        {/* Explorer sidebar skeleton (left) */}
+        <div className="w-[240px] border-r border-border flex flex-col shrink-0">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+            <div className="h-3 w-16 bg-muted animate-pulse rounded" />
+            <div className="flex gap-1">
+              <div className="h-5 w-5 bg-muted animate-pulse rounded" />
+              <div className="h-5 w-5 bg-muted animate-pulse rounded" />
             </div>
           </div>
+          <div className="px-3 pt-3 pb-2">
+            <div className="h-4 w-32 bg-muted animate-pulse rounded" />
+            <div className="h-3 w-24 bg-muted animate-pulse rounded mt-1" />
+          </div>
+          <div className="flex-1 px-2 py-1 space-y-1">
+            {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+              <div key={i} className="h-6 bg-muted animate-pulse rounded" style={{ width: `${60 + Math.random() * 30}%` }} />
+            ))}
+          </div>
         </div>
-        {/* Main content skeleton */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Main content skeleton (center) */}
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           {/* Header skeleton */}
           <div className="px-4 py-3 border-b border-border space-y-2">
             <div className="h-5 w-48 bg-muted animate-pulse rounded" />
@@ -506,6 +524,20 @@ export function DatasetDetailContentV2() {
             </div>
           </div>
         </div>
+        {/* Lucy sidebar skeleton (right) */}
+        <div className="w-[340px] border-l border-border flex flex-col shrink-0">
+          <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border">
+            <div className="w-7 h-7 rounded-full bg-muted animate-pulse" />
+            <div className="h-4 w-16 bg-muted animate-pulse rounded" />
+          </div>
+          <div className="flex-1 p-4 space-y-4">
+            <div className="space-y-2">
+              <div className="h-3 w-3/4 bg-muted animate-pulse rounded" />
+              <div className="h-3 w-full bg-muted animate-pulse rounded" />
+              <div className="h-3 w-2/3 bg-muted animate-pulse rounded" />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -520,16 +552,16 @@ export function DatasetDetailContentV2() {
 
   return (
     <DryRunJobsProvider dataset={dataset}>
-     <WorkspaceTabsProvider datasetId={datasetId}>
+     <WorkspaceTabsProvider datasetId={datasetId} initialTabs={emptyDatasetInitialTabs}>
       {/* Bridge: syncs workspace tab state ↔ parent content section */}
       <WorkspaceTabBridge openTabRef={openTabRef} onSectionChange={setTabContentSection} />
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Lucy Assistant on the left */}
-        <LucyDatasetAssistant />
+        {/* Explorer sidebar on the left */}
+        <ExplorerSidebar />
 
-        {/* Main content on the right */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Main content in the center */}
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           {/* Header with dataset objective and action buttons */}
           <div className="px-4 py-2 border-b border-border">
             <DatasetDetailHeader />
@@ -541,7 +573,7 @@ export function DatasetDetailContentV2() {
           {/* Dynamic workspace tabs */}
           <WorkspaceTabManager />
 
-          {/* Main content area — routed by contentSection */}
+          {/* Content panel — driven by the active workspace tab */}
           {contentSection === "overview" && (
             <DatasetOverviewPanel
               readme={readme}
@@ -666,6 +698,9 @@ export function DatasetDetailContentV2() {
             </div>
           )}
         </div>
+
+        {/* Lucy AI assistant on the right */}
+        <LucySidebar />
 
         {/* Dialogs */}
         <DeleteConfirmationDialog

@@ -1,18 +1,19 @@
 /**
- * LucyDatasetAssistant
+ * LucySidebar
  *
- * Lucy AI assistant sidebar for the datasets page.
- * Handles finetune workflow guidance with process-focused context.
+ * Right sidebar containing the Lucy AI assistant.
+ * Extracted from the former LucyDatasetAssistant monolith.
  *
  * Key Features:
  * - Proactive analysis when opening a dataset
  * - Guided finetune workflow (topics → categorize → coverage → grader → dry run → train → deploy)
  * - Workflow state persistence in IndexedDB
  * - Back-and-forth refinement of suggestions
+ * - Always visible — no tab switching needed
  */
 
 import { useMemo, useCallback, useState, useEffect, useRef } from "react";
-import { Plus, PanelLeftClose, PanelLeft, Settings2, Plug, Rocket, BarChart3, TrendingUp, Sparkles, Scale, FlaskConical, Pin, PinOff } from "lucide-react";
+import { Plus, PanelRightClose, PanelRight, Settings2, Plug, Rocket, BarChart3, TrendingUp, Sparkles, Scale, FlaskConical, Pin, PinOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LoadingIndicator } from "@/components/ui/LoadingIndicator";
 import { emitter } from "@/utils/eventEmitter";
@@ -43,15 +44,12 @@ import { PlanCard } from "@/components/agent/lucy-agent/plan-render/PlanCard";
 import type { QuickAction } from "@/components/agent/lucy-agent/LucyWelcome";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { buildDatasetAnalysisPrompt } from "./lucy-prompt-utils";
-import { SidebarTabStrip, DatasetExplorer } from "./sidebar";
-import type { SidebarTab } from "./sidebar";
+import { buildDatasetAnalysisPrompt } from "../lucy-prompt-utils";
 
 // Icon size for quick actions
 const QA_ICON = "w-4 h-4";
 
 // All available quick actions (plain language for non-technical users)
-// `prompt` is what Lucy receives; `label` is what the user sees on the button
 const ALL_QUICK_ACTIONS: Record<string, QuickAction> = {
   "start-finetune": { id: "start-finetune", icon: <Rocket className={QA_ICON} />, label: "Start training setup", prompt: "Help me set up fine-tuning for this dataset. Analyze what I have and create a plan." },
   "check-status": { id: "check-status", icon: <BarChart3 className={QA_ICON} />, label: "Check progress", prompt: "What's the current status of my fine-tuning workflow? Summarize where I am and what's next." },
@@ -64,50 +62,27 @@ const ALL_QUICK_ACTIONS: Record<string, QuickAction> = {
 
 /** Return context-appropriate quick actions based on workflow state */
 function getContextualQuickActions(recordCount: number, hasEvaluator: boolean, jobsCount: number): QuickAction[] {
-  // No records yet: suggest setup and data creation
   if (recordCount === 0) {
-    return [
-      ALL_QUICK_ACTIONS["start-finetune"],
-      ALL_QUICK_ACTIONS["generate-data"],
-    ];
+    return [ALL_QUICK_ACTIONS["start-finetune"], ALL_QUICK_ACTIONS["generate-data"]];
   }
-
-  // Has records but no evaluator: suggest data analysis and evaluation setup
   if (!hasEvaluator) {
-    return [
-      ALL_QUICK_ACTIONS["analyze-coverage"],
-      ALL_QUICK_ACTIONS["configure-grader"],
-      ALL_QUICK_ACTIONS["generate-data"],
-    ];
+    return [ALL_QUICK_ACTIONS["analyze-coverage"], ALL_QUICK_ACTIONS["configure-grader"], ALL_QUICK_ACTIONS["generate-data"]];
   }
-
-  // Has records + evaluator but no jobs: ready to test and train
   if (jobsCount === 0) {
-    return [
-      ALL_QUICK_ACTIONS["run-dry-run"],
-      ALL_QUICK_ACTIONS["start-training"],
-      ALL_QUICK_ACTIONS["analyze-coverage"],
-    ];
+    return [ALL_QUICK_ACTIONS["run-dry-run"], ALL_QUICK_ACTIONS["start-training"], ALL_QUICK_ACTIONS["analyze-coverage"]];
   }
-
-  // Has jobs: check progress, generate more data
-  return [
-    ALL_QUICK_ACTIONS["check-status"],
-    ALL_QUICK_ACTIONS["generate-data"],
-    ALL_QUICK_ACTIONS["analyze-coverage"],
-  ];
+  return [ALL_QUICK_ACTIONS["check-status"], ALL_QUICK_ACTIONS["generate-data"], ALL_QUICK_ACTIONS["analyze-coverage"]];
 }
 
-// Responsive sidebar width: 384px on wide screens, 340px on standard, auto-collapse on narrow
+// Responsive width: 384px on wide screens, 340px on standard
 const SIDEBAR_WIDTH_WIDE = 'w-[384px]';
 const SIDEBAR_WIDTH_STANDARD = 'w-[340px]';
 const BREAKPOINT_COLLAPSE = 1024;
 const BREAKPOINT_WIDE = 1536;
 
-export function LucyDatasetAssistant() {
+export function LucySidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isPinned, setIsPinned] = useState(() => localStorage.getItem("lucy-sidebar-pinned") === "true");
-  const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab>("lucy");
   const [sidebarWidthClass, setSidebarWidthClass] = useState(SIDEBAR_WIDTH_WIDE);
 
   // Connection timeout state
@@ -139,12 +114,12 @@ export function LucyDatasetAssistant() {
       setSidebarWidthClass(width >= BREAKPOINT_WIDE ? SIDEBAR_WIDTH_WIDE : SIDEBAR_WIDTH_STANDARD);
     };
 
-    handleResize(); // Set initial state
+    handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, [isPinned]);
 
-  // Get dataset from context (rendered inside DatasetDetailProvider)
+  // Get dataset from context
   const { dataset: currentDataset, datasetId: selectedDatasetId, isLoading: datasetLoading, records, activeSection } = DatasetDetailConsumer();
   const { filteredJobs } = FinetuneJobsConsumer();
 
@@ -184,7 +159,6 @@ export function LucyDatasetAssistant() {
   });
 
   // Track unread messages while sidebar is collapsed
-  // When collapsing: snapshot the current count. When expanding: reset unread.
   useEffect(() => {
     if (isCollapsed) {
       collapsedMessageCountRef.current = messages.length;
@@ -205,70 +179,46 @@ export function LucyDatasetAssistant() {
   const hasSetAutoTriggerRef = useRef(false);
   const lastAnalyzedDatasetRef = useRef<string | null>(null);
 
-  // Store messages ref to check without triggering effect re-runs
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
-  // Store workflow ref to use in timeout without adding to dependencies
   const workflowRef = useRef(workflow);
   workflowRef.current = workflow;
 
-  // Store records ref to use in timeout without adding to dependencies
   const recordsRef = useRef(records);
   recordsRef.current = records;
 
-  // Knowledge sources from context (single source of truth)
+  // Knowledge sources from context
   const { count: knowledgeSourcesCount, isProcessing: docsProcessing } = KnowledgeSourcesConsumer();
   const knowledgeSourcesCountRef = useRef(knowledgeSourcesCount);
   knowledgeSourcesCountRef.current = knowledgeSourcesCount;
 
-  // Track previous processing state to detect completion transitions
   const prevDocsProcessingRef = useRef(docsProcessing);
-  // Track whether we uploaded docs in this session (to auto-trigger plan creation)
   const pendingDocsPlanTriggerRef = useRef(false);
 
   // Proactive behavior: auto-analyze dataset when viewing it for the first time
   useEffect(() => {
-    // Skip if not ready
     if (
-      datasetLoading ||
-      workflowLoading ||
-      agentLoading ||
-      !agent ||
-      !isConnected ||
-      !selectedDatasetId ||
-      !currentDataset
-    ) {
-      return;
-    }
+      datasetLoading || workflowLoading || agentLoading ||
+      !agent || !isConnected || !selectedDatasetId || !currentDataset
+    ) return;
 
-    // Skip if we already successfully triggered for this dataset
-    if (lastAnalyzedDatasetRef.current === selectedDatasetId) {
-      return;
-    }
+    if (lastAnalyzedDatasetRef.current === selectedDatasetId) return;
 
-    // Skip if there are already messages (user has interacted)
-    // Using ref to avoid re-running effect when messages change
     if (messagesRef.current.length > 0) {
       lastAnalyzedDatasetRef.current = selectedDatasetId;
       return;
     }
 
-    // Skip if a plan is already proposed — sticky PlanCard handles the reload case
     if (planStatus === 'proposed') {
       lastAnalyzedDatasetRef.current = selectedDatasetId;
       return;
     }
 
     const targetDatasetId = selectedDatasetId;
-
-    // Use a delay to ensure LucyChat is fully mounted and ready
-    // Only mark as analyzed AFTER the trigger fires (prevents race condition with cleanup)
     const timer = setTimeout(() => {
-      // Double-check we haven't already triggered and messages are still empty
       if (lastAnalyzedDatasetRef.current !== targetDatasetId && messagesRef.current.length === 0) {
         lastAnalyzedDatasetRef.current = targetDatasetId;
-        // Use refs to get latest values at trigger time
         setAutoTriggerPrompt(buildDatasetAnalysisPrompt(recordsRef.current.length === 0));
       }
     }, 300);
@@ -276,71 +226,57 @@ export function LucyDatasetAssistant() {
     return () => clearTimeout(timer);
   }, [datasetLoading, workflowLoading, agentLoading, agent, isConnected, selectedDatasetId, currentDataset, planStatus]);
 
-  // Reset state when dataset changes - always start fresh
+  // Reset state when dataset changes
   useEffect(() => {
     setAutoTriggerPrompt(null);
     hasSetAutoTriggerRef.current = false;
     lastAnalyzedDatasetRef.current = null;
   }, [selectedDatasetId]);
 
-  // Auto-prompt Lucy when document extraction completes (isProcessing: true → false)
-  // Only if: pending trigger is set AND no plan is already active
+  // Auto-prompt Lucy when document extraction completes
   useEffect(() => {
     const wasProcessing = prevDocsProcessingRef.current;
     prevDocsProcessingRef.current = docsProcessing;
 
-    // Detect transition: processing → done, and we have a pending trigger
     if (wasProcessing && !docsProcessing && pendingDocsPlanTriggerRef.current) {
       pendingDocsPlanTriggerRef.current = false;
 
-      // Don't auto-prompt if a plan is already in progress
-      // User might be uploading additional docs to an existing dataset
       if (planStatus && planStatus !== 'proposed' && planStatus !== 'dismissed') {
-        console.log('[LucyDatasetAssistant] Documents ready, but plan already active (status:', planStatus, ') — skipping auto-prompt');
+        console.log('[LucySidebar] Documents ready, but plan already active (status:', planStatus, ') — skipping auto-prompt');
         return;
       }
 
-      console.log('[LucyDatasetAssistant] Documents ready, auto-triggering plan creation');
+      console.log('[LucySidebar] Documents ready, auto-triggering plan creation');
       emitter.emit("vllora_lucy_prompt", {
         prompt: `My documents have finished processing and are ready. Please analyze them and create a plan now.`,
       });
     }
   }, [docsProcessing, planStatus]);
 
-  // Listen for analyze_knowledge_sources detecting processing docs
-  // This sets the pending trigger so the auto-prompt fires when processing completes
+  // Listen for docs awaiting plan
   useEffect(() => {
     const handleDocsAwaiting = ({ datasetId }: { datasetId: string }) => {
       if (datasetId === selectedDatasetId) {
-        console.log('[LucyDatasetAssistant] Docs awaiting plan — setting pending trigger');
+        console.log('[LucySidebar] Docs awaiting plan — setting pending trigger');
         pendingDocsPlanTriggerRef.current = true;
       }
     };
 
     emitter.on('vllora_docs_awaiting_plan', handleDocsAwaiting);
-    return () => {
-      emitter.off('vllora_docs_awaiting_plan', handleDocsAwaiting);
-    };
+    return () => { emitter.off('vllora_docs_awaiting_plan', handleDocsAwaiting); };
   }, [selectedDatasetId]);
 
   // Listen for external prompt triggers (e.g., "Generate for topic" button)
+  // In dual-sidebar layout: just expand Lucy sidebar, no tab switching needed
   useEffect(() => {
     const handleLucyPrompt = ({ prompt }: { prompt: string }) => {
-      // Expand the sidebar and switch to Lucy tab
       setIsCollapsed(false);
-      setActiveSidebarTab("lucy");
-      // Clear first, then set - ensures re-trigger even if same prompt
       setAutoTriggerPrompt(null);
-      // Use setTimeout to ensure the clear happens before setting new value
-      setTimeout(() => {
-        setAutoTriggerPrompt(prompt);
-      }, 0);
+      setTimeout(() => { setAutoTriggerPrompt(prompt); }, 0);
     };
 
     emitter.on("vllora_lucy_prompt", handleLucyPrompt);
-    return () => {
-      emitter.off("vllora_lucy_prompt", handleLucyPrompt);
-    };
+    return () => { emitter.off("vllora_lucy_prompt", handleLucyPrompt); };
   }, []);
 
   const isOpenAIConfigured = useMemo(() => {
@@ -349,48 +285,35 @@ export function LucyDatasetAssistant() {
   }, [providers]);
 
   const toolRenderers = useMemo(
-    () => ({
-      default: LucyDefaultToolRenderer,
-      ...lucyToolRenderers,
-    }),
+    () => ({ default: LucyDefaultToolRenderer, ...lucyToolRenderers }),
     []
   );
 
-  // Context-aware quick actions based on current workflow state
   const contextualQuickActions = useMemo(
-    () => getContextualQuickActions(
-      records.length,
-      !!currentDataset?.evalScript,
-      filteredJobs.length,
-    ),
+    () => getContextualQuickActions(records.length, !!currentDataset?.evalScript, filteredJobs.length),
     [records.length, currentDataset?.evalScript, filteredJobs.length]
   );
 
-  // Helper to determine knowledge source type from mime type
   const getKnowledgeSourceType = useCallback((mimeType: string, fileName: string): KnowledgeSourceType => {
     if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) return 'pdf';
     if (mimeType.startsWith('image/')) return 'image';
     if (mimeType.startsWith('text/') || fileName.match(/\.(txt|md|json|csv)$/)) return 'text';
-    return 'text'; // Default to text
+    return 'text';
   }, []);
 
   // Attach finetune workflow context to messages before sending
   // Also handles file uploads by creating knowledge sources
   const handleBeforeSendMessage = useCallback(
     async (message: DistriMessage): Promise<DistriMessage> => {
-      // Extract text parts, file parts, and image parts separately
       const textParts = message.parts.filter(p => p.part_type === 'text');
       const fileParts = message.parts.filter(p => (p as any).part_type === 'file');
       const imageParts = message.parts.filter(p => p.part_type === 'image');
 
-      // Combine all text parts into one message
       let userText = textParts.map(p => p.data).join('\n') || '';
 
-      // Process file uploads as knowledge sources
       const uploadedFiles: string[] = [];
       const failedFiles: string[] = [];
       if (selectedDatasetId && fileParts.length > 0) {
-        // Show processing toast
         const toastId = toast.loading(`Processing ${fileParts.length} file(s)...`, {
           description: 'Extracting content from documents',
         });
@@ -400,79 +323,56 @@ export function LucyDatasetAssistant() {
           if (fileData && fileData.data && fileData.name) {
             try {
               const sourceType = getKnowledgeSourceType(fileData.mime_type || '', fileData.name);
-
-              // Update toast with current file
-              toast.loading(`Processing: ${fileData.name}`, {
-                id: toastId,
-                description: 'Extracting text and topics...',
-              });
+              toast.loading(`Processing: ${fileData.name}`, { id: toastId, description: 'Extracting text and topics...' });
 
               const result = await uploadKnowledgeSourceHandler({
                 dataset_id: selectedDatasetId,
                 name: fileData.name,
                 type: sourceType,
-                content: fileData.data, // base64 content
+                content: fileData.data,
                 mime_type: fileData.mime_type,
               });
 
               if ((result as any).success) {
                 uploadedFiles.push(fileData.name);
-                console.log(`[LucyDatasetAssistant] Uploaded knowledge source: ${fileData.name}`);
+                console.log(`[LucySidebar] Uploaded knowledge source: ${fileData.name}`);
               } else {
                 failedFiles.push(fileData.name);
-                console.error(`[LucyDatasetAssistant] Failed to upload ${fileData.name}:`, (result as any).error);
+                console.error(`[LucySidebar] Failed to upload ${fileData.name}:`, (result as any).error);
               }
             } catch (error) {
               failedFiles.push(fileData.name);
-              console.error(`[LucyDatasetAssistant] Error uploading ${fileData.name}:`, error);
+              console.error(`[LucySidebar] Error uploading ${fileData.name}:`, error);
             }
           }
         }
 
-        // Show completion toast
         if (uploadedFiles.length > 0 && failedFiles.length === 0) {
-          toast.success(`Processed ${uploadedFiles.length} file(s)`, {
-            id: toastId,
-            description: uploadedFiles.join(', '),
-          });
+          toast.success(`Processed ${uploadedFiles.length} file(s)`, { id: toastId, description: uploadedFiles.join(', ') });
         } else if (uploadedFiles.length > 0 && failedFiles.length > 0) {
-          toast.warning(`Processed ${uploadedFiles.length} file(s), ${failedFiles.length} failed`, {
-            id: toastId,
-            description: `Success: ${uploadedFiles.join(', ')}`,
-          });
+          toast.warning(`Processed ${uploadedFiles.length} file(s), ${failedFiles.length} failed`, { id: toastId, description: `Success: ${uploadedFiles.join(', ')}` });
         } else {
-          toast.error('Failed to process files', {
-            id: toastId,
-            description: failedFiles.join(', '),
-          });
+          toast.error('Failed to process files', { id: toastId, description: failedFiles.join(', ') });
         }
 
-        // Notify UI and set up auto-trigger for when extraction completes
         if (uploadedFiles.length > 0) {
-          // Emit event to refresh knowledge sources count
           emitter.emit("vllora_knowledge_source_updated", { datasetId: selectedDatasetId });
-
-          // Mark that we should auto-trigger plan creation when extraction finishes
           pendingDocsPlanTriggerRef.current = true;
 
-          // Tell Lucy about the upload — don't ask for a plan yet (docs are still extracting)
           if (!userText.trim()) {
             userText = `I've uploaded ${uploadedFiles.length} document(s): ${uploadedFiles.join(', ')}. They are being processed now — I'll let you know when they're ready so you can create a plan.`;
           } else {
-            const uploadNotice = `\n\n[Knowledge sources uploaded: ${uploadedFiles.join(', ')}. Documents are being processed — plan creation will be triggered automatically when extraction completes.]`;
-            userText += uploadNotice;
+            userText += `\n\n[Knowledge sources uploaded: ${uploadedFiles.join(', ')}. Documents are being processed — plan creation will be triggered automatically when extraction completes.]`;
           }
         }
       }
 
-      // The prepareMessage function handles context injection
-      // Only pass through image parts (file parts have been processed as knowledge sources)
       return prepareMessage(userText, imageParts);
     },
     [prepareMessage, selectedDatasetId, getKnowledgeSourceType]
   );
 
-  // Render chat content (always mounted to preserve state)
+  // Chat content — always visible in right sidebar
   const chatContent = (
     <>
       {providersLoading ? (
@@ -520,20 +420,12 @@ export function LucyDatasetAssistant() {
             <>
               <p className="text-sm font-medium text-foreground">Connection timed out</p>
               <p className="text-xs text-muted-foreground text-center px-6">Could not reach the assistant server. Check your connection and try again.</p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => { setConnectionTimedOut(false); reconnect(); }}
-              >
+              <Button variant="outline" size="sm" onClick={() => { setConnectionTimedOut(false); reconnect(); }}>
                 Retry
               </Button>
             </>
           ) : (
-            <LoadingIndicator
-              variant="progress"
-              message="Connecting..."
-              submessage="Establishing connection to the assistant"
-            />
+            <LoadingIndicator variant="progress" message="Connecting..." submessage="Establishing connection to the assistant" />
           )}
         </div>
       )}
@@ -543,17 +435,17 @@ export function LucyDatasetAssistant() {
   return (
     <div
       className={cn(
-        "flex-shrink-0 border-r border-border flex flex-col min-h-0 bg-background transition-all duration-200",
+        "flex-shrink-0 border-l border-border flex flex-col min-h-0 bg-background transition-all duration-200",
         isCollapsed ? "w-14" : sidebarWidthClass
       )}
     >
       {/* Header */}
       <div className={cn(
         "flex items-center border-b shrink-0 transition-all duration-200",
-        isCollapsed ? "flex-col py-3 gap-3" : "justify-between px-4 py-3"
+        isCollapsed ? "flex-col py-3 gap-3" : "justify-between px-3 py-2.5"
       )}>
         {isCollapsed ? (
-          // Collapsed header
+          // Collapsed header — right sidebar (tooltips point left)
           <>
             <TooltipProvider delayDuration={300}>
               <Tooltip>
@@ -568,7 +460,7 @@ export function LucyDatasetAssistant() {
                     )}
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="right">Expand Lucy Assistant</TooltipContent>
+                <TooltipContent side="left">Expand Lucy</TooltipContent>
               </Tooltip>
             </TooltipProvider>
 
@@ -592,7 +484,7 @@ export function LucyDatasetAssistant() {
                       {unreadCount > 9 ? "9+" : unreadCount}
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent side="right">{unreadCount} new message{unreadCount !== 1 ? "s" : ""}</TooltipContent>
+                  <TooltipContent side="left">{unreadCount} new message{unreadCount !== 1 ? "s" : ""}</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             )}
@@ -600,48 +492,32 @@ export function LucyDatasetAssistant() {
             <TooltipProvider delayDuration={300}>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => setIsCollapsed(false)}
-                  >
-                    <PanelLeft className="h-4 w-4" />
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsCollapsed(false)}>
+                    <PanelRight className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="right">Expand</TooltipContent>
+                <TooltipContent side="left">Expand</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </>
         ) : (
-          // Expanded header: tab strip + action buttons
+          // Expanded header: Lucy label + action buttons
           <>
-            <div className="flex-1 min-w-0">
-              <SidebarTabStrip
-                activeTab={activeSidebarTab}
-                onTabChange={setActiveSidebarTab}
-                lucyUnreadCount={activeSidebarTab !== "lucy" ? unreadCount : 0}
-                lucyProcessing={agentLoading || isGeneratingPlan || isExecuting}
-              />
+            <div className="flex items-center gap-2 min-w-0">
+              <LucyAvatar size="sm" />
+              <span className="text-[13px] font-semibold text-foreground">Lucy</span>
             </div>
-            <div className="flex items-center gap-0.5 px-1 shrink-0">
-              {activeSidebarTab === "lucy" && (
-                <TooltipProvider delayDuration={300}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={handleNewChat}
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">New Chat</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
+            <div className="flex items-center gap-0.5 shrink-0">
+              <TooltipProvider delayDuration={300}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleNewChat}>
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">New Chat</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               <TooltipProvider delayDuration={300}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -660,13 +536,8 @@ export function LucyDatasetAssistant() {
               <TooltipProvider delayDuration={300}>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={() => setIsCollapsed(true)}
-                    >
-                      <PanelLeftClose className="h-4 w-4" />
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsCollapsed(true)}>
+                      <PanelRightClose className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom">Collapse</TooltipContent>
@@ -677,23 +548,12 @@ export function LucyDatasetAssistant() {
         )}
       </div>
 
-      {/* Content - hidden when collapsed but stays mounted */}
+      {/* Chat content — always mounted, hidden only when collapsed */}
       <div className={cn(
         "flex-1 flex flex-col min-h-0 overflow-hidden transition-all duration-200",
         isCollapsed && "hidden"
       )}>
-        {/* Explorer panel */}
-        {activeSidebarTab === "explorer" && (
-          <DatasetExplorer onNavigate={() => {}} />
-        )}
-
-        {/* Lucy chat panel — always mounted to preserve state, hidden when Explorer active */}
-        <div className={cn(
-          "flex-1 flex flex-col min-h-0",
-          activeSidebarTab !== "lucy" && "hidden"
-        )}>
-          {chatContent}
-        </div>
+        {chatContent}
       </div>
     </div>
   );
