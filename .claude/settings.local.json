@@ -37,7 +37,11 @@
       "Bash(else)",
       "Bash(fi)",
       "Bash(for branch in main claude/config-setup chore-lucy-enhance feat/sub-agents-finetune)",
-      "Bash(do echo \"=== $branch ===\")"
+      "Bash(do echo \"=== $branch ===\")",
+      "mcp__stitch__generate_screen_from_text",
+      "mcp__stitch__get_project",
+      "mcp__stitch__edit_screens",
+      "mcp__stitch__get_screen"
     ],
     "deny": [],
     "ask": [],
