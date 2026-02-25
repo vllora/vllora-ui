@@ -242,43 +242,56 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
         </div>
       )}
 
-      {/* Tabbed content: Metrics | Per-Row */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col">
-        <div className="shrink-0 px-3 pt-2">
-          <TabsList className="h-7">
-            <TabsTrigger value="metrics" className="text-[11px] px-3 h-5">
-              Metrics
-            </TabsTrigger>
-            <TabsTrigger value="per-row" className="text-[11px] px-3 h-5">
-              Per-Row
-            </TabsTrigger>
-          </TabsList>
-        </div>
-        <TabsContent value="metrics" className="flex-1 min-h-0 overflow-y-auto p-3 mt-0">
-          {job.dataset_id ? (
-            <TrainingMetricsSection
-              evalResults={evalResults}
-              isLoading={isLoadingEvals}
-              isRefreshing={isRefreshing}
-              error={evalsError}
-              onRefresh={handleRefresh}
-            />
-          ) : (
-            <div className="text-xs text-muted-foreground py-2">
-              No dataset linked to this job
+      {/* Tabbed content: Metrics | Per-Row — only show if there's data or the job might produce data */}
+      {(() => {
+        const hasEvalData = evalResults && evalResults.results.length > 0;
+        const isFailed = job.status === "failed";
+        const isActive = job.status === "running" || job.status === "pending";
+
+        // Failed with no eval data: skip tabs entirely
+        if (isFailed && !hasEvalData && !isLoadingEvals) {
+          return null;
+        }
+
+        return (
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col">
+            <div className="shrink-0 px-3 pt-2">
+              <TabsList className="h-7">
+                <TabsTrigger value="metrics" className="text-[11px] px-3 h-5">
+                  Metrics
+                </TabsTrigger>
+                <TabsTrigger value="per-row" className="text-[11px] px-3 h-5">
+                  Per-Row
+                </TabsTrigger>
+              </TabsList>
             </div>
-          )}
-        </TabsContent>
-        <TabsContent value="per-row" className="flex-1 min-h-0 p-3 mt-0">
-          {job.dataset_id && evalResults && evalResults.results.length > 0 ? (
-            <PerRowDetailsSection results={evalResults.results} datasetId={job.dataset_id} />
-          ) : (
-            <div className="text-xs text-muted-foreground py-2">
-              {isLoadingEvals ? "Loading..." : "No per-row data available"}
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
+            <TabsContent value="metrics" className="flex-1 min-h-0 overflow-y-auto p-3 mt-0">
+              {job.dataset_id ? (
+                <TrainingMetricsSection
+                  evalResults={evalResults}
+                  isLoading={isLoadingEvals}
+                  isRefreshing={isRefreshing}
+                  error={evalsError}
+                  onRefresh={handleRefresh}
+                />
+              ) : (
+                <div className="text-xs text-muted-foreground py-2">
+                  No dataset linked to this job
+                </div>
+              )}
+            </TabsContent>
+            <TabsContent value="per-row" className="flex-1 min-h-0 p-3 mt-0">
+              {job.dataset_id && hasEvalData ? (
+                <PerRowDetailsSection results={evalResults.results} datasetId={job.dataset_id} />
+              ) : (
+                <div className="text-xs text-muted-foreground py-2">
+                  {isLoadingEvals ? "Loading..." : isActive ? "Evaluation data will appear as training progresses" : "No per-row data available"}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
+        );
+      })()}
     </div>
   );
 }

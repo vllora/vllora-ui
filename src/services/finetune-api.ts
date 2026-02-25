@@ -545,7 +545,7 @@ export const DEFAULT_TRAINING_CONFIG: ReinforcementTrainingConfig = {
   learning_rate: 0.00001,
   lora_rank: 8,
   epochs: 3,
-  batch_size: 10,
+  batch_size: 5,
   gradient_accumulation_steps: 40,
 };
 

@@ -3,7 +3,10 @@
  *
  * Recursive tree item component for the Dataset Explorer.
  * Models VS Code's file tree: indent per level, chevron for folders,
- * type-specific icons, optional badges, hover highlight.
+ * type-specific icons, optional badges, hover highlight, hover actions.
+ *
+ * Uses a <div> wrapper (not <button>) so that nested action <button>s
+ * receive clicks correctly — nesting <button> inside <button> is invalid HTML.
  */
 
 import { ChevronRight } from "lucide-react";
@@ -62,11 +65,20 @@ export function FileTreeItem({
 
   return (
     <>
-      <button
+      {/* Row wrapper — <div> instead of <button> so nested action buttons work */}
+      <div
+        role="treeitem"
+        tabIndex={0}
         onClick={handleClick}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            handleClick();
+          }
+        }}
         title={node.title}
         className={cn(
-          "w-full flex items-center gap-1 py-[3px] pr-2 text-left text-[13px] leading-[22px]",
+          "group/tree-item w-full flex items-center gap-1 py-[3px] pr-2 text-left text-[13px] leading-[22px]",
           "hover:bg-muted/60 transition-colors cursor-pointer select-none",
           isSelected && "bg-muted/80 text-foreground",
           !isSelected && "text-foreground/80"
@@ -95,6 +107,32 @@ export function FileTreeItem({
         {/* Name */}
         <span className="truncate flex-1 min-w-0">{node.name}</span>
 
+        {/* Hover actions (VS Code-style) */}
+        {node.actions && node.actions.length > 0 && (
+          <span className="shrink-0 flex items-center gap-0.5 opacity-0 group-hover/tree-item:opacity-100 transition-opacity">
+            {node.actions.map((action) => (
+              <button
+                key={action.key}
+                title={action.title}
+                className={cn(
+                  "w-5 h-5 flex items-center justify-center rounded-sm transition-colors",
+                  action.disabled
+                    ? "opacity-40 cursor-not-allowed text-muted-foreground"
+                    : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                )}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!action.disabled) {
+                    action.onClick();
+                  }
+                }}
+              >
+                {action.icon}
+              </button>
+            ))}
+          </span>
+        )}
+
         {/* Badge */}
         {node.badge && (
           <span
@@ -106,7 +144,7 @@ export function FileTreeItem({
             {node.badge.label}
           </span>
         )}
-      </button>
+      </div>
 
       {/* Children (expanded folders) */}
       {isExpanded && hasChildren && (

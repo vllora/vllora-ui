@@ -16,14 +16,14 @@ import {
   FolderOpen,
   Folder,
   FileCode,
-  FlaskConical,
-  Rocket,
+  ClipboardCheck,
   Brain,
   BarChart3,
   ScrollText,
   ListChecks,
   BookOpen,
   Sparkles,
+  Plus,
 } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
@@ -32,7 +32,9 @@ import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { PlanConsumer } from "@/contexts/PlanContext";
 import { WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
 import { useChatStateStore } from "@distri/react";
+import { toast } from "sonner";
 import { FileTreeItem } from "./FileTreeItem";
+import { NewJobDialog } from "@/components/finetune/content/NewJobDialog";
 import type { FileTreeNode, FileTreeBadge } from "./types";
 import type { TopicHierarchyNode } from "@/types/dataset-types";
 
@@ -101,7 +103,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
   const { dataset, records } = DatasetDetailConsumer();
   const { sources } = KnowledgeSourcesConsumer();
   const { jobs: dryRunJobs } = DryRunJobsConsumer();
-  const { filteredJobs: finetuneJobs } = FinetuneJobsConsumer();
+  const { filteredJobs: finetuneJobs, loadJobs: loadFinetuneJobs } = FinetuneJobsConsumer();
   const { proposedPlan, planStatus, hasPlanProposed } = PlanConsumer();
   const { openTab } = WorkspaceTabsConsumer();
   const todos = useChatStateStore((s) => s.todos);
@@ -111,6 +113,9 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
     () => new Set(["documents", "data", "evaluations", "finetune"])
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  // New finetune job dialog
+  const [showNewJobDialog, setShowNewJobDialog] = useState(false);
 
   const toggleExpand = useCallback((nodeId: string) => {
     setExpandedNodes((prev) => {
@@ -277,7 +282,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
             id: `evaluations/jobs/${job.id}`,
             name: `eval-${job.id.slice(0, 6)}`,
             type: "file" as const,
-            icon: <FlaskConical className={`${ICON_CLS} text-violet-500`} />,
+            icon: <ClipboardCheck className={`${ICON_CLS} text-violet-500`} />,
             badge: statusBadge,
           };
         });
@@ -296,7 +301,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         id: "evaluations",
         name: "evaluations",
         type: "folder",
-        icon: <FlaskConical className={`${ICON_CLS} text-violet-500`} />,
+        icon: <ClipboardCheck className={`${ICON_CLS} text-violet-500`} />,
         children: evalChildren,
         isExpandable: true,
       });
@@ -317,12 +322,16 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
         return {
           id: `finetune/${job.id}`,
-          name: `${displayName}.json`,
+          name: displayName,
           type: "file" as const,
-          icon: <Rocket className={`${ICON_CLS} text-[rgb(var(--theme-500))]`} />,
+          icon: <Sparkles className={`${ICON_CLS} text-[rgb(var(--theme-500))]`} />,
           badge: statusBadge,
         };
       });
+
+      const hasActiveJob = finetuneJobs.some(
+        (j) => j.status === "running" || j.status === "pending"
+      );
 
       nodes.push({
         id: "finetune",
@@ -334,6 +343,20 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
           : undefined,
         children: finetuneChildren,
         isExpandable: true,
+        actions: [
+          {
+            key: "new-job",
+            icon: <Plus className="w-3.5 h-3.5" />,
+            title: "New finetune job",
+            onClick: () => {
+              if (hasActiveJob) {
+                toast.info("A finetune job is already running. Wait for it to finish before starting a new one.");
+              } else {
+                setShowNewJobDialog(true);
+              }
+            },
+          },
+        ],
       });
     }
 
@@ -397,6 +420,10 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
   // Render
   // ============================================================================
 
+  const hasActiveJob = finetuneJobs.some(
+    (j) => j.status === "running" || j.status === "pending"
+  );
+
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* File tree */}
@@ -413,6 +440,18 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
           />
         ))}
       </div>
+
+      {/* New finetune job dialog (triggered from finetune folder "+" action) */}
+      {dataset?.id && (
+        <NewJobDialog
+          datasetId={dataset.id}
+          onSuccess={loadFinetuneJobs}
+          disabled={hasActiveJob}
+          open={showNewJobDialog}
+          onOpenChange={setShowNewJobDialog}
+          initialConfig={dataset.trainingConfig}
+        />
+      )}
     </div>
   );
 }

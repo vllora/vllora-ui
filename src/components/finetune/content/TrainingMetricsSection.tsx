@@ -52,7 +52,7 @@ export function TrainingMetricsSection({
         <TrainingMetricsChart results={evalResults.results} />
       ) : (
         <div className="text-xs text-muted-foreground py-2">
-          No evaluation metrics available yet
+          Metrics will appear here as training progresses. Hit Refresh to check for updates.
         </div>
       )}
     </div>

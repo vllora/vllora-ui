@@ -15,6 +15,20 @@ export interface FileTreeBadge {
   variant: BadgeVariant;
 }
 
+/** VS Code-style hover action button for tree nodes */
+export interface FileTreeAction {
+  /** Unique key for React list rendering */
+  key: string;
+  /** Icon (lucide ReactNode, sized w-3.5 h-3.5) */
+  icon: ReactNode;
+  /** Tooltip text */
+  title: string;
+  /** Click handler — receives the mouse event (already stopPropagation'd) */
+  onClick: () => void;
+  /** Optional: disable the action */
+  disabled?: boolean;
+}
+
 export interface FileTreeNode {
   /** Unique identifier — also used as the virtual path */
   id: string;
@@ -32,4 +46,6 @@ export interface FileTreeNode {
   isExpandable?: boolean;
   /** Optional native tooltip text (shown on hover) */
   title?: string;
+  /** Optional hover actions (VS Code-style buttons that appear on hover) */
+  actions?: FileTreeAction[];
 }
