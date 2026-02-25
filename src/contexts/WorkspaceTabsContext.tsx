@@ -98,7 +98,7 @@ function saveActiveTab(datasetId: string, path: string | null) {
 /** Derive a display label from a virtual file path */
 function labelFromPath(path: string): string {
   // "evaluations/grader-script.ts" → "grader-script.ts"
-  // "topics/openings/" → "openings/"
+  // "data/openings" → "openings"
   // "readme.md" → "readme.md"
   const segments = path.split("/").filter(Boolean);
   return segments[segments.length - 1] || path;

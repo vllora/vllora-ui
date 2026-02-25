@@ -11,14 +11,11 @@ import type { ViewMode } from "./dataset-detail-header/ViewModeToggle";
 import type { CoverageStats, DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import type { AvailableTopic } from "./record-utils";
 import { RecordsSectionHeader } from "./dataset-detail-header/RecordsSectionHeader";
-import { DatasetOverviewCard } from "./dataset-detail-header/overview-card";
 import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
 import { RecordsTable } from "./records-table/RecordsTable";
 import { RecordDetailSidebar } from "./records-table/RecordDetailSidebar";
 import { EmptyRecordsState } from "./EmptyRecordsState";
 import { filterRecords, type StatFilter, type RecordRole } from "./record-filters";
-
-type BalanceRating = "excellent" | "good" | "fair" | "poor" | "critical";
 
 export interface DatasetMainContentProps {
   viewMode: ViewMode;
@@ -30,18 +27,10 @@ export interface DatasetMainContentProps {
   coverageStats?: CoverageStats;
   availableTopics: AvailableTopic[];
 
-  // Overview card props
-  overviewStats: {
-    total: number;
-    original: number;
-    generated: number;
-    topicDistribution: Record<string, number>;
-    uncategorizedCount: number;
-    balanceRating?: BalanceRating;
-    balanceScore?: number;
-  };
-  leafTopicCount: number;
-  onOverviewClick: () => void;
+  /** Filter records to a specific topic and its descendants (from Explorer path) */
+  topicFilter?: string;
+
+  // Import + docs handlers (for empty state)
   onImportClick: () => void;
   onDocsClick?: () => void;
 
@@ -83,9 +72,7 @@ export function DatasetMainContent({
   topicHierarchy,
   coverageStats,
   availableTopics,
-  overviewStats,
-  leafTopicCount,
-  onOverviewClick,
+  topicFilter,
   onImportClick,
   onDocsClick,
   selectedTopic,
@@ -114,18 +101,48 @@ export function DatasetMainContent({
   // Search query state
   const [searchQuery, setSearchQuery] = useState("");
 
+  // When a topic is selected from Explorer, filter records to that subtree
+  const topicFilteredRecords = useMemo(() => {
+    if (!topicFilter || !topicHierarchy) return records;
+
+    // Find the node matching the topic path (e.g., "FEN Position Analysis")
+    // and collect all descendant topic IDs so we show its entire subtree
+    const pathSegments = topicFilter.split("/");
+    let currentNodes: TopicHierarchyNode[] | undefined = topicHierarchy;
+    let matchedNode: TopicHierarchyNode | undefined;
+
+    for (const segment of pathSegments) {
+      matchedNode = currentNodes?.find((n) => n.name === segment);
+      if (!matchedNode) break;
+      currentNodes = matchedNode.children;
+    }
+
+    if (!matchedNode) return records;
+
+    // Collect all topic IDs under this node (including itself)
+    const ids = new Set<string>();
+    const collect = (node: TopicHierarchyNode) => {
+      ids.add(node.id || node.name);
+      ids.add(node.name);
+      node.children?.forEach(collect);
+    };
+    collect(matchedNode);
+
+    return records.filter((r) => r.topic && ids.has(r.topic));
+  }, [records, topicFilter, topicHierarchy]);
+
   // Apply stat filter, role filter, and search to records
   const filteredRecords = useMemo(() => {
     const hasStatFilter = activeStatFilter !== "all";
     const hasRoleFilter = roleFilter !== "all";
     const hasSearch = searchQuery.trim().length > 0;
-    if (!hasStatFilter && !hasRoleFilter && !hasSearch) return records;
-    return filterRecords(records, {
+    if (!hasStatFilter && !hasRoleFilter && !hasSearch) return topicFilteredRecords;
+    return filterRecords(topicFilteredRecords, {
       statFilter: hasStatFilter ? activeStatFilter : undefined,
       role: hasRoleFilter ? roleFilter : undefined,
       search: hasSearch ? searchQuery : undefined,
     });
-  }, [records, activeStatFilter, roleFilter, searchQuery]);
+  }, [topicFilteredRecords, activeStatFilter, roleFilter, searchQuery]);
 
   // Handle "View in Table" from canvas panel — switch to table view and focus the topic
   const handleViewInTable = useCallback((topicId: string) => {
@@ -138,7 +155,25 @@ export function DatasetMainContent({
     }, 100);
   }, [onViewModeChange]);
 
-  const hasTopics = topicHierarchy && topicHierarchy.length > 0;
+  // When filtering by topic, narrow the hierarchy to just the matched subtree
+  const displayHierarchy = useMemo(() => {
+    if (!topicFilter || !topicHierarchy) return topicHierarchy;
+
+    const pathSegments = topicFilter.split("/");
+    let currentNodes: TopicHierarchyNode[] | undefined = topicHierarchy;
+    let matchedNode: TopicHierarchyNode | undefined;
+
+    for (const segment of pathSegments) {
+      matchedNode = currentNodes?.find((n) => n.name === segment);
+      if (!matchedNode) break;
+      currentNodes = matchedNode.children;
+    }
+
+    // Return the matched node as a single-root hierarchy
+    return matchedNode ? [matchedNode] : topicHierarchy;
+  }, [topicFilter, topicHierarchy]);
+
+  const hasTopics = displayHierarchy && displayHierarchy.length > 0;
 
   // Show empty state only when no records AND no topic hierarchy
   // If topics exist, show the table/canvas with empty topic groups
@@ -161,29 +196,13 @@ export function DatasetMainContent({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Overview card */}
-      <div className="px-4 py-3 border-b border-border shrink-0 bg-background">
-        <DatasetOverviewCard
-          total={overviewStats.total}
-          original={overviewStats.original}
-          generated={overviewStats.generated}
-          topicDistribution={overviewStats.topicDistribution}
-          uncategorizedCount={overviewStats.uncategorizedCount}
-          leafTopicCount={leafTopicCount}
-          balanceRating={overviewStats.balanceRating}
-          balanceScore={overviewStats.balanceScore}
-          onClick={onOverviewClick}
-          onImportClick={onImportClick}
-        />
-      </div>
-
       {/* Stats bar + view controls */}
       <div className="px-4 py-2 border-b border-border shrink-0 bg-background">
         <RecordsSectionHeader
           viewMode={viewMode}
           onViewModeChange={onViewModeChange}
           onExport={onExport}
-          records={records}
+          records={topicFilteredRecords}
           datasetId={datasetId}
           activeStatFilter={activeStatFilter}
           onStatFilterChange={setActiveStatFilter}
@@ -196,7 +215,7 @@ export function DatasetMainContent({
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
       {viewMode === "canvas" ? (
         <TopicHierarchyCanvas
-          hierarchy={topicHierarchy}
+          hierarchy={displayHierarchy}
           records={filteredRecords}
           datasetId={datasetId}
           coverageStats={coverageStats}
@@ -222,7 +241,7 @@ export function DatasetMainContent({
           showFooter={false}
           height="auto"
           groupByTopic={true}
-          topicHierarchy={topicHierarchy}
+          topicHierarchy={displayHierarchy}
           availableTopics={availableTopics}
           onUpdateTopic={onUpdateRecordTopic}
           onDelete={onDeleteRecord}

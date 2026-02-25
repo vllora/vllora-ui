@@ -59,7 +59,7 @@ function buildTopicChildren(
 ): FileTreeNode[] {
   return nodes.map((node) => {
     const path = parentPath ? `${parentPath}/${node.name}` : node.name;
-    const nodeId = `topics/${path}`;
+    const nodeId = `data/${path}`;
     const count = getTopicRecordCount(node, topicCounts);
     const hasChildren = node.children && node.children.length > 0;
 
@@ -107,7 +107,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
   // Expanded/selected state
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(
-    () => new Set(["documents", "topics", "evaluations", "finetune"])
+    () => new Set(["documents", "data", "evaluations", "finetune"])
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
@@ -234,10 +234,10 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
     if (records.length > 0 || topicChildren.length > 0) {
       nodes.push({
-        id: "topics",
-        name: "topics",
+        id: "data",
+        name: "data",
         type: "folder",
-        icon: folderIcon(expandedNodes, "topics"),
+        icon: folderIcon(expandedNodes, "data"),
         badge: records.length > 0
           ? { label: String(records.length), variant: "count" }
           : undefined,

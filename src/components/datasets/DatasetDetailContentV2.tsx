@@ -57,9 +57,10 @@ import "@/lib/distri-finetune-tools/steps/execute-plan";
 interface TabBridgeProps {
   openTabRef: React.MutableRefObject<(path: string, label?: string, preview?: boolean) => void>;
   onSectionChange: (section: ContentSection) => void;
+  onActivePathChange: (path: string | null) => void;
 }
 
-function WorkspaceTabBridge({ openTabRef, onSectionChange }: TabBridgeProps) {
+function WorkspaceTabBridge({ openTabRef, onSectionChange, onActivePathChange }: TabBridgeProps) {
   const { activeTabPath, openTab } = WorkspaceTabsConsumer();
 
   // Expose openTab to parent via ref (stable across renders)
@@ -68,7 +69,8 @@ function WorkspaceTabBridge({ openTabRef, onSectionChange }: TabBridgeProps) {
   // When active workspace tab changes, derive content section and notify parent
   useEffect(() => {
     onSectionChange(activeTabPath ? mapTabPathToSection(activeTabPath) : null);
-  }, [activeTabPath, onSectionChange]);
+    onActivePathChange(activeTabPath);
+  }, [activeTabPath, onSectionChange, onActivePathChange]);
 
   return null;
 }
@@ -148,6 +150,7 @@ export function DatasetDetailContentV2() {
   // Workspace tab bridge: ref exposes openTab(), state receives tab-driven content section
   const openTabRef = useRef<(path: string, label?: string, preview?: boolean) => void>(() => {});
   const [tabContentSection, setTabContentSection] = useState<ContentSection>(null);
+  const [activeTabPath, setActiveTabPath] = useState<string | null>(null);
 
   // Finetune jobs sidebar
   const { setCurrentBackendDatasetId } = FinetuneJobsConsumer();
@@ -559,7 +562,7 @@ export function DatasetDetailContentV2() {
     <DryRunJobsProvider dataset={dataset}>
      <WorkspaceTabsProvider datasetId={datasetId} initialTabs={emptyDatasetInitialTabs}>
       {/* Bridge: syncs workspace tab state ↔ parent content section */}
-      <WorkspaceTabBridge openTabRef={openTabRef} onSectionChange={setTabContentSection} />
+      <WorkspaceTabBridge openTabRef={openTabRef} onSectionChange={setTabContentSection} onActivePathChange={setActiveTabPath} />
 
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Title bar — dataset name (editable), spans full width like VS Code */}
@@ -598,17 +601,7 @@ export function DatasetDetailContentV2() {
               topicHierarchy={dataset.topicHierarchy?.hierarchy}
               coverageStats={canvasCoverageStats}
               availableTopics={availableTopics}
-              overviewStats={{
-                total: insights.totalRecords,
-                original: insights.originalRecords,
-                generated: insights.generatedRecords,
-                topicDistribution: insights.topicDistribution,
-                uncategorizedCount: insights.uncategorizedCount,
-                balanceRating: cardCoverageStats?.balanceRating,
-                balanceScore: cardCoverageStats?.balanceScore,
-              }}
-              leafTopicCount={availableTopics.length}
-              onOverviewClick={() => setAnalyticsDialogOpen(true)}
+              topicFilter={activeTabPath?.startsWith("data/") ? activeTabPath.slice(5) : undefined}
               onImportClick={() => setImportDialog(true)}
               onDocsClick={() => openTabRef.current("documents", "Documents", false)}
               selectedTopic={selectedTopic}

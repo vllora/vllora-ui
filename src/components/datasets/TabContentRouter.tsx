@@ -46,7 +46,8 @@ export function mapTabPathToSection(path: string | null): ContentSection {
 
   // Folder/file prefix matches
   if (path.startsWith("quick-stats/")) return "overview";
-  if (path.startsWith("topics/")) return "records";
+  if (path === "data") return "records";
+  if (path.startsWith("data/")) return "records";
   if (path === "evaluations/grader-script.ts") return "evaluator-script";
   if (path.startsWith("evaluations/jobs")) return "evaluator-jobs";
   if (path.startsWith("evaluations/")) return "evaluator";
