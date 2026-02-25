@@ -45,12 +45,13 @@ export function mapTabPathToSection(path: string | null): ContentSection {
   if (path === "logs.md") return "logs";
 
   // Folder/file prefix matches
-  if (path.startsWith("quick-stats/")) return "overview";
+  if (path.startsWith("insights/")) return "overview";
   if (path === "data") return "records";
   if (path.startsWith("data/")) return "records";
   if (path === "evaluations/grader-script.ts") return "evaluator-script";
   if (path.startsWith("evaluations/jobs")) return "evaluator-jobs";
   if (path.startsWith("evaluations/")) return "evaluator";
+  if (path === "finetune") return "jobs";
   if (path.startsWith("finetune/")) return "jobs";
   if (path.startsWith("documents/")) return "documents";
 

@@ -18,6 +18,7 @@ import {
   FileCode,
   FlaskConical,
   Rocket,
+  Brain,
   BarChart3,
   ScrollText,
   ListChecks,
@@ -295,14 +296,14 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         id: "evaluations",
         name: "evaluations",
         type: "folder",
-        icon: folderIcon(expandedNodes, "evaluations"),
+        icon: <FlaskConical className={`${ICON_CLS} text-violet-500`} />,
         children: evalChildren,
         isExpandable: true,
       });
     }
 
-    // --- finetune/ (only shown when there are finetune jobs) ---
-    if (finetuneJobs.length > 0) {
+    // --- finetune/ (always shown — users need access to start training manually) ---
+    {
       const finetuneChildren: FileTreeNode[] = finetuneJobs.map((job) => {
         const statusBadge: FileTreeBadge | undefined = (() => {
           if (job.status === "running") return { label: "running", variant: "loading" };
@@ -327,30 +328,32 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         id: "finetune",
         name: "finetune",
         type: "folder",
-        icon: folderIcon(expandedNodes, "finetune"),
-        badge: { label: String(finetuneJobs.length), variant: "count" },
+        icon: <Brain className={`${ICON_CLS} text-orange-500`} />,
+        badge: finetuneJobs.length > 0
+          ? { label: String(finetuneJobs.length), variant: "count" }
+          : undefined,
         children: finetuneChildren,
         isExpandable: true,
       });
     }
 
-    // --- quick-stats/ (only shown when dataset has records to report on) ---
+    // --- insights/ (only shown when dataset has records to report on) ---
     if (records.length > 0) {
       const statsChildren: FileTreeNode[] = [
         {
-          id: "quick-stats/coverage.md",
+          id: "insights/coverage.md",
           name: "coverage.md",
           type: "file",
           icon: <BarChart3 className={`${ICON_CLS} text-cyan-500`} />,
         },
         {
-          id: "quick-stats/balance.md",
+          id: "insights/balance.md",
           name: "balance.md",
           type: "file",
           icon: <BarChart3 className={`${ICON_CLS} text-cyan-500`} />,
         },
         {
-          id: "quick-stats/quality-scores.md",
+          id: "insights/quality-scores.md",
           name: "quality-scores.md",
           type: "file",
           icon: <Sparkles className={`${ICON_CLS} text-cyan-500`} />,
@@ -358,10 +361,10 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       ];
 
       nodes.push({
-        id: "quick-stats",
-        name: "quick-stats",
+        id: "insights",
+        name: "insights",
         type: "folder",
-        icon: folderIcon(expandedNodes, "quick-stats"),
+        icon: folderIcon(expandedNodes, "insights"),
         children: statsChildren,
         isExpandable: true,
       });
