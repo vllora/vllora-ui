@@ -349,11 +349,6 @@ function PlanEmptyView({
 
   return (
     <>
-      {/* Header bar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
-        <span className="text-sm font-medium text-foreground">Plan</span>
-      </div>
-
       {/* Empty state */}
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="max-w-sm text-center space-y-5">
