@@ -445,7 +445,7 @@ async function executeFinetune(ctx: StepContext): Promise<StepResult> {
     datasetId: dataset_id,
     baseModel: 'unsloth/Qwen3-4B',
     trainingConfig: {
-      learning_rate: 0.0001,
+      learning_rate: 0.00001,
       epochs: 2,
       batch_size_samples: 10,
       lora_rank: 8,
