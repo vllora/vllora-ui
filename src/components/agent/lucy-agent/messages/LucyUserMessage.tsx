@@ -8,7 +8,6 @@ import { DistriMessage } from '@distri/core';
 import { extractContent, formatTimestamp } from '../lucy-message-utils';
 import { LucyTextRenderer } from '../LucyTextRenderer';
 import { LucyImageRenderer } from '../LucyImageRenderer';
-import { UserAvatar } from '../UserAvatar';
 
 // ============================================================================
 // Types
@@ -29,17 +28,14 @@ export function LucyUserMessage({ message }: LucyUserMessageProps) {
   if (!content.text && content.imageParts.length === 0) return null;
 
   return (
-    <div className="flex flex-col items-end gap-2">
-      {/* Header */}
-      <div className="flex items-center gap-2">
-        <span className="text-xs font-mono text-muted-foreground">
-          You {timestamp && <span>• {timestamp}</span>}
-        </span>
-        <UserAvatar size="sm" />
-      </div>
+    <div className="flex flex-col items-start gap-1">
+      {/* Header — left-aligned, no avatar */}
+      <span className="text-xs font-medium text-muted-foreground">
+        You {timestamp && <span>• {timestamp}</span>}
+      </span>
 
-      {/* Message bubble */}
-      <div className="max-w-[100%] w-full bg-muted/40 border border-border/50 rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm overflow-hidden">
+      {/* Message content — no bubble */}
+      <div className="overflow-hidden">
         {content.text && <LucyTextRenderer text={content.text} />}
         <LucyImageRenderer imageParts={content.imageParts} />
       </div>

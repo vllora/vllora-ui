@@ -472,7 +472,7 @@ export async function uploadDatasetForFinetune(
   const jsonlContent = datasetToJsonl(dataset.records);
 
   if (!jsonlContent.trim()) {
-    throw new Error("No valid training records found in dataset");
+    throw new Error("No valid training records found");
   }
 
   // Extract topic hierarchy if available
@@ -522,7 +522,7 @@ export async function ensureDatasetUploaded(
     throw new Error("Dataset has no records");
   }
 
-  toast.info("Uploading dataset to backend...");
+  toast.info("Uploading training data...");
   try {
     const uploadResult = await uploadDatasetForFinetune({
       ...dataset,
@@ -532,10 +532,10 @@ export async function ensureDatasetUploaded(
       datasetId,
       uploadResult.backendDatasetId,
     );
-    toast.success("Dataset uploaded successfully");
+    toast.success("Training data uploaded");
     return uploadResult.backendDatasetId;
   } catch (uploadError) {
-    toast.error("Failed to upload dataset");
+    toast.error("Failed to upload training data");
     throw uploadError;
   }
 }
@@ -544,15 +544,17 @@ export async function ensureDatasetUploaded(
 export const DEFAULT_TRAINING_CONFIG: ReinforcementTrainingConfig = {
   learning_rate: 0.00001,
   lora_rank: 8,
+  gradient_accumulation_steps: 40,
   epochs: 2.0,
   batch_size: 100,
 };
 
 /** Default inference parameters */
 export const DEFAULT_INFERENCE_PARAMETERS: ReinforcementInferenceParameters = {
-  max_output_tokens: 2048,
+  max_output_tokens: 1000,
   temperature: 0.7,
   top_p: 0.9,
+  response_candidates_count: 4,
 };
 
 export interface CreateFinetuneJobOptions {

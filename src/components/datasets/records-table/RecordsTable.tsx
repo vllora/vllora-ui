@@ -82,7 +82,7 @@ export function RecordsTable({
   records,
   datasetId,
   isLoading = false,
-  emptyMessage: _emptyMessage = "No records in this dataset",
+  emptyMessage: _emptyMessage = "No records in this experiment",
   showHeader = false,
   showFooter = false,
   maxRecords = 0,

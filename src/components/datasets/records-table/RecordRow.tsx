@@ -6,6 +6,7 @@
  */
 
 import { useState, forwardRef, useCallback } from "react";
+import { Sparkles } from "lucide-react";
 import { DatasetRecord } from "@/types/dataset-types";
 import { cn } from "@/lib/utils";
 import { emitter } from "@/utils/eventEmitter";
@@ -121,6 +122,14 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
           className={COLUMN_WIDTHS.thread}
           sourceRecordId={record.sourceRecordId}
         />
+
+        {/* AI-generated indicator */}
+        {record.is_generated && (
+          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))] shrink-0">
+            <Sparkles className="w-2.5 h-2.5" />
+            AI
+          </span>
+        )}
 
         {/* Stats (tokens, turns, tools) */}
         <StatsBadge

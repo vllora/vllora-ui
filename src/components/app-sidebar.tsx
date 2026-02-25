@@ -21,7 +21,7 @@ import {
 const mainMenuItems = [
   { id: "home", label: "Home", icon: Home, path: "/" },
   { id: "chat", label: "Chat", icon: MessageSquare, path: "/chat" },
-  { id: "datasets", label: "Datasets", icon: Database, path: "/datasets" },
+  { id: "datasets", label: "Experiments", icon: Database, path: "/datasets" },
 ]
 
 const bottomMenuItems = [

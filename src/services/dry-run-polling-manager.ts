@@ -166,7 +166,7 @@ class DryRunPollingManager {
       // Start polling
       this.startPolling(job.id);
 
-      toast.info('Dry run started in background', { duration: 3000 });
+      toast.info('Evaluation started in background', { duration: 3000 });
 
       return job.id;
     } catch (error) {
@@ -177,7 +177,7 @@ class DryRunPollingManager {
         completedAt: Date.now(),
       });
 
-      toast.error('Failed to start dry run');
+      toast.error('Failed to start evaluation');
       throw error;
     }
   }
@@ -234,7 +234,7 @@ class DryRunPollingManager {
       completedAt: Date.now(),
     });
 
-    toast.info('Dry run cancelled');
+    toast.info('Evaluation cancelled');
   }
 
   /**
@@ -305,11 +305,11 @@ class DryRunPollingManager {
       this.stopPolling(jobId);
       await updateDryRunJob(jobId, {
         status: 'failed',
-        error: 'Dry run timed out',
+        error: 'Evaluation timed out',
         completedAt: Date.now(),
       });
       await this.markWorkflowStepFailed(job.datasetId);
-      toast.error('Dry run timed out');
+      toast.error('Evaluation timed out');
       return;
     }
 
@@ -339,11 +339,11 @@ class DryRunPollingManager {
         this.stopPolling(jobId);
         await updateDryRunJob(jobId, {
           status: 'failed',
-          error: 'Dry run failed: unable to reach evaluation server after multiple attempts',
+          error: 'Evaluation failed: unable to reach evaluation server after multiple attempts',
           completedAt: Date.now(),
         });
         await this.markWorkflowStepFailed(job.datasetId);
-        toast.error('Dry run failed: unable to reach evaluation server');
+        toast.error('Evaluation failed: unable to reach evaluation server');
       }
     }
   }
@@ -365,7 +365,7 @@ class DryRunPollingManager {
           completedAt: Date.now(),
         });
         await this.markWorkflowStepFailed(job.datasetId);
-        toast.error('Dry run failed');
+        toast.error('Evaluation failed');
         return;
       }
 
@@ -449,11 +449,11 @@ class DryRunPollingManager {
       // Show verdict toast
       const verdict = dryRunStats.diagnosis.verdict;
       if (verdict === 'GO') {
-        toast.success('Dry run complete: GO - Ready for training', { duration: 5000 });
+        toast.success('Evaluation complete: GO - Ready for training', { duration: 5000 });
       } else if (verdict === 'WARNING') {
-        toast.warning('Dry run complete: WARNING - Review recommendations', { duration: 5000 });
+        toast.warning('Evaluation complete: WARNING - Review recommendations', { duration: 5000 });
       } else {
-        toast.error('Dry run complete: NO-GO - Issues detected', { duration: 5000 });
+        toast.error('Evaluation complete: NO-GO - Issues detected', { duration: 5000 });
       }
     } catch (error) {
       console.error('[DryRunPollingManager] Failed to process results:', error);
@@ -463,7 +463,7 @@ class DryRunPollingManager {
         completedAt: Date.now(),
       });
       await this.markWorkflowStepFailed(job.datasetId);
-      toast.error('Failed to process dry run results');
+      toast.error('Failed to process evaluation results');
     }
   }
 

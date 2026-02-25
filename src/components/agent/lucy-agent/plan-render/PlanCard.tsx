@@ -7,19 +7,35 @@
 
 import { Sparkles, Eye, Pencil, X, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { PlanConsumer } from "@/contexts/PlanContext";
+import { WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
+import { mapTabPathToSection } from "@/components/datasets/TabContentRouter";
 
 export function PlanCard() {
   const {
     proposedPlan,
-    isPlanPreviewActive,
+    planStatus,
     approvePlan,
     dismissPlan,
-    setIsPlanPreviewActive,
     setPlanEditMode,
   } = PlanConsumer();
 
+  const { activeTabPath, openTab } = WorkspaceTabsConsumer();
+
   if (!proposedPlan) return null;
+
+  const isPlanTabActive = mapTabPathToSection(activeTabPath) === "plan";
 
   // Extract summary stats
   const topicCount = proposedPlan.total_topic_count ?? proposedPlan.proposed_topics?.length ?? 0;
@@ -28,13 +44,13 @@ export function PlanCard() {
   const estimatedDuration = proposedPlan.estimated_duration;
 
   const handleViewPlan = () => {
-    setIsPlanPreviewActive(true);
     setPlanEditMode("display");
+    openTab("plan.md", "plan.md", false);
   };
 
   const handleEdit = () => {
-    setIsPlanPreviewActive(true);
     setPlanEditMode("edit");
+    openTab("plan.md", "plan.md", false);
   };
 
   const handleApprove = () => {
@@ -68,43 +84,67 @@ export function PlanCard() {
         )}
       </div>
 
-      {/* Action buttons */}
-      <div className="flex items-center gap-1.5">
-        <Button
-          size="sm"
-          className="h-7 text-[11px] gap-1 flex-1 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
-          onClick={handleApprove}
-        >
-          <Check className="w-3 h-3" />
-          Approve
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 text-[11px] gap-1"
-          onClick={handleEdit}
-        >
-          <Pencil className="w-3 h-3" />
-          Edit
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-          onClick={dismissPlan}
-        >
-          <X className="w-3 h-3" />
-        </Button>
-      </div>
+      {/* Action buttons — only shown when plan is proposed (not yet approved/executing) */}
+      {planStatus === 'proposed' && (
+        <div className="flex items-center gap-1.5">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                size="sm"
+                className="h-7 text-[11px] gap-1 flex-1 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
+              >
+                <Check className="w-3 h-3" />
+                Approve
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Approve and execute plan?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will start executing the plan. Lucy will configure topics, generate training data, and set up evaluation. This may take several minutes.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
+                  onClick={handleApprove}
+                >
+                  Approve & Execute
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-[11px] gap-1"
+            onClick={handleEdit}
+          >
+            <Pencil className="w-3 h-3" />
+            Edit
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+            onClick={dismissPlan}
+          >
+            <X className="w-3 h-3" />
+          </Button>
+        </div>
+      )}
 
-      {/* View Plan link — always visible so user can navigate to plan preview */}
-      <button
-        onClick={handleViewPlan}
-        className="flex items-center gap-1 text-[11px] text-[rgb(var(--theme-500))] hover:underline w-full"
-      >
-        <Eye className="w-3 h-3" />
-        {isPlanPreviewActive ? "Viewing full plan" : "View full plan"}
-      </button>
+      {/* View Plan link — hidden when plan tab is already active */}
+      {!isPlanTabActive && (
+        <button
+          onClick={handleViewPlan}
+          className="flex items-center gap-1 text-[11px] text-[rgb(var(--theme-500))] hover:underline w-full"
+        >
+          <Eye className="w-3 h-3" />
+          View full plan
+        </button>
+      )}
     </div>
   );
 }

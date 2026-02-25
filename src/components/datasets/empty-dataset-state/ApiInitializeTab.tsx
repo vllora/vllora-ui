@@ -148,11 +148,11 @@ export function ApiInitializeTab({ hasBackendSpans, traces, onClear }: ApiInitia
       // Add records to the dataset
       await datasetsDB.addRecordsToDataset(dataset.id, records);
 
-      toast.success(`Created dataset with ${records.length} records`);
+      toast.success(`Created experiment with ${records.length} records`);
       navigate(`/datasets/${dataset.id}`);
     } catch (error) {
       console.error("Failed to create dataset:", error);
-      toast.error("Failed to create dataset");
+      toast.error("Failed to create experiment");
     } finally {
       setIsCreating(false);
     }

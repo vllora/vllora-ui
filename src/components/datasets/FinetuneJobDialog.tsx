@@ -153,8 +153,8 @@ export function FinetuneJobDialog({
   // Determine if submit is possible and why not
   const getDisabledReason = (): string | null => {
     if (isSubmitting) return "Creating finetuning job...";
-    if (!dataset) return "No dataset selected";
-    if (recordCount === 0) return "Dataset has no records";
+    if (!dataset) return "No experiment selected";
+    if (recordCount === 0) return "Experiment has no records";
     if (!baseModel) return "Please select a base model";
     return null;
   };
@@ -171,7 +171,7 @@ export function FinetuneJobDialog({
             Start Finetuning Job
           </DialogTitle>
           <DialogDescription>
-            Create a finetuning job using the records from "{dataset?.name || "dataset"}".
+            Create a finetuning job using the records from "{dataset?.name || "experiment"}".
           </DialogDescription>
         </DialogHeader>
 
@@ -183,7 +183,7 @@ export function FinetuneJobDialog({
               <div className="text-sm">
                 <p className="font-medium text-amber-600">Low record count</p>
                 <p className="text-muted-foreground">
-                  This dataset has only {recordCount} record{recordCount !== 1 ? "s" : ""}.
+                  This experiment has only {recordCount} record{recordCount !== 1 ? "s" : ""}.
                   For better results, we recommend at least {minRecords} training examples.
                 </p>
               </div>

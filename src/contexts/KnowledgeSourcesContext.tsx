@@ -3,7 +3,7 @@
  *
  * Single source of truth for knowledge sources state within a dataset.
  * Eliminates duplicate fetching — previously DatasetDetailContentV2,
- * PlanSection, and LucyDatasetAssistant each independently fetched
+ * PlanSection, and the sidebar assistant each independently fetched
  * from knowledgeDB on every vllora_knowledge_source_updated event.
  *
  * Now this context listens once and shares the result.

@@ -9,9 +9,21 @@
  * Empty state: prompt to generate a plan.
  */
 
-import { Eye, Pencil, Sparkles, Loader2, FolderOpen, AlertCircle, X, CheckCircle2, XCircle, ArrowLeftRight } from "lucide-react";
+import { Eye, Pencil, Sparkles, Loader2, FolderOpen, AlertCircle, CheckCircle2, XCircle, ArrowLeftRight } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { useChatStateStore } from "@distri/react";
 import { PlanEditor, planToMarkdown } from "./plan-section/PlanEditor";
 import LazyMarkdownRenderer from "@/components/chat/LazyMarkdownRenderer";
 import { emitter } from "@/utils/eventEmitter";
@@ -27,7 +39,7 @@ interface PlanPreviewProps {
   onModeChange: (mode: "display" | "edit") => void;
   onApprove: (plan: Plan) => void;
   onDismiss: () => void;
-  onClose: () => void;
+  onOpenDocs?: () => void;
   isGenerating: boolean;
   isLoadingPlan: boolean;
   isExecuting: boolean;
@@ -42,7 +54,7 @@ export function PlanPreview({
   onModeChange,
   onApprove,
   onDismiss,
-  onClose,
+  onOpenDocs,
   isGenerating,
   isLoadingPlan,
   isExecuting,
@@ -72,7 +84,6 @@ export function PlanPreview({
             onModeChange={onModeChange}
             onApprove={onApprove}
             onDismiss={onDismiss}
-            onClose={onClose}
           />
         ) : (
           <PlanDisplayView
@@ -81,7 +92,6 @@ export function PlanPreview({
             planDiff={planDiff}
             onModeChange={onModeChange}
             onApprove={onApprove}
-            onClose={onClose}
             isExecuting={isExecuting}
             isActionable={isActionable}
           />
@@ -90,7 +100,7 @@ export function PlanPreview({
         <PlanEmptyView
           isGenerating={isGenerating}
           hasKnowledgeSources={hasKnowledgeSources}
-          onClose={onClose}
+          onOpenDocs={onOpenDocs}
         />
       )}
     </div>
@@ -107,7 +117,6 @@ function PlanDisplayView({
   planDiff,
   onModeChange,
   onApprove,
-  onClose,
   isExecuting,
   isActionable,
 }: {
@@ -116,77 +125,30 @@ function PlanDisplayView({
   planDiff?: PlanDiff | null;
   onModeChange: (mode: "display" | "edit") => void;
   onApprove: (plan: Plan) => void;
-  onClose: () => void;
   isExecuting: boolean;
   isActionable: boolean;
 }) {
-  // Build human-readable diff summary for banner
+  // Build human-readable diff summary for banner.
+  // Skip the banner on the first plan proposal (only additions, no removals/modifications)
+  // since "Updated: 6 topics changed" is misleading when nothing existed before.
   const diffParts: string[] = [];
   if (planDiff?.hasChanges) {
-    const t = planDiff.topicsAdded.length + planDiff.topicsRemoved.length + planDiff.topicsModified.length;
-    const c = planDiff.criteriaAdded.length + planDiff.criteriaRemoved.length + planDiff.criteriaModified.length;
-    if (t > 0) diffParts.push(`${t} topic${t > 1 ? 's' : ''} changed`);
-    if (c > 0) diffParts.push(`${c} criterion${c > 1 ? ' changed' : 's changed'}`);
+    const hasRemovalsOrMods =
+      planDiff.topicsRemoved.length > 0 ||
+      planDiff.topicsModified.length > 0 ||
+      planDiff.criteriaRemoved.length > 0 ||
+      planDiff.criteriaModified.length > 0;
+
+    if (hasRemovalsOrMods) {
+      const t = planDiff.topicsAdded.length + planDiff.topicsRemoved.length + planDiff.topicsModified.length;
+      const c = planDiff.criteriaAdded.length + planDiff.criteriaRemoved.length + planDiff.criteriaModified.length;
+      if (t > 0) diffParts.push(`${t} topic${t > 1 ? 's' : ''} changed`);
+      if (c > 0) diffParts.push(`${c} ${c > 1 ? 'criteria' : 'criterion'} changed`);
+    }
   }
 
   return (
     <>
-      {/* Header toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border">
-        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <Sparkles className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-          Plan
-          {isExecuting && (
-            <span className="flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
-              <Loader2 className="w-3 h-3 animate-spin" />
-              Executing...
-            </span>
-          )}
-          {planStatus === 'completed' && (
-            <span className="flex items-center gap-1.5 text-xs font-normal text-emerald-600">
-              <CheckCircle2 className="w-3 h-3" />
-              Completed
-            </span>
-          )}
-          {planStatus === 'failed' && (
-            <span className="flex items-center gap-1.5 text-xs font-normal text-red-500">
-              <XCircle className="w-3 h-3" />
-              Failed
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-1.5">
-          {isActionable && !isExecuting && (
-            <>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs gap-1"
-                onClick={() => onModeChange("edit")}
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                Edit
-              </Button>
-              <Button
-                size="sm"
-                className="h-7 text-xs bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
-                onClick={() => onApprove(plan)}
-              >
-                Approve & Execute
-              </Button>
-            </>
-          )}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-muted-foreground"
-            onClick={onClose}
-          >
-            <X className="w-4 h-4" />
-          </Button>
-        </div>
-      </div>
-
       {/* Diff banner — shown when save_plan committed a plan with changes */}
       {planDiff?.hasChanges && diffParts.length > 0 && (
         <div className="mx-4 mt-3 flex items-center gap-2 px-3 py-2 rounded-md border border-blue-500/30 bg-blue-500/10 text-xs">
@@ -206,6 +168,70 @@ function PlanDisplayView({
           </div>
         </div>
       </div>
+
+      {/* Sticky footer — action buttons + status */}
+      {(isActionable || isExecuting || planStatus === 'completed' || planStatus === 'failed') && (
+        <div className="flex items-center justify-end px-4 py-2 border-t border-border bg-background/80 backdrop-blur-sm shrink-0 gap-2">
+          {isExecuting && (
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground mr-auto">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Executing...
+            </span>
+          )}
+          {planStatus === 'completed' && (
+            <span className="flex items-center gap-1.5 text-xs text-emerald-600 mr-auto">
+              <CheckCircle2 className="w-3 h-3" />
+              Completed
+            </span>
+          )}
+          {planStatus === 'failed' && (
+            <span className="flex items-center gap-1.5 text-xs text-red-500 mr-auto">
+              <XCircle className="w-3 h-3" />
+              Failed
+            </span>
+          )}
+          {isActionable && !isExecuting && (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                onClick={() => onModeChange("edit")}
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Edit
+              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
+                  >
+                    Approve & Execute
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Approve and execute plan?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will start executing the plan. Lucy will configure topics, generate training data, and set up evaluation. This may take several minutes.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      className="bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
+                      onClick={() => onApprove(plan)}
+                    >
+                      Approve & Execute
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </>
+          )}
+        </div>
+      )}
     </>
   );
 }
@@ -215,13 +241,11 @@ function PlanEditView({
   onModeChange,
   onApprove,
   onDismiss,
-  onClose,
 }: {
   plan: Plan;
   onModeChange: (mode: "display" | "edit") => void;
   onApprove: (plan: Plan) => void;
   onDismiss: () => void;
-  onClose: () => void;
 }) {
   return (
     <>
@@ -241,14 +265,6 @@ function PlanEditView({
             <Eye className="w-3.5 h-3.5" />
             Preview
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-muted-foreground"
-            onClick={onClose}
-          >
-            <X className="w-4 h-4" />
-          </Button>
         </div>
       </div>
 
@@ -265,19 +281,26 @@ function PlanEditView({
 function PlanEmptyView({
   isGenerating,
   hasKnowledgeSources,
-  onClose,
+  onOpenDocs,
 }: {
   isGenerating: boolean;
   hasKnowledgeSources: boolean;
-  onClose: () => void;
+  onOpenDocs?: () => void;
 }) {
   const [isRequesting, setIsRequesting] = useState(false);
   const [hasTimedOut, setHasTimedOut] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+
+  // Detect when Lucy is actively streaming (covers the gap between the user
+  // asking for a plan and Lucy actually calling propose_plan — e.g. she may
+  // run get_dataset_state or analyze_knowledge_sources first).
+  const isLucyStreaming = useChatStateStore((state) => state.isStreaming);
 
   useEffect(() => {
     if (isGenerating) {
       setIsRequesting(false);
       setHasTimedOut(false);
+      setRetryCount(0);
     }
   }, [isGenerating]);
 
@@ -289,19 +312,22 @@ function PlanEmptyView({
       setHasTimedOut(false);
     };
 
+    // Progressive timeout: 10s → 30s → 60s
+    const timeoutMs = retryCount === 0 ? 10000 : retryCount === 1 ? 30000 : 60000;
     const timeoutId = setTimeout(() => {
       setIsRequesting(false);
       setHasTimedOut(true);
-    }, 10000);
+    }, timeoutMs);
 
     emitter.on("vllora_plan_generating", handleGenerating);
     return () => {
       emitter.off("vllora_plan_generating", handleGenerating);
       clearTimeout(timeoutId);
     };
-  }, [isRequesting]);
+  }, [isRequesting, retryCount]);
 
   const handleGenerate = () => {
+    setRetryCount((c) => c + 1);
     setIsRequesting(true);
     setHasTimedOut(false);
     emitter.emit("vllora_lucy_prompt", {
@@ -311,23 +337,18 @@ function PlanEmptyView({
     });
   };
 
-  const showLoading = isGenerating || isRequesting;
+  // Show loading when:
+  // 1. isGenerating — vllora_plan_generating event fired (propose_plan tool running)
+  // 2. isRequesting — user clicked "Generate Plan" button
+  // 3. isLucyStreaming — Lucy is actively streaming (covers the gap before propose_plan fires)
+  const showLoading = isGenerating || isRequesting || isLucyStreaming;
+
+  // Distinguish message: "Generating plan..." when we know it's plan-specific,
+  // "Lucy is working..." when she's streaming but hasn't hit propose_plan yet
+  const isConfirmedPlanGeneration = isGenerating || isRequesting;
 
   return (
     <>
-      {/* Header bar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
-        <span className="text-sm font-medium text-foreground">Plan</span>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-muted-foreground"
-          onClick={onClose}
-        >
-          <X className="w-4 h-4" />
-        </Button>
-      </div>
-
       {/* Empty state */}
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="max-w-sm text-center space-y-5">
@@ -337,9 +358,13 @@ function PlanEmptyView({
                 <Loader2 className="w-6 h-6 animate-spin text-[rgb(var(--theme-500))]" />
               </div>
               <div>
-                <h3 className="text-base font-medium text-foreground mb-1">Generating plan...</h3>
+                <h3 className="text-base font-medium text-foreground mb-1">
+                  {isConfirmedPlanGeneration ? "Generating plan..." : "Lucy is working..."}
+                </h3>
                 <p className="text-sm text-muted-foreground">
-                  Lucy is analyzing your {hasKnowledgeSources ? "documents and " : ""}dataset to create a customized plan.
+                  {isConfirmedPlanGeneration
+                    ? `Lucy is analyzing your ${hasKnowledgeSources ? "documents and " : ""}dataset to create a customized plan.`
+                    : "Lucy is analyzing your dataset. A plan will appear here when ready."}
                 </p>
               </div>
             </>
@@ -368,13 +393,10 @@ function PlanEmptyView({
                   <Sparkles className="w-4 h-4" />
                   {hasTimedOut ? "Retry" : "Generate Plan"}
                 </Button>
-                {!hasKnowledgeSources && (
+                {!hasKnowledgeSources && onOpenDocs && (
                   <Button
                     variant="outline"
-                    onClick={() => {
-                      onClose();
-                      emitter.emit("vllora_open_drawer", { type: "docs" });
-                    }}
+                    onClick={onOpenDocs}
                     className="gap-2"
                   >
                     <FolderOpen className="w-4 h-4" />

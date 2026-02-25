@@ -1,13 +1,172 @@
-# Guided Onboarding Flow
+# Guided Onboarding & Planning System
 
-This document describes the guided onboarding flow for first-time users setting up a finetune dataset with Lucy.
+This document covers the general-purpose planning system and the guided onboarding flow that uses it.
 
-## Overview
+## Planning System
+
+### Design Principle
+
+**Tools are dumb, Lucy is smart.** Lucy decides when to propose a plan, constructs the plan herself, and the tool just validates, persists, and shows it to the user. There is no special-casing — initial setup, data augmentation, regrading, retraining all follow the same flow.
+
+### The Flow (Always the Same)
+
+```
+assess state → (analyze if needed) → construct plan → propose → approve → execute
+```
+
+1. **Assess state**: Lucy calls `get_dataset_state` to see what exists (records, topics, grader, etc.)
+2. **Analyze** (optional): If knowledge sources need analysis, Lucy calls `analyze_knowledge_sources` to get topic/grader/schema recommendations
+3. **Construct plan**: Lucy builds a `Plan` object based on state + analysis + user intent
+4. **Propose**: Lucy calls `propose_plan({ dataset_id, plan })` — tool persists to IndexedDB, emits event, UI shows plan card
+5. **Approve**: User reviews plan in UI, clicks "Approve & Execute"
+6. **Execute**: Lucy calls `execute_plan` — runs steps sequentially, emits progress
+
+### Plan Lifecycle
+
+```
+propose → [UI shows plan card] → approve → validate → execute → complete/fail
+                                    ↑           ↓
+                               adjust (edit)  toast.error (if invalid)
+```
+
+### Step Registry
+
+Each step is a `StepExecutor` with `name`, `execute`, optional `workflowStep`, and optional `nonFatal` flag.
+
+| Step ID | Name | Workflow Step | Non-Fatal |
+|---|---|---|---|
+| `topics` | Apply Topic Hierarchy | `topics_config` | No |
+| `adjust_topics` | Adjust Topics | `topics_config` | No |
+| `categorize` | Categorize Records | `categorize` | No |
+| `generate` | Generate Data | `coverage_generation` | No |
+| `grader` | Configure Evaluator | `grader_config` | No |
+| `upload` | Upload Dataset | — | No |
+| `dryrun` | Run Dry Run | `dry_run` | Yes |
+| `readme` | Generate README | — | Yes |
+| `finetune` | Start Finetune Job | — | Yes |
+
+Execution order is fixed: `topics → adjust_topics → categorize → generate → grader → upload → dryrun → readme → finetune`. Steps not in `steps_to_execute` are skipped. Non-fatal steps log errors and continue. Fatal steps abort the pipeline.
+
+To add a new step: define an executor function, add it to `STEP_REGISTRY` and `STEP_ORDER` in `execute-plan.ts`.
+
+### Plan Type
+
+```typescript
+interface Plan {
+  dataset_id: string;
+  dataset_name: string;
+  objective: string;
+  execution_steps: { step: string; description: string; estimated_time: string }[];
+  estimated_duration: string;
+
+  // Plan metadata
+  title?: string;
+  description?: string;
+
+  // Execution config
+  steps_to_execute?: ExecutionStepId[];
+  overrides?: {
+    adjust_topics?: { instruction?: string };
+    generate?: { count?: number; target_topics?: string[]; per_topic_count?: number };
+    upload?: { force_reupload?: boolean };
+  };
+  adjust_topics_instruction?: string;
+
+  // Domain-specific sections (optional)
+  output_format?: OutputFormat | null;
+  knowledge_sources?: { name: string; topics_extracted: string[] }[];
+  proposed_topics?: ProposedTopic[];
+  total_topic_count?: number;
+  data_generation?: { strategy: string; grounded_in_knowledge: boolean };
+  grader_config?: { criteria: GraderCriterion[]; template_preview: string };
+  estimated_records?: number;
+}
+```
+
+### Execution Types
+
+```typescript
+type ExecutionStepId = 'topics' | 'adjust_topics' | 'categorize' | 'generate' | 'grader' | 'upload' | 'dryrun' | 'readme' | 'finetune';
+
+interface StepExecutor {
+  name: string;
+  workflowStep?: FinetuneStep;
+  nonFatal?: boolean;
+  execute: (ctx: StepContext) => Promise<StepResult>;
+}
+
+interface StepContext {
+  dataset_id: string;
+  plan: Plan;
+  workflow_id: string;
+  workflow: FinetuneWorkflowState;
+  overrides?: { ... };
+  summary: ExecutionSummary;  // Mutable — each step updates its fields
+}
+
+interface ExecutionSummary {
+  topics_created: number;
+  records_generated: number;
+  grader_configured: boolean;
+  dry_run_completed: boolean;
+  dry_run_pass_rate?: number;
+  ready_to_finetune: boolean;
+  finetune_job_id?: string;
+  finetune_job_status?: string;
+}
+```
+
+### Validation Rules
+
+Before execution starts, the plan is validated by `validatePlanForExecution()` (exported from `execute-plan.ts`). Runs in two places: UI gate (`PlanContext.approvePlan` — shows `toast.error()`) and handler gate (`executePlanHandler` — safety net).
+
+| Step | Prerequisite | Error Message |
+|---|---|---|
+| _(any)_ | All IDs in `steps_to_execute` exist in `STEP_ORDER` | `Unknown step: '{id}'` |
+| `topics` | `plan.proposed_topics` has length > 0 | `Step 'topics' requires proposed_topics in the plan` |
+| `adjust_topics` | `overrides.adjust_topics.instruction` or `plan.adjust_topics_instruction` non-empty | `Step 'adjust_topics' requires an instruction` |
+| `generate` | `estimated_records > 0` or `overrides.generate.count > 0` or `per_topic_count > 0` | `Step 'generate' requires a record count` |
+| `grader` | `plan.grader_config.template_preview` non-empty | `Step 'grader' requires grader_config.template_preview` |
+| `categorize`, `upload`, `dryrun`, `readme`, `finetune` | No plan-level prereqs | _(always pass)_ |
+
+### UI Conditional Rendering
+
+The UI renders plan sections based on what's present:
+
+- **Title**: `plan.title` if present, else "Plan"
+- **Description**: `plan.description` if present, else "for {dataset_name}"
+- **Topics section**: Only if `plan.proposed_topics?.length > 0`
+- **Knowledge sources**: Only if `plan.knowledge_sources?.length > 0`
+- **Output format**: Only if `plan.output_format` is truthy
+- **Data generation**: Only if `plan.data_generation` is truthy
+- **Grader config**: Only if `plan.grader_config?.criteria?.length > 0`
+- **Summary**: Records count only if `plan.estimated_records` is present
+
+### Planning System Files
+
+| File | Role |
+|---|---|
+| `src/lib/distri-finetune-tools/steps/analyze-knowledge-sources.ts` | Analyzes knowledge sources via LLM, returns building blocks |
+| `src/lib/distri-finetune-tools/steps/propose-plan/types.ts` | Plan type with optional fields |
+| `src/lib/distri-finetune-tools/steps/propose-plan/handler.ts` | Validates, persists, emits plan (no LLM) |
+| `src/lib/distri-finetune-tools/steps/save-plan.ts` | Persist plan to IndexedDB |
+| `src/lib/distri-finetune-tools/steps/execute-plan.ts` | Registry-based orchestrator with STEP_REGISTRY |
+| `src/contexts/PlanContext.tsx` | Plan lifecycle state (generating, proposed, executing, completed) |
+| `src/components/datasets/PlanPreview.tsx` | Plan workspace tab (reads from PlanContext) |
+| `src/components/datasets/plan-section/PlanCard.tsx` | Full plan card with conditional sections |
+| `src/components/datasets/plan-section/PlanEditor.tsx` | Markdown-based plan editor |
+| `gateway/agents/finetune/vllora-finetune-agent.md` | Agent prompt with plan-first pattern |
+
+---
+
+## Guided Onboarding Flow
+
+### Overview
 
 When a user has an **empty dataset** (0 records) and uploads **knowledge sources** (documents), Lucy automatically triggers a guided onboarding flow that:
 
 1. Analyzes the uploaded documents
-2. Proposes a comprehensive setup plan
+2. Proposes a comprehensive plan
 3. Presents the plan via a custom UI card for approval
 4. Executes all setup steps automatically upon approval
 
@@ -23,26 +182,26 @@ User uploads documents to empty dataset
 │  LucyDatasetAssistant detects:      │
 │  - Empty dataset (0 records)        │
 │  - Knowledge sources uploaded       │
-│  - Triggers propose_setup_plan      │
+│  - Triggers propose_plan      │
 └─────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────┐
-│  propose_setup_plan tool            │
+│  propose_plan tool            │
 │  - Fetches dataset objective        │
 │  - Extracts topics from documents   │
 │  - Calls LLM to generate plan       │
-│  - Returns SetupPlan object         │
-│  - Emits vllora_setup_plan_proposed │
+│  - Returns Plan object         │
+│  - Emits vllora_plan_proposed │
 └─────────────────────────────────────┘
          │
          ├────────────────────────────────────┐
          ▼                                    ▼
 ┌─────────────────────────┐    ┌─────────────────────────────────────┐
 │  Lucy Chat (Left)       │    │  Plan Tab (Right)                   │
-│  LucySetupPlanRenderer  │    │  PlanSection                        │
+│  LucyToolRenderer  │    │  PlanPreview                        │
 │  - Shows confirmation   │    │  - Shows loading while generating   │
-│    message              │    │  - Displays SetupPlanEditor         │
+│    message              │    │  - Displays PlanEditor         │
 │  - Points user to right │    │  - Editable markdown format         │
 │    panel                │    │  - User modifies plan if needed     │
 └─────────────────────────┘    │  - "Approve & Execute" button       │
@@ -53,13 +212,13 @@ User uploads documents to empty dataset
                           ▼ (User requests    │                   ▼ (User clicks
                              changes)         │                      Approve)
                ┌─────────────────────────┐    │
-               │  adjust_setup_plan tool  │    │
+               │  adjust_plan tool  │    │
                │  - Takes user feedback   │    │
                │  - Regenerates plan      │    │
                │  - Emits updated plan    │────┘
                └─────────────────────────┘
                                ┌─────────────────────────────────────┐
-                               │  execute_setup_plan tool            │
+                               │  execute_plan tool            │
                                │  - Step 1: Apply topic hierarchy    │
                                │  - Step 2: Generate initial data    │
                                │  - Step 3: Configure evaluator      │
@@ -88,7 +247,7 @@ The guided onboarding flow can be triggered manually when ALL of the following a
 2. **Knowledge sources uploaded** - User has added at least one document
 3. **Training objective defined** - Dataset has a `datasetObjective` set
 
-If the training objective is not set, Lucy will first help the user define it before proposing a setup plan.
+If the training objective is not set, Lucy will first help the user define it before proposing a plan.
 
 ### Auto-Trigger via `?autoGeneratePlan=true`
 
@@ -102,16 +261,16 @@ When a user clicks "Start Finetune" in the empty dataset state **with files uplo
 `DatasetDetailContentV2.tsx` (lines 246-269) detects this query parameter and:
 1. Removes the query param immediately (to prevent re-triggering on refresh)
 2. Waits 2 seconds for knowledge sources to finish processing
-3. Emits a `vllora_lucy_prompt` event asking Lucy to create a setup plan
-4. Lucy calls `propose_setup_plan` automatically
+3. Emits a `vllora_lucy_prompt` event asking Lucy to create a plan
+4. Lucy calls `propose_plan` automatically
 
 This creates a seamless flow: upload docs → click Start → transition screen → auto-plan generation.
 
 ## Tools
 
-### `propose_setup_plan`
+### `propose_plan`
 
-Analyzes the dataset and knowledge sources to generate a comprehensive setup plan.
+Analyzes the dataset and knowledge sources to generate a comprehensive plan.
 
 **Parameters:**
 | Parameter | Type | Required | Default | Description |
@@ -121,18 +280,18 @@ Analyzes the dataset and knowledge sources to generate a comprehensive setup pla
 
 **Returns:**
 ```typescript
-interface ProposeSetupPlanResult {
+interface ProposePlanResult {
   success: boolean;
   error?: string;
-  plan?: SetupPlan;
+  plan?: Plan;
   requires_knowledge_sources?: boolean;
   message?: string;
 }
 ```
 
-**SetupPlan Structure:**
+**Plan Structure:**
 ```typescript
-interface SetupPlan {
+interface Plan {
   dataset_id: string;
   dataset_name: string;
   objective: string;
@@ -174,23 +333,23 @@ interface SetupPlan {
 }
 ```
 
-### `adjust_setup_plan`
+### `adjust_plan`
 
-Adjusts an existing setup plan based on user feedback via chat.
+Adjusts an existing plan based on user feedback via chat.
 
 **Parameters:**
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `dataset_id` | string | Yes | The dataset ID |
-| `current_plan` | SetupPlan | Yes | The current setup plan to adjust |
+| `current_plan` | Plan | Yes | The current plan to adjust |
 | `user_feedback` | string | Yes | User's feedback/request for changes (e.g., "reduce to 5 topics with 50 records each") |
 
 **Returns:**
 ```typescript
-interface AdjustSetupPlanResult {
+interface AdjustPlanResult {
   success: boolean;
   error?: string;
-  plan?: SetupPlan;
+  plan?: Plan;
   message?: string;
 }
 ```
@@ -198,21 +357,21 @@ interface AdjustSetupPlanResult {
 **Use Cases:**
 - User requests changes to the plan (e.g., "reduce to 5 topics", "increase examples to 100 each")
 - User wants to modify topic structure, counts, or grader criteria
-- The adjusted plan is shown to the user for approval via the same `vllora_setup_plan_proposed` event
+- The adjusted plan is shown to the user for approval via the same `vllora_plan_proposed` event
 
-### `execute_setup_plan`
+### `execute_plan`
 
-Executes all steps in the approved setup plan automatically.
+Executes all steps in the approved plan automatically.
 
 **Parameters:**
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `dataset_id` | string | Yes | The dataset ID |
-| `plan` | SetupPlan | Yes | The approved setup plan object |
+| `plan` | Plan | Yes | The approved plan object |
 
 **Returns:**
 ```typescript
-interface ExecuteSetupPlanResult {
+interface ExecutePlanResult {
   success: boolean;
   error?: string;
   execution_id: string;
@@ -240,7 +399,6 @@ interface ExecuteSetupPlanResult {
    - Data provenance (which knowledge sources were used)
    - Topic hierarchy visualization
    - Record statistics and coverage analysis
-   - Setup plan execution summary
 7. **Start Finetune Job** - Automatically creates and submits the training job using `quickFinetune()` with base model `unsloth/Qwen3-4B` and default hyperparameters: learning rate `0.00001`, epochs `2`, batch size `10` (samples), LoRA rank `8`. Emits `vllora_finetune_job_created` event and switches UI to Jobs tab. (Non-fatal if fails, user can start manually)
 
 ## Progress Indicators
@@ -318,15 +476,15 @@ getCurrentExecution(datasetId: string): ExecutionProgress | null
 hasActiveExecution(datasetId: string): boolean
 
 // Get the plan being executed (for displaying during execution)
-getExecutingPlan(datasetId: string): SetupPlan | null
+getExecutingPlan(datasetId: string): Plan | null
 
 // Store the plan when approved (called automatically via event)
-setExecutingPlan(datasetId: string, plan: SetupPlan): void
+setExecutingPlan(datasetId: string, plan: Plan): void
 ```
 
 The store automatically:
-- Updates on `vllora_setup_plan_progress` events
-- Stores the plan on `vllora_setup_plan_approved` events
+- Updates on `vllora_plan_progress` events
+- Stores the plan on `vllora_plan_approved` events
 - Auto-clears completed executions after 5 seconds
 
 ### Plan Markdown During Execution
@@ -342,11 +500,11 @@ This is achieved by:
 
 ## UI Components
 
-### SetupPlanEditor (Right Panel)
+### PlanEditor (Right Panel)
 
-Located at: `/ui/src/components/datasets/plan-section/SetupPlanEditor.tsx`
+Located at: `/ui/src/components/datasets/plan-section/PlanEditor.tsx`
 
-The primary component for viewing and editing setup plans. Displayed in the main content area (right panel) when a plan is proposed. Features:
+The primary component for viewing and editing plans. Displayed in the main content area (right panel) when a plan is proposed. Features:
 - **Markdown view** - Plan rendered as readable markdown
 - **Edit mode** - Toggle to edit the markdown directly
 - **Approve & Execute** - Button to proceed with the plan
@@ -354,21 +512,21 @@ The primary component for viewing and editing setup plans. Displayed in the main
 
 **Props:**
 ```typescript
-interface SetupPlanEditorProps {
-  plan: SetupPlan;
-  onApprove: (plan: SetupPlan) => void;
+interface PlanEditorProps {
+  plan: Plan;
+  onApprove: (plan: Plan) => void;
   onDismiss?: () => void;
 }
 ```
 
-The editor converts the SetupPlan to markdown for editing and parses changes back when approved. Key editable fields:
+The editor converts the Plan to markdown for editing and parses changes back when approved. Key editable fields:
 - Seed count
 - Passing threshold
 - Topic target counts
 
-### SetupPlanCard (Legacy/Compact)
+### PlanCard (Legacy/Compact)
 
-Located at: `/ui/src/components/datasets/plan-section/SetupPlanCard.tsx`
+Located at: `/ui/src/components/datasets/plan-section/PlanCard.tsx`
 
 Compact card version with expandable sections (used as fallback or in constrained spaces):
 - **Knowledge Sources** - Documents analyzed
@@ -379,27 +537,9 @@ Compact card version with expandable sections (used as fallback or in constraine
 
 **Props:**
 ```typescript
-interface SetupPlanCardProps {
-  plan: SetupPlan;
-  onApprove: (plan: SetupPlan) => void;
-}
-```
-
-### PlanExecutedView
-
-Located at: `/ui/src/components/datasets/plan-section/PlanExecutedView.tsx`
-
-Read-only view of a successfully executed setup plan:
-- Shows plan markdown with success badge
-- Green header with "Plan Executed Successfully" indicator
-- "Clear" button to dismiss the view
-
-**Props:**
-```typescript
-interface PlanExecutedViewProps {
-  plan: SetupPlan;
-  onClear: () => void;
-  className?: string;
+interface PlanCardProps {
+  plan: Plan;
+  onApprove: (plan: Plan) => void;
 }
 ```
 
@@ -421,105 +561,64 @@ interface ExecutionProgressCardProps {
 ```
 
 **Event Subscription:**
-The component subscribes to `vllora_setup_plan_progress` events to receive real-time updates.
+The component subscribes to `vllora_plan_progress` events to receive real-time updates.
 
-### PlanSection
+### PlanPreview (Workspace Tab)
 
-Located at: `/ui/src/components/datasets/plan-section/PlanSection.tsx`
+Located at: `/ui/src/components/datasets/PlanPreview.tsx`
 
-Dedicated section for setup plan management in the Plan tab. Render priority (highest first):
-1. **Docs processing** — Shows `DocsProcessingState` with "Processing documents — X of Y remaining" when knowledge sources are still being processed
-2. **Generating plan** — Shows loading state while Lucy is generating a plan
-3. **Plan proposed** — Displays `SetupPlanEditor` when a plan is proposed (listens for `vllora_setup_plan_proposed` events)
-4. **Execution in progress** — Shows `ExecutionProgressCard` during plan execution
-5. **Empty state** — Shows "Generate Setup Plan" button when no plan is active
+Workspace tab component for plan management. Reads plan state from `PlanContext` and renders the appropriate view based on lifecycle:
+1. **Docs processing** — Shows `DocsProcessingState` when knowledge sources are still being processed
+2. **Generating plan** — Shows loading state while Lucy generates a plan
+3. **Plan proposed** — Displays `PlanEditor` when a plan is ready for review
+4. **Execution in progress** — Shows `ExecutionProgressCard` with real-time progress
+5. **Plan completed** — Shows `PlanCompletedState` with summary
+6. **Empty state** — Prompts user to generate a plan
 
-Also handles plan approval and dismissal.
+### LucyToolRenderer
 
-**Props:**
-```typescript
-interface PlanSectionProps {
-  datasetId: string;
-  isGeneratingPlan?: boolean;
-  className?: string;
-}
-```
+Located at: `/ui/src/components/agent/lucy-agent/LucyToolRenderer.tsx`
 
-### ReadmeWithPlan
-
-Located at: `/ui/src/components/datasets/ReadmeWithPlan.tsx`
-
-Simple wrapper component for the README tab that renders the DatasetReadmeViewer. Plan functionality has been moved to the separate PlanSection component.
-
-**Props:**
-```typescript
-interface ReadmeWithPlanProps {
-  datasetId: string;
-  readme: string | null;
-  readmeUpdatedAt: number | null;
-  onExport: () => void;
-  onRegenerate: () => Promise<void>;
-  className?: string;
-}
-```
-
-### LucySetupPlanRenderer
-
-Located at: `/ui/src/components/agent/lucy-agent/LucySetupPlanRenderer.tsx`
-
-Custom tool renderer for `propose_setup_plan` tool in the chat. Shows:
-- Loading state while generating plan
-- Success confirmation pointing to the right panel
-- Error state display
-- "Requires knowledge sources" message
-
-### LucyExecutePlanRenderer
-
-Located at: `/ui/src/components/agent/lucy-agent/LucySetupPlanRenderer.tsx`
-
-Custom tool renderer for `execute_setup_plan` tool. Handles:
-- Running state with progress card
-- Success state with final summary
-- Error state display
+Generic tool renderer that handles display for tool calls in the chat sidebar. Includes specialized rendering for plan-related tools (`propose_plan`, `execute_plan`) showing loading states, success confirmations, error displays, and "requires knowledge sources" messages.
 
 ## Event Flow
 
 ### Plan Generating Event
 
-When `propose_setup_plan` starts, it emits an event to switch to the Plan tab and show loading:
+When `propose_plan` starts, it emits an event to switch to the Plan tab and show loading:
 
 ```typescript
-emitter.emit('vllora_setup_plan_generating', { datasetId: string });
+emitter.emit('vllora_plan_generating', { datasetId: string });
 ```
 
 `DatasetDetailContentV2` listens for this event and automatically switches to the Plan tab. `PlanSection` displays a loading state while the plan is being generated.
 
 ### Plan Proposed Event
 
-When `propose_setup_plan` completes, it emits an event so the right panel can display the plan:
+When `propose_plan` completes, it emits an event so the right panel can display the plan:
 
 ```typescript
-emitter.emit('vllora_setup_plan_proposed', { datasetId: string, plan: SetupPlan });
+emitter.emit('vllora_plan_proposed', { datasetId: string, plan: Plan });
 ```
 
-The `PlanSection` component listens for this event and displays the `SetupPlanEditor`.
+The `PlanSection` component listens for this event and displays the `PlanEditor`.
 
 ### Plan Dismissed Event
 
 Emitted in two scenarios:
 1. When the user dismisses the plan without approving
-2. When `propose_setup_plan` returns early because documents are still processing (clears the "generating plan" loading state)
+2. When `propose_plan` returns early because documents are still processing (clears the "generating plan" loading state)
 
 ```typescript
-emitter.emit('vllora_setup_plan_dismissed', { datasetId: string });
+emitter.emit('vllora_plan_dismissed', { datasetId: string });
 ```
 
 ### Progress Events
 
-The `execute_setup_plan` handler emits progress events via the event emitter:
+The `execute_plan` handler emits progress events via the event emitter:
 
 ```typescript
-emitter.emit('vllora_setup_plan_progress', { progress: ExecutionProgress });
+emitter.emit('vllora_plan_progress', { progress: ExecutionProgress });
 ```
 
 ### Workflow Updated Event
@@ -557,67 +656,89 @@ interface ExecutionStep {
 
 ### Approval Event
 
-When user clicks "Approve & Execute", the SetupPlanCard emits:
+When user clicks "Approve & Execute", the PlanCard emits:
 
 ```typescript
 emitter.emit('vllora_lucy_prompt', {
-  prompt: `I approve the setup plan. Please execute it now using the execute_setup_plan tool with the following plan:\n\n${JSON.stringify(plan)}`,
+  prompt: `I approve the plan. Please execute it now using the execute_plan tool with the following plan:\n\n${JSON.stringify(plan)}`,
 });
 ```
 
-This triggers Lucy to call the `execute_setup_plan` tool.
+This triggers Lucy to call the `execute_plan` tool.
 
 ## Agent Integration
 
+The Lucy agent system uses 4 agent definitions in `gateway/agents/finetune/`:
+
 ### Orchestrator Agent (`vllora-finetune-agent.md`)
 
-The orchestrator has both tools in its external tools list:
+The orchestrator handles plan creation directly (no delegation to sub-agents). Its plan-related external tools:
 ```yaml
 external = [
-  "propose_setup_plan",
-  "execute_setup_plan"
+  "analyze_knowledge_sources",
+  "generate_topics",
+  "generate_grader",
+  "propose_plan",
+  "adjust_plan",
+  "save_plan",
+  "execute_plan"
 ]
 ```
 
-**Rule #0** in the agent definition prioritizes guided onboarding triggers:
-- Contains "I've uploaded" AND "document(s)"
-- Contains "propose_setup_plan" or "setup plan"
-- Contains "analyze my documents"
+**Rule #0 (Plan-First Triggers)** in the agent definition prioritizes plan creation when:
+- Message contains "documents have finished processing" or "documents are ready"
+- Message contains "plan" or "create a plan"
+- Message contains "analyze my documents"
+- Dataset is empty (0 records) and has knowledge sources
 
-When triggered, the orchestrator calls `propose_setup_plan` directly (no delegation).
+When triggered, the orchestrator runs a 5-step sequence directly:
+1. `analyze_knowledge_sources` — check for uploaded documents
+2. `generate_topics` — get topic suggestions
+3. `generate_grader` — get evaluation criteria
+4. `propose_plan` — assemble and save draft plan
+5. `save_plan` — validate, commit, and show to user
 
-### Workflow Agent (`finetune-workflow-agent.md`)
+### Sub-Agents
 
-Also has access to both tools for delegated execution scenarios.
+- **`finetune-topics-agent.md`** — Topic hierarchy specialist, delegated via `transfer_to_agent("finetune_topics", ...)`
+- **`finetune-workflow-agent.md`** — Workflow executor (also has `propose_plan` and `execute_plan` for delegated scenarios)
+- **`data-generation-agent.md`** — Interactive data generation with knowledge sources, previews, iterative refinement
 
 ## File Locations
 
 | Component | Path |
 |-----------|------|
-| propose_setup_plan folder | `/ui/src/lib/distri-finetune-tools/steps/propose-setup-plan/` |
-| propose_setup_plan types | `/ui/src/lib/distri-finetune-tools/steps/propose-setup-plan/types.ts` |
-| propose_setup_plan handler | `/ui/src/lib/distri-finetune-tools/steps/propose-setup-plan/handler.ts` |
-| propose_setup_plan prompts | `/ui/src/lib/distri-finetune-tools/steps/propose-setup-plan/prompts.ts` |
-| adjust_setup_plan tool | `/ui/src/lib/distri-finetune-tools/steps/propose-setup-plan/adjust-plan.ts` |
-| grader_template utility | `/ui/src/lib/distri-finetune-tools/steps/propose-setup-plan/grader-template.ts` |
-| llm_service utility | `/ui/src/lib/distri-finetune-tools/steps/propose-setup-plan/llm-service.ts` |
-| execute_setup_plan tool | `/ui/src/lib/distri-finetune-tools/steps/execute-setup-plan.ts` |
-| generate_initial_data tool | `/ui/src/lib/distri-finetune-tools/steps/generate-initial-data.ts` |
-| knowledge_sources tools | `/ui/src/lib/distri-finetune-tools/steps/knowledge-sources.ts` |
-| pdf_extractor | `/ui/src/lib/distri-finetune-tools/steps/pdf-extractor.ts` |
-| pdf_llm_extractor | `/ui/src/lib/distri-finetune-tools/steps/pdf-llm-extractor.ts` |
+| **Plan Tools** | |
+| propose_plan folder | `/ui/src/lib/distri-finetune-tools/steps/propose-plan/` |
+| propose_plan types | `/ui/src/lib/distri-finetune-tools/steps/propose-plan/types.ts` |
+| propose_plan handler | `/ui/src/lib/distri-finetune-tools/steps/propose-plan/handler.ts` |
+| propose_plan tool def | `/ui/src/lib/distri-finetune-tools/steps/propose-plan/tool.ts` |
+| adjust_plan tool | `/ui/src/lib/distri-finetune-tools/steps/propose-plan/adjust-plan.ts` |
+| grader_template utility | `/ui/src/lib/distri-finetune-tools/steps/propose-plan/grader-template.ts` |
+| save_plan tool | `/ui/src/lib/distri-finetune-tools/steps/save-plan.ts` |
+| execute_plan tool | `/ui/src/lib/distri-finetune-tools/steps/execute-plan.ts` |
+| plan_step_normalization | `/ui/src/lib/distri-finetune-tools/steps/plan-step-normalization.ts` |
 | execution_state_store | `/ui/src/lib/distri-finetune-tools/steps/execution-state-store.ts` |
 | proposed_plan_store | `/ui/src/lib/distri-finetune-tools/steps/proposed-plan-store.ts` |
-| PlanSection | `/ui/src/components/datasets/plan-section/PlanSection.tsx` |
-| SetupPlanEditor | `/ui/src/components/datasets/plan-section/SetupPlanEditor.tsx` |
-| SetupPlanCard | `/ui/src/components/datasets/plan-section/SetupPlanCard.tsx` |
-| ExecutionProgressCard | `/ui/src/components/datasets/plan-section/ExecutionProgressCard.tsx` |
-| PlanExecutedView | `/ui/src/components/datasets/plan-section/PlanExecutedView.tsx` |
+| **Other Tools** | |
+| generate_initial_data | `/ui/src/lib/distri-finetune-tools/steps/generate-initial-data.ts` |
+| knowledge_sources | `/ui/src/lib/distri-finetune-tools/steps/knowledge-sources.ts` |
+| analyze_knowledge_sources | `/ui/src/lib/distri-finetune-tools/steps/analyze-knowledge-sources.ts` |
+| semantic_pdf_extractor | `/ui/src/lib/distri-finetune-tools/steps/semantic-pdf-extractor.ts` |
+| pdf_native_extractor | `/ui/src/lib/distri-finetune-tools/steps/pdf-native-extractor.ts` |
+| **Plan UI Components** | |
+| PlanPreview (workspace tab) | `/ui/src/components/datasets/PlanPreview.tsx` |
+| PlanEditor | `/ui/src/components/datasets/plan-section/PlanEditor.tsx` |
+| PlanCard | `/ui/src/components/datasets/plan-section/PlanCard.tsx` |
+| PlanHeaderActions | `/ui/src/components/datasets/plan-section/PlanHeaderActions.tsx` |
 | PlanCompletedState | `/ui/src/components/datasets/plan-section/PlanCompletedState.tsx` |
 | DocsProcessingState | `/ui/src/components/datasets/plan-section/DocsProcessingState.tsx` |
-| ReadmeWithPlan | `/ui/src/components/datasets/ReadmeWithPlan.tsx` |
-| SectionTabs | `/ui/src/components/datasets/dataset-detail-header/SectionTabs.tsx` |
-| Tool Renderers | `/ui/src/components/agent/lucy-agent/LucySetupPlanRenderer.tsx` |
+| ExecutionProgressCard | `/ui/src/components/datasets/plan-section/ExecutionProgressCard.tsx` |
+| plan-markdown-utils | `/ui/src/components/datasets/plan-section/plan-markdown-utils.ts` |
+| **Contexts & State** | |
+| PlanContext | `/ui/src/contexts/PlanContext.tsx` |
+| **Other UI** | |
+| Tool Renderers | `/ui/src/components/agent/lucy-agent/LucyToolRenderer.tsx` |
 | RecordsSectionHeader | `/ui/src/components/datasets/dataset-detail-header/RecordsSectionHeader.tsx` |
 | TopicRecordTree | `/ui/src/components/datasets/records-table/TopicRecordTree.tsx` |
 | TopicNodeHeader | `/ui/src/components/datasets/records-table/TopicNodeHeader.tsx` |
@@ -625,8 +746,11 @@ Also has access to both tools for delegated execution scenarios.
 | Lucy Assistant | `/ui/src/components/datasets/LucyDatasetAssistant.tsx` |
 | DatasetDetailContentV2 | `/ui/src/components/datasets/DatasetDetailContentV2.tsx` |
 | Event Emitter | `/ui/src/utils/eventEmitter.ts` |
+| **Agent Definitions** | |
 | Orchestrator Agent | `/gateway/agents/finetune/vllora-finetune-agent.md` |
+| Topics Agent | `/gateway/agents/finetune/finetune-topics-agent.md` |
 | Workflow Agent | `/gateway/agents/finetune/finetune-workflow-agent.md` |
+| Data Generation Agent | `/gateway/agents/finetune/data-generation-agent.md` |
 
 ## Recent Improvements
 
@@ -637,7 +761,7 @@ Initial plans now default to a **2-level hierarchy with exactly 5 leaf topics**:
 - 5 leaf subtopics distributed across parents (target_count = 30 each)
 - Total: 150 records by default
 
-The LLM prompt enforces this structure, and `llm-service.ts` includes a `validateAndFixInitialPlan()` function that programmatically ensures exactly 5 leaf topics even if the LLM deviates.
+The LLM prompt enforces this structure, and `propose-plan/handler.ts` validates leaf topic counts while `propose-plan/adjust-plan.ts` includes `validateAndFixResponse()` to programmatically ensure the correct number of leaf topics even if the LLM deviates.
 
 ### Parallel Data Generation
 
@@ -652,13 +776,13 @@ See `generate-initial-data.ts` for the implementation using `Promise.all()`.
 
 The evaluator configuration step now uses the pre-generated `template_preview` from the plan:
 - `grader-template.ts` generates a full LLM-as-judge evaluator during plan creation
-- `execute-setup-plan.ts` uses `plan.grader_config.template_preview` directly
+- `execute-plan.ts` uses `plan.grader_config.template_preview` directly
 - No more placeholder scripts with `[object Object]` issues
 
 ### Executed Plan Read-Only View
 
 After plan execution completes, the Plan tab shows a read-only view:
-- `PlanExecutedView` component displays the executed plan markdown
+- `PlanCompletedState` component displays the executed plan summary
 - Green "Plan Executed Successfully" badge in header
 - "Clear" button to dismiss and return to empty state
 - Persists across tab switches via `execution-state-store.ts`
@@ -667,7 +791,7 @@ After plan execution completes, the Plan tab shows a read-only view:
 
 ### Plan Shows Error Despite Successful Generation
 
-**Symptom:** Console shows `[proposeSetupPlan] Plan generated successfully` but UI shows error.
+**Symptom:** Console shows `[proposePlan] Plan generated successfully` but UI shows error.
 
 **Cause:** Tool result structure mismatch. The renderer wasn't using `extractToolResultData` to properly extract from the `ToolResult.parts` structure.
 
@@ -699,7 +823,7 @@ const result = resultData ? resultData.result : state.result;
 
 The `sources_processing` flag in the result indicates this state, and the UI shows a distinct amber card with a loading indicator.
 
-Before returning early, the handler emits `vllora_setup_plan_dismissed` to clear the "generating plan" loading state in `PlanSection`, preventing a misleading spinner.
+Before returning early, the handler emits `vllora_plan_dismissed` to clear the "generating plan" loading state in `PlanSection`, preventing a misleading spinner.
 
 ### PDF Extraction Quality
 

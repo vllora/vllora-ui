@@ -113,9 +113,9 @@ export function AddToDatasetDialog({
       setDatasetsWithCounts(prev => [newDs, ...prev]);
       setSelectedDataset(newDs);
       setIsDatasetPopoverOpen(false);
-      toast.success(`Created dataset "${newDataset.name}"`);
+      toast.success(`Created experiment "${newDataset.name}"`);
     } catch {
-      toast.error('Failed to create dataset');
+      toast.error('Failed to create experiment');
     } finally {
       setIsCreatingNew(false);
     }
@@ -125,7 +125,7 @@ export function AddToDatasetDialog({
     if (spans.length === 0) return;
 
     if (!selectedDataset) {
-      toast.error('Please select or create a dataset');
+      toast.error('Please select or create an experiment');
       return;
     }
 
@@ -138,7 +138,7 @@ export function AddToDatasetDialog({
       onOpenChange(false);
       onSuccess?.();
     } catch {
-      toast.error('Failed to add spans to dataset');
+      toast.error('Failed to add spans to experiment');
     } finally {
       setIsSubmitting(false);
     }
@@ -155,17 +155,17 @@ export function AddToDatasetDialog({
           <div className="space-y-1">
             <div className="flex items-center gap-2 font-semibold text-lg">
               <Database className="w-5 h-5 text-[rgb(var(--theme-500))]" />
-              <span>Add to Dataset</span>
+              <span>Add to Experiment</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              Adding {spans.length} span{spans.length !== 1 ? 's' : ''} to a dataset
+              Adding {spans.length} span{spans.length !== 1 ? 's' : ''} to an experiment
             </p>
           </div>
 
           {/* Dataset Selection - Combobox style */}
           <div className="space-y-2">
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              Select or Create Dataset
+              Select or Create Experiment
             </label>
             <Popover open={isDatasetPopoverOpen} onOpenChange={setIsDatasetPopoverOpen}>
               <PopoverTrigger asChild>
@@ -177,7 +177,7 @@ export function AddToDatasetDialog({
                       setSelectedDataset(null);
                       if (!isDatasetPopoverOpen) setIsDatasetPopoverOpen(true);
                     }}
-                    placeholder="Search or enter new dataset name..."
+                    placeholder="Search or enter new experiment name..."
                     className="bg-muted/30 pr-8"
                   />
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />

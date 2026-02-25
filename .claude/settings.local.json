@@ -29,9 +29,27 @@
       "Bash(cargo add:*)",
       "Bash(node --version)",
       "Bash(node -e:*)",
-      "Bash(git status:*)"
+      "Bash(git status:*)",
+      "Bash(for f in \"/Users/anhthuduong/Documents/GitHub/vllora/gateway/agents/finetune/vllora-finetune-agent.md\" \"/Users/anhthuduong/Documents/GitHub/vllora/gateway/src/distri.rs\" \"/Users/anhthuduong/Documents/GitHub/distri/server/distri-core/src/agent/orchestrator.rs\" \"/Users/anhthuduong/Documents/GitHub/distri/server/distri-core/src/agent/agent_loop.rs\" \"/Users/anhthuduong/Documents/GitHub/distri/distrijs/packages/react/src/useChat.ts\" \"/Users/anhthuduong/Documents/GitHub/distri/distrijs/packages/core/src/distri-client.ts\")",
+      "Bash(do)",
+      "Bash(if [ -f \"$f\" ])",
+      "Bash(then)",
+      "Bash(else)",
+      "Bash(fi)",
+      "Bash(for branch in main claude/config-setup chore-lucy-enhance feat/sub-agents-finetune)",
+      "Bash(do echo \"=== $branch ===\")",
+      "mcp__stitch__generate_screen_from_text",
+      "mcp__stitch__get_project",
+      "mcp__stitch__edit_screens",
+      "mcp__stitch__get_screen",
+      "mcp__stitch__list_screens",
+      "WebFetch(domain:contribution.usercontent.google.com)"
     ],
     "deny": [],
-    "ask": []
+    "ask": [],
+    "additionalDirectories": [
+      "/Users/anhthuduong/Documents/GitHub/distri",
+      "/Users/anhthuduong/Documents/GitHub/vllora"
+    ]
   }
 }

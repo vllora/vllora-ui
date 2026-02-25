@@ -73,8 +73,8 @@ export const uploadDatasetHandler: ToolHandler = async (params) => {
         eval_script: hasEvalScript,
       },
       message: hasEvalScript
-        ? 'Dataset uploaded with eval script. Ready for dry run.'
-        : 'Dataset uploaded without eval script. Configure grader before dry run.',
+        ? 'Dataset uploaded with eval script. Ready for evaluation.'
+        : 'Dataset uploaded without eval script. Configure grader before evaluation.',
     };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to upload dataset' };

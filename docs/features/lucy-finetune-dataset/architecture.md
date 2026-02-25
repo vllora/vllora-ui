@@ -14,7 +14,7 @@ The Lucy Dataset Agent follows a **3-tier architecture** with tools executing lo
 │  ┌────────────────────────┐   ┌─────────────────────────────────────┐  │
 │  │ LucyDatasetAssistant   │   │    distri-finetune-tools/           │  │
 │  │ - Sidebar UI           │   │    - Workflow tools (4)             │  │
-│  │ - Auto-analysis        │   │    - Step tools (31)                │  │
+│  │ - Auto-analysis        │   │    - Step tools (34)                │  │
 │  │ - Quick actions        │   │    - Execute locally in browser     │  │
 │  └────────────────────────┘   └─────────────────────────────────────┘  │
 │           │                              │                              │
@@ -44,8 +44,10 @@ The Lucy Dataset Agent follows a **3-tier architecture** with tools executing lo
 │  ┌───────────────────────┐   ┌────────────────────────────────────────┐│
 │  │   AgentOrchestrator   │   │     vllora-finetune-agent.md           ││
 │  │   - Loads agent defs  │◄──│     - Model: gpt-4.1                   ││
-│  │   - Tool execution    │   │     - 21 external tools defined        ││
-│  │   - Message routing   │   │     - max_iterations: 20               ││
+│  │   - Tool execution    │   │     - 13 external + 3 builtin tools    ││
+│  │   - Message routing   │   │     - max_iterations: 30               ││
+│  │   - Sub-agent mgmt    │   │     - 3 sub-agents (topics, workflow,  ││
+│  │                       │   │       data_generation)                  ││
 │  └───────────────────────┘   └────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -56,7 +58,9 @@ The Lucy Dataset Agent follows a **3-tier architecture** with tools executing lo
 
 ### 1. Agent Definition
 
-**File:** `gateway/agents/finetune/vllora-finetune-agent.md`
+**Folder:** `gateway/agents/finetune/` — contains 4 markdown-based agent definitions that the Distri server's AgentOrchestrator loads to instantiate the multi-agent system.
+
+**Orchestrator:** `vllora-finetune-agent.md`
 
 | Property | Value |
 |----------|-------|
@@ -66,52 +70,57 @@ The Lucy Dataset Agent follows a **3-tier architecture** with tools executing lo
 | Max Iterations | `30` |
 | Tool Format | `provider` |
 | External Tool Timeout | `600s` (10 min for user responses) |
-| Sub-Agents | `finetune_analysis`, `finetune_topics`, `finetune_workflow` |
-| Total Tools | 35 (4 workflow + 31 step) |
+| Sub-Agents | `finetune_topics`, `finetune_workflow`, `data_generation` |
+| Builtin Tools | 3 (`final`, `write_todos`, `transfer_to_agent`) |
+| External Tools | 13 (`ask_follow_up`, `get_workflow_status`, `get_dataset_state`, `get_dataset_records`, `update_objective`, `analyze_knowledge_sources`, `search_knowledge`, `generate_topics`, `generate_grader`, `propose_plan`, `adjust_plan`, `save_plan`, `execute_plan`) |
 
-The agent is defined using Distri's markdown-based agent definition format. Key sections:
-- **ROLE**: Process-focused finetune assistant
-- **MESSAGE CONTEXT**: JSON context structure injected with each message
-- **WORKFLOW OVERVIEW**: 7-step pipeline description
-- **STEP GUIDANCE**: Detailed instructions for each step
-- **RULES**: Critical rules for safe operation
+The orchestrator is the main agent users interact with. It handles plan-first routing (detecting when to create plans from knowledge sources), delegates specialized work to sub-agents via `transfer_to_agent`, and calls some tools directly (plan system, knowledge analysis, dataset access).
+
+Key prompt sections:
+- **ROLE**: Proactive finetune orchestrator
+- **CRITICAL RULES**: Plan-first triggers, ask_follow_up usage, delegation rules
+- **SUB-AGENTS**: When/how to delegate to each sub-agent
+- **RFT DATA FORMAT**: Record structure rules (prompts only, no golden responses needed)
 
 ---
 
 ### 1.5. Sub-Agent Architecture
 
-The orchestrator (`vllora_finetune_agent`) delegates specialized tasks to sub-agents rather than executing tools directly:
+The orchestrator delegates specialized tasks to 3 sub-agents via `transfer_to_agent`. Each sub-agent has its own tool set, model settings, and behavioral prompt.
 
-| Sub-Agent | Purpose | Tools |
-|-----------|---------|-------|
-| `finetune_analysis` | Dataset analysis, pattern identification | `get_dataset_records`, `get_dataset_state` |
-| `finetune_topics` | Topic hierarchy generation/manipulation | `generate_topics`, `apply_topic_hierarchy`, `adjust_topic_hierarchy`, `get_topic_hierarchy` |
-| `finetune_workflow` | Workflow operations, training, deployment | All workflow + training tools |
+| Sub-Agent | File | Purpose | External Tools |
+|-----------|------|---------|---------------|
+| `finetune_topics` | `finetune-topics-agent.md` | Topic hierarchy generation, display, manipulation | 5: `generate_topics`, `apply_topic_hierarchy`, `adjust_topic_hierarchy`, `get_topic_hierarchy`, `get_dataset_records` |
+| `finetune_workflow` | `finetune-workflow-agent.md` | Workflow operations — data generation, grading, training, deployment | 22: all workflow control + data ops + grader + training tools |
+| `data_generation` | `data-generation-agent.md` | Interactive data gen with knowledge sources, previews, iterative refinement | 12: knowledge source tools + generation tools + dataset access |
 
 **Delegation Flow:**
 ```
 vllora_finetune_agent (Orchestrator)
     │
-    ├── transfer_to_agent("finetune_analysis", "Analyze dataset...")
-    │       └── Calls get_dataset_state, get_dataset_records
+    │── Handles directly: plan system, knowledge analysis, ask_follow_up
     │
     ├── transfer_to_agent("finetune_topics", "Generate topics...")
-    │       └── Calls generate_topics, apply_topic_hierarchy
+    │       └── generate_topics, apply_topic_hierarchy, adjust_topic_hierarchy
     │
-    └── transfer_to_agent("finetune_workflow", "Start training...")
-            └── Calls start_training, run_dry_run, etc.
+    ├── transfer_to_agent("finetune_workflow", "Start training...")
+    │       └── start_finetune_workflow, advance_to_step, start_training, etc.
+    │
+    └── transfer_to_agent("data_generation", "Generate training data...")
+            └── generate_preview, generate_synthetic_data, upload_knowledge_source, etc.
 ```
 
-**Benefits:**
+**Design:**
 - **Separation of concerns**: Each sub-agent is specialized for its domain
-- **Smaller context windows**: Sub-agents only load relevant tools
-- **Cleaner orchestration**: Main agent focuses on UX and workflow guidance
+- **Smaller context windows**: Sub-agents only load relevant tools and instructions
+- **Cleaner orchestration**: Main agent focuses on plan-first routing and UX guidance
+- **Tool overlap**: Some tools appear on multiple agents (e.g., `get_dataset_records` on orchestrator + topics + data_generation) to allow each agent to access what it needs
 
-**Agent Definition Files:**
-- `gateway/agents/finetune/vllora-finetune-agent.md` (Orchestrator)
-- `gateway/agents/finetune/finetune-analysis-agent.md`
-- `gateway/agents/finetune/finetune-topics-agent.md`
-- `gateway/agents/finetune/finetune-workflow-agent.md`
+**Agent Definition Files** (`gateway/agents/finetune/`):
+- `vllora-finetune-agent.md` — Orchestrator (13 external + 3 builtin tools)
+- `finetune-topics-agent.md` — Topics specialist (5 external tools)
+- `finetune-workflow-agent.md` — Workflow executor (22 external tools)
+- `data-generation-agent.md` — Data generation specialist (12 external tools)
 
 ---
 
@@ -256,7 +265,7 @@ const tools = useMemo<DistriAnyTool[]>(
 );
 ```
 
-- `finetuneTools`: All 35 function tools (4 workflow + 31 step tools)
+- `finetuneTools`: All 38 function tools (4 workflow + 34 step tools)
 - `createAskFollowUpTool()`: UI tool for presenting options to users
 
 **Context Injection Pattern:**
@@ -280,26 +289,25 @@ distri-finetune-tools/
 ├── workflow/
 │   └── index.ts          # 4 workflow control tools
 ├── steps/
-│   ├── index.ts                  # Aggregates all 31 step tools
+│   ├── index.ts                  # Aggregates all 34 step tools
 │   ├── generate-topics/          # Topic generation (frontend + backend)
 │   │   ├── frontend.ts           # LLM-based generation
 │   │   ├── backend.ts            # Template-based generation
 │   │   └── index.ts
-│   ├── propose-setup-plan/       # Setup plan generation
-│   │   ├── handler.ts
-│   │   ├── tool.ts
-│   │   ├── types.ts
-│   │   ├── prompts.ts
-│   │   ├── llm-service.ts
-│   │   ├── grader-template.ts
-│   │   ├── adjust-plan.ts
+│   ├── propose-plan/             # Plan generation & adjustment
+│   │   ├── handler.ts            # Validates, persists, emits plan
+│   │   ├── tool.ts               # Tool definition
+│   │   ├── types.ts              # Plan type definitions
+│   │   ├── grader-template.ts    # LLM-as-judge evaluator template
+│   │   ├── adjust-plan.ts        # Plan adjustment via user feedback
 │   │   └── index.ts
 │   ├── shared/                   # Shared utilities
 │   │   ├── index.ts
 │   │   └── knowledge-context.ts  # Knowledge source context builder
 │   ├── knowledge-sources.ts      # 4 knowledge source tools
-│   ├── pdf-extractor.ts          # PDF text extraction with pdfjs-dist
-│   ├── pdf-llm-extractor.ts      # LLM-assisted content analysis
+│   ├── semantic-pdf-extractor.ts # LLM-assisted PDF content extraction
+│   ├── pdf-native-extractor.ts   # Basic pdfjs-dist text extraction
+│   ├── analyze-knowledge-sources.ts  # LLM analysis of uploaded docs
 │   ├── apply-hierarchy.ts
 │   ├── adjust-hierarchy.ts       # Natural language topic adjustments
 │   ├── topic-manipulation.ts     # get_topic_hierarchy tool
@@ -310,6 +318,7 @@ distri-finetune-tools/
 │   ├── generate-record-variants.ts  # Generate variations of existing records
 │   ├── generate-preview.ts       # Preview generation before committing
 │   ├── configure-grader.ts
+│   ├── generate-grader.ts        # LLM-based grader criteria + script generation
 │   ├── test-grader.ts
 │   ├── validate-records.ts
 │   ├── upload-dataset.ts
@@ -319,10 +328,13 @@ distri-finetune-tools/
 │   ├── check-training-status.ts
 │   ├── deploy-model.ts
 │   ├── get-dataset-records.ts
-│   ├── get-dataset-stats.ts
+│   ├── get-dataset-state.ts      # Dataset state + computed stats
 │   ├── update-record.ts
+│   ├── update-objective.ts       # Update dataset objective/goals
 │   ├── regenerate-readme.ts      # README regeneration tool
-│   ├── execute-setup-plan.ts     # 7-step plan execution
+│   ├── save-plan.ts              # Persist plan to IndexedDB
+│   ├── execute-plan.ts           # Registry-based plan execution
+│   ├── plan-step-normalization.ts  # Step ID normalization utilities
 │   ├── execution-state-store.ts  # In-memory execution cache (write-through to IndexedDB)
 │   ├── proposed-plan-store.ts    # IndexedDB plan persistence with lifecycle status tracking
 │   ├── stockfish-tools.ts        # Chess-specific tools (conditional)
@@ -344,21 +356,21 @@ distri-finetune-tools/
 | `advance_to_step` | Move to next step (with skip support) |
 | `rollback_to_step` | Return to previous step via snapshots |
 
-#### Step Tools (31)
+#### Step Tools (34)
 
 | Category | Tools |
 |----------|-------|
 | **Topics (Step 1)** | `generate_topics`, `apply_topic_hierarchy`, `adjust_topic_hierarchy`, `get_topic_hierarchy` |
 | **Categorize (Step 2)** | `categorize_records` |
 | **Coverage (Step 3)** | `analyze_coverage`, `generate_synthetic_data`, `generate_initial_data`, `generate_record_variants`, `generate_preview` |
-| **Knowledge Sources** | `upload_knowledge_source`, `list_knowledge_sources`, `extract_topics_from_source`, `search_knowledge` |
-| **Grader (Step 4)** | `configure_grader`, `test_grader_sample` |
+| **Knowledge Sources** | `upload_knowledge_source`, `list_knowledge_sources`, `extract_topics_from_source`, `search_knowledge`, `analyze_knowledge_sources` |
+| **Grader (Step 4)** | `configure_grader`, `generate_grader`, `test_grader_sample` |
 | **Upload/Sync** | `upload_dataset`, `sync_evaluator` |
 | **Dry Run (Step 5)** | `run_dry_run` |
 | **Training (Step 6)** | `start_training`, `check_training_status` |
 | **Deploy (Step 7)** | `deploy_model` |
-| **Setup Plan** | `propose_setup_plan`, `adjust_setup_plan`, `execute_setup_plan` |
-| **Data Access** | `get_dataset_records`, `get_dataset_state`, `update_record`, `validate_records` |
+| **Plan** | `propose_plan`, `adjust_plan`, `save_plan`, `execute_plan` |
+| **Data Access** | `get_dataset_records`, `get_dataset_state`, `update_record`, `update_objective`, `validate_records` |
 | **Documentation** | `regenerate_readme` |
 
 ---
@@ -393,7 +405,7 @@ interface FinetuneWorkflowState {
 ```
 
 **Storage Separation (3 IndexedDB databases):**
-- **`vllora-finetune`** (v4): Step progress, metadata, snapshots, dry run jobs, job evaluation cache (with `scoresPersisted` tracking), setup plans (with lifecycle status: proposed → approved → executing → completed/failed)
+- **`vllora-finetune`** (v4): Step progress, metadata, snapshots, dry run jobs, job evaluation cache (with `scoresPersisted` tracking), plans (with lifecycle status: proposed → approved → executing → completed/failed)
 - **`vllora-datasets`**: Actual data (records, topicHierarchy, evaluationConfig)
 - **`vllora-knowledge-sources`**: Uploaded documents with extracted content
 
@@ -434,7 +446,7 @@ interface FinetuneWorkflowState {
 ## Key Design Decisions
 
 ### 1. Frontend Tool Execution
-All 35 tools execute in the browser via JavaScript handlers. This allows:
+All 38 tools execute in the browser via JavaScript handlers. This allows:
 - Direct access to IndexedDB
 - No backend API needed for data operations
 - Real-time UI updates via emitter events
@@ -504,12 +516,112 @@ Workflow snapshots stored in IndexedDB enable:
 
    These must stay in sync manually across 4 agent definition files.
 
-2. **Browser-Only Execution** - All 35 tools execute in browser. For operations like `start_training` or `deploy_model`, consider:
+2. **Browser-Only Execution** - All 38 tools execute in browser. For operations like `start_training` or `deploy_model`, consider:
    - Access to GPU resources
    - Long-running jobs
    - Secure API key handling
 
 3. **Single Model Dependency** - Agent uses `model = "gpt-4.1"` exclusively.
+
+---
+
+## VS Code-Style UI Architecture
+
+The UI follows a **VS Code with Copilot Chat** pattern: an AI assistant (Lucy) in the sidebar orchestrates the workflow while the workspace displays artifacts as dynamic editor tabs.
+
+### Layout
+
+```
+┌──────┬──────────────────────────────┬──────────────────────────────────────┐
+│ App  │ SIDEBAR (340px)              │ WORKSPACE                            │
+│ Side │ [Explorer] [Lucy] tab strip  │ [readme.md ×] [plan.md ×] [data ×]  │
+│ bar  │                              │                                      │
+│      │ Explorer: VS Code file tree  │ Dynamic, closeable editor tabs       │
+│      │ Lucy: Flat IDE chat panel    │ Content routed by virtual file path  │
+│      │                              │                                      │
+│ 16px │          340px               │           flex-1                     │
+└──────┴──────────────────────────────┴──────────────────────────────────────┘
+```
+
+### Sidebar: Explorer + Lucy Chat
+
+The sidebar has a 2-tab strip switching between Explorer and Lucy views:
+
+- **Explorer** (`DatasetExplorer.tsx`) — VS Code file-tree showing the dataset as a virtual project. Every item maps to existing data in IndexedDB/contexts. Clicking a file opens it as a workspace tab.
+- **Lucy** (`LucyDatasetAssistant.tsx`) — Flat IDE-panel chat (not bubble-style). Left-aligned, compact 8px spacing, left-border accent for tool calls, ~6-8 messages visible.
+
+**Explorer file tree structure:**
+```
+📄 readme.md          → DatasetReadmeViewer
+📄 plan.md            → PlanPreview / PlanEditor
+📄 tasks.md           → TasksViewer (reads chat todos)
+📄 logs.md            → LogsViewer (aggregated timeline)
+📁 documents/         → KnowledgeSourcesPanel
+📁 topics/            → RecordsTable (filtered by topic)
+📁 evaluations/       → EvaluationConfigPanel + DryRunActivityView
+📁 finetune/          → JobDetailPanel
+📁 quick-stats/       → DatasetOverviewCard sub-views
+```
+
+**Key sidebar files:**
+| File | Purpose |
+|------|---------|
+| `src/components/datasets/sidebar/DatasetExplorer.tsx` | VS Code file tree, reads from 5+ contexts |
+| `src/components/datasets/sidebar/FileTreeItem.tsx` | Recursive tree item |
+| `src/components/datasets/sidebar/SidebarTabStrip.tsx` | `[Explorer] [Lucy]` tab strip |
+| `src/components/datasets/sidebar/LogsViewer.tsx` | Activity log timeline |
+| `src/components/datasets/sidebar/TasksViewer.tsx` | Lucy's task checklist |
+
+### Workspace: Dynamic Editor Tabs
+
+Fixed navigation tabs (Overview, Data, Evaluation, Fine-tune, Deploy) were replaced by dynamic, closeable editor tabs. Clicking a file in Explorer opens it as a tab.
+
+**Key workspace files:**
+| File | Purpose |
+|------|---------|
+| `src/components/datasets/WorkspaceTabManager.tsx` | Tab bar with open/close/preview/pin, localStorage persistence |
+| `src/components/datasets/TabContentRouter.tsx` | Maps virtual file path → existing content component |
+| `src/contexts/WorkspaceTabsContext.tsx` | React Context for open/active/pinned tab state |
+
+### Terminology Standardization
+
+| Concept | Standard Term | Code-Internal |
+|---------|--------------|---------------|
+| Quality scoring | **Evaluation** | `evalScript`, `grader` |
+| Training jobs | **Fine-tune** | `finetuneJob` |
+| Reference files | **Documents** | `knowledgeSource` |
+| AI records | **Generated** (badge/filter) | `source: 'generated'` |
+| Setup process | **Plan** | `Plan` |
+
+### Chat Panel Design
+
+Lucy Chat uses a **flat IDE-panel style** (not messaging bubbles):
+
+| Aspect | Design |
+|--------|--------|
+| Alignment | Everything left-aligned |
+| Containers | No bubbles — content flows directly |
+| Avatars | Tiny inline icon (14px) or text label |
+| Spacing | Compact (8px between messages) |
+| Tool calls | Left-border accent rows |
+| Input | Rounded-lg with simple border focus |
+| Density | ~6-8 messages visible |
+
+### Architectural Decision: What Changed vs Stayed
+
+**Unchanged** (no modifications needed):
+- Lucy agent prompt + tools (gateway)
+- Distri server + @distri/react + @distri/core packages
+- IndexedDB data models
+- Tool execution pipeline (`distri-finetune-tools/`)
+- All React contexts
+
+**Changed** (frontend only):
+- Sidebar → Explorer panel + Lucy chat with tab strip
+- Fixed tabs → dynamic workspace editor tabs
+- Sheet overlays (ReadmeDrawer, DocsDrawer) → workspace tabs
+- New `WorkspaceTabsContext` for tab state
+- Event semantics updated: `vllora_switch_tab` and `vllora_open_drawer` map to tab paths
 
 ---
 
@@ -749,7 +861,6 @@ Theme colors use CSS custom properties as space-separated RGB values (e.g., `--t
 ## Related Documentation
 
 - [State Machine](./state-machine.md) - Workflow state transitions
-- [Guided Onboarding](./guided-onboarding.md) - Setup plan flow documentation
-- [UX Flow Assessment](./ux-flow-assessment.md) - UX evaluation and recommendations
-- [Data Tab Redesign Spec](./data-tab-redesign-spec.md) - UX redesign proposals (P0-P2) with implementation status
-- [README](./README.md) - Complete design document
+- [Guided Onboarding](./guided-onboarding.md) - Planning system and onboarding flow
+- [Event Emitter Guide](./event-emitter-guide.md) - Event system reference
+- [README](./README.md) - Overview and documentation index

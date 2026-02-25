@@ -364,7 +364,7 @@ export function LucyChatInput({
       />
 
       {/* Input container with focus ring */}
-      <div className="bg-secondary rounded-xl border border-input focus-within:border-[rgb(var(--theme-500))] focus-within:shadow-[0_0_0_3px_rgba(var(--theme-rgb),0.1)] transition-all">
+      <div className="bg-secondary rounded-lg border border-input focus-within:border-[rgb(var(--theme-500))] transition-all">
         {/* Textarea */}
         <textarea
           ref={textareaRef}

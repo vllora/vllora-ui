@@ -115,10 +115,10 @@ function getDiagnosis(stats: ReturnType<typeof calculateStats>): {
 
   // Check for problems
   if (stats.mean < 0.1) {
-    issues.push("Mean too low - dataset may be too hard or grader too strict");
+    issues.push("Mean too low - examples may be too difficult or grader too strict");
   }
   if (stats.mean > 0.9) {
-    issues.push("Mean too high - dataset may be too easy or grader too lenient");
+    issues.push("Mean too high - examples may be too easy or grader too lenient");
   }
   if (stats.std < 0.1 && stats.mean > 0.1 && stats.mean < 0.9) {
     issues.push("Low variance - grader may not differentiate well");

@@ -150,7 +150,7 @@ export function DryRunEmptyState({
       {/* Glow effect on hover */}
       <div className="absolute -top-12 -right-12 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
-      <CardHeader label="Dry Run" />
+      <CardHeader label="Evaluation" />
 
       {/* Content */}
       <div className="relative flex items-center gap-4">
@@ -175,7 +175,7 @@ export function DryRunEmptyState({
         {/* Text content */}
         <div className="flex-1 text-left">
           <span className="text-sm font-medium text-zinc-300 group-hover:text-zinc-200 transition-colors">
-            Run dry run
+            Run evaluation
           </span>
           <p className="text-xs text-zinc-500 group-hover:text-zinc-400 transition-colors">
             Test your grader on sample data

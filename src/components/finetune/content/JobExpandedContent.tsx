@@ -41,54 +41,62 @@ export function JobExpandedContent({
           )}
 
           {/* Tabs for Job Details, Training Metrics, and Per-Row */}
-          <Tabs defaultValue="details" className="w-full">
-            <TabsList className="h-8">
-              <TabsTrigger value="details" className="text-xs gap-1.5 h-7">
-                <Info className="h-3.5 w-3.5" />
-                Job Details
-              </TabsTrigger>
-              {job.dataset_id && (
-                <>
-                  <TabsTrigger value="metrics" className="text-xs gap-1.5 h-7">
-                    <BarChart3 className="h-3.5 w-3.5" />
-                    Training Metrics
+          {(() => {
+            const hasEvalData = evalResults && evalResults.results.length > 0;
+            const isFailed = job.status === "failed";
+            const showMetricsTabs = job.dataset_id && !(isFailed && !hasEvalData && !isLoadingEvals);
+
+            return (
+              <Tabs defaultValue="details" className="w-full">
+                <TabsList className="h-8">
+                  <TabsTrigger value="details" className="text-xs gap-1.5 h-7">
+                    <Info className="h-3.5 w-3.5" />
+                    Job Details
                   </TabsTrigger>
-                  <TabsTrigger value="rows" className="text-xs gap-1.5 h-7">
-                    <List className="h-3.5 w-3.5" />
-                    Per-Row
-                  </TabsTrigger>
-                </>
-              )}
-            </TabsList>
-
-            <TabsContent value="details" className="mt-3">
-              <FinetuneJobDetailsSection job={job} />
-            </TabsContent>
-
-            {job.dataset_id && (
-              <>
-                <TabsContent value="metrics" className="mt-3">
-                  <TrainingMetricsSection
-                    evalResults={evalResults}
-                    isLoading={isLoadingEvals}
-                    isRefreshing={isRefreshingEvals}
-                    error={evalsError}
-                    onRefresh={onRefreshMetrics}
-                  />
-                </TabsContent>
-
-                <TabsContent value="rows" className="mt-3">
-                  {evalResults && evalResults.results.length > 0 ? (
-                    <PerRowDetailsSection results={evalResults.results} />
-                  ) : (
-                    <div className="text-xs text-muted-foreground py-2">
-                      No row data available yet
-                    </div>
+                  {showMetricsTabs && (
+                    <>
+                      <TabsTrigger value="metrics" className="text-xs gap-1.5 h-7">
+                        <BarChart3 className="h-3.5 w-3.5" />
+                        Training Metrics
+                      </TabsTrigger>
+                      <TabsTrigger value="rows" className="text-xs gap-1.5 h-7">
+                        <List className="h-3.5 w-3.5" />
+                        Per-Row
+                      </TabsTrigger>
+                    </>
                   )}
+                </TabsList>
+
+                <TabsContent value="details" className="mt-3">
+                  <FinetuneJobDetailsSection job={job} />
                 </TabsContent>
-              </>
-            )}
-          </Tabs>
+
+                {showMetricsTabs && (
+                  <>
+                    <TabsContent value="metrics" className="mt-3">
+                      <TrainingMetricsSection
+                        evalResults={evalResults}
+                        isLoading={isLoadingEvals}
+                        isRefreshing={isRefreshingEvals}
+                        error={evalsError}
+                        onRefresh={onRefreshMetrics}
+                      />
+                    </TabsContent>
+
+                    <TabsContent value="rows" className="mt-3">
+                      {hasEvalData ? (
+                        <PerRowDetailsSection results={evalResults.results} />
+                      ) : (
+                        <div className="text-xs text-muted-foreground py-2">
+                          {isLoadingEvals ? "Loading..." : "Evaluation data will appear as training progresses"}
+                        </div>
+                      )}
+                    </TabsContent>
+                  </>
+                )}
+              </Tabs>
+            );
+          })()}
         </div>
       </TableCell>
     </TableRow>

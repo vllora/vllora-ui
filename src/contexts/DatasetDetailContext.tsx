@@ -233,7 +233,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
       }
     } catch (err) {
       console.error("Failed to load dataset:", err);
-      toast.error("Failed to load dataset");
+      toast.error("Failed to load experiment");
     } finally {
       setIsLoading(false);
     }
@@ -415,9 +415,9 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
       try {
         await renameDataset(dataset.id, newName);
         setDataset({ ...dataset, name: newName });
-        toast.success("Dataset renamed");
+        toast.success("Experiment renamed");
       } catch {
-        toast.error("Failed to rename dataset");
+        toast.error("Failed to rename experiment");
       }
     },
     [dataset, renameDataset]
@@ -442,10 +442,10 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     if (!dataset) return;
     try {
       await deleteDataset(dataset.id);
-      toast.success("Dataset deleted");
+      toast.success("Experiment deleted");
       onBack();
     } catch {
-      toast.error("Failed to delete dataset");
+      toast.error("Failed to delete experiment");
     }
   }, [dataset, deleteDataset, onBack]);
 
@@ -754,7 +754,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
       const count = await importRecords(dataset.id, importedRecords, defaultTopic);
       await loadDataset();
       if (mode === "replace") {
-        toast.success(`Replaced dataset with ${count} record${count !== 1 ? "s" : ""}`);
+        toast.success(`Imported ${count} record${count !== 1 ? "s" : ""}`);
       } else {
         toast.success(`Imported ${count} record${count !== 1 ? "s" : ""}`);
       }
@@ -781,10 +781,10 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
       const newDs = await createDataset(newDatasetName.trim());
       setCreateDatasetDialog(false);
       setNewDatasetName("");
-      toast.success("Dataset created");
+      toast.success("Experiment created");
       onSelectDataset?.(newDs.id);
     } catch {
-      toast.error("Failed to create dataset");
+      toast.error("Failed to create experiment");
     }
   }, [newDatasetName, createDataset, onSelectDataset]);
 

@@ -37,6 +37,8 @@ interface DryRunActivityViewProps {
   onRunAgain?: () => void;
   /** Refresh a job's data from the backend API */
   onRefresh?: (jobId: string) => void;
+  /** Hide the runs sidebar (used when Explorer already shows job nodes) */
+  hideRunsSidebar?: boolean;
 }
 
 function formatTime(ts: number): string {
@@ -334,7 +336,7 @@ function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: D
   );
 }
 
-export function DryRunActivityView({ datasetId, jobs, onCancelJob, initialSelectedId, onRunAgain, onRefresh }: DryRunActivityViewProps) {
+export function DryRunActivityView({ datasetId, jobs, onCancelJob, initialSelectedId, onRunAgain, onRefresh, hideRunsSidebar = false }: DryRunActivityViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     if (initialSelectedId) return initialSelectedId;
     // Default to most recent completed job
@@ -356,7 +358,7 @@ export function DryRunActivityView({ datasetId, jobs, onCancelJob, initialSelect
   return (
     <div className="flex h-full min-h-0">
       {/* Left: selected job detail */}
-      <div className="flex-1 min-w-0 min-h-0 border-r border-zinc-800/60">
+      <div className={cn("flex-1 min-w-0 min-h-0", !hideRunsSidebar && "border-r border-zinc-800/60")}>
         {selectedJob ? (
           <JobDetail job={selectedJob} datasetId={datasetId} onCancel={onCancelJob} onRunAgain={onRunAgain} onRefresh={onRefresh} />
         ) : (
@@ -366,8 +368,10 @@ export function DryRunActivityView({ datasetId, jobs, onCancelJob, initialSelect
         )}
       </div>
 
-      {/* Right: job list sidebar */}
-      <RunsSidebar jobs={jobs} selectedId={selectedId} onSelectJob={setSelectedId} />
+      {/* Right: job list sidebar (hidden when Explorer provides job navigation) */}
+      {!hideRunsSidebar && (
+        <RunsSidebar jobs={jobs} selectedId={selectedId} onSelectJob={setSelectedId} />
+      )}
     </div>
   );
 }

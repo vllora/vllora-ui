@@ -1,18 +1,19 @@
 /**
  * LucyToolActions
  *
- * Lucy-themed tool actions component for external tools requiring user approval.
- * Same logic as DefaultToolActions from @distri/react but with Lucy UI styling.
+ * Clean tool approval card for external tools requiring user confirmation.
+ * Shows a friendly description of what the tool will do, with collapsible
+ * raw input for advanced users. Themed to match the app's visual style.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Wrench, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2, ChevronDown, ChevronRight, Play, Ban } from 'lucide-react';
 import { createSuccessfulToolResult, createFailedToolResult, DistriFnTool, ToolCall, ToolResult } from '@distri/core';
 import { ToolCallState } from '@distri/react';
 import { cn } from '@/lib/utils';
-import { JsonEditor } from '@/components/chat/conversation/model-config/json-editor';
+import { getFriendlyToolMessage } from './lucy-message-utils';
 
 export interface LucyToolActionsProps {
   toolCall: ToolCall;
@@ -31,26 +32,15 @@ export const LucyToolActions: React.FC<LucyToolActionsProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasExecuted, setHasExecuted] = useState(false);
   const [dontAskAgain, setDontAskAgain] = useState(false);
-  const [editedInput, setEditedInput] = useState(() => JSON.stringify(toolCall.input, null, 2));
-  const [inputError, setInputError] = useState<string | null>(null);
+  const [showInput, setShowInput] = useState(false);
   const autoExecute = tool.autoExecute;
   const toolName = toolCall.tool_name;
   const isLiveStream = toolCallState?.isLiveStream || false;
   const hasTriggeredRef = useRef(false);
 
-  // Parse edited input, returning null if invalid JSON
-  const getParsedInput = useCallback(() => {
-    try {
-      const parsed = JSON.parse(editedInput);
-      setInputError(null);
-      return parsed;
-    } catch (e) {
-      setInputError('Invalid JSON');
-      return null;
-    }
-  }, [editedInput]);
+  const friendlyMessage = getFriendlyToolMessage(toolName, toolCall.input);
 
-  // Get approval preferences from localStorage
+  // Get/save approval preferences from localStorage
   const getApprovalPreferences = useCallback((): Record<string, boolean> => {
     try {
       const stored = localStorage.getItem('distri-tool-preferences');
@@ -60,277 +50,173 @@ export const LucyToolActions: React.FC<LucyToolActionsProps> = ({
     }
   }, []);
 
-  // Save approval preferences to localStorage
   const saveApprovalPreference = useCallback(
-    (toolName: string, approved: boolean) => {
+    (name: string, approved: boolean) => {
       try {
         const preferences = getApprovalPreferences();
-        preferences[toolName] = approved;
+        preferences[name] = approved;
         localStorage.setItem('distri-tool-preferences', JSON.stringify(preferences));
-      } catch {
-        // Silently fail if localStorage is unavailable
-      }
+      } catch { /* noop */ }
     },
     [getApprovalPreferences]
   );
 
   const handleExecute = useCallback(async () => {
     if (isProcessing || hasExecuted) return;
+    if (!hasTriggeredRef.current) hasTriggeredRef.current = true;
 
-    // Parse the edited input
-    const parsedInput = getParsedInput();
-    if (parsedInput === null) {
-      return; // Don't execute if JSON is invalid
-    }
-
-    if (!hasTriggeredRef.current) {
-      hasTriggeredRef.current = true;
-    }
-
-    // Save preference if "don't ask again" is checked
-    if (dontAskAgain) {
-      saveApprovalPreference(toolName, true);
-    }
+    if (dontAskAgain) saveApprovalPreference(toolName, true);
 
     setIsProcessing(true);
     setHasExecuted(true);
 
     try {
-      // Execute the tool handler with edited input
-      const result = await tool.handler(parsedInput);
-
+      const result = await tool.handler(toolCall.input);
       if (!tool.is_final) {
-        const toolResult = createSuccessfulToolResult(toolCall.tool_call_id, toolName, result);
-        completeTool(toolResult);
-      } else {
-        console.log('Tool is final, no action required');
+        completeTool(createSuccessfulToolResult(toolCall.tool_call_id, toolName, result));
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const toolResult = createFailedToolResult(
-        toolCall.tool_call_id,
-        toolName,
-        errorMessage,
-        'Tool execution failed'
-      );
-      completeTool(toolResult);
+      const msg = error instanceof Error ? error.message : String(error);
+      completeTool(createFailedToolResult(toolCall.tool_call_id, toolName, msg, 'Tool execution failed'));
     } finally {
       setIsProcessing(false);
     }
-  }, [
-    completeTool,
-    dontAskAgain,
-    getParsedInput,
-    hasExecuted,
-    isProcessing,
-    saveApprovalPreference,
-    tool,
-    toolCall.tool_call_id,
-    toolName,
-  ]);
+  }, [completeTool, dontAskAgain, hasExecuted, isProcessing, saveApprovalPreference, tool, toolCall, toolName]);
 
   const handleCancel = useCallback(() => {
     if (isProcessing || hasExecuted) return;
-    if (!hasTriggeredRef.current) {
-      hasTriggeredRef.current = true;
-    }
+    if (!hasTriggeredRef.current) hasTriggeredRef.current = true;
 
-    // Save preference if "don't ask again" is checked
-    if (dontAskAgain) {
-      saveApprovalPreference(toolName, false);
-    }
+    if (dontAskAgain) saveApprovalPreference(toolName, false);
 
     setHasExecuted(true);
-
-    const toolResult = createFailedToolResult(
-      toolCall.tool_call_id,
-      toolName,
-      'User cancelled the operation',
-      'Tool execution cancelled by user'
+    completeTool(
+      createFailedToolResult(toolCall.tool_call_id, toolName, 'User cancelled the operation', 'Cancelled by user')
     );
+  }, [completeTool, dontAskAgain, hasExecuted, isProcessing, saveApprovalPreference, toolCall, toolName]);
 
-    completeTool(toolResult);
-  }, [
-    completeTool,
-    dontAskAgain,
-    hasExecuted,
-    isProcessing,
-    saveApprovalPreference,
-    toolCall.tool_call_id,
-    toolName,
-  ]);
-
-  // Check for auto-approval preference - but only for live stream tool calls
+  // Auto-approval from stored preference
   useEffect(() => {
     if (!isLiveStream) return;
-
     const preferences = getApprovalPreferences();
     const autoApprove = preferences[toolName];
-
-    if (autoApprove === undefined) return;
-    if (hasExecuted || isProcessing) return;
-    if (hasTriggeredRef.current) return;
-
+    if (autoApprove === undefined || hasExecuted || isProcessing || hasTriggeredRef.current) return;
     hasTriggeredRef.current = true;
-
-    if (autoApprove) {
-      handleExecute();
-    } else {
-      handleCancel();
-    }
+    if (autoApprove) handleExecute();
+    else handleCancel();
   }, [getApprovalPreferences, handleCancel, handleExecute, hasExecuted, isLiveStream, isProcessing, toolName]);
 
-  // Auto-execute if enabled - but only for live stream tool calls and if no user preference exists
+  // Auto-execute if tool is configured for it
   useEffect(() => {
     if (!isLiveStream) return;
-
     const preferences = getApprovalPreferences();
     const hasPreference = preferences[toolName] !== undefined;
-
-    if (!autoExecute || hasPreference || hasExecuted || isProcessing) {
-      return;
-    }
-    if (hasTriggeredRef.current) return;
-
+    if (!autoExecute || hasPreference || hasExecuted || isProcessing || hasTriggeredRef.current) return;
     hasTriggeredRef.current = true;
     handleExecute();
   }, [autoExecute, getApprovalPreferences, handleExecute, hasExecuted, isLiveStream, isProcessing, toolName]);
 
-  // Processing state - show spinner
+  // --- Processing state ---
   if (isProcessing) {
     return (
-      <div className="border border-border rounded-xl p-4 bg-muted/20">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-            <Loader2 className="h-5 w-5 text-blue-600 dark:text-blue-400 animate-spin" />
-          </div>
-          <div>
-            <div className="text-sm font-medium">Executing...</div>
-            <code className="text-xs text-muted-foreground font-mono">{toolName}</code>
-          </div>
+      <div className="my-2 rounded-lg border border-[rgba(var(--theme-500),0.3)] bg-[rgba(var(--theme-500),0.05)] px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-3.5 w-3.5 text-[rgb(var(--theme-500))] animate-spin shrink-0" />
+          <span className="text-xs text-foreground/80">Executing</span>
+          <code className="text-[11px] text-[rgb(var(--theme-400))] font-mono">{toolName}</code>
         </div>
       </div>
     );
   }
 
-  // Completed state
+  // --- Completed state ---
   if (hasExecuted) {
     const wasSuccessful = !toolCallState?.error;
     return (
-      <div
-        className={cn(
-          'border rounded-xl p-4',
-          wasSuccessful
-            ? 'border-[rgba(var(--theme-200),1)] dark:border-[rgba(var(--theme-800),1)] bg-[rgba(var(--theme-50),0.5)] dark:bg-[rgba(var(--theme-900),0.1)]'
-            : 'border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/10'
-        )}
-      >
-        <div className="flex items-center gap-3 mb-3">
-          <div
-            className={cn(
-              'w-10 h-10 rounded-full flex items-center justify-center',
-              wasSuccessful ? 'bg-[rgba(var(--theme-100),1)] dark:bg-[rgba(var(--theme-900),0.3)]' : 'bg-red-100 dark:bg-red-900/30'
-            )}
-          >
-            {wasSuccessful ? (
-              <CheckCircle2 className="h-5 w-5 text-[rgb(var(--theme-600))] dark:text-[rgb(var(--theme-400))]" />
-            ) : (
-              <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
-            )}
-          </div>
-          <div>
-            <div className="text-sm font-medium">
-              {wasSuccessful ? 'Completed' : 'Failed'}
-            </div>
-            <code className="text-xs text-muted-foreground font-mono">{toolName}</code>
-          </div>
+      <div className={cn(
+        'my-2 rounded-lg border px-3 py-2',
+        wasSuccessful
+          ? 'border-[rgba(var(--theme-500),0.2)] bg-[rgba(var(--theme-500),0.03)]'
+          : 'border-destructive/30 bg-destructive/5'
+      )}>
+        <div className="flex items-center gap-2">
+          {wasSuccessful ? (
+            <CheckCircle2 className="h-3.5 w-3.5 text-[rgb(var(--theme-500))] shrink-0" />
+          ) : (
+            <XCircle className="h-3.5 w-3.5 text-destructive shrink-0" />
+          )}
+          <span className="text-xs text-foreground/70">
+            {wasSuccessful ? 'Done' : 'Failed'}
+          </span>
+          <code className="text-[11px] text-muted-foreground font-mono">{toolName}</code>
         </div>
-
-        {toolCallState?.result && (
-          <div className="mt-3">
-            <div className="text-xs font-medium text-muted-foreground mb-1">Result</div>
-            <pre className="text-xs bg-background/80 p-2 rounded-lg border overflow-x-auto max-h-32">
-              {typeof toolCallState.result === 'string'
-                ? toolCallState.result
-                : JSON.stringify(toolCallState.result, null, 2)}
-            </pre>
-          </div>
-        )}
-
-        {toolCallState?.error && (
-          <div className="mt-3">
-            <div className="text-xs font-medium text-red-600 dark:text-red-400 mb-1">Error</div>
-            <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded-lg border border-red-200 dark:border-red-800">
-              {toolCallState.error}
-            </div>
-          </div>
-        )}
       </div>
     );
   }
 
-  // Pending state with action buttons
+  // --- Pending state (needs approval) ---
   return (
-    <div className="border border-[rgb(var(--theme-200))] dark:border-[rgb(var(--theme-800))] rounded-xl p-4 bg-[rgba(var(--theme-50),0.5)] dark:bg-[rgba(var(--theme-900),0.1)]">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="w-10 h-10 rounded-full bg-[rgb(var(--theme-100))] dark:bg-[rgba(var(--theme-900),0.3)] flex items-center justify-center">
-          <Wrench className="h-5 w-5 text-[rgb(var(--theme-600))] dark:text-[rgb(var(--theme-400))]" />
+    <div className="my-2 rounded-lg border border-border/60 bg-muted/30 overflow-hidden">
+      {/* Header */}
+      <div className="px-3 py-2.5 flex items-center gap-2">
+        <div className="w-6 h-6 rounded-md bg-[rgba(var(--theme-500),0.15)] flex items-center justify-center shrink-0">
+          <Play className="w-3 h-3 text-[rgb(var(--theme-500))]" />
         </div>
-        <div>
-          <div className="text-sm font-medium">Action Required</div>
-          <code className="text-xs text-muted-foreground font-mono">{toolName}</code>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <code className="text-[11px] font-mono font-medium text-[rgb(var(--theme-400))]">{toolName}</code>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5 truncate">{friendlyMessage}</p>
         </div>
       </div>
 
-      {/* Editable input with JsonEditor */}
-      <div className="mb-4">
-        <div className="text-xs font-medium text-muted-foreground mb-1">Input</div>
-        <div className="rounded-lg border overflow-hidden h-[150px]">
-          <JsonEditor
-            value={editedInput}
-            onChange={(value) => {
-              setEditedInput(value);
-              setInputError(null);
-            }}
-            hideValidation
-          />
-        </div>
-        {inputError && (
-          <div className="text-xs text-red-500 mt-1">{inputError}</div>
+      {/* Collapsible input */}
+      <div className="border-t border-border/40">
+        <button
+          onClick={() => setShowInput(!showInput)}
+          className="w-full flex items-center gap-1.5 px-3 py-1.5 text-[11px] text-muted-foreground/70 hover:text-muted-foreground hover:bg-muted/30 transition-colors"
+        >
+          {showInput ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          <span>Input</span>
+        </button>
+        {showInput && (
+          <div className="px-3 pb-2">
+            <pre className="text-[11px] font-mono text-muted-foreground/80 bg-background/50 border border-border/40 rounded-md p-2 overflow-x-auto max-h-40">
+              {JSON.stringify(toolCall.input, null, 2)}
+            </pre>
+          </div>
         )}
       </div>
 
+      {/* Actions */}
       {!autoExecute && (
-        <div className="space-y-3">
-          <div className="flex items-center space-x-2">
+        <div className="border-t border-border/40 px-3 py-2 flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60 cursor-pointer flex-1 min-w-0">
             <Checkbox
-              id="lucy-dont-ask-again"
               checked={dontAskAgain}
               onCheckedChange={(checked: boolean) => setDontAskAgain(checked)}
+              className="w-3 h-3"
             />
-            <label
-              htmlFor="lucy-dont-ask-again"
-              className="text-xs text-muted-foreground cursor-pointer"
-            >
-              Remember my choice for <span className="font-mono">{toolName}</span>
-            </label>
-          </div>
+            <span className="truncate">Remember for <span className="font-mono">{toolName}</span></span>
+          </label>
 
-          <div className="flex gap-2">
+          <div className="flex gap-1.5 shrink-0">
             <Button
               size="sm"
-              variant="outline"
+              variant="ghost"
               onClick={handleCancel}
-              className="flex-1"
+              className="h-7 px-2.5 text-[11px] text-muted-foreground hover:text-destructive gap-1"
             >
-              Cancel
+              <Ban className="w-3 h-3" />
+              Deny
             </Button>
             <Button
               size="sm"
               onClick={handleExecute}
-              className="flex-1 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
+              className="h-7 px-3 text-[11px] bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white gap-1"
             >
-              Confirm
+              <Play className="w-3 h-3" />
+              Allow
             </Button>
           </div>
         </div>

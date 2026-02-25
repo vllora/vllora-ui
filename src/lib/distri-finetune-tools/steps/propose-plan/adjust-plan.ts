@@ -529,7 +529,7 @@ export const adjustPlanHandler: ToolHandler = async (
           estimated_time: '~5 seconds',
         },
         {
-          step: 'Run Dry Run',
+          step: 'Run Evaluation',
           description: 'Test the training data with the current model to establish baseline',
           estimated_time: '~1-2 minutes',
         },

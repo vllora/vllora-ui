@@ -15,8 +15,8 @@ export function ReadmeEmptyState({ className }: ReadmeEmptyStateProps) {
   return (
     <EmptyStateTemplate
       icon={FileText}
-      heading="Dataset Overview"
-      description="Overview is initialized automatically and updated as your dataset changes."
+      heading="Experiment Overview"
+      description="Overview is initialized automatically and updated as your experiment changes."
       helperText="Add records, topics, or evaluator configuration to expand this overview."
       className={className}
     />

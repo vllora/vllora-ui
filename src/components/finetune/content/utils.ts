@@ -76,6 +76,8 @@ export interface TrainingSummary {
   epochData: EpochData[];
   latestEpoch: number | null;
   latestAvgScore: number | null;
+  /** Score change from previous epoch (null if only one epoch) */
+  scoreDelta: number | null;
 }
 
 /**
@@ -120,11 +122,22 @@ export function computeTrainingSummary(
 
   const latestEpochData = epochData[epochData.length - 1];
 
+  // Compute score change from previous epoch
+  let scoreDelta: number | null = null;
+  if (epochData.length >= 2) {
+    const prev = epochData[epochData.length - 2];
+    const latest = epochData[epochData.length - 1];
+    if (prev.avgScore !== null && latest.avgScore !== null) {
+      scoreDelta = latest.avgScore - prev.avgScore;
+    }
+  }
+
   return {
     totalRows: results.length,
     epochData,
     latestEpoch: latestEpochData?.epoch ?? null,
     latestAvgScore: latestEpochData?.avgScore ?? null,
+    scoreDelta,
   };
 }
 

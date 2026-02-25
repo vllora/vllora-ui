@@ -366,7 +366,7 @@ function generateWorkflowSection(workflow: FinetuneWorkflowState): string | null
     { name: 'Record Categorization', step: 'categorize' },
     { name: 'Coverage Generation', step: 'coverage_generation' },
     { name: 'Grader Configuration', step: 'grader_config' },
-    { name: 'Dry Run', step: 'dry_run' },
+    { name: 'Evaluation', step: 'dry_run' },
     { name: 'Training', step: 'training' },
     { name: 'Deployment', step: 'deployment' },
   ];

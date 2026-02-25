@@ -2,7 +2,8 @@
  * LucyToolCalls
  *
  * Renders external tool calls that need user approval.
- * Uses LucyToolActions for Lucy-themed approval UI instead of default.
+ * Always uses LucyToolActions for function tools — overrides the default
+ * @distri/react DefaultToolActions component set by the chat store.
  */
 
 import { useChatStateStore } from '@distri/react';
@@ -10,24 +11,12 @@ import type { DistriAnyTool } from '@distri/react';
 import { DistriFnTool } from '@distri/core';
 import { LucyToolActions } from './LucyToolActions';
 
-// ============================================================================
-// Types
-// ============================================================================
-
-interface LucyToolCallsProps {
-  tools?: DistriAnyTool[];
-}
-
 // Type guard to check if tool is a function tool
 function isFnTool(tool: DistriAnyTool): tool is DistriFnTool {
   return tool.type === 'function';
 }
 
-// ============================================================================
-// Component
-// ============================================================================
-
-export function LucyToolCalls({ tools }: LucyToolCallsProps) {
+export function LucyToolCalls({ tools }: { tools?: DistriAnyTool[] }) {
   const toolCalls = useChatStateStore((state) => state.toolCalls);
   const completeTool = useChatStateStore((state) => state.completeTool);
 
@@ -42,20 +31,9 @@ export function LucyToolCalls({ tools }: LucyToolCallsProps) {
   return (
     <>
       {externalToolCalls.map((toolCallState) => {
-        // Find the matching tool definition
         const tool = tools.find((t) => t.name === toolCallState.tool_name);
 
-        // For UI tools (like ask_follow_up), render their component directly
-        // The component is set by the chat store when executeTool is called
-        if (toolCallState.component) {
-          return (
-            <div key={`external-tool-${toolCallState.tool_call_id}`}>
-              {toolCallState.component}
-            </div>
-          );
-        }
-
-        // For function tools, render LucyToolActions
+        // For function tools, ALWAYS use LucyToolActions (override default component)
         if (tool && isFnTool(tool)) {
           return (
             <div key={`external-tool-${toolCallState.tool_call_id}`}>
@@ -78,6 +56,16 @@ export function LucyToolCalls({ tools }: LucyToolCallsProps) {
                 }}
                 tool={tool}
               />
+            </div>
+          );
+        }
+
+        // For non-function tools with a custom component (e.g., ask_follow_up),
+        // render the component set by the store
+        if (toolCallState.component) {
+          return (
+            <div key={`external-tool-${toolCallState.tool_call_id}`}>
+              {toolCallState.component}
             </div>
           );
         }

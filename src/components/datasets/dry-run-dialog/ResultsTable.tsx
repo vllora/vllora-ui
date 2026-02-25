@@ -18,7 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Filter, ArrowUpDown, HelpCircle } from "lucide-react";
+import { Search, Filter, ChevronDown, HelpCircle } from "lucide-react";
 import {
   Tooltip as UITooltip,
   TooltipContent as UITooltipContent,
@@ -32,7 +32,14 @@ type EvaluationResult = FlatEvaluationResult;
 
 type SortOption = "index" | "score-asc" | "score-desc" | "status";
 
-const ROW_HEIGHT = 32; // Height of each row in pixels
+const SORT_LABELS: Record<SortOption, string> = {
+  index: "Row ID",
+  "score-asc": "Score (Low)",
+  "score-desc": "Score (High)",
+  status: "Status",
+};
+
+const ROW_HEIGHT = 34; // Height of each row in pixels
 
 interface ResultsTableProps {
   results: EvaluationResult[];
@@ -167,16 +174,16 @@ export function ResultsTable({
   }
 
   return (
-    <div className={cn("space-y-3", fillHeight && "flex flex-col h-full")}>
+    <div className={cn("space-y-2", fillHeight && "flex flex-col h-full")}>
       {/* Search and filter controls */}
       <div className="flex items-center gap-2 shrink-0">
         <div className="relative flex-1">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
           <Input
-            placeholder="Search by ID, errors..."
+            placeholder="Search rows or records..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-8 pl-8 text-sm bg-muted/30 border-border placeholder:text-muted-foreground/60 focus-visible:ring-ring"
+            className="h-8 pl-8 text-xs bg-zinc-900/50 border-zinc-700/50 placeholder:text-zinc-500 focus-visible:ring-zinc-600"
           />
         </div>
 
@@ -187,8 +194,8 @@ export function ResultsTable({
           className={cn(
             "h-8 gap-1.5 text-xs",
             showOnlyFailed
-              ? "bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30"
-              : "border-border text-muted-foreground hover:bg-muted"
+              ? "bg-red-500/15 text-red-400 border-red-500/20 hover:bg-red-500/25"
+              : "border-zinc-700/50 text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-300"
           )}
         >
           <Filter className="h-3 w-3" />
@@ -200,24 +207,24 @@ export function ResultsTable({
             <Button
               variant="outline"
               size="sm"
-              className="h-8 gap-1.5 text-xs border-border text-muted-foreground hover:bg-muted"
+              className="h-8 gap-1.5 text-xs border-zinc-700/50 text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-300"
             >
-              <ArrowUpDown className="h-3 w-3" />
-              Sort
+              Sort: {SORT_LABELS[sortOption]}
+              <ChevronDown className="h-3 w-3 opacity-50" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="bg-background border-border">
-            <DropdownMenuItem onClick={() => setSortOption("index")} className="text-xs">
-              By Row Index
+          <DropdownMenuContent align="end" className="bg-zinc-900 border-zinc-700/60">
+            <DropdownMenuItem onClick={() => setSortOption("index")} className="text-xs text-zinc-300">
+              Row ID
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setSortOption("score-desc")} className="text-xs">
+            <DropdownMenuItem onClick={() => setSortOption("score-desc")} className="text-xs text-zinc-300">
               Score (High → Low)
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setSortOption("score-asc")} className="text-xs">
+            <DropdownMenuItem onClick={() => setSortOption("score-asc")} className="text-xs text-zinc-300">
               Score (Low → High)
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setSortOption("status")} className="text-xs">
-              By Status
+            <DropdownMenuItem onClick={() => setSortOption("status")} className="text-xs text-zinc-300">
+              Status
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -226,17 +233,17 @@ export function ResultsTable({
       {/* Table with header and virtualized rows */}
       <div className={cn("text-xs overflow-x-auto", fillHeight && "flex-1 flex flex-col min-h-0")}>
         {/* Table header */}
-        <div className="flex items-center text-muted-foreground shrink-0">
-          <div className="w-6 shrink-0 py-1" />
-          <div className="w-12 shrink-0 py-1 pr-2">Row</div>
-          {onRecordIdClick && <div className="w-24 shrink-0 py-1 pr-2">Record</div>}
-          <div className="w-16 shrink-0 py-1 pr-2">
+        <div className="flex items-center text-[10px] font-medium uppercase tracking-wider text-zinc-500 border-b border-zinc-800/60 shrink-0 bg-zinc-900/20">
+          <div className="w-6 shrink-0 py-2" />
+          <div className="w-12 shrink-0 py-2 pr-2">#</div>
+          {onRecordIdClick && <div className="w-24 shrink-0 py-2 pr-2">Record</div>}
+          <div className="w-16 shrink-0 py-2 pr-2">
             <UITooltipProvider delayDuration={200}>
               <UITooltip>
                 <UITooltipTrigger asChild>
                   <span className="inline-flex items-center gap-1 cursor-help">
                     Score
-                    <HelpCircle className="h-3 w-3 text-muted-foreground/60" />
+                    <HelpCircle className="h-2.5 w-2.5 text-zinc-600" />
                   </span>
                 </UITooltipTrigger>
                 <UITooltipContent side="bottom" className="max-w-[260px] text-xs p-3">
@@ -253,9 +260,9 @@ export function ResultsTable({
               </UITooltip>
             </UITooltipProvider>
           </div>
-          <div className="w-16 shrink-0 py-1 pr-2">Status</div>
-          <div className="flex-1 py-1 pr-2">Reasoning</div>
-          <div className="w-12 shrink-0 py-1 text-center">Logs</div>
+          <div className="w-12 shrink-0 py-2 pr-2">Status</div>
+          <div className="flex-1 py-2 pr-2">Reasoning</div>
+          <div className="w-10 shrink-0 py-2 text-center">Logs</div>
         </div>
 
         {/* Virtualized rows */}
@@ -299,7 +306,7 @@ export function ResultsTable({
                       onRecordIdClick={onRecordIdClick}
                     />
                     {isExpanded && renderExpandedContent && (
-                      <div className="border-t border-border/30 bg-muted/20 px-6 py-2">
+                      <div className="border-t border-zinc-800/40 bg-zinc-900/30 px-6 py-2">
                         {renderExpandedContent(result)}
                       </div>
                     )}
@@ -308,7 +315,7 @@ export function ResultsTable({
               })}
             </div>
           ) : (
-            <div className="text-center py-8 text-muted-foreground text-sm">
+            <div className="text-center py-8 text-zinc-500 text-xs">
               No results match your filters
             </div>
           )}

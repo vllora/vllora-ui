@@ -51,7 +51,7 @@ export function LucySavePlanRenderer({ toolCall, state }: ToolRendererProps) {
       <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3">
         <div className="flex items-center gap-2 text-xs text-destructive">
           <AlertCircle className="w-3.5 h-3.5" />
-          <span>{state?.error || result?.error || 'Failed to save plan'}</span>
+          <span>{state?.error || (Array.isArray(result?.errors) && result.errors.length > 0 ? result.errors.join('; ') : null) || result?.error || 'Failed to save plan'}</span>
         </div>
       </div>
     );
@@ -59,24 +59,15 @@ export function LucySavePlanRenderer({ toolCall, state }: ToolRendererProps) {
 
   if (result?.success) {
     const diffSummary = typeof result.diff_summary === 'string' ? result.diff_summary : '';
-    const topicsChanged = typeof result.topics_changed === 'number' ? result.topics_changed : null;
-    const criteriaChanged = typeof result.criteria_changed === 'number' ? result.criteria_changed : null;
 
     return (
-      <div className="rounded-lg border border-border bg-card p-3 space-y-1.5">
+      <div className="rounded-lg border border-border bg-card p-3 space-y-1">
         <div className="flex items-center gap-2 text-xs text-foreground">
           <CheckCircle2 className="w-3.5 h-3.5 text-[rgb(var(--theme-500))]" />
           <span className="font-medium">Plan saved</span>
         </div>
         {diffSummary && (
           <div className="text-[11px] text-muted-foreground">{diffSummary}</div>
-        )}
-        {(topicsChanged !== null || criteriaChanged !== null) && (
-          <div className="text-[10px] text-muted-foreground">
-            {topicsChanged !== null ? `${topicsChanged} topic change${topicsChanged === 1 ? '' : 's'}` : ''}
-            {topicsChanged !== null && criteriaChanged !== null ? ' · ' : ''}
-            {criteriaChanged !== null ? `${criteriaChanged} criteria change${criteriaChanged === 1 ? '' : 's'}` : ''}
-          </div>
         )}
       </div>
     );

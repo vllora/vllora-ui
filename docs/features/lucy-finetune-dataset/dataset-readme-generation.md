@@ -123,7 +123,7 @@ The following knowledge sources were used to generate the topic hierarchy and gr
 
 Training data is grounded in these source materials to ensure accuracy and relevance.
 
-## Setup Plan Execution
+## Plan Execution
 
 *Executed: Jan 15, 2024 2:30 PM*
 
@@ -188,7 +188,7 @@ The README should be regenerated when:
 | Workflow step changes | Workflow Status section |
 | Grader configured | Configuration section |
 | Training started/completed | Workflow Status section |
-| **Setup plan executed** | **Full README with data provenance** |
+| **Plan executed** | **Full README with data provenance** |
 | Knowledge sources added | Data Sources section |
 
 ## Implementation
@@ -205,7 +205,7 @@ interface KnowledgeSourceInfo {
   size?: number;
 }
 
-interface SetupPlanSummary {
+interface PlanSummary {
   executed_at: number;
   topics_created: number;
   records_generated: number;
@@ -219,22 +219,22 @@ interface ReadmeGeneratorOptions {
   workflow?: FinetuneWorkflow;
   /** Knowledge sources used to generate topics and data */
   knowledgeSources?: KnowledgeSourceInfo[];
-  /** Summary from setup plan execution */
-  setupPlanSummary?: SetupPlanSummary;
+  /** Summary from plan execution */
+  planSummary?: PlanSummary;
 }
 
 export function generateDatasetReadme(
   options: ReadmeGeneratorOptions
 ): string {
-  const { dataset, records, workflow, knowledgeSources, setupPlanSummary } = options;
+  const { dataset, records, workflow, knowledgeSources, planSummary } = options;
 
   const sections = [
     generateHeaderSection(dataset),
     generateOverviewSection(dataset, records),
     // Data provenance: where the data came from
     generateKnowledgeSourcesSection(knowledgeSources),
-    // Setup plan execution summary (if applicable)
-    generateSetupPlanSection(setupPlanSummary),
+    // Plan execution summary (if applicable)
+    generatePlanSection(planSummary),
     // Dataset structure
     generateTopicHierarchySection(dataset, records),
     generateCoverageSection(dataset, records),
@@ -428,11 +428,3 @@ function formatScoreDistribution(scores: number[]): string {
 4. **Auto-collapse**: Long sections (like topic trees) can be collapsible
 5. **Syntax Highlighting**: Code blocks should have proper highlighting
 6. **Print-friendly**: README should render well when printed
-
-## Future Enhancements
-
-1. **Version History**: Track README changes over time
-2. **Custom Sections**: Let users add custom notes/sections
-3. **Team Sharing**: Share README via link
-4. **PDF Export**: Generate PDF version for formal documentation
-5. **Diff View**: Show what changed since last update

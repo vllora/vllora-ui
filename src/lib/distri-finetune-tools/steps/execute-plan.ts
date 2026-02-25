@@ -33,6 +33,7 @@ import { generateGraderTemplate } from './propose-plan/grader-template';
 
 // Side-effect import to ensure execution state store is listening for progress events
 import './execution-state-store';
+import { isExecutionCancelled, clearCancellation } from './execution-state-store';
 import { updatePlanStatus, completePlan as completePlanInDB, failPlan as failPlanInDB } from './proposed-plan-store';
 
 // =============================================================================
@@ -423,14 +424,14 @@ async function executeDryRun(ctx: StepContext): Promise<StepResult> {
   const result = await runDryRunHandler({ workflow_id, sample_percentage: samplePercentage });
 
   if (!(result as any).success) {
-    throw new Error((result as any).error || 'Failed to run dry run');
+    throw new Error((result as any).error || 'Failed to run evaluation');
   }
 
   summary.dry_run_completed = true;
   summary.dry_run_pass_rate = (result as any).stats?.pass_rate;
   summary.ready_to_finetune = true;
 
-  return { message: 'Dry run started in background', result };
+  return { message: 'Evaluation started in background', result };
 }
 
 async function executeFinetune(ctx: StepContext): Promise<StepResult> {
@@ -593,7 +594,7 @@ const STEP_REGISTRY: Record<ExecutionStepId, StepExecutor> = {
   generate:      { name: 'Generate Data',          workflowStep: 'coverage_generation', execute: executeGenerate },
   grader:        { name: 'Configure Evaluator',    workflowStep: 'grader_config',       execute: executeGrader },
   upload:        { name: 'Upload Dataset',                                               execute: executeUpload },
-  dryrun:        { name: 'Run Dry Run',            workflowStep: 'dry_run',             execute: executeDryRun,   nonFatal: true },
+  dryrun:        { name: 'Run Evaluation',          workflowStep: 'dry_run',             execute: executeDryRun,   nonFatal: true },
   finetune:      { name: 'Start Finetune Job',                                           execute: executeFinetune, nonFatal: true },
 };
 
@@ -769,6 +770,20 @@ export const executePlanHandler: ToolHandler = async (
     // =========================================================================
     for (const stepId of STEP_ORDER) {
       if (!stepsToRun.has(stepId)) continue;
+
+      // Check cancellation before starting each step
+      if (isExecutionCancelled(dataset_id)) {
+        clearCancellation(dataset_id);
+        // Mark remaining steps as skipped
+        for (const s of progress.steps) {
+          if (s.status === 'pending') s.status = 'skipped';
+        }
+        progress.is_complete = true;
+        progress.has_error = true;
+        emitProgress(progress);
+        await failPlanInDB(dataset_id, progress);
+        throw new Error('Execution cancelled by user');
+      }
 
       const executor = STEP_REGISTRY[stepId];
       progress.current_step = STEP_ORDER.indexOf(stepId);

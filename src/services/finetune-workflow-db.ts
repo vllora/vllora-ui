@@ -166,7 +166,7 @@ export interface GenerationHistoryStore {
 // =============================================================================
 
 const DB_NAME = 'vllora-finetune';
-const DB_VERSION = 4;
+const DB_VERSION = 6;
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -180,6 +180,16 @@ export async function getDB(): Promise<IDBDatabase> {
 
     request.onsuccess = () => {
       dbInstance = request.result;
+
+      // Clear cached instance if the DB is upgraded by another tab or closed unexpectedly
+      dbInstance.onversionchange = () => {
+        dbInstance?.close();
+        dbInstance = null;
+      };
+      dbInstance.onclose = () => {
+        dbInstance = null;
+      };
+
       resolve(dbInstance);
     };
 

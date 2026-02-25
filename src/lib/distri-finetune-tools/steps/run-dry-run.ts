@@ -39,14 +39,14 @@ export const runDryRunHandler: ToolHandler = async (params) => {
 
     return {
       success: true,
-      message: 'Dry run started in background',
+      message: 'Evaluation started in background',
       dry_run_job_id: jobId,
       sample_size: sampleSize,
       sample_percentage: pct,
       status: 'running',
     };
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to start dry run' };
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to start evaluation' };
   }
 };
 

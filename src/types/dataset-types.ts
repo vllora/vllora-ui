@@ -252,7 +252,7 @@ export interface DatasetFilterGroupConfig {
 }
 
 export const DATASET_FILTER_CONFIG: DatasetFilterGroupConfig[] = [
-  { value: 'draft', label: 'Draft', className: 'bg-muted text-muted-foreground', tooltip: 'Dataset is being set up — no active jobs running' },
+  { value: 'draft', label: 'Draft', className: 'bg-muted text-muted-foreground', tooltip: 'Experiment is being set up — no active jobs running' },
   { value: 'in_finetune', label: 'Running', className: 'bg-blue-500/15 text-blue-600 dark:text-blue-400', tooltip: 'A finetune or evaluation job is actively running' },
   { value: 'completed', label: 'Completed', className: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400', tooltip: 'Finetuning completed successfully' },
 ];

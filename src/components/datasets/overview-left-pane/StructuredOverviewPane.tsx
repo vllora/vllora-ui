@@ -473,7 +473,7 @@ export function StructuredOverviewPane({
               }
             />
             <MetricItem
-              label="Dry-run Avg"
+              label="Evaluation Avg"
               value={
                 effectiveDryRunStats?.statistics?.mean != null
                   ? effectiveDryRunStats.statistics.mean.toFixed(2)
@@ -627,7 +627,7 @@ export function StructuredOverviewPane({
             </div>
           ) : (
             <EmptySection
-              text="No evaluation results yet. Run a dry run to see quality signals and score distribution."
+              text="No evaluation results yet. Run an evaluation to see quality signals and score distribution."
               actionLabel="Open Evaluator"
               onAction={onOpenEvaluator}
             />

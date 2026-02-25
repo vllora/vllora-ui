@@ -114,12 +114,14 @@ function buildDiffSummary(diff: PlanDiff): string {
   if (!diff.hasChanges) return 'No changes from previous plan';
 
   const parts: string[] = [];
-  if (diff.topicsAdded.length > 0) parts.push(`${diff.topicsAdded.length} topic(s) added`);
-  if (diff.topicsRemoved.length > 0) parts.push(`${diff.topicsRemoved.length} topic(s) removed`);
-  if (diff.topicsModified.length > 0) parts.push(`${diff.topicsModified.length} topic(s) modified`);
-  if (diff.criteriaAdded.length > 0) parts.push(`${diff.criteriaAdded.length} criterion added`);
-  if (diff.criteriaRemoved.length > 0) parts.push(`${diff.criteriaRemoved.length} criterion removed`);
-  if (diff.criteriaModified.length > 0) parts.push(`${diff.criteriaModified.length} criterion modified`);
+  const tp = (n: number) => n === 1 ? 'topic' : 'topics';
+  const cp = (n: number) => n === 1 ? 'criterion' : 'criteria';
+  if (diff.topicsAdded.length > 0) parts.push(`${diff.topicsAdded.length} ${tp(diff.topicsAdded.length)} added`);
+  if (diff.topicsRemoved.length > 0) parts.push(`${diff.topicsRemoved.length} ${tp(diff.topicsRemoved.length)} removed`);
+  if (diff.topicsModified.length > 0) parts.push(`${diff.topicsModified.length} ${tp(diff.topicsModified.length)} modified`);
+  if (diff.criteriaAdded.length > 0) parts.push(`${diff.criteriaAdded.length} ${cp(diff.criteriaAdded.length)} added`);
+  if (diff.criteriaRemoved.length > 0) parts.push(`${diff.criteriaRemoved.length} ${cp(diff.criteriaRemoved.length)} removed`);
+  if (diff.criteriaModified.length > 0) parts.push(`${diff.criteriaModified.length} ${cp(diff.criteriaModified.length)} modified`);
 
   return parts.join(', ');
 }

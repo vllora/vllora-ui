@@ -79,7 +79,7 @@ export function DocsProcessingState({
                     <Loader2 className="w-3.5 h-3.5 text-[rgb(var(--theme-500))] animate-spin shrink-0" />
                   )
                 ) : source.status === "ready" ? (
-                  <Check className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                  <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                 ) : source.status === "failed" ? (
                   <AlertTriangle className="w-3.5 h-3.5 text-destructive shrink-0" />
                 ) : (

@@ -29,7 +29,7 @@ import {
   failPlan,
   type PlanStatus,
 } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
-import { getCurrentExecution, getExecutingPlan } from "@/lib/distri-finetune-tools/steps/execution-state-store";
+import { getCurrentExecution, getExecutingPlan, cancelExecution as cancelExecutionInStore } from "@/lib/distri-finetune-tools/steps/execution-state-store";
 import type { Plan } from "@/lib/distri-finetune-tools/steps/propose-plan";
 import { STEP_ORDER, validatePlanForExecution } from "@/lib/distri-finetune-tools/steps/execute-plan";
 import type { ExecutionProgress, ExecutionStepId } from "@/lib/distri-finetune-tools/steps/execute-plan";
@@ -79,6 +79,7 @@ interface PlanContextType {
   setPlanEditMode: (mode: "display" | "edit") => void;
   approvePlan: (plan: Plan) => void;
   dismissPlan: () => void;
+  cancelExecution: () => void;
 }
 
 // ============================================================================
@@ -307,6 +308,19 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
             // Keep proposedPlan intact so the user can still view it.
             // Plan is only cleared on explicit dismiss or new plan generation.
             setIsPlanPreviewActive(false);
+            // Auto-switch to the tab most relevant to the last completed step
+            if (!progress.has_error) {
+              type SwitchTab = 'overview' | 'records' | 'evaluator' | 'jobs' | 'deploy';
+              const lastCompleted = [...progress.steps].reverse().find(s => s.status === 'completed');
+              const stepTabMap: Record<string, SwitchTab> = {
+                topics: 'records', adjust_topics: 'records', categorize: 'records',
+                generate: 'records', upload: 'records',
+                grader: 'evaluator', dryrun: 'evaluator',
+                finetune: 'jobs',
+              };
+              const tab: SwitchTab = stepTabMap[lastCompleted?.id ?? ''] ?? 'records';
+              emitter.emit('vllora_switch_tab', { datasetId: progress.dataset_id, tab });
+            }
           }, 2000);
         }
       }
@@ -366,6 +380,11 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
     setIsPlanPreviewActive(false);
   }, [datasetId]);
 
+  const cancelExecution = useCallback(() => {
+    cancelExecutionInStore(datasetId);
+    toast.info("Cancelling execution after current step completes...");
+  }, [datasetId]);
+
   const value: PlanContextType = {
     planStatus,
     isLoadingPlan,
@@ -382,6 +401,7 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
     setPlanEditMode,
     approvePlan,
     dismissPlan,
+    cancelExecution,
   };
 
   return (

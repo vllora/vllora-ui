@@ -1,19 +1,17 @@
 /**
  * DatasetDetailContentV2
  *
- * Main content component for dataset detail view:
- * - Header with dataset objective and insights
- * - Section tabs (Records / Evaluator / Jobs / Deploy)
- * - Records section: Canvas or Table view with view mode toggle
- * - Evaluator section: Evaluation function configuration
- * - Jobs section: Finetune jobs list
- * - Readme/Docs accessible via header drawer buttons
+ * Main content component for dataset detail view.
+ * Workspace tabs drive content: each tab maps to a content section
+ * via TabContentRouter. The Explorer opens tabs, the header buttons
+ * open tabs, and events (vllora_switch_tab / vllora_open_drawer)
+ * open tabs for backward compatibility.
  */
 
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { DatasetUtilityBar } from "./dataset-detail-header/DatasetUtilityBar";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { emitter } from "@/utils/eventEmitter";
 import { DeleteConfirmationDialog } from "./DeleteConfirmationDialog";
@@ -26,27 +24,68 @@ import { SanitizeDataDialog } from "./SanitizeDataDialog";
 import { getLeafTopicsFromHierarchy, computeCoverageStats, computeDatasetInsights } from "./record-utils";
 import { getTopicCounts } from "./topic-hierarchy-utils";
 import { RecordsAnalyticsDialog } from "./dataset-detail-header/detail-records-analytics-dialog";
-import { DatasetDetailHeader } from "./dataset-detail-header";
 import { DatasetMainContent } from "./DatasetMainContent";
 import { DatasetNotFound } from "./DatasetNotFound";
-import { LucyDatasetAssistant } from "./LucyDatasetAssistant";
+import { ExplorerSidebar, LucySidebar, TasksViewer, LogsViewer } from "./sidebars";
 import { EvaluationConfigPanel } from "./evaluation-dialog/EvaluationConfigPanel";
 import { FinetuneConfigPanel } from "@/components/finetune/content/FinetuneConfigPanel";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { DryRunJobsProvider } from "@/contexts/DryRunJobsContext";
-import { ReadmeDrawer } from "./ReadmeDrawer";
-import { DocsDrawer } from "./DocsDrawer";
 import { PlanPreview } from "./PlanPreview";
-import { ActivePlanBanner } from "./ActivePlanBanner";
+import { DatasetTitleBar, DatasetBreadcrumbBar } from "./DatasetBreadcrumbBar";
 import { useDatasetReadme } from "@/hooks/useDatasetReadme";
 import { DatasetOverviewPanel } from "./DatasetOverviewPanel";
+import { DatasetReadmeViewer } from "./readme-viewer";
+import { KnowledgeSourcesPanel } from "./KnowledgeSourcesPanel";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { PlanConsumer } from "@/contexts/PlanContext";
+import { DeployGuidancePanel } from "./DeployGuidancePanel";
+import { WorkspaceTabsProvider, WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
+import { WorkspaceTabManager } from "./WorkspaceTabManager";
+import { mapTabPathToSection, type ContentSection } from "./TabContentRouter";
+import { WorkspaceWelcome } from "./WorkspaceWelcome";
 import type { CoverageStats } from "@/types/dataset-types";
-import type { DatasetSection } from "./dataset-detail-header/DatasetUtilityBar";
 
 // Side-effect: registers plan approval event listener
 import "@/lib/distri-finetune-tools/steps/execute-plan";
+
+// ============================================================================
+// WorkspaceTabBridge
+// ============================================================================
+// Invisible component rendered inside WorkspaceTabsProvider.
+// Exposes openTab() to the parent via a ref, and syncs activeTabPath
+// changes back to a parent state variable so the content area can react.
+
+interface TabBridgeProps {
+  openTabRef: React.MutableRefObject<(path: string, label?: string, preview?: boolean) => void>;
+  onSectionChange: (section: ContentSection) => void;
+  onActivePathChange: (path: string | null) => void;
+}
+
+function WorkspaceTabBridge({ openTabRef, onSectionChange, onActivePathChange }: TabBridgeProps) {
+  const { activeTabPath, openTab } = WorkspaceTabsConsumer();
+
+  // Expose openTab to parent via ref (stable across renders)
+  openTabRef.current = openTab;
+
+  // When active workspace tab changes, derive content section and notify parent
+  useEffect(() => {
+    onSectionChange(activeTabPath ? mapTabPathToSection(activeTabPath) : null);
+    onActivePathChange(activeTabPath);
+  }, [activeTabPath, onSectionChange, onActivePathChange]);
+
+  return null;
+}
+
+/**
+ * Map legacy tab names (used in events and old URLs) to explorer node paths.
+ * Keeps backward compatibility while ensuring tabs match the explorer tree.
+ */
+const TAB_PATH_MAP: Record<string, { path: string; label: string }> = {
+  records: { path: "data", label: "data" },
+  evaluator: { path: "evaluations", label: "evaluations" },
+  jobs: { path: "finetune", label: "finetune" },
+};
 
 export function DatasetDetailContentV2() {
   const {
@@ -63,8 +102,6 @@ export function DatasetDetailContentV2() {
     selectedRecordIds,
 
     // UI View state
-    activeSection,
-    setActiveSection,
     viewMode,
     setViewMode,
     selectedTopic,
@@ -121,6 +158,11 @@ export function DatasetDetailContentV2() {
     recordsWithTopicsCount,
   } = DatasetDetailConsumer();
 
+  // Workspace tab bridge: ref exposes openTab(), state receives tab-driven content section
+  const openTabRef = useRef<(path: string, label?: string, preview?: boolean) => void>(() => {});
+  const [tabContentSection, setTabContentSection] = useState<ContentSection>(null);
+  const [activeTabPath, setActiveTabPath] = useState<string | null>(null);
+
   // Finetune jobs sidebar
   const { setCurrentBackendDatasetId } = FinetuneJobsConsumer();
 
@@ -138,10 +180,6 @@ export function DatasetDetailContentV2() {
 
   // Dialog state for records analytics
   const [analyticsDialogOpen, setAnalyticsDialogOpen] = useState(false);
-
-  // Drawer state for Readme and Docs
-  const [readmeDrawerOpen, setReadmeDrawerOpen] = useState(false);
-  const [docsDrawerOpen, setDocsDrawerOpen] = useState(false);
 
   // Knowledge sources from context (single source of truth)
   const {
@@ -166,15 +204,28 @@ export function DatasetDetailContentV2() {
     dismissPlan,
   } = PlanConsumer();
 
-  // Sync plan view state with URL query string (?view=plan&mode=edit)
-  // so refreshing the page preserves the current view.
+  // URL sync: ?tab=plan.md&mode=edit
   const [searchParams, setSearchParams] = useSearchParams();
   const isInitialMount = useRef(true);
 
-  // On mount: restore plan view from URL
+  // On mount: restore plan tab from URL
   useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    if (tabParam) {
+      // Open the tab from URL (e.g., ?tab=plan.md), mapping legacy names
+      const mapped = TAB_PATH_MAP[tabParam];
+      if (mapped) {
+        openTabRef.current(mapped.path, mapped.label, false);
+      } else {
+        openTabRef.current(tabParam, tabParam, false);
+      }
+      if (searchParams.get("mode") === "edit") {
+        setPlanEditMode("edit");
+      }
+    }
+    // Legacy: support old ?view=plan URL
     if (searchParams.get("view") === "plan") {
-      setIsPlanPreviewActive(true);
+      openTabRef.current("plan.md", "plan.md", false);
       if (searchParams.get("mode") === "edit") {
         setPlanEditMode("edit");
       }
@@ -183,43 +234,59 @@ export function DatasetDetailContentV2() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync state → URL when plan view changes (skip initial mount to avoid double-setting)
+  // Sync content section → URL (skip initial mount)
   useEffect(() => {
     if (isInitialMount.current) return;
     setSearchParams((prev) => {
       const params = new URLSearchParams(prev);
-      if (isPlanPreviewActive) {
-        params.set("view", "plan");
+      if (tabContentSection === "plan") {
+        params.set("tab", "plan.md");
         if (planEditMode === "edit") {
           params.set("mode", "edit");
         } else {
           params.delete("mode");
         }
+        params.delete("view"); // Remove legacy param
       } else {
+        params.delete("tab");
         params.delete("view");
         params.delete("mode");
       }
       return params;
     }, { replace: true });
-  }, [isPlanPreviewActive, planEditMode, setSearchParams]);
+  }, [tabContentSection, planEditMode, setSearchParams]);
 
-  // Handle tab switch events and drawer open events
+  // Auto-open plan tab when PlanContext sets isPlanPreviewActive
+  // (e.g., when a plan is proposed via Lucy)
   useEffect(() => {
+    if (isPlanPreviewActive) {
+      openTabRef.current("plan.md", "plan.md", false);
+      // Clear the flag — tab system now drives plan visibility
+      setIsPlanPreviewActive(false);
+    }
+  }, [isPlanPreviewActive, setIsPlanPreviewActive]);
+
+  // Handle tab switch events (backward compatibility for 17+ emit sites)
+  // Maps old section names to workspace tab paths that match the Explorer tree
+  useEffect(() => {
+
     const handleSwitchTab = ({ datasetId: switchDatasetId, tab }: { datasetId: string; tab: string }) => {
       if (switchDatasetId === datasetId) {
-        // Only accept valid workspace tabs
-        const validTabs: DatasetSection[] = ["overview", "records", "evaluator", "jobs", "deploy"];
-        if (validTabs.includes(tab as DatasetSection)) {
-          setActiveSection(tab as DatasetSection);
+        const mapped = TAB_PATH_MAP[tab];
+        if (mapped) {
+          openTabRef.current(mapped.path, mapped.label, false);
+        } else {
+          openTabRef.current(tab, tab.charAt(0).toUpperCase() + tab.slice(1), false);
         }
       }
     };
 
+    // Map old drawer opens to workspace tabs
     const handleOpenDrawer = ({ type }: { type: 'docs' | 'readme' }) => {
       if (type === 'docs') {
-        setDocsDrawerOpen(true);
+        openTabRef.current("documents", "Documents", false);
       } else if (type === 'readme') {
-        setReadmeDrawerOpen(true);
+        openTabRef.current("readme.md", "readme.md", false);
       }
     };
 
@@ -229,7 +296,7 @@ export function DatasetDetailContentV2() {
       emitter.off("vllora_switch_tab", handleSwitchTab);
       emitter.off("vllora_open_drawer", handleOpenDrawer);
     };
-  }, [datasetId, setActiveSection]);
+  }, [datasetId]);
 
   // 8.1: Show toast when data generation completes (Lucy action attribution)
   useEffect(() => {
@@ -244,10 +311,10 @@ export function DatasetDetailContentV2() {
         const count = event.completed ?? 0;
         const topicStr = event.topicName ? ` for "${event.topicName}"` : "";
         toast.success(`Lucy generated ${count} record${count !== 1 ? "s" : ""}${topicStr}`, {
-          action: activeSection !== "records" ? {
+          action: {
             label: "View Records",
-            onClick: () => setActiveSection("records"),
-          } : undefined,
+            onClick: () => openTabRef.current("data", "data", false),
+          },
         });
       }
     };
@@ -255,7 +322,7 @@ export function DatasetDetailContentV2() {
     return () => {
       emitter.off("vllora_data_generation_progress", handleGenProgress);
     };
-  }, [datasetId, activeSection, setActiveSection]);
+  }, [datasetId]);
 
   // Handle autoGeneratePlan query param (from new dataset with uploaded files)
   // Uses docsProcessing from KnowledgeSourcesContext — triggers when all docs finish
@@ -289,6 +356,10 @@ export function DatasetDetailContentV2() {
 
     hasTriggeredAutoGenerate.current = true;
 
+    // Emit generating event early so plan.md shows "Generating plan..." immediately,
+    // rather than waiting for the agent to eventually call the propose_plan tool.
+    emitter.emit("vllora_plan_generating", { datasetId });
+
     toast.info("Lucy is creating a plan from your documents...", { duration: 4000 });
     emitter.emit("vllora_lucy_prompt", {
       prompt: `Please analyze the uploaded documents and create a plan for this dataset using the propose_plan tool.`,
@@ -302,6 +373,8 @@ export function DatasetDetailContentV2() {
     const timeoutId = setTimeout(() => {
       if (hasTriggeredAutoGenerate.current) return;
       hasTriggeredAutoGenerate.current = true;
+
+      emitter.emit("vllora_plan_generating", { datasetId });
 
       toast.warning("Document processing is taking longer than expected. Generating plan with available content...", { duration: 5000 });
       emitter.emit("vllora_lucy_prompt", {
@@ -417,25 +490,44 @@ export function DatasetDetailContentV2() {
   const hasRecords = sortedRecords.length > 0;
   const hasEvaluator = !!dataset?.evalScript;
 
+  // For empty datasets with no plan, seed the tab system with plan.md so the user
+  // sees Lucy's plan creation immediately instead of an empty Overview.
+  // MUST be before early returns to satisfy React's Rules of Hooks.
+  const hasUrlTab = !!searchParams.get("tab") || !!searchParams.get("view");
+  const emptyDatasetInitialTabs = useMemo(() => {
+    if (hasUrlTab) return undefined;
+    const isEmpty = sortedRecords.length === 0;
+    const hasNoPlan = !proposedPlan && planStatus !== "proposed" && planStatus !== "approved";
+    if (isEmpty && hasNoPlan) {
+      return [{ path: "plan.md", label: "plan.md" }];
+    }
+    return undefined;
+  }, [sortedRecords.length, proposedPlan, planStatus, hasUrlTab]);
+
   if (isLoading) {
     return (
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar skeleton */}
-        <div className="w-[340px] border-r border-border flex flex-col shrink-0">
-          <div className="flex items-center gap-2.5 px-4 py-3 border-b">
-            <div className="w-8 h-8 rounded-full bg-muted animate-pulse" />
-            <div className="h-4 w-28 bg-muted animate-pulse rounded" />
-          </div>
-          <div className="flex-1 p-4 space-y-4">
-            <div className="space-y-2">
-              <div className="h-3 w-3/4 bg-muted animate-pulse rounded" />
-              <div className="h-3 w-full bg-muted animate-pulse rounded" />
-              <div className="h-3 w-2/3 bg-muted animate-pulse rounded" />
+        {/* Explorer sidebar skeleton (left) */}
+        <div className="w-[240px] border-r border-border flex flex-col shrink-0">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+            <div className="h-3 w-16 bg-muted animate-pulse rounded" />
+            <div className="flex gap-1">
+              <div className="h-5 w-5 bg-muted animate-pulse rounded" />
+              <div className="h-5 w-5 bg-muted animate-pulse rounded" />
             </div>
           </div>
+          <div className="px-3 pt-3 pb-2">
+            <div className="h-4 w-32 bg-muted animate-pulse rounded" />
+            <div className="h-3 w-24 bg-muted animate-pulse rounded mt-1" />
+          </div>
+          <div className="flex-1 px-2 py-1 space-y-1">
+            {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+              <div key={i} className="h-6 bg-muted animate-pulse rounded" style={{ width: `${60 + Math.random() * 30}%` }} />
+            ))}
+          </div>
         </div>
-        {/* Main content skeleton */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Main content skeleton (center) */}
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           {/* Header skeleton */}
           <div className="px-4 py-3 border-b border-border space-y-2">
             <div className="h-5 w-48 bg-muted animate-pulse rounded" />
@@ -462,6 +554,20 @@ export function DatasetDetailContentV2() {
             </div>
           </div>
         </div>
+        {/* Lucy sidebar skeleton (right) */}
+        <div className="w-[340px] border-l border-border flex flex-col shrink-0">
+          <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border">
+            <div className="w-7 h-7 rounded-full bg-muted animate-pulse" />
+            <div className="h-4 w-16 bg-muted animate-pulse rounded" />
+          </div>
+          <div className="flex-1 p-4 space-y-4">
+            <div className="space-y-2">
+              <div className="h-3 w-3/4 bg-muted animate-pulse rounded" />
+              <div className="h-3 w-full bg-muted animate-pulse rounded" />
+              <div className="h-3 w-2/3 bg-muted animate-pulse rounded" />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -470,61 +576,56 @@ export function DatasetDetailContentV2() {
     return <DatasetNotFound onBack={onBack} />;
   }
 
+  // Derive content section from the active workspace tab.
+  // When no tabs are open (null), WorkspaceWelcome is shown instead of falling back to overview.
+  const contentSection: ContentSection = tabContentSection;
+
   return (
     <DryRunJobsProvider dataset={dataset}>
-      <div className="flex-1 flex overflow-hidden">
-        {/* Lucy Assistant on the left */}
-        <LucyDatasetAssistant />
+     <WorkspaceTabsProvider datasetId={datasetId} initialTabs={emptyDatasetInitialTabs}>
+      {/* Bridge: syncs workspace tab state ↔ parent content section */}
+      <WorkspaceTabBridge openTabRef={openTabRef} onSectionChange={setTabContentSection} onActivePathChange={setActiveTabPath} />
 
-        {/* Main content on the right */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Header with dataset objective and insights */}
-          <div className="px-4 py-2 border-b border-border">
-            <DatasetDetailHeader
-              onOpenPlan={() => {
-                setIsPlanPreviewActive(true);
-                setPlanEditMode("display");
-              }}
-              onOpenReadme={() => setReadmeDrawerOpen(true)}
-              onOpenDocs={() => setDocsDrawerOpen(true)}
-              knowledgeSourcesCount={knowledgeSourcesCount}
-              docsProcessing={docsProcessing}
-            />
-          </div>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Title bar — dataset name (editable), spans full width like VS Code */}
+        <DatasetTitleBar />
 
-          {/* Active plan banner (shown when plan exists but workspace shows tab content) */}
-          {!isPlanPreviewActive && <ActivePlanBanner />}
+        <div className="flex-1 flex overflow-hidden min-h-0">
+          {/* Explorer sidebar on the left */}
+          <ExplorerSidebar />
 
-          {/* Section tabs — hidden when plan overlay is active */}
-          {!isPlanPreviewActive && (
-            <DatasetUtilityBar
-              activeSection={activeSection}
-              onSectionChange={setActiveSection}
-              recordsCount={sortedRecords.length}
-              hasEvaluator={hasEvaluator}
-            />
+          {/* Main content in the center */}
+          <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+          {/* Dynamic workspace tabs */}
+          <WorkspaceTabManager />
+
+          {/* Path breadcrumb — only shown for subfolder navigation */}
+          <DatasetBreadcrumbBar />
+
+          {/* Content panel — driven by the active workspace tab */}
+          {contentSection === null && (
+            <ErrorBoundary
+              fallback={
+                <div className="flex-1 flex items-center justify-center p-8 text-zinc-500 text-xs">
+                  Open a file from the explorer sidebar to get started
+                </div>
+              }
+            >
+              <WorkspaceWelcome
+                datasetName={dataset.name || "Untitled Experiment"}
+                onOpenTab={openTabRef.current}
+                recordCount={sortedRecords.length}
+                generatedCount={insights.generatedRecords}
+                originalCount={insights.originalRecords}
+                leafTopicCount={availableTopics.length}
+                planStatus={planStatus}
+                knowledgeSourcesCount={knowledgeSourcesCount}
+                hasEvalScript={!!dataset.evalScript}
+                hasReadme={!!readme}
+              />
+            </ErrorBoundary>
           )}
-
-          {/* Plan preview overlay OR tab content */}
-          {isPlanPreviewActive ? (
-            <PlanPreview
-              plan={proposedPlan}
-              planStatus={planStatus}
-              planDiff={planDiff}
-              mode={planEditMode}
-              onModeChange={setPlanEditMode}
-              onApprove={approvePlan}
-              onDismiss={dismissPlan}
-              onClose={() => setIsPlanPreviewActive(false)}
-              isGenerating={isGeneratingPlan}
-              isLoadingPlan={isLoadingPlan}
-              isExecuting={isExecuting}
-              hasKnowledgeSources={knowledgeSourcesCount > 0}
-            />
-          ) : (
-          <>
-          {/* Main content area - Overview, Records, Evaluator, or Jobs based on active section */}
-          {activeSection === "overview" && (
+          {contentSection === "overview" && (
             <DatasetOverviewPanel
               readme={readme}
               readmeUpdatedAt={readmeUpdatedAt}
@@ -534,7 +635,7 @@ export function DatasetDetailContentV2() {
               onOverviewClick={() => setAnalyticsDialogOpen(true)}
             />
           )}
-          {activeSection === "records" && (
+          {contentSection === "records" && (
             <DatasetMainContent
               viewMode={viewMode}
               onViewModeChange={handleViewModeChange}
@@ -544,19 +645,9 @@ export function DatasetDetailContentV2() {
               topicHierarchy={dataset.topicHierarchy?.hierarchy}
               coverageStats={canvasCoverageStats}
               availableTopics={availableTopics}
-              overviewStats={{
-                total: insights.totalRecords,
-                original: insights.originalRecords,
-                generated: insights.generatedRecords,
-                topicDistribution: insights.topicDistribution,
-                uncategorizedCount: insights.uncategorizedCount,
-                balanceRating: cardCoverageStats?.balanceRating,
-                balanceScore: cardCoverageStats?.balanceScore,
-              }}
-              leafTopicCount={availableTopics.length}
-              onOverviewClick={() => setAnalyticsDialogOpen(true)}
+              topicFilter={activeTabPath?.startsWith("data/") ? activeTabPath.slice(5) : undefined}
               onImportClick={() => setImportDialog(true)}
-              onDocsClick={() => setDocsDrawerOpen(true)}
+              onDocsClick={() => openTabRef.current("documents", "Documents", false)}
               selectedTopic={selectedTopic}
               onSelectTopic={setSelectedTopic}
               selectedRecord={selectedRecord}
@@ -579,7 +670,27 @@ export function DatasetDetailContentV2() {
               docsTotal={knowledgeSourcesCount}
             />
           )}
-          {activeSection === "evaluator" && (
+          {contentSection === "evaluator-script" && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <EvaluationConfigPanel
+                evalScript={dataset.evalScript}
+                onSave={handleSaveEvaluationConfig}
+                recordCount={sortedRecords.length}
+                view="script"
+              />
+            </div>
+          )}
+          {contentSection === "evaluator-jobs" && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <EvaluationConfigPanel
+                evalScript={dataset.evalScript}
+                onSave={handleSaveEvaluationConfig}
+                recordCount={sortedRecords.length}
+                view="jobs"
+              />
+            </div>
+          )}
+          {contentSection === "evaluator" && (
             <div className="flex-1 flex flex-col overflow-hidden">
               <EvaluationConfigPanel
                 evalScript={dataset.evalScript}
@@ -588,7 +699,7 @@ export function DatasetDetailContentV2() {
               />
             </div>
           )}
-          {activeSection === "jobs" && (
+          {contentSection === "jobs" && (
             <div className="flex-1 flex flex-col overflow-hidden">
               <FinetuneConfigPanel
                 datasetId={datasetId}
@@ -597,25 +708,61 @@ export function DatasetDetailContentV2() {
               />
             </div>
           )}
-          </>
+          {contentSection === "deploy" && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <DeployGuidancePanel />
+            </div>
+          )}
+          {contentSection === "plan" && (
+            <PlanPreview
+              plan={proposedPlan}
+              planStatus={planStatus}
+              planDiff={planDiff}
+              mode={planEditMode}
+              onModeChange={setPlanEditMode}
+              onApprove={approvePlan}
+              onDismiss={dismissPlan}
+              onOpenDocs={() => openTabRef.current("documents", "Documents", false)}
+              isGenerating={isGeneratingPlan}
+              isLoadingPlan={isLoadingPlan}
+              isExecuting={isExecuting}
+              hasKnowledgeSources={knowledgeSourcesCount > 0}
+            />
+          )}
+          {contentSection === "readme" && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <DatasetReadmeViewer
+                readme={readme}
+                readmeUpdatedAt={readmeUpdatedAt}
+                onExport={exportReadme}
+                onRegenerate={regenerateReadme}
+                className="h-full"
+              />
+            </div>
+          )}
+          {contentSection === "documents" && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <KnowledgeSourcesPanel
+                datasetId={datasetId}
+                className="h-full"
+              />
+            </div>
+          )}
+          {contentSection === "tasks" && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <TasksViewer />
+            </div>
+          )}
+          {contentSection === "logs" && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <LogsViewer />
+            </div>
           )}
         </div>
 
-
-        {/* Drawers */}
-        <ReadmeDrawer
-          open={readmeDrawerOpen}
-          onOpenChange={setReadmeDrawerOpen}
-          readme={readme}
-          readmeUpdatedAt={readmeUpdatedAt}
-          onExport={exportReadme}
-          onRegenerate={regenerateReadme}
-        />
-        <DocsDrawer
-          open={docsDrawerOpen}
-          onOpenChange={setDocsDrawerOpen}
-          datasetId={datasetId}
-        />
+          {/* Lucy AI assistant on the right */}
+          <LucySidebar />
+        </div>
 
         {/* Dialogs */}
         <DeleteConfirmationDialog
@@ -702,6 +849,7 @@ export function DatasetDetailContentV2() {
           }}
         />
       </div>
+     </WorkspaceTabsProvider>
     </DryRunJobsProvider>
   );
 }

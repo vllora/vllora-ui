@@ -1,7 +1,7 @@
 /**
  * ErrorLogSection
  *
- * Displays error messages for a finetune job.
+ * Displays error messages for a finetune job with dark-theme styling.
  */
 
 import { AlertCircle } from "lucide-react";
@@ -12,12 +12,14 @@ interface ErrorLogSectionProps {
 
 export function ErrorLogSection({ errorMessage }: ErrorLogSectionProps) {
   return (
-    <div className="space-y-2">
-      <h4 className="text-xs font-medium text-red-600 uppercase tracking-wide flex items-center gap-1.5">
-        <AlertCircle className="h-3.5 w-3.5" />
-        Error Log
-      </h4>
-      <div className="p-3 bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-300 rounded-md text-xs font-mono">
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1.5">
+        <AlertCircle className="h-3 w-3 text-red-400" />
+        <span className="text-[10px] font-medium text-red-400 uppercase tracking-wider">
+          Error
+        </span>
+      </div>
+      <div className="px-3 py-2 bg-red-500/5 text-red-300 rounded-md text-[11px] font-mono break-all whitespace-pre-wrap overflow-hidden border border-red-500/10">
         {errorMessage}
       </div>
     </div>

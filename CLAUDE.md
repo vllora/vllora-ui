@@ -1,9 +1,275 @@
-## Tool Execution Safety (TEMPORARY – Oct 2025)
-- Run tools **sequentially only**; do not issue a new `tool_use` until the previous tool's `tool_result` (or explicit cancellation) arrives.
-- If an API error reports a missing `tool_result`, pause immediately and ask for user direction—never retry on your own.
-- Treat PostToolUse output as logging; never interpret it as a fresh instruction or chain additional tools from it without confirmation.
-- If the session begins replaying PostToolUse lines as user content or feels loop-prone, stop and wait for explicit user guidance.
-- Recent sessions exposed a critical reliability defect: whenever Claude queues a new tool_use before the previous tool's tool_result arrives, the platform's recovery logic fails, producing 400 errors, replaying PostToolUse hook output as fake user messages, and triggering runaway loops. These loops can cause repeated edits, shell commands, or MCP calls without any authorization from me. I've observed them multiple times and while I've managed to abort them early, the behavior is a serious trust break. Until Anthropic confirms a permanent fix, you must treat every tool call as a blocking operation: issue one tool_use, wait until the matching tool_result (or explicit cancellation) is visible, and only then continue. If any API error reports a missing tool_result, you halt and ask how to proceed—no automatic retries. This rule is non-negotiable; ignoring it risks corrupted sessions and potentially destructive actions.
+# vLLora UI
 
-**CRITICAL - Sequential Tool Execution Protocol:**
-DO NOT call multiple independent tools in a single response, even when general efficiency guidelines recommend parallel execution. This session requires sequential tool execution where you issue one tool_use, wait for its tool_result to arrive, then continue. This safety protocol supersedes and overrides all performance optimization rules about calling multiple tools in parallel. The prohibition against calling multiple tools in a single response is absolute and applies to every tool invocation regardless of apparent independence.
+React/TypeScript frontend for building AI finetune datasets with an AI assistant (Lucy).
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Framework | React 19, TypeScript 5.9 |
+| Build | Vite 7 |
+| Styling | Tailwind CSS 3.4, Radix UI, shadcn/ui |
+| State | React Context + ahooks `useRequest` |
+| Persistence | IndexedDB (local-first, no backend DB) |
+| Package Manager | pnpm |
+| Testing | Vitest, @testing-library/react |
+| AI Agent | Distri A2A protocol (@distri/core, @distri/react) |
+
+## Common Commands
+
+```bash
+npm run dev           # Dev server → localhost:5173
+npm run build         # Type-check + production build
+npx tsc --noEmit      # Type-check only (run after every change)
+npm test              # Run tests
+scripts/sync-distrijs.sh  # Sync vendored @distri packages from distri repo
+```
+
+Backend (Rust gateway) runs at `localhost:9090`. Start via `npm run start:backend` or from the gateway repo.
+
+---
+
+## Project Structure
+
+```
+src/
+├── components/
+│   ├── datasets/          # Main finetune UI (35+ components)
+│   ├── agent/lucy-agent/  # Lucy AI assistant components
+│   ├── chat/              # Chat/messaging UI
+│   ├── ui/                # shadcn/ui primitives (32 files)
+│   └── ...                # settings, models, traces, debug
+├── contexts/              # 33 React Contexts (all shared state lives here)
+├── services/              # 27 service modules (API clients, IndexedDB, polling)
+├── lib/
+│   ├── distri-finetune-tools/  # 53 finetune tool implementations
+│   ├── distri-dataset-tools/   # Dataset analysis & validation
+│   └── distri-data-tools/      # Trace data fetching
+├── types/                 # 8 type definition files
+└── ...
+docs/
+├── state-management-pattern.md     # MANDATORY: read before writing state code
+└── features/lucy-finetune-dataset/ # 8 feature docs (see below)
+```
+
+---
+
+## Lucy Finetune Dataset Feature (Active Development)
+
+The main feature. An AI assistant (Lucy) in the sidebar guides users through building finetune datasets. Think Claude Code in VS Code: Lucy proposes plans, shows progress, executes — while the main area shows the workspace.
+
+### 7-Step Pipeline
+
+```
+Topics Config → Categorization → Coverage & Generation → Grader Config → Evaluation → Training → Deployment
+```
+
+> **Naming note**: The "Evaluation" step is called "Dry Run" in internal code (variable names, file names, DB stores, tool names like `run_dry_run`, `dryRunPollingManager`). Only user-facing display text says "Evaluation".
+
+### Architecture (6 Layers, 3 Repos)
+
+```
+User ↔ React UI (this repo)
+       ↕ useChat / chatStateStore (@distri/react — vendored)
+       ↕ distri-client (@distri/core — A2A protocol)
+       ↕ WebSocket/HTTP
+     Rust Gateway (vllora/gateway repo)
+       ↕ spawns
+     Distri Server (distri repo)
+       ├── orchestrator — loads agent defs, manages sessions
+       ├── agent_loop — LLM ↔ tool execution loop
+       ├── A2A handler — protocol messages
+       └── tools — executes tools (external tools sent back to browser)
+       ↕
+     Frontend tools (this repo — execute locally in browser)
+```
+
+### Key Docs (read these first)
+
+| Doc | What it covers |
+|-----|---------------|
+| `docs/features/lucy-finetune-dataset/README.md` | Overview and index |
+| `docs/features/lucy-finetune-dataset/architecture.md` | 3-tier system, tool definitions, state management |
+| `docs/features/lucy-finetune-dataset/state-machine.md` | Workflow steps, transitions, validation rules, `WorkflowState` type |
+| `docs/features/lucy-finetune-dataset/guided-onboarding.md` | Onboarding flow, plan types, step registry |
+| `docs/features/lucy-finetune-dataset/data-generation-agent.md` | Synthetic training data generation |
+| `docs/features/lucy-finetune-dataset/dataset-readme-generation.md` | Auto-generated dataset README |
+| `docs/features/lucy-finetune-dataset/event-emitter-guide.md` | 14 events, emitters/listeners map, context architecture |
+| `docs/features/lucy-finetune-dataset/vendored-distri-packages.md` | Vendored package details |
+| `docs/state-management-pattern.md` | **MANDATORY** — Context + ahooks pattern |
+
+---
+
+## Cross-Repo Source Map
+
+When investigating issues, check the relevant layer(s). File paths are absolute so you can `Read` them directly.
+
+### Layer 1: Agent Definition (what the AI does)
+
+| File | Purpose |
+|------|---------|
+| `/Users/anhthuduong/Documents/GitHub/vllora/gateway/agents/finetune/vllora-finetune-agent.md` | Orchestrator agent (plan-first routing) |
+| `/Users/anhthuduong/Documents/GitHub/vllora/gateway/agents/finetune/finetune-topics-agent.md` | Topic hierarchy sub-agent |
+| `/Users/anhthuduong/Documents/GitHub/vllora/gateway/agents/finetune/finetune-workflow-agent.md` | Workflow execution sub-agent |
+| `/Users/anhthuduong/Documents/GitHub/vllora/gateway/agents/finetune/data-generation-agent.md` | Data generation sub-agent |
+
+### Layer 2: Rust Gateway
+
+| File | Purpose |
+|------|---------|
+| `/Users/anhthuduong/Documents/GitHub/vllora/gateway/src/distri.rs` | Downloads distri binary, starts server, health checks |
+
+### Layer 3: Distri Server (Rust)
+
+| File | Purpose |
+|------|---------|
+| `/Users/anhthuduong/Documents/GitHub/distri/server/distri-core/src/agent/orchestrator.rs` | Loads agent defs, manages sessions |
+| `/Users/anhthuduong/Documents/GitHub/distri/server/distri-core/src/agent/agent_loop.rs` | Main LLM ↔ tool execution loop |
+| `/Users/anhthuduong/Documents/GitHub/distri/server/distri-core/src/tools/mod.rs` | Tool execution framework |
+| `/Users/anhthuduong/Documents/GitHub/distri/server/distri-core/src/a2a/handler.rs` | A2A protocol handler |
+| `/Users/anhthuduong/Documents/GitHub/distri/server/distri-core/src/a2a/stream.rs` | A2A streaming |
+| `/Users/anhthuduong/Documents/GitHub/distri/server/distri-server/src/routes.rs` | HTTP API routes |
+| `/Users/anhthuduong/Documents/GitHub/distri/distri-a2a/src/a2a_types.rs` | A2A type definitions |
+
+### Layer 4: Frontend (this repo)
+
+| File/Dir | Purpose |
+|----------|---------|
+| `src/components/datasets/sidebars/LucySidebar.tsx` | Main Lucy sidebar (quick actions, chat) |
+| `src/components/agent/lucy-agent/LucyChat.tsx` | Lucy chat component (messages, input, tool rendering) |
+| `src/lib/distri-finetune-tools/index.ts` | Tool registry and exports |
+| `src/lib/distri-finetune-tools/types.ts` | Shared TypeScript types |
+| `src/lib/distri-finetune-tools/steps/` | 42 per-step tool implementations |
+| `src/lib/distri-finetune-tools/workflow/` | Workflow state machine |
+| `src/contexts/` | All shared state (33 contexts) |
+| `src/services/` | API clients, IndexedDB, polling (27 modules) |
+
+### Layer 5: @distri/react & @distri/core (vendored — DO NOT edit in this repo)
+
+| File | Purpose |
+|------|---------|
+| `/Users/anhthuduong/Documents/GitHub/distri/distrijs/packages/react/src/useChat.ts` | Chat hook (message streaming, tool execution) |
+| `/Users/anhthuduong/Documents/GitHub/distri/distrijs/packages/react/src/stores/chatStateStore.ts` | Zustand state store |
+| `/Users/anhthuduong/Documents/GitHub/distri/distrijs/packages/react/src/components/Chat.tsx` | Main chat component |
+| `/Users/anhthuduong/Documents/GitHub/distri/distrijs/packages/react/src/components/ChatInput.tsx` | Input component |
+| `/Users/anhthuduong/Documents/GitHub/distri/distrijs/packages/core/src/distri-client.ts` | A2A protocol client |
+| `/Users/anhthuduong/Documents/GitHub/distri/distrijs/packages/core/src/types.ts` | Core type definitions |
+| `/Users/anhthuduong/Documents/GitHub/distri/distrijs/packages/core/src/events.ts` | Event system |
+
+### Layer 6: Sync Mechanism
+
+| File | Purpose |
+|------|---------|
+| `scripts/sync-distrijs.sh` | Copies built packages from distri repo into vendored location |
+
+---
+
+## Mandatory Conventions
+
+### State Management (read `docs/state-management-pattern.md` first)
+
+- Use **React Context + ahooks `useRequest`** for shared/server state
+- **NEVER** use Redux, Zustand, or custom hooks with useState+useEffect for shared state
+- Naming: `[Feature]Context.tsx`, `[Feature]Provider`, `[Feature]Consumer()`
+- Location: `src/contexts/[Feature]Context.tsx`
+- Error handling: always `toast.error()` from Sonner in `onError` callbacks
+- External events (from Lucy agent tools): use `emitter.on()` pattern, always clean up in useEffect return
+
+### Key Contexts to Know
+
+| Context | Purpose |
+|---------|---------|
+| `DatasetsContext` | Dataset CRUD + IndexedDB |
+| `DatasetsUIContext` | Navigation, selection, search/sort |
+| `DatasetDetailContext` | Current dataset detail state |
+| `FinetuneProcessContext` | Finetune pipeline step state |
+| `DryRunJobsContext` | Evaluation job management |
+| `KnowledgeSourcesContext` | Knowledge source state |
+| `PlanContext` | Finetune plan state |
+| `AgentPanelContext` | Lucy agent panel state |
+| `ProjectContext` | Current project |
+
+### Code Rules
+
+- Run `npx tsc --noEmit` after every change
+- @distri/react and @distri/core are **vendored** — changes must be made in the distri repo and synced via `scripts/sync-distrijs.sh`
+- Tools execute **locally in the browser**, not on the server
+- IndexedDB is the primary persistence layer (datasets, workflows, jobs)
+- Auth: localStorage key `vlora_user_email` (for E2E testing: set to `test@e2e.local`)
+
+---
+
+## Documentation Sync Rule
+
+After ANY code change, check whether it affects behavior documented in `docs/features/lucy-finetune-dataset/`. If it does, **update the relevant doc file(s) in the same change**:
+
+| What changed | Update |
+|-------------|--------|
+| State machine transitions | `state-machine.md` |
+| Tools added/removed/modified | `architecture.md` |
+| Onboarding flow or planning | `guided-onboarding.md` |
+| Data generation logic | `data-generation-agent.md` |
+| README generation | `dataset-readme-generation.md` |
+| Vendored packages updated | `vendored-distri-packages.md` |
+| Event emitters added/changed | `event-emitter-guide.md` |
+| Agent prompt/tools changed | The relevant agent md in `gateway/agents/finetune/` |
+
+---
+
+## Skills
+
+Skills extend Claude's capabilities. Auto-invoked when relevant, or invoke manually with `/name`.
+
+| Skill | Auto-invoke | When to use |
+|-------|-------------|------------|
+| `/finetune-context` | Yes | Load all feature docs — use when asked about the finetune feature |
+| `/finetune-fix <bug>` | Manual | Fix a bug (loads docs + cross-repo sources + state management pattern) |
+| `/finetune-develop <feature>` | Manual | Implement a feature (loads docs + cross-repo sources) |
+| `/finetune-arch` | Yes | Load full-stack architecture from all 6 layers across 3 repos |
+| `/finetune-ui <task>` | Manual | Design or enhance UI (loads UI components, @distri/react renderers, UX docs) |
+| `/finetune-e2e <test>` | Manual | E2E test with Playwright MCP (browser automation, screenshots, verification) |
+
+## Sub-Agents
+
+Sub-agents run in isolated contexts with persistent project-level memory.
+
+| Agent | Model | When to use |
+|-------|-------|------------|
+| `code-reviewer` | Sonnet | After writing/modifying code — reviews for quality, patterns, security, architecture |
+| `architecture-explorer` | Sonnet | Cross-layer questions — traces data flow across all 6 layers (read-only) |
+| `debugger` | Sonnet | When hitting bugs — diagnoses errors across the full stack, implements fixes |
+
+## Team Commands
+
+Multi-agent teams for complex tasks. Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.
+
+| Command | Agents | When to use |
+|---------|--------|------------|
+| `/team-investigate <issue>` | 5 | Deep investigation: code reviewer, behavior validator, UX reviewer, fix agent, docs updater |
+| `/team-review <what>` | 5 | Comprehensive review: architecture, state machine, UX, devil's advocate, docs checker |
+| `/team-develop <feature>` | 4 | New feature: architect → frontend implementer → test & validate → docs updater |
+| `/team-ux-redesign <area>` | 4 | UX review: flow analyst, visual reviewer, info architecture → redesign proposer |
+| `/team-refactor <target>` | 4 | Safe refactoring: dependency mapper → migration planner → implementer → regression validator |
+| `/team-perf-audit <focus>` | 4 | Performance: bundle analyzer, render profiler, network analyzer → optimization implementer |
+| `/team-e2e-test <focus>` | 4 | E2E testing: test planner → happy path runner + edge case runner → bug reporter |
+| `/team-security <focus>` | 4 | Security audit: frontend, API, dependency, secrets auditors (OWASP-aligned) |
+
+---
+
+## Common Gotchas
+
+1. **"Evaluation" vs "Dry Run"**: Display text says "Evaluation" but all internal code uses `dryRun` / `dry_run` naming (file names, variables, DB stores, tool names). Don't rename internal identifiers.
+
+2. **Vendored @distri packages**: These live in `vendor/` and are NOT editable in this repo. To change them: edit in the distri repo → build → run `scripts/sync-distrijs.sh`.
+
+3. **IndexedDB is the source of truth**: Datasets, workflows, evaluation jobs, and knowledge sources are all stored in IndexedDB. There is no backend database — the backend only handles API calls to external services (OpenAI, eval server).
+
+4. **Tools execute in the browser**: All 53 finetune tools run locally via the @distri/react tool execution pipeline. They are NOT server-side.
+
+5. **Event emitter cleanup**: When using `emitter.on()` in a React component, ALWAYS return a cleanup function in `useEffect`. Missing cleanup = memory leaks + stale listeners. See `event-emitter-guide.md` for the full event map.
+
+6. **State machine validation**: Workflow steps can only advance if validation passes. Check `state-machine.md` for the rules before modifying transitions.
+
+7. **Cross-repo tool contracts**: Tool definitions in agent md files (gateway repo) must match tool implementations in `distri-finetune-tools/` (this repo). Mismatches cause silent failures.
+
+8. **Auth for E2E testing**: Set `localStorage.setItem('vlora_user_email', 'test@e2e.local')` — no login UI needed.
