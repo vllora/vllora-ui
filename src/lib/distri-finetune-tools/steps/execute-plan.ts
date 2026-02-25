@@ -440,7 +440,7 @@ async function executeFinetune(ctx: StepContext): Promise<StepResult> {
     throw new Error('Dataset not uploaded to backend');
   }
 
-  const result = await quickFinetune({ datasetId: dataset_id, baseModel: 'google/gemma-3-4b-it' });
+  const result = await quickFinetune({ datasetId: dataset_id, baseModel: 'unsloth/Qwen3-4B' });
   if (!result.success) {
     throw new Error(result.error || 'Failed to create finetune job');
   }

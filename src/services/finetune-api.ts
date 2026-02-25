@@ -542,17 +542,19 @@ export async function ensureDatasetUploaded(
 
 /** Default training configuration */
 export const DEFAULT_TRAINING_CONFIG: ReinforcementTrainingConfig = {
-  learning_rate: 0.0001,
-  lora_rank: 16,
-  epochs: 2.0,
-  batch_size: 65536,
+  learning_rate: 0.00001,
+  lora_rank: 8,
+  epochs: 3,
+  batch_size: 10,
+  gradient_accumulation_steps: 40,
 };
 
 /** Default inference parameters */
 export const DEFAULT_INFERENCE_PARAMETERS: ReinforcementInferenceParameters = {
-  max_output_tokens: 2048,
+  max_output_tokens: 1000,
   temperature: 0.7,
   top_p: 0.9,
+  response_candidates_count: 4,
 };
 
 export interface CreateFinetuneJobOptions {
@@ -598,7 +600,7 @@ export async function createFinetuneJobFromUpload(
   // Create reinforcement job request
   const request: CreateReinforcementJobRequest = {
     dataset: backendDatasetId,
-    base_model: options?.baseModel || "google/gemma-3-4b-it",
+    base_model: options?.baseModel || "unsloth/Qwen3-4B",
     output_model: options?.outputModel || defaultOutputModel,
     display_name: options?.displayName || `${datasetName} Fine-tune`,
     training_config: trainingConfig,

@@ -37,7 +37,7 @@ export const startTrainingHandler: ToolHandler = async (params) => {
   try {
     const {
       workflow_id,
-      base_model = 'google/gemma-3-4b-it',
+      base_model = 'unsloth/Qwen3-4B',
       chunk_size,
       node_count,
       training_params,
@@ -48,7 +48,7 @@ export const startTrainingHandler: ToolHandler = async (params) => {
     }
 
     // Parse top-level params with type coercion
-    const model = typeof base_model === 'string' ? base_model : 'google/gemma-3-4b-it';
+    const model = typeof base_model === 'string' ? base_model : 'unsloth/Qwen3-4B';
     const chunkSize = typeof chunk_size === 'number' ? chunk_size : undefined;
     const nodeCount = typeof node_count === 'number' ? node_count : undefined;
 
@@ -131,7 +131,7 @@ export const startTrainingTool: DistriFnTool = {
     type: 'object',
     properties: {
       workflow_id: { type: 'string', description: 'The workflow ID' },
-      base_model: { type: 'string', default: 'google/gemma-3-4b-it', description: 'Base model to fine-tune' },
+      base_model: { type: 'string', default: 'unsloth/Qwen3-4B', description: 'Base model to fine-tune' },
       chunk_size: { type: 'number', description: 'Chunk size for training data processing' },
       node_count: { type: 'number', description: 'Number of nodes for distributed training' },
       training_params: {
@@ -139,20 +139,20 @@ export const startTrainingTool: DistriFnTool = {
         description: 'Advanced training and inference parameters (optional)',
         properties: {
           // Training config
-          learning_rate: { type: 'number', description: 'Learning rate (default: 0.0001)' },
-          epochs: { type: 'number', description: 'Number of epochs (default: 2.0)' },
-          batch_size: { type: 'number', description: 'Batch size in tokens (default: 65536)' },
+          learning_rate: { type: 'number', description: 'Learning rate (default: 0.00001)' },
+          epochs: { type: 'number', description: 'Number of epochs (default: 3)' },
+          batch_size: { type: 'number', description: 'Batch size (default: 10)' },
           batch_size_samples: { type: 'number', description: 'Batch size in samples' },
-          lora_rank: { type: 'number', description: 'LoRA rank (default: 16)' },
+          lora_rank: { type: 'number', description: 'LoRA rank (default: 8)' },
           max_context_length: { type: 'number', description: 'Max context length for training' },
-          gradient_accumulation_steps: { type: 'number', description: 'Gradient accumulation steps' },
+          gradient_accumulation_steps: { type: 'number', description: 'Gradient accumulation steps (default: 40)' },
           learning_rate_warmup_steps: { type: 'number', description: 'Learning rate warmup steps' },
           // Inference parameters
-          max_output_tokens: { type: 'number', description: 'Max output tokens during training rollouts (default: 2048)' },
+          max_output_tokens: { type: 'number', description: 'Max output tokens during training rollouts (default: 1000)' },
           temperature: { type: 'number', description: 'Temperature for rollouts (default: 0.7)' },
           top_p: { type: 'number', description: 'Top-p sampling (default: 0.9)' },
           top_k: { type: 'number', description: 'Top-k sampling' },
-          response_candidates_count: { type: 'number', description: 'Number of response candidates to generate per prompt' },
+          response_candidates_count: { type: 'number', description: 'Number of response candidates per prompt (default: 4)' },
         },
       },
     },

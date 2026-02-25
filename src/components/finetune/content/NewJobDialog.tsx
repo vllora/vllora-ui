@@ -59,7 +59,7 @@ interface NewJobDialogProps {
 
 export function NewJobDialog({ datasetId, onSuccess, disabled, open, onOpenChange, initialConfig }: NewJobDialogProps) {
   // Use initial config from sample dataset if available, otherwise use defaults
-  const defaultBaseModel = initialConfig?.base_model || "google/gemma-3-4b-it";
+  const defaultBaseModel = initialConfig?.base_model || "unsloth/Qwen3-4B";
   const defaultLearningRate = initialConfig?.training_config?.learning_rate ?? DEFAULT_TRAINING_CONFIG.learning_rate;
   const defaultEpochs = initialConfig?.training_config?.epochs ?? DEFAULT_TRAINING_CONFIG.epochs;
   const defaultBatchSize = initialConfig?.training_config?.batch_size ?? DEFAULT_TRAINING_CONFIG.batch_size;
@@ -200,7 +200,7 @@ export function NewJobDialog({ datasetId, onSuccess, disabled, open, onOpenChang
                       value={learningRate}
                       onChange={(e) => setLearningRate(e.target.value)}
                       className="h-9 bg-zinc-800/50 border-zinc-700 text-zinc-300 focus-visible:ring-zinc-600"
-                      placeholder="0.0001"
+                      placeholder="0.00001"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -212,7 +212,7 @@ export function NewJobDialog({ datasetId, onSuccess, disabled, open, onOpenChang
                       value={epochs}
                       onChange={(e) => setEpochs(e.target.value)}
                       className="h-9 bg-zinc-800/50 border-zinc-700 text-zinc-300 focus-visible:ring-zinc-600"
-                      placeholder="2.0"
+                      placeholder="3"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -223,7 +223,7 @@ export function NewJobDialog({ datasetId, onSuccess, disabled, open, onOpenChang
                       value={batchSize}
                       onChange={(e) => setBatchSize(e.target.value)}
                       className="h-9 bg-zinc-800/50 border-zinc-700 text-zinc-300 focus-visible:ring-zinc-600"
-                      placeholder="65536"
+                      placeholder="10"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -234,7 +234,7 @@ export function NewJobDialog({ datasetId, onSuccess, disabled, open, onOpenChang
                       value={loraRank}
                       onChange={(e) => setLoraRank(e.target.value)}
                       className="h-9 bg-zinc-800/50 border-zinc-700 text-zinc-300 focus-visible:ring-zinc-600"
-                      placeholder="16"
+                      placeholder="8"
                     />
                   </div>
                 </div>
@@ -252,7 +252,7 @@ export function NewJobDialog({ datasetId, onSuccess, disabled, open, onOpenChang
                       value={maxOutputTokens}
                       onChange={(e) => setMaxOutputTokens(e.target.value)}
                       className="h-9 bg-zinc-800/50 border-zinc-700 text-zinc-300 focus-visible:ring-zinc-600"
-                      placeholder="2048"
+                      placeholder="1000"
                     />
                   </div>
                   <div className="space-y-1.5">
