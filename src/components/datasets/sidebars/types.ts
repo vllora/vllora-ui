@@ -52,4 +52,6 @@ export interface FileTreeNode {
   title?: string;
   /** Optional hover actions (VS Code-style buttons that appear on hover) */
   actions?: FileTreeAction[];
+  /** Render as a VS Code-style collapsible section header (uppercase, bold, full-width bar) */
+  isSection?: boolean;
 }

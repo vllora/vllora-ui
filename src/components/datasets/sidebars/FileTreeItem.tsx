@@ -61,6 +61,7 @@ export function FileTreeItem({
   const isExpanded = expandedNodes.has(node.id);
   const isSelected = selectedNodeId === node.id;
   const canExpand = isFolder && (hasChildren || node.isExpandable);
+  const isSection = !!node.isSection;
 
   const handleClick = () => {
     if (canExpand) {
@@ -68,6 +69,123 @@ export function FileTreeItem({
     }
     onSelect(node.id);
   };
+
+  // ── Section header (VS Code collapsible section) ────────────────────
+  if (isSection) {
+    return (
+      <>
+        <div
+          role="treeitem"
+          tabIndex={0}
+          onClick={handleClick}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              handleClick();
+            }
+          }}
+          title={node.title}
+          className={cn(
+            "group/tree-item w-full flex items-center gap-1 h-[22px] pr-2",
+            "text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/70",
+            "hover:text-sidebar-foreground cursor-pointer select-none transition-colors",
+            level === 0 && "mt-2 first:mt-0"
+          )}
+          style={{ paddingLeft: `${BASE_PX + level * INDENT_PX}px` }}
+        >
+          {/* Chevron */}
+          <span className="w-4 h-4 flex items-center justify-center shrink-0">
+            <ChevronRight
+              className={cn(
+                "w-3 h-3 transition-transform duration-150",
+                isExpanded && "rotate-90"
+              )}
+            />
+          </span>
+
+          {/* Section label */}
+          <span className="truncate flex-1 min-w-0">{node.name}</span>
+
+          {/* Hover actions */}
+          {node.actions && node.actions.length > 0 && (
+            <span className="shrink-0 flex items-center gap-0.5 opacity-0 group-hover/tree-item:opacity-100 transition-opacity">
+              {node.actions.map((action) => (
+                <button
+                  key={action.key}
+                  title={action.title}
+                  className={cn(
+                    "w-5 h-5 flex items-center justify-center rounded-sm transition-colors",
+                    action.disabled
+                      ? "opacity-40 cursor-not-allowed text-muted-foreground"
+                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                  )}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!action.disabled) {
+                      action.onClick();
+                    }
+                  }}
+                >
+                  {action.icon}
+                </button>
+              ))}
+            </span>
+          )}
+
+          {/* Badge */}
+          {node.badge && (
+            node.badge.icon ? (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className={cn(
+                        "shrink-0 flex items-center justify-center w-4 h-4",
+                        badgeClasses(node.badge.variant)
+                      )}
+                    >
+                      {node.badge.icon}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">
+                    {node.badge.tooltip || node.badge.label}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <span
+                className={cn(
+                  "text-[10px] shrink-0 tabular-nums font-normal",
+                  badgeClasses(node.badge.variant)
+                )}
+              >
+                {node.badge.label}
+              </span>
+            )
+          )}
+        </div>
+
+        {/* Section children */}
+        {isExpanded && hasChildren && (
+          <>
+            {node.children!.map((child) => (
+              <FileTreeItem
+                key={child.id}
+                node={child}
+                level={level + 1}
+                expandedNodes={expandedNodes}
+                selectedNodeId={selectedNodeId}
+                onToggle={onToggle}
+                onSelect={onSelect}
+              />
+            ))}
+          </>
+        )}
+      </>
+    );
+  }
+
+  // ── Regular tree item ───────────────────────────────────────────────
 
   return (
     <>

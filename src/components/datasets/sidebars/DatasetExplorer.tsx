@@ -272,10 +272,10 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         id: "documents",
         name: "documents",
         type: "folder",
-        icon: folderIcon(expandedNodes, "documents"),
         badge: { label: String(sources.length), variant: "count" },
         children: docChildren,
         isExpandable: true,
+        isSection: true,
       });
     }
 
@@ -290,12 +290,12 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         id: "data",
         name: "data",
         type: "folder",
-        icon: folderIcon(expandedNodes, "data"),
         badge: records.length > 0
           ? { label: String(records.length), variant: "count" }
           : undefined,
         children: topicChildren,
         isExpandable: true,
+        isSection: true,
       });
     }
 
@@ -388,9 +388,9 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         id: "evaluations",
         name: "evaluations",
         type: "folder",
-        icon: <ClipboardCheck className={`${ICON_CLS} text-violet-500`} />,
         children: evalChildren,
         isExpandable: true,
+        isSection: true,
       });
     }
 
@@ -444,12 +444,12 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         id: "finetune",
         name: "finetune",
         type: "folder",
-        icon: <Brain className={`${ICON_CLS} text-orange-500`} />,
         badge: finetuneJobs.length > 0
           ? { label: String(finetuneJobs.length), variant: "count" }
           : undefined,
         children: finetuneChildren,
         isExpandable: true,
+        isSection: true,
         actions: [
           {
             key: "new-job",
@@ -494,9 +494,9 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         id: "insights",
         name: "insights",
         type: "folder",
-        icon: folderIcon(expandedNodes, "insights"),
         children: statsChildren,
         isExpandable: true,
+        isSection: true,
       });
     }
 
