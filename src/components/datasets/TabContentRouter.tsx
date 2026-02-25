@@ -50,9 +50,11 @@ export function mapTabPathToSection(path: string | null): ContentSection {
   if (path.startsWith("data/")) return "records";
   if (path === "evaluations/grader-script.ts") return "evaluator-script";
   if (path.startsWith("evaluations/jobs")) return "evaluator-jobs";
+  if (path === "evaluations") return "evaluator";
   if (path.startsWith("evaluations/")) return "evaluator";
   if (path === "finetune") return "jobs";
   if (path.startsWith("finetune/")) return "jobs";
+  if (path === "documents") return "documents";
   if (path.startsWith("documents/")) return "documents";
 
   return null;

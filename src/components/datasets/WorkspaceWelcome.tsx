@@ -152,7 +152,7 @@ export function WorkspaceWelcome({
       active: knowledgeSourcesCount > 0,
     },
     {
-      path: "evaluations",
+      path: "evaluations/jobs",
       label: "Evaluations",
       icon: ClipboardCheck,
       iconColor: "text-violet-500",
@@ -242,7 +242,7 @@ export function WorkspaceWelcome({
 
           {/* Eval Score */}
           <button
-            onClick={() => onOpenTab("evaluations", "evaluations", false)}
+            onClick={() => onOpenTab("evaluations/jobs", "Evaluations", false)}
             className="bg-zinc-900/50 border border-zinc-800/60 rounded-lg px-3 py-3 text-left hover:border-zinc-700/60 transition-colors"
           >
             <div className="flex items-center justify-between mb-1.5">
