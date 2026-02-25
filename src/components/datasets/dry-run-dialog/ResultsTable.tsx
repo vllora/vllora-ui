@@ -39,7 +39,7 @@ const SORT_LABELS: Record<SortOption, string> = {
   status: "Status",
 };
 
-const ROW_HEIGHT = 32; // Height of each row in pixels
+const ROW_HEIGHT = 34; // Height of each row in pixels
 
 interface ResultsTableProps {
   results: EvaluationResult[];
@@ -233,11 +233,11 @@ export function ResultsTable({
       {/* Table with header and virtualized rows */}
       <div className={cn("text-xs overflow-x-auto", fillHeight && "flex-1 flex flex-col min-h-0")}>
         {/* Table header */}
-        <div className="flex items-center text-[10px] font-medium uppercase tracking-wider text-zinc-500 border-b border-zinc-800/60 shrink-0">
-          <div className="w-6 shrink-0 py-1.5" />
-          <div className="w-12 shrink-0 py-1.5 pr-2">Row</div>
-          {onRecordIdClick && <div className="w-24 shrink-0 py-1.5 pr-2">Record</div>}
-          <div className="w-16 shrink-0 py-1.5 pr-2">
+        <div className="flex items-center text-[10px] font-medium uppercase tracking-wider text-zinc-500 border-b border-zinc-800/60 shrink-0 bg-zinc-900/20">
+          <div className="w-6 shrink-0 py-2" />
+          <div className="w-12 shrink-0 py-2 pr-2">#</div>
+          {onRecordIdClick && <div className="w-24 shrink-0 py-2 pr-2">Record</div>}
+          <div className="w-16 shrink-0 py-2 pr-2">
             <UITooltipProvider delayDuration={200}>
               <UITooltip>
                 <UITooltipTrigger asChild>
@@ -260,9 +260,9 @@ export function ResultsTable({
               </UITooltip>
             </UITooltipProvider>
           </div>
-          <div className="w-16 shrink-0 py-1.5 pr-2">Status</div>
-          <div className="flex-1 py-1.5 pr-2">Reasoning</div>
-          <div className="w-12 shrink-0 py-1.5 text-center">Logs</div>
+          <div className="w-12 shrink-0 py-2 pr-2">Status</div>
+          <div className="flex-1 py-2 pr-2">Reasoning</div>
+          <div className="w-10 shrink-0 py-2 text-center">Logs</div>
         </div>
 
         {/* Virtualized rows */}

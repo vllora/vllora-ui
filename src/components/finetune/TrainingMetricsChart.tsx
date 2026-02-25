@@ -172,9 +172,9 @@ export function TrainingMetricsChart({
     );
   }
 
-  // Prepare chart data
+  // Prepare chart data — display epochs as 1-based (backend is 0-based)
   const chartData = epochData.map((epoch) => ({
-    name: `Epoch ${epoch.epoch}`,
+    name: `Epoch ${epoch.epoch + 1}`,
     epoch: epoch.epoch,
     "Avg Score": parseFloat(epoch.avgScore.toFixed(3)),
     ...Object.fromEntries(
@@ -204,7 +204,7 @@ export function TrainingMetricsChart({
           {formatScore(latestScore)}
         </span>
         <span className="text-[11px] text-zinc-600">
-          Epoch {latestEpoch?.epoch} &middot; {latestEpoch?.rowCount} rows
+          Epoch {latestEpoch ? latestEpoch.epoch + 1 : "-"} &middot; {latestEpoch?.rowCount} rows
         </span>
       </div>
 
@@ -321,7 +321,7 @@ export function TrainingMetricsChart({
       {hasBreakdown && Object.keys(latestCriteriaAvg).length > 0 && (
         <div className="flex flex-wrap gap-2 pt-1 border-t border-zinc-800/60">
           <span className="text-[10px] uppercase tracking-wider text-zinc-600 self-center mr-1">
-            Epoch {latestEpoch?.epoch}
+            Epoch {latestEpoch ? latestEpoch.epoch + 1 : "-"}
           </span>
           {Object.entries(latestCriteriaAvg).map(([key, val]) => (
             <div

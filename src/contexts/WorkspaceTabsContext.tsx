@@ -45,6 +45,10 @@ interface WorkspaceTabsContextType {
   pinTab: (path: string) => void;
   /** Close a tab */
   closeTab: (path: string) => void;
+  /** Close all tabs except the given path */
+  closeOtherTabs: (path: string) => void;
+  /** Close all tabs to the right of the given path */
+  closeTabsToRight: (path: string) => void;
   /** Set the active tab */
   setActiveTab: (path: string) => void;
   /** Close all tabs */
@@ -228,6 +232,27 @@ export function WorkspaceTabsProvider({ datasetId, initialTabs, children }: Work
     setActiveTabPath(path);
   }, []);
 
+  const closeOtherTabs = useCallback((path: string) => {
+    setTabs((prev) => prev.filter((t) => t.path === path));
+    setActiveTabPath(path);
+  }, []);
+
+  const closeTabsToRight = useCallback((path: string) => {
+    setTabs((prev) => {
+      const idx = prev.findIndex((t) => t.path === path);
+      if (idx === -1) return prev;
+      return prev.slice(0, idx + 1);
+    });
+    // If active tab was to the right, switch to the kept tab
+    setActiveTabPath((current) => {
+      const prev = tabsRef.current;
+      const idx = prev.findIndex((t) => t.path === path);
+      const currentIdx = prev.findIndex((t) => t.path === current);
+      if (currentIdx > idx) return path;
+      return current;
+    });
+  }, []);
+
   const closeAllTabs = useCallback(() => {
     setTabs([]);
     setActiveTabPath(null);
@@ -239,6 +264,8 @@ export function WorkspaceTabsProvider({ datasetId, initialTabs, children }: Work
     openTab,
     pinTab,
     closeTab,
+    closeOtherTabs,
+    closeTabsToRight,
     setActiveTab,
     closeAllTabs,
   };

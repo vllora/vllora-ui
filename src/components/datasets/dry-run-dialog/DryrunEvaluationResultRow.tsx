@@ -148,19 +148,20 @@ export function DryrunEvaluationResultRow({
   return (
     <div
       className={cn(
-        "flex items-center border-t border-zinc-800/40 first:border-t-0 rounded-sm",
-        isExpandable ? "cursor-pointer hover:bg-zinc-800/30" : "h-full",
-        isExpanded && "bg-zinc-800/20",
+        "flex items-center border-t border-zinc-800/40 first:border-t-0",
+        isExpandable ? "cursor-pointer hover:bg-zinc-800/25" : "h-full",
+        isExpanded && "bg-zinc-800/20 border-l-2 border-l-[rgb(var(--theme-500))]",
+        !isExpanded && "border-l-2 border-l-transparent",
         isHighlighted && "animate-record-highlight"
       )}
-      style={{ minHeight: 32 }}
+      style={{ minHeight: 34 }}
       onClick={onClick}
     >
       {/* Expand chevron / empty column */}
       <div className="w-6 shrink-0 flex items-center justify-center">
         {isExpandable ? (
           isExpanded ? (
-            <ChevronDown className="h-3 w-3 text-zinc-500" />
+            <ChevronDown className="h-3 w-3 text-zinc-400" />
           ) : (
             <ChevronRight className="h-3 w-3 text-zinc-600" />
           )
@@ -168,7 +169,7 @@ export function DryrunEvaluationResultRow({
       </div>
 
       {/* Row index column */}
-      <div className="w-12 shrink-0 py-1 pr-2 font-mono text-xs text-zinc-400">
+      <div className="w-12 shrink-0 py-1.5 pr-2 font-mono text-[11px] text-zinc-500 tabular-nums">
         {index + 1}
       </div>
 
@@ -184,36 +185,36 @@ export function DryrunEvaluationResultRow({
       )}
 
       {/* Score column */}
-      <div className="w-16 shrink-0 py-1 pr-2">
+      <div className="w-16 shrink-0 py-1.5 pr-2">
         {result.score != null && isSuccess ? (
-          <span className={cn("font-mono text-xs font-medium", getScoreColorClass(result.score))}>
+          <span className={cn("font-mono text-[11px] font-semibold tabular-nums", getScoreColorClass(result.score))}>
             {formatScore(result.score)}
           </span>
         ) : isPending ? (
           <div className="h-3 w-3 rounded-full border-2 border-zinc-600 border-t-zinc-400 animate-spin" />
         ) : (
-          <span className="font-mono text-xs text-zinc-600">-</span>
+          <span className="font-mono text-[11px] text-zinc-600">-</span>
         )}
       </div>
 
       {/* Status column */}
-      <div className="w-16 shrink-0 py-1 pr-2">
+      <div className="w-12 shrink-0 py-1.5 pr-2 flex items-center">
         {isSuccess ? (
-          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/80" />
         ) : isFailed ? (
-          <AlertCircle className="h-3.5 w-3.5 text-red-400" />
+          <AlertCircle className="h-3.5 w-3.5 text-red-400/80" />
         ) : (
-          <span className="text-xs text-zinc-600">...</span>
+          <div className="h-3 w-3 rounded-full border-2 border-zinc-700 border-t-zinc-500 animate-spin" />
         )}
       </div>
 
       {/* Message/Reasoning column */}
-      <div className="flex-1 py-1 pr-2 text-xs text-zinc-500 truncate min-w-0">
+      <div className="flex-1 py-1.5 pr-2 text-[11px] text-zinc-500 truncate min-w-0">
         {isFailed ? <HighlightedText text={message} /> : message}
       </div>
 
       {/* Logs button column */}
-      <div className="w-12 shrink-0 flex items-center justify-center">
+      <div className="w-10 shrink-0 flex items-center justify-center">
         {hasLogs && <LogsPopover logs={result.logs!} rowIndex={index} />}
       </div>
     </div>

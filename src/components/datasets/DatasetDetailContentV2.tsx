@@ -75,6 +75,16 @@ function WorkspaceTabBridge({ openTabRef, onSectionChange, onActivePathChange }:
   return null;
 }
 
+/**
+ * Map legacy tab names (used in events and old URLs) to explorer node paths.
+ * Keeps backward compatibility while ensuring tabs match the explorer tree.
+ */
+const TAB_PATH_MAP: Record<string, { path: string; label: string }> = {
+  records: { path: "data", label: "data" },
+  evaluator: { path: "evaluations", label: "evaluations" },
+  jobs: { path: "finetune", label: "finetune" },
+};
+
 export function DatasetDetailContentV2() {
   const {
     // Core data
@@ -201,8 +211,13 @@ export function DatasetDetailContentV2() {
   useEffect(() => {
     const tabParam = searchParams.get("tab");
     if (tabParam) {
-      // Open the tab from URL (e.g., ?tab=plan.md)
-      openTabRef.current(tabParam, tabParam, false);
+      // Open the tab from URL (e.g., ?tab=plan.md), mapping legacy names
+      const mapped = TAB_PATH_MAP[tabParam];
+      if (mapped) {
+        openTabRef.current(mapped.path, mapped.label, false);
+      } else {
+        openTabRef.current(tabParam, tabParam, false);
+      }
       if (searchParams.get("mode") === "edit") {
         setPlanEditMode("edit");
       }
@@ -251,11 +266,17 @@ export function DatasetDetailContentV2() {
   }, [isPlanPreviewActive, setIsPlanPreviewActive]);
 
   // Handle tab switch events (backward compatibility for 17+ emit sites)
-  // Maps old section names to workspace tab paths
+  // Maps old section names to workspace tab paths that match the Explorer tree
   useEffect(() => {
+
     const handleSwitchTab = ({ datasetId: switchDatasetId, tab }: { datasetId: string; tab: string }) => {
       if (switchDatasetId === datasetId) {
-        openTabRef.current(tab, tab.charAt(0).toUpperCase() + tab.slice(1), false);
+        const mapped = TAB_PATH_MAP[tab];
+        if (mapped) {
+          openTabRef.current(mapped.path, mapped.label, false);
+        } else {
+          openTabRef.current(tab, tab.charAt(0).toUpperCase() + tab.slice(1), false);
+        }
       }
     };
 
@@ -291,7 +312,7 @@ export function DatasetDetailContentV2() {
         toast.success(`Lucy generated ${count} record${count !== 1 ? "s" : ""}${topicStr}`, {
           action: {
             label: "View Records",
-            onClick: () => openTabRef.current("records", "Records", false),
+            onClick: () => openTabRef.current("data", "data", false),
           },
         });
       }

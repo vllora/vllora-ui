@@ -16,6 +16,11 @@ import {
   Layers,
   BarChart3,
   Rows3,
+  Zap,
+  TrendingUp,
+  TrendingDown,
+  FileText,
+  Package,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
@@ -52,6 +57,7 @@ function StatCard({
   label,
   value,
   subValue,
+  delta,
   icon: Icon,
   valueClassName,
   children,
@@ -59,6 +65,8 @@ function StatCard({
   label: string;
   value: string;
   subValue?: string;
+  /** Score change from previous epoch (shown as +X% / -X% badge) */
+  delta?: number | null;
   icon: React.ElementType;
   valueClassName?: string;
   children?: React.ReactNode;
@@ -82,6 +90,24 @@ function StatCard({
         </span>
         {subValue && (
           <span className="text-[10px] text-zinc-600 font-mono">{subValue}</span>
+        )}
+        {delta != null && delta !== 0 && (
+          <span
+            className={cn(
+              "inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-medium font-mono",
+              delta > 0
+                ? "bg-emerald-500/10 text-emerald-400"
+                : "bg-red-500/10 text-red-400"
+            )}
+          >
+            {delta > 0 ? (
+              <TrendingUp className="h-2.5 w-2.5" />
+            ) : (
+              <TrendingDown className="h-2.5 w-2.5" />
+            )}
+            {delta > 0 ? "+" : ""}
+            {(delta * 100).toFixed(1)}%
+          </span>
         )}
       </div>
       {children}
@@ -343,22 +369,22 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
       {/* ── Stat Cards ─────────────────────────────────────────── */}
       {summary && (
         <div className="shrink-0 flex gap-2 px-3 py-2 border-b border-zinc-800/60">
-          {/* Epoch */}
+          {/* Epoch — backend uses 0-based epochs, display as 1-based */}
           <StatCard
             label="Epoch"
             icon={Layers}
-            value={String(summary.latestEpoch ?? "-")}
+            value={summary.latestEpoch != null ? String(summary.latestEpoch + 1) : "-"}
             subValue={totalEpochs ? `/ ${totalEpochs}` : undefined}
           >
             {totalEpochs && summary.latestEpoch != null && (
               <EpochProgressBar
-                current={summary.latestEpoch}
+                current={summary.latestEpoch + 1}
                 total={totalEpochs}
               />
             )}
           </StatCard>
 
-          {/* Avg Score */}
+          {/* Avg Score with delta */}
           <StatCard
             label="Avg Score"
             icon={BarChart3}
@@ -372,6 +398,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
                 ? getScoreColorClass(summary.latestAvgScore)
                 : "text-zinc-500"
             }
+            delta={summary.scoreDelta}
           />
 
           {/* Rows */}
@@ -381,6 +408,15 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
             value={String(summary.totalRows)}
             subValue="evaluated"
           />
+
+          {/* Learning Rate */}
+          {job.training_config?.learning_rate != null && (
+            <StatCard
+              label="Learning Rate"
+              icon={Zap}
+              value={String(job.training_config.learning_rate)}
+            />
+          )}
         </div>
       )}
 
@@ -415,19 +451,31 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
             onValueChange={setActiveTab}
             className="flex-1 min-h-0 flex flex-col"
           >
-            <div className="shrink-0 px-3 pt-2">
-              <TabsList className="h-7 bg-zinc-900/50">
+            <div className="shrink-0 px-3 pt-1.5 border-b border-zinc-800/60">
+              <TabsList className="h-8 bg-transparent p-0 gap-0">
                 <TabsTrigger
                   value="metrics"
-                  className="text-[11px] px-3 h-5 data-[state=active]:bg-zinc-800"
+                  className="text-[11px] px-3 h-8 rounded-none border-b-2 data-[state=active]:border-b-[rgb(var(--theme-500))] data-[state=active]:text-zinc-200 data-[state=inactive]:border-b-transparent data-[state=inactive]:text-zinc-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none hover:text-zinc-300 transition-colors"
                 >
                   Metrics
                 </TabsTrigger>
                 <TabsTrigger
                   value="per-row"
-                  className="text-[11px] px-3 h-5 data-[state=active]:bg-zinc-800"
+                  className="text-[11px] px-3 h-8 rounded-none border-b-2 data-[state=active]:border-b-[rgb(var(--theme-500))] data-[state=active]:text-zinc-200 data-[state=inactive]:border-b-transparent data-[state=inactive]:text-zinc-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none hover:text-zinc-300 transition-colors"
                 >
                   Per-Row
+                </TabsTrigger>
+                <TabsTrigger
+                  value="logs"
+                  className="text-[11px] px-3 h-8 rounded-none border-b-2 data-[state=active]:border-b-[rgb(var(--theme-500))] data-[state=active]:text-zinc-200 data-[state=inactive]:border-b-transparent data-[state=inactive]:text-zinc-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none hover:text-zinc-300 transition-colors"
+                >
+                  Logs
+                </TabsTrigger>
+                <TabsTrigger
+                  value="artifacts"
+                  className="text-[11px] px-3 h-8 rounded-none border-b-2 data-[state=active]:border-b-[rgb(var(--theme-500))] data-[state=active]:text-zinc-200 data-[state=inactive]:border-b-transparent data-[state=inactive]:text-zinc-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none hover:text-zinc-300 transition-colors"
+                >
+                  Artifacts
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -467,6 +515,30 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
                       : "No per-row data available"}
                 </div>
               )}
+            </TabsContent>
+            <TabsContent
+              value="logs"
+              className="flex-1 min-h-0 overflow-y-auto p-3 mt-0"
+            >
+              <div className="flex flex-col items-center justify-center gap-2 py-8 text-zinc-500">
+                <FileText className="h-5 w-5 opacity-40" />
+                <span className="text-xs">Training logs will appear here</span>
+                <span className="text-[10px] text-zinc-600">
+                  Logs are captured during training execution
+                </span>
+              </div>
+            </TabsContent>
+            <TabsContent
+              value="artifacts"
+              className="flex-1 min-h-0 overflow-y-auto p-3 mt-0"
+            >
+              <div className="flex flex-col items-center justify-center gap-2 py-8 text-zinc-500">
+                <Package className="h-5 w-5 opacity-40" />
+                <span className="text-xs">No artifacts yet</span>
+                <span className="text-[10px] text-zinc-600">
+                  Model weights and checkpoints will appear here after training
+                </span>
+              </div>
             </TabsContent>
           </Tabs>
         );
