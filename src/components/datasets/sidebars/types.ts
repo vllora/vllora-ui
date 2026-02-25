@@ -13,6 +13,10 @@ export type BadgeVariant = "default" | "success" | "warning" | "error" | "loadin
 export interface FileTreeBadge {
   label: string;
   variant: BadgeVariant;
+  /** Optional icon to render instead of the text label */
+  icon?: ReactNode;
+  /** Tooltip text shown on hover (falls back to label) */
+  tooltip?: string;
 }
 
 /** VS Code-style hover action button for tree nodes */

@@ -24,6 +24,12 @@ import {
   BookOpen,
   Sparkles,
   Plus,
+  CheckCircle2,
+  Loader2,
+  XCircle,
+  Clock,
+  AlertTriangle,
+  Circle,
 } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
@@ -43,6 +49,7 @@ import type { TopicHierarchyNode } from "@/types/dataset-types";
 // ============================================================================
 
 const ICON_CLS = "w-4 h-4";
+const BADGE_CLS = "w-3.5 h-3.5";
 
 function folderIcon(expandedSet: Set<string>, id: string) {
   return expandedSet.has(id)
@@ -102,7 +109,7 @@ interface DatasetExplorerProps {
 export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
   const { dataset, records } = DatasetDetailConsumer();
   const { sources } = KnowledgeSourcesConsumer();
-  const { jobs: dryRunJobs } = DryRunJobsConsumer();
+  const { jobs: dryRunJobs, runningJob: runningEval, startDryRun } = DryRunJobsConsumer();
   const { filteredJobs: finetuneJobs, loadJobs: loadFinetuneJobs } = FinetuneJobsConsumer();
   const { proposedPlan, planStatus, hasPlanProposed } = PlanConsumer();
   const { openTab } = WorkspaceTabsConsumer();
@@ -157,16 +164,40 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       name: "readme.md",
       type: "file",
       icon: <BookOpen className={`${ICON_CLS} text-blue-500`} />,
-      badge: dataset?.readme ? undefined : { label: "empty", variant: "default" },
+      badge: dataset?.readme ? undefined : {
+        label: "empty", variant: "default",
+        icon: <Circle className={`${BADGE_CLS} opacity-40`} />,
+        tooltip: "No content yet",
+      },
     });
 
     // plan.md
     const planBadge: FileTreeBadge | undefined = (() => {
-      if (planStatus === "executing") return { label: "executing", variant: "loading" };
-      if (planStatus === "completed") return { label: "done", variant: "success" };
-      if (planStatus === "failed") return { label: "failed", variant: "error" };
-      if (hasPlanProposed) return { label: "proposed", variant: "warning" };
-      return { label: "empty", variant: "default" };
+      if (planStatus === "executing") return {
+        label: "executing", variant: "loading" as const,
+        icon: <Loader2 className={`${BADGE_CLS} animate-spin`} />,
+        tooltip: "Plan executing",
+      };
+      if (planStatus === "completed") return {
+        label: "done", variant: "success" as const,
+        icon: <CheckCircle2 className={BADGE_CLS} />,
+        tooltip: "Plan completed",
+      };
+      if (planStatus === "failed") return {
+        label: "failed", variant: "error" as const,
+        icon: <XCircle className={BADGE_CLS} />,
+        tooltip: "Plan failed",
+      };
+      if (hasPlanProposed) return {
+        label: "proposed", variant: "warning" as const,
+        icon: <AlertTriangle className={BADGE_CLS} />,
+        tooltip: "Plan proposed — review needed",
+      };
+      return {
+        label: "empty", variant: "default" as const,
+        icon: <Circle className={`${BADGE_CLS} opacity-40`} />,
+        tooltip: "No plan yet",
+      };
     })();
 
     nodes.push({
@@ -205,10 +236,26 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
     if (sources.length > 0) {
       const docChildren: FileTreeNode[] = sources.map((src) => {
         const statusBadge: FileTreeBadge | undefined = (() => {
-          if (src.status === "processing") return { label: "loading", variant: "loading" };
-          if (src.status === "ready") return { label: "done", variant: "success" };
-          if (src.status === "failed") return { label: "error", variant: "error" };
-          if (src.status === "pending") return { label: "pending", variant: "default" };
+          if (src.status === "processing") return {
+            label: "loading", variant: "loading" as const,
+            icon: <Loader2 className={`${BADGE_CLS} animate-spin`} />,
+            tooltip: "Processing document",
+          };
+          if (src.status === "ready") return {
+            label: "done", variant: "success" as const,
+            icon: <CheckCircle2 className={BADGE_CLS} />,
+            tooltip: "Document ready",
+          };
+          if (src.status === "failed") return {
+            label: "error", variant: "error" as const,
+            icon: <XCircle className={BADGE_CLS} />,
+            tooltip: "Processing failed",
+          };
+          if (src.status === "pending") return {
+            label: "pending", variant: "default" as const,
+            icon: <Clock className={BADGE_CLS} />,
+            tooltip: "Waiting to process",
+          };
           return undefined;
         })();
 
@@ -265,37 +312,77 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         icon: <FileCode className={`${ICON_CLS} text-yellow-500`} />,
         badge: dataset?.evalScript
           ? undefined
-          : { label: "empty", variant: "default" },
+          : {
+            label: "empty", variant: "default",
+            icon: <Circle className={`${BADGE_CLS} opacity-40`} />,
+            tooltip: "No grader script yet",
+          },
       });
 
-      // evaluations/jobs/
-      if (dryRunJobs.length > 0) {
-        const jobChildren: FileTreeNode[] = dryRunJobs.map((job) => {
-          const statusBadge: FileTreeBadge | undefined = (() => {
-            if (job.status === "running") return { label: "running", variant: "loading" };
-            if (job.status === "completed") return { label: "pass", variant: "success" };
-            if (job.status === "failed") return { label: "fail", variant: "error" };
-            return { label: job.status, variant: "default" };
-          })();
-
-          return {
-            id: `evaluations/jobs/${job.id}`,
-            name: `eval-${job.id.slice(0, 6)}`,
-            type: "file" as const,
-            icon: <ClipboardCheck className={`${ICON_CLS} text-violet-500`} />,
-            badge: statusBadge,
+      // evaluations/jobs/ (always shown so "+" action is accessible)
+      const hasGraderScript = !!dataset?.evalScript;
+      const jobChildren: FileTreeNode[] = dryRunJobs.map((job) => {
+        const statusBadge: FileTreeBadge | undefined = (() => {
+          if (job.status === "running") return {
+            label: "running", variant: "loading" as const,
+            icon: <Loader2 className={`${BADGE_CLS} animate-spin`} />,
+            tooltip: "Evaluation running",
           };
-        });
+          if (job.status === "completed") return {
+            label: "pass", variant: "success" as const,
+            icon: <CheckCircle2 className={BADGE_CLS} />,
+            tooltip: "Evaluation completed",
+          };
+          if (job.status === "failed") return {
+            label: "fail", variant: "error" as const,
+            icon: <XCircle className={BADGE_CLS} />,
+            tooltip: "Evaluation failed",
+          };
+          return {
+            label: job.status, variant: "default" as const,
+            icon: <Clock className={BADGE_CLS} />,
+            tooltip: `Status: ${job.status}`,
+          };
+        })();
 
-        evalChildren.push({
-          id: "evaluations/jobs",
-          name: "jobs",
-          type: "folder",
-          icon: folderIcon(expandedNodes, "evaluations/jobs"),
-          children: jobChildren,
-          isExpandable: true,
-        });
-      }
+        return {
+          id: `evaluations/jobs/${job.id}`,
+          name: `eval-${job.id.slice(0, 6)}`,
+          type: "file" as const,
+          icon: <ClipboardCheck className={`${ICON_CLS} text-violet-500`} />,
+          badge: statusBadge,
+        };
+      });
+
+      evalChildren.push({
+        id: "evaluations/jobs",
+        name: "jobs",
+        type: "folder",
+        icon: folderIcon(expandedNodes, "evaluations/jobs"),
+        children: jobChildren,
+        isExpandable: true,
+        actions: [
+          {
+            key: "run-eval",
+            icon: <Plus className="w-3.5 h-3.5" />,
+            title: "New evaluation",
+            onClick: () => {
+              if (!hasGraderScript) {
+                toast.info("Configure and save a grader script first.");
+              } else if (runningEval) {
+                toast.info("An evaluation is already running. Wait for it to finish.");
+              } else {
+                const sampleSize = records.length <= 50 ? records.length : 50;
+                startDryRun(sampleSize).then(() => {
+                  toast.success(`Evaluation started with ${sampleSize} samples.`);
+                }).catch(() => {
+                  toast.error("Failed to start evaluation.");
+                });
+              }
+            },
+          },
+        ],
+      });
 
       nodes.push({
         id: "evaluations",
@@ -311,20 +398,40 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
     {
       const finetuneChildren: FileTreeNode[] = finetuneJobs.map((job) => {
         const statusBadge: FileTreeBadge | undefined = (() => {
-          if (job.status === "running") return { label: "running", variant: "loading" };
-          if (job.status === "succeeded") return { label: "done", variant: "success" };
-          if (job.status === "failed") return { label: "failed", variant: "error" };
-          if (job.status === "pending") return { label: "queued", variant: "default" };
-          return { label: job.status, variant: "default" };
+          if (job.status === "running") return {
+            label: "running", variant: "loading" as const,
+            icon: <Loader2 className={`${BADGE_CLS} animate-spin`} />,
+            tooltip: "Training in progress",
+          };
+          if (job.status === "succeeded") return {
+            label: "done", variant: "success" as const,
+            icon: <CheckCircle2 className={BADGE_CLS} />,
+            tooltip: "Training completed",
+          };
+          if (job.status === "failed") return {
+            label: "failed", variant: "error" as const,
+            icon: <XCircle className={BADGE_CLS} />,
+            tooltip: "Training failed",
+          };
+          if (job.status === "pending") return {
+            label: "queued", variant: "default" as const,
+            icon: <Clock className={BADGE_CLS} />,
+            tooltip: "Queued — waiting to start",
+          };
+          return {
+            label: job.status, variant: "default" as const,
+            icon: <Clock className={BADGE_CLS} />,
+            tooltip: `Status: ${job.status}`,
+          };
         })();
 
-        const displayName = job.suffix || job.provider_job_id.slice(0, 12);
+        const displayName = job.suffix || `ft-${job.id.slice(0, 6)}`;
 
         return {
           id: `finetune/${job.id}`,
           name: displayName,
           type: "file" as const,
-          icon: <Sparkles className={`${ICON_CLS} text-[rgb(var(--theme-500))]`} />,
+          icon: <Brain className={`${ICON_CLS} text-orange-500`} />,
           badge: statusBadge,
         };
       });

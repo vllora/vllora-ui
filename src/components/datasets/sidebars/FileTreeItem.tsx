@@ -11,6 +11,12 @@
 
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { FileTreeNode, BadgeVariant } from "./types";
 
 interface FileTreeItemProps {
@@ -133,16 +139,36 @@ export function FileTreeItem({
           </span>
         )}
 
-        {/* Badge */}
+        {/* Badge — icon (with styled tooltip) or text */}
         {node.badge && (
-          <span
-            className={cn(
-              "text-[11px] shrink-0 tabular-nums",
-              badgeClasses(node.badge.variant)
-            )}
-          >
-            {node.badge.label}
-          </span>
+          node.badge.icon ? (
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className={cn(
+                      "shrink-0 flex items-center justify-center w-4 h-4",
+                      badgeClasses(node.badge.variant)
+                    )}
+                  >
+                    {node.badge.icon}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  {node.badge.tooltip || node.badge.label}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            <span
+              className={cn(
+                "text-[11px] shrink-0 tabular-nums",
+                badgeClasses(node.badge.variant)
+              )}
+            >
+              {node.badge.label}
+            </span>
+          )
         )}
       </div>
 
