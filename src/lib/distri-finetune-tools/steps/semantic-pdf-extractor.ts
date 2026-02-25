@@ -151,9 +151,6 @@ export async function extractPdfContentLocal(
     };
   }
 
-  // Build rawText from page texts (for LLM section matching)
-  const rawText = pages.map((p) => p.text).join('\n\n');
-
   // -------------------------------------------------------------------------
   // PRIMARY PATH: LLM section identification with native PDF
   // -------------------------------------------------------------------------
@@ -161,7 +158,7 @@ export async function extractPdfContentLocal(
     onProgress?.({ step: 'Analyzing document structure with AI...', percent: 40 });
 
     const sections = await extractSectionsWithLLM(
-      rawText, totalPages, objective, comment, base64Data, filename,
+      sentences, totalPages, objective, comment, base64Data, filename,
     );
 
     if (sections.length === 0) {
@@ -170,7 +167,7 @@ export async function extractPdfContentLocal(
 
     onProgress?.({ step: 'Mapping sections to text...', percent: 75 });
 
-    const chunks = buildChunksFromSections(sections, rawText, sentences);
+    const chunks = buildChunksFromSections(sections, sentences);
 
     if (chunks.length === 0) {
       throw new Error('Could not match any LLM sections to document text');
@@ -389,6 +386,18 @@ function generateMarkdown(filename: string, chunks: SemanticChunk[], totalPages:
 }
 
 // ---------------------------------------------------------------------------
+// Indexed Text Builder
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a numbered text representation of sentences for LLM consumption.
+ * Format: "[0] First sentence\n[1] Second sentence\n..."
+ */
+function buildIndexedText(sentences: SentenceWithPage[]): string {
+  return sentences.map((s, i) => `[${i}] ${s.text}`).join('\n');
+}
+
+// ---------------------------------------------------------------------------
 // LLM Section Extraction (used by primary path)
 // ---------------------------------------------------------------------------
 
@@ -398,19 +407,26 @@ const SECTION_LLM_SYSTEM = `You are a document structure analyzer.
 
 {{OBJECTIVE_BLOCK}}
 
-Identify the logical sections of this document that are most useful for the training objective above.
+You will receive the document's sentences in numbered format:
+[0] First sentence text
+[1] Second sentence text
+...
 
-For each section provide:
+Identify the logical sections of this document. For each section provide:
 - "heading": short descriptive title (max 10 words)
 - "summary": 4-5 sentence summary
-- "start_text": exact first ~40 chars of the section (copy-paste from document)
-- "end_text": exact last ~40 chars of the section (copy-paste from document)
+- "start_index": the integer index of the first sentence in this section
+- "end_index": the integer index of the last sentence in this section (inclusive)
 
 Rules:
 - 5-20 sections depending on document length
 - Follow the document's own structure (Articles, Chapters, Sections)
 - Group content by what's relevant to the training objective
-- Don't create sections smaller than a paragraph`;
+- Sections must be contiguous: no gaps between sections, no overlapping indices
+- Sections must be in document order (ascending start_index)
+- Each section must contain at least 3 sentences
+- The first section should start at index 0
+- The last section should end at the last sentence index`;
 
 const SECTION_LLM_RESPONSE_FORMAT = {
   type: 'json_schema',
@@ -427,10 +443,10 @@ const SECTION_LLM_RESPONSE_FORMAT = {
             properties: {
               heading: { type: 'string', description: 'Short descriptive title (max 10 words)' },
               summary: { type: 'string', description: '4-5 sentence summary' },
-              start_text: { type: 'string', description: 'Exact first ~40 chars of this section (copy-paste from document)' },
-              end_text: { type: 'string', description: 'Exact last ~40 chars of this section (copy-paste from document)' },
+              start_index: { type: 'integer', description: 'Index of the first sentence in this section' },
+              end_index: { type: 'integer', description: 'Index of the last sentence in this section (inclusive)' },
             },
-            required: ['heading', 'summary', 'start_text', 'end_text'],
+            required: ['heading', 'summary', 'start_index', 'end_index'],
             additionalProperties: false,
           },
         },
@@ -444,16 +460,16 @@ const SECTION_LLM_RESPONSE_FORMAT = {
 interface LLMSection {
   heading: string;
   summary: string;
-  start_text: string;
-  end_text: string;
+  start_index: number;
+  end_index: number;
 }
 
 /**
- * Single LLM call to identify proper document sections from the full text.
- * Returns section boundaries that can be matched against the sentence array.
+ * Single LLM call to identify proper document sections from indexed sentences.
+ * Returns section boundaries as start_index / end_index integers.
  */
 async function extractSectionsWithLLM(
-  rawText: string,
+  sentences: SentenceWithPage[],
   totalPages: number,
   objective?: string,
   comment?: string,
@@ -470,7 +486,11 @@ async function extractSectionsWithLLM(
 
   const systemPrompt = SECTION_LLM_SYSTEM.replace('{{OBJECTIVE_BLOCK}}', objectiveBlock);
 
-  // Build user content: prefer sending the actual PDF file when available
+  // Build indexed text from sentences
+  const indexedText = buildIndexedText(sentences);
+
+  // Build user content: when PDF is available, send BOTH the native PDF (visual context)
+  // AND the indexed text (for index references)
   let userContent: string | ContentBlock[];
   if (pdfBase64) {
     const base64Only = pdfBase64.startsWith('data:')
@@ -486,12 +506,12 @@ async function extractSectionsWithLLM(
       } as FileContentBlock,
       {
         type: 'text',
-        text: `Analyze this ${totalPages}-page document and identify its sections.`,
+        text: `Analyze this ${totalPages}-page document and identify its sections.\n\nHere are the numbered sentences — use these indices in your response:\n\n${indexedText}`,
       } as TextContentBlock,
     ];
-    console.log(`[extraction] Sending PDF as file content block: ${filename || 'document.pdf'}`);
+    console.log(`[extraction] Sending PDF file block + ${sentences.length} indexed sentences`);
   } else {
-    userContent = `Document (${totalPages} pages):\n\n${rawText}`;
+    userContent = `Document (${totalPages} pages, ${sentences.length} sentences):\n\n${indexedText}`;
   }
 
   const messages: LucyMessage[] = [
@@ -511,81 +531,40 @@ async function extractSectionsWithLLM(
 }
 
 /**
- * Match LLM-identified sections against the raw document text using start_text/end_text anchors,
- * then collect sentences that fall within each section's character range.
+ * Build chunks from LLM sections using deterministic index-based slicing.
+ * Sections reference sentence indices directly — no string matching needed.
  */
 function buildChunksFromSections(
   sections: LLMSection[],
-  rawText: string,
   sentences: SentenceWithPage[],
 ): SemanticChunk[] {
   if (sections.length === 0 || sentences.length === 0) return [];
 
-  const rawLower = rawText.toLowerCase();
+  const maxIdx = sentences.length - 1;
 
-  // Build a character-position index for each sentence in the raw text.
-  // For each sentence, find its position in rawText so we can map char ranges → sentences.
-  const sentencePositions: Array<{ start: number; end: number }> = [];
-  let searchFrom = 0;
-  for (const sent of sentences) {
-    const sentLower = sent.text.toLowerCase().trim();
-    // Find the first ~30 chars of the sentence in rawText (enough to be unique)
-    const needle = sentLower.slice(0, Math.min(30, sentLower.length));
-    let pos = rawLower.indexOf(needle, searchFrom);
-    if (pos < 0) {
-      // Fallback: search from beginning (sentence might be out of order due to page joins)
-      pos = rawLower.indexOf(needle);
-    }
-    if (pos >= 0) {
-      sentencePositions.push({ start: pos, end: pos + sentLower.length });
-      searchFrom = pos + 1; // Advance to avoid matching the same spot
-    } else {
-      // Could not find sentence — use -1 as sentinel
-      sentencePositions.push({ start: -1, end: -1 });
-    }
-  }
+  // Pre-sort sections by start_index for robustness
+  const sorted = [...sections].sort((a, b) => a.start_index - b.start_index);
 
-  // For each section, find char positions of start_text and end_text in rawText
   const chunks: SemanticChunk[] = [];
-  for (const section of sections) {
-    const startTarget = section.start_text.toLowerCase().trim();
-    const endTarget = section.end_text.toLowerCase().trim();
+  let prevEndIndex = -1;
 
-    const startPos = rawLower.indexOf(startTarget);
-    let endPos = rawLower.indexOf(endTarget);
+  for (const section of sorted) {
+    // Clamp indices to valid range
+    let startIdx = Math.max(0, Math.min(section.start_index, maxIdx));
+    let endIdx = Math.max(0, Math.min(section.end_index, maxIdx));
 
-    if (startPos < 0) {
-      console.warn(`[buildChunksFromSections] Could not find start_text: "${section.start_text.slice(0, 50)}"`);
+    // Contiguity failsafe: adjust start if it overlaps with previous section
+    if (startIdx <= prevEndIndex) {
+      startIdx = prevEndIndex + 1;
+    }
+
+    // Skip sections that are empty after adjustment
+    if (endIdx < startIdx) {
+      console.warn(`[buildChunksFromSections] Skipping "${section.heading}": endIdx ${endIdx} < startIdx ${startIdx} after adjustment`);
       continue;
     }
 
-    // If end_text not found, fall back to end of document
-    let sectionEndPos: number;
-    if (endPos < 0) {
-      console.warn(`[buildChunksFromSections] Could not find end_text: "${section.end_text.slice(0, 50)}", using document end`);
-      sectionEndPos = rawText.length;
-    } else {
-      sectionEndPos = endPos + endTarget.length;
-    }
-
-    // Ensure end is after start
-    if (sectionEndPos <= startPos) {
-      sectionEndPos = rawText.length;
-    }
-
-    // Collect all sentences whose position falls within [startPos, sectionEndPos)
-    const chunkSentences: SentenceWithPage[] = [];
-    for (let i = 0; i < sentences.length; i++) {
-      const sp = sentencePositions[i];
-      if (sp.start < 0) continue; // Couldn't map this sentence
-      // Sentence is in range if it starts within the section boundary
-      if (sp.start >= startPos && sp.start < sectionEndPos) {
-        chunkSentences.push(sentences[i]);
-      }
-    }
-
-    if (chunkSentences.length === 0) continue;
-
+    const chunkSentences = sentences.slice(startIdx, endIdx + 1);
     const texts = chunkSentences.map((s) => s.text);
     const pageStart = Math.min(...chunkSentences.map((s) => s.pageNumber));
     const pageEnd = Math.max(...chunkSentences.map((s) => s.pageNumber));
@@ -600,7 +579,8 @@ function buildChunksFromSections(
       summary: section.summary,
     });
 
-    console.log(`[buildChunksFromSections] Section "${section.heading}": ${chunkSentences.length} sentences, pages ${pageStart}-${pageEnd}`);
+    console.log(`[buildChunksFromSections] Section "${section.heading}": indices [${startIdx}–${endIdx}], ${chunkSentences.length} sentences, pages ${pageStart}–${pageEnd}`);
+    prevEndIndex = endIdx;
   }
 
   return chunks;

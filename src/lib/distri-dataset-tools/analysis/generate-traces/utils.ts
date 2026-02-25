@@ -58,7 +58,12 @@ export function extractLeafTopicsFromHierarchy(nodes: TopicHierarchyNode[], pare
     } else {
       // Leaf node - add with full path and ID
       // Use node.id if available, otherwise fallback to node.name
-      leaves.push({ id: node.id || node.name, name: node.name, path: currentPath });
+      leaves.push({
+        id: node.id || node.name,
+        name: node.name,
+        path: currentPath,
+        sourceChunkRefs: node.sourceChunkRefs,
+      });
     }
   }
   return leaves;

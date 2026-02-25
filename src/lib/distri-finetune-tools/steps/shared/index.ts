@@ -37,3 +37,10 @@ export {
   type SentenceWithPage,
   type SemanticChunk,
 } from './semantic-chunker';
+
+export {
+  resolveChunkRefs,
+  buildChunkContextSection,
+  parseChunkRef,
+  type ResolvedChunk,
+} from './chunk-lookup';

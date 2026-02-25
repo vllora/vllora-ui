@@ -61,6 +61,8 @@ export interface TopicHierarchyNode {
   children?: TopicHierarchyNode[];
   // Whether this node is selected/checked
   selected?: boolean;
+  /** Composite refs to knowledge source chunks: "sourceId:chunkId" */
+  sourceChunkRefs?: string[];
 }
 
 // Topic hierarchy configuration stored at dataset level

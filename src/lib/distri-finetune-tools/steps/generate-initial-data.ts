@@ -19,6 +19,7 @@ import {
   type FileContentBlock,
 } from "./shared/lucy-client";
 import { buildKnowledgeContentBlocks } from "./shared/knowledge-context";
+import { resolveChunkRefs, buildChunkContextSection } from "./shared/chunk-lookup";
 import { extractSeedTools, extractSeedMessages, extractSeedSystemPrompt } from "@/lib/distri-dataset-tools/analysis/generate-traces/utils";
 
 // =============================================================================
@@ -28,6 +29,7 @@ import { extractSeedTools, extractSeedMessages, extractSeedSystemPrompt } from "
 interface LeafTopic {
   name: string;
   path: string[]; // Full path from root to leaf
+  sourceChunkRefs?: string[];
 }
 
 /**
@@ -42,7 +44,11 @@ function getLeafTopics(hierarchy: TopicHierarchyNode[], parentPath: string[] = [
 
     if (!node.children || node.children.length === 0) {
       // This is a leaf node
-      leaves.push({ name: node.name, path: currentPath });
+      leaves.push({
+        name: node.name,
+        path: currentPath,
+        sourceChunkRefs: node.sourceChunkRefs,
+      });
     } else {
       // Recurse into children
       leaves.push(...getLeafTopics(node.children, currentPath));
@@ -447,6 +453,7 @@ async function callLLMForInitialData(
   outputFormatConfig?: OutputFormatParam | null,
   fileContentBlocks?: FileContentBlock[],
   seedSystemPrompt?: string,
+  topicChunkContext?: string,
 ): Promise<GeneratedExample[]> {
   // Select prompt template: structured output RFT when response schema is present
   let userPromptTemplate: string;
@@ -468,10 +475,9 @@ async function callLLMForInitialData(
     ? `\n--- TOPIC FOCUS ---\nGenerate ALL examples specifically about this topic: "${topicContext.name}"\nTopic path: ${topicContext.path.join(" > ")}\nAll examples MUST be directly relevant to this specific topic.\n--- END TOPIC FOCUS ---\n`
     : "";
 
-  // Build knowledge context section if available
-  const knowledgeSection = knowledgeContext
-    ? buildKnowledgeContextSection(knowledgeContext)
-    : "";
+  // Build knowledge context section: prefer topic-specific chunks, fall back to generic
+  const knowledgeSection = topicChunkContext
+    || (knowledgeContext ? buildKnowledgeContextSection(knowledgeContext) : "");
 
   // Build structured output placeholders
   const systemPromptTemplatePlaceholder = outputFormatConfig?.system_prompt_template || "";
@@ -753,6 +759,21 @@ export const generateInitialDataHandler: ToolHandler = async (
         // Send file content blocks only with the first chunk
         const chunkFileBlocks = chunkStart === 0 ? firstBatchFileBlocks : undefined;
 
+        // Resolve topic-specific chunks for this batch
+        const topicChunkContexts = new Map<string, string>();
+        for (const job of chunkJobs) {
+          if (job.topic.sourceChunkRefs?.length && !topicChunkContexts.has(job.topic.name)) {
+            try {
+              const resolvedChunks = await resolveChunkRefs(dataset_id, job.topic.sourceChunkRefs);
+              if (resolvedChunks.length > 0) {
+                topicChunkContexts.set(job.topic.name, buildChunkContextSection(resolvedChunks));
+              }
+            } catch (err) {
+              console.warn(`[generateInitialData] Failed to resolve chunks for topic "${job.topic.name}":`, err);
+            }
+          }
+        }
+
         // Create parallel requests for this chunk
         const batchPromises = chunkJobs.map(job =>
           callLLMForInitialData(
@@ -765,6 +786,7 @@ export const generateInitialDataHandler: ToolHandler = async (
             output_format,
             chunkFileBlocks,
             seedSystemPrompt,
+            topicChunkContexts.get(job.topic.name),
           ).then(examples => ({ job, examples }))
             .catch(err => {
               console.error(`[generateInitialData] Topic "${job.topic.name}" batch ${job.batchIndex + 1} failed:`, err);

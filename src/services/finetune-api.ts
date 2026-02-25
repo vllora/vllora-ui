@@ -544,9 +544,9 @@ export async function ensureDatasetUploaded(
 export const DEFAULT_TRAINING_CONFIG: ReinforcementTrainingConfig = {
   learning_rate: 0.00001,
   lora_rank: 8,
-  epochs: 3,
-  batch_size: 5,
   gradient_accumulation_steps: 40,
+  epochs: 2.0,
+  batch_size: 100,
 };
 
 /** Default inference parameters */
@@ -816,7 +816,7 @@ export async function updateDatasetEvalScript(
     `/finetune/datasets/${datasetId}/evaluator`,
     {
       method: "PATCH",
-      body: JSON.stringify({ evaluator: { type: "js", script } }),
+      body: JSON.stringify({ evaluator: { type: "js", config: { script } } }),
     },
   );
   return handleApiResponse<UpdateEvaluatorResponse>(response);

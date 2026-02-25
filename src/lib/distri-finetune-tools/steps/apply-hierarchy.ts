@@ -50,9 +50,17 @@ function normalizeHierarchy(
       ? normalizeHierarchy(node.children, currentPath)
       : undefined;
 
+    // Preserve optional fields from the incoming node
+    const description = typeof node.description === 'string' ? node.description : undefined;
+    const sourceChunkRefs = Array.isArray(node.sourceChunkRefs) && node.sourceChunkRefs.length > 0
+      ? (node.sourceChunkRefs as string[])
+      : undefined;
+
     result.push({
       id,
       name,
+      description,
+      sourceChunkRefs,
       children: children && children.length > 0 ? children : undefined,
     });
   }

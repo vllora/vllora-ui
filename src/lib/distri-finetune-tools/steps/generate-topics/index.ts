@@ -11,9 +11,26 @@ import * as knowledgeDB from "@/services/knowledge-sources-db";
 import type { ToolHandler } from "../../types";
 import type { TopicHierarchyNode } from "@/types/dataset-types";
 import { countLeafTopics } from "../helpers";
+import type { ProposedTopic } from "../propose-plan/types";
 
 import { generateTopicsViaBackend } from "./backend";
 import { generateTopicsViaFrontend } from "./frontend";
+
+/** Convert TopicHierarchyNode[] to ProposedTopic[], preserving sourceChunkRefs */
+function hierarchyToProposedTopics(nodes: TopicHierarchyNode[]): ProposedTopic[] {
+  return nodes.map(node => {
+    const topic: ProposedTopic = {
+      name: node.name,
+      description: node.description || '',
+      target_count: 0,
+      source_chunk_refs: node.sourceChunkRefs,
+    };
+    if (node.children && node.children.length > 0) {
+      topic.subtopics = hierarchyToProposedTopics(node.children);
+    }
+    return topic;
+  });
+}
 
 /**
  * Extract topics from all knowledge sources for a dataset
@@ -222,6 +239,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
       return {
         success: true,
         hierarchy,
+        proposed_topics: hierarchyToProposedTopics(hierarchy),
         topic_count: countLeafTopics(hierarchy),
         depth: depthValue,
         suggest_only: true,
@@ -309,6 +327,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
     return {
       success: true,
       hierarchy,
+      proposed_topics: hierarchyToProposedTopics(hierarchy),
       method,
       topic_count: topicCount,
       depth: depthValue,

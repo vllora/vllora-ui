@@ -11,7 +11,8 @@ import * as datasetsDB from "@/services/datasets-db";
 import { getDistriUrl } from "@/config/api";
 import { fetchLucyConfig, type LucyConfig } from "@/lib/agent-sync";
 import type { ToolHandler } from "../types";
-import type { DataInfo, DatasetRecord } from "@/types/dataset-types";
+import type { DataInfo, DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
+import { resolveChunkRefs, buildChunkContextSection } from "./shared/chunk-lookup";
 
 // Cache for Lucy config
 let cachedLucyConfig: LucyConfig | null = null;
@@ -73,7 +74,7 @@ CONVERSATION CONTEXT (preserve this history unchanged):
 
 FINAL USER MESSAGE TO VARY:
 {{final_user_message}}
-{{guidance_section}}{{tools_section}}Create variations of the final user message that:
+{{guidance_section}}{{tools_section}}{{topic_section}}{{knowledge_context}}Create variations of the final user message that:
 - Ask about similar topics but with different specific scenarios or angles
 - Vary the complexity (some simpler, some more complex questions)
 - Use different phrasings, tones, and styles (formal, casual, brief, detailed)
@@ -210,6 +211,20 @@ function buildToolsSection(tools: unknown[]): string {
   return `\nTool Schema:\nThe assistant has access to the following tools. Generate user messages that would naturally use one or more of these tools:\n${lines.join("\n")}\n`;
 }
 
+/**
+ * Walk the topic hierarchy tree to find a node by ID.
+ */
+function findTopicNode(nodes: TopicHierarchyNode[], targetId: string): TopicHierarchyNode | null {
+  for (const node of nodes) {
+    if (node.id === targetId || node.name === targetId) return node;
+    if (node.children?.length) {
+      const found = findTopicNode(node.children, targetId);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 // =============================================================================
 // LLM Call
 // =============================================================================
@@ -220,6 +235,8 @@ async function callLLMForVariants(
   count: number,
   guidance?: string,
   tools?: any[],
+  knowledgeContext?: string,
+  topicName?: string,
 ): Promise<GeneratedVariant[]> {
   const lucyConfig = await fetchLucyConfigCached();
   const rawUrl = lucyConfig.distri_url || getDistriUrl();
@@ -237,12 +254,22 @@ async function callLLMForVariants(
     ? prefixMessages.map((msg) => `[${msg.role.toUpperCase()}]: ${msg.content}`).join("\n\n")
     : "(No prior context - this is the first message)";
 
+  const knowledgeSection = knowledgeContext
+    ? `\n${knowledgeContext}\n`
+    : "";
+
+  const topicSection = topicName
+    ? `\nTOPIC: ${topicName}\nEnsure all generated variants stay within this topic area.\n`
+    : "";
+
   const userPrompt = VARIANT_GENERATION_USER
     .replace(/\{\{count\}\}/g, String(count))
     .replace("{{conversation_context}}", conversationContext)
     .replace("{{final_user_message}}", finalUserMessage)
     .replace("{{guidance_section}}", guidanceSection)
-    .replace("{{tools_section}}", buildToolsSection(tools ?? []));
+    .replace("{{tools_section}}", buildToolsSection(tools ?? []))
+    .replace("{{topic_section}}", topicSection)
+    .replace("{{knowledge_context}}", knowledgeSection);
 
   const messages: DistriMessage[] = [
     DistriClient.initDistriMessage("system", [
@@ -334,6 +361,40 @@ export const generateRecordVariantsHandler: ToolHandler = async (
       topic: sourceRecord.topic,
     });
 
+    // Resolve knowledge source chunks for the record's topic
+    let knowledgeContext: string | undefined;
+    if (sourceRecord.topic) {
+      try {
+        const dataset = await datasetsDB.getDatasetById(dataset_id);
+        const hierarchy = dataset?.topicHierarchy?.hierarchy;
+        if (!hierarchy?.length) {
+          console.log(`[generateRecordVariants] No hierarchy found for dataset "${dataset_id}"`);
+        } else {
+          console.log(`[generateRecordVariants] Hierarchy loaded: ${hierarchy.length} top-level nodes`);
+          let topicNode = findTopicNode(hierarchy, sourceRecord.topic);
+          // Fallback: use last segment of metadata.topic_path
+          if (!topicNode && sourceRecord.metadata?.topic_path) {
+            const pathParts = (sourceRecord.metadata.topic_path as string).split(' > ');
+            const leafName = pathParts[pathParts.length - 1]?.trim();
+            if (leafName && leafName !== sourceRecord.topic) {
+              console.log(`[generateRecordVariants] Primary lookup failed, trying leaf name from topic_path: "${leafName}"`);
+              topicNode = findTopicNode(hierarchy, leafName);
+            }
+          }
+          console.log(`[generateRecordVariants] Topic node lookup: ${topicNode ? `found "${topicNode.name}" with ${topicNode.sourceChunkRefs?.length ?? 0} chunk refs` : 'not found'}`);
+          if (topicNode?.sourceChunkRefs?.length) {
+            const resolvedChunks = await resolveChunkRefs(dataset_id, topicNode.sourceChunkRefs);
+            console.log(`[generateRecordVariants] Resolved ${resolvedChunks.length} chunks from ${topicNode.sourceChunkRefs.length} refs for topic "${sourceRecord.topic}"`);
+            if (resolvedChunks.length > 0) {
+              knowledgeContext = buildChunkContextSection(resolvedChunks);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`[generateRecordVariants] Failed to resolve chunks for topic "${sourceRecord.topic}":`, err);
+      }
+    }
+
     // Generate variants using LLM
     const variants = await callLLMForVariants(
       extracted.prefixMessages,
@@ -341,6 +402,8 @@ export const generateRecordVariantsHandler: ToolHandler = async (
       count,
       guidance,
       extracted.tools,
+      knowledgeContext,
+      sourceRecord.topic,
     );
 
     console.log("[generateRecordVariants] Generated", variants.length, "variants");

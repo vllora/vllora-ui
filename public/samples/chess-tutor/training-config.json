@@ -1,13 +1,13 @@
 {
-  "base_model": "google/gemma-3-4b-it",
+  "base_model": "unsloth/Qwen3-4B",
   "training_config": {
-    "learning_rate": 0.0001,
+    "learning_rate": 0.00001,
     "lora_rank": 8,
     "epochs": 8.0,
-    "batch_size": 65536
+    "batch_size": 100
   },
   "inference_parameters": {
-    "max_output_tokens": 2048,
+    "max_output_tokens": 1000,
     "temperature": 0.7,
     "top_p": 0.9
   }

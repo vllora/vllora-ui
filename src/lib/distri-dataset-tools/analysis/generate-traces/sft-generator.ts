@@ -139,11 +139,12 @@ export async function simulateConversation(
   _seedMessages: any[],
   tools: any[],
   maxTurns: number,
-  personaCache: Map<string, string[]>
+  personaCache: Map<string, string[]>,
+  knowledgeContext?: string,
 ): Promise<SyntheticTraceRecord | null> {
   const topicStr = topicPath.join(' -> ');
   const topicKey = topicPath.join('/');
-  const contextStr = topicStr;
+  const contextStr = knowledgeContext ? `${topicStr}\n\n${knowledgeContext}` : topicStr;
 
   console.log(`[simulateConversation] Starting for topic: ${topicStr}`);
 

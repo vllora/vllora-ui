@@ -43,6 +43,9 @@ import {
 import { generateRFTRecord, buildRFTDataInfo } from "./rft-generator";
 import { simulateConversation } from "./sft-generator";
 
+// Import chunk resolution utilities
+import { resolveChunkRefs, buildChunkContextSection } from "@/lib/distri-finetune-tools/steps/shared/chunk-lookup";
+
 // Re-export types for external use
 export type { GenerateTracesParams, GenerateTracesResult } from "./types";
 
@@ -77,6 +80,7 @@ async function generateSingleRecord(
         seedRecord,
         task.tools,
         personaCache,
+        task.knowledgeContext,
       );
 
       if (!simulated) {
@@ -114,6 +118,7 @@ async function generateSingleRecord(
         task.tools,
         turns,
         personaCache,
+        task.knowledgeContext,
       );
 
       if (!simulated) {
@@ -415,6 +420,22 @@ export async function generateTraces(
       : [];
     const effectiveTools = seedTools.length > 0 ? seedTools : [];
 
+    // Resolve knowledge source chunks for topics that have sourceChunkRefs
+    const topicKnowledgeContexts = new Map<string, string>();
+    for (const topic of targetLeafTopics) {
+      if (topic.sourceChunkRefs?.length) {
+        try {
+          const resolvedChunks = await resolveChunkRefs(resolvedDatasetId, topic.sourceChunkRefs);
+          if (resolvedChunks.length > 0) {
+            topicKnowledgeContexts.set(topic.id, buildChunkContextSection(resolvedChunks));
+            console.log(`[generateTraces] Resolved ${resolvedChunks.length} chunks for topic "${topic.name}"`);
+          }
+        } catch (err) {
+          console.warn(`[generateTraces] Failed to resolve chunks for topic "${topic.name}":`, err);
+        }
+      }
+    }
+
     // Create one task per topic with full path and ID
     const topicTasks: TopicGenerationTask[] = targetLeafTopics.map((topic) => {
       // In seed-based mode, filter seed records to those matching this topic
@@ -443,6 +464,7 @@ export async function generateTraces(
         seedRecords: taskSeedRecords,
         tools: effectiveTools,
         generationMode: generation_mode,
+        knowledgeContext: topicKnowledgeContexts.get(topic.id),
       };
     });
     const personaCache = new Map<string, string[]>();
