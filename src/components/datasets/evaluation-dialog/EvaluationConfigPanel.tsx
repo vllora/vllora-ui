@@ -191,10 +191,12 @@ interface EvaluationConfigPanelProps {
   hideHeaderActions?: boolean;
   /** Number of records in the dataset (for dry run config) */
   recordCount: number;
+  /** Which sub-view to render: "script" = editor only, "jobs" = runs only, undefined = both */
+  view?: "script" | "jobs";
 }
 
 export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, EvaluationConfigPanelProps>(
-  function EvaluationConfigPanel({ evalScript, onSave, hideHeaderActions = false, recordCount }, ref) {
+  function EvaluationConfigPanel({ evalScript, onSave, hideHeaderActions = false, recordCount, view }, ref) {
   const [script, setScript] = useState(evalScript || PLACEHOLDER_SCRIPT);
   const [isSaving, setIsSaving] = useState(false);
   const [isBottomCollapsed, setIsBottomCollapsed] = useState(false);
@@ -276,6 +278,189 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
 
   const sampleOptions = getSampleSizeOptions(recordCount);
 
+  // ── Shared sub-components ──────────────────────────────────────────
+
+  const editorHeaderBar = (
+    <TooltipProvider delayDuration={300}>
+    <div className="flex items-center gap-1 px-2 py-1 border-b border-border bg-muted/40 shrink-0">
+      <span className="text-xs font-medium text-muted-foreground px-1">Grader Script</span>
+      {!hideHeaderActions && (
+        <>
+          <div className="w-px h-3.5 bg-border mx-1" />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={handleLoadTemplate}
+                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                <FileCode2 className="w-3.5 h-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+              Load example template
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={handleCopy}
+                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                <Copy className="w-3.5 h-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+              Copy script
+            </TooltipContent>
+          </Tooltip>
+        </>
+      )}
+      <div className="flex-1" />
+
+      {/* Dry run config popover */}
+      <Popover>
+        <PopoverTrigger asChild>
+          <button className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+            <Settings className="w-3.5 h-3.5" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent side="bottom" align="end" className="w-64 p-3">
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                Sample Size
+              </label>
+              <div className="flex gap-1">
+                {sampleOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => setSampleSize(option.value)}
+                    className={cn(
+                      "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+                      sampleSize === option.value
+                        ? "bg-muted text-foreground"
+                        : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-muted-foreground/50">
+                {recordCount.toLocaleString()} records available
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                Rollout Model
+              </label>
+              <Select value={rolloutModel} onValueChange={setRolloutModel}>
+                <SelectTrigger className="h-8 bg-muted/50 border-border/50 text-xs text-foreground focus:ring-ring focus:ring-offset-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROLLOUT_MODEL_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
+
+      {/* Run dry run button */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={handleRunDryRun}
+            disabled={!hasGraderConfig || !!runningJob}
+            className={cn(
+              "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors",
+              hasGraderConfig && !runningJob
+                ? "text-[rgb(var(--theme-400))] hover:text-[rgb(var(--theme-300))] hover:bg-muted"
+                : "text-muted-foreground/50 cursor-not-allowed"
+            )}
+          >
+            {runningJob ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Play className="w-3 h-3" />
+            )}
+            {runningJob ? "Running..." : "Run"}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="text-xs">
+          {!hasGraderConfig ? "Save grader script first" : runningJob ? "Dry run in progress" : `Run dry run (${sampleSize} samples)`}
+        </TooltipContent>
+      </Tooltip>
+
+      <div className="w-px h-3.5 bg-border mx-0.5" />
+
+      {/* Save button */}
+      <button
+        onClick={handleSave}
+        disabled={isSaving || !hasChanges}
+        className={cn(
+          "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-colors",
+          hasChanges
+            ? "text-[rgb(var(--theme-400))] hover:text-[rgb(var(--theme-300))] hover:bg-muted"
+            : "text-muted-foreground/50 cursor-default"
+        )}
+      >
+        {isSaving ? (
+          <Loader2 className="w-3 h-3 animate-spin" />
+        ) : !hasChanges ? (
+          <CheckCircle2 className="w-3 h-3 text-emerald-500/60" />
+        ) : null}
+        {hasChanges ? "Save" : "Saved"}
+      </button>
+    </div>
+    </TooltipProvider>
+  );
+
+  const codeEditor = (
+    <div className="flex-1 min-h-0">
+      <Editor
+        height="100%"
+        language="javascript"
+        value={script}
+        onChange={(v) => setScript(v || "")}
+        theme="vs-dark"
+        options={EDITOR_OPTIONS}
+      />
+    </div>
+  );
+
+  // ── Script-only view ──────────────────────────────────────────────
+
+  if (view === "script") {
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        {editorHeaderBar}
+        {codeEditor}
+      </div>
+    );
+  }
+
+  // ── Jobs-only view ────────────────────────────────────────────────
+
+  if (view === "jobs") {
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        <EvaluationBottomPanel
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+          standalone
+        />
+      </div>
+    );
+  }
+
+  // ── Default: both panels (resizable split) ────────────────────────
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <ResizablePanelGroup
@@ -285,157 +470,8 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
         {/* Top: editor header + Monaco editor */}
         <ResizablePanel defaultSize={65} minSize={20}>
           <div className="flex flex-col h-full">
-            {/* Editor header bar */}
-            <TooltipProvider delayDuration={300}>
-            <div className="flex items-center gap-1 px-2 py-1 border-b border-border bg-muted/40 shrink-0">
-              <span className="text-xs font-medium text-muted-foreground px-1">Grader Script</span>
-              {!hideHeaderActions && (
-                <>
-                  <div className="w-px h-3.5 bg-border mx-1" />
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        onClick={handleLoadTemplate}
-                        className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                      >
-                        <FileCode2 className="w-3.5 h-3.5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" className="text-xs">
-                      Load example template
-                    </TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        onClick={handleCopy}
-                        className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" className="text-xs">
-                      Copy script
-                    </TooltipContent>
-                  </Tooltip>
-                </>
-              )}
-              <div className="flex-1" />
-
-              {/* Dry run config popover */}
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-                    <Settings className="w-3.5 h-3.5" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent side="bottom" align="end" className="w-64 p-3">
-                  <div className="space-y-3">
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                        Sample Size
-                      </label>
-                      <div className="flex gap-1">
-                        {sampleOptions.map((option) => (
-                          <button
-                            key={option.value}
-                            onClick={() => setSampleSize(option.value)}
-                            className={cn(
-                              "px-2.5 py-1 rounded text-xs font-medium transition-colors",
-                              sampleSize === option.value
-                                ? "bg-muted text-foreground"
-                                : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
-                            )}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
-                      </div>
-                      <p className="text-[10px] text-muted-foreground/50">
-                        {recordCount.toLocaleString()} records available
-                      </p>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                        Rollout Model
-                      </label>
-                      <Select value={rolloutModel} onValueChange={setRolloutModel}>
-                        <SelectTrigger className="h-8 bg-muted/50 border-border/50 text-xs text-foreground focus:ring-ring focus:ring-offset-0">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {ROLLOUT_MODEL_OPTIONS.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
-
-              {/* Run dry run button */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={handleRunDryRun}
-                    disabled={!hasGraderConfig || !!runningJob}
-                    className={cn(
-                      "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors",
-                      hasGraderConfig && !runningJob
-                        ? "text-[rgb(var(--theme-400))] hover:text-[rgb(var(--theme-300))] hover:bg-muted"
-                        : "text-muted-foreground/50 cursor-not-allowed"
-                    )}
-                  >
-                    {runningJob ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                    ) : (
-                      <Play className="w-3 h-3" />
-                    )}
-                    {runningJob ? "Running..." : "Run"}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">
-                  {!hasGraderConfig ? "Save grader script first" : runningJob ? "Dry run in progress" : `Run dry run (${sampleSize} samples)`}
-                </TooltipContent>
-              </Tooltip>
-
-              <div className="w-px h-3.5 bg-border mx-0.5" />
-
-              {/* Save button */}
-              <button
-                onClick={handleSave}
-                disabled={isSaving || !hasChanges}
-                className={cn(
-                  "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-colors",
-                  hasChanges
-                    ? "text-[rgb(var(--theme-400))] hover:text-[rgb(var(--theme-300))] hover:bg-muted"
-                    : "text-muted-foreground/50 cursor-default"
-                )}
-              >
-                {isSaving ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : !hasChanges ? (
-                  <CheckCircle2 className="w-3 h-3 text-emerald-500/60" />
-                ) : null}
-                {hasChanges ? "Save" : "Saved"}
-              </button>
-            </div>
-            </TooltipProvider>
-
-            {/* Code editor */}
-            <div className="flex-1 min-h-0">
-              <Editor
-                height="100%"
-                language="javascript"
-                value={script}
-                onChange={(v) => setScript(v || "")}
-                theme="vs-dark"
-                options={EDITOR_OPTIONS}
-              />
-            </div>
+            {editorHeaderBar}
+            {codeEditor}
           </div>
         </ResizablePanel>
 

@@ -22,11 +22,14 @@ const OPEN_DRY_RUN_JOB_EVENT = "vllora_select_dry_run_job";
 interface EvaluationBottomPanelProps {
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  /** When true, skip the Activity header bar (used when panel is the full-height content) */
+  standalone?: boolean;
 }
 
 export function EvaluationBottomPanel({
   isCollapsed,
   onToggleCollapse,
+  standalone = false,
 }: EvaluationBottomPanelProps) {
   const {
     datasetId,
@@ -73,6 +76,24 @@ export function EvaluationBottomPanel({
       await cancelDryRun(runningJob.id);
     }
   }, [runningJob, cancelDryRun]);
+
+  // Standalone mode: no header bar, always expanded (full-height jobs view)
+  if (standalone) {
+    return (
+      <div className="flex flex-col h-full overflow-hidden bg-background">
+        <div className="flex-1 min-h-0 flex flex-col">
+          <DryRunActivityView
+            datasetId={datasetId}
+            jobs={jobs}
+            onCancelJob={handleCancel}
+            initialSelectedId={selectedJobId}
+            onRefresh={refreshJob}
+            hideRunsSidebar
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background">

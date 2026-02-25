@@ -633,6 +633,26 @@ export function DatasetDetailContentV2() {
               docsTotal={knowledgeSourcesCount}
             />
           )}
+          {contentSection === "evaluator-script" && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <EvaluationConfigPanel
+                evalScript={dataset.evalScript}
+                onSave={handleSaveEvaluationConfig}
+                recordCount={sortedRecords.length}
+                view="script"
+              />
+            </div>
+          )}
+          {contentSection === "evaluator-jobs" && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <EvaluationConfigPanel
+                evalScript={dataset.evalScript}
+                onSave={handleSaveEvaluationConfig}
+                recordCount={sortedRecords.length}
+                view="jobs"
+              />
+            </div>
+          )}
           {contentSection === "evaluator" && (
             <div className="flex-1 flex flex-col overflow-hidden">
               <EvaluationConfigPanel

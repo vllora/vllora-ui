@@ -13,6 +13,8 @@ export type ContentSection =
   | "overview"
   | "records"
   | "evaluator"
+  | "evaluator-script"
+  | "evaluator-jobs"
   | "jobs"
   | "deploy"
   | "plan"
@@ -45,6 +47,8 @@ export function mapTabPathToSection(path: string | null): ContentSection {
   // Folder/file prefix matches
   if (path.startsWith("quick-stats/")) return "overview";
   if (path.startsWith("topics/")) return "records";
+  if (path === "evaluations/grader-script.ts") return "evaluator-script";
+  if (path.startsWith("evaluations/jobs")) return "evaluator-jobs";
   if (path.startsWith("evaluations/")) return "evaluator";
   if (path.startsWith("finetune/")) return "jobs";
   if (path.startsWith("documents/")) return "documents";
