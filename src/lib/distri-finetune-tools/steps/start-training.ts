@@ -37,7 +37,7 @@ export const startTrainingHandler: ToolHandler = async (params) => {
   try {
     const {
       workflow_id,
-      base_model = 'google/gemma-3-4b-it',
+      base_model = 'unsloth/Qwen3-4B',
       chunk_size,
       node_count,
       training_params,
@@ -48,7 +48,7 @@ export const startTrainingHandler: ToolHandler = async (params) => {
     }
 
     // Parse top-level params with type coercion
-    const model = typeof base_model === 'string' ? base_model : 'google/gemma-3-4b-it';
+    const model = typeof base_model === 'string' ? base_model : 'unsloth/Qwen3-4B';
     const chunkSize = typeof chunk_size === 'number' ? chunk_size : undefined;
     const nodeCount = typeof node_count === 'number' ? node_count : undefined;
 
@@ -131,7 +131,7 @@ export const startTrainingTool: DistriFnTool = {
     type: 'object',
     properties: {
       workflow_id: { type: 'string', description: 'The workflow ID' },
-      base_model: { type: 'string', default: 'google/gemma-3-4b-it', description: 'Base model to fine-tune' },
+      base_model: { type: 'string', default: 'unsloth/Qwen3-4B', description: 'Base model to fine-tune' },
       chunk_size: { type: 'number', description: 'Chunk size for training data processing' },
       node_count: { type: 'number', description: 'Number of nodes for distributed training' },
       training_params: {

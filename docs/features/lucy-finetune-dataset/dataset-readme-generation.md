@@ -146,9 +146,9 @@ Records were generated with topics pre-assigned based on the topic hierarchy str
     "criteria": ["accuracy", "teaching_quality", "appropriate_level"]
   },
   "training": {
-    "base_model": "google/gemma-3-4b-it",
+    "base_model": "unsloth/Qwen3-4B",
     "epochs": 2,
-    "learning_rate": 0.0001
+    "learning_rate": 0.00001
   }
 }
 ```

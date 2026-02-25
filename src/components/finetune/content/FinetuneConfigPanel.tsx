@@ -62,7 +62,7 @@ interface FinetuneConfigPanelProps {
 }
 
 export function FinetuneConfigPanel({ datasetId, canStartJob, initialConfig }: FinetuneConfigPanelProps) {
-  const defaultBaseModel = initialConfig?.base_model || "google/gemma-3-4b-it";
+  const defaultBaseModel = initialConfig?.base_model || "unsloth/Qwen3-4B";
   const defaultLearningRate = initialConfig?.training_config?.learning_rate ?? DEFAULT_TRAINING_CONFIG.learning_rate;
   const defaultEpochs = initialConfig?.training_config?.epochs ?? DEFAULT_TRAINING_CONFIG.epochs;
   const defaultBatchSize = initialConfig?.training_config?.batch_size ?? DEFAULT_TRAINING_CONFIG.batch_size;
