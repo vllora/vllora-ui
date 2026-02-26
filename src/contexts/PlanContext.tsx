@@ -284,7 +284,10 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
 
     const handleExecutionProgress = ({ progress }: { progress: ExecutionProgress }) => {
       if (progress.dataset_id === datasetId) {
-        setExecutionProgress(progress);
+        // Shallow-clone to guarantee a new reference — execute-plan.ts mutates
+        // the same progress object in place, so without this React's Object.is()
+        // check would bail out and skip the re-render (checkboxes wouldn't update).
+        setExecutionProgress({ ...progress, steps: [...progress.steps] });
         if (!progress.is_complete) {
           setIsExecuting(true);
           setPlanStatus('executing');
