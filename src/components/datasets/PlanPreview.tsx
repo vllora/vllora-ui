@@ -164,6 +164,25 @@ function buildCompletedStepIndices(
 }
 
 /**
+ * Format detail strings for display.
+ * Converts "Job ID: {full-uuid}" → "Evaluation: eval-{short}" / "Finetune: ft-{short}"
+ * to match the short names shown in the Explorer sidebar.
+ */
+function formatStepDetails(details: string[], stepId: string): string[] {
+  const UUID_RE = /^Job ID:\s*([0-9a-f]{6})[0-9a-f-]+$/i;
+  return details.map(d => {
+    const match = d.match(UUID_RE);
+    if (match) {
+      const short = match[1];
+      if (stepId === 'dryrun') return `Evaluation: eval-${short}`;
+      if (stepId === 'finetune') return `Finetune: ft-${short}`;
+      return `Job: ${short}`;
+    }
+    return d;
+  });
+}
+
+/**
  * Maps execution step indices → detail sub-items + status.
  * Uses progress data when available, falls back to plan data for pending steps.
  */
@@ -201,6 +220,7 @@ function buildStepDetails(
   executionSteps.forEach((step, index) => {
     // Find matching progress step
     let progressStep: ExecutionStep | undefined;
+    let matchedStepId = step.step_id || '';
 
     if (step.step_id) {
       progressStep = progressById.get(step.step_id);
@@ -210,15 +230,16 @@ function buildStepDetails(
       for (const [stepId, keywords] of STEP_KEYWORDS) {
         if (keywords.some(k => lower.includes(k))) {
           progressStep = progressById.get(stepId);
+          matchedStepId = stepId;
           break;
         }
       }
     }
 
-    // If we have progress data with details, use it
+    // If we have progress data with details, use it (formatted for display)
     if (progressStep?.details?.length) {
       result.set(index, {
-        details: progressStep.details,
+        details: formatStepDetails(progressStep.details, matchedStepId),
         status: progressStep.status,
       });
       return;
@@ -302,20 +323,104 @@ function buildPendingDetails(
   return [];
 }
 
-function PlanMarkdownContent({ plan, executionProgress }: { plan: Plan; executionProgress?: ExecutionProgress | null }) {
-  const completedStepIndices = useMemo(
-    () => buildCompletedStepIndices(plan.execution_steps, executionProgress),
-    [plan.execution_steps, executionProgress]
-  );
+/** User-friendly labels for step IDs not already in execution_steps */
+const STEP_DISPLAY_NAMES: Record<string, string> = {
+  topics: 'Apply Topics',
+  adjust_topics: 'Adjust Topics',
+  categorize: 'Categorize Records',
+  generate: 'Generate Data',
+  grader: 'Configure Evaluator',
+  upload: 'Upload Dataset',
+  dryrun: 'Run Evaluation',
+  finetune: 'Start Finetune Job',
+};
 
-  const stepDetails = useMemo(
-    () => buildStepDetails(plan.execution_steps, executionProgress, plan),
+/** Steps that are internal/technical and should not appear in the user-facing checklist */
+const HIDDEN_STEPS = new Set(['upload', 'adjust_topics', 'categorize']);
+
+/**
+ * Augment plan.execution_steps with any executed steps that the agent
+ * omitted (e.g. finetune). Returns the original array if nothing
+ * is missing, or a new array with synthetic entries appended.
+ * Internal steps (upload, adjust_topics, categorize) are excluded.
+ */
+function augmentExecutionSteps(
+  executionSteps: Plan['execution_steps'],
+  progress: ExecutionProgress | null | undefined,
+  plan: Plan
+): Plan['execution_steps'] {
+  if (!executionSteps?.length) return executionSteps;
+
+  // Collect step_ids already present in the plan checklist
+  const existingIds = new Set<string>();
+  for (const s of executionSteps) {
+    if (s.step_id) existingIds.add(s.step_id);
+  }
+
+  // Collect step_ids that actually ran (from progress) or are scheduled (from plan)
+  const executedIds: string[] = [];
+  if (progress?.steps) {
+    for (const s of progress.steps) {
+      // Only include steps that actually did something (not skipped idle steps)
+      if (s.status !== 'skipped' && s.status !== 'pending') {
+        executedIds.push(s.id);
+      }
+    }
+  }
+  // Also check steps_to_execute from the plan (for pre-execution view)
+  const plannedIds = (plan.steps_to_execute as string[] | undefined) ?? [];
+
+  // Merge: prefer executed (live) over planned
+  const allIds = new Set([...executedIds, ...plannedIds]);
+
+  // Find missing steps (skip hidden internal steps)
+  const missing: NonNullable<Plan['execution_steps']> = [];
+  for (const id of allIds) {
+    if (HIDDEN_STEPS.has(id)) continue;
+    if (!existingIds.has(id)) {
+      missing.push({
+        step: STEP_DISPLAY_NAMES[id] || id,
+        step_id: id,
+        description: '',
+        estimated_time: '',
+      });
+    }
+  }
+
+  // Filter out any existing execution_steps that are hidden internal steps
+  const visible = executionSteps.filter(s => !s.step_id || !HIDDEN_STEPS.has(s.step_id));
+
+  if (missing.length === 0 && visible.length === executionSteps.length) return executionSteps;
+  return [...visible, ...missing];
+}
+
+function PlanMarkdownContent({ plan, executionProgress }: { plan: Plan; executionProgress?: ExecutionProgress | null }) {
+  // Augment execution_steps with any missing steps the agent omitted
+  // (e.g. upload, finetune) so they appear in the checklist
+  const fullExecutionSteps = useMemo(
+    () => augmentExecutionSteps(plan.execution_steps, executionProgress, plan),
     [plan.execution_steps, executionProgress, plan]
   );
 
+  const completedStepIndices = useMemo(
+    () => buildCompletedStepIndices(fullExecutionSteps, executionProgress),
+    [fullExecutionSteps, executionProgress]
+  );
+
+  const stepDetails = useMemo(
+    () => buildStepDetails(fullExecutionSteps, executionProgress, plan),
+    [fullExecutionSteps, executionProgress, plan]
+  );
+
+  // Create a plan copy with augmented steps for markdown rendering
+  const planForMarkdown = useMemo(
+    () => fullExecutionSteps === plan.execution_steps ? plan : { ...plan, execution_steps: fullExecutionSteps },
+    [plan, fullExecutionSteps]
+  );
+
   const markdownContent = useMemo(
-    () => planToMarkdown(plan, { completedStepIndices, stepDetails }),
-    [plan, completedStepIndices, stepDetails]
+    () => planToMarkdown(planForMarkdown, { completedStepIndices, stepDetails }),
+    [planForMarkdown, completedStepIndices, stepDetails]
   );
 
   return (

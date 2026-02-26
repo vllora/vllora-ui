@@ -164,8 +164,6 @@ ${objectiveLine}${planSubtitle}---
 
 ${stepsContent}
 
-**Estimated output:** \`${plan.estimated_records ?? 0} records\` · **Duration:** \`${plan.estimated_duration}\`
-
 ---
 
 ${knowledgeSection}${outputFormatSection}## Training Topics
