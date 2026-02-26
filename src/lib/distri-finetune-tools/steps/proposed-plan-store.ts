@@ -255,7 +255,7 @@ export async function updatePlanExecution(
  */
 export async function completePlan(
   datasetId: string,
-  finalProgress: ExecutionProgress,
+  finalProgress: ExecutionProgress | null,
 ): Promise<void> {
   try {
     const stored = await getStoredPlan(datasetId);
@@ -267,7 +267,7 @@ export async function completePlan(
     const updated: StoredPlan = {
       ...stored,
       status: 'completed',
-      executionProgress: finalProgress,
+      executionProgress: finalProgress ?? stored.executionProgress,
       updatedAt: Date.now(),
     };
 
@@ -292,7 +292,7 @@ export async function completePlan(
  */
 export async function failPlan(
   datasetId: string,
-  finalProgress: ExecutionProgress,
+  finalProgress: ExecutionProgress | null,
 ): Promise<void> {
   try {
     const stored = await getStoredPlan(datasetId);
@@ -304,7 +304,7 @@ export async function failPlan(
     const updated: StoredPlan = {
       ...stored,
       status: 'failed',
-      executionProgress: finalProgress,
+      executionProgress: finalProgress ?? stored.executionProgress,
       updatedAt: Date.now(),
     };
 

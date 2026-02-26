@@ -19,9 +19,10 @@ import {
 // =============================================================================
 
 export const updatePlanMarkdownHandler: ToolHandler = async (params) => {
-  const { dataset_id, plan_markdown } = params as {
+  const { dataset_id, plan_markdown, status } = params as {
     dataset_id: string;
     plan_markdown: string;
+    status?: 'executing' | 'completed' | 'failed';
   };
 
   if (!dataset_id || typeof dataset_id !== 'string') {
@@ -41,10 +42,23 @@ export const updatePlanMarkdownHandler: ToolHandler = async (params) => {
     // Update the markdown in IndexedDB (preserves status, progress, etc.)
     await updateStoredPlanMarkdown(dataset_id, plan_markdown);
 
-    // Re-emit so PlanPreview re-renders with updated content
-    emitter.emit('vllora_plan_proposed', {
+    // If a status transition was requested, persist it to IndexedDB too
+    if (status) {
+      const { updatePlanStatus, completePlan, failPlan } = await import('./proposed-plan-store');
+      if (status === 'completed') {
+        completePlan(dataset_id, null);
+      } else if (status === 'failed') {
+        failPlan(dataset_id, null);
+      } else {
+        updatePlanStatus(dataset_id, status);
+      }
+    }
+
+    // Emit content-only update — does NOT reset plan status (unlike vllora_plan_proposed)
+    emitter.emit('vllora_plan_markdown_updated', {
       datasetId: dataset_id,
       plan: { ...stored.plan, plan_markdown },
+      status,
     });
 
     return { success: true };
@@ -62,7 +76,7 @@ export const updatePlanMarkdownHandler: ToolHandler = async (params) => {
 
 export const updatePlanMarkdownTool: DistriFnTool = {
   name: 'update_plan_markdown',
-  description: `Update the plan display with new markdown content.
+  description: `Update the plan display with new markdown content and optionally transition plan status.
 
 Call this during execution to check off completed steps in the plan checklist.
 
@@ -70,8 +84,14 @@ Example flow:
 1. Call apply_topic_hierarchy → succeeds
 2. Call update_plan_markdown with the plan markdown updated to check off that step:
    "- [x] Set up training categories\\n- [ ] Generate training data\\n..."
+3. On the FINAL step, include status: "completed" to mark the plan as done.
 
-The UI will re-render immediately with the updated checklist.`,
+The UI will re-render immediately with the updated checklist.
+
+Status transitions:
+- Omit status for intermediate updates (auto-transitions to "executing" on first call)
+- "completed" — all steps done successfully (shows "Completed" badge)
+- "failed" — execution stopped due to error (shows "Failed" badge)`,
   type: 'function',
   parameters: {
     type: 'object',
@@ -83,6 +103,11 @@ The UI will re-render immediately with the updated checklist.`,
       plan_markdown: {
         type: 'string',
         description: 'The full updated plan markdown. Use - [x] for completed steps, - [ ] for pending.',
+      },
+      status: {
+        type: 'string',
+        enum: ['executing', 'completed', 'failed'],
+        description: 'Optional status transition. Use "completed" on the final update when all steps are done. Use "failed" if execution stopped due to an error. Omit for intermediate updates.',
       },
     },
     required: ['dataset_id', 'plan_markdown'],

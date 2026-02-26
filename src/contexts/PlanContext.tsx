@@ -121,9 +121,11 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
   const [isPlanPreviewActive, setIsPlanPreviewActive] = useState(false);
   const [planEditMode, setPlanEditMode] = useState<"display" | "edit">("display");
 
-  // Ref to track current datasetId for use in setTimeout callbacks
+  // Refs to track current values for use in event handlers (avoids stale closures)
   const datasetIdRef = useRef(datasetId);
   datasetIdRef.current = datasetId;
+  const planStatusRef = useRef(planStatus);
+  planStatusRef.current = planStatus;
 
   // Check for persisted state on mount (IndexedDB + in-memory stores)
   // Uses a cancelled flag for proper cleanup — safe with React strict mode
@@ -282,6 +284,47 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
       }
     };
 
+    // Content-only plan markdown updates (during agent-driven execution).
+    // Unlike vllora_plan_proposed, this does NOT reset status/isExecuting.
+    const handleMarkdownUpdated = ({ datasetId: id, plan, status: newStatus }: {
+      datasetId: string;
+      plan: unknown;
+      status?: 'executing' | 'completed' | 'failed';
+    }) => {
+      if (id !== datasetId) return;
+
+      // Update plan content so PlanPreview re-renders with new checkboxes
+      setProposedPlan(plan as Plan);
+
+      // Auto-transition from 'proposed'/'approved' → 'executing' on first update
+      const currentStatus = planStatusRef.current;
+      if (!newStatus && (currentStatus === 'proposed' || currentStatus === 'approved')) {
+        setPlanStatus('executing');
+        setIsExecuting(true);
+        updatePlanStatus(datasetId, 'executing');
+      }
+
+      // Explicit status transition from the agent
+      if (newStatus) {
+        setPlanStatus(newStatus);
+        if (newStatus === 'completed' || newStatus === 'failed') {
+          // Delay clearing isExecuting briefly so the user sees the final state
+          setTimeout(() => {
+            if (datasetIdRef.current !== id) return;
+            setIsExecuting(false);
+            if (newStatus === 'completed') {
+              toast.success('Plan executed successfully!', {
+                description: 'View your generated data in the Records tab.',
+              });
+            }
+          }, 2000);
+        } else if (newStatus === 'executing') {
+          setIsExecuting(true);
+        }
+      }
+
+    };
+
     const handleExecutionProgress = ({ progress }: { progress: ExecutionProgress }) => {
       if (progress.dataset_id === datasetId) {
         // Shallow-clone to guarantee a new reference — execute-plan.ts mutates
@@ -337,6 +380,7 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
     emitter.on("vllora_plan_dismissed", handleDismissed);
     emitter.on("vllora_workflow_updated", handleWorkflowUpdated);
     emitter.on("vllora_plan_progress", handleExecutionProgress);
+    emitter.on("vllora_plan_markdown_updated", handleMarkdownUpdated);
 
     return () => {
       emitter.off("vllora_plan_generating", handleGenerating);
@@ -344,6 +388,7 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
       emitter.off("vllora_plan_dismissed", handleDismissed);
       emitter.off("vllora_workflow_updated", handleWorkflowUpdated);
       emitter.off("vllora_plan_progress", handleExecutionProgress);
+      emitter.off("vllora_plan_markdown_updated", handleMarkdownUpdated);
     };
   }, [datasetId, executionProgress?.is_complete]);
 
