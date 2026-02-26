@@ -117,7 +117,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
   // Expanded/selected state
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(
-    () => new Set(["documents", "data", "evaluations", "finetune"])
+    () => new Set(["documents", "data", "evaluations", "finetune", "insights"])
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
@@ -279,29 +279,26 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       });
     }
 
-    // --- topics/ (only shown when dataset has records or a topic hierarchy) ---
+    // --- data/ (always shown) ---
     const topicHierarchy = dataset?.topicHierarchy?.hierarchy;
     const topicChildren = topicHierarchy
       ? buildTopicChildren(topicHierarchy, "", topicCounts, expandedNodes)
       : [];
 
-    if (records.length > 0 || topicChildren.length > 0) {
-      nodes.push({
-        id: "data",
-        name: "data",
-        type: "folder",
-        badge: records.length > 0
-          ? { label: String(records.length), variant: "count" }
-          : undefined,
-        children: topicChildren,
-        isExpandable: true,
-        isSection: true,
-      });
-    }
+    nodes.push({
+      id: "data",
+      name: "data",
+      type: "folder",
+      badge: records.length > 0
+        ? { label: String(records.length), variant: "count" }
+        : undefined,
+      children: topicChildren,
+      isExpandable: topicChildren.length > 0,
+      isSection: true,
+    });
 
-    // --- evaluations/ (only shown when grader script exists or dry-run jobs exist) ---
-    const hasEvalContent = !!dataset?.evalScript || dryRunJobs.length > 0;
-    if (hasEvalContent) {
+    // --- evaluations/ (always shown) ---
+    {
       const evalChildren: FileTreeNode[] = [];
 
       // grader-script.ts
@@ -467,8 +464,8 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       });
     }
 
-    // --- insights/ (only shown when dataset has records to report on) ---
-    if (records.length > 0) {
+    // --- insights/ (always shown) ---
+    {
       const statsChildren: FileTreeNode[] = [
         {
           id: "insights/coverage.md",
