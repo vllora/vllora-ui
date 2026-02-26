@@ -160,6 +160,10 @@ export function DatasetDetailContentV2() {
 
   // Workspace tab bridge: ref exposes openTab(), state receives tab-driven content section
   const openTabRef = useRef<(path: string, label?: string, preview?: boolean) => void>(() => {});
+  // Stable callback that reads from the ref at call-time (avoids stale snapshot when passed as prop)
+  const handleOpenTab = useCallback((path: string, label?: string, preview?: boolean) => {
+    openTabRef.current(path, label, preview);
+  }, []);
   const [tabContentSection, setTabContentSection] = useState<ContentSection>(null);
   const [activeTabPath, setActiveTabPath] = useState<string | null>(null);
 
@@ -613,7 +617,7 @@ export function DatasetDetailContentV2() {
             >
               <WorkspaceWelcome
                 datasetName={dataset.name || "Untitled Experiment"}
-                onOpenTab={openTabRef.current}
+                onOpenTab={handleOpenTab}
                 recordCount={sortedRecords.length}
                 generatedCount={insights.generatedRecords}
                 originalCount={insights.originalRecords}

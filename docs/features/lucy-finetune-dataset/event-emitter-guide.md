@@ -29,6 +29,7 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 │  KnowledgeSourcesPanel    ←─ listens ── events ──┤           │
 │  EmptyRecordsState        ←─ listens ── events ──┤           │
 │  ExecutionProgressCard    ←─ listens ── events ──┤           │
+│  ExecutionProgressCard    ── emits ──► events ───┤           │
 │  TopicRecordTree          ←─ listens ── events ──┤           │
 │  TopicCanvasContext       ←─ listens ── events ──┤           │
 │                                                  │           │
@@ -134,8 +135,9 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 | File | What it does |
 |------|-------------|
 | `PlanContext.tsx` | Sets `isGeneratingPlan=true` |
-| `DatasetDetailContentV2.tsx` | Auto-switches to Plan tab |
 | `PlanEmptyState.tsx` | Clears "Waiting for Lucy..." loading state |
+
+> **Note:** `DatasetDetailContentV2.tsx` only EMITS this event (lines 361, 377 — auto-plan trigger). It does NOT listen to it. The auto-switch to the Plan tab happens via `PlanContext.isPlanPreviewActive`, which is set when `vllora_plan_proposed` fires.
 
 ---
 
@@ -244,6 +246,7 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 | File | When |
 |------|------|
 | `execute-plan.ts` (tool) | After generating data → records, after grader → evaluator, after job → jobs |
+| `ExecutionProgressCard.tsx` | User clicks "Start Fine-tuning" → jobs, or "Review Data" → records in completion footer |
 | `DocsProcessingState.tsx` | User clicks "View Reference Docs" |
 | `SourcesProcessingMessage.tsx` | Auto-switch to docs/plan during processing |
 | `RecordRow.tsx` | User clicks evaluation/finetune link on a record |
@@ -253,7 +256,7 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 **Listener:**
 | File | What it does |
 |------|-------------|
-| `DatasetDetailContentV2.tsx` | Calls `setActiveSection(tab)` |
+| `DatasetDetailContentV2.tsx` | Maps legacy tab names to explorer paths and opens workspace tabs via `openTab()` |
 
 ---
 
@@ -416,7 +419,7 @@ Previously 3 components independently called `knowledgeDB.getKnowledgeSourcesByD
 
 Single source of truth for the plan lifecycle. Exposes `planStatus: PlanStatus | null` alongside boolean convenience properties (`isGeneratingPlan`, `hasPlanProposed`, `isExecuting`). On mount, hydrates from `getStoredPlan()` in IndexedDB. On approval, persists `'approved'` status (plan is NOT deleted). During execution, writes progress to IndexedDB on each step. On completion/failure, persists terminal status with final progress. The agent also receives `plan_status` and `has_active_plan` in its context injection.
 
-> **Note:** `DatasetDetailContentV2` still listens to `vllora_plan_generating` directly (for auto-switching to the Plan tab), but no longer tracks plan state — that's in `PlanContext`.
+> **Note:** `DatasetDetailContentV2` only emits `vllora_plan_generating` (for auto-plan triggers). It does NOT listen to it. Plan state tracking is entirely in `PlanContext`, and the auto-switch to the Plan tab happens via `PlanContext.isPlanPreviewActive` (set on `vllora_plan_proposed`).
 
 ### `DatasetsContext` (`src/contexts/DatasetsContext.tsx`)
 

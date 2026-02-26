@@ -59,9 +59,3 @@ export function mapTabPathToSection(path: string | null): ContentSection {
 
   return null;
 }
-
-/**
- * Default tabs to open for a new dataset.
- * Returns the paths that should be pre-opened as pinned tabs.
- */
-export const DEFAULT_TAB_PATHS = ["overview"] as const;

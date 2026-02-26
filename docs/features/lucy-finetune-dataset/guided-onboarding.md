@@ -551,6 +551,7 @@ Shows real-time execution progress:
 - Step-by-step status (pending, running, completed, failed)
 - Progress indicator
 - Final summary with "Ready for fine-tuning!" message
+- Completion footer with "Start Fine-tuning" and "Review Data" buttons that emit `vllora_switch_tab` events to open workspace tabs
 
 **Props:**
 ```typescript

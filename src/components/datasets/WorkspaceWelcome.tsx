@@ -107,16 +107,16 @@ export function WorkspaceWelcome({
   hasReadme,
 }: WorkspaceWelcomeProps) {
   // Consume job contexts (we're rendered inside their providers)
-  const { jobs: dryRunJobs } = DryRunJobsConsumer();
+  const { lastCompletedJob } = DryRunJobsConsumer();
   const { filteredJobs, latestJob } = FinetuneJobsConsumer();
 
-  // Derive eval stats
+  // Derive eval stats from most recent completed job
   const evalScore = useMemo(() => {
-    const completed = dryRunJobs.filter(
-      (j) => j.status === "completed" && getJobAverageScore(j) != null
-    );
-    return completed.length > 0 ? getJobAverageScore(completed[0]) : undefined;
-  }, [dryRunJobs]);
+    if (lastCompletedJob && getJobAverageScore(lastCompletedJob) != null) {
+      return getJobAverageScore(lastCompletedJob);
+    }
+    return undefined;
+  }, [lastCompletedJob]);
 
   const scorePercent = evalScore != null ? Math.round(evalScore * 100) : null;
   const finetuneJobCount = filteredJobs.length;

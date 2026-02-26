@@ -310,7 +310,7 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
             setIsPlanPreviewActive(false);
             // Auto-switch to the tab most relevant to the last completed step
             if (!progress.has_error) {
-              type SwitchTab = 'overview' | 'records' | 'evaluator' | 'jobs' | 'deploy';
+              type SwitchTab = 'records' | 'evaluator' | 'jobs' | 'deploy';
               const lastCompleted = [...progress.steps].reverse().find(s => s.status === 'completed');
               const stepTabMap: Record<string, SwitchTab> = {
                 topics: 'records', adjust_topics: 'records', categorize: 'records',

@@ -32,7 +32,7 @@ export function ExecutionProgressCard({
   initialProgress,
   onComplete,
 }: ExecutionProgressCardProps) {
-  const { setActiveSection } = DatasetDetailConsumer();
+  const { datasetId } = DatasetDetailConsumer();
   const [progress, setProgress] = useState<ExecutionProgress | null>(
     initialProgress || null
   );
@@ -221,7 +221,7 @@ export function ExecutionProgressCard({
               <Button
                 size="sm"
                 className="flex-1 gap-1.5 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
-                onClick={() => setActiveSection('jobs')}
+                onClick={() => emitter.emit('vllora_switch_tab', { datasetId, tab: 'jobs' })}
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 Start Fine-tuning
@@ -230,7 +230,7 @@ export function ExecutionProgressCard({
                 size="sm"
                 variant="outline"
                 className="gap-1.5"
-                onClick={() => setActiveSection('records')}
+                onClick={() => emitter.emit('vllora_switch_tab', { datasetId, tab: 'records' })}
               >
                 Review Data
               </Button>
