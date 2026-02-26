@@ -202,6 +202,7 @@ export function DatasetDetailContentV2() {
     isGeneratingPlan,
     isLoadingPlan,
     isExecuting,
+    planErrorMessage,
     setIsPlanPreviewActive,
     setPlanEditMode,
     approvePlan,
@@ -731,6 +732,7 @@ export function DatasetDetailContentV2() {
               isLoadingPlan={isLoadingPlan}
               isExecuting={isExecuting}
               hasKnowledgeSources={knowledgeSourcesCount > 0}
+              planErrorMessage={planErrorMessage}
             />
           )}
           {contentSection === "readme" && (

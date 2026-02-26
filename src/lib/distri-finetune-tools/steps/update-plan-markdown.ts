@@ -19,10 +19,11 @@ import {
 // =============================================================================
 
 export const updatePlanMarkdownHandler: ToolHandler = async (params) => {
-  const { dataset_id, plan_markdown, status } = params as {
+  const { dataset_id, plan_markdown, status, error_message } = params as {
     dataset_id: string;
     plan_markdown: string;
     status?: 'executing' | 'completed' | 'failed';
+    error_message?: string;
   };
 
   if (!dataset_id || typeof dataset_id !== 'string') {
@@ -59,6 +60,7 @@ export const updatePlanMarkdownHandler: ToolHandler = async (params) => {
       datasetId: dataset_id,
       plan: { ...stored.plan, plan_markdown },
       status,
+      error_message,
     });
 
     return { success: true };
@@ -108,6 +110,10 @@ Status transitions:
         type: 'string',
         enum: ['executing', 'completed', 'failed'],
         description: 'Optional status transition. Use "completed" on the final update when all steps are done. Use "failed" if execution stopped due to an error. Omit for intermediate updates.',
+      },
+      error_message: {
+        type: 'string',
+        description: 'Short error description when status is "failed". Shown in the plan footer so the user knows what went wrong. Example: "Training failed: maximum finetune jobs reached"',
       },
     },
     required: ['dataset_id', 'plan_markdown'],

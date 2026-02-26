@@ -67,6 +67,8 @@ interface PlanContextType {
   executionProgress: ExecutionProgress | null;
   /** The plan that was last executed (shown after completion) */
   executedPlan: Plan | null;
+  /** Error message when plan status is 'failed' — shown in plan footer */
+  planErrorMessage: string | null;
 
   // Workspace overlay state
   /** Whether the plan preview is shown in workspace (replaces tab content) */
@@ -116,6 +118,7 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionProgress, setExecutionProgress] = useState<ExecutionProgress | null>(null);
   const [executedPlan, setExecutedPlan] = useState<Plan | null>(null);
+  const [planErrorMessage, setPlanErrorMessage] = useState<string | null>(null);
 
   // Workspace overlay state
   const [isPlanPreviewActive, setIsPlanPreviewActive] = useState(false);
@@ -286,10 +289,11 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
 
     // Content-only plan markdown updates (during agent-driven execution).
     // Unlike vllora_plan_proposed, this does NOT reset status/isExecuting.
-    const handleMarkdownUpdated = ({ datasetId: id, plan, status: newStatus }: {
+    const handleMarkdownUpdated = ({ datasetId: id, plan, status: newStatus, error_message }: {
       datasetId: string;
       plan: unknown;
       status?: 'executing' | 'completed' | 'failed';
+      error_message?: string;
     }) => {
       if (id !== datasetId) return;
 
@@ -301,6 +305,7 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
       if (!newStatus && (currentStatus === 'proposed' || currentStatus === 'approved')) {
         setPlanStatus('executing');
         setIsExecuting(true);
+        setPlanErrorMessage(null);
         updatePlanStatus(datasetId, 'executing');
       }
 
@@ -308,6 +313,10 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
       if (newStatus) {
         setPlanStatus(newStatus);
         if (newStatus === 'completed' || newStatus === 'failed') {
+          // Store error message for display in plan footer
+          if (newStatus === 'failed' && error_message) {
+            setPlanErrorMessage(error_message);
+          }
           // Delay clearing isExecuting briefly so the user sees the final state
           setTimeout(() => {
             if (datasetIdRef.current !== id) return;
@@ -320,6 +329,7 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
           }, 2000);
         } else if (newStatus === 'executing') {
           setIsExecuting(true);
+          setPlanErrorMessage(null);
         }
       }
 
@@ -449,6 +459,7 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
     isExecuting,
     executionProgress,
     executedPlan,
+    planErrorMessage,
     isPlanPreviewActive,
     planEditMode,
     setIsPlanPreviewActive,

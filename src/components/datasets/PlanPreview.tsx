@@ -34,6 +34,7 @@ interface PlanPreviewProps {
   isLoadingPlan: boolean;
   isExecuting: boolean;
   hasKnowledgeSources: boolean;
+  planErrorMessage?: string | null;
 }
 
 export function PlanPreview({
@@ -49,6 +50,7 @@ export function PlanPreview({
   isLoadingPlan,
   isExecuting,
   hasKnowledgeSources,
+  planErrorMessage,
 }: PlanPreviewProps) {
   // Show loading spinner while IndexedDB is being read on mount
   if (isLoadingPlan) {
@@ -84,6 +86,7 @@ export function PlanPreview({
             onApprove={onApprove}
             isExecuting={isExecuting}
             isActionable={isActionable}
+            planErrorMessage={planErrorMessage}
           />
         )
       ) : (
@@ -142,6 +145,7 @@ function PlanDisplayView({
   onApprove,
   isExecuting,
   isActionable,
+  planErrorMessage,
 }: {
   plan: Plan;
   planStatus: PlanStatus | null;
@@ -150,6 +154,7 @@ function PlanDisplayView({
   onApprove: (plan: Plan) => void;
   isExecuting: boolean;
   isActionable: boolean;
+  planErrorMessage?: string | null;
 }) {
   // Build human-readable diff summary for banner.
   // Skip the banner on the first plan proposal (only additions, no removals/modifications)
@@ -203,8 +208,8 @@ function PlanDisplayView({
           )}
           {planStatus === 'failed' && (
             <span className="flex items-center gap-1.5 text-xs text-red-500 mr-auto">
-              <XCircle className="w-3 h-3" />
-              Failed
+              <XCircle className="w-3 h-3 shrink-0" />
+              <span className="truncate">{planErrorMessage ? 'Failed: ' + planErrorMessage : 'Failed'}</span>
             </span>
           )}
           {isActionable && !isExecuting && (

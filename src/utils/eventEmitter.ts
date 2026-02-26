@@ -111,6 +111,8 @@ type VlloraEvents = {
     plan: unknown;
     /** Optional status transition: 'executing' during steps, 'completed'/'failed' on final call */
     status?: 'executing' | 'completed' | 'failed';
+    /** Optional error message when status is 'failed' — shown in plan footer */
+    error_message?: string;
   };
   // plan dismissed (user closed the card without approving)
   vllora_plan_dismissed: { datasetId: string };
