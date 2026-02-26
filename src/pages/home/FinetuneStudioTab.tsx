@@ -7,7 +7,7 @@
 
 import { useState, useCallback } from "react";
 import { useNavigate } from "react-router";
-import { BookOpen, ArrowRight, Radio } from "lucide-react";
+import { BookOpen, Radio } from "lucide-react";
 import { ObjectiveInputTab } from "@/components/datasets/empty-dataset-state/ObjectiveInputTab";
 import { FinetuneHero } from "@/components/datasets/empty-dataset-state/FinetuneHero";
 import { CurrentAppConsumer } from "@/lib";
