@@ -155,6 +155,7 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 |------|------|
 | `propose-plan/handler.ts` (tool) | Plan generated successfully |
 | `propose-plan/adjust-plan.ts` (tool) | Adjusted plan ready |
+| `update-plan-markdown.ts` (tool) | Agent updated plan markdown (e.g. checked off a step) |
 
 **Listeners:**
 | File | What it does |
