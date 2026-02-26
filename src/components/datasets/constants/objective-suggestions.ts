@@ -10,10 +10,10 @@ export interface ObjectiveSuggestion {
 export const CHESS_TUTOR_OBJECTIVE: ObjectiveSuggestion = {
   summary: "Chess Tutor Assistant",
   description:
-    "Train a chess tutor assistant that can analyze board positions from FEN notation, " +
-    "suggest optimal moves with clear explanations of the strategic reasoning behind each recommendation, " +
-    "teach opening theory, middlegame tactics, and endgame techniques, " +
-    "and adapt explanations to the player's skill level from beginner to advanced.",
+    "Train a chess tutor assistant that analyzes board positions from FEN notation " +
+    "and suggests optimal moves with clear strategic reasoning. " +
+    "It should teach opening theory, middlegame tactics, and endgame techniques, " +
+    "adapting explanations to the player's skill level from beginner to advanced.",
 };
 
 export const OBJECTIVE_SUGGESTIONS: ObjectiveSuggestion[] = [
@@ -27,6 +27,6 @@ export const OBJECTIVE_SUGGESTIONS: ObjectiveSuggestion[] = [
   {
     summary: "Code Generation Assistant",
     description:
-      "Create a code generation model that writes clean, well-documented Python code following best practices, including proper error handling, type hints, and comprehensive test coverage.",
+      "Create a code generation model that writes clean, well-documented Python code with proper error handling, type hints, and comprehensive test coverage.",
   },
 ];

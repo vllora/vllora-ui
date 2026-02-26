@@ -32,7 +32,7 @@ const HOME_TABS: {
     tab: "gateway",
     icon: Radio,
     label: "LLM Gateway",
-    hint: "Route & monitor 200+ models",
+    hint: "Route and monitor 200+ models",
   },
 ];
 

@@ -50,7 +50,7 @@ export function FinetuneStudioTab() {
               Real conversations
             </span>
             <span className="block text-[11px] text-muted-foreground/40 mt-0.5 truncate">
-              Finetune from live LLM calls
+              Build from live LLM calls
             </span>
           </div>
         </button>
@@ -74,7 +74,7 @@ export function FinetuneStudioTab() {
               Documentation
             </span>
             <span className="block text-[11px] text-muted-foreground/40 mt-0.5 truncate">
-              Guides & API reference
+              Guides and API reference
             </span>
           </div>
         </button>

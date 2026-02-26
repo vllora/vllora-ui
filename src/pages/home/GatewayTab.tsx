@@ -66,7 +66,7 @@ export function GatewayTab({ buildPath }: GatewayTabProps) {
             </div>
             <div>
               <span className="text-[13px] font-medium text-foreground/80 group-hover:text-foreground transition-colors duration-200 block">
-                Chat with 200+ Models
+                Chat with 200+ models
               </span>
               <span className="block text-[11px] text-muted-foreground/40 mt-1 leading-relaxed">
                 GPT-4, Claude, Gemini — one unified interface.
@@ -84,7 +84,7 @@ export function GatewayTab({ buildPath }: GatewayTabProps) {
             </div>
             <div>
               <span className="text-[13px] font-medium text-foreground/80 group-hover:text-foreground transition-colors duration-200 block">
-                API Gateway & Debug
+                API gateway and debugging
               </span>
               <span className="block text-[11px] text-muted-foreground/40 mt-1 leading-relaxed">
                 Route calls, monitor traces, capture data.
@@ -237,7 +237,7 @@ function ProviderSetupSection() {
             </div>
             <div className="flex-1 min-w-0">
               <span className="text-[13px] font-medium text-muted-foreground/60 group-hover:text-foreground transition-colors duration-200 block truncate">
-                Add Custom
+                Add custom
               </span>
               <span className="block text-[11px] text-muted-foreground/40 mt-0.5 truncate">
                 Custom endpoint
