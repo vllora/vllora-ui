@@ -9,7 +9,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { Database, FlaskConical, Sparkles } from "lucide-react";
+import { Database, FlaskConical, Sparkles, Radio } from "lucide-react";
 import { DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
 import { DatasetsConsumer } from "@/contexts/DatasetsContext";
 import { ProjectEventsConsumer } from "@/contexts/project-events";
@@ -31,6 +31,21 @@ type TabType = "objective" | "api";
 const isValidTab = (tab: string | null): tab is TabType => {
   return tab === "objective" || tab === "api";
 };
+
+const PATHWAYS: { tab: TabType; icon: typeof Sparkles; label: string; hint: string }[] = [
+  {
+    tab: "objective",
+    icon: Sparkles,
+    label: "Start from scratch",
+    hint: "Just describe what you want",
+  },
+  {
+    tab: "api",
+    icon: Radio,
+    label: "Use existing API calls",
+    hint: "Capture & enhance real traces",
+  },
+];
 
 // Helper to read file as base64
 function readFileAsBase64(file: File): Promise<string> {
@@ -345,7 +360,7 @@ export function EmptyDatasetsState() {
       <div className="absolute top-[200px] left-1/2 -translate-x-1/2 w-[300px] h-[300px] bg-[radial-gradient(circle_at_center,rgba(var(--theme-400),0.04)_0%,transparent_60%)] pointer-events-none blur-xl" />
 
       {/* Hero Section */}
-      <div className="flex flex-col items-center text-center relative z-10 pt-[10vh] mb-10 max-w-xl">
+      <div className="flex flex-col items-center text-center relative z-10 pt-[10vh] mb-8 max-w-xl">
         {/* Subtle badge */}
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-[rgba(var(--theme-500),0.15)] bg-[rgba(var(--theme-500),0.05)] mb-6">
           <Sparkles className="w-3 h-3 text-[rgba(var(--theme-500),0.7)]" />
@@ -368,30 +383,42 @@ export function EmptyDatasetsState() {
         </p>
       </div>
 
-      {/* Tab Switcher */}
-      <div className="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/30 border border-border/50 mb-6 relative z-10">
-        <button
-          onClick={() => handleTabChange("objective")}
-          className={cn(
-            "px-4 py-1.5 rounded-md text-[13px] font-medium transition-all duration-200",
-            activeTab === "objective"
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground/60 hover:text-foreground"
-          )}
-        >
-          Enter Objective
-        </button>
-        <button
-          onClick={() => handleTabChange("api")}
-          className={cn(
-            "px-4 py-1.5 rounded-md text-[13px] font-medium transition-all duration-200",
-            activeTab === "api"
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground/60 hover:text-foreground"
-          )}
-        >
-          Initialize via API
-        </button>
+      {/* Pathway Toggle */}
+      <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-muted/20 border border-border/40 mb-8 relative z-10">
+        {PATHWAYS.map((pathway) => {
+          const isActive = activeTab === pathway.tab;
+          return (
+            <button
+              key={pathway.tab}
+              onClick={() => handleTabChange(pathway.tab)}
+              className={cn(
+                "flex flex-col items-center gap-0.5 px-5 py-2.5 rounded-lg transition-all duration-200",
+                isActive
+                  ? "bg-background shadow-sm"
+                  : "hover:bg-background/40"
+              )}
+            >
+              <div className="flex items-center gap-1.5">
+                <pathway.icon className={cn(
+                  "w-3.5 h-3.5 transition-colors duration-200",
+                  isActive ? "text-[rgb(var(--theme-500))]" : "text-muted-foreground/40"
+                )} />
+                <span className={cn(
+                  "text-[13px] font-medium transition-colors duration-200",
+                  isActive ? "text-foreground" : "text-muted-foreground/50 hover:text-muted-foreground/80"
+                )}>
+                  {pathway.label}
+                </span>
+              </div>
+              <span className={cn(
+                "text-[10px] transition-colors duration-200",
+                isActive ? "text-muted-foreground/50" : "text-muted-foreground/25"
+              )}>
+                {pathway.hint}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Tab Content */}
