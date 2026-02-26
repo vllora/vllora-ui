@@ -2,50 +2,167 @@
  * ObjectiveInputTab
  *
  * Landing page tab for entering a dataset objective.
- * Features a glowing input card, animated suggestions, and file upload.
+ * Claude Code-style input with file attach, voice input, and quick suggestions.
  */
 
-import { useCallback, useState } from "react";
-import { Sparkles, ArrowRight, Loader2, FlaskConical } from "lucide-react";
+import { useCallback, useState, useRef, useEffect } from "react";
+import { Sparkles, Loader2, Paperclip, Mic, Crown, BarChart3, Code2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   OBJECTIVE_SUGGESTIONS,
   type ObjectiveSuggestion,
 } from "../constants/objective-suggestions";
-import { useKnowledgeSourcesUpload, DragOverlay, FileList, AddDocsButton } from "./KnowledgeSourcesUpload";
+import { useKnowledgeSourcesUpload, DragOverlay, FileList } from "./KnowledgeSourcesUpload";
+
+// Map suggestion summaries to icons for visual richness
+const SUGGESTION_ICONS: Record<string, typeof Sparkles> = {
+  "Chess Tutor Assistant": Crown,
+  "Financial Report Summarizer": BarChart3,
+  "Code Generation Assistant": Code2,
+};
 
 interface ObjectiveInputTabProps {
   objective: string;
   onObjectiveChange: (value: string) => void;
-  datasetName?: string;
-  onDatasetNameChange?: (value: string) => void;
   onStartFinetune: (files?: File[]) => void;
-  onLoadSample?: () => void;
   isLoading?: boolean;
-  isLoadingSample?: boolean;
 }
 
 export function ObjectiveInputTab({
   objective,
   onObjectiveChange,
-  datasetName = "",
-  onDatasetNameChange,
   onStartFinetune,
-  onLoadSample,
   isLoading = false,
-  isLoadingSample = false,
 }: ObjectiveInputTabProps) {
   const {
     files,
-    isDragOver,
-    handleDrop,
-    handleDragOver,
-    handleDragLeave,
+    handleDrop: hookHandleDrop,
     handleFileInput,
     removeFile,
   } = useKnowledgeSourcesUpload();
 
   const [isFocused, setIsFocused] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Robust drag-and-drop with counter to prevent flicker on child elements
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dragCounterRef = useRef(0);
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    if (dragCounterRef.current === 1) {
+      setIsDragOver(true);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) {
+      setIsDragOver(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = 0;
+    setIsDragOver(false);
+    hookHandleDrop(e);
+  }, [hookHandleDrop]);
+
+  // Voice input state
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeechSupported, setIsSpeechSupported] = useState(false);
+  const recognitionRef = useRef<ReturnType<typeof Object> | null>(null);
+  const objectiveRef = useRef(objective);
+
+  // Keep objectiveRef in sync so voice callback always has latest value
+  useEffect(() => {
+    objectiveRef.current = objective;
+  }, [objective]);
+
+  // Check speech recognition support on mount
+  useEffect(() => {
+    setIsSpeechSupported(
+      typeof window !== "undefined" &&
+        ("SpeechRecognition" in window || "webkitSpeechRecognition" in window)
+    );
+  }, []);
+
+  // Cleanup recognition on unmount
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        (recognitionRef.current as { stop: () => void }).stop();
+      }
+    };
+  }, []);
+
+  const toggleVoiceInput = useCallback(() => {
+    if (isListening) {
+      // Stop listening
+      if (recognitionRef.current) {
+        (recognitionRef.current as { stop: () => void }).stop();
+        recognitionRef.current = null;
+      }
+      setIsListening(false);
+      return;
+    }
+
+    // Start listening
+    if (
+      !("webkitSpeechRecognition" in window || "SpeechRecognition" in window)
+    )
+      return;
+
+    const SpeechRecognitionAPI =
+      (window as /* eslint-disable-line @typescript-eslint/no-explicit-any */ any)
+        .SpeechRecognition ||
+      (window as /* eslint-disable-line @typescript-eslint/no-explicit-any */ any)
+        .webkitSpeechRecognition;
+    const recognition = new SpeechRecognitionAPI();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.continuous = true;
+
+    recognition.onresult = (event: { resultIndex: number; results: { length: number; [key: number]: { isFinal: boolean; 0: { transcript: string } } } }) => {
+      let transcript = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          transcript += event.results[i][0].transcript;
+        }
+      }
+      if (transcript) {
+        const current = objectiveRef.current;
+        onObjectiveChange(
+          current ? current + " " + transcript.trim() : transcript.trim()
+        );
+      }
+    };
+
+    recognition.onerror = () => {
+      setIsListening(false);
+      recognitionRef.current = null;
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      recognitionRef.current = null;
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsListening(true);
+  }, [isListening, onObjectiveChange]);
 
   const handleSuggestionClick = (suggestion: ObjectiveSuggestion) => {
     onObjectiveChange(suggestion.description);
@@ -59,12 +176,13 @@ export function ObjectiveInputTab({
 
   return (
     <div className="w-full space-y-6">
-      {/* Main Input Card — glowing border on focus */}
+      {/* Main Input Card — drag-and-drop enabled, glowing border */}
       <div
         className="group relative"
-        onDrop={handleDrop}
+        onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
         {/* Glow effect behind card */}
         <div
@@ -74,7 +192,8 @@ export function ObjectiveInputTab({
               : "opacity-0 group-hover:opacity-60"
           }`}
           style={{
-            background: "linear-gradient(135deg, rgba(var(--theme-500), 0.2), rgba(var(--theme-400), 0.05), rgba(var(--theme-500), 0.15))",
+            background:
+              "linear-gradient(135deg, rgba(var(--theme-500), 0.2), rgba(var(--theme-400), 0.05), rgba(var(--theme-500), 0.15))",
           }}
         />
 
@@ -84,7 +203,8 @@ export function ObjectiveInputTab({
             isFocused ? "opacity-100" : "opacity-0"
           }`}
           style={{
-            background: "radial-gradient(ellipse at center, rgba(var(--theme-500), 0.06), transparent 70%)",
+            background:
+              "radial-gradient(ellipse at center, rgba(var(--theme-500), 0.06), transparent 70%)",
           }}
         />
 
@@ -93,15 +213,17 @@ export function ObjectiveInputTab({
             isDragOver
               ? "border-[rgba(var(--theme-500),0.4)]"
               : isFocused
-              ? "border-[rgba(var(--theme-500),0.25)] shadow-lg shadow-[rgba(var(--theme-500),0.05)]"
-              : "border-border/50 hover:border-border/80"
+                ? "border-[rgba(var(--theme-500),0.25)] shadow-lg shadow-[rgba(var(--theme-500),0.05)]"
+                : "border-border/50 hover:border-border/80"
           }`}
           style={{ background: "hsl(var(--card) / 0.9)" }}
         >
           {/* Textarea area */}
           <div className="relative">
             {/* Sparkle watermark */}
-            <div className={`absolute left-4 top-[18px] transition-all duration-300 ${isFocused ? "opacity-80 scale-100" : "opacity-40 scale-95"}`}>
+            <div
+              className={`absolute left-4 top-[18px] transition-all duration-300 ${isFocused ? "opacity-80 scale-100" : "opacity-40 scale-95"}`}
+            >
               <Sparkles className="w-4 h-4 text-[rgb(var(--theme-500))]" />
             </div>
 
@@ -110,109 +232,108 @@ export function ObjectiveInputTab({
               onChange={(e) => onObjectiveChange(e.target.value)}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
-              placeholder="e.g. A chess tutor that analyzes board positions and explains optimal moves at any skill level..."
-              className="w-full min-h-[200px] bg-transparent border-0 border-none outline-none pl-11 pr-6 pt-[18px] pb-5 text-[14px] text-foreground placeholder:text-muted-foreground/30 resize-none focus:outline-none focus:ring-0 focus:border-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none leading-[1.7]"
+              placeholder="Describe what you want your model to do... e.g. 'A specialized assistant for React performance optimization that speaks in a concise, technical tone.'"
+              className="w-full min-h-[180px] bg-transparent border-0 border-none outline-none pl-11 pr-6 pt-[18px] pb-5 text-[14px] text-foreground placeholder:text-muted-foreground/30 resize-none focus:outline-none focus:ring-0 focus:border-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none leading-[1.7]"
             />
+          </div>
+
+          {/* File list (inside card when files are attached) */}
+          <FileList files={files} onRemove={removeFile} />
+
+          {/* Footer bar — attach + voice on left, start on right */}
+          <div className="flex items-center justify-between px-4 py-3 border-t border-border/20 bg-muted/10">
+            <div className="flex items-center gap-1">
+              {/* Attach files button */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center justify-center h-8 w-8 rounded-lg hover:bg-accent/50 transition-colors"
+                title="Attach reference documents (PDFs, text files)"
+              >
+                <Paperclip className="h-4 w-4 text-muted-foreground" />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept=".pdf,.txt,.md"
+                onChange={handleFileInput}
+                className="hidden"
+              />
+
+              {/* Voice input button */}
+              {isSpeechSupported && (
+                <button
+                  type="button"
+                  onClick={toggleVoiceInput}
+                  className={`flex items-center justify-center h-8 w-8 rounded-lg transition-colors ${
+                    isListening
+                      ? "bg-red-500/10 hover:bg-red-500/20"
+                      : "hover:bg-accent/50"
+                  }`}
+                  title={isListening ? "Stop voice input" : "Voice input"}
+                >
+                  <Mic
+                    className={`h-4 w-4 transition-colors ${isListening ? "text-red-500 animate-pulse" : "text-muted-foreground"}`}
+                  />
+                </button>
+              )}
+            </div>
+
+            {/* Listening indicator */}
+            {isListening && (
+              <div className="flex items-center gap-2 text-xs text-red-400 animate-pulse">
+                <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                Listening...
+              </div>
+            )}
+
+            {/* Start button */}
+            <Button
+              onClick={handleStart}
+              disabled={!hasContent || isLoading}
+              className="group/btn bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-400))] text-white gap-2 px-6 h-10 rounded-xl text-[13px] font-semibold shadow-md shadow-[rgba(var(--theme-500),0.25)] hover:shadow-lg hover:shadow-[rgba(var(--theme-500),0.3)] transition-all duration-200 disabled:opacity-25 disabled:shadow-none disabled:cursor-not-allowed"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  Start Finetune
+                  <Sparkles className="w-3.5 h-3.5 transition-transform duration-200 group-hover/btn:rotate-12" />
+                </>
+              )}
+            </Button>
           </div>
 
           {/* Drag overlay */}
           {isDragOver && <DragOverlay />}
-
-          {/* File list */}
-          <FileList files={files} onRemove={removeFile} />
-
-          {/* Footer bar */}
-          <div className="flex items-center justify-between px-4 py-3 border-t border-border/20 bg-muted/10">
-            {/* Left side */}
-            <div className="flex items-center gap-3">
-              <AddDocsButton onFileInput={handleFileInput} />
-              {hasContent && (
-                <span className="text-[11px] text-muted-foreground/30 tabular-nums">
-                  {objective.length} chars
-                </span>
-              )}
-            </div>
-
-            {/* Right side */}
-            <div className="flex items-center gap-2.5">
-              {/* Name field — slides in when objective has content */}
-              {hasContent && onDatasetNameChange && (
-                <div className="animate-in fade-in slide-in-from-right-2 duration-300">
-                  <input
-                    type="text"
-                    value={datasetName}
-                    onChange={(e) => onDatasetNameChange(e.target.value)}
-                    placeholder="Experiment name"
-                    className="h-8 w-48 px-2.5 text-[12px] bg-background/40 border border-border/30 rounded-lg outline-none focus:border-[rgba(var(--theme-500),0.3)] transition-colors placeholder:text-muted-foreground/25"
-                  />
-                </div>
-              )}
-
-              <Button
-                onClick={handleStart}
-                disabled={!hasContent || isLoading}
-                className="group/btn bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-400))] text-white gap-1.5 px-5 h-9 rounded-xl text-[13px] font-semibold shadow-md shadow-[rgba(var(--theme-500),0.25)] hover:shadow-lg hover:shadow-[rgba(var(--theme-500),0.3)] transition-all duration-200 disabled:opacity-25 disabled:shadow-none disabled:cursor-not-allowed"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  <>
-                    Start Finetune
-                    <ArrowRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover/btn:translate-x-0.5" />
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* Suggestion Chips */}
-      <div className="flex items-center gap-2.5 flex-wrap justify-center pt-1">
-        <span className="text-[12px] text-muted-foreground/40 font-medium tracking-wide">
-          Try:
+      {/* Quick-Start Suggestions */}
+      <div className="space-y-3">
+        <span className="text-[11px] font-semibold text-muted-foreground/40 tracking-widest uppercase">
+          Quick-start suggestions
         </span>
-        {OBJECTIVE_SUGGESTIONS.map((suggestion, index) => (
-          <button
-            key={suggestion.summary}
-            onClick={() => handleSuggestionClick(suggestion)}
-            className="group/chip relative px-3.5 py-1.5 text-[12px] rounded-full border border-border/30 bg-card/30 backdrop-blur-sm hover:bg-[rgba(var(--theme-500),0.06)] hover:border-[rgba(var(--theme-500),0.2)] transition-all duration-300 text-muted-foreground/60 hover:text-foreground"
-            style={{ animationDelay: `${index * 80}ms` }}
-          >
-            {suggestion.summary}
-          </button>
-        ))}
-      </div>
-
-      {/* Sample Dataset Link */}
-      {onLoadSample && (
-        <div className="flex items-center justify-center pt-2">
-          <button
-            onClick={onLoadSample}
-            disabled={isLoadingSample}
-            className="group/sample flex items-center gap-1.5 text-[12px] text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isLoadingSample ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-[rgb(var(--theme-500))]" />
-                <span>Loading sample...</span>
-              </>
-            ) : (
-              <>
-                <span>or start with</span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-[rgba(var(--theme-500),0.15)] bg-[rgba(var(--theme-500),0.04)] text-[rgba(var(--theme-500),0.7)] font-medium group-hover/sample:bg-[rgba(var(--theme-500),0.08)] group-hover/sample:border-[rgba(var(--theme-500),0.3)] group-hover/sample:text-[rgba(var(--theme-500),0.9)] transition-all duration-300">
-                  <FlaskConical className="w-3 h-3" />
-                  Chess Tutor Sample
-                </span>
-              </>
-            )}
-          </button>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {OBJECTIVE_SUGGESTIONS.map((suggestion) => {
+            const Icon = SUGGESTION_ICONS[suggestion.summary] || Sparkles;
+            return (
+              <button
+                key={suggestion.summary}
+                onClick={() => handleSuggestionClick(suggestion)}
+                className="group/chip flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(var(--theme-500),0.2)] bg-[rgba(var(--theme-500),0.04)] text-[rgba(var(--theme-500),0.8)] text-[12px] font-medium hover:bg-[rgba(var(--theme-500),0.1)] hover:border-[rgba(var(--theme-500),0.35)] hover:text-[rgb(var(--theme-500))] transition-all duration-300"
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {suggestion.summary}
+              </button>
+            );
+          })}
         </div>
-      )}
-
+      </div>
     </div>
   );
 }

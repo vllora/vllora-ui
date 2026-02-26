@@ -14,7 +14,6 @@ import { DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
 import { DatasetsConsumer } from "@/contexts/DatasetsContext";
 import { ProjectEventsConsumer } from "@/contexts/project-events";
 import { listSpans, type Span } from "@/services/spans-api";
-import { createSampleDataset, getDefaultSampleDataset } from "@/services/sample-datasets";
 import { toast } from "sonner";
 import { ObjectiveInputTab } from "./ObjectiveInputTab";
 import { ApiInitializeTab } from "./ApiInitializeTab";
@@ -113,24 +112,11 @@ export function EmptyDatasetsState() {
   const activeTab: TabType = isValidTab(tabParam) ? tabParam : "objective";
 
   const [objective, setObjective] = useState("");
-  const [datasetName, setDatasetName] = useState("");
-  const [hasEditedName, setHasEditedName] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [isLoadingSample, setIsLoadingSample] = useState(false);
   const [transition, setTransition] = useState<{ datasetId: string; hasFiles: boolean } | null>(null);
 
-  // Auto-generate dataset name suggestion from objective (unless user manually edited)
   const handleObjectiveChange = useCallback((value: string) => {
     setObjective(value);
-    if (!hasEditedName) {
-      const words = value.trim().split(/\s+/).slice(0, 5).join(" ");
-      setDatasetName(words.length > 40 ? words.slice(0, 40) : words);
-    }
-  }, [hasEditedName]);
-
-  const handleDatasetNameChange = useCallback((value: string) => {
-    setDatasetName(value);
-    setHasEditedName(true);
   }, []);
 
   // Update URL when tab changes
@@ -205,8 +191,8 @@ export function EmptyDatasetsState() {
 
     setIsCreating(true);
     try {
-      // Use user-edited name or fall back to auto-generated from objective
-      const finalName = datasetName.trim() || objective.trim().split(/\s+/).slice(0, 5).join(" ");
+      // Auto-generate name from the first few words of the objective
+      const finalName = objective.trim().split(/\s+/).slice(0, 5).join(" ");
 
       const dataset = await createDataset(finalName, objective.trim());
 
@@ -251,21 +237,6 @@ export function EmptyDatasetsState() {
       console.error("Failed to create dataset:", error);
       toast.error("Failed to create experiment");
       setIsCreating(false);
-    }
-  };
-
-  const handleLoadSample = async () => {
-    setIsLoadingSample(true);
-    try {
-      const sampleConfig = getDefaultSampleDataset();
-      const result = await createSampleDataset(sampleConfig);
-      toast.success(`Created sample experiment with ${result.recordCount} records`);
-      navigate(`/datasets/${result.datasetId}`);
-    } catch (error) {
-      console.error("Failed to load sample dataset:", error);
-      toast.error("Failed to load sample experiment");
-    } finally {
-      setIsLoadingSample(false);
     }
   };
 
@@ -432,12 +403,8 @@ export function EmptyDatasetsState() {
           <ObjectiveInputTab
             objective={objective}
             onObjectiveChange={handleObjectiveChange}
-            datasetName={datasetName}
-            onDatasetNameChange={handleDatasetNameChange}
             onStartFinetune={handleStartFinetune}
-            onLoadSample={handleLoadSample}
             isLoading={isCreating}
-            isLoadingSample={isLoadingSample}
           />
         ) : (
           <ApiInitializeTab
