@@ -205,7 +205,7 @@ export function ImportFileCard() {
       await importRecords(dataset.id, parsedRecords);
       toast.success(`Created "${datasetName}" with ${parsedRecords.length} records`);
       // Navigate to the new dataset's detail page
-      navigate(`/datasets/${dataset.id}`);
+      navigate(`/finetune/${dataset.id}`);
     } catch (err) {
       console.error("Failed to create dataset:", err);
       toast.error("Failed to create experiment");

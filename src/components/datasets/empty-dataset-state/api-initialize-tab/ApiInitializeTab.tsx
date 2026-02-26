@@ -142,7 +142,7 @@ export function ApiInitializeTab({ traces, onClear }: ApiInitializeTabProps) {
         toast.success("Created experiment");
       }
 
-      navigate(`/datasets/${dataset.id}`);
+      navigate(`/finetune/${dataset.id}`);
     } catch (error) {
       console.error("Failed to create dataset:", error);
       toast.error("Failed to create experiment");

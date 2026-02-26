@@ -86,7 +86,7 @@ export function DatasetsListHeader({
           </span>
         )}
         <Link
-          to="/datasets/new"
+          to="/finetune/new"
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--theme-500))] text-white hover:bg-[rgb(var(--theme-600))] transition-colors shrink-0"
         >
           <Plus className="w-3.5 h-3.5" />

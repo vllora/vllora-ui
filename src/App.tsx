@@ -95,10 +95,10 @@ function App() {
 
                 {/* Global routes */}
                 <Route path="projects" element={<ProjectsPage />} />
-                <Route path="datasets/new" element={<NewDatasetPage />} />
-                <Route path="datasets/new-advanced" element={<NewDatasetAdvancedPage />} />
-                <Route path="datasets/:datasetId" element={<DatasetDetailPage />} />
-                <Route path="datasets" element={<DatasetsPage />} />
+                <Route path="finetune/new" element={<NewDatasetPage />} />
+                <Route path="finetune/new-advanced" element={<NewDatasetAdvancedPage />} />
+                <Route path="finetune/:datasetId" element={<DatasetDetailPage />} />
+                <Route path="finetune" element={<DatasetsPage />} />
                 <Route path="settings" element={<SettingsPage />} />
               </Route>
             </Routes>

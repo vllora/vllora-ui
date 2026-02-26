@@ -52,7 +52,7 @@ export const SpanFooter = ({ span }: SpanFooterProps) => {
                 {spanDatasets.map(ds => (
                   <Link
                     key={ds.id}
-                    to={`/datasets?id=${ds.id}`}
+                    to={`/finetune?id=${ds.id}`}
                     className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 text-sm"
                   >
                     <Database className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />

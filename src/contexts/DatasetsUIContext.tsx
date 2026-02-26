@@ -138,7 +138,7 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
 
   // Navigation actions - use path-based routing
   const navigateToDataset = useCallback((datasetId: string) => {
-    navigate(`/datasets/${datasetId}`);
+    navigate(`/finetune/${datasetId}`);
     // Clear selection when navigating
     setSelectedRecordIds(new Set());
     setSearchQuery('');
@@ -146,7 +146,7 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
   }, [navigate]);
 
   const navigateToList = useCallback(() => {
-    navigate('/datasets');
+    navigate('/finetune');
     setSelectedRecordIds(new Set());
     setSearchQuery('');
     setSortConfig(undefined);
@@ -197,7 +197,7 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
     const handleSelectRecords = (data: { datasetId: string; recordIds: string[] }) => {
       // Navigate to the dataset first, then select records
       if (data.datasetId) {
-        navigate(`/datasets/${data.datasetId}`);
+        navigate(`/finetune/${data.datasetId}`);
       }
       selectRecords(data.recordIds);
     };

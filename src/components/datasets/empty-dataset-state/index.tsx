@@ -220,14 +220,14 @@ export function EmptyDatasetsState() {
         setIsCreating(false);
         setTransition({ datasetId: dataset.id, hasFiles: true });
         setTimeout(() => {
-          navigate(`/datasets/${dataset.id}?autoGeneratePlan=true`);
+          navigate(`/finetune/${dataset.id}?autoGeneratePlan=true`);
         }, 2500);
       } else {
         // Show transition screen before navigating
         setIsCreating(false);
         setTransition({ datasetId: dataset.id, hasFiles: false });
         setTimeout(() => {
-          navigate(`/datasets/${dataset.id}`);
+          navigate(`/finetune/${dataset.id}`);
         }, 800);
       }
     } catch (error) {
@@ -248,8 +248,8 @@ export function EmptyDatasetsState() {
   const handleSkipTransition = useCallback(() => {
     if (!transition) return;
     const url = transition.hasFiles
-      ? `/datasets/${transition.datasetId}?autoGeneratePlan=true`
-      : `/datasets/${transition.datasetId}`;
+      ? `/finetune/${transition.datasetId}?autoGeneratePlan=true`
+      : `/finetune/${transition.datasetId}`;
     navigate(url);
   }, [transition, navigate]);
 

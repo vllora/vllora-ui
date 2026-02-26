@@ -52,7 +52,7 @@ export function AgentPanelWrapper() {
   }
 
   // Don't render on datasets page - it has its own embedded Lucy
-  if (location.pathname.startsWith('/datasets')) {
+  if (location.pathname.startsWith('/finetune')) {
     return null;
   }
 

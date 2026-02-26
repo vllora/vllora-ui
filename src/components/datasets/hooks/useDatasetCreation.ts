@@ -295,7 +295,7 @@ export function useDatasetCreation() {
       }
 
       // Navigate to datasets list
-      navigate(`/datasets/${dataset.id}`);
+      navigate(`/finetune/${dataset.id}`);
     } catch (err) {
       console.error("Failed to create dataset:", err);
       toast.error("Failed to create experiment");

@@ -46,7 +46,7 @@ export function SelectSpansOrUploadFile() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => navigate("/datasets")}
+          onClick={() => navigate("/finetune")}
           className="gap-1"
         >
           <ArrowLeft className="h-4 w-4" />

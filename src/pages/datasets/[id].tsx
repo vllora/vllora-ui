@@ -14,16 +14,16 @@ function DatasetDetailPageContent() {
   const navigate = useNavigate();
 
   if (!datasetId) {
-    navigate("/datasets");
+    navigate("/finetune");
     return null;
   }
 
   const handleBack = () => {
-    navigate("/datasets");
+    navigate("/finetune");
   };
 
   const handleSelectDataset = (newDatasetId: string) => {
-    navigate(`/datasets/${newDatasetId}`);
+    navigate(`/finetune/${newDatasetId}`);
   };
 
 
