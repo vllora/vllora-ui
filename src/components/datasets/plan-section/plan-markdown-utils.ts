@@ -80,35 +80,31 @@ ${topics.map((t) => {
     return step;
   };
 
-  // Build execution steps as checkbox task list (Claude Code style)
-  // Completed steps are checked off during execution
-  // Sub-details appear as indented sub-checkboxes
+  // Build execution steps as a concise checkbox task list.
+  // Each step is a single line: - [x] **Step name** — key detail
   const completedIndices = options?.completedStepIndices;
   const stepDetailsMap = options?.stepDetails;
   const executionSteps = plan.execution_steps ?? [];
   const stepsContent = executionSteps.map((s, i) => {
     const checked = completedIndices?.has(i) ? 'x' : ' ';
-    const line = `- [${checked}] **${friendlyStepName(s.step)}**`;
+    const stepName = friendlyStepName(s.step);
 
-    // Add sub-details if available
+    // Show up to 2 details as a concise inline summary.
+    // Topics/criteria names are omitted — they're in detail sections below.
     const stepInfo = stepDetailsMap?.get(i);
+    let suffix = '';
     if (stepInfo?.details?.length) {
-      const subItems = stepInfo.details.map(d => {
-        if (stepInfo.status === 'completed' || stepInfo.status === 'skipped') {
-          return `  - [x] ${d}`;
-        }
-        if (stepInfo.status === 'failed') {
-          return `  - ❌ ${d}`;
-        }
-        if (stepInfo.status === 'running') {
-          return `  - ⏳ ${d}`;
-        }
-        // pending — unchecked
-        return `  - [ ] ${d}`;
-      }).join('\n');
-      return `${line}\n${subItems}`;
+      const summary = stepInfo.details.slice(0, 2).join(' · ');
+      if (stepInfo.status === 'failed') {
+        suffix = ` — ❌ ${summary}`;
+      } else if (stepInfo.status === 'running') {
+        suffix = ` — ⏳ ${summary}`;
+      } else {
+        suffix = ` — ${summary}`;
+      }
     }
-    return line;
+
+    return `- [${checked}] **${stepName}**${suffix}`;
   }).join('\n');
 
   // Build response schema section if applicable

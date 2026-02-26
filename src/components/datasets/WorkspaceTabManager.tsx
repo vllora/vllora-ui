@@ -12,8 +12,9 @@
  */
 
 import { useCallback, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { X, CheckCircle2, XCircle, Loader2, AlertTriangle } from "lucide-react";
 import { WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
+import { PlanConsumer } from "@/contexts/PlanContext";
 import { cn } from "@/lib/utils";
 
 /** Position for the context menu */
@@ -34,6 +35,7 @@ export function WorkspaceTabManager() {
     closeAllTabs,
     pinTab,
   } = WorkspaceTabsConsumer();
+  const { planStatus, isExecuting } = PlanConsumer();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
 
@@ -81,6 +83,19 @@ export function WorkspaceTabManager() {
                 !tab.isPinned && "italic"
               )}
             >
+              {/* Plan status icon — matches explorer sidebar badges */}
+              {tab.path === 'plan.md' && planStatus === 'completed' && (
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-[rgb(var(--theme-500))]" />
+              )}
+              {tab.path === 'plan.md' && planStatus === 'failed' && (
+                <XCircle className="w-3.5 h-3.5 shrink-0 text-destructive" />
+              )}
+              {tab.path === 'plan.md' && isExecuting && (
+                <Loader2 className="w-3.5 h-3.5 shrink-0 text-blue-500 animate-spin" />
+              )}
+              {tab.path === 'plan.md' && planStatus === 'proposed' && !isExecuting && (
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-yellow-500" />
+              )}
               <span className="truncate max-w-[140px]">{tab.label}</span>
 
               {/* Close button — always visible on active tab, hover on others */}

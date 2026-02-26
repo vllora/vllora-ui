@@ -201,14 +201,6 @@ function buildCompletedStepDetails(
     case 'topics': {
       const count = summary.topics_created || plan.total_topic_count || 0;
       details.push(`Applied ${count} topics`);
-      // Show first few topic names from the plan
-      const topicNames = plan.proposed_topics?.map(t => t.name) ?? [];
-      if (topicNames.length > 0) {
-        const display = topicNames.length <= 5
-          ? topicNames.join(', ')
-          : topicNames.slice(0, 5).join(', ') + `, +${topicNames.length - 5} more`;
-        details.push(`Topics: ${display}`);
-      }
       break;
     }
     case 'adjust_topics': {
@@ -238,11 +230,7 @@ function buildCompletedStepDetails(
     }
     case 'grader': {
       const criteriaCount = plan.grader_config?.criteria?.length ?? 0;
-      details.push(`Configured ${criteriaCount} evaluation criteria`);
-      const names = plan.grader_config?.criteria?.map(c => c.name) ?? [];
-      if (names.length > 0 && names.length <= 4) {
-        details.push(`Criteria: ${names.join(', ')}`);
-      }
+      details.push(`Configured ${criteriaCount} criteria`);
       break;
     }
     case 'upload': {
@@ -256,7 +244,7 @@ function buildCompletedStepDetails(
     }
     case 'dryrun': {
       const jobId = (res as any)?.dry_run_job_id as string | undefined;
-      if (jobId) details.push(`Evaluation: eval-${jobId.slice(0, 6)}`);
+      if (jobId) details.push(`[eval-${jobId.slice(0, 6)}](evaluations/jobs/${jobId})`);
       const passRate = summary.dry_run_pass_rate;
       if (typeof passRate === 'number') {
         details.push(`Pass rate: ${Math.round(passRate * 100)}%`);
@@ -265,8 +253,7 @@ function buildCompletedStepDetails(
     }
     case 'finetune': {
       const ftId = summary.finetune_job_id;
-      if (ftId) details.push(`Finetune: ft-${ftId.slice(0, 6)}`);
-      if (summary.finetune_job_status) details.push(`Status: ${summary.finetune_job_status}`);
+      if (ftId) details.push(`[ft-${ftId.slice(0, 6)}](finetune/${ftId})`);
       break;
     }
   }

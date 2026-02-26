@@ -10,19 +10,8 @@
  */
 
 import { Eye, Pencil, Sparkles, Loader2, FolderOpen, AlertCircle, CheckCircle2, XCircle, ArrowLeftRight } from "lucide-react";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { useChatStateStore } from "@distri/react";
 import { PlanEditor, planToMarkdown } from "./plan-section/PlanEditor";
 import LazyMarkdownRenderer from "@/components/chat/LazyMarkdownRenderer";
@@ -31,6 +20,7 @@ import type { Plan } from "@/lib/distri-finetune-tools/steps/propose-plan";
 import type { PlanStatus } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
 import type { ExecutionProgress, ExecutionStep, ExecutionStepStatus } from "@/lib/distri-finetune-tools/steps/execute-plan";
 import type { PlanDiff } from "./plan-section/plan-markdown-utils";
+import { WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
 
 interface PlanPreviewProps {
   plan: Plan | null;
@@ -165,21 +155,25 @@ function buildCompletedStepIndices(
 
 /**
  * Format detail strings for display.
- * Converts "Job ID: {full-uuid}" → "Evaluation: eval-{short}" / "Finetune: ft-{short}"
- * to match the short names shown in the Explorer sidebar.
+ * - Converts legacy "Job ID: {full-uuid}" → clickable markdown links
+ * - Strips redundant "Topics: ..." and "Criteria: ..." lines (shown in sections below)
+ * New executions already produce clean details from buildCompletedStepDetails.
  */
 function formatStepDetails(details: string[], stepId: string): string[] {
-  const UUID_RE = /^Job ID:\s*([0-9a-f]{6})[0-9a-f-]+$/i;
-  return details.map(d => {
-    const match = d.match(UUID_RE);
-    if (match) {
-      const short = match[1];
-      if (stepId === 'dryrun') return `Evaluation: eval-${short}`;
-      if (stepId === 'finetune') return `Finetune: ft-${short}`;
-      return `Job: ${short}`;
-    }
-    return d;
-  });
+  const UUID_RE = /^Job ID:\s*(([0-9a-f]{6})[0-9a-f-]+)$/i;
+  return details
+    .filter(d => !d.startsWith('Topics:') && !d.startsWith('Criteria:') && !d.startsWith('Status:'))
+    .map(d => {
+      const match = d.match(UUID_RE);
+      if (match) {
+        const fullId = match[1];
+        const short = match[2];
+        if (stepId === 'dryrun') return `[eval-${short}](evaluations/jobs/${fullId})`;
+        if (stepId === 'finetune') return `[ft-${short}](finetune/${fullId})`;
+        return `Job: ${short}`;
+      }
+      return d;
+    });
 }
 
 /**
@@ -395,6 +389,8 @@ function augmentExecutionSteps(
 }
 
 function PlanMarkdownContent({ plan, executionProgress }: { plan: Plan; executionProgress?: ExecutionProgress | null }) {
+  const { openTab } = WorkspaceTabsConsumer();
+
   // Augment execution_steps with any missing steps the agent omitted
   // (e.g. upload, finetune) so they appear in the checklist
   const fullExecutionSteps = useMemo(
@@ -423,8 +419,23 @@ function PlanMarkdownContent({ plan, executionProgress }: { plan: Plan; executio
     [planForMarkdown, completedStepIndices, stepDetails]
   );
 
+  // Intercept clicks on internal navigation links (eval/finetune jobs)
+  // and route them through the workspace tab system instead of browser navigation.
+  const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    const link = target.closest('a');
+    if (!link) return;
+    const href = link.getAttribute('href');
+    if (!href) return;
+    // Internal workspace paths: evaluations/jobs/{id} or finetune/{id}
+    if (href.startsWith('evaluations/') || href.startsWith('finetune/')) {
+      e.preventDefault();
+      openTab(href);
+    }
+  }, [openTab]);
+
   return (
-    <div className="flex-1 overflow-auto p-6">
+    <div className="flex-1 overflow-auto p-6" onClick={handleClick}>
       <div className="max-w-3xl mx-auto">
         <div className="text-sm [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_table]:text-xs [&_p]:text-sm [&_li]:text-sm [&_blockquote]:text-sm">
           <LazyMarkdownRenderer content={markdownContent} />
@@ -524,33 +535,13 @@ function PlanDisplayView({
                 <Pencil className="w-3.5 h-3.5" />
                 Edit
               </Button>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    size="sm"
-                    className="h-7 text-xs bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
-                  >
-                    Approve & Execute
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Approve and execute plan?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This will start executing the plan. Lucy will configure topics, generate training data, and set up evaluation. This may take several minutes.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      className="bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
-                      onClick={() => onApprove(plan)}
-                    >
-                      Approve & Execute
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              <Button
+                size="sm"
+                className="h-7 text-xs bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
+                onClick={() => onApprove(plan)}
+              >
+                Approve & Execute
+              </Button>
             </>
           )}
         </div>
