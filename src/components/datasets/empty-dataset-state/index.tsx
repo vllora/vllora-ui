@@ -338,29 +338,45 @@ export function EmptyDatasetsState() {
   }
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-start pt-16 p-8 relative overflow-auto">
+    <div className="flex-1 flex flex-col items-center justify-start px-6 pb-8 relative overflow-auto">
 
-      {/* Header - always centered */}
-      <div className="flex flex-col items-center text-center relative z-10 mb-8">
-        {/* Title */}
-        <h1 className="text-4xl md:text-5xl font-bold mb-4 text-foreground">
-          What is the objective of{" "}
-          <span className="text-[rgb(var(--theme-500))]">your experiment?</span>
+      {/* Background ambient glow */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-[radial-gradient(ellipse_at_center,rgba(var(--theme-500),0.08)_0%,transparent_70%)] pointer-events-none" />
+      <div className="absolute top-[200px] left-1/2 -translate-x-1/2 w-[300px] h-[300px] bg-[radial-gradient(circle_at_center,rgba(var(--theme-400),0.04)_0%,transparent_60%)] pointer-events-none blur-xl" />
+
+      {/* Hero Section */}
+      <div className="flex flex-col items-center text-center relative z-10 pt-[10vh] mb-10 max-w-xl">
+        {/* Subtle badge */}
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-[rgba(var(--theme-500),0.15)] bg-[rgba(var(--theme-500),0.05)] mb-6">
+          <Sparkles className="w-3 h-3 text-[rgba(var(--theme-500),0.7)]" />
+          <span className="text-[11px] font-medium text-[rgba(var(--theme-500),0.8)] tracking-wide uppercase">
+            New Experiment
+          </span>
+        </div>
+
+        {/* Heading */}
+        <h1 className="text-[2.25rem] leading-[1.15] font-bold tracking-tight text-foreground mb-4">
+          From idea to{" "}
+          <span className="bg-gradient-to-r from-[rgb(var(--theme-400))] to-[rgb(var(--theme-600))] bg-clip-text text-transparent">
+            finetuned model
+          </span>
         </h1>
-        <p className="text-muted-foreground text-lg">
-          Define your goal to let our AI agent optimize your data enhancement strategy.
+
+        {/* Subtitle */}
+        <p className="text-[15px] text-muted-foreground/60">
+          Define the vision. We handle the pipeline.
         </p>
       </div>
 
-      {/* Tab Switcher - always centered */}
-      <div className="inline-flex items-center p-1 rounded-full bg-muted/50 border border-border mb-8 relative z-10">
+      {/* Tab Switcher */}
+      <div className="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/30 border border-border/50 mb-6 relative z-10">
         <button
           onClick={() => handleTabChange("objective")}
           className={cn(
-            "px-6 py-2 rounded-full text-sm font-medium transition-all",
+            "px-4 py-1.5 rounded-md text-[13px] font-medium transition-all duration-200",
             activeTab === "objective"
               ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
+              : "text-muted-foreground/60 hover:text-foreground"
           )}
         >
           Enter Objective
@@ -368,21 +384,21 @@ export function EmptyDatasetsState() {
         <button
           onClick={() => handleTabChange("api")}
           className={cn(
-            "px-6 py-2 rounded-full text-sm font-medium transition-all",
+            "px-4 py-1.5 rounded-md text-[13px] font-medium transition-all duration-200",
             activeTab === "api"
               ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
+              : "text-muted-foreground/60 hover:text-foreground"
           )}
         >
           Initialize via API
         </button>
       </div>
 
-      {/* Tab Content - width varies by tab */}
+      {/* Tab Content */}
       <div
         className={cn(
           "w-full relative z-10 h-full",
-          activeTab === "objective" ? "max-w-3xl" : "max-w-6xl"
+          activeTab === "objective" ? "max-w-[640px]" : "max-w-6xl"
         )}
       >
         {activeTab === "objective" ? (

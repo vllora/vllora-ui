@@ -1,14 +1,11 @@
 /**
  * ObjectiveInputTab
  *
- * Tab content for entering a dataset objective manually.
- * Features a text input with sparkle icon, badges, and start button.
- * Includes suggestion pills that show short summaries and fill full descriptions.
- * Also includes a "Try Sample" button to load pre-built sample datasets.
- * Now supports file uploads for knowledge sources.
+ * Landing page tab for entering a dataset objective.
+ * Features a glowing input card, animated suggestions, and file upload.
  */
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { Sparkles, ArrowRight, Loader2, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,6 +45,8 @@ export function ObjectiveInputTab({
     removeFile,
   } = useKnowledgeSourcesUpload();
 
+  const [isFocused, setIsFocused] = useState(false);
+
   const handleSuggestionClick = (suggestion: ObjectiveSuggestion) => {
     onObjectiveChange(suggestion.description);
   };
@@ -60,71 +59,91 @@ export function ObjectiveInputTab({
 
   return (
     <div className="w-full space-y-6">
-      {/* Main Card with gradient border effect */}
+      {/* Main Input Card — glowing border on focus */}
       <div
-        className={`group relative rounded-2xl p-[1px] bg-gradient-to-b from-border/80 via-border/40 to-border/80 hover:from-[rgba(var(--theme-500),0.3)] hover:via-border/40 hover:to-[rgba(var(--theme-500),0.3)] transition-all duration-500 ${isDragOver ? "from-[rgba(var(--theme-500),0.5)] via-[rgba(var(--theme-500),0.3)] to-[rgba(var(--theme-500),0.5)]" : ""}`}
+        className="group relative"
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
       >
-        <div className="rounded-2xl bg-card/95 backdrop-blur-md overflow-hidden relative">
-          {/* Input Area */}
+        {/* Glow effect behind card */}
+        <div
+          className={`absolute -inset-px rounded-2xl transition-opacity duration-500 ${
+            isFocused || isDragOver
+              ? "opacity-100"
+              : "opacity-0 group-hover:opacity-60"
+          }`}
+          style={{
+            background: "linear-gradient(135deg, rgba(var(--theme-500), 0.2), rgba(var(--theme-400), 0.05), rgba(var(--theme-500), 0.15))",
+          }}
+        />
+
+        {/* Outer glow spread */}
+        <div
+          className={`absolute -inset-3 rounded-3xl blur-xl transition-opacity duration-700 pointer-events-none ${
+            isFocused ? "opacity-100" : "opacity-0"
+          }`}
+          style={{
+            background: "radial-gradient(ellipse at center, rgba(var(--theme-500), 0.06), transparent 70%)",
+          }}
+        />
+
+        <div
+          className={`relative rounded-2xl border transition-all duration-300 overflow-hidden ${
+            isDragOver
+              ? "border-[rgba(var(--theme-500),0.4)]"
+              : isFocused
+              ? "border-[rgba(var(--theme-500),0.25)] shadow-lg shadow-[rgba(var(--theme-500),0.05)]"
+              : "border-border/50 hover:border-border/80"
+          }`}
+          style={{ background: "hsl(var(--card) / 0.9)" }}
+        >
+          {/* Textarea area */}
           <div className="relative">
-            {/* Sparkle Icon with subtle animation */}
-            <div className="absolute left-5 top-5">
-              <div className="relative">
-                <Sparkles className="w-5 h-5 text-[rgba(var(--theme-500),0.9)] transition-transform duration-300 group-hover:scale-110" />
-                <div className="absolute inset-0 text-[rgba(var(--theme-500),0.4)] animate-pulse">
-                  <Sparkles className="w-5 h-5" />
-                </div>
-              </div>
+            {/* Sparkle watermark */}
+            <div className={`absolute left-4 top-[18px] transition-all duration-300 ${isFocused ? "opacity-80 scale-100" : "opacity-40 scale-95"}`}>
+              <Sparkles className="w-4 h-4 text-[rgb(var(--theme-500))]" />
             </div>
 
             <textarea
               value={objective}
               onChange={(e) => onObjectiveChange(e.target.value)}
-              placeholder="Describe what you want your model to do..."
-              className="w-full min-h-[28vh] bg-transparent border-0 border-none outline-none pl-14 pr-6 pt-5 pb-6 text-foreground placeholder:text-muted-foreground/60 resize-none focus:outline-none focus:ring-0 focus:border-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none text-[15px] leading-relaxed"
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
+              placeholder="e.g. A chess tutor that analyzes board positions and explains optimal moves at any skill level..."
+              className="w-full min-h-[200px] bg-transparent border-0 border-none outline-none pl-11 pr-6 pt-[18px] pb-5 text-[14px] text-foreground placeholder:text-muted-foreground/30 resize-none focus:outline-none focus:ring-0 focus:border-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none leading-[1.7]"
             />
-
-            {/* Subtle gradient overlay at bottom for depth */}
-            <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-card/80 to-transparent pointer-events-none" />
           </div>
 
           {/* Drag overlay */}
           {isDragOver && <DragOverlay />}
 
-          {/* File upload area - shown below textarea */}
+          {/* File list */}
           <FileList files={files} onRemove={removeFile} />
 
-          {/* Footer */}
-          <div className="flex items-center justify-between px-5 py-4 border-t border-border/30 bg-muted/20">
-            {/* Left side: file upload button + hint */}
+          {/* Footer bar */}
+          <div className="flex items-center justify-between px-4 py-3 border-t border-border/20 bg-muted/10">
+            {/* Left side */}
             <div className="flex items-center gap-3">
               <AddDocsButton onFileInput={handleFileInput} />
-              <span className="text-xs text-muted-foreground/40">|</span>
-              <span className="text-xs text-muted-foreground/60">
-                {hasContent ? (
-                  <span className="text-muted-foreground/80">
-                    {objective.length} characters
-                  </span>
-                ) : (
-                  "Be specific about capabilities and use cases"
-                )}
-              </span>
+              {hasContent && (
+                <span className="text-[11px] text-muted-foreground/30 tabular-nums">
+                  {objective.length} chars
+                </span>
+              )}
             </div>
 
-            <div className="flex items-center gap-3">
-              {/* Dataset name input — visible once objective has content */}
+            {/* Right side */}
+            <div className="flex items-center gap-2.5">
+              {/* Name field — slides in when objective has content */}
               {hasContent && onDatasetNameChange && (
-                <div className="flex items-center gap-1.5">
-                  <label className="text-xs text-muted-foreground/60 whitespace-nowrap">Name:</label>
+                <div className="animate-in fade-in slide-in-from-right-2 duration-300">
                   <input
                     type="text"
                     value={datasetName}
                     onChange={(e) => onDatasetNameChange(e.target.value)}
                     placeholder="Experiment name"
-                    className="h-8 w-40 px-2 text-sm bg-background/50 border border-border/50 rounded-md outline-none focus:border-[rgba(var(--theme-500),0.5)] transition-colors placeholder:text-muted-foreground/40"
+                    className="h-8 w-48 px-2.5 text-[12px] bg-background/40 border border-border/30 rounded-lg outline-none focus:border-[rgba(var(--theme-500),0.3)] transition-colors placeholder:text-muted-foreground/25"
                   />
                 </div>
               )}
@@ -132,17 +151,17 @@ export function ObjectiveInputTab({
               <Button
                 onClick={handleStart}
                 disabled={!hasContent || isLoading}
-                className="group/btn relative bg-[rgba(var(--theme-500),1)] hover:bg-[rgba(var(--theme-400),1)] text-white gap-2 px-5 h-10 rounded-lg font-medium shadow-lg shadow-[rgba(var(--theme-500),0.25)] hover:shadow-[rgba(var(--theme-500),0.35)] hover:shadow-xl transition-all duration-200 disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed"
+                className="group/btn bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-400))] text-white gap-1.5 px-5 h-9 rounded-xl text-[13px] font-semibold shadow-md shadow-[rgba(var(--theme-500),0.25)] hover:shadow-lg hover:shadow-[rgba(var(--theme-500),0.3)] transition-all duration-200 disabled:opacity-25 disabled:shadow-none disabled:cursor-not-allowed"
               >
                 {isLoading ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     Creating...
                   </>
                 ) : (
                   <>
                     Start Finetune
-                    <ArrowRight className="w-4 h-4 transition-transform duration-200 group-hover/btn:translate-x-0.5" />
+                    <ArrowRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover/btn:translate-x-0.5" />
                   </>
                 )}
               </Button>
@@ -151,49 +170,46 @@ export function ObjectiveInputTab({
         </div>
       </div>
 
-      {/* Objective Suggestions */}
-      <div className="flex items-center gap-2.5 flex-wrap justify-center">
-        <span className="text-sm text-muted-foreground/70 mr-1">Try:</span>
+      {/* Suggestion Chips */}
+      <div className="flex items-center gap-2.5 flex-wrap justify-center pt-1">
+        <span className="text-[12px] text-muted-foreground/40 font-medium tracking-wide">
+          Try:
+        </span>
         {OBJECTIVE_SUGGESTIONS.map((suggestion, index) => (
           <button
             key={suggestion.summary}
             onClick={() => handleSuggestionClick(suggestion)}
-            className="group/pill px-4 py-2 text-sm rounded-full border border-border/50 bg-card/50 backdrop-blur-sm hover:bg-[rgba(var(--theme-500),0.08)] hover:border-[rgba(var(--theme-500),0.25)] hover:shadow-[0_0_20px_rgba(var(--theme-500),0.12)] transition-all duration-300 text-muted-foreground hover:text-foreground"
-            style={{ animationDelay: `${index * 50}ms` }}
+            className="group/chip relative px-3.5 py-1.5 text-[12px] rounded-full border border-border/30 bg-card/30 backdrop-blur-sm hover:bg-[rgba(var(--theme-500),0.06)] hover:border-[rgba(var(--theme-500),0.2)] transition-all duration-300 text-muted-foreground/60 hover:text-foreground"
+            style={{ animationDelay: `${index * 80}ms` }}
           >
-            <span className="relative">
-              {suggestion.summary}
-              <span className="absolute inset-x-0 -bottom-px h-px bg-gradient-to-r from-transparent via-[rgba(var(--theme-500),0.5)] to-transparent opacity-0 group-hover/pill:opacity-100 transition-opacity duration-300" />
-            </span>
+            {suggestion.summary}
           </button>
         ))}
       </div>
 
-      {/* Sample Dataset CTA */}
+      {/* Sample Dataset Link */}
       {onLoadSample && (
-        <div className="flex items-center justify-center gap-2 mt-4">
-          <div className="h-px w-12" />
+        <div className="flex items-center justify-center pt-2">
           <button
             onClick={onLoadSample}
             disabled={isLoadingSample}
-            className="group/sample flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="group/sample flex items-center gap-1.5 text-[12px] text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isLoadingSample ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin text-[rgb(var(--theme-500))]" />
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-[rgb(var(--theme-500))]" />
                 <span>Loading sample...</span>
               </>
             ) : (
               <>
-                <span>or jumpstart with</span>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[rgba(var(--theme-500),0.3)] bg-[rgba(var(--theme-500),0.08)] text-[rgb(var(--theme-500))] font-medium group-hover/sample:bg-[rgba(var(--theme-500),0.15)] group-hover/sample:border-[rgba(var(--theme-500),0.5)] transition-all">
-                  <FlaskConical className="w-3.5 h-3.5" />
+                <span>or start with</span>
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-[rgba(var(--theme-500),0.15)] bg-[rgba(var(--theme-500),0.04)] text-[rgba(var(--theme-500),0.7)] font-medium group-hover/sample:bg-[rgba(var(--theme-500),0.08)] group-hover/sample:border-[rgba(var(--theme-500),0.3)] group-hover/sample:text-[rgba(var(--theme-500),0.9)] transition-all duration-300">
+                  <FlaskConical className="w-3 h-3" />
                   Chess Tutor Sample
                 </span>
               </>
             )}
           </button>
-          <div className="h-px w-12 bg-gradient-to-l from-transparent to-border/50" />
         </div>
       )}
     </div>
