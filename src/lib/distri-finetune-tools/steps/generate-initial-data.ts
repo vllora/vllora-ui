@@ -678,8 +678,10 @@ export const generateInitialDataHandler: ToolHandler = async (
     }
 
     // Check if we should use topic-based generation
+    // Auto-enable distribute_by_topic when a topic hierarchy exists (unless explicitly set to false)
     const topicHierarchy = dataset.topicHierarchy?.hierarchy;
-    const allLeafTopics = (distribute_by_topic && topicHierarchy && topicHierarchy.length > 0)
+    const shouldDistributeByTopic = distribute_by_topic || (topicHierarchy && topicHierarchy.length > 0);
+    const allLeafTopics = (shouldDistributeByTopic && topicHierarchy && topicHierarchy.length > 0)
       ? getLeafTopics(topicHierarchy)
       : [];
 
