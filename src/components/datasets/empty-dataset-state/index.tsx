@@ -10,14 +10,12 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Database, FlaskConical, Sparkles, Radio } from "lucide-react";
-import { DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
 import { DatasetsConsumer } from "@/contexts/DatasetsContext";
 import { ProjectEventsConsumer } from "@/contexts/project-events";
 import { listSpans, type Span } from "@/services/spans-api";
 import { toast } from "sonner";
 import { ObjectiveInputTab } from "./ObjectiveInputTab";
-import { ApiInitializeTab } from "./ApiInitializeTab";
-import type { Trace } from "./LiveTraceFeed";
+import { ApiInitializeTab, type Trace } from "./api-initialize-tab";
 import { ALL_PROVIDERS } from "../spans-select-table";
 import { tryParseJson } from "@/utils/modelUtils";
 import { emitter } from "@/utils/eventEmitter";
@@ -41,7 +39,7 @@ const PATHWAYS: { tab: TabType; icon: typeof Sparkles; label: string; hint: stri
   {
     tab: "api",
     icon: Radio,
-    label: "Use existing API calls",
+    label: "Route existing calls",
     hint: "Capture & enhance real traces",
   },
 ];
@@ -103,7 +101,6 @@ function spanToTrace(span: Span): Trace {
 export function EmptyDatasetsState() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { hasBackendSpans } = DatasetsUIConsumer();
   const { createDataset } = DatasetsConsumer();
   const { projectId, subscribe } = ProjectEventsConsumer();
 
@@ -394,10 +391,7 @@ export function EmptyDatasetsState() {
 
       {/* Tab Content */}
       <div
-        className={cn(
-          "w-full relative z-10 h-full",
-          activeTab === "objective" ? "max-w-[640px]" : "max-w-6xl"
-        )}
+        className="w-full max-w-[min(56rem,90vw)] relative z-10 h-full"
       >
         {activeTab === "objective" ? (
           <ObjectiveInputTab
@@ -408,7 +402,6 @@ export function EmptyDatasetsState() {
           />
         ) : (
           <ApiInitializeTab
-            hasBackendSpans={hasBackendSpans}
             traces={clearedIds.size > 0 ? traces.filter(t => !clearedIds.has(t.traceId)) : traces}
             onClear={() => setClearedIds(new Set(traces.map(t => t.traceId)))}
           />

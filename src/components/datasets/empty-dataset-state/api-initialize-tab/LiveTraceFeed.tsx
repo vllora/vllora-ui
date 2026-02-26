@@ -1,8 +1,8 @@
 /**
  * LiveTraceFeed
  *
- * Displays real-time trace feed from the gateway.
- * Shows captured API requests and connection status.
+ * Terminal-style streaming log of captured API traces.
+ * Monospace font, minimal chrome, logs flow bottom-up.
  */
 
 import { cn } from "@/lib/utils";
@@ -25,14 +25,12 @@ export interface Trace {
 }
 
 interface LiveTraceFeedProps {
-  isActive: boolean;
   traces: Trace[];
   onClear?: () => void;
   className?: string;
 }
 
 export function LiveTraceFeed({
-  isActive,
   traces,
   onClear,
   className,
@@ -44,11 +42,18 @@ export function LiveTraceFeed({
         className
       )}
     >
-      <LiveTraceFeedHeader isActive={isActive} onClear={onClear} />
+      <LiveTraceFeedHeader
+        traceCount={traces.length}
+        onClear={onClear}
+      />
 
-      <div className="flex-1 p-3 space-y-2 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto">
         {traces.length > 0 ? (
-          traces.map((trace, i) => <TraceItem key={i} trace={trace} />)
+          <div className="px-3 py-2 space-y-1">
+            {traces.map((trace, i) => (
+              <TraceItem key={i} trace={trace} />
+            ))}
+          </div>
         ) : (
           <EmptyTraceState />
         )}

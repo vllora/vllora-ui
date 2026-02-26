@@ -6,13 +6,13 @@
  */
 
 import { useCallback, useRef } from "react";
-import { Sparkles, Loader2, Crown, BarChart3, Code2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Sparkles, Crown, BarChart3, Code2 } from "lucide-react";
 import {
   OBJECTIVE_SUGGESTIONS,
   type ObjectiveSuggestion,
 } from "../constants/objective-suggestions";
 import { ObjectiveInputCard, type ObjectiveInputCardRef } from "./ObjectiveInputCard";
+import { StartFinetuneButton } from "./StartFinetuneButton";
 
 // Map suggestion summaries to icons for visual richness
 const SUGGESTION_ICONS: Record<string, typeof Sparkles> = {
@@ -48,30 +48,18 @@ export function ObjectiveInputTab({
   const hasContent = objective.trim().length > 0;
 
   return (
-    <div className="w-full space-y-6">
+    <div className="w-3/4 mx-auto space-y-6">
       <ObjectiveInputCard
         ref={cardRef}
         value={objective}
         onChange={onObjectiveChange}
         placeholder="Describe what you want your model to do... e.g. 'A specialized assistant for React performance optimization that speaks in a concise, technical tone.'"
         actionButton={
-          <Button
+          <StartFinetuneButton
             onClick={handleStart}
-            disabled={!hasContent || isLoading}
-            className="group/btn bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-400))] text-white gap-2 px-6 h-10 rounded-xl text-[13px] font-semibold shadow-md shadow-[rgba(var(--theme-500),0.25)] hover:shadow-lg hover:shadow-[rgba(var(--theme-500),0.3)] transition-all duration-200 disabled:opacity-25 disabled:shadow-none disabled:cursor-not-allowed"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              <>
-                Start Finetune
-                <Sparkles className="w-3.5 h-3.5 transition-transform duration-200 group-hover/btn:rotate-12" />
-              </>
-            )}
-          </Button>
+            disabled={!hasContent}
+            isLoading={isLoading}
+          />
         }
       />
 
